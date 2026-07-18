@@ -21,17 +21,27 @@ class SamplerUsageTracker(Module):
         self.register_buffer("cumulative_expert_usage_mass", torch.zeros(num_experts))
 
     def record(self, probabilities: Tensor, indices: Tensor | None) -> None:
-        usage_counts, usage_mass = self.compute_usage(probabilities, indices)
-        self.last_expert_usage_counts.copy_(usage_counts)
-        self.last_expert_usage_mass.copy_(usage_mass)
-        self.cumulative_expert_usage_counts.add_(usage_counts)
-        self.cumulative_expert_usage_mass.add_(usage_mass)
+        expert_usage_counts, expert_probability_mass = self.compute_usage(
+            probabilities,
+            indices,
+        )
+        self.last_expert_usage_counts.copy_(expert_usage_counts)
+        self.last_expert_usage_mass.copy_(expert_probability_mass)
+        self.cumulative_expert_usage_counts.add_(expert_usage_counts)
+        self.cumulative_expert_usage_mass.add_(expert_probability_mass)
 
     def record_sampler_output(self, output: "SamplerOutput") -> None:
-        probabilities, indices, _, _ = output
-        detached_probabilities = probabilities.detach()
-        detached_indices = indices.detach() if indices is not None else None
-        self.record(detached_probabilities, detached_indices)
+        normalized_selected_probabilities, selected_expert_indices, _, _ = output
+        detached_selected_probabilities = normalized_selected_probabilities.detach()
+        detached_selected_expert_indices = (
+            selected_expert_indices.detach()
+            if selected_expert_indices is not None
+            else None
+        )
+        self.record(
+            detached_selected_probabilities,
+            detached_selected_expert_indices,
+        )
 
     def compute_usage(
         self,
@@ -39,17 +49,31 @@ class SamplerUsageTracker(Module):
         indices: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
         if indices is None:
-            flat_probabilities = probabilities.reshape(-1, self.num_experts)
-            usage_counts = (flat_probabilities > 0).sum(dim=0).float()
-            usage_mass = flat_probabilities.sum(dim=0)
-            return usage_counts, usage_mass
+            flattened_expert_probabilities = probabilities.reshape(
+                -1,
+                self.num_experts,
+            )
+            expert_usage_counts = (
+                (flattened_expert_probabilities > 0).sum(dim=0).float()
+            )
+            expert_probability_mass = flattened_expert_probabilities.sum(dim=0)
+            return expert_usage_counts, expert_probability_mass
 
-        flat_indices = indices.reshape(-1).long()
-        flat_probabilities = probabilities.reshape(-1).float()
-        usage_counts = torch.bincount(flat_indices, minlength=self.num_experts).float()
-        usage_mass = flat_probabilities.new_zeros(self.num_experts)
-        usage_mass.scatter_add_(0, flat_indices, flat_probabilities)
-        return usage_counts, usage_mass
+        flattened_selected_expert_indices = indices.reshape(-1).long()
+        flattened_selected_probabilities = probabilities.reshape(-1).float()
+        expert_usage_counts = torch.bincount(
+            flattened_selected_expert_indices,
+            minlength=self.num_experts,
+        ).float()
+        expert_probability_mass = flattened_selected_probabilities.new_zeros(
+            self.num_experts
+        )
+        expert_probability_mass.scatter_add_(
+            0,
+            flattened_selected_expert_indices,
+            flattened_selected_probabilities,
+        )
+        return expert_usage_counts, expert_probability_mass
 
     def reset(self) -> None:
         self.last_expert_usage_counts.zero_()
@@ -72,12 +96,12 @@ class SamplerUsageTrackerManager:
         usage_tracker.record_sampler_output(output)
 
     def attach(self, sampler: "SamplerModel") -> SamplerUsageTracker:
-        existing_tracker = sampler.usage_tracker
-        if existing_tracker is not None:
-            return existing_tracker
-        tracker = SamplerUsageTracker(sampler.num_experts)
-        sampler.add_module(self.TRACKER_MODULE_NAME, tracker)
-        return tracker
+        existing_usage_tracker = sampler.usage_tracker
+        if existing_usage_tracker is not None:
+            return existing_usage_tracker
+        new_usage_tracker = SamplerUsageTracker(sampler.num_experts)
+        sampler.add_module(self.TRACKER_MODULE_NAME, new_usage_tracker)
+        return new_usage_tracker
 
     def detach(self, sampler: "SamplerModel") -> None:
         if self.TRACKER_MODULE_NAME in sampler._modules:
