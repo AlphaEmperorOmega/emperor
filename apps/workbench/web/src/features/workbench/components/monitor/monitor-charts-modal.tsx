@@ -123,8 +123,8 @@ function LazyMonitorChart({
     if (hasEnteredView) {
       return;
     }
-    const node = chartRef.current;
-    if (!node || !canObserveVisibility) {
+    const chartElement = chartRef.current;
+    if (!chartElement || !canObserveVisibility) {
       setHasEnteredView(true);
       return;
     }
@@ -137,7 +137,7 @@ function LazyMonitorChart({
       },
       { rootMargin: "320px 0px" },
     );
-    observer.observe(node);
+    observer.observe(chartElement);
     return () => observer.disconnect();
   }, [canObserveVisibility, hasEnteredView]);
 
@@ -749,7 +749,7 @@ export function MonitorChartsModal({
     query,
   } = modalState;
   const {
-    data,
+    data: primaryData,
     comparisonData,
     historicalData,
     historicalComparisonData,
@@ -948,12 +948,12 @@ export function MonitorChartsModal({
             <ComparisonCharts
               primaryNode={node}
               comparisonNode={comparisonNode}
-              primaryData={data}
+              primaryData={primaryData}
               comparisonData={comparisonData}
               comparisonLoading={comparisonLoading}
             />
           ) : (
-            data && <SingleNodeCharts data={data} />
+            primaryData && <SingleNodeCharts data={primaryData} />
           )}
         </div>
     </DialogShell>
