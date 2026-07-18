@@ -22,7 +22,7 @@ def _is_windows_reparse_point(path: Path) -> bool:
         return False
     try:
         attributes = path.lstat().st_file_attributes
-    except (AttributeError, FileNotFoundError, OSError):
+    except (AttributeError, OSError):
         return False
     return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 

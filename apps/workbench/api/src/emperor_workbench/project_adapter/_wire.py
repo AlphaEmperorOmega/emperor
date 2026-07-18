@@ -66,7 +66,7 @@ def decode_response(raw_response: bytes) -> Any:
             raw_response,
             parse_constant=_reject_nonfinite_json,
         )
-    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
+    except (ValueError, RecursionError) as exc:
         raise ProjectAdapterProtocolFailure(
             "The model project Adapter returned an invalid response."
         ) from exc

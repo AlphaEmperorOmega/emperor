@@ -22,7 +22,7 @@ def read_json_object(path: Path) -> dict[str, Any] | None:
     try:
         reject_link_like(Path(path), "JSON file")
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+    except (OSError, ValueError):
         return None
     return payload if isinstance(payload, dict) else None
 
