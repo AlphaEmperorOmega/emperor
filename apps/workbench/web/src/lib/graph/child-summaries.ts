@@ -58,8 +58,7 @@ function childSummary(
   }
 
   const label = layerStackLabel(child);
-  const nestedChild = directChildNodes(child.id, navigation, nodesById)
-    .find((node): node is GraphNode => Boolean(node));
+  const [nestedChild] = directChildNodes(child.id, navigation, nodesById);
 
   if (!nestedChild) {
     return {
