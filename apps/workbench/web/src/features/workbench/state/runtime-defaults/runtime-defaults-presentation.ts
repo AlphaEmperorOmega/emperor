@@ -146,32 +146,35 @@ function presentField(
   };
 }
 
-function sectionMap(sections: ConfigSection[]) {
-  const byTitle = new Map<string, ConfigSection>();
-  function collect(section: ConfigSection) {
-    byTitle.set(section.title, section);
+function indexSectionsByTitle(sections: ConfigSection[]) {
+  const sectionsByTitle = new Map<string, ConfigSection>();
+  function indexSectionAndDescendants(section: ConfigSection) {
+    sectionsByTitle.set(section.title, section);
     for (const child of section.children ?? []) {
-      collect(child);
+      indexSectionAndDescendants(child);
     }
   }
   for (const section of sections) {
-    collect(section);
+    indexSectionAndDescendants(section);
   }
-  return byTitle;
+  return sectionsByTitle;
 }
 
-function rootSectionTitles(sections: ConfigSection[]) {
-  const bySectionTitle = new Map<string, string>();
-  function collect(section: ConfigSection, rootTitle: string) {
-    bySectionTitle.set(section.title, rootTitle);
+function indexRootTitlesBySectionTitle(sections: ConfigSection[]) {
+  const rootTitlesBySectionTitle = new Map<string, string>();
+  function indexSectionAndDescendants(
+    section: ConfigSection,
+    rootTitle: string,
+  ) {
+    rootTitlesBySectionTitle.set(section.title, rootTitle);
     for (const child of section.children ?? []) {
-      collect(child, rootTitle);
+      indexSectionAndDescendants(child, rootTitle);
     }
   }
   for (const section of sections) {
-    collect(section, section.title);
+    indexSectionAndDescendants(section, section.title);
   }
-  return bySectionTitle;
+  return rootTitlesBySectionTitle;
 }
 
 function descendantFieldKeys(sections: ConfigSection[]) {
@@ -215,8 +218,12 @@ function presentSection({
   const bodySchemas = section.fields.filter(
     (field) => field.key !== controlField?.key && !childFieldKeys.has(field.key),
   );
-  const rawGroups = boundaryModelFieldGroups(section.title, bodySchemas, overrides);
-  const fieldGroups = rawGroups?.map((group, groupIndex) => {
+  const boundaryFieldGroups = boundaryModelFieldGroups(
+    section.title,
+    bodySchemas,
+    overrides,
+  );
+  const fieldGroups = boundaryFieldGroups?.map((group, groupIndex) => {
     const groupControlField = group.controlField
       ? presentField(
           group.controlField,
@@ -358,8 +365,8 @@ export function presentRuntimeDefaultsSchema({
   const schemaFields = configSectionsFields(sections);
   const schemaMetrics = runtimeDefaultsMetrics(schemaFields, overrides);
   const sourceSections = deriveNestedConfigSections(sections);
-  const sourceSectionsByTitle = sectionMap(sourceSections);
-  const rootTitleBySectionTitle = rootSectionTitles(sourceSections);
+  const sourceSectionsByTitle = indexSectionsByTitle(sourceSections);
+  const rootTitleBySectionTitle = indexRootTitlesBySectionTitle(sourceSections);
   const disabledFieldReasonByKey = disabledConfigFieldReasons(sections, overrides);
   const selectedFieldKey = search.selectedFieldKey ?? null;
   const isSearchActive = search.query.trim().length > 0 || selectedFieldKey !== null;
