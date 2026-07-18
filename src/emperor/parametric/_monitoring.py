@@ -77,10 +77,12 @@ class _ParametricTrackingContext:
 class _ParametricDiagnostics:
     @staticmethod
     def clip_saturation(mixture: object, values: Tensor) -> Tensor:
-        clip_range = getattr(mixture, "clip_range", None)
-        if clip_range is None or clip_range <= 0:
+        parameter_clip_range = getattr(mixture, "clip_range", None)
+        if parameter_clip_range is None or parameter_clip_range <= 0:
             return values.new_zeros(())
-        return (values.abs() >= float(clip_range)).float().mean()
+        clip_saturation_mask = values.abs() >= float(parameter_clip_range)
+        clip_saturation_fraction = clip_saturation_mask.float().mean()
+        return clip_saturation_fraction
 
     @staticmethod
     def router_entropy(
@@ -88,15 +90,26 @@ class _ParametricDiagnostics:
         top_k: int | None = None,
     ) -> Tensor:
         route_probability_count = 1 if top_k == 1 else probabilities.shape[-1]
-        values = probabilities.reshape(-1, route_probability_count).float()
-        normalized_values = values / values.sum(
-            dim=-1,
+        flattened_route_probabilities = probabilities.reshape(
+            -1, route_probability_count
+        ).float()
+        route_choice_dimension = -1
+        probability_normalization_epsilon = 1e-12
+        route_probability_mass = flattened_route_probabilities.sum(
+            dim=route_choice_dimension,
             keepdim=True,
-        ).clamp_min(1e-12)
-        entropy = -(normalized_values.clamp_min(1e-12).log() * normalized_values).sum(
-            dim=-1
+        ).clamp_min(probability_normalization_epsilon)
+        normalized_route_probabilities = (
+            flattened_route_probabilities / route_probability_mass
         )
-        return entropy.mean()
+        log_safe_route_probabilities = normalized_route_probabilities.clamp_min(
+            probability_normalization_epsilon
+        )
+        per_route_entropy = -(
+            log_safe_route_probabilities.log() * normalized_route_probabilities
+        ).sum(dim=route_choice_dimension)
+        mean_route_entropy = per_route_entropy.mean()
+        return mean_route_entropy
 
     @staticmethod
     def utilization(
@@ -107,27 +120,43 @@ class _ParametricDiagnostics:
         if num_experts <= 0:
             return None
         if indices is not None:
-            counts = torch.zeros(num_experts, device=indices.device)
-            flat_indices = indices.detach().long().reshape(-1)
-            valid_indices = (flat_indices >= 0) & (flat_indices < num_experts)
-            if valid_indices.any():
-                counts.scatter_add_(
-                    0,
-                    flat_indices[valid_indices],
+            expert_selection_counts = torch.zeros(num_experts, device=indices.device)
+            flattened_expert_indices = indices.detach().long().reshape(-1)
+            valid_expert_index_mask = (flattened_expert_indices >= 0) & (
+                flattened_expert_indices < num_experts
+            )
+            if valid_expert_index_mask.any():
+                expert_dimension = 0
+                expert_selection_counts.scatter_add_(
+                    expert_dimension,
+                    flattened_expert_indices[valid_expert_index_mask],
                     torch.ones_like(
-                        flat_indices[valid_indices],
-                        dtype=counts.dtype,
+                        flattened_expert_indices[valid_expert_index_mask],
+                        dtype=expert_selection_counts.dtype,
                     ),
                 )
-            return counts / counts.sum().clamp_min(1.0)
+            total_expert_selections = expert_selection_counts.sum().clamp_min(1.0)
+            expert_utilization = expert_selection_counts / total_expert_selections
+            return expert_utilization
         if probabilities is None or probabilities.shape[-1] != num_experts:
             return None
-        values = probabilities.detach().float().reshape(-1, num_experts)
-        normalized_mass = values / values.sum(
-            dim=-1,
+        flattened_expert_probabilities = (
+            probabilities.detach().float().reshape(-1, num_experts)
+        )
+        expert_dimension = -1
+        probability_normalization_epsilon = 1e-12
+        expert_probability_mass = flattened_expert_probabilities.sum(
+            dim=expert_dimension,
             keepdim=True,
-        ).clamp_min(1e-12)
-        return normalized_mass.mean(dim=0)
+        ).clamp_min(probability_normalization_epsilon)
+        normalized_expert_probabilities = (
+            flattened_expert_probabilities / expert_probability_mass
+        )
+        routing_input_dimension = 0
+        mean_expert_utilization = normalized_expert_probabilities.mean(
+            dim=routing_input_dimension
+        )
+        return mean_expert_utilization
 
 
 class ParametricLayerMonitorCallback(Callback):
@@ -195,23 +224,23 @@ class ParametricLayerMonitorCallback(Callback):
         original_forward = parametric_layer.forward
 
         def monitored_forward(*args: object, **kwargs: object) -> object:
-            layer_id = id(parametric_layer)
+            parametric_layer_id = id(parametric_layer)
             if not self.__should_sample(pl_module):
-                self._observations.pop(layer_id, None)
+                self._observations.pop(parametric_layer_id, None)
                 return original_forward(*args, **kwargs)
-            observation = _ParametricObservation()
-            self._observations[layer_id] = observation
+            parametric_observation = _ParametricObservation()
+            self._observations[parametric_layer_id] = parametric_observation
             try:
-                output = original_forward(*args, **kwargs)
+                forward_output = original_forward(*args, **kwargs)
                 self.__emit_observation(
                     pl_module,
                     module_name,
                     parametric_layer,
-                    observation,
+                    parametric_observation,
                 )
-                return output
+                return forward_output
             finally:
-                self._observations.pop(layer_id, None)
+                self._observations.pop(parametric_layer_id, None)
 
         self.__install_method_wrapper(
             parametric_layer,
@@ -227,11 +256,14 @@ class ParametricLayerMonitorCallback(Callback):
             *args: object,
             **kwargs: object,
         ) -> object:
-            output = original_generate_parameters(*args, **kwargs)
-            observation = self._observations.get(id(parametric_layer))
-            if observation is not None:
-                self.__record_generated_parameters(observation, output)
-            return output
+            generated_parameter_output = original_generate_parameters(*args, **kwargs)
+            parametric_observation = self._observations.get(id(parametric_layer))
+            if parametric_observation is not None:
+                self.__record_generated_parameters(
+                    parametric_observation,
+                    generated_parameter_output,
+                )
+            return generated_parameter_output
 
         self.__install_method_wrapper(
             parametric_layer,
@@ -247,37 +279,40 @@ class ParametricLayerMonitorCallback(Callback):
     ) -> None:
         if not isinstance(output, tuple) or len(output) != 4:
             return
-        weights, bias, skip_mask, auxiliary_loss = output
-        if torch.is_tensor(weights):
-            observation.generated_weights = weights.detach()
-        if torch.is_tensor(bias):
-            observation.generated_bias = bias.detach()
+        generated_weights, generated_bias, skip_mask, auxiliary_loss = output
+        if torch.is_tensor(generated_weights):
+            observation.generated_weights = generated_weights.detach()
+        if torch.is_tensor(generated_bias):
+            observation.generated_bias = generated_bias.detach()
         if torch.is_tensor(skip_mask):
             observation.skip_mask = skip_mask.detach()
         if torch.is_tensor(auxiliary_loss):
             observation.auxiliary_loss = auxiliary_loss.detach()
 
     def __wrap_affine_callback(self, parametric_layer: Module) -> None:
-        method_name = "_compute_affine_transformation_callback"
-        original_affine_callback = getattr(parametric_layer, method_name)
+        affine_callback_method_name = "_compute_affine_transformation_callback"
+        original_affine_callback = getattr(
+            parametric_layer,
+            affine_callback_method_name,
+        )
 
         def monitored_affine_callback(
             *args: object,
             **kwargs: object,
         ) -> object:
-            output = original_affine_callback(*args, **kwargs)
-            observation = self._observations.get(id(parametric_layer))
-            if observation is not None:
+            affine_output = original_affine_callback(*args, **kwargs)
+            parametric_observation = self._observations.get(id(parametric_layer))
+            if parametric_observation is not None:
                 affine_input = args[2] if len(args) > 2 else kwargs.get("input")
                 if torch.is_tensor(affine_input):
-                    observation.affine_input = affine_input.detach()
-                if torch.is_tensor(output):
-                    observation.affine_output = output.detach()
-            return output
+                    parametric_observation.affine_input = affine_input.detach()
+                if torch.is_tensor(affine_output):
+                    parametric_observation.affine_output = affine_output.detach()
+            return affine_output
 
         self.__install_method_wrapper(
             parametric_layer,
-            method_name,
+            affine_callback_method_name,
             original_affine_callback,
             monitored_affine_callback,
         )
@@ -303,13 +338,13 @@ class ParametricLayerMonitorCallback(Callback):
             *args: object,
             **kwargs: object,
         ) -> object:
-            output = original_sampling_method(*args, **kwargs)
-            observation = self._observations.get(id(parametric_layer))
-            if observation is not None:
-                sample = self.__parse_router_sample(output)
-                if sample is not None:
-                    observation.set_sample(slot, sample)
-            return output
+            sampling_output = original_sampling_method(*args, **kwargs)
+            parametric_observation = self._observations.get(id(parametric_layer))
+            if parametric_observation is not None:
+                router_sample = self.__parse_router_sample(sampling_output)
+                if router_sample is not None:
+                    parametric_observation.set_sample(slot, router_sample)
+            return sampling_output
 
         self.__install_method_wrapper(
             parametric_layer,
@@ -323,14 +358,17 @@ class ParametricLayerMonitorCallback(Callback):
         if not isinstance(output, tuple) or len(output) != 4:
             return None
         probabilities, indices, _skip_mask, auxiliary_loss = output
+        detached_probabilities = (
+            probabilities.detach() if torch.is_tensor(probabilities) else None
+        )
+        detached_expert_indices = indices.detach() if torch.is_tensor(indices) else None
+        detached_auxiliary_loss = (
+            auxiliary_loss.detach() if torch.is_tensor(auxiliary_loss) else None
+        )
         return _RouterSample(
-            probabilities=(
-                probabilities.detach() if torch.is_tensor(probabilities) else None
-            ),
-            indices=indices.detach() if torch.is_tensor(indices) else None,
-            auxiliary_loss=(
-                auxiliary_loss.detach() if torch.is_tensor(auxiliary_loss) else None
-            ),
+            probabilities=detached_probabilities,
+            indices=detached_expert_indices,
+            auxiliary_loss=detached_auxiliary_loss,
         )
 
     def __install_method_wrapper(
@@ -356,29 +394,30 @@ class ParametricLayerMonitorCallback(Callback):
         parametric_layer: Module,
         observation: _ParametricObservation,
     ) -> None:
-        context = _ParametricTrackingContext(
+        weight_expert_utilization = self.__calculate_utilization(
+            parametric_layer,
+            observation,
+            "weight",
+        )
+        bias_expert_utilization = self.__calculate_utilization(
+            parametric_layer,
+            observation,
+            "bias",
+        )
+        logger = getattr(pl_module, "logger", None)
+        experiment = getattr(logger, "experiment", None)
+        global_step = getattr(pl_module, "global_step", 0)
+        tracking_context = _ParametricTrackingContext(
             pl_module=pl_module,
             module_name=module_name,
             parametric_layer=parametric_layer,
             observation=observation,
-            weight_utilization=self.__calculate_utilization(
-                parametric_layer,
-                observation,
-                "weight",
-            ),
-            bias_utilization=self.__calculate_utilization(
-                parametric_layer,
-                observation,
-                "bias",
-            ),
-            experiment=getattr(
-                getattr(pl_module, "logger", None),
-                "experiment",
-                None,
-            ),
-            global_step=getattr(pl_module, "global_step", 0),
+            weight_utilization=weight_expert_utilization,
+            bias_utilization=bias_expert_utilization,
+            experiment=experiment,
+            global_step=global_step,
         )
-        self.__track_parametric_diagnostics(context)
+        self.__track_parametric_diagnostics(tracking_context)
 
     def __track_parametric_diagnostics(
         self,
@@ -446,9 +485,10 @@ class ParametricLayerMonitorCallback(Callback):
         parameter_values = self.__parameter_values(context.observation, slot)
         if parameter_values is None:
             return
+        generated_parameter_l2_norm = parameter_values.detach().float().norm()
         context.pl_module.log(
             f"{context.module_name}/parametric/generated_{slot}_norm",
-            parameter_values.detach().float().norm(),
+            generated_parameter_l2_norm,
         )
 
     def __track_clip_saturation_fraction(
@@ -459,12 +499,18 @@ class ParametricLayerMonitorCallback(Callback):
         parameter_values = self.__parameter_values(context.observation, slot)
         if parameter_values is None:
             return
+        parameter_mixture = self.__parameter_mixture(
+            context.parametric_layer,
+            slot,
+        )
+        diagnostic_parameter_values = parameter_values.detach().float()
+        clip_saturation_fraction = _ParametricDiagnostics.clip_saturation(
+            parameter_mixture,
+            diagnostic_parameter_values,
+        )
         context.pl_module.log(
             f"{context.module_name}/parametric/{slot}_clip_saturation_fraction",
-            _ParametricDiagnostics.clip_saturation(
-                self.__parameter_mixture(context.parametric_layer, slot),
-                parameter_values.detach().float(),
-            ),
+            clip_saturation_fraction,
         )
 
     @staticmethod
@@ -472,9 +518,10 @@ class ParametricLayerMonitorCallback(Callback):
         auxiliary_loss = context.observation.auxiliary_loss
         if auxiliary_loss is None:
             return
+        mean_auxiliary_loss = auxiliary_loss.detach().float().mean()
         context.pl_module.log(
             f"{context.module_name}/parametric/auxiliary_loss",
-            auxiliary_loss.detach().float().mean(),
+            mean_auxiliary_loss,
         )
 
     @staticmethod
@@ -482,9 +529,10 @@ class ParametricLayerMonitorCallback(Callback):
         skip_mask = context.observation.skip_mask
         if skip_mask is None:
             return
+        skip_fraction = skip_mask.detach().float().mean()
         context.pl_module.log(
             f"{context.module_name}/parametric/skip_fraction",
-            skip_mask.detach().float().mean(),
+            skip_fraction,
         )
 
     @staticmethod
@@ -492,9 +540,11 @@ class ParametricLayerMonitorCallback(Callback):
         skip_mask = context.observation.skip_mask
         if skip_mask is None:
             return
+        skip_fraction = skip_mask.detach().float().mean()
+        drop_fraction = 1.0 - skip_fraction
         context.pl_module.log(
             f"{context.module_name}/parametric/drop_fraction",
-            1.0 - skip_mask.detach().float().mean(),
+            drop_fraction,
         )
 
     @staticmethod
@@ -502,9 +552,10 @@ class ParametricLayerMonitorCallback(Callback):
         affine_output = context.observation.affine_output
         if affine_output is None:
             return
+        affine_output_l2_norm = affine_output.detach().float().norm()
         context.pl_module.log(
             f"{context.module_name}/parametric/affine/output_norm",
-            affine_output.detach().float().norm(),
+            affine_output_l2_norm,
         )
 
     @staticmethod
@@ -515,10 +566,16 @@ class ParametricLayerMonitorCallback(Callback):
         affine_output = context.observation.affine_output
         if affine_input is None or affine_output is None:
             return
+        affine_output_l2_norm = affine_output.detach().float().norm()
+        stabilized_affine_input_l2_norm = (
+            affine_input.detach().float().norm().clamp_min(1e-6)
+        )
+        relative_affine_output_l2_norm = (
+            affine_output_l2_norm / stabilized_affine_input_l2_norm
+        )
         context.pl_module.log(
             f"{context.module_name}/parametric/affine/relative_output_norm",
-            affine_output.detach().float().norm()
-            / affine_input.detach().float().norm().clamp_min(1e-6),
+            relative_affine_output_l2_norm,
         )
 
     @staticmethod
@@ -531,9 +588,11 @@ class ParametricLayerMonitorCallback(Callback):
             or affine_input.shape != affine_output.shape
         ):
             return
+        affine_delta = affine_output.detach().float() - affine_input.detach().float()
+        affine_delta_l2_norm = affine_delta.norm()
         context.pl_module.log(
             f"{context.module_name}/parametric/affine/delta_norm",
-            (affine_output.detach().float() - affine_input.detach().float()).norm(),
+            affine_delta_l2_norm,
         )
 
     @staticmethod
@@ -548,11 +607,16 @@ class ParametricLayerMonitorCallback(Callback):
             or affine_input.shape != affine_output.shape
         ):
             return
-        input_values = affine_input.detach().float()
-        delta_norm = (affine_output.detach().float() - input_values).norm()
+        diagnostic_affine_input = affine_input.detach().float()
+        affine_delta = affine_output.detach().float() - diagnostic_affine_input
+        affine_delta_l2_norm = affine_delta.norm()
+        stabilized_affine_input_l2_norm = diagnostic_affine_input.norm().clamp_min(1e-6)
+        relative_affine_delta_l2_norm = (
+            affine_delta_l2_norm / stabilized_affine_input_l2_norm
+        )
         context.pl_module.log(
             f"{context.module_name}/parametric/affine/relative_delta_norm",
-            delta_norm / input_values.norm().clamp_min(1e-6),
+            relative_affine_delta_l2_norm,
         )
 
     @staticmethod
@@ -560,12 +624,15 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        sample = context.observation.sample_for(slot)
-        if sample is None or sample.auxiliary_loss is None:
+        router_sample = context.observation.sample_for(slot)
+        if router_sample is None or router_sample.auxiliary_loss is None:
             return
+        mean_router_auxiliary_loss = (
+            router_sample.auxiliary_loss.detach().float().mean()
+        )
         context.pl_module.log(
             f"{context.module_name}/router/{slot}_auxiliary_loss",
-            sample.auxiliary_loss.detach().float().mean(),
+            mean_router_auxiliary_loss,
         )
 
     @staticmethod
@@ -573,19 +640,21 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        sample = context.observation.sample_for(slot)
-        if sample is None or sample.probabilities is None:
+        router_sample = context.observation.sample_for(slot)
+        if router_sample is None or router_sample.probabilities is None:
             return
         parameter_mixture = ParametricLayerMonitorCallback.__parameter_mixture(
             context.parametric_layer,
             slot,
         )
+        diagnostic_route_probabilities = router_sample.probabilities.detach().float()
+        router_entropy = _ParametricDiagnostics.router_entropy(
+            diagnostic_route_probabilities,
+            top_k=getattr(parameter_mixture, "top_k", None),
+        )
         context.pl_module.log(
             f"{context.module_name}/router/{slot}_entropy",
-            _ParametricDiagnostics.router_entropy(
-                sample.probabilities.detach().float(),
-                top_k=getattr(parameter_mixture, "top_k", None),
-            ),
+            router_entropy,
         )
 
     @staticmethod
@@ -594,38 +663,43 @@ class ParametricLayerMonitorCallback(Callback):
         observation: _ParametricObservation,
         slot: ParametricSlot,
     ) -> Tensor | None:
-        sample = observation.sample_for(slot)
-        if sample is None:
+        router_sample = observation.sample_for(slot)
+        if router_sample is None:
             return None
-        utilization = _ParametricDiagnostics.utilization(
-            sample.probabilities,
-            sample.indices,
+        expert_utilization = _ParametricDiagnostics.utilization(
+            router_sample.probabilities,
+            router_sample.indices,
             ParametricLayerMonitorCallback.__num_experts(parametric_layer, slot),
         )
-        return utilization.detach().float() if utilization is not None else None
+        return (
+            expert_utilization.detach().float()
+            if expert_utilization is not None
+            else None
+        )
 
     @staticmethod
     def __num_experts(
         parametric_layer: Module,
         slot: ParametricSlot,
     ) -> int:
-        mixture = ParametricLayerMonitorCallback.__parameter_mixture(
+        parameter_mixture = ParametricLayerMonitorCallback.__parameter_mixture(
             parametric_layer,
             slot,
         )
-        return int(getattr(mixture, "num_experts", 0) or 0)
+        return int(getattr(parameter_mixture, "num_experts", 0) or 0)
 
     @staticmethod
     def __track_active_slots(
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None:
             return
+        active_slot_count = (expert_utilization > 0).sum().float()
         context.pl_module.log(
             f"{context.module_name}/mixture/{slot}_active_slots",
-            (utilization > 0).sum().float(),
+            active_slot_count,
         )
 
     @staticmethod
@@ -633,12 +707,14 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None:
             return
+        dead_slot_mask = expert_utilization <= 0
+        dead_slot_fraction = dead_slot_mask.float().mean()
         context.pl_module.log(
             f"{context.module_name}/mixture/{slot}_dead_slot_fraction",
-            (utilization <= 0).float().mean(),
+            dead_slot_fraction,
         )
 
     @staticmethod
@@ -646,12 +722,13 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None:
             return
+        maximum_slot_utilization = expert_utilization.max()
         context.pl_module.log(
             f"{context.module_name}/mixture/{slot}_max_utilization",
-            utilization.max(),
+            maximum_slot_utilization,
         )
 
     @staticmethod
@@ -659,12 +736,13 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None:
             return
+        minimum_slot_utilization = expert_utilization.min()
         context.pl_module.log(
             f"{context.module_name}/mixture/{slot}_min_utilization",
-            utilization.min(),
+            minimum_slot_utilization,
         )
 
     def __track_per_slot_utilization(
@@ -672,10 +750,10 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if not self.log_per_slot_scalars or utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if not self.log_per_slot_scalars or expert_utilization is None:
             return
-        for slot_index, slot_utilization in enumerate(utilization):
+        for slot_index, slot_utilization in enumerate(expert_utilization):
             context.pl_module.log(
                 f"{context.module_name}/mixture/{slot}_slot_{slot_index}_utilization",
                 slot_utilization,
@@ -686,23 +764,24 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None:
             return
-        self._utilization_histories[(context.module_name, slot)].append(utilization)
+        utilization_history = self._utilization_histories[(context.module_name, slot)]
+        utilization_history.append(expert_utilization)
 
     def __track_utilization_histogram(
         self,
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None or context.experiment is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None or context.experiment is None:
             return
         self._emission_policy.emit_histogram(
             context.experiment,
             f"{context.module_name}/mixture/histogram/{slot}_utilization",
-            utilization,
+            expert_utilization,
             context.global_step,
         )
 
@@ -711,13 +790,14 @@ class ParametricLayerMonitorCallback(Callback):
         context: _ParametricTrackingContext,
         slot: ParametricSlot,
     ) -> None:
-        utilization = context.utilization_for(slot)
-        if utilization is None or context.experiment is None:
+        expert_utilization = context.utilization_for(slot)
+        if expert_utilization is None or context.experiment is None:
             return
+        utilization_history = self._utilization_histories[(context.module_name, slot)]
         self._emission_policy.emit_history_heatmap(
             context.experiment,
             f"{context.module_name}/mixture/heatmap/{slot}_utilization",
-            self._utilization_histories[(context.module_name, slot)],
+            utilization_history,
             context.global_step,
         )
 
@@ -733,8 +813,8 @@ class ParametricLayerMonitorCallback(Callback):
         self.__cleanup()
 
     def __cleanup(self) -> None:
-        for replacement in reversed(self._wrapped_methods):
-            replacement.restore()
+        for method_replacement in reversed(self._wrapped_methods):
+            method_replacement.restore()
         self._wrapped_methods.clear()
         self._observations.clear()
         self._utilization_histories.clear()
