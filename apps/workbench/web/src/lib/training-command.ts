@@ -17,12 +17,18 @@ function shellQuote(value: string) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
-function orderedOverrideEntries(sections: ConfigSection[], overrides: OverrideValues) {
+function orderedOverrideEntries(
+  sections: ConfigSection[],
+  overrides: OverrideValues,
+) {
   const entries: Array<{ field: ConfigField; value: string }> = [];
   for (const section of sections) {
     for (const field of configSectionFields(section)) {
       if (hasOverride(overrides, field.key)) {
-        entries.push({ field, value: overrideValue(overrides, field.key) ?? "" });
+        entries.push({
+          field,
+          value: overrideValue(overrides, field.key) ?? "",
+        });
       }
     }
   }
@@ -59,7 +65,9 @@ export function buildTrainingCommand({
   const selectedPresets = [
     preset,
     ...(presets ?? []).filter((candidate) => candidate !== preset),
-  ].filter((candidate, index, all) => candidate && all.indexOf(candidate) === index);
+  ].filter(
+    (candidate, index, all) => candidate && all.indexOf(candidate) === index,
+  );
   const parts = [
     "source",
     "experiment.sh",

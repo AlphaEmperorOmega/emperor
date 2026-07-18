@@ -105,9 +105,15 @@ function runMonitorEligibility(
   tagsByRunId: ReadonlyMap<string, LogRunTags>,
 ): MonitorEligibility {
   const tags = tagsByRunId.get(run.id);
-  if (tags) return logRunHasLayerMonitorData(tags) ? "eligible" : "ineligible";
-  if (run.hasLayerMonitorData === true) return "eligible";
-  if (run.hasLayerMonitorData === false) return "ineligible";
+  if (tags) {
+    return logRunHasLayerMonitorData(tags) ? "eligible" : "ineligible";
+  }
+  if (run.hasLayerMonitorData === true) {
+    return "eligible";
+  }
+  if (run.hasLayerMonitorData === false) {
+    return "ineligible";
+  }
   return "checking";
 }
 
@@ -265,7 +271,9 @@ export function useHistoricalTargetBrowsing({
   );
   const setSelectedHistoricalExperimentFilter = useCallback(
     (experiment: string) => {
-      if (experiment === selectedHistoricalExperimentFilter) return;
+      if (experiment === selectedHistoricalExperimentFilter) {
+        return;
+      }
       setExperiment(experiment);
       setDataset("");
       setPreset("");
@@ -274,7 +282,9 @@ export function useHistoricalTargetBrowsing({
   );
   const setSelectedHistoricalDatasetFilter = useCallback(
     (dataset: string) => {
-      if (dataset === selectedHistoricalDatasetFilter) return;
+      if (dataset === selectedHistoricalDatasetFilter) {
+        return;
+      }
       setDataset(dataset);
       setPreset("");
     },
@@ -282,7 +292,9 @@ export function useHistoricalTargetBrowsing({
   );
   const setSelectedHistoricalPresetFilter = useCallback(
     (preset: string) => {
-      if (preset === selectedHistoricalPreset) return;
+      if (preset === selectedHistoricalPreset) {
+        return;
+      }
       setPreset(preset);
     },
     [selectedHistoricalPreset],
@@ -409,33 +421,66 @@ export function useHistoricalTargetBrowsing({
   ]);
 
   const historicalBrowseStatus = useMemo<HistoricalBrowseStatus>(() => {
-    if (!baseQueryEnabled) return { phase: "idle", message: "" };
-    if (experimentQuery.isLoading || experimentQuery.isFetching)
+    if (!baseQueryEnabled) {
+      return { phase: "idle", message: "" };
+    }
+    if (experimentQuery.isLoading || experimentQuery.isFetching) {
       return { phase: "loading", message: "Loading historical experiments…" };
-    if (experimentQuery.isError) return errorStatus("historical experiments");
-    if (!experimentQuery.data?.facets)
+    }
+    if (experimentQuery.isError) {
+      return errorStatus("historical experiments");
+    }
+    if (!experimentQuery.data?.facets) {
       return errorStatus("historical experiment facets");
-    if (historicalExperimentOptions.length === 0)
-      return { phase: "empty", message: "No historical experiments match this model and task." };
-    if (!selectedHistoricalExperimentFilter) return { phase: "ready", message: "" };
-    if (datasetQuery.isLoading || datasetQuery.isFetching)
+    }
+    if (historicalExperimentOptions.length === 0) {
+      return {
+        phase: "empty",
+        message: "No historical experiments match this model and task.",
+      };
+    }
+    if (!selectedHistoricalExperimentFilter) {
+      return { phase: "ready", message: "" };
+    }
+    if (datasetQuery.isLoading || datasetQuery.isFetching) {
       return { phase: "loading", message: "Loading historical datasets…" };
-    if (datasetQuery.isError) return errorStatus("historical datasets");
-    if (!datasetQuery.data?.facets)
+    }
+    if (datasetQuery.isError) {
+      return errorStatus("historical datasets");
+    }
+    if (!datasetQuery.data?.facets) {
       return errorStatus("historical dataset facets");
-    if (historicalDatasetOptions.length === 0)
-      return { phase: "empty", message: "No historical datasets match this experiment." };
-    if (!selectedHistoricalDatasetFilter) return { phase: "ready", message: "" };
-    if (presetQuery.isLoading || presetQuery.isFetching)
+    }
+    if (historicalDatasetOptions.length === 0) {
+      return {
+        phase: "empty",
+        message: "No historical datasets match this experiment.",
+      };
+    }
+    if (!selectedHistoricalDatasetFilter) {
+      return { phase: "ready", message: "" };
+    }
+    if (presetQuery.isLoading || presetQuery.isFetching) {
       return { phase: "loading", message: "Loading historical presets…" };
-    if (presetQuery.isError) return errorStatus("historical presets");
-    if (!presetQuery.data?.facets)
+    }
+    if (presetQuery.isError) {
+      return errorStatus("historical presets");
+    }
+    if (!presetQuery.data?.facets) {
       return errorStatus("historical preset facets");
-    if (historicalPresetOptions.length === 0)
-      return { phase: "empty", message: "No historical presets match this dataset." };
-    if (!selectedHistoricalPreset) return { phase: "ready", message: "" };
-    if (exactRunsQuery.isError || logRunTagsQuery.isError)
+    }
+    if (historicalPresetOptions.length === 0) {
+      return {
+        phase: "empty",
+        message: "No historical presets match this dataset.",
+      };
+    }
+    if (!selectedHistoricalPreset) {
+      return { phase: "ready", message: "" };
+    }
+    if (exactRunsQuery.isError || logRunTagsQuery.isError) {
       return errorStatus("historical runs");
+    }
     if (
       exactRunsQuery.isLoading ||
       exactRunsQuery.isFetching ||
@@ -444,10 +489,19 @@ export function useHistoricalTargetBrowsing({
     ) {
       return { phase: "loading", message: "Resolving the newest monitor runs…" };
     }
-    if (exactRuns.length === 0)
-      return { phase: "empty", message: "No runs match the selected historical group." };
-    if (!exactRunsQuery.hasNextPage && historicalMonitorRuns.length === 0)
-      return { phase: "empty", message: "No monitor-eligible runs match the selected historical group." };
+    if (exactRuns.length === 0) {
+      return {
+        phase: "empty",
+        message: "No runs match the selected historical group.",
+      };
+    }
+    if (!exactRunsQuery.hasNextPage && historicalMonitorRuns.length === 0) {
+      return {
+        phase: "empty",
+        message:
+          "No monitor-eligible runs match the selected historical group.",
+      };
+    }
     return { phase: "ready", message: "" };
   }, [
     baseQueryEnabled,

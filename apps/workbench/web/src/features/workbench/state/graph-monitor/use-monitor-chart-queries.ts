@@ -16,7 +16,7 @@ type MonitorDataApi = typeof import("@/lib/api/monitor-data");
 const fetchLogRunMonitorData: MonitorDataApi["fetchLogRunMonitorData"] =
   createLazyFunction(() =>
     import("@/lib/api/monitor-data").then(
-    (module) => module.fetchLogRunMonitorData,
+      (module) => module.fetchLogRunMonitorData,
     ),
   );
 const fetchMonitorData: MonitorDataApi["fetchMonitorData"] =

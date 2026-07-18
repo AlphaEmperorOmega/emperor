@@ -86,8 +86,13 @@ function WorkbenchCompositionProviders({
     workbenchConnection,
   );
   const configSnapshotEditor = useConfigSnapshotEditorSessionState();
-  const { targetContexts, graph, history, graphMonitor, clearForConnectionChange } =
-    useWorkbenchState({
+  const {
+    targetContexts,
+    graph,
+    history,
+    graphMonitor,
+    clearForConnectionChange,
+  } = useWorkbenchState({
     activeWorkspace,
     activeTrainingJob: activeJob.activeTrainingJob,
     protectedReadsEnabled,

@@ -1,10 +1,6 @@
 import { useCallback, useMemo } from "react";
-import {
-  useGraphPreviewOrchestration,
-} from "@/features/workbench/state/graph-monitor/use-graph-preview-orchestration";
-import {
-  useModelPackageInspectionState,
-} from "@/features/workbench/state/target/use-model-package-inspection-state";
+import { useGraphPreviewOrchestration } from "@/features/workbench/state/graph-monitor/use-graph-preview-orchestration";
+import { useModelPackageInspectionState } from "@/features/workbench/state/target/use-model-package-inspection-state";
 import type { TrainingJob } from "@/lib/api/training-jobs";
 import { type WorkbenchWorkspace } from "@/types/workbench";
 
@@ -67,21 +63,14 @@ export function useWorkbenchState(options: WorkbenchStateOptions = {}) {
         activeTrainingJob,
         protectedReadsEnabled,
       }),
-    [
-      activeTrainingJob,
-      inspectionState,
-      protectedReadsEnabled,
-    ],
+    [activeTrainingJob, inspectionState, protectedReadsEnabled],
   );
   const graphPreviewState = useGraphPreviewOrchestration(graphPreviewInput);
   const clearGraphForConnectionChange = graphPreviewState.clearForConnectionChange;
   const clearForConnectionChange = useCallback(() => {
     clearGraphForConnectionChange();
     inspectionState.inspection.clearForConnectionChange();
-  }, [
-    clearGraphForConnectionChange,
-    inspectionState.inspection,
-  ]);
+  }, [clearGraphForConnectionChange, inspectionState.inspection]);
 
   const history = useMemo(
     () => ({

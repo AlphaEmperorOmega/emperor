@@ -20,17 +20,17 @@ export function createLazyValue<Value>(load: () => Promise<Value>) {
       return Promise.reject(error);
     }
     const loadPromise = loaded.then(
-        (value) => {
-          cachedValue = value;
-          hasCachedValue = true;
-          pendingLoad = null;
-          return value;
-        },
-        (error: unknown) => {
-          pendingLoad = null;
-          throw error;
-        },
-      );
+      (value) => {
+        cachedValue = value;
+        hasCachedValue = true;
+        pendingLoad = null;
+        return value;
+      },
+      (error: unknown) => {
+        pendingLoad = null;
+        throw error;
+      },
+    );
     pendingLoad = loadPromise;
     return loadPromise;
   };

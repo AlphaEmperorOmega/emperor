@@ -1,8 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ModelIdentity } from "@/lib/api/model-catalog";
-import {
-  type OverrideValues,
-} from "@/lib/config";
+import { type OverrideValues } from "@/lib/config";
 import {
   effectivePresetOverrides,
   inactivePresetOwnedOverrideKeys,
@@ -21,9 +19,7 @@ import {
   DEFAULT_TRAINING_SEARCH_STATE,
   type TrainingSearchState,
 } from "@/lib/training-search-state";
-import {
-  useConfigSnapshotRecords,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
+import { useConfigSnapshotRecords } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
 import {
   deriveModelPackageSelection,
   datasetsForExperimentTask,

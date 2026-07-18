@@ -342,7 +342,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                         aria-hidden
                       />
                     )}
-                Load More Runs
+                    Load More Runs
                   </Button>
                 </div>
               )}
@@ -408,7 +408,7 @@ export function LogsSidebar({ browser, deletion }: LogsSidebarProps) {
                             aria-hidden
                           />
                         )}
-                Load More Scalar Tags
+                        Load More Scalar Tags
                       </Button>
                     </div>
                   ) : undefined

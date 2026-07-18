@@ -121,7 +121,7 @@ export function SelectedNodeDetailsView({
           onClick={onOpenMonitors}
         >
           <LineChart className="h-4 w-4" aria-hidden />
-        Monitor Charts
+          Monitor Charts
         </Button>
       </SurfacePanel>
       {reachGrid && <TerminalReachView grid={reachGrid} />}

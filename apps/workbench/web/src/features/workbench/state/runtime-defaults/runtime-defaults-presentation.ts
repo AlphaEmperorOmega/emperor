@@ -178,7 +178,11 @@ function indexRootTitlesBySectionTitle(sections: ConfigSection[]) {
 }
 
 function descendantFieldKeys(sections: ConfigSection[]) {
-  return new Set(sections.flatMap((section) => configSectionFields(section).map((field) => field.key)));
+  return new Set(
+    sections.flatMap((section) =>
+      configSectionFields(section).map((field) => field.key),
+    ),
+  );
 }
 
 function presentSection({

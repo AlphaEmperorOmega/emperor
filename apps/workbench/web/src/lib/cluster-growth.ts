@@ -41,7 +41,9 @@ function numberOrNull(value: unknown): number | null {
 
 // Reconstructs neuron cluster growth from training progress events so the UI
 // can show when (and where) neurons were added over the course of a run.
-export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthSummary[] {
+export function buildClusterGrowth(
+  job: TrainingJob | undefined,
+): ClusterGrowthSummary[] {
   if (!job) {
     return [];
   }

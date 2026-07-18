@@ -7,7 +7,11 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
-import type { TrainingJob, TrainingRun, TrainingRunPlan } from "@/lib/api/training-jobs";
+import type {
+  TrainingJob,
+  TrainingRun,
+  TrainingRunPlan,
+} from "@/lib/api/training-jobs";
 import { formatSignificantNumber } from "@/lib/format";
 
 type StatusMeta = {

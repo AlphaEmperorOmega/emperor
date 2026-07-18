@@ -512,7 +512,7 @@ export function ConfigSnapshotsTray({
                     disabled={isMutationPending}
                     className="h-touch text-xs md:h-control-sm"
                   >
-                Retry Change
+                    Retry Change
                   </Button>
                 )}
                 <Button
@@ -645,7 +645,7 @@ export function ConfigSnapshotsTray({
                           className="h-touch justify-center px-2.5 text-xs md:h-control-sm"
                         >
                           <Play className="h-3.5 w-3.5" aria-hidden />
-                        Load Snapshot
+                          Load Snapshot
                         </Button>
                       </div>
                     );

@@ -1,7 +1,5 @@
 import { type GraphDetailMode } from "@/lib/graph";
-import {
-  GraphNodeSimpleBadges,
-} from "@/features/workbench/components/graph/graph-node-badges";
+import { GraphNodeSimpleBadges } from "@/features/workbench/components/graph/graph-node-badges";
 import { graphCardGeometry } from "@/lib/graph/constants";
 
 export function GraphNodeHeader({

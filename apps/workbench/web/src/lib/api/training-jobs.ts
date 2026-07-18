@@ -349,7 +349,9 @@ export const trainingJobEventsSchema = z.object({
 
 export type TrainingRunChange = z.infer<typeof trainingRunChangeSchema>;
 export type TrainingRun = z.infer<typeof trainingRunSchema>;
-export type TrainingRunPlanSummary = z.infer<typeof trainingRunPlanSummarySchema>;
+export type TrainingRunPlanSummary = z.infer<
+  typeof trainingRunPlanSummarySchema
+>;
 export type TrainingRunPlan = z.infer<typeof trainingRunPlanSchema>;
 export type TrainingProgressEvent = z.infer<typeof trainingProgressEventSchema>;
 export type TrainingClusterGrowth = z.infer<typeof trainingClusterGrowthSchema>;
@@ -384,7 +386,9 @@ export function toTrainingRunPlanSubmitInput(
       id: run.id,
       preset: run.preset,
       ...(run.snapshotId !== undefined ? { snapshotId: run.snapshotId } : {}),
-      ...(run.snapshotName !== undefined ? { snapshotName: run.snapshotName } : {}),
+      ...(run.snapshotName !== undefined
+        ? { snapshotName: run.snapshotName }
+        : {}),
       dataset: run.dataset,
       overrides: run.overrides,
     })),

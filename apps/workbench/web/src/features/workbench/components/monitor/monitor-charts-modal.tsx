@@ -792,170 +792,184 @@ export function MonitorChartsModal({
       className="grid bg-black/80 p-region sm:p-shell-wide"
       panelClassName="grid max-h-full min-h-0 max-w-5xl grid-rows-[auto_minmax(0,1fr)] justify-self-center"
     >
-        <div className="grid gap-panel border-b border-line bg-panel/90 p-region backdrop-blur-xl sm:grid-cols-[minmax(0,1fr)_auto]">
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <h2 id="monitor-charts-title" className="type-title text-balance font-semibold text-ink">
-                Monitor Charts
-              </h2>
-              {activeJob ? (
-                <>
-                  <Badge>{activeJob.status}</Badge>
-                  <Badge>{activeJob.monitors.length} monitors</Badge>
-                </>
-              ) : (
-                <>
-                  <Badge>{historicalRunGroup ? "historical group" : "historical"}</Badge>
-                  {historicalRunGroup ? (
-                    <>
-                      <Badge>{historicalExperiment}</Badge>
-                      <Badge>{historicalDataset}</Badge>
-                      <Badge>{historicalPreset}</Badge>
-                      <Badge>{historicalRuns.length} runs</Badge>
-                    </>
-                  ) : historicalRun ? (
-                    <>
-                      <Badge>{historicalRun.experiment}</Badge>
-                      <Badge>{historicalRun.eventFileCount} event files</Badge>
-                    </>
-                  ) : null}
-                </>
-              )}
-            </div>
-            <div className="mt-1 break-words font-mono text-xs text-ink-faint">{node.path}</div>
+      <div className="grid gap-panel border-b border-line bg-panel/90 p-region backdrop-blur-xl sm:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <h2
+              id="monitor-charts-title"
+              className="type-title text-balance font-semibold text-ink"
+            >
+              Monitor Charts
+            </h2>
+            {activeJob ? (
+              <>
+                <Badge>{activeJob.status}</Badge>
+                <Badge>{activeJob.monitors.length} monitors</Badge>
+              </>
+            ) : (
+              <>
+                <Badge>
+                  {historicalRunGroup ? "historical group" : "historical"}
+                </Badge>
+                {historicalRunGroup ? (
+                  <>
+                    <Badge>{historicalExperiment}</Badge>
+                    <Badge>{historicalDataset}</Badge>
+                    <Badge>{historicalPreset}</Badge>
+                    <Badge>{historicalRuns.length} runs</Badge>
+                  </>
+                ) : historicalRun ? (
+                  <>
+                    <Badge>{historicalRun.experiment}</Badge>
+                    <Badge>{historicalRun.eventFileCount} event files</Badge>
+                  </>
+                ) : null}
+              </>
+            )}
           </div>
-          <div className="flex shrink-0 flex-wrap items-end gap-2">
-            {hasComparisonCandidates && (
-              <LabeledField
-                label="Scope"
-                id="monitor-comparison-scope"
-                className="text-xs font-medium normal-case"
-              >
-                <SelectOnlyDropdown
-                  id="monitor-comparison-scope"
-                  label="Scope"
-                  value={comparisonScope}
-                  options={comparisonScopeSelectOptions}
-                  onChange={(nextScope) =>
-                    setComparisonScope(nextScope as LinearMonitorComparisonScope)
-                  }
-                  className="min-w-36"
-                  triggerClassName="h-touch min-w-36 rounded-control px-2 text-sm md:h-control"
-                />
-              </LabeledField>
-            )}
-            {hasComparisonCandidates && (
-              <LabeledField
-                label="Compare"
-                id="monitor-comparison-target"
-                className="text-xs font-medium normal-case"
-              >
-                <SelectOnlyDropdown
-                  id="monitor-comparison-target"
-                  label="Compare"
-                  value={comparisonPath}
-                  options={comparisonPathOptions}
-                  onChange={setComparisonPath}
-                  className="min-w-44"
-                  triggerClassName="h-touch min-w-44 rounded-control px-2 text-sm md:h-control"
-                />
-              </LabeledField>
-            )}
-            {activeJob && sourcePresets.length > 1 && (
-              <LabeledField
-                label="Preset"
-                id="monitor-source-preset"
-                className="text-xs font-medium normal-case"
-              >
-                <SelectOnlyDropdown
-                  id="monitor-source-preset"
-                  label="Preset"
-                  value={preset}
-                  options={sourcePresetOptions}
-                  onChange={setPreset}
-                  className="min-w-32"
-                  triggerClassName="h-touch min-w-32 rounded-control px-2 text-sm md:h-control"
-                />
-              </LabeledField>
-            )}
+          <div className="mt-1 break-words font-mono text-xs text-ink-faint">
+            {node.path}
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-end gap-2">
+          {hasComparisonCandidates && (
             <LabeledField
-              label="Dataset"
-              id="monitor-source-dataset"
+              label="Scope"
+              id="monitor-comparison-scope"
               className="text-xs font-medium normal-case"
             >
               <SelectOnlyDropdown
-                id="monitor-source-dataset"
-                label="Dataset"
-                value={dataset}
-                options={sourceDatasetOptions}
-                onChange={setDataset}
+                id="monitor-comparison-scope"
+                label="Scope"
+                value={comparisonScope}
+                options={comparisonScopeSelectOptions}
+                onChange={(nextScope) =>
+                  setComparisonScope(nextScope as LinearMonitorComparisonScope)
+                }
+                className="min-w-36"
+                triggerClassName="h-touch min-w-36 rounded-control px-2 text-sm md:h-control"
+              />
+            </LabeledField>
+          )}
+          {hasComparisonCandidates && (
+            <LabeledField
+              label="Compare"
+              id="monitor-comparison-target"
+              className="text-xs font-medium normal-case"
+            >
+              <SelectOnlyDropdown
+                id="monitor-comparison-target"
+                label="Compare"
+                value={comparisonPath}
+                options={comparisonPathOptions}
+                onChange={setComparisonPath}
+                className="min-w-44"
+                triggerClassName="h-touch min-w-44 rounded-control px-2 text-sm md:h-control"
+              />
+            </LabeledField>
+          )}
+          {activeJob && sourcePresets.length > 1 && (
+            <LabeledField
+              label="Preset"
+              id="monitor-source-preset"
+              className="text-xs font-medium normal-case"
+            >
+              <SelectOnlyDropdown
+                id="monitor-source-preset"
+                label="Preset"
+                value={preset}
+                options={sourcePresetOptions}
+                onChange={setPreset}
                 className="min-w-32"
                 triggerClassName="h-touch min-w-32 rounded-control px-2 text-sm md:h-control"
               />
             </LabeledField>
-            <Button
-              variant="secondary"
-              onClick={refreshMonitorData}
-              disabled={isFetching || monitorCount === 0}
-              aria-label="Refresh monitor data"
-            >
-              <RefreshCw
-                className={cn("h-4 w-4", isFetching && "animate-spin")}
-                aria-hidden
-              />
-            </Button>
-            <Button variant="ghost" onClick={onClose} aria-label="Close monitor charts">
-              <X className="h-4 w-4" aria-hidden />
-            </Button>
-          </div>
+          )}
+          <LabeledField
+            label="Dataset"
+            id="monitor-source-dataset"
+            className="text-xs font-medium normal-case"
+          >
+            <SelectOnlyDropdown
+              id="monitor-source-dataset"
+              label="Dataset"
+              value={dataset}
+              options={sourceDatasetOptions}
+              onChange={setDataset}
+              className="min-w-32"
+              triggerClassName="h-touch min-w-32 rounded-control px-2 text-sm md:h-control"
+            />
+          </LabeledField>
+          <Button
+            variant="secondary"
+            onClick={refreshMonitorData}
+            disabled={isFetching || monitorCount === 0}
+            aria-label="Refresh monitor data"
+          >
+            <RefreshCw
+              className={cn("h-4 w-4", isFetching && "animate-spin")}
+              aria-hidden
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onClose}
+            aria-label="Close monitor charts"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </Button>
         </div>
+      </div>
 
-        <div className="min-h-0 overflow-y-auto bg-bg-2/80 p-region">
-          {hasData && historicalRunGroup && (
-            <div className="mb-3 grid gap-2">
+      <div className="min-h-0 overflow-y-auto bg-bg-2/80 p-region">
+        {hasData && historicalRunGroup && (
+          <div className="mb-3 grid gap-2">
+            <HistoricalMonitorProgressRow
+              label="Primary"
+              progress={historicalProgress}
+            />
+            {isComparing && (
               <HistoricalMonitorProgressRow
-                label="Primary"
-                progress={historicalProgress}
+                label="Comparison"
+                progress={historicalComparisonProgress}
               />
-              {isComparing && (
-                <HistoricalMonitorProgressRow
-                  label="Comparison"
-                  progress={historicalComparisonProgress}
-                />
-              )}
-            </div>
-          )}
-          {!hasData ? (
-            <MonitorEmptyState
-              title={emptyMessage.title}
-              detail={emptyMessage.detail}
-              busy={isLoading}
-            />
-          ) : historicalRunGroup && isComparing && comparisonNode && historicalData ? (
-            <MultiRunComparisonCharts
-              primaryNode={node}
-              comparisonNode={comparisonNode}
-              primaryResults={historicalData}
-              comparisonResults={historicalComparisonData}
-              comparisonLoading={comparisonLoading}
-            />
-          ) : historicalRunGroup && historicalData ? (
-            <MultiRunMonitorCharts
-              results={historicalData}
-              idPrefix="historical-group-monitor"
-            />
-          ) : isComparing && comparisonNode ? (
-            <ComparisonCharts
-              primaryNode={node}
-              comparisonNode={comparisonNode}
-              primaryData={primaryData}
-              comparisonData={comparisonData}
-              comparisonLoading={comparisonLoading}
-            />
-          ) : (
-            primaryData && <SingleNodeCharts data={primaryData} />
-          )}
-        </div>
+            )}
+          </div>
+        )}
+        {!hasData ? (
+          <MonitorEmptyState
+            title={emptyMessage.title}
+            detail={emptyMessage.detail}
+            busy={isLoading}
+          />
+        ) : historicalRunGroup &&
+          isComparing &&
+          comparisonNode &&
+          historicalData ? (
+          <MultiRunComparisonCharts
+            primaryNode={node}
+            comparisonNode={comparisonNode}
+            primaryResults={historicalData}
+            comparisonResults={historicalComparisonData}
+            comparisonLoading={comparisonLoading}
+          />
+        ) : historicalRunGroup && historicalData ? (
+          <MultiRunMonitorCharts
+            results={historicalData}
+            idPrefix="historical-group-monitor"
+          />
+        ) : isComparing && comparisonNode ? (
+          <ComparisonCharts
+            primaryNode={node}
+            comparisonNode={comparisonNode}
+            primaryData={primaryData}
+            comparisonData={comparisonData}
+            comparisonLoading={comparisonLoading}
+          />
+        ) : (
+          primaryData && <SingleNodeCharts data={primaryData} />
+        )}
+      </div>
     </DialogShell>
   );
 }

@@ -1,10 +1,5 @@
-import {
-  type ClusterDiagram,
-  type ExpertDiagram,
-} from "@/lib/graph";
-import {
-  graphCardGeometry,
-} from "@/lib/graph/constants";
+import { type ClusterDiagram, type ExpertDiagram } from "@/lib/graph";
+import { graphCardGeometry } from "@/lib/graph/constants";
 
 export const GRAPH_NODE_HORIZONTAL_PADDING = 64;
 export const EXPERT_DIAGRAM_WIDTH =

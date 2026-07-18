@@ -185,50 +185,52 @@ export function SelectOnlyDropdown({
                   <div aria-hidden style={{ height: beforeHeight }} />
                 )}
                 {virtualOptions.map(({ option, index, key }) => {
-                const isActive = index === activeIndex;
-                const isSelected = option.value === value;
-                const isOptionDisabled = Boolean(option.disabled);
-                const descriptionId = option.description
-                  ? `${popupId}-option-${encodeURIComponent(key)}-description`
-                  : undefined;
-                return (
-                  <div
-                    ref={measureOption}
-                    key={key}
-                    id={`${popupId}-option-${encodeURIComponent(key)}`}
-                    data-virtual-option-key={key}
-                    role="option"
-                    aria-label={option.label}
-                    aria-selected={isSelected}
-                    aria-disabled={isOptionDisabled || undefined}
-                    aria-describedby={descriptionId}
-                    tabIndex={-1}
-                    onMouseDown={handleOptionMouseDown}
-                    onMouseEnter={() => handleOptionMouseEnter(index)}
-                    onClick={() => handleOptionClick(index)}
-                    className={cn(
-                      "block",
-                      dropdownOptionClassName,
-                      dropdownOptionStateClassName({
-                        active: isActive,
-                        disabled: isOptionDisabled,
-                        selected: isSelected,
-                      }),
-                    )}
-                  >
-                    <span className="grid min-w-0 gap-0.5">
-                      <span className="block min-w-0 truncate">{option.label}</span>
-                      {option.description && (
-                        <span
-                          id={descriptionId}
-                          className="block min-w-0 truncate font-mono text-xs text-ink-dim"
-                        >
-                          {option.description}
-                        </span>
+                  const isActive = index === activeIndex;
+                  const isSelected = option.value === value;
+                  const isOptionDisabled = Boolean(option.disabled);
+                  const descriptionId = option.description
+                    ? `${popupId}-option-${encodeURIComponent(key)}-description`
+                    : undefined;
+                  return (
+                    <div
+                      ref={measureOption}
+                      key={key}
+                      id={`${popupId}-option-${encodeURIComponent(key)}`}
+                      data-virtual-option-key={key}
+                      role="option"
+                      aria-label={option.label}
+                      aria-selected={isSelected}
+                      aria-disabled={isOptionDisabled || undefined}
+                      aria-describedby={descriptionId}
+                      tabIndex={-1}
+                      onMouseDown={handleOptionMouseDown}
+                      onMouseEnter={() => handleOptionMouseEnter(index)}
+                      onClick={() => handleOptionClick(index)}
+                      className={cn(
+                        "block",
+                        dropdownOptionClassName,
+                        dropdownOptionStateClassName({
+                          active: isActive,
+                          disabled: isOptionDisabled,
+                          selected: isSelected,
+                        }),
                       )}
-                    </span>
-                  </div>
-                );
+                    >
+                      <span className="grid min-w-0 gap-0.5">
+                        <span className="block min-w-0 truncate">
+                          {option.label}
+                        </span>
+                        {option.description && (
+                          <span
+                            id={descriptionId}
+                            className="block min-w-0 truncate font-mono text-xs text-ink-dim"
+                          >
+                            {option.description}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  );
                 })}
                 {afterHeight > 0 && (
                   <div aria-hidden style={{ height: afterHeight }} />

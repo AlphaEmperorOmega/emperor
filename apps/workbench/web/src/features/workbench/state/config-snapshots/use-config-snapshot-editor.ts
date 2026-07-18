@@ -13,12 +13,8 @@ import {
 } from "@/lib/config-snapshots";
 import { useRuntimeDefaultsSchema } from "@/features/workbench/state/model-package/use-model-package-metadata";
 import { runtimeDefaultsEditor } from "@/features/workbench/state/runtime-defaults/runtime-defaults";
-import {
-  useConfigSnapshotRecords,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
-import {
-  type ConfigSnapshotEditorSessionState,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
+import { useConfigSnapshotRecords } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
+import { type ConfigSnapshotEditorSessionState } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 
 function createSnapshotId() {
   return globalThis.crypto?.randomUUID?.() ?? `snapshot-${Date.now()}`;
@@ -285,7 +281,10 @@ export function useConfigSnapshotEditorState({
   const retrySave = useCallback(async (): Promise<ConfigSnapshotCreateResult> => {
     const retryResult = await snapshotRecords.actions.retry();
     if (!retryResult) {
-      return { ok: false, error: "There is no failed Config Snapshot save to retry." };
+      return {
+        ok: false,
+        error: "There is no failed Config Snapshot save to retry.",
+      };
     }
     if (!retryResult.ok) {
       return { ok: false, error: retryResult.error };
@@ -294,7 +293,10 @@ export function useConfigSnapshotEditorState({
       (retryResult.kind !== "create" && retryResult.kind !== "update") ||
       !retryResult.record
     ) {
-      return { ok: false, error: "The failed change was not a Config Snapshot save." };
+      return {
+        ok: false,
+        error: "The failed change was not a Config Snapshot save.",
+      };
     }
     return { ok: true, snapshot: retryResult.record };
   }, [snapshotRecords.actions]);

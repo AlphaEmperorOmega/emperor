@@ -13,11 +13,11 @@ import {
   workspaceHref as buildWorkspaceHref,
   type DeferredWorkbenchWorkspace,
 } from "@/features/workbench/state/workbench-location-store";
-import {
-  type WorkbenchWorkspace,
-} from "@/types/workbench";
+import { type WorkbenchWorkspace } from "@/types/workbench";
 
-export type { DeferredWorkbenchWorkspace } from "@/features/workbench/state/workbench-location-store";
+export type {
+  DeferredWorkbenchWorkspace,
+} from "@/features/workbench/state/workbench-location-store";
 
 export type WorkbenchDialogControls = {
   isOpen: boolean;

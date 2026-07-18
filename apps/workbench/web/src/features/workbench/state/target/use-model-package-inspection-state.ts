@@ -11,12 +11,8 @@ import {
   inactivePresetOwnedOverrideKeys,
   runtimeDefaultsEditor,
 } from "@/features/workbench/state/runtime-defaults/runtime-defaults";
-import {
-  validateConfigSnapshotName,
-} from "@/lib/config-snapshots";
-import {
-  resolveRunPresetName,
-} from "@/lib/historical-monitor-runs";
+import { validateConfigSnapshotName } from "@/lib/config-snapshots";
+import { resolveRunPresetName } from "@/lib/historical-monitor-runs";
 import {
   modelNameForId,
   modelsForType,
@@ -25,9 +21,7 @@ import {
   normalizeSelection,
   selectionValuesEqual,
 } from "@/lib/selection";
-import {
-  useConfigSnapshotRecords,
-} from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
+import { useConfigSnapshotRecords } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
 import {
   getPersistedTargetSelectionServerSnapshot,
   getPersistedTargetSelectionSnapshot,
@@ -54,8 +48,6 @@ import {
   useInspectionTargetLifecycle,
 } from "@/features/workbench/state/target/_inspection-target-state";
 import { useHistoricalTargetBrowsing } from "@/features/workbench/state/target/use-historical-target-browsing";
-
-
 type ModelPackageInspectionStateOptions = {
   historicalRunsEnabled?: boolean;
   protectedReadsEnabled?: boolean;
@@ -246,7 +238,10 @@ export function useModelPackageInspectionState({
     () => experimentTaskOptions(datasetGroups),
     [datasetGroups],
   );
-  const datasets = datasetsForExperimentTask(datasetGroups, activeExperimentTask);
+  const datasets = datasetsForExperimentTask(
+    datasetGroups,
+    activeExperimentTask,
+  );
   const isDatasetsError = metadata.datasetMetadata.isError;
   const datasetsError = metadata.datasetMetadata.error;
   const targetMonitors = metadata.monitorMetadata.records;
@@ -523,7 +518,9 @@ export function useModelPackageInspectionState({
   const selectModel = useCallback(
     (model: string, modelType = selectedModelType) => {
       const nextModel = modelNameForId(model);
-      const nextModelType = model.includes("/") ? modelTypeForId(model) : modelType;
+      const nextModelType = model.includes("/")
+        ? modelTypeForId(model)
+        : modelType;
       if (
         !nextModel ||
         !catalogModels.some(
@@ -585,9 +582,12 @@ export function useModelPackageInspectionState({
       return;
     }
 
-    const availableModelTypes = availableModelTypeOptions.map((option) => option.value);
+    const availableModelTypes = availableModelTypeOptions.map(
+      (option) => option.value,
+    );
     const selectedTypeIsValid =
-      selectedModelType.length > 0 && availableModelTypes.includes(selectedModelType);
+      selectedModelType.length > 0 &&
+      availableModelTypes.includes(selectedModelType);
     const nextModelType = selectedTypeIsValid
       ? selectedModelType
       : availableModelTypes[0] ?? "";
@@ -1007,10 +1007,7 @@ export function useModelPackageInspectionState({
   ]);
 
   const updateTargetOverride = useCallback(
-    (
-      key: string,
-      value: string,
-    ) => {
+    (key: string, value: string) => {
       cancelTargetRestoration();
       const exitsNonPresetTarget =
         selectedTargetMode === "snapshot" || selectedTargetMode === "experiment";
@@ -1330,10 +1327,6 @@ export function useModelPackageInspectionState({
       historical,
       inspection,
     }),
-    [
-      contexts,
-      historical,
-      inspection,
-    ],
+    [contexts, historical, inspection],
   );
 }

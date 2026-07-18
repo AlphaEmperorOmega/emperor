@@ -199,7 +199,7 @@ export function TrainingTargetDatasetPanel({
                   onClick={() => void variants.retrySnapshotMutation()}
                   className="h-touch text-xs md:h-control-sm"
                 >
-              Retry Change
+                  Retry Change
                 </Button>
               )}
               <Button

@@ -198,152 +198,156 @@ export function DeleteSubsetRunsDialog({
       panelClassName="grid max-h-[min(760px,calc(100dvh-32px))] max-w-2xl gap-4 overflow-y-auto p-4 sm:p-5"
     >
       <header className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2
-              id={dialogTitleId}
-              className="text-base font-semibold text-ink"
-            >
-              {title}
-            </h2>
-            <div className="mt-1 font-mono text-xs text-ink-faint">
-              {isPlanning ? "Planning matched version folders" : `${runCount} matched runs`}
-            </div>
+        <div className="min-w-0">
+          <h2
+            id={dialogTitleId}
+            className="text-base font-semibold text-ink"
+          >
+            {title}
+          </h2>
+          <div className="mt-1 font-mono text-xs text-ink-faint">
+            {isPlanning
+              ? "Planning matched version folders"
+              : `${runCount} matched runs`}
           </div>
-          <IconButton
-            label={`Close delete ${target.kind}`}
-            onClick={onClose}
-            disabled={isDeleting}
-            variant="edge"
-            icon={<X className="h-4 w-4" aria-hidden />}
-          />
+        </div>
+        <IconButton
+          label={`Close delete ${target.kind}`}
+          onClick={onClose}
+          disabled={isDeleting}
+          variant="edge"
+          icon={<X className="h-4 w-4" aria-hidden />}
+        />
       </header>
 
-        {isPlanning ? (
-          <DialogStatus
-            title="Planning delete"
-            detail="Matching the selected experiment and row."
-            busy
-          />
-        ) : plan ? (
-          <div className="grid gap-4">
-            <div className="grid gap-3 text-sm leading-6 text-ink-dim">
-              <p>
-                This permanently removes only the matched <code>version_*</code> run
-                folders. Other runs and non-empty parent folders are left on disk.
-              </p>
-              <div className="grid gap-2 rounded-panel border border-danger-line/70 bg-danger-soft p-3 sm:grid-cols-3">
-                <div className="min-w-0">
-                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
-                    Experiment
-                  </div>
-                  <div className="mt-1 truncate font-mono text-xs text-ink">
-                    {target.experiment}
-                  </div>
+      {isPlanning ? (
+        <DialogStatus
+          title="Planning delete"
+          detail="Matching the selected experiment and row."
+          busy
+        />
+      ) : plan ? (
+        <div className="grid gap-4">
+          <div className="grid gap-3 text-sm leading-6 text-ink-dim">
+            <p>
+              This permanently removes only the matched <code>version_*</code> run
+              folders. Other runs and non-empty parent folders are left on disk.
+            </p>
+            <div className="grid gap-2 rounded-panel border border-danger-line/70 bg-danger-soft p-3 sm:grid-cols-3">
+              <div className="min-w-0">
+                <div className="type-meta font-bold uppercase tracking-label text-danger-text">
+                  Experiment
                 </div>
-                <div className="min-w-0">
-                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
-                    {targetLabel}
-                  </div>
-                  <div className="mt-1 truncate font-mono text-xs text-ink">
-                    {target.value}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="type-meta font-bold uppercase tracking-label text-danger-text">
-                    Matched Runs
-                  </div>
-                  <div className="mt-1 font-mono text-xs text-ink">{runCount}</div>
+                <div className="mt-1 truncate font-mono text-xs text-ink">
+                  {target.experiment}
                 </div>
               </div>
-              {plan.truncated && (
-                <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-2 text-xs text-ink-faint">
-                  {plan.truncationReason ??
-                    `Showing ${plan.returnedItemCount ?? plan.candidates.length} of ${
-                      plan.sourceItemCount ?? plan.candidateCount
-                    } matched runs.`}
+              <div className="min-w-0">
+                <div className="type-meta font-bold uppercase tracking-label text-danger-text">
+                  {targetLabel}
                 </div>
-              )}
-              <div className="grid gap-3 rounded-panel border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
-                <AffectedValueGroup label="Experiments" values={plan.affected.experiments} />
-                <AffectedValueGroup label="Datasets" values={plan.affected.datasets} />
-                <AffectedValueGroup
-                  label="Models"
-                  values={modelIdentityLabels(plan.affected.models)}
-                />
-                <AffectedValueGroup label="Presets" values={plan.affected.presets} />
+                <div className="mt-1 truncate font-mono text-xs text-ink">
+                  {target.value}
+                </div>
+              </div>
+              <div className="min-w-0">
+                <div className="type-meta font-bold uppercase tracking-label text-danger-text">
+                  Matched Runs
+                </div>
+                <div className="mt-1 font-mono text-xs text-ink">{runCount}</div>
               </div>
             </div>
-
-            {blockers.length > 0 && (
-              <div className="grid gap-2 rounded-panel border border-danger-line bg-danger-soft p-3 text-sm text-danger-detail">
-                <div className="flex items-start gap-2 font-semibold text-danger-text">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                  <span>A training job is still writing to this log folder.</span>
-                </div>
-                <div className="grid gap-1.5">
-                  {blockers.map((blocker) => (
-                    <div
-                      key={`${blocker.id}-${blocker.logFolder}`}
-                      className="grid gap-1 rounded-control border border-danger-line/70 bg-black/20 px-2.5 py-2 font-mono text-xs sm:grid-cols-[minmax(0,1fr)_auto]"
-                    >
-                      <span className="min-w-0 truncate">
-                        {blocker.id} · logs/{blocker.logFolder}
-                      </span>
-                      <span>{blocker.status}</span>
-                    </div>
-                  ))}
-                </div>
+            {plan.truncated && (
+              <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-2 text-xs text-ink-faint">
+                {plan.truncationReason ??
+                  `Showing ${plan.returnedItemCount ?? plan.candidates.length} of ${
+                    plan.sourceItemCount ?? plan.candidateCount
+                  } matched runs.`}
               </div>
             )}
-
-            <div className="grid gap-2">
-              <div className="text-xs font-bold uppercase tracking-label text-ink-faint">
-                Path Preview
-              </div>
-              <div className="grid max-h-56 gap-1.5 overflow-y-auto rounded-panel border border-line-soft bg-black/20 p-2">
-                {previewCandidates.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-sm text-ink-faint">
-                    No matched run folders
-                  </div>
-                ) : (
-                  previewCandidates.map((candidate) => (
-                    <div
-                      key={candidate.id}
-                      className="truncate rounded-control-md border border-line-soft bg-white/[0.025] px-2.5 py-1.5 font-mono text-xs text-ink-dim"
-                      title={candidate.relativePath}
-                    >
-                      {candidate.relativePath}
-                    </div>
-                  ))
-                )}
-                {overflowCount > 0 && (
-                  <div className="px-2 py-1 font-mono text-xs text-ink-faint">
-                    +{overflowCount} more
-                  </div>
-                )}
-              </div>
+            <div className="grid gap-3 rounded-panel border border-line-soft bg-black/20 p-3 sm:grid-cols-2">
+              <AffectedValueGroup label="Experiments" values={plan.affected.experiments} />
+              <AffectedValueGroup label="Datasets" values={plan.affected.datasets} />
+              <AffectedValueGroup
+                label="Models"
+                values={modelIdentityLabels(plan.affected.models)}
+              />
+              <AffectedValueGroup label="Presets" values={plan.affected.presets} />
             </div>
           </div>
-        ) : null}
 
-        {error ? (
-          <ErrorPanel title="Delete failed" message={errorMessage(error)} />
-        ) : null}
-
-        <footer className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
-            Cancel
-          </Button>
-          {Boolean(error) && !plan && !isPlanning && (
-            <Button variant="secondary" onClick={onRetry} disabled={isDeleting}>
-              Retry Plan
-            </Button>
+          {blockers.length > 0 && (
+            <div className="grid gap-2 rounded-panel border border-danger-line bg-danger-soft p-3 text-sm text-danger-detail">
+              <div className="flex items-start gap-2 font-semibold text-danger-text">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span>A training job is still writing to this log folder.</span>
+              </div>
+              <div className="grid gap-1.5">
+                {blockers.map((blocker) => (
+                  <div
+                    key={`${blocker.id}-${blocker.logFolder}`}
+                    className="grid gap-1 rounded-control border border-danger-line/70 bg-black/20 px-2.5 py-2 font-mono text-xs sm:grid-cols-[minmax(0,1fr)_auto]"
+                  >
+                    <span className="min-w-0 truncate">
+                      {blocker.id} · logs/{blocker.logFolder}
+                    </span>
+                    <span>{blocker.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
-          <Button variant="danger" onClick={onConfirm} disabled={!canDelete}>
-            {isDeleting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
-            {title}
+
+          <div className="grid gap-2">
+            <div className="text-xs font-bold uppercase tracking-label text-ink-faint">
+              Path Preview
+            </div>
+            <div className="grid max-h-56 gap-1.5 overflow-y-auto rounded-panel border border-line-soft bg-black/20 p-2">
+              {previewCandidates.length === 0 ? (
+                <div className="px-2 py-4 text-center text-sm text-ink-faint">
+                  No matched run folders
+                </div>
+              ) : (
+                previewCandidates.map((candidate) => (
+                  <div
+                    key={candidate.id}
+                    className="truncate rounded-control-md border border-line-soft bg-white/[0.025] px-2.5 py-1.5 font-mono text-xs text-ink-dim"
+                    title={candidate.relativePath}
+                  >
+                    {candidate.relativePath}
+                  </div>
+                ))
+              )}
+              {overflowCount > 0 && (
+                <div className="px-2 py-1 font-mono text-xs text-ink-faint">
+                  +{overflowCount} more
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <ErrorPanel title="Delete failed" message={errorMessage(error)} />
+      ) : null}
+
+      <footer className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="ghost" onClick={onClose} disabled={isDeleting}>
+          Cancel
+        </Button>
+        {Boolean(error) && !plan && !isPlanning && (
+          <Button variant="secondary" onClick={onRetry} disabled={isDeleting}>
+            Retry Plan
           </Button>
-        </footer>
+        )}
+        <Button variant="danger" onClick={onConfirm} disabled={!canDelete}>
+          {isDeleting && (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          )}
+          {title}
+        </Button>
+      </footer>
     </DialogShell>
   );
 }

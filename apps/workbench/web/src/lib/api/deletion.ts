@@ -4,9 +4,7 @@ import {
   requestJson,
   type MutationRequestOptions,
 } from "@/lib/api/client";
-import {
-  type ModelIdentity,
-} from "@/lib/api/model-catalog";
+import { type ModelIdentity } from "@/lib/api/model-catalog";
 import { modelIdentitySchema } from "@/lib/api/model-identity-schema";
 import { responseCompletenessSchema } from "@/lib/api/schemas";
 

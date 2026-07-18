@@ -68,7 +68,9 @@ export function selectedSearchAxisCount(search: TrainingSearchState) {
   return selectedSearchAxisKeys(search).length;
 }
 
-export function estimateGridCombinations(selectedValues: Record<string, ConfigValue[]>) {
+export function estimateGridCombinations(
+  selectedValues: Record<string, ConfigValue[]>,
+) {
   const counts = Object.values(selectedValues)
     .map((values) => values.length)
     .filter((count) => count > 0);
@@ -144,10 +146,15 @@ export function effectiveUnlockedTrainingSearch(
   }
   const axesByKey = axisMap(axes);
   const selectedValues = Object.fromEntries(
-    Object.entries(search.selectedValues).filter(([key, values]) => {
-      const axis = axesByKey.get(configKeyToken(key));
-      return Boolean(axis && !axis.locked && values.length > 0);
-    }).map(([key, values]) => [axesByKey.get(configKeyToken(key))?.key ?? key, values]),
+    Object.entries(search.selectedValues)
+      .filter(([key, values]) => {
+        const axis = axesByKey.get(configKeyToken(key));
+        return Boolean(axis && !axis.locked && values.length > 0);
+      })
+      .map(([key, values]) => [
+        axesByKey.get(configKeyToken(key))?.key ?? key,
+        values,
+      ]),
   );
   return { ...search, selectedValues };
 }
@@ -179,7 +186,9 @@ export function deriveTrainingSearchLockSummary(
   const skippedSelectedAxes = selectedSearchEntries(search)
     .map(([key]) => axesByKey.get(configKeyToken(key)))
     .filter((axis): axis is SearchAxis => Boolean(axis?.locked));
-  const skippedSelectedAxisLabels = skippedSelectedAxes.map((axis) => axis.label);
+  const skippedSelectedAxisLabels = skippedSelectedAxes.map(
+    (axis) => axis.label,
+  );
   const skippedSelectedAxisCount = skippedSelectedAxes.length;
   const skippedSelectedAxisMessage =
     skippedSelectedAxisCount > 0
@@ -248,7 +257,9 @@ export function buildTrainingSearchPayload(
     return undefined;
   }
   const values = Object.fromEntries(
-    Object.entries(search.selectedValues).filter(([, selected]) => selected.length > 0),
+    Object.entries(search.selectedValues).filter(
+      ([, selected]) => selected.length > 0,
+    ),
   );
   if (Object.keys(values).length === 0) {
     return undefined;

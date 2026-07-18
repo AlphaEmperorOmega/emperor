@@ -12,9 +12,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { DialogShell } from "@/features/workbench/components/shared/dialog-shell";
-import {
-  useWorkbenchConnection,
-} from "@/features/workbench/providers/workbench-connection-provider";
+import { useWorkbenchConnection } from "@/features/workbench/providers/workbench-connection-provider";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { WORKBENCH_API_URL_ENV_NAME } from "@/lib/api/_connection-runtime";
 

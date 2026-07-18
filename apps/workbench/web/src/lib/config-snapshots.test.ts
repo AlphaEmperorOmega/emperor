@@ -471,5 +471,4 @@ describe("config snapshots", () => {
       });
     }
   });
-
 });

@@ -93,14 +93,14 @@ export function TrainingPanel() {
   const onExcludeConfigSnapshot = variants.excludeSnapshot;
   const {
     state: {
-    existingHelp,
-    existingValue: selectedExistingLogFolder,
-    isLoading: logFoldersLoading,
-    mode: logFolderMode,
-    newError: newLogFolderError,
-    newValid: newLogFolderValid,
-    newValue: newLogFolder,
-    options: logFolderOptions,
+      existingHelp,
+      existingValue: selectedExistingLogFolder,
+      isLoading: logFoldersLoading,
+      mode: logFolderMode,
+      newError: newLogFolderError,
+      newValid: newLogFolderValid,
+      newValue: newLogFolder,
+      options: logFolderOptions,
     },
     actions: {
       selectMode: selectLogFolderMode,
@@ -153,112 +153,112 @@ export function TrainingPanel() {
         trailingLabel="Training Job"
         notices={
           <>
-          {trainingError && (
-            <InlineStatus tone="danger" compact role="alert">
-              {trainingError}
-            </InlineStatus>
-          )}
-          {!trainingEnabled && (
-            <InlineStatus tone="warning" compact>
-              Training is disabled by this backend.
-            </InlineStatus>
-          )}
+            {trainingError && (
+              <InlineStatus tone="danger" compact role="alert">
+                {trainingError}
+              </InlineStatus>
+            )}
+            {!trainingEnabled && (
+              <InlineStatus tone="warning" compact>
+                Training is disabled by this backend.
+              </InlineStatus>
+            )}
           </>
         }
         leading={
           <>
-              <WorkbenchSidebarHeader
-                icon={<Activity aria-hidden />}
-                title="Setup"
-                actions={
-                  <Badge variant="violet" aria-label="Stage 1">
+            <WorkbenchSidebarHeader
+              icon={<Activity aria-hidden />}
+              title="Setup"
+              actions={
+                <Badge variant="violet" aria-label="Stage 1">
                   01
-                  </Badge>
-                }
-              />
-              {setupLockMessage && (
-                <InlineStatus tone="warning" compact>
-                  {setupLockMessage}
-                </InlineStatus>
-              )}
+                </Badge>
+              }
+            />
+            {setupLockMessage && (
+              <InlineStatus tone="warning" compact>
+                {setupLockMessage}
+              </InlineStatus>
+            )}
 
-              <WorkbenchSidebarSection
-                title="Log Folder"
-                icon={
-                  logFolderMode === "existing" ? (
-                    <FolderOpen aria-hidden />
-                  ) : (
-                    <FolderPlus aria-hidden />
-                  )
-                }
-                aside={logFolderModeControl}
-                divider="after"
-              >
-                <div className="grid min-h-[4.25rem] grid-rows-[2.75rem_1rem] gap-2 md:min-h-[4rem] md:grid-rows-[2.5rem_1rem]">
-                  {logFolderMode === "existing" ? (
-                    <>
-                      <div className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg">
-                        <SelectOnlyDropdown
-                          label="Log experiment folder"
-                          value={selectedExistingLogFolder}
-                          options={logFolderDropdownOptions}
-                          onChange={setSelectedExistingLogFolder}
-                          disabled={
-                            planChangingControlsDisabled ||
-                            logFoldersLoading ||
-                            logFolderDropdownOptions.length === 0
-                          }
-                          placeholder="Select folder"
-                          className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg"
-                          triggerClassName="h-touch md:h-control-lg"
-                        />
-                      </div>
-                      <span className="min-h-4 text-xs leading-4 text-ink-faint">
-                        {existingHelp || "\u00a0"}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Input
-                        name="training-log-folder"
-                        value={newLogFolder}
-                        onChange={(event) => setNewLogFolder(event.target.value)}
-                        placeholder="e.g. my_experiment…"
-                        aria-label="New log folder"
-                        aria-invalid={
-                          newLogFolder.length > 0 && !newLogFolderValid
+            <WorkbenchSidebarSection
+              title="Log Folder"
+              icon={
+                logFolderMode === "existing" ? (
+                  <FolderOpen aria-hidden />
+                ) : (
+                  <FolderPlus aria-hidden />
+                )
+              }
+              aside={logFolderModeControl}
+              divider="after"
+            >
+              <div className="grid min-h-[4.25rem] grid-rows-[2.75rem_1rem] gap-2 md:min-h-[4rem] md:grid-rows-[2.5rem_1rem]">
+                {logFolderMode === "existing" ? (
+                  <>
+                    <div className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg">
+                      <SelectOnlyDropdown
+                        label="Log experiment folder"
+                        value={selectedExistingLogFolder}
+                        options={logFolderDropdownOptions}
+                        onChange={setSelectedExistingLogFolder}
+                        disabled={
+                          planChangingControlsDisabled ||
+                          logFoldersLoading ||
+                          logFolderDropdownOptions.length === 0
                         }
-                        autoComplete="off"
-                        disabled={planChangingControlsDisabled}
-                        className="h-touch md:h-control-lg"
+                        placeholder="Select folder"
+                        className="h-touch min-h-touch md:h-control-lg md:min-h-control-lg"
+                        triggerClassName="h-touch md:h-control-lg"
                       />
-                      <span
-                        className={
-                          newLogFolderError && newLogFolder.length > 0
-                            ? "block min-h-4 text-xs leading-4 text-danger-text"
-                            : "block min-h-4 text-xs leading-4 text-ink-faint"
-                        }
-                        role={
-                          newLogFolderError && newLogFolder.length > 0
-                            ? "alert"
-                            : undefined
-                        }
-                      >
-                        {newLogFolderError || "Folder name is valid"}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </WorkbenchSidebarSection>
+                    </div>
+                    <span className="min-h-4 text-xs leading-4 text-ink-faint">
+                      {existingHelp || "\u00a0"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      name="training-log-folder"
+                      value={newLogFolder}
+                      onChange={(event) => setNewLogFolder(event.target.value)}
+                      placeholder="e.g. my_experiment…"
+                      aria-label="New log folder"
+                      aria-invalid={
+                        newLogFolder.length > 0 && !newLogFolderValid
+                      }
+                      autoComplete="off"
+                      disabled={planChangingControlsDisabled}
+                      className="h-touch md:h-control-lg"
+                    />
+                    <span
+                      className={
+                        newLogFolderError && newLogFolder.length > 0
+                          ? "block min-h-4 text-xs leading-4 text-danger-text"
+                          : "block min-h-4 text-xs leading-4 text-ink-faint"
+                      }
+                      role={
+                        newLogFolderError && newLogFolder.length > 0
+                          ? "alert"
+                          : undefined
+                      }
+                    >
+                      {newLogFolderError || "Folder name is valid"}
+                    </span>
+                  </>
+                )}
+              </div>
+            </WorkbenchSidebarSection>
 
-              <TrainingTargetDatasetPanel
-                setup={setup}
-                disabled={planChangingControlsDisabled}
-              />
+            <TrainingTargetDatasetPanel
+              setup={setup}
+              disabled={planChangingControlsDisabled}
+            />
 
-              <section className="grid gap-2 border-t border-line-soft pt-panel">
-                <TrainingSearchSetup search={plan.search} />
-              </section>
+            <section className="grid gap-2 border-t border-line-soft pt-panel">
+              <TrainingSearchSetup search={plan.search} />
+            </section>
           </>
         }
         primary={
@@ -364,78 +364,78 @@ export function TrainingPanel() {
         }
         trailing={
           <>
-              <TrainingRunPlanCard
-                plan={progressRunPlan}
-                job={job}
-                isPlanning={isProgressPlanning}
-                planError={progressPlanError}
-                trainingError={trainingError}
-                effectiveTrainingSearch={effectiveTrainingSearch}
-                searchModeLabel={searchModeLabel}
-                activeSearchAxisCount={activeSearchAxisCount}
-                searchConflictCount={searchConflictKeys.length}
-                searchLockSummary={searchLockSummary}
-                trainingSearchValidation={trainingSearchValidation}
-                displayedRunCount={displayedRunCount}
-                requiresLargeGridConfirmation={requiresLargeGridConfirmation}
-                selectedMonitorCount={selectedMonitors.length}
-                presetCountLabel={presetCountLabel}
-                datasetCountLabel={datasetCountLabel}
-              />
+            <TrainingRunPlanCard
+              plan={progressRunPlan}
+              job={job}
+              isPlanning={isProgressPlanning}
+              planError={progressPlanError}
+              trainingError={trainingError}
+              effectiveTrainingSearch={effectiveTrainingSearch}
+              searchModeLabel={searchModeLabel}
+              activeSearchAxisCount={activeSearchAxisCount}
+              searchConflictCount={searchConflictKeys.length}
+              searchLockSummary={searchLockSummary}
+              trainingSearchValidation={trainingSearchValidation}
+              displayedRunCount={displayedRunCount}
+              requiresLargeGridConfirmation={requiresLargeGridConfirmation}
+              selectedMonitorCount={selectedMonitors.length}
+              presetCountLabel={presetCountLabel}
+              datasetCountLabel={datasetCountLabel}
+            />
 
-              {clusterGrowth.length > 0 && (
-                <SurfacePanel padding="roomy">
-                  <SectionHeading title="Cluster growth" />
-                  <div className="grid gap-1.5">
-                    {clusterGrowth.map((summary) => (
-                      <div
-                        key={summary.node}
-                        className="grid gap-2 rounded-panel border border-line bg-panel-2/70 px-panel py-2 text-xs"
-                      >
-                        <div className="flex min-w-0 items-center justify-between gap-2">
-                          <span className="truncate font-mono text-ink">
-                            {summary.node}
-                          </span>
-                          <span className="font-mono text-violet-muted">
-                            {summary.count}
-                            {summary.capacityTotal
-                              ? ` / ${summary.capacityTotal}`
-                              : ""}{" "}
-                            neurons
-                            {summary.additionCount > 0
-                              ? ` · +${summary.additionCount}`
-                              : ""}
-                          </span>
-                        </div>
-                        {summary.additions.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {summary.additions
-                              .slice(-12)
-                              .map((addition, index) => (
-                                <span
-                                  key={`${addition.coord.join("-")}-${index}`}
-                                  title={`added at ${
-                                    addition.step !== null
-                                      ? `step ${addition.step}`
-                                      : "unknown step"
-                                  }`}
-                                  className="rounded-chip border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono type-meta text-violet"
-                                >
-                                  ({addition.coord.join(", ")})
-                                  {addition.step !== null
-                                    ? ` @${addition.step}`
-                                    : ""}
-                                </span>
-                              ))}
-                          </div>
-                        )}
+            {clusterGrowth.length > 0 && (
+              <SurfacePanel padding="roomy">
+                <SectionHeading title="Cluster growth" />
+                <div className="grid gap-1.5">
+                  {clusterGrowth.map((summary) => (
+                    <div
+                      key={summary.node}
+                      className="grid gap-2 rounded-panel border border-line bg-panel-2/70 px-panel py-2 text-xs"
+                    >
+                      <div className="flex min-w-0 items-center justify-between gap-2">
+                        <span className="truncate font-mono text-ink">
+                          {summary.node}
+                        </span>
+                        <span className="font-mono text-violet-muted">
+                          {summary.count}
+                          {summary.capacityTotal
+                            ? ` / ${summary.capacityTotal}`
+                            : ""}{" "}
+                          neurons
+                          {summary.additionCount > 0
+                            ? ` · +${summary.additionCount}`
+                            : ""}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                </SurfacePanel>
-              )}
+                      {summary.additions.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {summary.additions
+                            .slice(-12)
+                            .map((addition, index) => (
+                              <span
+                                key={`${addition.coord.join("-")}-${index}`}
+                                title={`added at ${
+                                  addition.step !== null
+                                    ? `step ${addition.step}`
+                                    : "unknown step"
+                                }`}
+                                className="rounded-chip border border-violet/30 bg-violet/10 px-1.5 py-0.5 font-mono type-meta text-violet"
+                              >
+                                ({addition.coord.join(", ")})
+                                {addition.step !== null
+                                  ? ` @${addition.step}`
+                                  : ""}
+                              </span>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </SurfacePanel>
+            )}
 
-              <TrainingLogTailCard logTail={job?.logTail} />
+            <TrainingLogTailCard logTail={job?.logTail} />
           </>
         }
       />

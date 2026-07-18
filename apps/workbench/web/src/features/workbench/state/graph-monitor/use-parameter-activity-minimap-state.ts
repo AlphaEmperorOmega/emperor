@@ -4,9 +4,7 @@ import type { LogRun } from "@/lib/api/logs";
 import { useExperimentMonitorParameterActivity } from "@/features/workbench/state/graph-monitor/use-experiment-monitor-parameter-activity";
 import { deriveParameterActivityMinimapModel } from "@/lib/graph";
 import { type MonitorEligibility } from "@/lib/historical-monitor-runs";
-import {
-  type GraphParameterActivity,
-} from "@/lib/graph/types";
+import { type GraphParameterActivity } from "@/lib/graph/types";
 import { type MonitorChartsSource } from "@/types/monitor";
 
 type TargetMode = "preset" | "snapshot" | "experiment";

@@ -125,10 +125,7 @@ export function useTrainingWorkspaceState({
   const clearForConnectionChange = useCallback(() => {
     clearLogFolderForConnectionChange();
     clearPlanForConnectionChange();
-  }, [
-    clearLogFolderForConnectionChange,
-    clearPlanForConnectionChange,
-  ]);
+  }, [clearLogFolderForConnectionChange, clearPlanForConnectionChange]);
 
   const presetCountLabel = planState.presetCountLabel;
   const datasetCountLabel = planState.datasetCountLabel;
@@ -162,7 +159,7 @@ export function useTrainingWorkspaceState({
         canOpenFullConfig: Boolean(
           modelSetup.selected &&
             variantSetup.primaryPreset &&
-            configuration.status.isSchemaReady
+            configuration.status.isSchemaReady,
         ),
         activeConfigSnapshotCount: planState.activeConfigSnapshotCount,
         selectedPresetCount: planState.selectedPresetCount,
@@ -196,11 +193,7 @@ export function useTrainingWorkspaceState({
       datasetCount: planState.datasetCount,
       search: planState.search,
     }),
-    [
-      datasetCountLabel,
-      planState,
-      presetCountLabel,
-    ],
+    [datasetCountLabel, planState, presetCountLabel],
   );
   const job = useMemo(
     () => ({
@@ -235,11 +228,7 @@ export function useTrainingWorkspaceState({
       resamplePlan: planState.actions.resample,
       retryPlan: planState.actions.retry,
     }),
-    [
-      lifecycle,
-      onOpenFullConfig,
-      planState.actions,
-    ],
+    [lifecycle, onOpenFullConfig, planState.actions],
   );
   const workspace = useMemo(
     () => ({ draft, plan, job, dialogs, actions }),
