@@ -58,15 +58,22 @@ class _MemoryDiagnostics:
         input_values: Tensor, output_values: Tensor
     ) -> _MemoryDiagnosticMetrics:
         memory_delta = output_values - input_values
-        delta_norm = memory_delta.norm()
+        memory_delta_l2_norm = memory_delta.norm()
+        memory_output_mean = output_values.mean()
+        memory_output_variance = output_values.var(unbiased=False)
+        memory_output_l2_norm = output_values.norm()
+        memory_delta_mean = memory_delta.mean()
+        memory_delta_variance = memory_delta.var(unbiased=False)
+        stabilized_input_l2_norm = input_values.norm().clamp_min(1e-6)
+        relative_memory_delta_l2_norm = memory_delta_l2_norm / stabilized_input_l2_norm
         return _MemoryDiagnosticMetrics(
-            output_mean=output_values.mean(),
-            output_variance=output_values.var(unbiased=False),
-            output_norm=output_values.norm(),
-            delta_mean=memory_delta.mean(),
-            delta_variance=memory_delta.var(unbiased=False),
-            delta_norm=delta_norm,
-            relative_delta_norm=delta_norm / input_values.norm().clamp_min(1e-6),
+            output_mean=memory_output_mean,
+            output_variance=memory_output_variance,
+            output_norm=memory_output_l2_norm,
+            delta_mean=memory_delta_mean,
+            delta_variance=memory_delta_variance,
+            delta_norm=memory_delta_l2_norm,
+            relative_delta_norm=relative_memory_delta_l2_norm,
         )
 
     @staticmethod
@@ -76,29 +83,34 @@ class _MemoryDiagnostics:
     ) -> _MemoryGateMetrics:
         from emperor.memory._variants.weighted import WeightedDynamicMemory
 
-        detached_logits = gate_logits.detach().float()
+        detached_gate_logits = gate_logits.detach().float()
         if isinstance(memory_module, WeightedDynamicMemory):
-            memory_share = torch.softmax(detached_logits, dim=-1).select(
-                dim=-1,
-                index=1,
+            blend_source_dimension = -1
+            memory_source_index = 1
+            memory_blend_weights = torch.softmax(
+                detached_gate_logits, dim=blend_source_dimension
+            ).select(
+                dim=blend_source_dimension,
+                index=memory_source_index,
             )
+            mean_memory_blend_weight = memory_blend_weights.mean()
+            memory_dominant_blend_fraction = (memory_blend_weights > 0.5).float().mean()
             return _MemoryGateMetrics(
-                open_mean=memory_share.mean(),
-                open_fraction=(memory_share > 0.5).float().mean(),
+                open_mean=mean_memory_blend_weight,
+                open_fraction=memory_dominant_blend_fraction,
                 saturation_fraction=None,
             )
-        gate_values = torch.sigmoid(detached_logits)
+        gate_open_probabilities = torch.sigmoid(detached_gate_logits)
+        mean_gate_open_probability = gate_open_probabilities.mean()
+        open_gate_fraction = (gate_open_probabilities > 0.5).float().mean()
+        saturated_gate_mask = (
+            detached_gate_logits < _MemoryDiagnostics._LOW_SATURATION_LOGIT
+        ) | (detached_gate_logits > _MemoryDiagnostics._HIGH_SATURATION_LOGIT)
+        saturated_gate_fraction = saturated_gate_mask.float().mean()
         return _MemoryGateMetrics(
-            open_mean=gate_values.mean(),
-            open_fraction=(gate_values > 0.5).float().mean(),
-            saturation_fraction=(
-                (
-                    (detached_logits < _MemoryDiagnostics._LOW_SATURATION_LOGIT)
-                    | (detached_logits > _MemoryDiagnostics._HIGH_SATURATION_LOGIT)
-                )
-                .float()
-                .mean()
-            ),
+            open_mean=mean_gate_open_probability,
+            open_fraction=open_gate_fraction,
+            saturation_fraction=saturated_gate_fraction,
         )
 
 
@@ -191,8 +203,8 @@ class MemoryMonitorCallback(Callback):
     def __extract_hidden_tensor(output: object) -> Tensor | None:
         if torch.is_tensor(output):
             return output
-        hidden = getattr(output, "hidden", None)
-        return hidden if torch.is_tensor(hidden) else None
+        hidden_output = getattr(output, "hidden", None)
+        return hidden_output if torch.is_tensor(hidden_output) else None
 
     def __make_memory_forward_hook(
         self,
@@ -205,26 +217,30 @@ class MemoryMonitorCallback(Callback):
             inputs: tuple[object, ...],
             output: object,
         ) -> None:
-            gate_logits = self._latest_gate_logits.pop(module_name, None)
+            captured_gate_logits = self._latest_gate_logits.pop(module_name, None)
             global_step = trainer.global_step
             if global_step % self.log_every_n_steps != 0:
                 return
-            if not inputs or not torch.is_tensor(inputs[0]):
+            if not inputs:
+                return
+            memory_input_values = inputs[0]
+            if not torch.is_tensor(memory_input_values):
                 return
             if not torch.is_tensor(output):
                 return
-            observation = _MemoryObservation(
+            memory_output_values = output
+            memory_observation = _MemoryObservation(
                 memory_module=memory_module,
-                input_values=inputs[0],
-                output_values=output,
-                gate_logits=gate_logits,
+                input_values=memory_input_values,
+                output_values=memory_output_values,
+                gate_logits=captured_gate_logits,
             )
-            context = self.__build_tracking_context(
+            tracking_context = self.__build_tracking_context(
                 pl_module,
                 module_name,
-                observation,
+                memory_observation,
             )
-            self.__track_memory_diagnostics(context)
+            self.__track_memory_diagnostics(tracking_context)
 
         return log_memory_output
 
@@ -234,7 +250,7 @@ class MemoryMonitorCallback(Callback):
         module_name: str,
         observation: _MemoryObservation,
     ) -> _MemoryTrackingContext:
-        gate_metrics = (
+        memory_gate_metrics = (
             _MemoryDiagnostics.calculate_gate(
                 observation.memory_module,
                 observation.gate_logits,
@@ -242,15 +258,19 @@ class MemoryMonitorCallback(Callback):
             if observation.gate_logits is not None
             else None
         )
-        return _MemoryTrackingContext(
+        diagnostic_input_values = observation.input_values.detach().float()
+        diagnostic_output_values = observation.output_values.detach().float()
+        memory_diagnostic_metrics = _MemoryDiagnostics.calculate(
+            diagnostic_input_values,
+            diagnostic_output_values,
+        )
+        tracking_context = _MemoryTrackingContext(
             pl_module=pl_module,
             module_name=module_name,
-            memory_metrics=_MemoryDiagnostics.calculate(
-                observation.input_values.detach().float(),
-                observation.output_values.detach().float(),
-            ),
-            gate_metrics=gate_metrics,
+            memory_metrics=memory_diagnostic_metrics,
+            gate_metrics=memory_gate_metrics,
         )
+        return tracking_context
 
     def __track_memory_diagnostics(
         self,
