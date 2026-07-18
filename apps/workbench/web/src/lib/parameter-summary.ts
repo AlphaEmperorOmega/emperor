@@ -119,10 +119,7 @@ function classifyChannel(statuses: ParameterActivityStatus[]) {
   return { status: "notTracked" as const, missingRuns, unknownRuns };
 }
 
-function channelStatus(
-  channel: ExpectedParameterChannelName,
-  status: ParameterChannelStatus | undefined,
-) {
+function channelStatus(status: ParameterChannelStatus | undefined) {
   if (!status) {
     return "unknown" as const;
   }
@@ -161,7 +158,7 @@ export function summarizeHistoricalParameterStatus({
   for (const expected of expectedChannels) {
     const statuses = runs.map((run) => {
       const nodeStatus = nodesByRunId.get(run.id)?.get(expected.nodePath);
-      return channelStatus(expected.channel, nodeStatus?.[expected.channel]);
+      return channelStatus(nodeStatus?.[expected.channel]);
     });
     const classification = classifyChannel(statuses);
     counts[classification.status] += 1;
