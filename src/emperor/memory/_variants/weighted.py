@@ -38,29 +38,45 @@ class WeightedDynamicMemory(DynamicMemoryAbstract):
 
     def forward(self, logits: Tensor) -> Tensor:
         self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
+        memory = self.__retrieve_memory(logits)
+        broadcastable_blend_weights = self.__compute_weights(logits, memory)
+        blend_sources = self.__reshape_and_concat(logits, memory)
+        blended_logits = self.__blend_inputs_and_memory(
+            blend_sources, broadcastable_blend_weights
+        )
+        return blended_logits
+
+    def __retrieve_memory(self, logits: Tensor) -> Tensor:
         if self.test_time_training_flag:
-            memory = self._adapt_and_retrieve(
+            return self._adapt_and_retrieve(
                 logits, self.memory_model, self.memory_decoder
             )
-        else:
-            memory = self._run_model(self.memory_model, logits)
-        weights = self.__compute_weights(logits, memory)
-        merged_logits_memory = self.__reshape_and_concat(logits, memory)
-        return self.__blend_inputs_and_memory(merged_logits_memory, weights)
+        return self._run_model(self.memory_model, logits)
 
     def __compute_weights(self, logits: Tensor, memory: Tensor) -> Tensor:
-        combined = torch.cat([logits, memory], dim=-1)
-        weight_logits = self._run_model(self.memory_weight_model, combined)
-        weights = torch.softmax(weight_logits, dim=-1)
-        return weights.unsqueeze(-1)
+        weighting_context = torch.cat([logits, memory], dim=-1)
+        blend_weight_logits = self._run_model(
+            self.memory_weight_model, weighting_context
+        )
+        blend_weights = torch.softmax(blend_weight_logits, dim=-1)
+        broadcastable_blend_weights = blend_weights.unsqueeze(-1)
+        return broadcastable_blend_weights
 
     def __reshape_and_concat(self, logits: Tensor, memory: Tensor) -> Tensor:
-        logits = logits.unsqueeze(-2)
-        memory = memory.unsqueeze(-2)
-        return torch.cat((logits, memory), dim=-2)
+        blend_source_dimension = -2
+        logits_source = logits.unsqueeze(blend_source_dimension)
+        memory_source = memory.unsqueeze(blend_source_dimension)
+        blend_sources = torch.cat(
+            (logits_source, memory_source), dim=blend_source_dimension
+        )
+        return blend_sources
 
     def __blend_inputs_and_memory(
-        self, input_and_memory: Tensor, weights: Tensor
+        self,
+        blend_sources: Tensor,
+        broadcastable_blend_weights: Tensor,
     ) -> Tensor:
-        weighted_logits = input_and_memory * weights
-        return torch.sum(weighted_logits, dim=-2)
+        weighted_blend_sources = blend_sources * broadcastable_blend_weights
+        blend_source_dimension = -2
+        blended_logits = torch.sum(weighted_blend_sources, dim=blend_source_dimension)
+        return blended_logits
