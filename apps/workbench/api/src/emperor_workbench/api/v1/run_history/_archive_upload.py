@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from email import policy
+from email.message import Message
 from email.parser import BytesHeaderParser
 from typing import BinaryIO
 
@@ -124,7 +125,7 @@ def _seek_first_multipart_boundary(body: BinaryIO, boundary: bytes) -> bool:
     raise ApiError("Expected multipart form data upload.")
 
 
-def _multipart_part_headers(body: BinaryIO):
+def _multipart_part_headers(body: BinaryIO) -> Message:
     lines: list[bytes] = []
     consumed = 0
     while consumed <= MULTIPART_HEADER_LIMIT:
@@ -215,7 +216,8 @@ def parse_multipart_log_archive_upload(
         field_name = headers.get_param("name", header="content-disposition")
         if field_name in UPLOAD_FIELD_NAMES:
             return upload
-        fallback_upload = fallback_upload or upload
+        if fallback_upload is None:
+            fallback_upload = upload
 
     if fallback_upload is not None:
         return fallback_upload

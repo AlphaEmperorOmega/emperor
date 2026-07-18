@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from model_runtime.inspection import InspectionResult
 
 from emperor_workbench.api._blocking import (
     named_blocking_work_limiter,
@@ -43,7 +44,7 @@ def _inspect_model(
     *,
     service: InspectionService,
     project_adapter: ProjectAdapterClient,
-):
+) -> InspectionResult:
     try:
         selected = ModelPackageCatalog(project_adapter).select_parts(
             request.modelType,
@@ -76,7 +77,7 @@ async def inspect(
         Depends(get_project_adapter_client),
     ],
 ) -> InspectResponse:
-    result = await run_blocking_io(
+    inspection_result = await run_blocking_io(
         _inspect_model,
         request,
         service=service,
@@ -86,7 +87,7 @@ async def inspect(
             INSPECTION_BLOCKING_WORK_CONCURRENCY,
         ),
     )
-    return inspection_response(result)
+    return inspection_response(inspection_result)
 
 
 __all__ = ["router"]

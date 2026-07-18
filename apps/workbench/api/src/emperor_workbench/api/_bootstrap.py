@@ -23,6 +23,7 @@ from emperor_workbench.run_history import (
 from emperor_workbench.run_plans import RunPlanService
 from emperor_workbench.settings import WorkbenchApiSettings
 from emperor_workbench.training_jobs import (
+    ActiveTrainingJob,
     TrainingJobService,
     TrainingResourceLimits,
 )
@@ -73,7 +74,7 @@ def acquire_container(
         )
         training_job_service = training_jobs
 
-        def active_log_writers():
+        def active_log_writers() -> list[ActiveTrainingJob]:
             if training_job_service is None:
                 return []
             return training_job_service.active_jobs()
@@ -94,7 +95,7 @@ def acquire_container(
                 logs_root=settings.logs_root,
                 cancellation_mode=settings.training_cancellation_mode,
                 mutation_coordinator=mutation_coordinator,
-                terminal_log_experiment_invalidator=(run_history.invalidate_experiment),
+                terminal_log_experiment_invalidator=run_history.invalidate_experiment,
                 run_plans=run_plans,
                 max_progress_record_bytes=settings.max_progress_record_bytes,
                 tensorboard_request_work_bytes=(

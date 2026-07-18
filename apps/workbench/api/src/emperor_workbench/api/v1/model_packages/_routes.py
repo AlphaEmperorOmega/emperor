@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from model_runtime.inspection import ConfigurationSchema, SearchSpace
 
 from emperor_workbench.api._blocking import run_blocking_io
 from emperor_workbench.api._dependencies import get_project_adapter_client
@@ -66,7 +67,7 @@ def _config_schema(
     model_type: str,
     model: str,
     preset: str | None,
-):
+) -> ConfigurationSchema:
     return catalog.select_parts(model_type, model).configuration(preset)
 
 
@@ -76,7 +77,7 @@ def _search_space(
     model: str,
     preset: str | None,
     presets: list[str] | None,
-):
+) -> SearchSpace:
     return catalog.select_parts(model_type, model).search_space(preset, presets)
 
 

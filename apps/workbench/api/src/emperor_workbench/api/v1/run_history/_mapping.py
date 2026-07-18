@@ -137,18 +137,20 @@ def log_checkpoint_to_payload(checkpoint: LogCheckpoint) -> dict[str, Any]:
 
 
 def log_checkpoints_to_payload(checkpoints: list[LogCheckpoint]) -> dict[str, Any]:
-    returned = checkpoints[:LOG_METADATA_RESPONSE_LIMIT]
-    truncated = len(checkpoints) > len(returned)
+    returned_checkpoints = checkpoints[:LOG_METADATA_RESPONSE_LIMIT]
+    truncated = len(checkpoints) > len(returned_checkpoints)
     return {
         "sourceItemCount": len(checkpoints),
-        "returnedItemCount": len(returned),
+        "returnedItemCount": len(returned_checkpoints),
         "truncated": truncated,
         "truncationReason": (
             f"checkpoint metadata capped at {LOG_METADATA_RESPONSE_LIMIT} rows"
             if truncated
             else None
         ),
-        "checkpoints": [log_checkpoint_to_payload(item) for item in returned],
+        "checkpoints": [
+            log_checkpoint_to_payload(item) for item in returned_checkpoints
+        ],
     }
 
 
@@ -166,8 +168,11 @@ def _artifact_to_payload(artifact: LogRunArtifact) -> dict[str, Any]:
 def log_run_artifacts_to_payload(details: LogRunArtifacts) -> dict[str, Any]:
     source_item_count = len(details.artifacts) + len(details.checkpoints)
     returned_artifacts = details.artifacts[:LOG_METADATA_RESPONSE_LIMIT]
-    remaining = max(0, LOG_METADATA_RESPONSE_LIMIT - len(returned_artifacts))
-    returned_checkpoints = details.checkpoints[:remaining]
+    remaining_checkpoint_slots = max(
+        0,
+        LOG_METADATA_RESPONSE_LIMIT - len(returned_artifacts),
+    )
+    returned_checkpoints = details.checkpoints[:remaining_checkpoint_slots]
     returned_item_count = len(returned_artifacts) + len(returned_checkpoints)
     response_truncated = source_item_count > returned_item_count
     truncated = bool(details.truncation_reasons) or response_truncated
@@ -428,12 +433,12 @@ def _delete_plan_fields(
     models = sorted({candidate.model for candidate in candidates})
     presets = sorted({candidate.preset for candidate in candidates})
     run_ids = sorted({candidate.id for candidate in candidates})
-    returned = candidates[:LOG_METADATA_RESPONSE_LIMIT]
-    truncated = len(candidates) > len(returned)
+    returned_candidates = candidates[:LOG_METADATA_RESPONSE_LIMIT]
+    truncated = len(candidates) > len(returned_candidates)
     return {
         "candidateCount": len(candidates),
         "sourceItemCount": len(candidates),
-        "returnedItemCount": len(returned),
+        "returnedItemCount": len(returned_candidates),
         "truncated": truncated,
         "truncationReason": (
             f"delete candidates capped at {LOG_METADATA_RESPONSE_LIMIT} rows"
@@ -454,7 +459,9 @@ def _delete_plan_fields(
             "presets": presets,
             "runIds": run_ids,
         },
-        "candidates": [_delete_candidate_to_payload(item) for item in returned],
+        "candidates": [
+            _delete_candidate_to_payload(item) for item in returned_candidates
+        ],
         "blockedByActiveJobs": [
             _delete_blocker_to_payload(blocker) for blocker in blockers
         ],

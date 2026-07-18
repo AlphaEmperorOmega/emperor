@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Annotated, BinaryIO
+from typing import Annotated, Any, BinaryIO, TypeVar
 
 from fastapi import APIRouter, Depends, Request
 
@@ -31,12 +32,13 @@ from emperor_workbench.api.v1.run_history._contracts import (
 from emperor_workbench.api.v1.run_history._mapping import (
     log_archive_import_to_payload,
 )
-from emperor_workbench.run_history import RunHistoryService
+from emperor_workbench.run_history import LogArchiveImportResult, RunHistoryService
 from emperor_workbench.settings import WorkbenchApiSettings
 
 router = APIRouter()
 LOG_ARCHIVE_UPLOAD_MEMORY_SPOOL_SIZE = 1024 * 1024
 LOG_ARCHIVE_UPLOAD_LIMITER_NAME = "log-archive-upload"
+FileCallResultT = TypeVar("FileCallResultT")
 
 
 def _upload_too_large_error(limit: int) -> ApiError:
@@ -61,7 +63,10 @@ async def _read_upload_body_with_limit(
         thread_name_prefix="workbench-upload-spool",
     )
 
-    async def run_file_call(callable_object, *args):
+    async def run_file_call(
+        callable_object: Callable[..., FileCallResultT],
+        *args: Any,
+    ) -> FileCallResultT:
         future = executor.submit(callable_object, *args)
         while not future.done():
             await asyncio.sleep(0)
@@ -132,7 +137,7 @@ async def import_log_archive(
             max_upload_size=max_upload_size,
         )
 
-        def parse_and_extract_archive():
+        def parse_and_extract_archive() -> LogArchiveImportResult:
             try:
                 upload = parse_multipart_log_archive_upload(
                     content_type=content_type,
@@ -151,13 +156,13 @@ async def import_log_archive(
                 body.close()
 
         limiter_handed_to_worker = True
-        result = await run_mutation_io(
+        import_result = await run_mutation_io(
             parse_and_extract_archive,
             limiter=upload_limiter,
             limiter_already_acquired=True,
         )
         return LogArchiveImportResponse.model_validate(
-            log_archive_import_to_payload(result)
+            log_archive_import_to_payload(import_result)
         )
     finally:
         if not limiter_handed_to_worker:

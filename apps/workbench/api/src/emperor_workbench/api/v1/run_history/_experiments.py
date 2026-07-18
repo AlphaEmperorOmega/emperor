@@ -24,7 +24,7 @@ from emperor_workbench.api.v1.run_history._mapping import (
     log_experiment_delete_to_payload,
     log_experiment_page_to_payload,
 )
-from emperor_workbench.run_history import RunHistoryService
+from emperor_workbench.run_history import LogExperimentDeleteResult, RunHistoryService
 from emperor_workbench.settings import WorkbenchApiSettings
 
 router = APIRouter()
@@ -59,7 +59,7 @@ async def delete_log_experiment(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogExperimentDeleteResponse:
-    def delete_experiment():
+    def delete_experiment() -> LogExperimentDeleteResult:
         return service.delete_experiment(experiment)
 
     return LogExperimentDeleteResponse.model_validate(

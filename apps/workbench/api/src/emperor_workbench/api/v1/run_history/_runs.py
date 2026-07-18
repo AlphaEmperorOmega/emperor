@@ -36,7 +36,12 @@ from emperor_workbench.api.v1.run_history._mapping import (
 )
 from emperor_workbench.model_packages import ModelPackageCatalog
 from emperor_workbench.project_adapter import ProjectAdapterClient
-from emperor_workbench.run_history import RunHistoryFailure, RunHistoryService
+from emperor_workbench.run_history import (
+    LogRunDeletePlan,
+    LogRunDeleteResult,
+    RunHistoryFailure,
+    RunHistoryService,
+)
 from emperor_workbench.settings import WorkbenchApiSettings
 
 router = APIRouter()
@@ -154,7 +159,7 @@ async def log_run_delete_plan(
         Depends(get_project_adapter_client),
     ],
 ) -> LogRunDeletePlanResponse:
-    def create_delete_plan():
+    def create_delete_plan() -> LogRunDeletePlan:
         return service.create_delete_plan(
             experiments=request.experiments,
             datasets=request.datasets,
@@ -187,7 +192,7 @@ async def delete_log_runs(
         Depends(get_project_adapter_client),
     ],
 ) -> LogRunDeleteResponse:
-    def delete_runs():
+    def delete_runs() -> LogRunDeleteResult:
         return service.delete_runs(
             experiments=request.experiments,
             datasets=request.datasets,
@@ -215,7 +220,7 @@ async def log_preset_delete_plan(
     request: LogPresetDeleteRequest,
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
 ) -> LogRunDeletePlanResponse:
-    def create_delete_plan():
+    def create_delete_plan() -> LogRunDeletePlan:
         return service.create_preset_delete_plan(
             experiment=request.experiment,
             preset=request.preset,
@@ -238,7 +243,7 @@ async def delete_log_preset(
     service: Annotated[RunHistoryService, Depends(get_run_history_service)],
     settings: Annotated[WorkbenchApiSettings, Depends(get_workbench_settings)],
 ) -> LogRunDeleteResponse:
-    def delete_preset():
+    def delete_preset() -> LogRunDeleteResult:
         return service.delete_preset(
             experiment=request.experiment,
             preset=request.preset,

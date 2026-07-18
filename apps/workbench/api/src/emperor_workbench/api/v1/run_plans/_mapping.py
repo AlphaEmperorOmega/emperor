@@ -128,7 +128,7 @@ def run_plan_to_payload(plan: TrainingRunPlanView) -> dict[str, Any]:
         "experimentTask": plan.experiment_task,
         "datasets": plan.datasets,
         "overrides": plan.overrides,
-        "search": search_to_payload(plan.search) if plan.search else None,
+        "search": search_to_payload(plan.search) if plan.search is not None else None,
         "logFolder": plan.log_folder,
         "isRandomSearch": plan.is_random_search,
         "runs": [_run_to_payload(run) for run in plan.runs],

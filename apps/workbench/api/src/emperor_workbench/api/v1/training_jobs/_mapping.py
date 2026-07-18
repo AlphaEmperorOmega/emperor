@@ -34,9 +34,11 @@ def training_job_to_payload(job: TrainingJobView) -> dict[str, Any]:
         "experimentTask": job.experiment_task,
         "datasets": job.datasets,
         "overrides": job.overrides,
-        "search": search_to_payload(job.search) if job.search else None,
+        "search": search_to_payload(job.search) if job.search is not None else None,
         "plannedRunCount": job.planned_run_count,
-        "runPlan": (run_plan_to_payload(job.run_plan) if job.run_plan else None),
+        "runPlan": (
+            run_plan_to_payload(job.run_plan) if job.run_plan is not None else None
+        ),
         "monitors": job.monitors,
         "logFolder": job.log_folder,
         "createdAt": job.created_at,
