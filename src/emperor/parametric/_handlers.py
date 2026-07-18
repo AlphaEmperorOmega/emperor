@@ -129,6 +129,10 @@ class ParametricLayerHandler(Layer):
         super()._validate_configuration()
         self.PARAMETRIC_VALIDATOR.validate(self)
 
+    def forward(self, state: LayerState) -> LayerState:
+        self.PARAMETRIC_VALIDATOR.validate_state(state)
+        return super().forward(state)
+
     def _handle_model_processing(
         self,
         main_model_input: Tensor,
