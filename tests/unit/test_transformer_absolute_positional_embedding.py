@@ -79,7 +79,7 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
 
         output = model(input_tokens, incremental_state={})
 
-        self.assertEqual(output.shape, (1, 1, cfg.embedding_dim))
+        self.assertEqual(output.shape, (3, 1, cfg.embedding_dim))
 
     def test_forward_explicit_positions(self):
         cfg = self.preset(num_embeddings=10, embedding_dim=4)
