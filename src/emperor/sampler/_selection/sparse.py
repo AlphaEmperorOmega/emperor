@@ -30,6 +30,27 @@ class SamplerSparse(SamplerBase):
         )
         return selected_probabilities, selected_expert_indices
 
+    def _sample_probabilities_log_scores_and_indices(
+        self,
+        probabilities: Tensor,
+        log_probabilities: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        expert_dimension = 1
+        selected_log_probabilities, selected_expert_indices = torch.max(
+            log_probabilities,
+            dim=expert_dimension,
+        )
+        selected_probabilities = torch.gather(
+            probabilities,
+            expert_dimension,
+            selected_expert_indices.unsqueeze(expert_dimension),
+        ).squeeze(expert_dimension)
+        return (
+            selected_probabilities,
+            selected_log_probabilities,
+            selected_expert_indices,
+        )
+
     def _compute_loss(
         self,
         logits: Tensor,

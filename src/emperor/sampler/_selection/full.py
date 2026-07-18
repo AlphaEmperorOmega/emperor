@@ -29,6 +29,34 @@ class SamplerFull(SamplerBase):
         )
         return thresholded_probabilities, None
 
+    def _sample_probabilities_log_scores_and_indices(
+        self,
+        probabilities: Tensor,
+        log_probabilities: Tensor,
+    ) -> tuple[Tensor, Tensor, None]:
+        if self.threshold == 0.0:
+            return probabilities, log_probabilities, None
+
+        below_threshold_mask = probabilities < self.threshold
+        unnormalized_thresholded_probabilities = torch.where(
+            below_threshold_mask,
+            0.0,
+            probabilities,
+        )
+        selected_log_probabilities = torch.where(
+            below_threshold_mask,
+            torch.full_like(log_probabilities, float("-inf")),
+            log_probabilities,
+        )
+        selected_log_probabilities = self._normalize_log_probabilities(
+            unnormalized_thresholded_probabilities,
+            selected_log_probabilities,
+        )
+        thresholded_probabilities = self._normalize_probabilities(
+            unnormalized_thresholded_probabilities
+        )
+        return thresholded_probabilities, selected_log_probabilities, None
+
     def __apply_dynamic_topk_threshold_mask(self, probabilities: Tensor) -> Tensor:
         if self.threshold == 0.0:
             return probabilities

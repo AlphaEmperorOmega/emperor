@@ -35,6 +35,63 @@ class SamplerTopk(SamplerBase):
         )
         return selected_probabilities, selected_expert_indices
 
+    def _sample_probabilities_log_scores_and_indices(
+        self,
+        probabilities: Tensor,
+        log_probabilities: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        if self.training and self.num_topk_samples > 0:
+            selected_expert_indices = (
+                self.__sample_deterministic_and_random_topk_indices(
+                    log_probabilities,
+                    probabilities,
+                )
+            )
+            selected_probabilities = torch.gather(
+                probabilities,
+                1,
+                selected_expert_indices,
+            )
+        else:
+            _, selected_expert_indices = torch.topk(log_probabilities, self.top_k)
+            selected_probabilities = torch.gather(
+                probabilities,
+                1,
+                selected_expert_indices,
+            )
+        selected_log_probabilities = torch.gather(
+            log_probabilities,
+            1,
+            selected_expert_indices,
+        )
+        return (
+            selected_probabilities,
+            selected_log_probabilities,
+            selected_expert_indices,
+        )
+
+    def __sample_deterministic_and_random_topk_indices(
+        self,
+        deterministic_ranking_scores: Tensor,
+        random_sampling_probabilities: Tensor,
+    ) -> Tensor:
+        num_deterministic_samples = self.top_k - self.num_topk_samples
+        expert_first_scores = deterministic_ranking_scores.transpose(0, 1)
+        _, expert_first_deterministic_indices = expert_first_scores.topk(
+            num_deterministic_samples,
+            dim=0,
+        )
+        deterministic_topk_indices = expert_first_deterministic_indices.transpose(0, 1)
+
+        sampling_epsilon = 1e-6
+        random_sampling_weights = random_sampling_probabilities + sampling_epsilon
+        random_sampling_weights.scatter_(1, deterministic_topk_indices, 0)
+        random_topk_indices = torch.multinomial(
+            random_sampling_weights,
+            self.num_topk_samples,
+        )
+        return torch.hstack((deterministic_topk_indices, random_topk_indices))
+
     def __sample_deterministic_and_random_topk(
         self, probabilities: Tensor
     ) -> tuple[Tensor, Tensor]:
