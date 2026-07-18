@@ -25,34 +25,46 @@ class SamplerTopk(SamplerBase):
         self, probabilities: Tensor
     ) -> tuple[Tensor, Tensor | None]:
         if self.training and (self.num_topk_samples > 0):
-            probabilities, indices = self.__sample_deterministic_and_random_topk(
-                probabilities
+            selected_probabilities, selected_expert_indices = (
+                self.__sample_deterministic_and_random_topk(probabilities)
             )
-            return probabilities, indices
+            return selected_probabilities, selected_expert_indices
 
-        probabilities, indices = torch.topk(probabilities, self.top_k)
-        return probabilities, indices
+        selected_probabilities, selected_expert_indices = torch.topk(
+            probabilities, self.top_k
+        )
+        return selected_probabilities, selected_expert_indices
 
     def __sample_deterministic_and_random_topk(
         self, probabilities: Tensor
     ) -> tuple[Tensor, Tensor]:
-        num_deterministic = self.top_k - self.num_topk_samples
-        _, transposed_deterministic_indices = probabilities.transpose(0, 1).topk(
-            num_deterministic,
-            dim=0,
+        num_deterministic_samples = self.top_k - self.num_topk_samples
+        expert_first_probabilities = probabilities.transpose(0, 1)
+        expert_first_expert_dimension = 0
+        _, expert_first_deterministic_indices = expert_first_probabilities.topk(
+            num_deterministic_samples,
+            dim=expert_first_expert_dimension,
         )
-        topk_deterministic_indices = transposed_deterministic_indices.transpose(0, 1)
+        deterministic_topk_indices = expert_first_deterministic_indices.transpose(0, 1)
 
-        masked_probs = probabilities + 1e-6
-        masked_probs.scatter_(1, topk_deterministic_indices, 0)
-        topk_random_indices = torch.multinomial(masked_probs, self.num_topk_samples)
-
-        final_topk_indices = torch.hstack(
-            (topk_deterministic_indices, topk_random_indices)
+        sampling_epsilon = 1e-6
+        random_sampling_weights = probabilities + sampling_epsilon
+        expert_dimension = 1
+        random_sampling_weights.scatter_(
+            expert_dimension, deterministic_topk_indices, 0
+        )
+        random_topk_indices = torch.multinomial(
+            random_sampling_weights, self.num_topk_samples
         )
 
-        final_topk_probs = torch.gather(probabilities, 1, final_topk_indices)
-        return final_topk_probs, final_topk_indices
+        selected_expert_indices = torch.hstack(
+            (deterministic_topk_indices, random_topk_indices)
+        )
+
+        selected_probabilities = torch.gather(
+            probabilities, expert_dimension, selected_expert_indices
+        )
+        return selected_probabilities, selected_expert_indices
 
     def _compute_loss(
         self,
@@ -62,30 +74,42 @@ class SamplerTopk(SamplerBase):
         indices: Tensor,
         skip_mask: Tensor | None = None,
     ) -> Tensor:
-        logits = logits.reshape(-1, self.num_experts)
-        gates = self.__prepare_loss_gates(sampled_probabilities, indices)
-        full_probabilities = full_probabilities.reshape(-1, self.num_experts)
-        skip_mask = self.__prepare_loss_skip_mask(skip_mask)
+        flattened_router_logits = logits.reshape(-1, self.num_experts)
+        loss_gates = self.__prepare_loss_gates(sampled_probabilities, indices)
+        flattened_full_probabilities = full_probabilities.reshape(-1, self.num_experts)
+        flattened_skip_mask = self.__prepare_loss_skip_mask(skip_mask)
 
         self.auxiliary_loss_model.update_accumulated_statistics(
-            logits, full_probabilities, gates, skip_mask
+            flattened_router_logits,
+            flattened_full_probabilities,
+            loss_gates,
+            flattened_skip_mask,
         )
-        return self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+        auxiliary_loss = self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+        return auxiliary_loss
 
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
-        indices = indices.view(-1, self.top_k)
-        input_dim = sampled_probabilities.shape[0]
-        gates_buffer = sampled_probabilities.new_zeros(input_dim, self.num_experts)
-        gates = gates_buffer.scatter(1, indices, sampled_probabilities)
+        flattened_sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
+        flattened_expert_indices = indices.view(-1, self.top_k)
+        num_routing_inputs = flattened_sampled_probabilities.shape[0]
+        zero_expert_gates = flattened_sampled_probabilities.new_zeros(
+            num_routing_inputs, self.num_experts
+        )
+        expert_dimension = 1
+        expert_gates = zero_expert_gates.scatter(
+            expert_dimension,
+            flattened_expert_indices,
+            flattened_sampled_probabilities,
+        )
 
-        return gates
+        return expert_gates
 
     def __prepare_loss_skip_mask(
         self, skip_mask: Tensor | None = None
     ) -> Tensor | None:
         if skip_mask is not None:
-            return skip_mask.reshape(-1, 1)
+            flattened_skip_mask = skip_mask.reshape(-1, 1)
+            return flattened_skip_mask
         return None
