@@ -38,14 +38,16 @@ class ElementWiseWeightedDynamicMemory(DynamicMemoryAbstract):
 
     def forward(self, logits: Tensor) -> Tensor:
         self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
-        if self.test_time_training_flag:
-            memory = self._adapt_and_retrieve(
-                logits, self.memory_model, self.memory_decoder
-            )
-        else:
-            memory = self._run_model(self.memory_model, logits)
+        memory = self.__retrieve_memory(logits)
         feature_weights = self.__compute_feature_weights(logits, memory)
         return self.__blend_inputs_and_memory(logits, memory, feature_weights)
+
+    def __retrieve_memory(self, logits: Tensor) -> Tensor:
+        if self.test_time_training_flag:
+            return self._adapt_and_retrieve(
+                logits, self.memory_model, self.memory_decoder
+            )
+        return self._run_model(self.memory_model, logits)
 
     def __compute_feature_weights(self, logits: Tensor, memory: Tensor) -> Tensor:
         combined = torch.cat([logits, memory], dim=-1)
@@ -58,4 +60,6 @@ class ElementWiseWeightedDynamicMemory(DynamicMemoryAbstract):
         memory: Tensor,
         feature_weights: Tensor,
     ) -> Tensor:
-        return (1 - feature_weights) * logits + feature_weights * memory
+        weighted_logits = (1 - feature_weights) * logits
+        weighted_memory = feature_weights * memory
+        return weighted_logits + weighted_memory
