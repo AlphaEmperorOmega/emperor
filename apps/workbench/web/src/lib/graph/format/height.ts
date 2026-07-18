@@ -47,12 +47,12 @@ function clusterDiagramHeight(clusterDiagram: ClusterDiagram) {
 }
 
 function parameterShapeListHeight(input: GraphNodeHeightInput) {
-  const entries = parameterShapeEntries(input.details);
-  if (entries.length === 0) {
+  const parameterShapes = parameterShapeEntries(input.details);
+  if (parameterShapes.length === 0) {
     return 0;
   }
 
-  const rowCount = Math.ceil(entries.length / 2);
+  const rowCount = Math.ceil(parameterShapes.length / 2);
   return (
     graphCardGeometry.parameterShapes.marginBlockStart +
     rowCount * graphCardGeometry.parameterShapes.rowHeight +

@@ -261,8 +261,10 @@ export function buildMonitorComparisonCandidates(
   );
   const primaryTarget = primary.node;
 
-  const targetParent = parentIdByChildId.get(primaryTarget.id);
-  const targetParentNode = targetParent ? nodesById.get(targetParent) : undefined;
+  const targetParentId = parentIdByChildId.get(primaryTarget.id);
+  const targetParentNode = targetParentId
+    ? nodesById.get(targetParentId)
+    : undefined;
   const hasNumericLayerWrapper = Boolean(
     targetParentNode &&
       stackIndex(targetParentNode) !== undefined &&

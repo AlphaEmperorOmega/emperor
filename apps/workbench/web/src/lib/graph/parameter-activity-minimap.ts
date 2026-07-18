@@ -87,9 +87,11 @@ export function deriveParameterActivityMinimapModel({
     ),
   };
   const navigation = buildGraphNavigation(relevantGraph);
-  const expandable = expandableNodeIds(navigation);
+  const expandableNodeIdsSet = expandableNodeIds(navigation);
   const initialExpandedNodeIds = new Set(
-    [...navigation.rootIds].filter((nodeId) => expandable.has(nodeId)),
+    [...navigation.rootIds].filter((nodeId) =>
+      expandableNodeIdsSet.has(nodeId),
+    ),
   );
 
   return {
@@ -98,7 +100,7 @@ export function deriveParameterActivityMinimapModel({
     parameterNodeIds,
     relevantNodeIds,
     initialExpandedNodeIds,
-    expandableNodeIds: expandable,
+    expandableNodeIds: expandableNodeIdsSet,
     parameterNodeCount: parameterNodeIds.size,
   };
 }

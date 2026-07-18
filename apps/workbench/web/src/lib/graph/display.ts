@@ -109,8 +109,8 @@ function decorateChildSummaries(
     return summaries;
   }
 
-  let changed = false;
-  const decorated = summaries.map((summary) => {
+  let hasChanges = false;
+  const decoratedSummaries = summaries.map((summary) => {
     const sourceNode = summary.sourceNodeId
       ? model.sourceNodesById.get(summary.sourceNodeId)
       : undefined;
@@ -121,11 +121,11 @@ function decorateChildSummaries(
       return summary;
     }
 
-    changed = true;
+    hasChanges = true;
     return { ...summary, parameterActivity };
   });
 
-  return changed ? decorated : summaries;
+  return hasChanges ? decoratedSummaries : summaries;
 }
 
 function graphDisplayCard(

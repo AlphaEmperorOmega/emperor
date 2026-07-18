@@ -4,7 +4,7 @@ import { graphDisplayTypeNames } from "@/lib/graph/constants";
 import { lastPathSegment } from "@/lib/graph/helpers";
 import { type GraphCoordinate } from "@/lib/graph/types";
 
-const bytesPerMegabyte = 1024 * 1024;
+const BYTES_PER_MEGABYTE = 1024 * 1024;
 
 export type NodeDetailEntry = {
   key: string;
@@ -71,7 +71,7 @@ export function formatModelSize(bytes: number | null | undefined) {
     return undefined;
   }
 
-  const megabytes = bytes / bytesPerMegabyte;
+  const megabytes = bytes / BYTES_PER_MEGABYTE;
   if (megabytes < 0.01) {
     return "<0.01 MB";
   }
@@ -133,14 +133,14 @@ function dimensionRangeFromText(value: unknown) {
     return undefined;
   }
 
-  const parts = value.trim().split(/\s*->\s*/);
-  if (parts.length !== 2) {
+  const dimensionParts = value.trim().split(/\s*->\s*/);
+  if (dimensionParts.length !== 2) {
     return undefined;
   }
 
   return dimensionRange(
-    dimensionScalarText(parts[0]),
-    dimensionScalarText(parts[1]),
+    dimensionScalarText(dimensionParts[0]),
+    dimensionScalarText(dimensionParts[1]),
   );
 }
 
