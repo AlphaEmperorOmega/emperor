@@ -51,12 +51,12 @@ def _run_worker(request: InspectionWorkerRequest) -> dict[str, Any]:
 
     with ProjectAdapterClient(timeout_seconds=None) as project_adapter:
         try:
-            selected = ModelPackageCatalog(project_adapter).select_parts(
+            selected_model_package = ModelPackageCatalog(project_adapter).select_parts(
                 request.model_type,
                 request.model,
             )
-            parsed_overrides = selected.parse_overrides(request.overrides)
-            result = selected.inspect(
+            parsed_overrides = selected_model_package.parse_overrides(request.overrides)
+            inspection_result = selected_model_package.inspect(
                 InspectionRequest(
                     preset=request.preset,
                     overrides=parsed_overrides,
@@ -66,7 +66,7 @@ def _run_worker(request: InspectionWorkerRequest) -> dict[str, Any]:
             )
         except ModelPackageFailure as exc:
             raise inspection_failure(exc) from exc
-    return success_envelope(result)
+    return success_envelope(inspection_result)
 
 
 def main() -> int:

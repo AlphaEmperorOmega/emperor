@@ -148,14 +148,14 @@ def _default_value_for_field(field: ConfigurationField) -> str:
 
 
 def _normalize_value_for_field(field: ConfigurationField, value: Any) -> str:
-    raw = "" if value is None else str(value).strip()
-    if field.nullable and raw == "":
+    raw_value = "" if value is None else str(value).strip()
+    if field.nullable and raw_value == "":
         return "null"
-    if field.value_type == "bool" and raw.lower() in ("true", "false"):
-        return raw.lower()
+    if field.value_type == "bool" and raw_value.lower() in ("true", "false"):
+        return raw_value.lower()
     if field.value_type in ("int", "float"):
         try:
-            number = float(raw)
+            number = float(raw_value)
         except (TypeError, ValueError):
             pass
         else:
@@ -163,7 +163,7 @@ def _normalize_value_for_field(field: ConfigurationField, value: Any) -> str:
                 return str(int(number))
             if field.value_type == "float":
                 return str(int(number)) if number.is_integer() else str(number)
-    return raw
+    return raw_value
 
 
 def _field_label(field: ConfigurationField) -> str:

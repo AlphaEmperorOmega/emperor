@@ -87,7 +87,7 @@ class SelectedModelPackage:
         preset: str | None = None,
         ignore_unknown: bool = False,
     ) -> ParsedOverrides:
-        result = self._project_call(
+        parsed_overrides_payload = self._project_call(
             "parse_overrides",
             {
                 "model_id": self.catalog_key,
@@ -96,9 +96,9 @@ class SelectedModelPackage:
                 "ignore_unknown": ignore_unknown,
             },
         )
-        if not isinstance(result, dict):
+        if not isinstance(parsed_overrides_payload, dict):
             raise ModelPackageFailure("The project Adapter returned invalid overrides.")
-        return ParsedOverrides(result)
+        return ParsedOverrides(parsed_overrides_payload)
 
     def validate(self, request: InspectionRequest) -> None:
         raw_overrides = (
@@ -118,11 +118,11 @@ class SelectedModelPackage:
         )
 
     def preset_locks(self, preset: str | None) -> dict[str, Any]:
-        result = self._project_call(
+        preset_locks_payload = self._project_call(
             "preset_locks",
             {"model_id": self.catalog_key, "preset": preset},
         )
-        return self._mapping_result(result, name="preset locks")
+        return self._mapping_result(preset_locks_payload, name="preset locks")
 
     def reject_locked_overrides(
         self,
@@ -144,7 +144,7 @@ class SelectedModelPackage:
         *,
         ignore_unknown: bool = False,
     ) -> dict[str, Any]:
-        result = self._project_call(
+        serialized_overrides_payload = self._project_call(
             "serialize_overrides",
             {
                 "model_id": self.catalog_key,
@@ -152,7 +152,10 @@ class SelectedModelPackage:
                 "ignore_unknown": ignore_unknown,
             },
         )
-        return self._mapping_result(result, name="serialized overrides")
+        return self._mapping_result(
+            serialized_overrides_payload,
+            name="serialized overrides",
+        )
 
     def checkpoint_config_overrides(
         self,

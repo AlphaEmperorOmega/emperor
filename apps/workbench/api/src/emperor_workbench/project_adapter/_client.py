@@ -131,13 +131,13 @@ class ProjectAdapterClient:
                 process.wait(timeout=self._remaining_timeout(started_at))
             except subprocess.TimeoutExpired as exc:
                 raise self._timeout_failure() from exc
-            result = decode_response(raw_response)
+            decoded_response = decode_response(raw_response)
             if process.returncode != 0:
                 raise ProjectAdapterFailure(
                     "The model project Adapter exited unexpectedly.",
                     kind=FailureKind.UNAVAILABLE,
                 )
-            return result
+            return decoded_response
         finally:
             _shutdown_process(process)
 
@@ -255,14 +255,14 @@ class ProjectAdapterClient:
         if timeout is None:
             return exchange()
 
-        result: Queue[bytes | BaseException] = Queue(maxsize=1)
+        response_queue: Queue[bytes | BaseException] = Queue(maxsize=1)
 
         def run_exchange() -> None:
             try:
                 response: bytes | BaseException = exchange()
             except BaseException as exc:  # pragma: no cover - OS pipe failure
                 response = exc
-            result.put(response)
+            response_queue.put(response)
 
         worker = threading.Thread(
             target=run_exchange,
@@ -271,7 +271,7 @@ class ProjectAdapterClient:
         )
         worker.start()
         try:
-            response = result.get(timeout=timeout)
+            response = response_queue.get(timeout=timeout)
         except Empty as exc:
             if discard_persistent:
                 self._discard_process(process)
@@ -334,26 +334,28 @@ class ProjectAdapterClient:
 
     def _package_metadata(self, model_id: str) -> dict[str, Any]:
         with self._metadata_lock:
-            cached = self._metadata_cache.get(model_id)
-            if cached is None:
-                cached = require_mapping(
+            cached_metadata = self._metadata_cache.get(model_id)
+            if cached_metadata is None:
+                cached_metadata = require_mapping(
                     self.call(
                         "package_metadata",
                         {"model_id": model_id},
                     )
                 )
-                self._metadata_cache[model_id] = cached
-            return deepcopy(cached)
+                self._metadata_cache[model_id] = cached_metadata
+            return deepcopy(cached_metadata)
 
     def catalog(self) -> list[ModelPackageReference]:
-        result = require_list(self.call("catalog"))
+        catalog_payload = require_list(self.call("catalog"))
         references: list[ModelPackageReference] = []
-        for value in result:
-            item = require_mapping(value)
+        for raw_package in catalog_payload:
+            package_payload = require_mapping(raw_package)
             references.append(
                 ModelPackageReference(
-                    model_type=require_string(require_field(item, "modelType")),
-                    model=require_string(require_field(item, "model")),
+                    model_type=require_string(
+                        require_field(package_payload, "modelType")
+                    ),
+                    model=require_string(require_field(package_payload, "model")),
                     client=self,
                 )
             )
@@ -368,13 +370,13 @@ class ProjectAdapterClient:
         return reference
 
     def configuration(self, model_id: str, preset: str | None) -> ConfigurationSchema:
-        result = self.call(
+        configuration_payload = self.call(
             "configuration",
             {"model_id": model_id, "preset": preset},
         )
         return _decode_wire_result(
             configuration_schema_from_wire,
-            result,
+            configuration_payload,
             name="configuration",
         )
 
@@ -384,7 +386,7 @@ class ProjectAdapterClient:
         preset: str | None,
         presets: tuple[str, ...] | list[str] | None = None,
     ) -> SearchSpace:
-        result = self.call(
+        search_space_payload = self.call(
             "search_space",
             {
                 "model_id": model_id,
@@ -394,7 +396,7 @@ class ProjectAdapterClient:
         )
         return _decode_wire_result(
             search_space_from_wire,
-            result,
+            search_space_payload,
             name="search space",
         )
 
@@ -404,7 +406,7 @@ class ProjectAdapterClient:
             if isinstance(request.overrides, ParsedOverrides)
             else request.overrides
         )
-        result = self.call(
+        inspection_payload = self.call(
             "inspect",
             {
                 "model_id": model_id,
@@ -416,7 +418,7 @@ class ProjectAdapterClient:
         )
         return _decode_wire_result(
             inspection_result_from_wire,
-            result,
+            inspection_payload,
             name="inspection",
         )
 
@@ -452,7 +454,7 @@ class ProjectAdapterClient:
         budget: PlanningBudget,
         random_source: random.Random | None = None,
     ) -> RunPlan:
-        result = self.call(
+        plan_response = self.call(
             "plan_runs",
             {
                 "model_id": model_id,
@@ -465,17 +467,17 @@ class ProjectAdapterClient:
                 ),
             },
         )
-        result_payload = require_mapping(result)
-        if random_source is not None and result_payload.get("random_state") is not None:
+        plan_payload = require_mapping(plan_response)
+        if random_source is not None and plan_payload.get("random_state") is not None:
             try:
-                random_source.setstate(tuple_tree(result_payload["random_state"]))
+                random_source.setstate(tuple_tree(plan_payload["random_state"]))
             except (TypeError, ValueError) as exc:
                 raise ProjectAdapterProtocolFailure(
                     "The project Adapter random state is invalid."
                 ) from exc
         return _decode_wire_result(
             run_plan_from_wire,
-            require_field(result_payload, "plan"),
+            require_field(plan_payload, "plan"),
             name="Run Plan",
         )
 
@@ -487,7 +489,7 @@ class ProjectAdapterClient:
         *,
         budget: PlanningBudget,
     ) -> RunPlan:
-        result = self.call(
+        accepted_plan_payload = self.call(
             "accept_run_plan",
             {
                 "model_id": model_id,
@@ -498,7 +500,7 @@ class ProjectAdapterClient:
         )
         return _decode_wire_result(
             run_plan_from_wire,
-            result,
+            accepted_plan_payload,
             name="Run Plan",
         )
 

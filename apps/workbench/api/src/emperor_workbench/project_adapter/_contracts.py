@@ -65,8 +65,8 @@ class ModelPackageReference:
             ) from exc
 
     def resolve_experiment_task(self, value: str | None) -> str:
-        result = self._resolve(experiment_task=value)
-        return require_string(require_field(result, "experiment_task"))
+        resolution = self._resolve(experiment_task=value)
+        return require_string(require_field(resolution, "experiment_task"))
 
     def task_name(self, task: object) -> str:
         return str(task)
@@ -76,30 +76,30 @@ class ModelPackageReference:
         values: list[str],
         task: object,
     ) -> list[DatasetReference]:
-        result = self._resolve(experiment_task=str(task), datasets=values)
-        datasets = require_list(require_field(result, "datasets"))
-        return [DatasetReference(require_string(name)) for name in datasets]
+        resolution = self._resolve(experiment_task=str(task), datasets=values)
+        dataset_names = require_list(require_field(resolution, "datasets"))
+        return [DatasetReference(require_string(name)) for name in dataset_names]
 
     def resolve_preset(self, value: str) -> PresetReference:
-        result = self._resolve(presets=[value])
-        presets = require_list(require_field(result, "presets"))
-        if len(presets) != 1:
+        resolution = self._resolve(presets=[value])
+        resolved_presets = require_list(require_field(resolution, "presets"))
+        if len(resolved_presets) != 1:
             raise ProjectAdapterProtocolFailure(
                 "The project Adapter preset result is invalid."
             )
-        preset = require_mapping(presets[0])
+        preset_payload = require_mapping(resolved_presets[0])
         return PresetReference(
-            name=require_string(require_field(preset, "key")),
-            public_name=require_string(require_field(preset, "name")),
+            name=require_string(require_field(preset_payload, "key")),
+            public_name=require_string(require_field(preset_payload, "name")),
         )
 
     def preset_name(self, preset: PresetReference) -> str:
         return preset.public_name
 
     def resolve_monitors(self, values: list[str] | None) -> list[MonitorReference]:
-        result = self._resolve(monitors=list(values or ()))
-        monitors = require_list(require_field(result, "monitors"))
-        return [MonitorReference(require_string(name)) for name in monitors]
+        resolution = self._resolve(monitors=list(values or ()))
+        monitor_names = require_list(require_field(resolution, "monitors"))
+        return [MonitorReference(require_string(name)) for name in monitor_names]
 
     def checkpoint_config_overrides(
         self,
