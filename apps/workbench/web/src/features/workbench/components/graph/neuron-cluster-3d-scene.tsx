@@ -88,7 +88,7 @@ function InstancedCells({
   onSelectCell?: (cell: RenderCell) => void;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const cellTransform = useMemo(() => new THREE.Object3D(), []);
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -97,13 +97,13 @@ function InstancedCells({
     }
     cells.forEach((cell, index) => {
       const [x, y, z] = coordinatePosition(cell.coordinate, capacity);
-      dummy.position.set(x, y, z);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
+      cellTransform.position.set(x, y, z);
+      cellTransform.updateMatrix();
+      mesh.setMatrixAt(index, cellTransform.matrix);
     });
     mesh.count = cells.length;
     mesh.instanceMatrix.needsUpdate = true;
-  }, [capacity, cells, dummy]);
+  }, [capacity, cellTransform, cells]);
 
   if (cells.length === 0) {
     return null;

@@ -161,7 +161,7 @@ function GraphParameterActivityPopover({
         return;
       }
 
-      const rect = anchor.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
       const viewportWidth =
         document.documentElement.clientWidth || window.innerWidth;
       const viewportHeight =
@@ -177,11 +177,11 @@ function GraphParameterActivityPopover({
         viewportWidth - popupWidth - POPUP_MARGIN,
       );
       const left = Math.min(
-        Math.max(rect.right - popupWidth, POPUP_MARGIN),
+        Math.max(anchorRect.right - popupWidth, POPUP_MARGIN),
         maxLeft,
       );
-      const belowTop = rect.bottom + POPUP_GAP;
-      const aboveTop = rect.top - popupHeight - POPUP_GAP;
+      const belowTop = anchorRect.bottom + POPUP_GAP;
+      const aboveTop = anchorRect.top - popupHeight - POPUP_GAP;
       const top =
         belowTop + popupHeight <= viewportHeight - POPUP_MARGIN ||
         aboveTop < POPUP_MARGIN
@@ -257,7 +257,7 @@ function GraphParameterActivityPopover({
     >
       <span className="text-ink">Parameter Activity</span>
       {activityChannels(activity).map(({ key, label, shortLabel, channel }) => {
-        const counts = runCounts(channel);
+        const runCountsText = runCounts(channel);
 
         return (
           <span key={key} className="grid gap-1">
@@ -279,7 +279,9 @@ function GraphParameterActivityPopover({
               step: {formatStep(channel.lastStep)} · samples:{" "}
               {channel.observedPoints}
             </span>
-            {counts && <span className="font-mono text-ink-faint">{counts}</span>}
+            {runCountsText && (
+              <span className="font-mono text-ink-faint">{runCountsText}</span>
+            )}
           </span>
         );
       })}

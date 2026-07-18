@@ -78,8 +78,8 @@ export function SelectedNodeDetailsView({
   monitorButtonTitle?: string;
   onOpenMonitors: () => void;
 }) {
-  const entries = nodeDetailEntries(node.details, node.config);
-  const badges = nodeBadges(node.details);
+  const detailEntries = nodeDetailEntries(node.details, node.config);
+  const detailBadges = nodeBadges(node.details);
   const hasParameters = node.parameterCount > 0;
   const reachGrid = buildTerminalReachGrid(node.details);
 
@@ -99,9 +99,9 @@ export function SelectedNodeDetailsView({
             <span className="min-w-0 truncate font-mono text-ink">{node.id}</span>
           </div>
         </div>
-        {badges.length > 0 && (
+        {detailBadges.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1">
-            {badges.map(([key, value]) => (
+            {detailBadges.map(([key, value]) => (
               <Badge key={`${key}-${value}`} className="border-violet/25 bg-violet/10 text-ink">
                 {`${key}: ${detailText(value)}`}
               </Badge>
@@ -125,7 +125,7 @@ export function SelectedNodeDetailsView({
         </Button>
       </SurfacePanel>
       {reachGrid && <TerminalReachView grid={reachGrid} />}
-      {(hasParameters || entries.length > 0) && (
+      {(hasParameters || detailEntries.length > 0) && (
         <div className="grid gap-0">
           {hasParameters && (
             <KeyValueRow
@@ -134,7 +134,7 @@ export function SelectedNodeDetailsView({
               valueClassName="text-violet-text"
             />
           )}
-          {entries.map((entry) => {
+          {detailEntries.map((entry) => {
             const value = nodeDetailEntryText(entry);
             const isNumeric = typeof entry.value === "number";
             return (

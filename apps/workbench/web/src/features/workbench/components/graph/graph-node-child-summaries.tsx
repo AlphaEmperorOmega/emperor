@@ -54,7 +54,7 @@ function GraphNodeChildSummaryRow({
   index: number;
   monitorButton?: ReactNode;
 }) {
-  const activity = summary.parameterActivity;
+  const parameterActivity = summary.parameterActivity;
   const summaryLabel = summary.nestedLabel
     ? `${summary.label} ${summary.nestedLabel}`
     : summary.label;
@@ -103,9 +103,9 @@ function GraphNodeChildSummaryRow({
               {summary.dims}
             </span>
           )}
-          {activity && (
+          {parameterActivity && (
             <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-              <GraphParameterIndicators activity={activity} />
+              <GraphParameterIndicators activity={parameterActivity} />
               {monitorButton}
             </span>
           )}

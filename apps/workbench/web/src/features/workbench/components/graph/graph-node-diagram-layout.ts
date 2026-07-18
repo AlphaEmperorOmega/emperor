@@ -60,10 +60,10 @@ export function expertDiagramCellCenters(
     width: EXPERT_DIAGRAM_WIDTH,
     gap: EXPERT_DIAGRAM_GAP,
   });
-  let offset = 0;
-  return widths.map((width) => {
-    const center = offset + width / 2;
-    offset += width + EXPERT_DIAGRAM_GAP;
+  let leftOffset = 0;
+  return widths.map((cellWidth) => {
+    const center = leftOffset + cellWidth / 2;
+    leftOffset += cellWidth + EXPERT_DIAGRAM_GAP;
     return center;
   });
 }

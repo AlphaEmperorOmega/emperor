@@ -287,20 +287,20 @@ function ParameterActivityMinimapDialogSession({
 
   const toggleExpansion = useCallback((nodeId: string) => {
     setExpandedNodeIds((current) => {
-      const next = new Set(current);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
+      const nextExpandedNodeIds = new Set(current);
+      if (nextExpandedNodeIds.has(nodeId)) {
+        nextExpandedNodeIds.delete(nodeId);
       } else {
-        next.add(nodeId);
+        nextExpandedNodeIds.add(nodeId);
       }
-      return next;
+      return nextExpandedNodeIds;
     });
   }, []);
   const visibleGraph = useMemo(
     () => filterParameterActivityMinimapGraphByExpansion(model, expandedNodeIds),
     [expandedNodeIds, model],
   );
-  const flow = useMemo(
+  const minimapLayout = useMemo(
     () =>
       layoutMinimapNodes({
         graph: visibleGraph,
@@ -363,16 +363,16 @@ function ParameterActivityMinimapDialogSession({
         </header>
         <div className="min-h-[60vh] min-w-0 bg-minimap">
           <ReactFlowProvider
-            initialNodes={flow.nodes}
-            initialEdges={flow.edges}
+            initialNodes={minimapLayout.nodes}
+            initialEdges={minimapLayout.edges}
             initialMinZoom={0.35}
             initialMaxZoom={2}
             fitView
             initialFitViewOptions={{ padding: 0.22 }}
           >
             <ReactFlow
-              nodes={flow.nodes}
-              edges={flow.edges}
+              nodes={minimapLayout.nodes}
+              edges={minimapLayout.edges}
               nodeTypes={minimapNodeTypes}
               fitView
               minZoom={0.35}

@@ -19,13 +19,13 @@ function coordinateText([x, y, z]: [number, number, number]) {
 }
 
 function reachSummary(reach: ClusterDiagramReach) {
-  const outsideText =
+  const outOfBoundsText =
     reach.outOfBoundsTotal > 0
       ? ` · ${formatExactCount(reach.outOfBoundsTotal)} outside`
       : "";
   return `${coordinateText(reach.position)} · ${formatExactCount(
     reach.connections.length,
-  )} reach · ${formatExactCount(reach.activeConnectionTotal)} active${outsideText}`;
+  )} reach · ${formatExactCount(reach.activeConnectionTotal)} active${outOfBoundsText}`;
 }
 
 export function ClusterDiagramView({

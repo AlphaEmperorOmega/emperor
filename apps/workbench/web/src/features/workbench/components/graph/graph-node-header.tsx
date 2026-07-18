@@ -22,7 +22,7 @@ export function GraphNodeHeader({
   simpleDimsText?: string;
 }) {
   const isSimpleMode = graphDetailMode === "simple";
-  const hasSimpleMetrics = Boolean(simpleDimsText);
+  const hasSimpleDimensions = Boolean(simpleDimsText);
 
   if (isSimpleMode) {
     return (
@@ -33,7 +33,7 @@ export function GraphNodeHeader({
         >
           {label}
         </div>
-        {hasSimpleMetrics && (
+        {hasSimpleDimensions && (
           <div
             className="mt-1 flex h-5 min-w-0 items-center gap-1.5 overflow-hidden"
             data-testid={`graph-node-simple-metrics-${nodeId}`}

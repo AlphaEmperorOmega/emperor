@@ -104,9 +104,9 @@ const GraphNodeView = memo(function GraphNodeView({
     );
   }
 
-  const entries = nodeDetailEntries(data.details, data.config);
+  const detailEntries = nodeDetailEntries(data.details, data.config);
   const parameterShapes = parameterShapeEntries(data.details);
-  const hasMetadata = entries.length > 0;
+  const hasDetailEntries = detailEntries.length > 0;
   const detailToggleLabel = data.config ? "Config options" : "Details";
   const detailsId = `graph-node-details-${data.nodeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const rendersChildSummaries =
@@ -199,7 +199,7 @@ const GraphNodeView = memo(function GraphNodeView({
     />
   );
   const detailsToggle =
-    !isSimpleMode && hasMetadata ? (
+    !isSimpleMode && hasDetailEntries ? (
       <GraphNodeDetailsToggle
         detailsId={detailsId}
         toggleLabel={detailToggleLabel}
@@ -271,10 +271,10 @@ const GraphNodeView = memo(function GraphNodeView({
               monitorButton={inlineMonitorButton}
             />
           ) : null}
-          {!isSimpleMode && hasMetadata && (
+          {!isSimpleMode && hasDetailEntries && (
             <GraphNodeDetails
               detailsId={detailsId}
-              entries={entries}
+              entries={detailEntries}
               isExpanded={data.isDetailsExpanded}
             />
           )}
