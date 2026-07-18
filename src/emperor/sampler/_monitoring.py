@@ -45,21 +45,30 @@ class _SamplerDiagnostics:
         usage_counts: Tensor,
         usage_mass: Tensor,
     ) -> _SamplerUsageMetrics:
-        detached_counts = usage_counts.detach()
-        detached_mass = usage_mass.detach()
-        usage_fraction = detached_counts / detached_counts.sum().clamp_min(1.0)
-        mass_fraction = detached_mass / detached_mass.sum().clamp_min(1e-6)
-        entropy = -(usage_fraction.clamp_min(1e-6).log() * usage_fraction).sum()
-        coefficient_of_variation = (
-            detached_counts.std(unbiased=False)
-            / detached_counts.mean().clamp_min(1e-6)
+        detached_usage_counts = usage_counts.detach()
+        detached_probability_mass = usage_mass.detach()
+        total_expert_usage_count = detached_usage_counts.sum().clamp_min(1.0)
+        expert_usage_fraction = detached_usage_counts / total_expert_usage_count
+        total_probability_mass = detached_probability_mass.sum().clamp_min(1e-6)
+        expert_probability_mass_fraction = (
+            detached_probability_mass / total_probability_mass
         )
+        log_safe_usage_fraction = expert_usage_fraction.clamp_min(1e-6)
+        usage_entropy = -(log_safe_usage_fraction.log() * expert_usage_fraction).sum()
+        expert_usage_standard_deviation = detached_usage_counts.std(unbiased=False)
+        stabilized_mean_expert_usage_count = detached_usage_counts.mean().clamp_min(
+            1e-6
+        )
+        usage_coefficient_of_variation = (
+            expert_usage_standard_deviation / stabilized_mean_expert_usage_count
+        )
+        active_expert_count = (detached_usage_counts > 0).sum().float()
         return _SamplerUsageMetrics(
-            usage_fraction=usage_fraction,
-            mass_fraction=mass_fraction,
-            active_experts=(detached_counts > 0).sum().float(),
-            entropy=entropy,
-            coefficient_of_variation=coefficient_of_variation,
+            usage_fraction=expert_usage_fraction,
+            mass_fraction=expert_probability_mass_fraction,
+            active_experts=active_expert_count,
+            entropy=usage_entropy,
+            coefficient_of_variation=usage_coefficient_of_variation,
         )
 
 
@@ -85,14 +94,15 @@ class SamplerMonitorCallback(Callback):
         self._emission_policy = MonitorEmissionPolicy()
 
     @staticmethod
-    def __validate_positive_integer(option_name: str, value: int) -> None:
-        if not isinstance(value, int):
+    def __validate_positive_integer(option_name: str, option_value: int) -> None:
+        if not isinstance(option_value, int):
             raise TypeError(
-                f"{option_name} must be an integer, received {type(value).__name__}."
+                f"{option_name} must be an integer, "
+                f"received {type(option_value).__name__}."
             )
-        if isinstance(value, bool) or value <= 0:
+        if isinstance(option_value, bool) or option_value <= 0:
             raise ValueError(
-                f"{option_name} must be a positive integer, received {value!r}."
+                f"{option_name} must be a positive integer, received {option_value!r}."
             )
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
@@ -123,22 +133,22 @@ class SamplerMonitorCallback(Callback):
             usage_tracker = sampler_module.usage_tracker
             if usage_tracker is None:
                 continue
-            batch_metrics = _SamplerDiagnostics.calculate_usage(
+            batch_usage_metrics = _SamplerDiagnostics.calculate_usage(
                 usage_tracker.last_expert_usage_counts,
                 usage_tracker.last_expert_usage_mass,
             )
-            cumulative_metrics = _SamplerDiagnostics.calculate_usage(
+            cumulative_usage_metrics = _SamplerDiagnostics.calculate_usage(
                 usage_tracker.cumulative_expert_usage_counts,
                 usage_tracker.cumulative_expert_usage_mass,
             )
-            context = self.__build_tracking_context(
+            tracking_context = self.__build_tracking_context(
                 pl_module,
                 module_name,
                 sampler_module,
-                batch_metrics,
-                cumulative_metrics,
+                batch_usage_metrics,
+                cumulative_usage_metrics,
             )
-            self.__track_sampler_diagnostics(context)
+            self.__track_sampler_diagnostics(tracking_context)
 
     @staticmethod
     def __build_tracking_context(
@@ -148,24 +158,28 @@ class SamplerMonitorCallback(Callback):
         batch_metrics: _SamplerUsageMetrics,
         cumulative_metrics: _SamplerUsageMetrics,
     ) -> _SamplerTrackingContext:
-        skip_mask = sampler_module.get_updated_skip_mask()
-        auxiliary_loss = sampler_module.get_auxiliary_loss()
-        return _SamplerTrackingContext(
+        updated_skip_mask = sampler_module.get_updated_skip_mask()
+        sampler_auxiliary_loss = sampler_module.get_auxiliary_loss()
+        retention_fraction = (
+            updated_skip_mask.detach().float().mean()
+            if updated_skip_mask is not None
+            else None
+        )
+        mean_auxiliary_loss = sampler_auxiliary_loss.detach().float().mean()
+        logger = getattr(pl_module, "logger", None)
+        experiment = getattr(logger, "experiment", None)
+        global_step = getattr(pl_module, "global_step", 0)
+        tracking_context = _SamplerTrackingContext(
             pl_module=pl_module,
             module_name=module_name,
             batch_metrics=batch_metrics,
             cumulative_metrics=cumulative_metrics,
-            retention_fraction=(
-                skip_mask.detach().float().mean() if skip_mask is not None else None
-            ),
-            auxiliary_loss=auxiliary_loss.detach().float().mean(),
-            experiment=getattr(
-                getattr(pl_module, "logger", None),
-                "experiment",
-                None,
-            ),
-            global_step=getattr(pl_module, "global_step", 0),
+            retention_fraction=retention_fraction,
+            auxiliary_loss=mean_auxiliary_loss,
+            experiment=experiment,
+            global_step=global_step,
         )
+        return tracking_context
 
     def __track_sampler_diagnostics(
         self,
@@ -252,9 +266,10 @@ class SamplerMonitorCallback(Callback):
     def __track_drop_fraction(context: _SamplerTrackingContext) -> None:
         if context.retention_fraction is None:
             return
+        drop_fraction = 1.0 - context.retention_fraction
         context.pl_module.log(
             f"{context.module_name}/capacity/drop_fraction",
-            1.0 - context.retention_fraction,
+            drop_fraction,
         )
 
     @staticmethod
@@ -303,9 +318,10 @@ class SamplerMonitorCallback(Callback):
         metric_scope: str,
         metrics: _SamplerUsageMetrics,
     ) -> None:
+        maximum_expert_usage_fraction = metrics.usage_fraction.max()
         context.pl_module.log(
             f"{context.module_name}/{metric_scope}/max_usage_fraction",
-            metrics.usage_fraction.max(),
+            maximum_expert_usage_fraction,
         )
 
     @staticmethod
@@ -314,9 +330,10 @@ class SamplerMonitorCallback(Callback):
         metric_scope: str,
         metrics: _SamplerUsageMetrics,
     ) -> None:
+        minimum_expert_usage_fraction = metrics.usage_fraction.min()
         context.pl_module.log(
             f"{context.module_name}/{metric_scope}/min_usage_fraction",
-            metrics.usage_fraction.min(),
+            minimum_expert_usage_fraction,
         )
 
     @staticmethod
@@ -325,9 +342,10 @@ class SamplerMonitorCallback(Callback):
         metric_scope: str,
         metrics: _SamplerUsageMetrics,
     ) -> None:
+        maximum_expert_probability_mass_fraction = metrics.mass_fraction.max()
         context.pl_module.log(
             f"{context.module_name}/{metric_scope}/max_probability_mass",
-            metrics.mass_fraction.max(),
+            maximum_expert_probability_mass_fraction,
         )
 
     @staticmethod
@@ -336,9 +354,10 @@ class SamplerMonitorCallback(Callback):
         metric_scope: str,
         metrics: _SamplerUsageMetrics,
     ) -> None:
+        minimum_expert_probability_mass_fraction = metrics.mass_fraction.min()
         context.pl_module.log(
             f"{context.module_name}/{metric_scope}/min_probability_mass",
-            metrics.mass_fraction.min(),
+            minimum_expert_probability_mass_fraction,
         )
 
     def __track_per_expert_usage_fraction(
@@ -364,19 +383,19 @@ class SamplerMonitorCallback(Callback):
     ) -> None:
         if not self.log_per_expert_scalars:
             return
-        for expert_index, probability_mass in enumerate(metrics.mass_fraction):
+        for expert_index, probability_mass_fraction in enumerate(metrics.mass_fraction):
             context.pl_module.log(
                 f"{context.module_name}/{metric_scope}/"
                 f"expert_{expert_index}/probability_mass",
-                probability_mass,
+                probability_mass_fraction,
             )
 
     def __track_usage_history(self, context: _SamplerTrackingContext) -> None:
         if context.experiment is None:
             return
-        self._usage_history[context.module_name].append(
-            context.batch_metrics.usage_fraction
-        )
+        usage_history = self._usage_history[context.module_name]
+        batch_expert_usage_fraction = context.batch_metrics.usage_fraction
+        usage_history.append(batch_expert_usage_fraction)
 
     def __track_probability_mass_history(
         self,
@@ -384,17 +403,18 @@ class SamplerMonitorCallback(Callback):
     ) -> None:
         if context.experiment is None:
             return
-        self._mass_history[context.module_name].append(
-            context.batch_metrics.mass_fraction
-        )
+        probability_mass_history = self._mass_history[context.module_name]
+        batch_expert_probability_mass_fraction = context.batch_metrics.mass_fraction
+        probability_mass_history.append(batch_expert_probability_mass_fraction)
 
     def __track_usage_histogram(self, context: _SamplerTrackingContext) -> None:
         if context.experiment is None:
             return
+        batch_expert_usage_fraction = context.batch_metrics.usage_fraction
         self._emission_policy.emit_histogram(
             context.experiment,
             f"{context.module_name}/histogram/usage_fraction",
-            context.batch_metrics.usage_fraction,
+            batch_expert_usage_fraction,
             context.global_step,
         )
 
@@ -404,20 +424,22 @@ class SamplerMonitorCallback(Callback):
     ) -> None:
         if context.experiment is None:
             return
+        batch_expert_probability_mass_fraction = context.batch_metrics.mass_fraction
         self._emission_policy.emit_histogram(
             context.experiment,
             f"{context.module_name}/histogram/probability_mass",
-            context.batch_metrics.mass_fraction,
+            batch_expert_probability_mass_fraction,
             context.global_step,
         )
 
     def __track_usage_heatmap(self, context: _SamplerTrackingContext) -> None:
         if context.experiment is None:
             return
+        usage_history = self._usage_history[context.module_name]
         self._emission_policy.emit_history_heatmap(
             context.experiment,
             f"{context.module_name}/heatmap/usage_fraction",
-            self._usage_history[context.module_name],
+            usage_history,
             context.global_step,
         )
 
@@ -427,10 +449,11 @@ class SamplerMonitorCallback(Callback):
     ) -> None:
         if context.experiment is None:
             return
+        probability_mass_history = self._mass_history[context.module_name]
         self._emission_policy.emit_history_heatmap(
             context.experiment,
             f"{context.module_name}/heatmap/probability_mass",
-            self._mass_history[context.module_name],
+            probability_mass_history,
             context.global_step,
         )
 
