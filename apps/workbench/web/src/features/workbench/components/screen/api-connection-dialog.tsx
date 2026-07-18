@@ -20,6 +20,80 @@ import { WORKBENCH_API_URL_ENV_NAME } from "@/lib/api/_connection-runtime";
 
 const CORS_ENV_NAME = "WORKBENCH_API_CORS_ORIGINS";
 
+type AuthenticationState = ReturnType<
+  typeof useWorkbenchConnection
+>["authentication"]["state"];
+
+type AuthenticationStatus = {
+  role: "alert" | "status";
+  message: string;
+  danger: boolean;
+};
+
+function getAuthenticationStatus(
+  state: AuthenticationState,
+  storageError: string | null,
+): AuthenticationStatus {
+  if (storageError) {
+    return { role: "alert", message: storageError, danger: true };
+  }
+
+  switch (state) {
+    case "capability-checking":
+      return {
+        role: "status",
+        message: "Checking backend authentication requirements…",
+        danger: false,
+      };
+    case "capability-failed":
+      return {
+        role: "alert",
+        message:
+          "Backend capabilities could not be read. Check the API connection and try again.",
+        danger: true,
+      };
+    case "unauthenticated":
+      return {
+        role: "alert",
+        message:
+          "Authentication required. Enter the bearer token supplied by the API operator.",
+        danger: true,
+      };
+    case "rejected":
+      return {
+        role: "alert",
+        message:
+          "The session bearer token was rejected. Replace it or log out.",
+        danger: true,
+      };
+    case "protected-read-failed":
+      return {
+        role: "alert",
+        message:
+          "The session token is stored, but a protected API read failed. Check the API connection and try again.",
+        danger: true,
+      };
+    case "checking":
+      return {
+        role: "status",
+        message: "Checking the session bearer token…",
+        danger: false,
+      };
+    case "authenticated":
+      return {
+        role: "status",
+        message: "Authenticated for this browser session.",
+        danger: false,
+      };
+    default:
+      return {
+        role: "status",
+        message: "This backend does not require bearer authentication.",
+        danger: false,
+      };
+  }
+}
+
 function currentFrontendOrigin() {
   if (typeof window === "undefined") {
     return "";
@@ -181,57 +255,10 @@ export function ApiConnectionDialog({ onClose }: { onClose: () => void }) {
     authentication.state === "capability-failed" ||
     authentication.state === "protected-read-failed";
 
-  const authStatus = authStorageError
-    ? { role: "alert" as const, message: authStorageError, danger: true }
-    : authentication.state === "capability-checking"
-      ? {
-          role: "status" as const,
-          message: "Checking backend authentication requirements…",
-          danger: false,
-        }
-      : authentication.state === "capability-failed"
-        ? {
-            role: "alert" as const,
-            message:
-              "Backend capabilities could not be read. Check the API connection and try again.",
-            danger: true,
-          }
-        : authentication.state === "unauthenticated"
-      ? {
-          role: "alert" as const,
-          message: "Authentication required. Enter the bearer token supplied by the API operator.",
-          danger: true,
-        }
-      : authentication.state === "rejected"
-        ? {
-            role: "alert" as const,
-            message: "The session bearer token was rejected. Replace it or log out.",
-            danger: true,
-          }
-        : authentication.state === "protected-read-failed"
-          ? {
-              role: "alert" as const,
-              message:
-                "The session token is stored, but a protected API read failed. Check the API connection and try again.",
-              danger: true,
-            }
-          : authentication.state === "checking"
-            ? {
-                role: "status" as const,
-                message: "Checking the session bearer token…",
-                danger: false,
-              }
-            : authentication.state === "authenticated"
-              ? {
-                  role: "status" as const,
-                  message: "Authenticated for this browser session.",
-                  danger: false,
-                }
-              : {
-                  role: "status" as const,
-                  message: "This backend does not require bearer authentication.",
-                  danger: false,
-                };
+  const authStatus = getAuthenticationStatus(
+    authentication.state,
+    authStorageError,
+  );
 
   return (
     <DialogShell
