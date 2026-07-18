@@ -646,11 +646,10 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
     const selectedPlotTags = plotSelectorGroup
       ? selectedGroupTags.filter((tag) => availablePlotTagSet?.has(tag))
       : selectedGroupTags;
-    const renderedMetrics = metrics;
-    const visibleMetrics = renderedMetrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
+    const visibleMetrics = metrics.slice(0, LOG_METRIC_GROUP_RENDER_LIMIT);
     const hiddenMetricCount = Math.max(
       0,
-      renderedMetrics.length - visibleMetrics.length,
+      metrics.length - visibleMetrics.length,
     );
     const fullSpanClass = SCALAR_CHART_GRID_FULL_SPAN_CLASSES[metricGridMode];
     const plotSelectorOptions = plotSelectorGroup
@@ -763,7 +762,7 @@ export function LogsChartPanel({ charts }: { charts: LogsCharts }) {
             </div>
             {hiddenMetricCount > 0 && (
               <div className="rounded-control border border-line-soft bg-white/[0.018] px-3 py-3 text-center text-xs text-ink-faint">
-                Showing {visibleMetrics.length} of {renderedMetrics.length} charts in
+                Showing {visibleMetrics.length} of {metrics.length} charts in
                 this group. Narrow selected tags to inspect the rest.
               </div>
             )}
