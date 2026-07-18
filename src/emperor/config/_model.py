@@ -8,7 +8,6 @@ _LEARNING_RATE = 1e-3
 _INPUT_DIM = 16
 _HIDDEN_DIM = 32
 _OUTPUT_DIM = 64
-_GATHER_FREQUENCY_FLAG = False
 
 
 @dataclass
@@ -36,15 +35,6 @@ class ModelConfig(ConfigBase):
     output_dim: int = field(
         default=_OUTPUT_DIM,
         metadata={"help": "Dimension of the output features"},
-    )
-    gather_frequency_flag: bool = field(
-        default=_GATHER_FREQUENCY_FLAG,
-        metadata={
-            "help": (
-                "Flag to control frequency of gathering operations for the purpose "
-                "of visualization"
-            )
-        },
     )
     experiment_config: ConfigBase | None = field(
         default=None,
