@@ -7,29 +7,33 @@ class HyperParameters:
 
     def save_hyperparameters(self, ignore=None):
         """Save function arguments into class attribuites."""
-        ignore = ignore or []
-        frame = inspect.currentframe()
-        while frame is not None:
-            frame = frame.f_back
-            if frame is not None and frame.f_locals.get("self") is self:
+        ignored_parameter_names = ignore or []
+        instance_method_frame = inspect.currentframe()
+        while instance_method_frame is not None:
+            instance_method_frame = instance_method_frame.f_back
+            if (
+                instance_method_frame is not None
+                and instance_method_frame.f_locals.get("self") is self
+            ):
                 break
-        if frame is None:
+        if instance_method_frame is None:
             raise RuntimeError(
                 "save_hyperparameters must be called from an instance method."
             )
-        argument_info = inspect.getargvalues(frame)
-        argument_names = list(argument_info.args)
-        if argument_info.varargs is not None:
-            argument_names.append(argument_info.varargs)
-        if argument_info.keywords is not None:
-            argument_names.append(argument_info.keywords)
+        caller_arguments = inspect.getargvalues(instance_method_frame)
+        captured_argument_names = list(caller_arguments.args)
+        if caller_arguments.varargs is not None:
+            captured_argument_names.append(caller_arguments.varargs)
+        if caller_arguments.keywords is not None:
+            captured_argument_names.append(caller_arguments.keywords)
         self.hparams = {
-            name: argument_info.locals[name]
-            for name in argument_names
-            if name not in set(ignore + ["self"]) and not name.startswith("_")
+            argument_name: caller_arguments.locals[argument_name]
+            for argument_name in captured_argument_names
+            if argument_name not in set(ignored_parameter_names + ["self"])
+            and not argument_name.startswith("_")
         }
-        for k, v in self.hparams.items():
-            setattr(self, k, v)
+        for parameter_name, parameter_value in self.hparams.items():
+            setattr(self, parameter_name, parameter_value)
 
 
 class ProgressBoard(HyperParameters):
@@ -65,18 +69,22 @@ class ProgressBoard(HyperParameters):
             self.raw_points[label] = []
             self.data[label] = []
 
-        points = self.raw_points[label]
-        line = self.data[label]
-        points.append(Point(x, y))
+        pending_points = self.raw_points[label]
+        averaged_points = self.data[label]
+        raw_point = Point(x, y)
+        pending_points.append(raw_point)
 
-        if len(points) != every_n:
+        if len(pending_points) != every_n:
             return
 
-        def mean(values):
-            return sum(values) / len(values)
+        def coordinate_mean(coordinates):
+            return sum(coordinates) / len(coordinates)
 
-        line.append(Point(mean([p.x for p in points]), mean([p.y for p in points])))
-        points.clear()
+        mean_x_coordinate = coordinate_mean([point.x for point in pending_points])
+        mean_y_coordinate = coordinate_mean([point.y for point in pending_points])
+        averaged_point = Point(mean_x_coordinate, mean_y_coordinate)
+        averaged_points.append(averaged_point)
+        pending_points.clear()
 
         if not self.display:
             return
@@ -87,32 +95,36 @@ class ProgressBoard(HyperParameters):
         if self.fig is None:
             self.fig = plt.figure(figsize=self.figsize)
 
-        plt_lines, labels = [], []
-        for (k, v), ls, color in zip(  # noqa: B905
+        plotted_lines, line_labels = [], []
+        for (series_label, series_points), line_style, line_color in zip(  # noqa: B905
             self.data.items(),
             self.ls,
             self.colors,
         ):
-            plt_lines.append(
-                plt.plot([p.x for p in v], [p.y for p in v], linestyle=ls, color=color)[
-                    0
-                ]
-            )
-            labels.append(k)
+            x_coordinates = [point.x for point in series_points]
+            y_coordinates = [point.y for point in series_points]
+            plotted_line = plt.plot(
+                x_coordinates,
+                y_coordinates,
+                linestyle=line_style,
+                color=line_color,
+            )[0]
+            plotted_lines.append(plotted_line)
+            line_labels.append(series_label)
 
-        axes = self.axes if self.axes else plt.gca()
+        plot_axes = self.axes if self.axes else plt.gca()
         if self.xlim:
-            axes.set_xlim(self.xlim)
+            plot_axes.set_xlim(self.xlim)
         if self.ylim:
-            axes.set_ylim(self.ylim)
+            plot_axes.set_ylim(self.ylim)
         if not self.xlabel:
             self.xlabel = "x"
 
-        axes.set_xlabel(self.xlabel)
-        axes.set_ylabel(self.ylabel)
-        axes.set_xscale(self.xscale)
-        axes.set_yscale(self.yscale)
-        axes.legend(plt_lines, labels)
+        plot_axes.set_xlabel(self.xlabel)
+        plot_axes.set_ylabel(self.ylabel)
+        plot_axes.set_xscale(self.xscale)
+        plot_axes.set_yscale(self.yscale)
+        plot_axes.legend(plotted_lines, line_labels)
 
         display.display(self.fig)
         display.clear_output(wait=True)
