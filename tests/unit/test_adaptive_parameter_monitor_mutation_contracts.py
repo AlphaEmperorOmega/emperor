@@ -455,5 +455,76 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         ):
             self.assertNotIn(f"adaptive/mask/batch/{suffix}", disabled_names)
 
+    def test_histogram_flags_gate_real_emission_and_preserve_payloads(self) -> None:
+        experiment = RecordingExperiment()
+        base = torch.tensor([0.1, 0.2])
+        output = torch.tensor([[0.4, -0.1], [0.2, 0.5]])
+        observation = _AdaptiveParameterObservation.from_forward((base,), output)
+        context = _AdaptiveParameterTrackingContext(
+            pl_module=RecordingLightningModule(),
+            metric_prefix=self.PREFIX,
+            slot="weight",
+            option=soft_weight_bank(),
+            observation=observation,
+            input_adaptivity=None,
+            weight_bank_values=None,
+            effective_scale=None,
+            experiment=experiment,
+            global_step=7,
+        )
+
+        disabled = AdaptiveParameterMonitorCallback(log_histograms=False)
+        disabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
+            context
+        )
+        self.assertEqual(experiment.histograms, [])
+
+        enabled = AdaptiveParameterMonitorCallback(log_histograms=True)
+        enabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
+            context
+        )
+        self.assertEqual(
+            [tag for tag, _, _ in experiment.histograms],
+            [f"{self.PREFIX}/output", f"{self.PREFIX}/delta"],
+        )
+        torch.testing.assert_close(
+            experiment.histograms[0][1],
+            output.reshape(-1),
+        )
+        torch.testing.assert_close(
+            experiment.histograms[1][1],
+            observation.delta.reshape(-1),
+        )
+        self.assertEqual(
+            [step for _, _, step in experiment.histograms],
+            [7, 7],
+        )
+
+        no_base_experiment = RecordingExperiment()
+        no_base_observation = _AdaptiveParameterObservation.from_forward(
+            (),
+            output,
+        )
+        no_base_context = _AdaptiveParameterTrackingContext(
+            pl_module=RecordingLightningModule(),
+            metric_prefix="adaptive/no_base/batch",
+            slot="weight",
+            option=soft_weight_bank(),
+            observation=no_base_observation,
+            input_adaptivity=None,
+            weight_bank_values=None,
+            effective_scale=None,
+            experiment=no_base_experiment,
+            global_step=8,
+        )
+        enabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
+            no_base_context
+        )
+        self.assertEqual(
+            [tag for tag, _, _ in no_base_experiment.histograms],
+            ["adaptive/no_base/batch/output"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
