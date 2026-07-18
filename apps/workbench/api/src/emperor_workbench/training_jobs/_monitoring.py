@@ -20,9 +20,9 @@ class TrainingMonitorLocator:
             log_dir = event.get("logDir")
             if not log_dir:
                 continue
-            if dataset is None or event.get("dataset") == dataset:
-                if self.event_matches_preset(event, preset):
-                    return str(log_dir)
+            matches_dataset = dataset is None or event.get("dataset") == dataset
+            if matches_dataset and self.event_matches_preset(event, preset):
+                return str(log_dir)
         return None
 
     def event_preset_name(self, event: dict[str, Any]) -> str | None:

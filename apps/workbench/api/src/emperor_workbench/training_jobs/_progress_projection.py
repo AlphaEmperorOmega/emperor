@@ -127,17 +127,17 @@ class _TrainingEventReducer:
         if event_type not in {"cluster_initialized", "neuron_added", "neurons_added"}:
             return
 
-        summary = self.cluster_growth.get(node)
-        if summary is None:
+        growth_state = self.cluster_growth.get(node)
+        if growth_state is None:
             if len(self.cluster_growth) >= MAX_TRAINING_PLANNED_RUNS:
                 return
-            summary = _ClusterGrowthState(node=node)
-            self.cluster_growth[node] = summary
+            growth_state = _ClusterGrowthState(node=node)
+            self.cluster_growth[node] = growth_state
         if isinstance(event.get("count"), int):
-            summary.count = event["count"]
+            growth_state.count = event["count"]
         capacity_total = _capacity_total(event.get("capacity"))
         if capacity_total:
-            summary.capacity_total = capacity_total
+            growth_state.capacity_total = capacity_total
 
         if event_type == "cluster_initialized":
             return
@@ -148,33 +148,33 @@ class _TrainingEventReducer:
             coordinate_count = event.get("coordinateCount")
             if not isinstance(coordinate_count, int):
                 coordinate_count = len(coordinates)
-            summary.addition_count += max(0, coordinate_count)
+            growth_state.addition_count += max(0, coordinate_count)
             for coordinate_value in coordinates[-50:]:
                 coord = _coord(coordinate_value)
                 if coord is None:
                     continue
-                summary.additions.append(
+                growth_state.additions.append(
                     {
                         "coord": coord,
                         "step": _optional_int(event.get("step")),
                         "epoch": _optional_int(event.get("epoch")),
                     }
                 )
-            summary.additions = summary.additions[-50:]
+            growth_state.additions = growth_state.additions[-50:]
             return
 
         coord = _coord(event.get("coord"))
         if coord is None:
             return
-        summary.addition_count += 1
-        summary.additions.append(
+        growth_state.addition_count += 1
+        growth_state.additions.append(
             {
                 "coord": coord,
                 "step": _optional_int(event.get("step")),
                 "epoch": _optional_int(event.get("epoch")),
             }
         )
-        summary.additions = summary.additions[-50:]
+        growth_state.additions = growth_state.additions[-50:]
 
 
 def _capacity_total(value: Any) -> int:

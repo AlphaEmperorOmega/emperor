@@ -350,9 +350,9 @@ class _TrainingJobRuntime:
         job = self._get_job_record(job_id)
         snapshot = self._progress_updates(job)
         self._refresh(job, snapshot=snapshot)
-        payload = self._snapshot(job, snapshot=snapshot)
+        job_view = self._snapshot(job, snapshot=snapshot)
         self._release_terminal_resources(job)
-        return payload
+        return job_view
 
     def cancel_job_view(self, job_id: str) -> TrainingJobView:
         terminal_transition: tuple[TrainingJobRecord, str] | None = None
@@ -361,7 +361,7 @@ class _TrainingJobRuntime:
             snapshot = self._progress_updates(job)
             self._refresh(job, snapshot=snapshot)
             if is_terminal_job_status(job.status):
-                payload = self._snapshot(job, snapshot=snapshot)
+                job_view = self._snapshot(job, snapshot=snapshot)
             else:
                 previous_status = job.status
                 process = self._process_for_job(job)
@@ -394,12 +394,12 @@ class _TrainingJobRuntime:
                         {"type": "cancelled", "status": "cancelled"},
                     )
                 snapshot = self._progress_updates(job)
-                payload = self._snapshot(job, snapshot=snapshot)
+                job_view = self._snapshot(job, snapshot=snapshot)
                 terminal_transition = (job, previous_status)
         if terminal_transition is not None:
             self._notify_terminal_transition(*terminal_transition)
         self._release_terminal_resources(job)
-        return payload
+        return job_view
 
     def reconcile_unknown_job_view(
         self,
@@ -446,11 +446,11 @@ class _TrainingJobRuntime:
             job.updated_at = _now()
             self.job_store.save(job)
             snapshot = self._progress_updates(job)
-            payload = self._snapshot(job, snapshot=snapshot)
+            job_view = self._snapshot(job, snapshot=snapshot)
 
         self._notify_terminal_transition(job, previous_status)
         self._release_terminal_resources(job)
-        return payload
+        return job_view
 
     def active_job_views(self) -> list[ActiveTrainingJob]:
         active: list[ActiveTrainingJob] = []
@@ -487,7 +487,7 @@ class _TrainingJobRuntime:
             limit=safe_limit,
         )
         next_offset = safe_offset + len(page.events)
-        payload = TrainingProgressEventsPage(
+        events_page = TrainingProgressEventsPage(
             job_id=job.id,
             offset=safe_offset,
             limit=safe_limit,
@@ -496,7 +496,7 @@ class _TrainingJobRuntime:
             events=page.events,
         )
         self._release_terminal_resources(job)
-        return payload
+        return events_page
 
     def get_monitor_data(
         self,

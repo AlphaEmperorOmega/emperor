@@ -58,7 +58,7 @@ class TrainingJobService:
             worker_launcher=worker_launcher,
             cancellation_mode=cancellation_mode,
             cgroup_manager=cgroup_manager,
-            terminal_log_experiment_invalidator=(terminal_log_experiment_invalidator),
+            terminal_log_experiment_invalidator=terminal_log_experiment_invalidator,
             run_plans=run_plans,
             max_progress_record_bytes=max_progress_record_bytes,
             tensorboard_request_work_bytes=tensorboard_request_work_bytes,

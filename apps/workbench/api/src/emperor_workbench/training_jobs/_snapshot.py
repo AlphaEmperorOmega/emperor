@@ -85,7 +85,7 @@ class TrainingJobProjector:
     def log_tail(
         self,
         job: TrainingJobRecord,
-        line_count: int = 80,
+        line_count: int = TRAINING_JOB_LOG_TAIL_LINE_LIMIT,
     ) -> list[str]:
         return list(self.log_tail_snapshot(job, line_count=line_count).lines)
 
