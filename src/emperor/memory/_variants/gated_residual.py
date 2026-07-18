@@ -39,14 +39,16 @@ class GatedResidualDynamicMemory(DynamicMemoryAbstract):
 
     def forward(self, logits: Tensor) -> Tensor:
         self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
-        if self.test_time_training_flag:
-            memory = self._adapt_and_retrieve(
-                logits, self.memory_model, self.memory_decoder
-            )
-        else:
-            memory = self._run_model(self.memory_model, logits)
+        memory = self.__retrieve_memory(logits)
         memory_gate = self.__compute_memory_gate(logits, memory)
         return logits + memory_gate * memory
+
+    def __retrieve_memory(self, logits: Tensor) -> Tensor:
+        if self.test_time_training_flag:
+            return self._adapt_and_retrieve(
+                logits, self.memory_model, self.memory_decoder
+            )
+        return self._run_model(self.memory_model, logits)
 
     def __compute_memory_gate(self, logits: Tensor, memory: Tensor) -> Tensor:
         combined = torch.cat([logits, memory], dim=-1)
