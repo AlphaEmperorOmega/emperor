@@ -195,12 +195,15 @@ function firstDefinedMetric(
   statuses: Array<ParameterChannelStatus | undefined>,
   status: ParameterChannelStatus["status"],
 ) {
-  return statuses.find((item) => item?.status === status && item.metric)?.metric;
+  return statuses.find(
+    (channelStatus) =>
+      channelStatus?.status === status && channelStatus.metric,
+  )?.metric;
 }
 
 function maxLastStep(statuses: Array<ParameterChannelStatus | undefined>) {
   const steps = statuses
-    .map((item) => item?.lastStep)
+    .map((channelStatus) => channelStatus?.lastStep)
     .filter((step): step is number => typeof step === "number");
   return steps.length > 0 ? Math.max(...steps) : undefined;
 }
@@ -254,7 +257,7 @@ function historicalParameterChannel(
       null,
     lastStep: maxLastStep(normalizedStatuses),
     observedPoints: normalizedStatuses.reduce(
-      (total, item) => total + item.observedPoints,
+      (total, channelStatus) => total + channelStatus.observedPoints,
       0,
     ),
     updatedRuns,
