@@ -130,8 +130,12 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         self, input_tokens: Tensor, batch_size: int, sequence_length: int
     ) -> Tensor:
         positions = self._make_positions(input_tokens)
-        selected_weights = self.weights.index_select(0, positions.view(-1))
-        return selected_weights.view(batch_size, sequence_length, -1).detach()
+        selected_weights = self.weights.index_select(0, positions.reshape(-1))
+        return selected_weights.view(
+            batch_size,
+            sequence_length,
+            self.embedding_dim,
+        ).detach()
 
 
 class ImageSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
