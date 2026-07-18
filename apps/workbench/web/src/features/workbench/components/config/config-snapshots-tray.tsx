@@ -159,9 +159,10 @@ function AddConfigSnapshotDialogSession({
       return;
     }
     setSubmittedError("");
-    const result = canRetry && onRetry ? await onRetry() : await onAdd(name);
-    if (!result.ok) {
-      setSubmittedError(result.error);
+    const submissionResult =
+      canRetry && onRetry ? await onRetry() : await onAdd(name);
+    if (!submissionResult.ok) {
+      setSubmittedError(submissionResult.error);
       return;
     }
     onDismissMutation?.();
@@ -431,34 +432,37 @@ export function ConfigSnapshotsTray({
 
   async function renameSnapshot(snapshotId: string, name: string) {
     setSubmittedError("");
-    const result = await onRename(snapshotId, name);
-    if (result.ok) {
+    const renameResult = await onRename(snapshotId, name);
+    if (renameResult.ok) {
       setEditingId(null);
       return;
     }
-    setSubmittedError(result.error);
+    setSubmittedError(renameResult.error);
   }
 
   async function removeSnapshot(snapshotId: string) {
     setSubmittedError("");
-    const result = await onRemove(snapshotId);
-    if (!result.ok) {
-      setSubmittedError(result.error);
+    const removalResult = await onRemove(snapshotId);
+    if (!removalResult.ok) {
+      setSubmittedError(removalResult.error);
     }
   }
 
   async function retryMutation() {
     setSubmittedError("");
-    const result = await onRetryMutation();
-    if (!result) {
+    const retryResult = await onRetryMutation();
+    if (!retryResult) {
       setSubmittedError("There is no failed Config Snapshot change to retry.");
       return;
     }
-    if (!result.ok) {
-      setSubmittedError(result.error);
+    if (!retryResult.ok) {
+      setSubmittedError(retryResult.error);
       return;
     }
-    if (result.kind === "rename" && result.snapshotId === editingId) {
+    if (
+      retryResult.kind === "rename" &&
+      retryResult.snapshotId === editingId
+    ) {
       setEditingId(null);
     }
   }

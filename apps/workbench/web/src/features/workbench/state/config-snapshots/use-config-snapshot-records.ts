@@ -186,7 +186,7 @@ export function useConfigSnapshotRecords(
     resetMutation();
   }, [identityKey, lifecycle, resetMutation]);
 
-  const run = useCallback(
+  const executeMutation = useCallback(
     async (
       command: ConfigSnapshotMutationCommand,
       mutationOptions: MutationRequestOptions = createMutationRequestOptions(),
@@ -234,9 +234,9 @@ export function useConfigSnapshotRecords(
     return mutationIsError &&
       mutationRequest &&
       lifecycle.isCurrent(mutationRequest.lifecycleToken)
-      ? run(mutationRequest.command, mutationRequest.mutation)
+      ? executeMutation(mutationRequest.command, mutationRequest.mutation)
       : Promise.resolve(null);
-  }, [lifecycle, mutationIsError, mutationRequest, run]);
+  }, [executeMutation, lifecycle, mutationIsError, mutationRequest]);
   const dismissMutation = useCallback(() => {
     if (!mutationIsPending) {
       resetMutation();
@@ -291,17 +291,17 @@ export function useConfigSnapshotRecords(
   const actions = useMemo(
     () => ({
       create: (input: ConfigSnapshotCreateInput) =>
-        run({ kind: "create", input }),
+        executeMutation({ kind: "create", input }),
       rename: (input: { id: string; name: string }) =>
-        run({ kind: "rename", ...input }),
+        executeMutation({ kind: "rename", ...input }),
       update: (input: { id: string; input: ConfigSnapshotUpdateInput }) =>
-        run({ kind: "update", ...input }),
-      remove: (id: string) => run({ kind: "remove", id }),
+        executeMutation({ kind: "update", ...input }),
+      remove: (id: string) => executeMutation({ kind: "remove", id }),
       retry,
       dismissMutation,
       clearForConnectionChange: clearMutationLifecycle,
     }),
-    [clearMutationLifecycle, dismissMutation, retry, run],
+    [clearMutationLifecycle, dismissMutation, executeMutation, retry],
   );
 
   return useMemo(

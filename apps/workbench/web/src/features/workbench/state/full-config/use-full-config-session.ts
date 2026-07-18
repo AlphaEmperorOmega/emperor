@@ -164,20 +164,20 @@ export function useFullConfigSession({
   }, [kind, snapshotEditor.actions]);
   const saveSnapshot = useCallback(
     async (name: string) => {
-      const result = await snapshotEditor.actions.save(name);
-      if (result.ok) {
+      const saveResult = await snapshotEditor.actions.save(name);
+      if (saveResult.ok) {
         finishTransientSnapshotSave();
       }
-      return result;
+      return saveResult;
     },
     [finishTransientSnapshotSave, snapshotEditor.actions],
   );
   const retrySnapshotSave = useCallback(async () => {
-    const result = await snapshotEditor.actions.retrySave();
-    if (result.ok) {
+    const retryResult = await snapshotEditor.actions.retrySave();
+    if (retryResult.ok) {
       finishTransientSnapshotSave();
     }
-    return result;
+    return retryResult;
   }, [finishTransientSnapshotSave, snapshotEditor.actions]);
   const closeSnapshotSave = useCallback(() => {
     if (kind === "model") {

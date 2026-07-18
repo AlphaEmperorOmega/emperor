@@ -195,7 +195,7 @@ export function useConfigSnapshotEditorState({
         draft,
       );
       if (session.kind === "draft") {
-        const result = createConfigSnapshot({
+        const creationResult = createConfigSnapshot({
           id: createSnapshotId(),
           name,
           modelType: session.modelType,
@@ -206,26 +206,26 @@ export function useConfigSnapshotEditorState({
           snapshots: snapshotRecords.records,
           createdAt: new Date().toISOString(),
         });
-        if (!result.ok) {
-          return result;
+        if (!creationResult.ok) {
+          return creationResult;
         }
-        const outcome = await snapshotRecords.actions.create({
-          modelType: result.snapshot.modelType,
-          model: result.snapshot.model,
-          preset: result.snapshot.preset,
-          name: result.snapshot.name,
-          overrides: result.snapshot.overrides,
+        const persistenceResult = await snapshotRecords.actions.create({
+          modelType: creationResult.snapshot.modelType,
+          model: creationResult.snapshot.model,
+          preset: creationResult.snapshot.preset,
+          name: creationResult.snapshot.name,
+          overrides: creationResult.snapshot.overrides,
         });
-        if (!outcome.ok) {
-          return { ok: false, error: outcome.error };
+        if (!persistenceResult.ok) {
+          return { ok: false, error: persistenceResult.error };
         }
-        if (!outcome.record) {
+        if (!persistenceResult.record) {
           return {
             ok: false,
             error: "The backend did not return the created Config Snapshot.",
           };
         }
-        return { ok: true, snapshot: outcome.record };
+        return { ok: true, snapshot: persistenceResult.record };
       }
       if (!selectedSnapshot) {
         return { ok: false, error: "The selected Config Snapshot is unavailable." };
@@ -253,23 +253,23 @@ export function useConfigSnapshotEditorState({
       if (!validation.ok) {
         return validation;
       }
-      const outcome = await snapshotRecords.actions.update({
+      const updateResult = await snapshotRecords.actions.update({
         id: selectedSnapshot.id,
         input: {
           name: nameValidation.name,
           overrides: validation.overrides,
         },
       });
-      if (!outcome.ok) {
-        return { ok: false, error: outcome.error };
+      if (!updateResult.ok) {
+        return { ok: false, error: updateResult.error };
       }
-      if (!outcome.record) {
+      if (!updateResult.record) {
         return {
           ok: false,
           error: "The backend did not return the updated Config Snapshot.",
         };
       }
-      return { ok: true, snapshot: outcome.record };
+      return { ok: true, snapshot: updateResult.record };
     },
     [
       configFields,
