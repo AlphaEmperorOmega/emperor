@@ -38,8 +38,9 @@ class MonitorEmissionPolicy:
     def should_emit_media(
         self, step: int | None = None, global_step: int | None = None
     ) -> bool:
-        cadence = max(1, int(self.media_every_n_steps))
-        return _step_value(step, global_step) % cadence == 0
+        media_cadence_steps = max(1, int(self.media_every_n_steps))
+        resolved_step = _step_value(step, global_step)
+        return resolved_step % media_cadence_steps == 0
 
     def emit_histogram(
         self,
@@ -50,15 +51,17 @@ class MonitorEmissionPolicy:
         *,
         module_key: str | None = None,
     ) -> bool:
-        add_histogram = getattr(experiment, "add_histogram", None)
-        if not callable(add_histogram) or not self._claim_emission(
+        histogram_writer = getattr(experiment, "add_histogram", None)
+        if not callable(histogram_writer) or not self._claim_emission(
             "histogram",
             tag,
             step,
             module_key,
         ):
             return False
-        add_histogram(tag, self._bounded_histogram(values), int(step))
+        bounded_histogram_values = self._bounded_histogram(values)
+        histogram_step = int(step)
+        histogram_writer(tag, bounded_histogram_values, histogram_step)
         return True
 
     def emit_image(  # noqa: PLR0913
@@ -73,18 +76,18 @@ class MonitorEmissionPolicy:
         module_key: str | None = None,
     ) -> bool:
         resolved_step = _step_value(step, global_step)
-        add_image = getattr(experiment, "add_image", None)
+        image_writer = getattr(experiment, "add_image", None)
         if (
-            not callable(add_image)
+            not callable(image_writer)
             or not self.should_emit_media(resolved_step)
             or not self._claim_emission("image", tag, resolved_step, module_key)
         ):
             return False
-        image = self._bounded_image(image, dataformats=dataformats)
+        bounded_image = self._bounded_image(image, dataformats=dataformats)
         if dataformats is None:
-            add_image(tag, image, global_step=resolved_step)
+            image_writer(tag, bounded_image, global_step=resolved_step)
         else:
-            add_image(tag, image, resolved_step, dataformats=dataformats)
+            image_writer(tag, bounded_image, resolved_step, dataformats=dataformats)
         return True
 
     def emit_history_heatmap(  # noqa: PLR0913
@@ -97,13 +100,13 @@ class MonitorEmissionPolicy:
         global_step: int | None = None,
         module_key: str | None = None,
     ) -> bool:
-        heatmap = history.render_heatmap()
-        if heatmap is None:
+        history_heatmap = history.render_heatmap()
+        if history_heatmap is None:
             return False
         return self.emit_image(
             experiment,
             tag,
-            heatmap,
+            history_heatmap,
             step,
             global_step=global_step,
             dataformats="CHW",
@@ -117,27 +120,33 @@ class MonitorEmissionPolicy:
         step: int,
         module_key: str | None,
     ) -> bool:
-        key = (kind, module_key or _default_module_key(tag), tag, int(step))
-        if key in self._emitted:
+        resolved_module_key = module_key or _default_module_key(tag)
+        emission_key = (kind, resolved_module_key, tag, int(step))
+        if emission_key in self._emitted:
             return False
-        self._emitted[key] = None
+        self._emitted[emission_key] = None
         while len(self._emitted) > self.emitted_max_entries:
-            self._emitted.pop(next(iter(self._emitted)))
+            oldest_emission_key = next(iter(self._emitted))
+            self._emitted.pop(oldest_emission_key)
         return True
 
     def _bounded_histogram(self, values: torch.Tensor) -> torch.Tensor:
-        tensor = values.detach().float().reshape(-1).cpu()
-        max_elements = max(1, int(self.histogram_max_elements))
-        if tensor.numel() <= max_elements:
-            return tensor
-        indices = torch.linspace(
+        flat_histogram_values = values.detach().float().reshape(-1).cpu()
+        histogram_element_limit = max(1, int(self.histogram_max_elements))
+        if flat_histogram_values.numel() <= histogram_element_limit:
+            return flat_histogram_values
+        last_histogram_index = flat_histogram_values.numel() - 1
+        histogram_sample_indices = torch.linspace(
             0,
-            tensor.numel() - 1,
-            max_elements,
+            last_histogram_index,
+            histogram_element_limit,
             dtype=torch.long,
-            device=tensor.device,
+            device=flat_histogram_values.device,
         )
-        return tensor.index_select(0, indices)
+        bounded_histogram_values = flat_histogram_values.index_select(
+            0, histogram_sample_indices
+        )
+        return bounded_histogram_values
 
     def _bounded_image(
         self,
@@ -145,15 +154,24 @@ class MonitorEmissionPolicy:
         *,
         dataformats: str | None,
     ) -> torch.Tensor:
-        tensor = image.detach().float().cpu()
-        formats = dataformats or self._infer_dataformats(tensor)
-        tensor = self._cap_image_side(tensor, formats)
-        while tensor.numel() * tensor.element_size() > self.image_max_raw_bytes:
-            next_tensor = self._scale_image(tensor, formats, 0.75)
-            if next_tensor.shape == tensor.shape:
+        image_snapshot = image.detach().float().cpu()
+        resolved_dataformats = dataformats or self._infer_dataformats(image_snapshot)
+        bounded_image = self._cap_image_side(image_snapshot, resolved_dataformats)
+        bounded_image_raw_bytes = bounded_image.numel() * bounded_image.element_size()
+        byte_limit_downscale_factor = 0.75
+        while bounded_image_raw_bytes > self.image_max_raw_bytes:
+            scaled_image = self._scale_image(
+                bounded_image,
+                resolved_dataformats,
+                byte_limit_downscale_factor,
+            )
+            if scaled_image.shape == bounded_image.shape:
                 break
-            tensor = next_tensor
-        return tensor
+            bounded_image = scaled_image
+            bounded_image_raw_bytes = (
+                bounded_image.numel() * bounded_image.element_size()
+            )
+        return bounded_image
 
     def _infer_dataformats(self, image: torch.Tensor) -> str:
         if image.dim() == 2:
@@ -166,11 +184,14 @@ class MonitorEmissionPolicy:
 
     def _cap_image_side(self, image: torch.Tensor, dataformats: str) -> torch.Tensor:
         height, width = self._image_hw(image, dataformats)
-        max_side = max(1, int(self.image_max_side))
-        if height <= max_side and width <= max_side:
+        image_side_limit = max(1, int(self.image_max_side))
+        if height <= image_side_limit and width <= image_side_limit:
             return image
-        scale = min(max_side / max(height, 1), max_side / max(width, 1))
-        return self._scale_image(image, dataformats, scale)
+        height_scale = image_side_limit / max(height, 1)
+        width_scale = image_side_limit / max(width, 1)
+        side_limit_scale = min(height_scale, width_scale)
+        side_bounded_image = self._scale_image(image, dataformats, side_limit_scale)
+        return side_bounded_image
 
     def _image_hw(self, image: torch.Tensor, dataformats: str) -> tuple[int, int]:
         if dataformats.endswith("CHW") and image.dim() >= 3:
@@ -190,20 +211,21 @@ class MonitorEmissionPolicy:
         scale: float,
     ) -> torch.Tensor:
         height, width = self._image_hw(image, dataformats)
-        next_height = max(1, int(height * scale))
-        next_width = max(1, int(width * scale))
-        if next_height == height and next_width == width:
+        scaled_height = max(1, int(height * scale))
+        scaled_width = max(1, int(width * scale))
+        if scaled_height == height and scaled_width == width:
             return image
-        nchw_image, restore = self._image_as_nchw(image, dataformats)
+        nchw_image, restore_image_layout = self._image_as_nchw(image, dataformats)
         if nchw_image is None:
             return image
-        scaled = F.interpolate(
+        scaled_nchw_image = F.interpolate(
             nchw_image,
-            size=(next_height, next_width),
+            size=(scaled_height, scaled_width),
             mode="bilinear",
             align_corners=False,
         )
-        return restore(scaled)
+        scaled_image = restore_image_layout(scaled_nchw_image)
+        return scaled_image
 
     def _image_as_nchw(
         self,
@@ -211,22 +233,25 @@ class MonitorEmissionPolicy:
         dataformats: str,
     ) -> tuple[torch.Tensor | None, Callable[[torch.Tensor], torch.Tensor]]:
         if dataformats.endswith("CHW") and image.dim() == 3:
-            return image.unsqueeze(0), lambda scaled: scaled.squeeze(0)
+            return (
+                image.unsqueeze(0),
+                lambda scaled_nchw_image: scaled_nchw_image.squeeze(0),
+            )
         if dataformats.endswith("NCHW") and image.dim() == 4:
-            return image, lambda scaled: scaled
+            return image, lambda scaled_nchw_image: scaled_nchw_image
         if dataformats.endswith("HWC") and image.dim() == 3:
             return (
                 image.permute(2, 0, 1).unsqueeze(0),
-                lambda scaled: scaled.squeeze(0).permute(1, 2, 0),
+                lambda scaled_nchw_image: scaled_nchw_image.squeeze(0).permute(1, 2, 0),
             )
         if dataformats.endswith("NHWC") and image.dim() == 4:
             return (
                 image.permute(0, 3, 1, 2),
-                lambda scaled: scaled.permute(0, 2, 3, 1),
+                lambda scaled_nchw_image: scaled_nchw_image.permute(0, 2, 3, 1),
             )
         if image.dim() == 2:
             return (
                 image.unsqueeze(0).unsqueeze(0),
-                lambda scaled: scaled.squeeze(0).squeeze(0),
+                lambda scaled_nchw_image: scaled_nchw_image.squeeze(0).squeeze(0),
             )
-        return None, lambda scaled: scaled
+        return None, lambda scaled_nchw_image: scaled_nchw_image
