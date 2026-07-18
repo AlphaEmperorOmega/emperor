@@ -105,7 +105,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         input_dims = [8, 4, 6]
         output_dims = [4, 8, 6]
 
-        for input_dim, output_dim in zip(input_dims, output_dims):
+        for input_dim, output_dim in zip(input_dims, output_dims, strict=True):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
                     config_cls=StandardDynamicDiagonalConfig,
@@ -125,7 +125,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         input_dims = [8, 4, 6]
         output_dims = [4, 8, 6]
 
-        for input_dim, output_dim in zip(input_dims, output_dims):
+        for input_dim, output_dim in zip(input_dims, output_dims, strict=True):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
                     config_cls=AntiDynamicDiagonalConfig,
@@ -145,7 +145,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         input_dims = [8, 4, 6]
         output_dims = [4, 8, 6]
 
-        for input_dim, output_dim in zip(input_dims, output_dims):
+        for input_dim, output_dim in zip(input_dims, output_dims, strict=True):
             with self.subTest(input_dim=input_dim, output_dim=output_dim):
                 cfg = self.preset(
                     config_cls=CombinedDynamicDiagonalConfig,

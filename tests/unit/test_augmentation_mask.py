@@ -1839,7 +1839,11 @@ class TestAxisMaskHandlers(unittest.TestCase):
 
         for config_cls, _ in self.mask_cases():
             for mask_dimension_option in MaskDimensionOptions:
-                for input_dim, output_dim in zip(input_dims, output_dims):
+                for input_dim, output_dim in zip(
+                    input_dims,
+                    output_dims,
+                    strict=True,
+                ):
                     with self.subTest(
                         config_cls=config_cls.__name__,
                         mask_dimension_option=mask_dimension_option,
