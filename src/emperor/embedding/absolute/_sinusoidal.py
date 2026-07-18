@@ -150,6 +150,12 @@ class ImageSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     def _get_init_size(self) -> int:
         return self.num_embeddings + int(self.cfg.class_token_flag)
 
+    def _get_embedding(self, num_embeddings: int) -> Tensor:
+        embedding = super()._get_embedding(num_embeddings)
+        if self.cfg.class_token_flag:
+            embedding[0, :] = 0
+        return embedding
+
     def forward(self, patch_embeddings: Tensor) -> Tensor:
         self.VALIDATOR.validate_patch_embeddings(
             patch_embeddings,

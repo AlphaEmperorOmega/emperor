@@ -8,6 +8,7 @@ import unittest
 import torch
 from emperor.embedding.absolute import (
     ImageLearnedPositionalEmbeddingConfig,
+    ImageSinusoidalPositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
@@ -206,6 +207,34 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         torch.testing.assert_close(
             nonzero_padding.weights[2],
             torch.zeros(4),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_image_sinusoidal_class_token_has_zero_positional_offset(
+        self,
+    ) -> None:
+        model = ImageSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=None,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        ).build()
+        patches = torch.tensor([[[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]]])
+
+        output = model(patches)
+
+        expected = patches.clone()
+        expected[:, 1, 0] += torch.sin(torch.tensor(1.0))
+        expected[:, 1, 1] += torch.cos(torch.tensor(1.0))
+        expected[:, 2, 0] += torch.sin(torch.tensor(2.0))
+        expected[:, 2, 1] += torch.cos(torch.tensor(2.0))
+        torch.testing.assert_close(output, expected)
+        torch.testing.assert_close(
+            model.weights[0],
+            torch.zeros(2),
             rtol=0,
             atol=0,
         )
