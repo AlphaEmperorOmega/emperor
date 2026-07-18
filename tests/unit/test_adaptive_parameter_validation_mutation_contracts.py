@@ -602,6 +602,102 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                     config.build,
                 )
 
+    def test_dimension_validator_adapters_receive_both_dimensions(self) -> None:
+        models = (
+            AdaptiveLinearLayer(
+                AdaptiveLinearLayerConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    bias_flag=True,
+                    adaptive_augmentation_config=(
+                        AdaptiveParameterAugmentationConfig()
+                    ),
+                )
+            ),
+            AdditiveDynamicBiasConfig(
+                input_dim=2,
+                output_dim=3,
+                decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                decay_rate=0.0,
+                decay_warmup_batches=0,
+                model_config=linear_stack_config(),
+            ).build(),
+            StandardDynamicDiagonalConfig(
+                input_dim=2,
+                output_dim=3,
+                model_config=linear_stack_config(),
+            ).build(),
+            PerAxisScoreMaskConfig(
+                input_dim=2,
+                output_dim=3,
+                mask_threshold=0.5,
+                mask_surrogate_scale=5.0,
+                mask_floor=0.0,
+                mask_dimension_option=MaskDimensionOptions.ROW,
+                model_config=linear_stack_config(),
+            ).build(),
+            SingleModelDynamicWeightConfig(
+                input_dim=2,
+                output_dim=2,
+                generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                decay_rate=0.0,
+                decay_warmup_batches=0,
+                model_config=linear_stack_config(2, 2),
+                normalization_option=WeightNormalizationOptions.DISABLED,
+                normalization_position_option=(
+                    WeightNormalizationPositionOptions.DISABLED
+                ),
+            ).build(),
+            DepthMappingLayer(
+                DepthMappingLayerConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    bias_flag=True,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                )
+            ),
+        )
+        for model in models:
+            dimension_owner = (
+                model if isinstance(model, AdaptiveLinearLayer) else model.cfg
+            )
+            for field_name in ("input_dim", "output_dim"):
+                with self.subTest(
+                    model=type(model).__name__,
+                    field_name=field_name,
+                ):
+                    original = getattr(dimension_owner, field_name)
+                    setattr(dimension_owner, field_name, 0)
+                    try:
+                        self.assert_exact_error(
+                            ValueError,
+                            f"{field_name} must be greater than 0, received 0",
+                            lambda model=model: model.VALIDATOR.validate(model),
+                        )
+                    finally:
+                        setattr(dimension_owner, field_name, original)
+
+    def test_single_model_weight_requires_square_dimensions_exactly(self) -> None:
+        config = SingleModelDynamicWeightConfig(
+            input_dim=2,
+            output_dim=3,
+            generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+            decay_schedule=WeightDecayScheduleOptions.DISABLED,
+            decay_rate=0.0,
+            decay_warmup_batches=0,
+            model_config=linear_stack_config(),
+            normalization_option=WeightNormalizationOptions.DISABLED,
+            normalization_position_option=(WeightNormalizationPositionOptions.DISABLED),
+        )
+
+        self.assert_exact_error(
+            ValueError,
+            "SingleModelDynamicWeight requires input_dim == output_dim, "
+            "received input_dim=2, output_dim=3.",
+            config.build,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
