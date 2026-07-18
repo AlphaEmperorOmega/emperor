@@ -810,7 +810,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertTrue(torch.allclose(output[1, 1], torch.zeros_like(output[1, 1])))
         self.assertTrue(torch.allclose(output[1, 2], torch.zeros_like(output[1, 2])))
 
-    def test_top_slice_column_mode_zeroes_first_below_threshold_column_and_all_later_columns(
+    def test_top_slice_column_mode_zeroes_threshold_and_later_columns(
         self,
     ):
         cfg = self.preset(
