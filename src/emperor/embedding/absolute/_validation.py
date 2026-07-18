@@ -106,6 +106,13 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             )
 
     @staticmethod
+    def validate_incremental_sequence_length(sequence_length: int) -> None:
+        if sequence_length <= 0:
+            raise ValueError(
+                "incremental positional embedding requires a non-empty input sequence."
+            )
+
+    @staticmethod
     def validate_patch_embeddings(
         patch_embeddings: Tensor,
         *,

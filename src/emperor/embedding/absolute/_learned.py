@@ -56,6 +56,9 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         positions: Tensor | None = None,
     ) -> Tensor:
         self.VALIDATOR.validate_text_tokens(input_tokens)
+        sequence_length = input_tokens.size(1)
+        if incremental_state is not None:
+            self.VALIDATOR.validate_incremental_sequence_length(sequence_length)
         if positions is not None:
             self.VALIDATOR.validate_positions(
                 positions,

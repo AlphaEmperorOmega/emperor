@@ -80,6 +80,8 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     ) -> Tensor:
         self.VALIDATOR.validate_text_tokens(input_tokens)
         batch_size, sequence_length = input_tokens.size()
+        if incremental_state is not None:
+            self.VALIDATOR.validate_incremental_sequence_length(sequence_length)
         self.__maybe_expand_weights(
             input_tokens,
             incremental_state=incremental_state,

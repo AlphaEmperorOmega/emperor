@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 
 import torch
-from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
+from emperor.embedding.absolute import (
+    TextLearnedPositionalEmbeddingConfig,
+    TextSinusoidalPositionalEmbeddingConfig,
+)
 
 
 class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
@@ -147,6 +150,38 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
             rtol=0,
             atol=0,
         )
+
+    def test_incremental_text_embeddings_reject_empty_sequences(self) -> None:
+        configs = (
+            TextLearnedPositionalEmbeddingConfig(
+                num_embeddings=4,
+                embedding_dim=2,
+                init_size=4,
+                padding_idx=0,
+                auto_expand_flag=False,
+            ),
+            TextSinusoidalPositionalEmbeddingConfig(
+                num_embeddings=4,
+                embedding_dim=2,
+                init_size=4,
+                padding_idx=0,
+                auto_expand_flag=False,
+            ),
+        )
+
+        for config in configs:
+            with self.subTest(config=type(config).__name__):
+                model = config.build()
+                with self.assertRaises(ValueError) as error:
+                    model(
+                        torch.empty((2, 0), dtype=torch.long),
+                        incremental_state={},
+                    )
+                self.assertEqual(
+                    str(error.exception),
+                    "incremental positional embedding requires a non-empty "
+                    "input sequence.",
+                )
 
 
 if __name__ == "__main__":
