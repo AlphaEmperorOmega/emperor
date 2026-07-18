@@ -14,7 +14,7 @@ export type ClusterGrowthSummary = {
   additions: ClusterGrowthAddition[];
 };
 
-function toCoord(value: unknown): [number, number, number] | null {
+function toCoordinate(value: unknown): [number, number, number] | null {
   if (
     Array.isArray(value) &&
     value.length === 3 &&
@@ -25,7 +25,7 @@ function toCoord(value: unknown): [number, number, number] | null {
   return null;
 }
 
-function capacityTotal(value: unknown): number {
+function calculateCapacityTotal(value: unknown): number {
   if (!Array.isArray(value)) {
     return 0;
   }
@@ -55,21 +55,21 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
     }));
   }
 
-  const byNode = new Map<string, ClusterGrowthSummary>();
-  const ensure = (node: string): ClusterGrowthSummary => {
-    const existing = byNode.get(node);
-    if (existing) {
-      return existing;
+  const summariesByNode = new Map<string, ClusterGrowthSummary>();
+  const getOrCreateSummary = (node: string): ClusterGrowthSummary => {
+    const existingSummary = summariesByNode.get(node);
+    if (existingSummary) {
+      return existingSummary;
     }
-    const created: ClusterGrowthSummary = {
+    const newSummary: ClusterGrowthSummary = {
       node,
       count: 0,
       capacityTotal: 0,
       additionCount: 0,
       additions: [],
     };
-    byNode.set(node, created);
-    return created;
+    summariesByNode.set(node, newSummary);
+    return newSummary;
   };
 
   for (const event of job.events) {
@@ -79,17 +79,18 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
     }
 
     if (event.type === "cluster_initialized") {
-      const summary = ensure(node);
+      const summary = getOrCreateSummary(node);
       summary.count = typeof event.count === "number" ? event.count : summary.count;
-      summary.capacityTotal = capacityTotal(event.capacity) || summary.capacityTotal;
+      summary.capacityTotal =
+        calculateCapacityTotal(event.capacity) || summary.capacityTotal;
     } else if (event.type === "neuron_added" || event.type === "neurons_added") {
-      const summary = ensure(node);
+      const summary = getOrCreateSummary(node);
       if (typeof event.count === "number") {
         summary.count = event.count;
       }
-      const capacity = capacityTotal(event.capacity);
-      if (capacity) {
-        summary.capacityTotal = capacity;
+      const eventCapacityTotal = calculateCapacityTotal(event.capacity);
+      if (eventCapacityTotal) {
+        summary.capacityTotal = eventCapacityTotal;
       }
       if (event.type === "neurons_added") {
         const coordinateCount =
@@ -99,10 +100,10 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
           : [];
         summary.additionCount += Math.max(0, coordinateCount);
         for (const coordinate of coordinates.slice(-50)) {
-          const coord = toCoord(coordinate);
-          if (coord) {
+          const parsedCoordinate = toCoordinate(coordinate);
+          if (parsedCoordinate) {
             summary.additions.push({
-              coord,
+              coord: parsedCoordinate,
               step: numberOrNull(event.step),
               epoch: numberOrNull(event.epoch),
             });
@@ -110,11 +111,11 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
         }
         continue;
       }
-      const coord = toCoord(event.coord);
-      if (coord) {
+      const coordinate = toCoordinate(event.coord);
+      if (coordinate) {
         summary.additionCount += 1;
         summary.additions.push({
-          coord,
+          coord: coordinate,
           step: numberOrNull(event.step),
           epoch: numberOrNull(event.epoch),
         });
@@ -122,5 +123,5 @@ export function buildClusterGrowth(job: TrainingJob | undefined): ClusterGrowthS
     }
   }
 
-  return [...byNode.values()];
+  return [...summariesByNode.values()];
 }
