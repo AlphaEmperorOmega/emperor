@@ -65,9 +65,8 @@ def _is_unsafe_zip_mode(info: zipfile.ZipInfo) -> bool:
         stat.S_IFSOCK,
     }:
         return True
-    return not (
-        file_type == stat.S_IFDIR if info.is_dir() else file_type == stat.S_IFREG
-    )
+    expected_file_type = stat.S_IFDIR if info.is_dir() else stat.S_IFREG
+    return file_type != expected_file_type
 
 
 def _archive_relative_parts(

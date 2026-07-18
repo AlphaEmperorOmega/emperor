@@ -347,11 +347,11 @@ def event_file_index(
         if not resolved.is_file():
             continue
         try:
-            stat = resolved.stat()
+            file_stat = resolved.stat()
         except OSError:
             continue
         files_by_dir.setdefault(event_dir, []).append(
-            (path, resolved, int(stat.st_size), int(stat.st_mtime_ns))
+            (path, resolved, int(file_stat.st_size), int(file_stat.st_mtime_ns))
         )
 
     dirs: list[Path] = []

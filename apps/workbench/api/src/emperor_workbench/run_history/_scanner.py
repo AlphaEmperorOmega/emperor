@@ -290,23 +290,23 @@ class LogRunScanner:
             candidates = (root, *sorted(root.iterdir(), key=lambda path: path.name))
         except OSError:
             candidates = (root,)
-        for version_dir in candidates:
+        for catalog_path in candidates:
             try:
-                stat = version_dir.stat()
+                path_stat = catalog_path.stat()
                 relative = (
                     "."
-                    if version_dir == root
-                    else version_dir.relative_to(root).as_posix()
+                    if catalog_path == root
+                    else catalog_path.relative_to(root).as_posix()
                 )
             except (OSError, ValueError):
                 continue
-            if version_dir.is_dir():
+            if catalog_path.is_dir():
                 generation.append(
                     (
                         relative,
-                        int(stat.st_dev),
-                        int(stat.st_ino),
-                        int(stat.st_mtime_ns),
+                        int(path_stat.st_dev),
+                        int(path_stat.st_ino),
+                        int(path_stat.st_mtime_ns),
                     )
                 )
         return tuple(sorted(generation))

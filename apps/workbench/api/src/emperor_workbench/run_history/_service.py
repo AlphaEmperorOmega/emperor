@@ -250,7 +250,7 @@ class RunHistoryService:
         if cached is not None:
             return cached
 
-        filtered_runs = []
+        filtered_runs: list[LogRun] = []
         for run in catalog:
             if experiment_set and run.experiment not in experiment_set:
                 continue

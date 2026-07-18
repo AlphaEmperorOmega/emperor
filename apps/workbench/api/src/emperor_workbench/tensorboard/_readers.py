@@ -604,13 +604,12 @@ class TensorBoardParameterStatusReader:
         )
         metric = evidence_metric or two_sample_metric or delta_metrics[0]
         points = points_by_metric[metric]
-        status: ParameterActivityStatus = (
-            "updated"
-            if evidence_metric
-            else "unchanged"
-            if two_sample_metric
-            else "unknown"
-        )
+        if evidence_metric:
+            status: ParameterActivityStatus = "updated"
+        elif two_sample_metric:
+            status = "unchanged"
+        else:
+            status = "unknown"
         return ParameterChannelStatus(
             status=status,
             metric=f"{node_path}/{channel}/{metric}",
@@ -649,13 +648,12 @@ class TensorBoardParameterStatusReader:
         )
         metric = evidence_metric or two_sample_metric or observed_metrics[0]
         points = points_by_metric[metric]
-        status: ParameterActivityStatus = (
-            "updated"
-            if evidence_metric
-            else "unchanged"
-            if two_sample_metric
-            else "unknown"
-        )
+        if evidence_metric:
+            status: ParameterActivityStatus = "updated"
+        elif two_sample_metric:
+            status = "unchanged"
+        else:
+            status = "unknown"
         return ParameterChannelStatus(
             status=status,
             metric=f"{node_path}/{channel}/{metric}",
