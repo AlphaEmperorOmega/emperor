@@ -24,7 +24,10 @@ class Conv2dLayer(Module):
         self.bias_flag: bool = self.cfg.bias_flag
         self.VALIDATOR.validate(self)
 
-        self.model = nn.Conv2d(
+        self.model = self.__build_configured_conv2d_layer()
+
+    def __build_configured_conv2d_layer(self) -> nn.Conv2d:
+        return nn.Conv2d(
             in_channels=self.input_dim,
             out_channels=self.output_dim,
             kernel_size=self.kernel_size,
