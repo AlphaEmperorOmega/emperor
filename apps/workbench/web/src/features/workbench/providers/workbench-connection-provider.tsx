@@ -313,14 +313,17 @@ export function WorkbenchConnectionProvider({
     return () => resetRegistryRef.current.delete(reset);
   }, []);
 
-  const serialize = useCallback(
+  const serializeConnectionTransition = useCallback(
     <Result,>(transition: () => Promise<Result>) => {
-      const result = transitionQueueRef.current.then(transition, transition);
-      transitionQueueRef.current = result.then(
+      const queuedTransition = transitionQueueRef.current.then(
+        transition,
+        transition,
+      );
+      transitionQueueRef.current = queuedTransition.then(
         () => undefined,
         () => undefined,
       );
-      return result;
+      return queuedTransition;
     },
     [],
   );
@@ -340,38 +343,38 @@ export function WorkbenchConnectionProvider({
 
   const useApiBaseUrl = useCallback(
     (url: string) =>
-      serialize(async () => {
+      serializeConnectionTransition(async () => {
         const actions = await loadWorkbenchConnectionActions();
         return actions.useApiBaseUrl(actionEnvironment, url);
       }),
-    [actionEnvironment, serialize],
+    [actionEnvironment, serializeConnectionTransition],
   );
 
   const resetApiBaseUrl = useCallback(
     () =>
-      serialize(async () => {
+      serializeConnectionTransition(async () => {
         const actions = await loadWorkbenchConnectionActions();
         return actions.resetApiBaseUrl(actionEnvironment);
       }),
-    [actionEnvironment, serialize],
+    [actionEnvironment, serializeConnectionTransition],
   );
 
   const signIn = useCallback(
     (rawToken: string) =>
-      serialize(async () => {
+      serializeConnectionTransition(async () => {
         const actions = await loadWorkbenchConnectionActions();
         return actions.signIn(actionEnvironment, rawToken);
       }),
-    [actionEnvironment, serialize],
+    [actionEnvironment, serializeConnectionTransition],
   );
 
   const logout = useCallback(
     () =>
-      serialize(async () => {
+      serializeConnectionTransition(async () => {
         const actions = await loadWorkbenchConnectionActions();
         return actions.logout(actionEnvironment);
       }),
-    [actionEnvironment, serialize],
+    [actionEnvironment, serializeConnectionTransition],
   );
 
   const retry = useCallback(async () => {
