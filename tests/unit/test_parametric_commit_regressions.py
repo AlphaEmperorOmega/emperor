@@ -6,6 +6,7 @@ from emperor.parametric import (
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerHandler,
+    VectorWeightsMixtureConfig,
 )
 from torch import nn
 
@@ -86,6 +87,49 @@ class ParametricCommitRegressionTests(unittest.TestCase):
                 0.1 * parameter_bank[1] + 0.9 * parameter_bank[0],
             )
         )
+        torch.testing.assert_close(output, expected)
+
+    def test_vector_full_top_k_routes_preserve_axis_selection(self) -> None:
+        mixture = VectorWeightsMixtureConfig(
+            input_dim=2,
+            output_dim=2,
+            top_k=2,
+            num_experts=3,
+            weighted_parameters_flag=True,
+            clip_parameter_option=ClipParameterOptions.DISABLED,
+            clip_range=1.0,
+        ).build()
+        parameter_bank = torch.tensor(
+            [
+                [[1.0, 0.0], [2.0, 1.0], [-1.0, 3.0]],
+                [[0.0, 1.0], [4.0, -2.0], [2.0, 2.0]],
+            ]
+        )
+        with torch.no_grad():
+            mixture.parameter_bank.copy_(parameter_bank)
+        probabilities = torch.tensor(
+            [
+                [[0.25, 0.75], [0.6, 0.4]],
+                [[0.8, 0.2], [0.1, 0.9]],
+            ]
+        )
+        indices = torch.tensor(
+            [
+                [[0, 2], [1, 0]],
+                [[2, 1], [0, 2]],
+            ]
+        )
+
+        output = mixture.compute_mixture(probabilities, indices)
+
+        expected = torch.empty(2, 2, 2)
+        for axis in range(2):
+            for sample in range(2):
+                expected[sample, axis] = sum(
+                    probabilities[axis, sample, route]
+                    * parameter_bank[axis, indices[axis, sample, route]]
+                    for route in range(2)
+                )
         torch.testing.assert_close(output, expected)
 
 

@@ -36,7 +36,10 @@ class VectorMixtureBase(AdaptiveMixtureBase):
         if indices is None:
             return self.parameter_bank
         indices = indices.transpose(1, 0)
-        return self.parameter_bank[self.select_range, indices]
+        select_range = self.select_range
+        if 1 < self.top_k == self.depth_dim:
+            select_range = select_range.unsqueeze(-1)
+        return self.parameter_bank[select_range, indices]
 
     def __compute_parameter_mixture(
         self,
