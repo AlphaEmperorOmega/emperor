@@ -56,16 +56,17 @@ class DynamicPositionalBias(Module):
             num_heads=self.num_heads,
             head_dim=self.head_dim,
         )
-        logits = torch.einsum(
+        relative_position_logits = torch.einsum(
             "nhid,hdj->nhij", query, self.relative_positional_embeddings
         )
-        embedding_grid = self.__compute_embedding_grid(
-            query,
-            sequence_length,
-            last,
+        embedding_grid = self.__compute_embedding_grid(query, sequence_length, last)
+        relative_offsets = self.__compute_relative_offsets(
+            embedding_grid, relative_position_logits
         )
-        relative_offsets = self.__compute_relative_offsets(embedding_grid, logits)
-        return logits.gather(-1, relative_offsets)
+        aligned_relative_position_bias = relative_position_logits.gather(
+            -1, relative_offsets
+        )
+        return aligned_relative_position_bias
 
     def __compute_embedding_grid(
         self,
@@ -74,25 +75,23 @@ class DynamicPositionalBias(Module):
         last: bool,
     ) -> Tensor:
         _, _, target_sequence_length, _ = query.size()
-        source_indices = torch.arange(
-            source_sequence_length,
-            device=query.device,
-        )
+        source_indices = torch.arange(source_sequence_length, device=query.device)
+        source_positions_across_columns = source_indices[None, :]
         if last:
-            return source_indices[None, :] - (source_sequence_length - 1)
-        target_indices = torch.arange(
-            target_sequence_length,
-            device=query.device,
-        )
-        return source_indices[None, :] - target_indices[:, None]
+            last_target_position = source_sequence_length - 1
+            return source_positions_across_columns - last_target_position
+        target_indices = torch.arange(target_sequence_length, device=query.device)
+        target_positions_down_rows = target_indices[:, None]
+        return source_positions_across_columns - target_positions_down_rows
 
     def __compute_relative_offsets(
-        self, embedding_grid: Tensor, logits: Tensor
+        self, embedding_grid: Tensor, relative_position_logits: Tensor
     ) -> Tensor:
         min_offset = -self.max_positions
         max_offset = self.max_positions
         bounded_offsets = torch.clamp(embedding_grid, min=min_offset, max=max_offset)
         table_indices = bounded_offsets + self.max_positions
         broadcastable_indices = table_indices[None, None, :, :]
-        batch_size, num_heads = logits.size(0), logits.size(1)
+        batch_size = relative_position_logits.size(0)
+        num_heads = relative_position_logits.size(1)
         return broadcastable_indices.expand(batch_size, num_heads, -1, -1)
