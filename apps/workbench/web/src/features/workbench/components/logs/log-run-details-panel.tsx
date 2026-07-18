@@ -209,15 +209,18 @@ export function LogRunDetailsPanel({
               </InlineStatus>
             ) : (
               <div className="grid gap-2">
-                {checkpoints.map((checkpoint) => (
-                  <DetailRow
-                    key={checkpoint.id}
-                    label={checkpoint.filename}
-                    labelTitle={checkpoint.filename}
-                    value={checkpointDetail(checkpoint)}
-                    valueTitle={checkpointDetail(checkpoint)}
-                  />
-                ))}
+                {checkpoints.map((checkpoint) => {
+                  const detail = checkpointDetail(checkpoint);
+                  return (
+                    <DetailRow
+                      key={checkpoint.id}
+                      label={checkpoint.filename}
+                      labelTitle={checkpoint.filename}
+                      value={detail}
+                      valueTitle={detail}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -238,15 +241,18 @@ export function LogRunDetailsPanel({
               </InlineStatus>
             ) : (
               <div className="grid gap-2">
-                {params.map(([key, value]) => (
-                  <DetailRow
-                    key={key}
-                    label={key}
-                    labelTitle={key}
-                    value={formatMetricValue(value)}
-                    valueTitle={formatMetricValue(value)}
-                  />
-                ))}
+                {params.map(([key, value]) => {
+                  const formattedValue = formatMetricValue(value);
+                  return (
+                    <DetailRow
+                      key={key}
+                      label={key}
+                      labelTitle={key}
+                      value={formattedValue}
+                      valueTitle={formattedValue}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -263,15 +269,18 @@ export function LogRunDetailsPanel({
               </InlineStatus>
             ) : (
               <div className="grid gap-2">
-                {metrics.map(([key, value]) => (
-                  <DetailRow
-                    key={key}
-                    label={key}
-                    labelTitle={key}
-                    value={formatMetricValue(value)}
-                    valueTitle={formatMetricValue(value)}
-                  />
-                ))}
+                {metrics.map(([key, value]) => {
+                  const formattedValue = formatMetricValue(value);
+                  return (
+                    <DetailRow
+                      key={key}
+                      label={key}
+                      labelTitle={key}
+                      value={formattedValue}
+                      valueTitle={formattedValue}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -292,23 +301,22 @@ export function LogRunDetailsPanel({
               </InlineStatus>
             ) : (
               <div className="grid gap-2">
-                {artifactFiles.map((artifact) => (
-                  <DetailRow
-                    key={artifact.id}
-                    label={artifact.label}
-                    labelTitle={artifact.label}
-                    value={[
-                      artifact.kind,
-                      formatBytes(artifact.sizeBytes),
-                      formatDateTime(artifact.modifiedAt),
-                    ].join(" · ")}
-                    valueTitle={[
-                      artifact.kind,
-                      formatBytes(artifact.sizeBytes),
-                      formatDateTime(artifact.modifiedAt),
-                    ].join(" · ")}
-                  />
-                ))}
+                {artifactFiles.map((artifact) => {
+                  const detail = [
+                    artifact.kind,
+                    formatBytes(artifact.sizeBytes),
+                    formatDateTime(artifact.modifiedAt),
+                  ].join(" · ");
+                  return (
+                    <DetailRow
+                      key={artifact.id}
+                      label={artifact.label}
+                      labelTitle={artifact.label}
+                      value={detail}
+                      valueTitle={detail}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
