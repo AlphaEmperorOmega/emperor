@@ -698,6 +698,119 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             config.build,
         )
 
+    def test_depth_mapping_rejects_invalid_depth_and_runtime_inputs_exactly(
+        self,
+    ) -> None:
+        self.assert_exact_error(
+            ValueError,
+            "generator_depth must be greater than 0 for DepthMappingLayer, "
+            "received DynamicDepthOptions.DISABLED. Use DEPTH_OF_ONE, "
+            "DEPTH_OF_TWO, or DEPTH_OF_THREE.",
+            lambda: DepthMappingLayer(
+                DepthMappingLayerConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    bias_flag=True,
+                    generator_depth=DynamicDepthOptions.DISABLED,
+                )
+            ),
+        )
+
+        model = DepthMappingLayerStack(depth_mapping_config())
+        cases = (
+            (
+                TypeError,
+                "DepthMappingLayerStack input must be a Tensor, received list.",
+                lambda: model([[1.0, 2.0]]),
+            ),
+            (
+                ValueError,
+                "DepthMappingLayerStack expects a 2D input tensor "
+                "(batch_size, features), received a 3D tensor with shape "
+                "(1, 1, 2).",
+                lambda: model(torch.ones(1, 1, 2)),
+            ),
+            (
+                ValueError,
+                "DepthMappingLayerStack input feature dimension must match "
+                "input_dim, received input_dim=2 and input shape (2, 1).",
+                lambda: model(torch.ones(2, 1)),
+            ),
+        )
+        for error_type, message, action in cases:
+            with self.subTest(message=message):
+                self.assert_exact_error(error_type, message, action)
+
+    def test_depth_mapping_source_stack_restrictions_are_exact(self) -> None:
+        wrong_inner = replace(
+            linear_stack_config(),
+            layer_config=replace(
+                linear_stack_config().layer_config,
+                layer_model_config=AdditiveDynamicBiasConfig(),
+            ),
+        )
+        self.assert_exact_error(
+            TypeError,
+            "model_config.layer_config.layer_model_config must be a "
+            "LinearLayerConfig, received AdditiveDynamicBiasConfig.",
+            lambda: DepthMappingLayerStack(depth_mapping_config(wrong_inner)),
+        )
+
+        base = linear_stack_config()
+        cases = (
+            (
+                replace(
+                    base,
+                    layer_config=replace(base.layer_config, gate_config=object()),
+                ),
+                "DepthMappingLayerStack does not support gate_config. Set "
+                "gate_config to None.",
+            ),
+            (
+                replace(base, shared_gate_config=object()),
+                "DepthMappingLayerStack does not support shared_gate_config. Set "
+                "shared_gate_config to None.",
+            ),
+            (
+                replace(
+                    base,
+                    layer_config=replace(
+                        base.layer_config,
+                        halting_config=object(),
+                    ),
+                ),
+                "DepthMappingLayerStack does not support halting_config. Set "
+                "halting_config to None.",
+            ),
+            (
+                replace(base, shared_halting_config=object()),
+                "DepthMappingLayerStack does not support shared_halting_config. "
+                "Set shared_halting_config to None.",
+            ),
+            (
+                replace(
+                    base,
+                    layer_config=replace(base.layer_config, memory_config=object()),
+                ),
+                "DepthMappingLayerStack does not support memory_config. Set "
+                "memory_config to None.",
+            ),
+            (
+                replace(base, shared_memory_config=object()),
+                "DepthMappingLayerStack does not support shared_memory_config. Set "
+                "shared_memory_config to None.",
+            ),
+        )
+        for model_config, message in cases:
+            with self.subTest(message=message):
+                self.assert_exact_error(
+                    ValueError,
+                    message,
+                    lambda model_config=model_config: DepthMappingLayerStack(
+                        depth_mapping_config(model_config)
+                    ),
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
