@@ -13,14 +13,16 @@ function resolveMonoFontFamily(): string {
   if (typeof document === "undefined") {
     return MONO_FALLBACK;
   }
-  const value = getComputedStyle(document.documentElement)
+  const configuredMonoFontFamily = getComputedStyle(document.documentElement)
     .getPropertyValue("--font-mono")
     .trim();
-  return value ? `${value}, ${MONO_FALLBACK}` : MONO_FALLBACK;
+  return configuredMonoFontFamily
+    ? `${configuredMonoFontFamily}, ${MONO_FALLBACK}`
+    : MONO_FALLBACK;
 }
 
 export function buildEmperorTheme(fontFamily = resolveMonoFontFamily()) {
-  const axis = {
+  const axisTheme = {
     axisLine: { lineStyle: { color: workbenchVisualTokens.line } },
     axisTick: { show: false },
     axisLabel: { color: workbenchVisualTokens.inkFaint, fontFamily, fontSize: 10 },
@@ -35,10 +37,10 @@ export function buildEmperorTheme(fontFamily = resolveMonoFontFamily()) {
       textStyle: { color: workbenchVisualTokens.ink },
       subtextStyle: { color: workbenchVisualTokens.inkFaint },
     },
-    categoryAxis: axis,
-    valueAxis: axis,
-    logAxis: axis,
-    timeAxis: axis,
+    categoryAxis: axisTheme,
+    valueAxis: axisTheme,
+    logAxis: axisTheme,
+    timeAxis: axisTheme,
     legend: { textStyle: { color: workbenchVisualTokens.inkDim, fontFamily } },
     tooltip: {
       backgroundColor: workbenchVisualTokens.panel,

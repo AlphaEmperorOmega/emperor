@@ -25,13 +25,13 @@ function renderHistogramBar(
   const count = api.value(2) as number;
   const topLeft = api.coord([left, count]);
   const bottomRight = api.coord([right, 0]);
-  const width = bottomRight[0] - topLeft[0];
+  const bucketPixelWidth = bottomRight[0] - topLeft[0];
   return {
     type: "rect",
     shape: {
       x: topLeft[0],
       y: topLeft[1],
-      width: Math.max(width - 1, 0.5),
+      width: Math.max(bucketPixelWidth - 1, 0.5),
       height: bottomRight[1] - topLeft[1],
     },
     style: api.style(),
@@ -43,7 +43,11 @@ export function buildHistogramBarOption(
   options: HistogramBarOptions = {},
 ): EChartsOption {
   const { maxCount, color = workbenchVisualTokens.violet } = options;
-  const data = histogram.buckets.map((bucket) => [bucket.left, bucket.right, bucket.count]);
+  const bucketData = histogram.buckets.map((bucket) => [
+    bucket.left,
+    bucket.right,
+    bucket.count,
+  ]);
   return {
     animation: false,
     grid: { left: 40, right: 12, top: 12, bottom: 24 },
@@ -65,7 +69,7 @@ export function buildHistogramBarOption(
         renderItem: renderHistogramBar,
         encode: { x: [0, 1], y: 2 },
         itemStyle: { color, opacity: 0.85 },
-        data,
+        data: bucketData,
       },
     ],
   };
