@@ -24,8 +24,11 @@ class SamplerSparse(SamplerBase):
     def _sample_probabilities_and_indices(
         self, probabilities: Tensor
     ) -> tuple[Tensor, Tensor | None]:
-        probability, indices = torch.max(probabilities, dim=1)
-        return probability, indices
+        expert_dimension = 1
+        selected_probabilities, selected_expert_indices = torch.max(
+            probabilities, dim=expert_dimension
+        )
+        return selected_probabilities, selected_expert_indices
 
     def _compute_loss(
         self,
@@ -35,22 +38,30 @@ class SamplerSparse(SamplerBase):
         indices: Tensor,
         skip_mask: Tensor | None = None,
     ) -> Tensor:
-        gates = self.__prepare_loss_gates(sampled_probabilities, indices)
-        logits = logits.reshape(-1, self.num_experts)
-        full_probabilities = full_probabilities.reshape(-1, self.num_experts)
+        loss_gates = self.__prepare_loss_gates(sampled_probabilities, indices)
+        flattened_router_logits = logits.reshape(-1, self.num_experts)
+        flattened_full_probabilities = full_probabilities.reshape(-1, self.num_experts)
 
         self.auxiliary_loss_model.update_accumulated_statistics(
-            logits, full_probabilities, gates
+            flattened_router_logits, flattened_full_probabilities, loss_gates
         )
-        return self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+        auxiliary_loss = self.auxiliary_loss_model.get_auxiliary_loss_and_clear()
+        return auxiliary_loss
 
     def __prepare_loss_gates(
         self, sampled_probabilities: Tensor, indices: Tensor
     ) -> Tensor:
-        sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
-        indices = indices.view(-1, self.top_k)
-        input_dim = sampled_probabilities.shape[0]
-        gates_buffer = sampled_probabilities.new_zeros(input_dim, self.num_experts)
-        gates = gates_buffer.scatter(1, indices, sampled_probabilities)
+        flattened_sampled_probabilities = sampled_probabilities.view(-1, self.top_k)
+        flattened_expert_indices = indices.view(-1, self.top_k)
+        num_routing_inputs = flattened_sampled_probabilities.shape[0]
+        zero_expert_gates = flattened_sampled_probabilities.new_zeros(
+            num_routing_inputs, self.num_experts
+        )
+        expert_dimension = 1
+        expert_gates = zero_expert_gates.scatter(
+            expert_dimension,
+            flattened_expert_indices,
+            flattened_sampled_probabilities,
+        )
 
-        return gates
+        return expert_gates
