@@ -124,11 +124,17 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         config_cls: type[DynamicWeightConfig] = DualModelDynamicWeightConfig,
         input_dim: int = 12,
         output_dim: int = 24,
-        normalization_option: WeightNormalizationOptions = WeightNormalizationOptions.L2_SCALE,
-        normalization_position_option: WeightNormalizationPositionOptions = WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
+        normalization_option: WeightNormalizationOptions = (
+            WeightNormalizationOptions.L2_SCALE
+        ),
+        normalization_position_option: WeightNormalizationPositionOptions = (
+            WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+        ),
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
         bank_expansion_factor: BankExpansionFactorOptions | None = None,
-        decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
+        decay_schedule: WeightDecayScheduleOptions = (
+            WeightDecayScheduleOptions.DISABLED
+        ),
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
         model_config: LayerStackConfig | None = None,
@@ -225,7 +231,9 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         output_dim: int = 24,
         bias_flag: bool = True,
         bank_expansion_factor: BankExpansionFactorOptions | None = None,
-        decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
+        decay_schedule: WeightDecayScheduleOptions = (
+            WeightDecayScheduleOptions.DISABLED
+        ),
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicBiasConfig:
@@ -1175,7 +1183,9 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         expected_weights = ((base_weights + 1.0) * 2.0) - 3.0
         expected_bias = base_bias + 4.0
         expected_output = input_tensor @ expected_weights + expected_bias
-        self.assertEqual(observed_steps, ["weight", "diagonal", "bias", "mask", "callback"])
+        self.assertEqual(
+            observed_steps, ["weight", "diagonal", "bias", "mask", "callback"]
+        )
         torch.testing.assert_close(output, expected_output)
 
     def test_forward_full_pipeline(self):
@@ -1186,8 +1196,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 for bias_config_cls, bias_bank_factor in self._bias_cases():
                     for mask_config_cls in self._mask_cases():
                         msg = (
-                            f"weight={weight_config_cls.__name__}, diagonal={diagonal_config_cls.__name__}, "
-                            f"bias={bias_config_cls.__name__}, mask={mask_config_cls.__name__}"
+                            f"weight={weight_config_cls.__name__}, "
+                            f"diagonal={diagonal_config_cls.__name__}, "
+                            f"bias={bias_config_cls.__name__}, "
+                            f"mask={mask_config_cls.__name__}"
                         )
                         with self.subTest(msg):
                             cfg = self.preset(

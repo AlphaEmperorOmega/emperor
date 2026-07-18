@@ -222,9 +222,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
                 "tall",
                 5,
                 3,
-                torch.tensor(
-                    [[1.0, 2.0, 3.0, 9.0, 8.0], [4.0, 0.5, 2.5, 7.0, 6.0]]
-                ),
+                torch.tensor([[1.0, 2.0, 3.0, 9.0, 8.0], [4.0, 0.5, 2.5, 7.0, 6.0]]),
                 (0, 0, 0, 2),
             ),
         ]

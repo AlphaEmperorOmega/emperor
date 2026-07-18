@@ -36,7 +36,6 @@ class TestDepthMappingAugmentation(unittest.TestCase):
         bias_flag: bool = True,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DISABLED,
     ) -> DepthMappingLayerConfig:
-
         return DepthMappingLayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -442,9 +441,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
 
         model = DepthMappingLayerStack(cfg)
 
-        result_depth_mapping_config = (
-            model.model_config.layer_config.layer_model_config
-        )
+        result_depth_mapping_config = model.model_config.layer_config.layer_model_config
         self.assertIsNot(model.model_config, source_stack_config)
         self.assertIsNot(result_depth_mapping_config, depth_mapping_config)
         self.assertEqual(model.model_config.input_dim, input_dim)

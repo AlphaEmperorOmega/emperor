@@ -56,7 +56,8 @@ class ConstantGenerator(nn.Module):
         batch_size = input_tensor.size(0)
         if self.output.size(0) != batch_size:
             raise ValueError(
-                f"ConstantGenerator expected batch size {self.output.size(0)}, received {batch_size}."
+                "ConstantGenerator expected batch size "
+                f"{self.output.size(0)}, received {batch_size}."
             )
         if isinstance(logits, LayerState):
             logits.hidden = self.output
@@ -1245,9 +1246,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
         )
         global_model = WeightInformedScoreAxisMask(global_cfg)
         global_model.eval()
-        global_model.model = ConstantGenerator(
-            torch.tensor([[10.0, -10.0, 10.0]])
-        )
+        global_model.model = ConstantGenerator(torch.tensor([[10.0, -10.0, 10.0]]))
         global_output = global_model(weight_params, logits)
 
         per_axis_cfg = self.preset(
@@ -1910,7 +1909,9 @@ class TestOuterProductMask(unittest.TestCase):
 
         output = model(weight_params, logits)
 
-        scores = torch.sigmoid(torch.einsum("bi,bj->bij", input_vectors, output_vectors))
+        scores = torch.sigmoid(
+            torch.einsum("bi,bj->bij", input_vectors, output_vectors)
+        )
         hard_mask = (scores >= threshold).to(dtype=scores.dtype)
         adjusted_hard_mask = floor_value + (1.0 - floor_value) * hard_mask
         expected = weight_params * adjusted_hard_mask * scores

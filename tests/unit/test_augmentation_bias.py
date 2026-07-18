@@ -60,7 +60,8 @@ class ConstantGenerator(nn.Module):
         batch_size = input_tensor.size(0)
         if self.output.size(0) != batch_size:
             raise ValueError(
-                f"ConstantGenerator expected batch size {self.output.size(0)}, received {batch_size}."
+                "ConstantGenerator expected batch size "
+                f"{self.output.size(0)}, received {batch_size}."
             )
         if isinstance(logits, LayerState):
             logits.hidden = self.output
@@ -77,7 +78,9 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         output_dim: int = 4,
         bias_flag: bool = True,
         bank_expansion_factor: BankExpansionFactorOptions | None = None,
-        decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
+        decay_schedule: WeightDecayScheduleOptions = (
+            WeightDecayScheduleOptions.DISABLED
+        ),
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicBiasConfig:
@@ -258,9 +261,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         model = AffineTransformDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, -2.0])
-        affine_parameters = torch.tensor(
-            [[2.0, 0.5, 0.5, -2.5], [-1.5, 1.0, 1.0, 6.0]]
-        )
+        affine_parameters = torch.tensor([[2.0, 0.5, 0.5, -2.5], [-1.5, 1.0, 1.0, 6.0]])
         model.model = ConstantGenerator(affine_parameters)
 
         output = model(bias_params, logits)

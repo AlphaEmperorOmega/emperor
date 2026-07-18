@@ -62,10 +62,16 @@ class TestWeightHandlerForward(unittest.TestCase):
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
-        normalization_option: WeightNormalizationOptions = WeightNormalizationOptions.L2_SCALE,
-        normalization_position_option: WeightNormalizationPositionOptions = WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
+        normalization_option: WeightNormalizationOptions = (
+            WeightNormalizationOptions.L2_SCALE
+        ),
+        normalization_position_option: WeightNormalizationPositionOptions = (
+            WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+        ),
         bank_expansion_factor: BankExpansionFactorOptions | None = None,
-        decay_schedule: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED,
+        decay_schedule: WeightDecayScheduleOptions = (
+            WeightDecayScheduleOptions.DISABLED
+        ),
         decay_rate: float = 0.0,
         decay_warmup_batches: int = 0,
     ) -> DynamicWeightConfig:
@@ -660,7 +666,16 @@ class TestWeightHandlerForward(unittest.TestCase):
 
         model.model = StaticDepthMapper(raw_logits)
         model.weight_bank.data = torch.tensor(
-            [[[[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [4.0, 5.0, 6.0], [40.0, 50.0, 60.0]]]]
+            [
+                [
+                    [
+                        [1.0, 2.0, 3.0],
+                        [10.0, 20.0, 30.0],
+                        [4.0, 5.0, 6.0],
+                        [40.0, 50.0, 60.0],
+                    ]
+                ]
+            ]
         )
 
         output = model(weight_params, input_tensor)
@@ -711,7 +726,8 @@ class TestWeightHandlerForward(unittest.TestCase):
                     expected = weight_params * expected_factor
                     self.assertTrue(
                         torch.allclose(result, expected, atol=1e-6),
-                        f"{message}, step={step}: expected factor={expected_factor.item():.6f}",
+                        f"{message}, step={step}: expected factor="
+                        f"{expected_factor.item():.6f}",
                     )
 
     def test_decay_schedule_disabled_leaves_weights_unchanged(self):
