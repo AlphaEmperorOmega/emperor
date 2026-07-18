@@ -44,6 +44,7 @@ class ParametricLayerValidator(ValidatorBase):
         cls._validate_router_and_sampler_configs(model)
         cls._validate_routing_initialization_mode(model)
         cls._validate_sampler_matches_mixtures(model)
+        cls._validate_router_matches_sampler(model)
         cls._validate_vector_shared_router(model)
         cls._validate_adaptive_augmentation_config(model)
 
@@ -119,6 +120,22 @@ class ParametricLayerValidator(ValidatorBase):
                 "routing_initialization_mode must be an AdaptiveRouterOptions "
                 "value for ParametricLayer, "
                 f"got {type(model.routing_initialization_mode).__name__}."
+            )
+
+    @classmethod
+    def _validate_router_matches_sampler(cls, model: "ParametricLayer") -> None:
+        cls._validate_count_match(
+            "router_config.num_experts",
+            model.router_config.num_experts,
+            "sampler_config.num_experts",
+            model.sampler_config.num_experts,
+        )
+        if model.router_config.noisy_topk_flag != model.sampler_config.noisy_topk_flag:
+            raise ValueError(
+                "router_config.noisy_topk_flag must match "
+                "sampler_config.noisy_topk_flag, received "
+                f"{model.router_config.noisy_topk_flag} and "
+                f"{model.sampler_config.noisy_topk_flag}."
             )
 
     @classmethod

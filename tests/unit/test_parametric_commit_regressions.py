@@ -270,6 +270,35 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         )
         ParametricLayerValidator._validate_routing_initialization_mode(valid_model)
 
+    def test_router_and_sampler_contracts_must_match(self) -> None:
+        count_mismatch = SimpleNamespace(
+            router_config=SimpleNamespace(num_experts=3, noisy_topk_flag=False),
+            sampler_config=SimpleNamespace(num_experts=2, noisy_topk_flag=False),
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "^router_config.num_experts must match sampler_config.num_experts, "
+            "received 3 and 2\\.$",
+        ):
+            ParametricLayerValidator._validate_router_matches_sampler(count_mismatch)
+
+        noise_mismatch = SimpleNamespace(
+            router_config=SimpleNamespace(num_experts=2, noisy_topk_flag=True),
+            sampler_config=SimpleNamespace(num_experts=2, noisy_topk_flag=False),
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "^router_config.noisy_topk_flag must match "
+            "sampler_config.noisy_topk_flag, received True and False\\.$",
+        ):
+            ParametricLayerValidator._validate_router_matches_sampler(noise_mismatch)
+
+        matching_model = SimpleNamespace(
+            router_config=SimpleNamespace(num_experts=2, noisy_topk_flag=False),
+            sampler_config=SimpleNamespace(num_experts=2, noisy_topk_flag=False),
+        )
+        ParametricLayerValidator._validate_router_matches_sampler(matching_model)
+
 
 if __name__ == "__main__":
     unittest.main()
