@@ -295,5 +295,82 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
                 torch.testing.assert_close(value, expected_value)
         self.assertNotIn(None, actual)
 
+    def test_real_history_histogram_and_heatmap_preserve_global_step(self) -> None:
+        utilization = torch.tensor([0.2, 0.3, 0.5])
+        metrics = _WeightBankDiagnostics.calculate_utilization(
+            _BankDistributionSummary(
+                per_slot_utilization=utilization,
+                mean_per_sample_entropy=torch.tensor(0.4),
+            ),
+            dead_slot_utilization_floor=0.0001,
+        )
+        experiment = RecordingExperiment()
+        callback = WeightBankUtilizationMonitorCallback(
+            history_size=3,
+            log_per_slot_scalars=True,
+        )
+        callback._utilization_history["dynamic_bank"] = MonitorTensorHistory(3)
+        context = _WeightBankTrackingContext(
+            pl_module=RecordingLightningModule(),
+            module_name="dynamic_bank",
+            metrics=metrics,
+            experiment=experiment,
+            global_step=7,
+        )
+
+        callback._WeightBankUtilizationMonitorCallback__track_weight_bank_utilization(
+            context
+        )
+
+        self.assertEqual(
+            [tag for tag, _, _ in experiment.histograms],
+            ["dynamic_bank/bank/histogram/utilization"],
+        )
+        torch.testing.assert_close(
+            experiment.histograms[0][1],
+            utilization,
+        )
+        self.assertEqual(experiment.histograms[0][2], 7)
+        self.assertEqual(
+            [tag for tag, _, _, _ in experiment.images],
+            ["dynamic_bank/bank/heatmap/utilization"],
+        )
+        self.assertEqual(experiment.images[0][2], 7)
+        self.assertEqual(experiment.images[0][3], "CHW")
+
+    def test_batch_end_continues_past_unexecuted_real_bank(self) -> None:
+        first = weighted_bias()
+        second = weighted_bias()
+        module = RecordingLightningModule(first, second)
+        callback = WeightBankUtilizationMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(trainer=None, pl_module=module)
+        self.assertEqual(
+            [name for name, _ in callback._bank_modules],
+            ["first_bank", "second_bank"],
+        )
+
+        second(
+            torch.zeros(2),
+            torch.tensor([[1.0, 2.0], [-1.0, 0.5]]),
+        )
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        names = set(logged_map(module))
+        self.assertIn(
+            "second_bank/bank/selection_entropy_marginal",
+            names,
+        )
+        self.assertFalse(
+            any(name and name.startswith("first_bank/") for name in names)
+        )
+        callback.on_fit_end(trainer=None, pl_module=module)
+
+
 if __name__ == "__main__":
     unittest.main()
