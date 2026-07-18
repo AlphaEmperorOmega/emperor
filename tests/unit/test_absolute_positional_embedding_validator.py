@@ -1,21 +1,25 @@
 import unittest
 
 import torch
-from emperor.embedding.absolute.core._validator import (
-    AbsolutePositionalEmbeddingValidator,
-)
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
+    AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbeddingConfig,
+    ImageSinusoidalPositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
 )
-from emperor.embedding.absolute.core.layers import (
-    AbsolutePositionalEmbeddingBase,
+from emperor.embedding.absolute._base import AbsolutePositionalEmbeddingBase
+from emperor.embedding.absolute._learned import (
     ImageLearnedPositionalEmbedding,
-    ImageSinusoidalPositionalEmbedding,
     LearnedPositionalEmbedding,
-    SinusoidalPositionalEmbedding,
     TextLearnedPositionalEmbedding,
+)
+from emperor.embedding.absolute._sinusoidal import (
+    ImageSinusoidalPositionalEmbedding,
+    SinusoidalPositionalEmbedding,
     TextSinusoidalPositionalEmbedding,
+)
+from emperor.embedding.absolute._validation import (
+    AbsolutePositionalEmbeddingValidator,
 )
 
 
@@ -29,6 +33,26 @@ def make_text_config(**overrides) -> TextLearnedPositionalEmbeddingConfig:
     }
     values.update(overrides)
     return TextLearnedPositionalEmbeddingConfig(**values)
+
+
+def make_image_config(
+    config_type: type[
+        ImageLearnedPositionalEmbeddingConfig | ImageSinusoidalPositionalEmbeddingConfig
+    ],
+    **overrides: object,
+) -> ImageLearnedPositionalEmbeddingConfig | ImageSinusoidalPositionalEmbeddingConfig:
+    values: dict[str, object] = {
+        "num_embeddings": 4,
+        "embedding_dim": 4,
+        "init_size": 4,
+        "padding_idx": (
+            None if config_type is ImageSinusoidalPositionalEmbeddingConfig else 0
+        ),
+        "auto_expand_flag": False,
+        "class_token_flag": True,
+    }
+    values.update(overrides)
+    return config_type(**values)
 
 
 class TestAbsolutePositionalEmbeddingValidatorAdapter(unittest.TestCase):
@@ -98,6 +122,55 @@ class TestAbsolutePositionalEmbeddingValidatorAdapter(unittest.TestCase):
             "ImageLearnedPositionalEmbeddingConfig, received None",
         ):
             ImageLearnedPositionalEmbedding(cfg)
+
+    def test_fixed_learned_tables_reject_out_of_range_padding_indices(
+        self,
+    ) -> None:
+        invalid_cases = (
+            (
+                lambda: LearnedPositionalEmbedding(
+                    AbsolutePositionalEmbeddingConfig(
+                        num_embeddings=3,
+                        embedding_dim=2,
+                        init_size=3,
+                        padding_idx=3,
+                        auto_expand_flag=False,
+                    )
+                ),
+                "padding_idx must be in [0, 3) for "
+                "LearnedPositionalEmbedding, received 3",
+            ),
+            (
+                lambda: ImageLearnedPositionalEmbedding(
+                    make_image_config(
+                        ImageLearnedPositionalEmbeddingConfig,
+                        num_embeddings=3,
+                        class_token_flag=False,
+                        padding_idx=3,
+                    )
+                ),
+                "padding_idx must be in [0, 3) for "
+                "ImageLearnedPositionalEmbedding, received 3",
+            ),
+            (
+                lambda: ImageLearnedPositionalEmbedding(
+                    make_image_config(
+                        ImageLearnedPositionalEmbeddingConfig,
+                        num_embeddings=3,
+                        class_token_flag=True,
+                        padding_idx=4,
+                    )
+                ),
+                "padding_idx must be in [0, 4) for "
+                "ImageLearnedPositionalEmbedding, received 4",
+            ),
+        )
+
+        for build, message in invalid_cases:
+            with self.subTest(message=message):
+                with self.assertRaises(ValueError) as error:
+                    build()
+                self.assertEqual(str(error.exception), message)
 
 
 if __name__ == "__main__":

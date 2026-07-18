@@ -21,6 +21,11 @@ class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     ):
         super().__init__(cfg, overrides)
         self.num_embeddings = self._get_num_embeddings()
+        self.VALIDATOR.validate_padding_idx_bounds(
+            padding_idx=self.padding_idx,
+            num_embeddings=self.num_embeddings,
+            model_name=type(self).__name__,
+        )
         self.embedding_model = self.__initialize_embedding_model()
 
     def _get_num_embeddings(self) -> int:

@@ -45,6 +45,19 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             )
 
     @staticmethod
+    def validate_padding_idx_bounds(
+        *,
+        padding_idx: int | None,
+        num_embeddings: int,
+        model_name: str,
+    ) -> None:
+        if padding_idx is not None and padding_idx >= num_embeddings:
+            raise ValueError(
+                f"padding_idx must be in [0, {num_embeddings}) for "
+                f"{model_name}, received {padding_idx}"
+            )
+
+    @staticmethod
     def validate_text_tokens(input_tokens: Tensor) -> None:
         if not isinstance(input_tokens, Tensor):
             raise TypeError(
