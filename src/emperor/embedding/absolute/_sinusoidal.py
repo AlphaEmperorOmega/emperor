@@ -87,6 +87,8 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
         batch_size, sequence_length = input_tokens.size()
         if incremental_state is not None:
             self.VALIDATOR.validate_incremental_sequence_length(sequence_length)
+            if timestep is not None:
+                self.VALIDATOR.validate_timestep(timestep)
         self.__maybe_expand_weights(
             input_tokens,
             incremental_state=incremental_state,
@@ -106,7 +108,7 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     ) -> None:
         _, sequence_length = input_tokens.size()
         if incremental_state is not None and timestep is not None:
-            sequence_length = int(timestep.flatten()[0].item()) + 1
+            sequence_length = int(timestep.item()) + 1
         max_positions = self._get_position_start() + sequence_length
         if self.auto_expand_flag and max_positions > self.weights.size(0):
             self.weights = self._get_embedding(max_positions).to(
@@ -117,10 +119,11 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     def __forward_incremental(
         self, batch_size: int, sequence_length: int, timestep: Tensor | None
     ) -> Tensor:
-        current_position = sequence_length
+        current_position = sequence_length - 1
         if timestep is not None:
-            current_position = timestep.flatten()[0] + 1
-        single_step_weights = self.weights[self.position_offset + current_position, :]
+            current_position = int(timestep.item())
+        position_idx = self._get_position_start() + current_position
+        single_step_weights = self.weights[position_idx, :]
         return single_step_weights.expand(batch_size, 1, -1)
 
     def __forward_full_sequence(

@@ -113,6 +113,27 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             )
 
     @staticmethod
+    def validate_timestep(timestep: Tensor) -> None:
+        if not isinstance(timestep, Tensor):
+            raise TypeError(f"timestep must be a Tensor, got {type(timestep).__name__}")
+        if timestep.dim() > 1:
+            raise ValueError(
+                "timestep must be a scalar or one-dimensional tensor, "
+                f"got shape {tuple(timestep.shape)}"
+            )
+        if timestep.numel() != 1:
+            raise ValueError(
+                f"timestep must contain exactly one value, got {timestep.numel()}"
+            )
+        if timestep.dtype not in (torch.int32, torch.int64):
+            raise TypeError(
+                f"timestep must use torch.int32 or torch.int64, got {timestep.dtype}"
+            )
+        value = int(timestep.item())
+        if value < 0:
+            raise ValueError(f"timestep must be non-negative, received {value}")
+
+    @staticmethod
     def validate_patch_embeddings(
         patch_embeddings: Tensor,
         *,

@@ -183,6 +183,156 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
                     "input sequence.",
                 )
 
+    def test_incremental_auto_expansion_uses_timestep_and_preserves_dtype(
+        self,
+    ) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=4,
+            init_size=2,
+            padding_idx=0,
+            auto_expand_flag=True,
+        ).build()
+        model.double()
+
+        output = model(
+            torch.ones(3, 1, dtype=torch.long),
+            incremental_state={},
+            timestep=torch.tensor([5]),
+        )
+
+        self.assertEqual(output.shape, (3, 1, 4))
+        self.assertEqual(output.dtype, torch.float64)
+        self.assertEqual(model.weights.dtype, torch.float64)
+        self.assertEqual(model.weights.size(0), 7)
+        torch.testing.assert_close(
+            output,
+            model.weights[6].reshape(1, 1, -1).expand(3, -1, -1),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_incremental_sinusoidal_accepts_zero_scalar_timestep(self) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=False,
+        ).build()
+
+        output = model(
+            torch.ones(2, 1, dtype=torch.long),
+            incremental_state={},
+            timestep=torch.tensor(0, dtype=torch.int32),
+        )
+
+        torch.testing.assert_close(
+            output,
+            model.weights[1].reshape(1, 1, 2).expand(2, -1, -1),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_incremental_sinusoidal_without_timestep_uses_last_input_step(
+        self,
+    ) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=False,
+        ).build()
+
+        output = model(
+            torch.ones(2, 3, dtype=torch.long),
+            incremental_state={},
+        )
+
+        expected_row = torch.tensor(
+            [torch.sin(torch.tensor(3.0)), torch.cos(torch.tensor(3.0))]
+        )
+        torch.testing.assert_close(
+            output,
+            expected_row.reshape(1, 1, 2).expand(2, -1, -1),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_incremental_sinusoidal_rejects_negative_timestep(self) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=True,
+        ).build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 1, dtype=torch.long),
+                incremental_state={},
+                timestep=torch.tensor([-1]),
+            )
+
+        self.assertEqual(
+            str(error.exception),
+            "timestep must be non-negative, received -1",
+        )
+
+    def test_incremental_sinusoidal_rejects_malformed_timesteps(self) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=True,
+        ).build()
+        invalid_cases = (
+            (
+                [1],
+                TypeError,
+                "timestep must be a Tensor, got list",
+            ),
+            (
+                torch.tensor([[1]]),
+                ValueError,
+                "timestep must be a scalar or one-dimensional tensor, "
+                "got shape (1, 1)",
+            ),
+            (
+                torch.tensor([], dtype=torch.long),
+                ValueError,
+                "timestep must contain exactly one value, got 0",
+            ),
+            (
+                torch.tensor([1, 2]),
+                ValueError,
+                "timestep must contain exactly one value, got 2",
+            ),
+            (
+                torch.tensor([1.5]),
+                TypeError,
+                "timestep must use torch.int32 or torch.int64, got torch.float32",
+            ),
+            (
+                torch.tensor([True]),
+                TypeError,
+                "timestep must use torch.int32 or torch.int64, got torch.bool",
+            ),
+        )
+
+        for timestep, error_type, message in invalid_cases:
+            with self.subTest(timestep=timestep):
+                with self.assertRaises(error_type) as error:
+                    model(
+                        torch.ones(2, 1, dtype=torch.long),
+                        incremental_state={},
+                        timestep=timestep,
+                    )
+                self.assertEqual(str(error.exception), message)
+
 
 if __name__ == "__main__":
     unittest.main()
