@@ -1043,7 +1043,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     weight_requires_grad=True,
                 )
                 input_tensor = torch.randn(batch_size, input_dim, requires_grad=True)
-                callback = lambda weights, bias, X: weights
+
+                def callback(weights, bias, X):
+                    return weights
+
                 output = model(callback, weight_params, bias_params, input_tensor)
                 output.pow(2).sum().backward()
                 grads = [p.grad for p in model.parameters() if p.requires_grad]
@@ -1110,7 +1113,10 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     weight_requires_grad=True,
                 )
                 input_tensor = torch.randn(batch_size, input_dim, requires_grad=True)
-                callback = lambda weights, bias, X: weights
+
+                def callback(weights, bias, X):
+                    return weights
+
                 output = model(callback, weight_params, bias_params, input_tensor)
                 output.pow(2).sum().backward()
                 grads = [p.grad for p in model.parameters() if p.requires_grad]
