@@ -36,6 +36,17 @@ class GeneratorMixtureBase(AdaptiveMixtureBase):
         )
         return self.generator_config.build(overrides)
 
+    def _canonicalize_singleton_generator_routing(
+        self,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> tuple[Tensor | None, Tensor | None]:
+        if self.top_k != 1 or self.num_experts != 1:
+            return probabilities, indices
+        if probabilities is not None and probabilities.dim() == 1:
+            probabilities = probabilities.unsqueeze(-1)
+        return probabilities, None
+
 
 class GeneratorWeightsMixture(GeneratorMixtureBase):
     def __init__(
@@ -74,6 +85,10 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
     ) -> tuple[Tensor, Tensor]:
         self.VALIDATOR.validate_input_batch_2d(input_batch)
         self.VALIDATOR.validate_weighted_probabilities(self.cfg, probabilities)
+        probabilities, indices = self._canonicalize_singleton_generator_routing(
+            probabilities,
+            indices,
+        )
         experts_inputs = (input_batch, probabilities, indices)
         input_vectors, _, input_loss = self.input_vector_generator(*experts_inputs)
         output_vectors, _, output_loss = self.output_vector_generator(*experts_inputs)
@@ -166,5 +181,8 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
         input_batch: Tensor,
     ) -> tuple[Tensor, Tensor]:
         self.VALIDATOR.validate_input_batch_2d(input_batch)
+        probabilities, indices = self._canonicalize_singleton_generator_routing(
+            probabilities, indices
+        )
         bias, _, loss = self.bias_generator(input_batch, probabilities, indices)
         return bias, loss

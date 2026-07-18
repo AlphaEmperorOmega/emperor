@@ -192,6 +192,65 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         torch.testing.assert_close(generated_bias, expected_bias)
         torch.testing.assert_close(bias_loss, torch.tensor(0.5))
 
+    def test_singleton_generator_routing_uses_probability_columns(self) -> None:
+        weights = GeneratorWeightsMixture.__new__(GeneratorWeightsMixture)
+        nn.Module.__init__(weights)
+        weights.cfg = SimpleNamespace(weighted_parameters_flag=True)
+        weights.top_k = 1
+        weights.num_experts = 1
+        weights.input_dim = 2
+        weights.output_dim = 2
+        weights.weighted_parameters_flag = True
+        weights.clip_parameter_option = ClipParameterOptions.DISABLED
+        weights.clip_range = 1.0
+        weights.probability_shape = (-1, 1, 1, 1)
+        weight_calls: list[tuple[torch.Tensor | None, torch.Tensor | None]] = []
+
+        def generate_vectors(input_batch, probabilities, indices):
+            weight_calls.append((probabilities, indices))
+            return input_batch, None, input_batch.new_zeros(())
+
+        weights.input_vector_generator = generate_vectors
+        weights.output_vector_generator = generate_vectors
+        inputs = torch.tensor([[1.0, 2.0], [-1.0, 0.5]])
+        probabilities = torch.tensor([0.25, 0.75])
+        indices = torch.zeros(2, dtype=torch.long)
+
+        generated_weights, _ = weights.compute_mixture(
+            probabilities,
+            indices,
+            inputs,
+        )
+
+        expected_weights = probabilities.reshape(-1, 1, 1) * torch.einsum(
+            "bi,bj->bij",
+            inputs,
+            inputs,
+        )
+        torch.testing.assert_close(generated_weights, expected_weights)
+        self.assertEqual(len(weight_calls), 2)
+        for routed_probabilities, routed_indices in weight_calls:
+            self.assertEqual(routed_probabilities.shape, (2, 1))
+            self.assertIsNone(routed_indices)
+
+        bias = GeneratorBiasMixture.__new__(GeneratorBiasMixture)
+        nn.Module.__init__(bias)
+        bias.top_k = 1
+        bias.num_experts = 1
+        bias_calls: list[tuple[torch.Tensor | None, torch.Tensor | None]] = []
+
+        def generate_bias(input_batch, routed_probabilities, routed_indices):
+            bias_calls.append((routed_probabilities, routed_indices))
+            return input_batch, None, input_batch.new_zeros(())
+
+        bias.bias_generator = generate_bias
+
+        generated_bias, _ = bias.compute_mixture(probabilities, indices, inputs)
+
+        torch.testing.assert_close(generated_bias, inputs)
+        self.assertEqual(bias_calls[0][0].shape, (2, 1))
+        self.assertIsNone(bias_calls[0][1])
+
 
 if __name__ == "__main__":
     unittest.main()
