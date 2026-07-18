@@ -401,6 +401,21 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             torch.tensor(0.0),
         )
 
+    def test_duplicate_parametric_monitors_are_rejected_before_wrapping(self) -> None:
+        first_monitor = ParametricLayerMonitorCallback()
+        second_monitor = ParametricLayerMonitorCallback()
+        trainer = SimpleNamespace(callbacks=[first_monitor, second_monitor])
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Only one ParametricLayerMonitorCallback may be configured per "
+            "Trainer\\.$",
+        ):
+            first_monitor.on_fit_start(trainer, object())
+
+        self.assertEqual(first_monitor._wrapped_methods, [])
+        self.assertEqual(second_monitor._wrapped_methods, [])
+
 
 if __name__ == "__main__":
     unittest.main()

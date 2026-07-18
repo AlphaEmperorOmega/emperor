@@ -161,6 +161,7 @@ class ParametricLayerMonitorCallback(Callback):
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.parametric._layer import ParametricLayer
 
+        self.__validate_single_monitor(trainer)
         self.__cleanup()
         for module_name, parametric_layer in pl_module.named_modules():
             if not isinstance(parametric_layer, ParametricLayer):
@@ -173,6 +174,17 @@ class ParametricLayerMonitorCallback(Callback):
             self.__wrap_generate_parameters(parametric_layer)
             self.__wrap_affine_callback(parametric_layer)
             self.__wrap_sampling_methods(parametric_layer)
+
+    @staticmethod
+    def __validate_single_monitor(trainer: Trainer) -> None:
+        configured_monitor_count = sum(
+            isinstance(callback, ParametricLayerMonitorCallback)
+            for callback in getattr(trainer, "callbacks", ())
+        )
+        if configured_monitor_count > 1:
+            raise ValueError(
+                "Only one ParametricLayerMonitorCallback may be configured per Trainer."
+            )
 
     def __wrap_forward(
         self,
