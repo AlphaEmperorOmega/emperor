@@ -263,14 +263,14 @@ def _validate_plan_payload(payload: Mapping[str, Any]) -> None:
         raise ValueError("runPlan.logFolder must be a string.")
     if "isRandomSearch" in payload and not isinstance(payload["isRandomSearch"], bool):
         raise ValueError("runPlan.isRandomSearch must be a boolean.")
-    rows = payload.get("runs")
-    if not isinstance(rows, list):
+    run_payloads = payload.get("runs")
+    if not isinstance(run_payloads, list):
         raise ValueError("Persisted Run Plan rows must be a list of objects.")
     seen_ids: set[str] = set()
-    for index, row in enumerate(rows):
-        _validate_run_payload(row, path=f"runPlan.runs[{index}]")
-        assert isinstance(row, Mapping)
-        run_id = cast(str, row["id"])
+    for index, run_payload in enumerate(run_payloads):
+        _validate_run_payload(run_payload, path=f"runPlan.runs[{index}]")
+        assert isinstance(run_payload, Mapping)
+        run_id = cast(str, run_payload["id"])
         if run_id in seen_ids:
             raise ValueError(
                 f"Persisted Run Plan contains duplicate run id '{run_id}'."

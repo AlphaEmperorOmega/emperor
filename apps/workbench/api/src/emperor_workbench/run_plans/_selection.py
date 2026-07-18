@@ -202,10 +202,8 @@ def configuration_fields(
     for config_field in fields:
         by_key[normalize_key(config_field.key)] = config_field
     for config_field in fields:
-        by_key[normalize_key(config_key_to_model_param(config_field.key))] = by_key.get(
-            normalize_key(config_key_to_model_param(config_field.key)),
-            config_field,
-        )
+        model_param_key = normalize_key(config_key_to_model_param(config_field.key))
+        by_key.setdefault(model_param_key, config_field)
     return fields, by_key
 
 

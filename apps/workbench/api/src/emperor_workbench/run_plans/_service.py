@@ -351,12 +351,12 @@ class RunPlanService:
                 selected.request,
                 tuple(
                     SubmittedRun(
-                        id=row.id or None,
-                        preset=row.preset,
-                        dataset=row.dataset,
-                        overrides=dict(row.overrides),
+                        id=submitted_run.id or None,
+                        preset=submitted_run.preset,
+                        dataset=submitted_run.dataset,
+                        overrides=dict(submitted_run.overrides),
                     )
-                    for row in submitted_runs
+                    for submitted_run in submitted_runs
                 ),
                 budget=_planning_budget(),
             )
@@ -364,11 +364,11 @@ class RunPlanService:
             raise RunPlanFailure(exc.detail, kind=exc.kind) from exc
 
         runs = []
-        for index, (row, semantic_run) in enumerate(
+        for index, (submitted_run, semantic_run) in enumerate(
             zip(submitted_runs, semantic_plan.runs, strict=True),
             start=1,
         ):
-            projected_row = project_pending_run(
+            projected_run = project_pending_run(
                 self._model_packages,
                 model=model,
                 package=selected.package,
@@ -380,9 +380,9 @@ class RunPlanService:
             )
             runs.append(
                 replace(
-                    projected_row,
-                    snapshot_id=row.snapshot_id,
-                    snapshot_name=row.snapshot_name,
+                    projected_run,
+                    snapshot_id=submitted_run.snapshot_id,
+                    snapshot_name=submitted_run.snapshot_name,
                     snapshot_id_present=True,
                     snapshot_name_present=True,
                 )

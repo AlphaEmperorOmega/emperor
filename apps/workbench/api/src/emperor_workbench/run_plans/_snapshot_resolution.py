@@ -78,18 +78,18 @@ class SnapshotResolver:
         envelope_snapshot_ids: list[str] | None = None,
         envelope_overrides: Mapping[str, object] | None = None,
     ) -> tuple[SubmittedTrainingRunPlan, tuple[ConfigSnapshotRecord, ...]]:
-        row_snapshot_ids = [
+        run_snapshot_ids = [
             run.snapshot_id for run in plan.runs if run.snapshot_id is not None
         ]
         revision_ids = [revision.id for revision in plan.snapshot_revisions]
-        if not row_snapshot_ids and not revision_ids:
+        if not run_snapshot_ids and not revision_ids:
             return plan, ()
         if not plan.snapshot_revisions:
             raise RunPlanFailure(
                 "Snapshot provenance requires a backend-issued semantic revision.",
                 kind=FailureKind.CONFLICT,
             )
-        if set(row_snapshot_ids) != set(revision_ids):
+        if set(run_snapshot_ids) != set(revision_ids):
             raise RunPlanFailure(
                 "Submitted Snapshot provenance does not match its revision set.",
                 kind=FailureKind.CONFLICT,

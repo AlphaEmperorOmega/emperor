@@ -101,7 +101,7 @@ class TrainingRunPlanView:
 
 @dataclass(frozen=True, slots=True)
 class SubmittedTrainingRun:
-    """Authoritative row choices accepted from an untrusted caller."""
+    """Authoritative Run choices accepted from an untrusted caller."""
 
     id: str
     preset: str
