@@ -1,8 +1,11 @@
 import unittest
+from types import SimpleNamespace
 
 import torch
 from emperor.parametric import (
     ClipParameterOptions,
+    GeneratorBiasMixture,
+    GeneratorWeightsMixture,
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerHandler,
@@ -131,6 +134,63 @@ class ParametricCommitRegressionTests(unittest.TestCase):
                     for route in range(2)
                 )
         torch.testing.assert_close(output, expected)
+
+    def test_generator_mixtures_consume_expert_metadata(self) -> None:
+        weights = GeneratorWeightsMixture.__new__(GeneratorWeightsMixture)
+        nn.Module.__init__(weights)
+        weights.cfg = SimpleNamespace(weighted_parameters_flag=False)
+        weights.top_k = 2
+        weights.num_experts = 2
+        weights.input_dim = 2
+        weights.output_dim = 2
+        weights.weighted_parameters_flag = False
+        weights.clip_parameter_option = ClipParameterOptions.DISABLED
+        weights.clip_range = 1.0
+        input_vectors = torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])
+        output_vectors = torch.tensor([[[2.0, 1.0], [3.0, -1.0]]])
+        weights.input_vector_generator = lambda *_: (
+            input_vectors,
+            torch.ones(1, 1),
+            torch.tensor(0.25),
+        )
+        weights.output_vector_generator = lambda *_: (
+            output_vectors,
+            torch.zeros(1, 1),
+            torch.tensor(0.75),
+        )
+
+        generated_weights, weight_loss = weights.compute_mixture(
+            None,
+            None,
+            torch.ones(1, 2),
+        )
+
+        expected_weights = sum(
+            torch.outer(input_vectors[0, route], output_vectors[0, route])
+            for route in range(2)
+        ).unsqueeze(0)
+        torch.testing.assert_close(generated_weights, expected_weights)
+        torch.testing.assert_close(weight_loss, torch.tensor(1.0))
+
+        bias = GeneratorBiasMixture.__new__(GeneratorBiasMixture)
+        nn.Module.__init__(bias)
+        bias.top_k = 2
+        bias.num_experts = 2
+        expected_bias = torch.tensor([[1.5, -2.0]])
+        bias.bias_generator = lambda *_: (
+            expected_bias,
+            torch.ones(1, 1),
+            torch.tensor(0.5),
+        )
+
+        generated_bias, bias_loss = bias.compute_mixture(
+            None,
+            None,
+            torch.ones(1, 2),
+        )
+
+        torch.testing.assert_close(generated_bias, expected_bias)
+        torch.testing.assert_close(bias_loss, torch.tensor(0.5))
 
 
 if __name__ == "__main__":

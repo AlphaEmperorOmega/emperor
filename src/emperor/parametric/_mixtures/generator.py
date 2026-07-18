@@ -75,8 +75,8 @@ class GeneratorWeightsMixture(GeneratorMixtureBase):
         self.VALIDATOR.validate_input_batch_2d(input_batch)
         self.VALIDATOR.validate_weighted_probabilities(self.cfg, probabilities)
         experts_inputs = (input_batch, probabilities, indices)
-        input_vectors, input_loss = self.input_vector_generator(*experts_inputs)
-        output_vectors, output_loss = self.output_vector_generator(*experts_inputs)
+        input_vectors, _, input_loss = self.input_vector_generator(*experts_inputs)
+        output_vectors, _, output_loss = self.output_vector_generator(*experts_inputs)
         generated_parameters = self.__compute_outer_product(
             input_vectors, output_vectors
         )
@@ -166,4 +166,5 @@ class GeneratorBiasMixture(GeneratorMixtureBase):
         input_batch: Tensor,
     ) -> tuple[Tensor, Tensor]:
         self.VALIDATOR.validate_input_batch_2d(input_batch)
-        return self.bias_generator(input_batch, probabilities, indices)
+        bias, _, loss = self.bias_generator(input_batch, probabilities, indices)
+        return bias, loss
