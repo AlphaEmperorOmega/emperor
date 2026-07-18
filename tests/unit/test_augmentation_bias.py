@@ -703,7 +703,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
             decay_rate=0.1,
         )
         model = cfg.build()
-        setattr(model, "decay_schedule_option", "invalid_schedule")
+        model.decay_schedule_option = "invalid_schedule"
         bias_params = torch.randn(4)
 
         with self.assertRaises(ValueError):

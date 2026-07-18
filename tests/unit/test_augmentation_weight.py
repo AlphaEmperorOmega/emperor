@@ -320,7 +320,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             normalization_position_option=WeightNormalizationPositionOptions.DISABLED,
         )
         model = DualModelDynamicWeight(cfg)
-        setattr(model, "normalization_position_option", "invalid_position")
+        model.normalization_position_option = "invalid_position"
         input_vectors = torch.randn(batch_size, generator_depth, input_dim)
         output_vectors = torch.randn(batch_size, generator_depth, output_dim)
         with self.assertRaises(ValueError):
@@ -832,7 +832,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             decay_rate=0.1,
         )
         model = cfg.build()
-        setattr(model, "decay_schedule_option", "invalid_schedule")
+        model.decay_schedule_option = "invalid_schedule"
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         with self.assertRaises(ValueError):
             model._maybe_apply_weight_decay(weight_params)
@@ -894,7 +894,7 @@ class TestWeightHandlerForward(unittest.TestCase):
         output_dim = 24
         cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
         model = DualModelDynamicWeight(cfg)
-        setattr(model, "normalization_option", "invalid_normalization")
+        model.normalization_option = "invalid_normalization"
         vectors = torch.randn(batch_size, generator_depth, input_dim)
         with self.assertRaises(ValueError):
             model._apply_normalization_transform(vectors)
