@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import torch
 from emperor.parametric import (
+    AdaptiveRouterOptions,
     ClipParameterOptions,
     GeneratorBiasMixture,
     GeneratorWeightsMixture,
@@ -11,6 +12,7 @@ from emperor.parametric import (
     ParametricLayerHandler,
     VectorWeightsMixtureConfig,
 )
+from emperor.parametric._validation import ParametricLayerValidator
 from torch import nn
 
 
@@ -250,6 +252,23 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         torch.testing.assert_close(generated_bias, inputs)
         self.assertEqual(bias_calls[0][0].shape, (2, 1))
         self.assertIsNone(bias_calls[0][1])
+
+    def test_invalid_parametric_routing_mode_is_rejected(self) -> None:
+        invalid_model = SimpleNamespace(routing_initialization_mode="independent")
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^routing_initialization_mode must be an AdaptiveRouterOptions value "
+            "for ParametricLayer, got str\\.$",
+        ):
+            ParametricLayerValidator._validate_routing_initialization_mode(
+                invalid_model
+            )
+
+        valid_model = SimpleNamespace(
+            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER
+        )
+        ParametricLayerValidator._validate_routing_initialization_mode(valid_model)
 
 
 if __name__ == "__main__":

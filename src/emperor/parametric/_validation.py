@@ -42,6 +42,7 @@ class ParametricLayerValidator(ValidatorBase):
         cls._validate_weight_mixture_config(model.weight_mixture_config)
         cls._validate_bias_mixture_config(model.bias_mixture_config)
         cls._validate_router_and_sampler_configs(model)
+        cls._validate_routing_initialization_mode(model)
         cls._validate_sampler_matches_mixtures(model)
         cls._validate_vector_shared_router(model)
         cls._validate_adaptive_augmentation_config(model)
@@ -109,6 +110,15 @@ class ParametricLayerValidator(ValidatorBase):
             raise TypeError(
                 "sampler_config must be a SamplerConfig for ParametricLayer, "
                 f"got {type(model.sampler_config).__name__}."
+            )
+
+    @staticmethod
+    def _validate_routing_initialization_mode(model: "ParametricLayer") -> None:
+        if not isinstance(model.routing_initialization_mode, AdaptiveRouterOptions):
+            raise TypeError(
+                "routing_initialization_mode must be an AdaptiveRouterOptions "
+                "value for ParametricLayer, "
+                f"got {type(model.routing_initialization_mode).__name__}."
             )
 
     @classmethod
