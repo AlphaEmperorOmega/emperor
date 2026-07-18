@@ -9,7 +9,8 @@ import {
   type MonitorChartsSource,
 } from "@/types/monitor";
 
-const runningStatuses = new Set(["running", "queued"]);
+const RUNNING_STATUSES = new Set(["running", "queued"]);
+const RUNNING_MONITOR_REFETCH_INTERVAL_MS = 1_500;
 const HISTORICAL_MONITOR_REQUEST_CONCURRENCY = 2;
 type MonitorDataApi = typeof import("@/lib/api/monitor-data");
 const fetchLogRunMonitorData: MonitorDataApi["fetchLogRunMonitorData"] =
@@ -159,7 +160,7 @@ export function useMonitorChartQueries({
     () => `${comparisonNodePath ?? ""}\n${historicalRunIds.join("\n")}`,
     [comparisonNodePath, historicalRunIds],
   );
-  const isRunning = activeJob ? runningStatuses.has(activeJob.status) : false;
+  const isRunning = activeJob ? RUNNING_STATUSES.has(activeJob.status) : false;
   const monitorCount = activeJob?.monitors.length;
   const isComparing = Boolean(comparisonNodePath);
   const historicalRunGroupEnabled = Boolean(
@@ -214,7 +215,7 @@ export function useMonitorChartQueries({
         ? activeJob.monitors.length > 0
         : !historicalRunGroup && Boolean(historicalRun)),
     retry: false,
-    refetchInterval: isRunning ? 1500 : false,
+    refetchInterval: isRunning ? RUNNING_MONITOR_REFETCH_INTERVAL_MS : false,
   });
 
   const historicalMonitorQueries = useQueries({
@@ -274,7 +275,7 @@ export function useMonitorChartQueries({
         ? activeJob.monitors.length > 0
         : !historicalRunGroup && Boolean(historicalRun)),
     retry: false,
-    refetchInterval: isRunning ? 1500 : false,
+    refetchInterval: isRunning ? RUNNING_MONITOR_REFETCH_INTERVAL_MS : false,
   });
 
   const historicalComparisonQueries = useQueries({

@@ -19,6 +19,7 @@ import { createLazyFunction } from "@/lib/lazy-value";
 
 const RUNNING_TRAINING_STATUSES = new Set(["running", "queued"]);
 const PARAMETER_STATUS_STALE_TIME_MS = 5 * 60_000;
+const PARAMETER_STATUS_REFETCH_INTERVAL_MS = 1_500;
 const INACTIVE_PARAMETER_STATUS_QUERY_KEY = [
   "experiment-monitor-parameter-activity",
   "inactive",
@@ -106,7 +107,9 @@ export function useExperimentMonitorParameterActivity({
     retry: false,
     staleTime: PARAMETER_STATUS_STALE_TIME_MS,
     refetchInterval:
-      activeJob && RUNNING_TRAINING_STATUSES.has(activeJob.status) ? 1500 : false,
+      activeJob && RUNNING_TRAINING_STATUSES.has(activeJob.status)
+        ? PARAMETER_STATUS_REFETCH_INTERVAL_MS
+        : false,
   });
   const isLoading = Boolean(
     queryEnabled &&
