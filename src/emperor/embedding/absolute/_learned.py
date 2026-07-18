@@ -45,8 +45,9 @@ class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
 
 class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def _get_num_embeddings(self) -> int:
-        padding_offset = self.padding_idx if self.padding_idx is not None else 0
-        return self.num_embeddings + padding_offset + 1
+        if self.padding_idx is None:
+            return self.num_embeddings
+        return self.num_embeddings + self.padding_idx + 1
 
     def forward(
         self,

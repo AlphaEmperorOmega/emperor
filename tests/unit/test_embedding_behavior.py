@@ -5,6 +5,59 @@ import subprocess
 import sys
 import unittest
 
+import torch
+from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
+
+
+def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingConfig:
+    values: dict[str, object] = {
+        "num_embeddings": 4,
+        "embedding_dim": 2,
+        "init_size": 4,
+        "padding_idx": 0,
+        "auto_expand_flag": False,
+    }
+    values.update(overrides)
+    return TextLearnedPositionalEmbeddingConfig(**values)
+
+
+class LearnedEmbeddingBehaviorTests(unittest.TestCase):
+    def test_no_padding_table_positions_and_device_follow_input(self) -> None:
+        model = text_learned_config(
+            num_embeddings=4,
+            padding_idx=None,
+        ).build()
+        weights = torch.tensor(
+            [
+                [1.0, 10.0],
+                [2.0, 20.0],
+                [3.0, 30.0],
+                [4.0, 40.0],
+            ]
+        )
+        with torch.no_grad():
+            model.embedding_model.weight.copy_(weights)
+
+        output = model(torch.tensor([[9, 8, 7], [6, 5, 4]]))
+
+        self.assertEqual(model.embedding_model.num_embeddings, 4)
+        torch.testing.assert_close(
+            output,
+            weights[torch.tensor([[0, 1, 2], [0, 1, 2]])],
+            rtol=0,
+            atol=0,
+        )
+
+        meta_tokens = torch.empty(
+            (2, 3),
+            dtype=torch.long,
+            device="meta",
+        )
+        meta_positions = model._make_positions(meta_tokens)
+        self.assertEqual(meta_positions.device.type, "meta")
+        self.assertEqual(meta_positions.dtype, torch.long)
+        self.assertEqual(meta_positions.shape, meta_tokens.shape)
+
 
 class EmbeddingInterfaceBehaviorTests(unittest.TestCase):
     def test_interfaces_export_only_configuration_without_dynamic_shortcuts(
