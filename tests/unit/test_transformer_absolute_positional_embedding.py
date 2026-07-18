@@ -315,7 +315,7 @@ class TestImageSinusoidalPositionalEmbedding(unittest.TestCase):
         num_embeddings: int = 4,
         embedding_dim: int = 6,
         init_size: int = 4,
-        padding_idx: int | None = 0,
+        padding_idx: int | None = None,
         auto_expand_flag: bool = False,
         class_token_flag: bool = True,
     ) -> ImageSinusoidalPositionalEmbeddingConfig:

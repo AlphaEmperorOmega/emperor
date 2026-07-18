@@ -4,6 +4,9 @@ import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
+from emperor.embedding.absolute._config import (
+    ImageSinusoidalPositionalEmbeddingConfig,
+)
 
 if TYPE_CHECKING:
     from emperor.embedding.absolute._base import AbsolutePositionalEmbeddingBase
@@ -26,6 +29,7 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             init_size=cfg.init_size,
         )
         cls._validate_padding_idx(cfg)
+        cls._validate_image_sinusoidal_padding_idx(cfg)
 
     @staticmethod
     def _validate_padding_idx(
@@ -55,6 +59,20 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
             raise ValueError(
                 f"padding_idx must be in [0, {num_embeddings}) for "
                 f"{model_name}, received {padding_idx}"
+            )
+
+    @staticmethod
+    def _validate_image_sinusoidal_padding_idx(
+        cfg: "AbsolutePositionalEmbeddingConfig",
+    ) -> None:
+        if (
+            isinstance(cfg, ImageSinusoidalPositionalEmbeddingConfig)
+            and cfg.padding_idx is not None
+        ):
+            raise ValueError(
+                "padding_idx must be None for "
+                "ImageSinusoidalPositionalEmbeddingConfig because image patch "
+                "sequences do not contain padding tokens."
             )
 
     @staticmethod

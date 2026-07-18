@@ -172,6 +172,23 @@ class TestAbsolutePositionalEmbeddingValidatorAdapter(unittest.TestCase):
                     build()
                 self.assertEqual(str(error.exception), message)
 
+    def test_image_sinusoidal_rejects_numeric_padding_indices(self) -> None:
+        for padding_idx in (0, 2):
+            with self.subTest(padding_idx=padding_idx):
+                with self.assertRaises(ValueError) as error:
+                    ImageSinusoidalPositionalEmbedding(
+                        make_image_config(
+                            ImageSinusoidalPositionalEmbeddingConfig,
+                            padding_idx=padding_idx,
+                        )
+                    )
+                self.assertEqual(
+                    str(error.exception),
+                    "padding_idx must be None for "
+                    "ImageSinusoidalPositionalEmbeddingConfig because image patch "
+                    "sequences do not contain padding tokens.",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
