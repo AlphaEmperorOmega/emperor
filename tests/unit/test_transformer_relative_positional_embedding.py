@@ -2,10 +2,10 @@ import unittest
 
 import torch
 from emperor.embedding.relative import (
-    DynamicPositionalBias,
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
 )
+from emperor.embedding.relative._bias import DynamicPositionalBias
 
 
 class TestRelativePositionalEmbeddingConfig(unittest.TestCase):

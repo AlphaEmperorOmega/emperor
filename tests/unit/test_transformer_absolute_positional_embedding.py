@@ -5,14 +5,18 @@ import torch
 import torch.nn as nn
 from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
-    ImageLearnedPositionalEmbedding,
     ImageLearnedPositionalEmbeddingConfig,
-    ImageSinusoidalPositionalEmbedding,
     ImageSinusoidalPositionalEmbeddingConfig,
-    TextLearnedPositionalEmbedding,
     TextLearnedPositionalEmbeddingConfig,
-    TextSinusoidalPositionalEmbedding,
     TextSinusoidalPositionalEmbeddingConfig,
+)
+from emperor.embedding.absolute._learned import (
+    ImageLearnedPositionalEmbedding,
+    TextLearnedPositionalEmbedding,
+)
+from emperor.embedding.absolute._sinusoidal import (
+    ImageSinusoidalPositionalEmbedding,
+    TextSinusoidalPositionalEmbedding,
 )
 
 
