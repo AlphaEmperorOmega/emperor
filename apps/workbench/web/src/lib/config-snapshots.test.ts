@@ -4,6 +4,7 @@ import {
   configSnapshotOverrideCountLabel,
   configSnapshotOverrideEntries,
   createConfigSnapshot,
+  groupConfigSnapshotsByPreset,
   validateConfigSnapshotCandidate,
   validateConfigSnapshotName,
 } from "@/lib/config-snapshots";
@@ -212,6 +213,34 @@ describe("config snapshots", () => {
     expect(configSnapshotOverrideCountLabel(0)).toBe("0 overrides");
     expect(configSnapshotOverrideCountLabel(1)).toBe("1 override");
     expect(configSnapshotOverrideCountLabel(2)).toBe("2 overrides");
+  });
+
+  it("groups snapshots by preset without changing snapshot order", () => {
+    const firstBaselineSnapshot = makeSnapshot(
+      { hidden_dim: "128" },
+      "first-baseline",
+    );
+    const wideSnapshot = {
+      ...makeSnapshot({ hidden_dim: "256" }, "wide"),
+      preset: "wide",
+    };
+    const secondBaselineSnapshot = makeSnapshot(
+      { hidden_dim: "512" },
+      "second-baseline",
+    );
+
+    expect(
+      groupConfigSnapshotsByPreset(
+        [firstBaselineSnapshot, wideSnapshot, secondBaselineSnapshot],
+        ["baseline", "wide"],
+      ),
+    ).toEqual([
+      {
+        preset: "baseline",
+        snapshots: [firstBaselineSnapshot, secondBaselineSnapshot],
+      },
+      { preset: "wide", snapshots: [wideSnapshot] },
+    ]);
   });
 
   it("rejects default-equivalent snapshots", () => {

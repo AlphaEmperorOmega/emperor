@@ -359,7 +359,12 @@ export function groupConfigSnapshotsByPreset(
     groups.set(preset, []);
   }
   for (const snapshot of snapshots) {
-    groups.set(snapshot.preset, [...(groups.get(snapshot.preset) ?? []), snapshot]);
+    const groupedSnapshots = groups.get(snapshot.preset);
+    if (groupedSnapshots) {
+      groupedSnapshots.push(snapshot);
+    } else {
+      groups.set(snapshot.preset, [snapshot]);
+    }
   }
   return Array.from(groups, ([preset, groupedSnapshots]) => ({
     preset,
