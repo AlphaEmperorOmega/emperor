@@ -133,6 +133,42 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
 
 
 class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
+    def test_sinusoidal_table_dtype_is_independent_of_global_default_dtype(
+        self,
+    ) -> None:
+        previous_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.float64)
+            model = TextSinusoidalPositionalEmbeddingConfig(
+                num_embeddings=3,
+                embedding_dim=4,
+                init_size=3,
+                padding_idx=None,
+                auto_expand_flag=False,
+            ).build()
+        finally:
+            torch.set_default_dtype(previous_dtype)
+
+        self.assertEqual(model.weights.dtype, torch.float32)
+        expected = torch.tensor(
+            [
+                [0.0, 0.0, 1.0, 1.0],
+                [
+                    torch.sin(torch.tensor(1.0)),
+                    torch.sin(torch.tensor(0.0001)),
+                    torch.cos(torch.tensor(1.0)),
+                    torch.cos(torch.tensor(0.0001)),
+                ],
+                [
+                    torch.sin(torch.tensor(2.0)),
+                    torch.sin(torch.tensor(0.0002)),
+                    torch.cos(torch.tensor(2.0)),
+                    torch.cos(torch.tensor(0.0002)),
+                ],
+            ]
+        )
+        torch.testing.assert_close(model.weights, expected)
+
     def test_text_table_sizes_follow_none_and_nonzero_padding_contracts(
         self,
     ) -> None:

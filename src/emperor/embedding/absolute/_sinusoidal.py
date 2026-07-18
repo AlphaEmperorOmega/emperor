@@ -49,9 +49,11 @@ class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     ) -> Tensor:
         half_dim = embedding_dim // 2
         frequency_scale = 0.0 if half_dim <= 1 else math.log(10000) / (half_dim - 1)
-        frequency_exponents = torch.arange(half_dim) * -frequency_scale
+        frequency_exponents = (
+            torch.arange(half_dim, dtype=torch.float32) * -frequency_scale
+        )
         frequencies = torch.exp(frequency_exponents)
-        position_range = torch.arange(num_embeddings).unsqueeze(1)
+        position_range = torch.arange(num_embeddings, dtype=torch.float32).unsqueeze(1)
         scaled_positions = position_range * frequencies.unsqueeze(0)
         embedding = torch.cat(
             [torch.sin(scaled_positions), torch.cos(scaled_positions)], dim=1
@@ -62,7 +64,7 @@ class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
         self, embedding: Tensor, embedding_dim: int, num_embeddings: int
     ) -> Tensor:
         if embedding_dim % 2 == 1:
-            padding_vector = torch.zeros(num_embeddings, 1)
+            padding_vector = embedding.new_zeros((num_embeddings, 1))
             embedding = torch.cat([embedding, padding_vector], dim=1)
         return embedding
 
