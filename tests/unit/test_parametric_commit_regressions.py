@@ -416,6 +416,25 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         self.assertEqual(first_monitor._wrapped_methods, [])
         self.assertEqual(second_monitor._wrapped_methods, [])
 
+    def test_failed_monitored_forward_releases_its_observation(self) -> None:
+        monitor = ParametricLayerMonitorCallback(log_every_n_steps=1)
+
+        def fail_forward() -> None:
+            raise RuntimeError("deliberate layer failure")
+
+        parametric_layer = SimpleNamespace(forward=fail_forward)
+        pl_module = SimpleNamespace(global_step=0)
+        monitor._ParametricLayerMonitorCallback__wrap_forward(
+            "parametric",
+            parametric_layer,
+            pl_module,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "^deliberate layer failure$"):
+            parametric_layer.forward()
+
+        self.assertEqual(monitor._observations, {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -201,15 +201,17 @@ class ParametricLayerMonitorCallback(Callback):
                 return original_forward(*args, **kwargs)
             observation = _ParametricObservation()
             self._observations[layer_id] = observation
-            output = original_forward(*args, **kwargs)
-            self.__emit_observation(
-                pl_module,
-                module_name,
-                parametric_layer,
-                observation,
-            )
-            self._observations.pop(layer_id, None)
-            return output
+            try:
+                output = original_forward(*args, **kwargs)
+                self.__emit_observation(
+                    pl_module,
+                    module_name,
+                    parametric_layer,
+                    observation,
+                )
+                return output
+            finally:
+                self._observations.pop(layer_id, None)
 
         self.__install_method_wrapper(
             parametric_layer,
