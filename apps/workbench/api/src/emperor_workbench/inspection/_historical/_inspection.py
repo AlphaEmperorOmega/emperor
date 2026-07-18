@@ -27,7 +27,10 @@ from emperor_workbench.model_packages import (
     SelectedModelPackage,
     normalize_preset_token,
 )
-from emperor_workbench.run_history import HistoricalInspectionSource
+from emperor_workbench.run_history import (
+    HistoricalInspectionContext,
+    HistoricalInspectionSource,
+)
 
 _ADAPTIVE_GENERATOR_COUNT_KEYS = {
     "adaptive_generator_stack_num_layers",
@@ -164,7 +167,7 @@ class HistoricalInspection:
 
     def _saved_run_overrides(
         self,
-        context: Any,
+        context: HistoricalInspectionContext,
         *,
         preset: str,
         dataset: str | None,

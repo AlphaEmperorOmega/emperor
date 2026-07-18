@@ -16,6 +16,8 @@ MAX_CHECKPOINT_GRAPH_SHAPE_BYTES = 256 * 1024 * 1024
 MAX_CHECKPOINT_GRAPH_CANDIDATES = 32
 MAX_CHECKPOINT_GRAPH_AGGREGATE_BYTES = 512 * 1024 * 1024
 _OVERSIZED_CHECKPOINT_REASON = "checkpointTooLarge"
+_WEIGHT_PARAMETER_NAMES = frozenset({"weight_params", "weight", "weights"})
+_BIAS_PARAMETER_NAMES = frozenset({"bias_params", "bias", "biases"})
 
 _DIRECT_STACK_WEIGHT_RE = re.compile(
     r"^main_model\.layers\.(?P<index>\d+)\.model\.weight_params$"
@@ -297,9 +299,10 @@ def _config_overrides(
         output_weight=output_weight,
         layer_shapes=layer_shapes,
     )
-    if hidden_candidates and len(set(hidden_candidates)) == 1:
+    unique_hidden_candidates = set(hidden_candidates)
+    if hidden_candidates and len(unique_hidden_candidates) == 1:
         overrides["hidden_dim"] = hidden_candidates[0]
-    elif len(set(hidden_candidates)) > 1:
+    elif len(unique_hidden_candidates) > 1:
         diagnostics.append("hidden_dim:conflictingShapes")
 
     layer_count = _stack_layer_count_from_patterns(
@@ -670,11 +673,11 @@ def _router_output_expert_count(
             return None
         final_layer_shapes = layer_shapes[contiguous_layers[-1]]
         for parameter, shape in final_layer_shapes:
-            if parameter in {"weight_params", "weight", "weights"}:
+            if parameter in _WEIGHT_PARAMETER_NAMES:
                 matrix = _matrix_shape(shape)
                 if matrix is not None:
                     candidates.append(matrix[1])
-            elif parameter in {"bias_params", "bias", "biases"} and len(shape) == 1:
+            elif parameter in _BIAS_PARAMETER_NAMES and len(shape) == 1:
                 candidates.append(shape[0])
 
     if not candidates:
@@ -740,9 +743,9 @@ def _split_tensor_key(key: str) -> tuple[str, str] | None:
 
 
 def _parameter_detail_key(parameter_name: str) -> str | None:
-    if parameter_name in {"weight_params", "weight", "weights"}:
+    if parameter_name in _WEIGHT_PARAMETER_NAMES:
         return "weightShape"
-    if parameter_name in {"bias_params", "bias", "biases"}:
+    if parameter_name in _BIAS_PARAMETER_NAMES:
         return "biasShape"
     return None
 
@@ -780,14 +783,14 @@ def _is_embedding_weight(
 ) -> bool:
     node_name = node_path.rsplit(".", 1)[-1].lower()
     return (
-        parameter_name in {"weight_params", "weight", "weights"}
+        parameter_name in _WEIGHT_PARAMETER_NAMES
         and len(shape) == 2
         and "embedding" in node_name
     )
 
 
 def _is_conv_like_weight(parameter_name: str, shape: TensorShape) -> bool:
-    return parameter_name in {"weight_params", "weight", "weights"} and len(shape) >= 3
+    return parameter_name in _WEIGHT_PARAMETER_NAMES and len(shape) >= 3
 
 
 def _coverage_counts(tensor_shapes: Mapping[str, TensorShape]) -> dict[str, int]:
