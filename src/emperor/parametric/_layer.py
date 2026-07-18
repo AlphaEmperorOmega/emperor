@@ -291,6 +291,8 @@ class ParametricLayer(Module):
         input: Tensor,
         generated_weights: Tensor,
     ) -> Tensor:
+        if generated_weights.dim() == 2:
+            return torch.einsum("bi,ij->bj", input, generated_weights)
         return torch.einsum("bi,bij->bj", input, generated_weights)
 
     def __apply_generated_biases(

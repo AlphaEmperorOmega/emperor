@@ -45,6 +45,8 @@ class MatrixMixtureBase(AdaptiveMixtureBase):
 
         if self.__is_topk_sparse():
             return weighted_parameters
+        if weighted_parameters is self.parameter_bank:
+            return weighted_parameters.sum(dim=0)
         return weighted_parameters.sum(dim=1)
 
     def __is_topk_sparse(self) -> bool:
