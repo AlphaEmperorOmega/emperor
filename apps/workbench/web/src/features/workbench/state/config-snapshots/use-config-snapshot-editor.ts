@@ -283,20 +283,20 @@ export function useConfigSnapshotEditorState({
     ],
   );
   const retrySave = useCallback(async (): Promise<ConfigSnapshotCreateResult> => {
-    const outcome = await snapshotRecords.actions.retry();
-    if (!outcome) {
+    const retryResult = await snapshotRecords.actions.retry();
+    if (!retryResult) {
       return { ok: false, error: "There is no failed Config Snapshot save to retry." };
     }
-    if (!outcome.ok) {
-      return { ok: false, error: outcome.error };
+    if (!retryResult.ok) {
+      return { ok: false, error: retryResult.error };
     }
     if (
-      (outcome.kind !== "create" && outcome.kind !== "update") ||
-      !outcome.record
+      (retryResult.kind !== "create" && retryResult.kind !== "update") ||
+      !retryResult.record
     ) {
       return { ok: false, error: "The failed change was not a Config Snapshot save." };
     }
-    return { ok: true, snapshot: outcome.record };
+    return { ok: true, snapshot: retryResult.record };
   }, [snapshotRecords.actions]);
 
   const value = useMemo(
