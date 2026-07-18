@@ -1,10 +1,9 @@
 import * as echarts from "echarts/core";
-import { BarChart, CustomChart, LineChart } from "echarts/charts";
+import { CustomChart, LineChart } from "echarts/charts";
 import {
   AxisPointerComponent,
   DataZoomComponent,
   GridComponent,
-  LegendComponent,
   MarkLineComponent,
   TooltipComponent,
 } from "echarts/components";
@@ -15,13 +14,11 @@ import { CanvasRenderer } from "echarts/renderers";
 // the full bundle.
 echarts.use([
   LineChart,
-  BarChart,
   CustomChart,
   GridComponent,
   TooltipComponent,
   AxisPointerComponent,
   DataZoomComponent,
-  LegendComponent,
   MarkLineComponent,
   CanvasRenderer,
 ]);
