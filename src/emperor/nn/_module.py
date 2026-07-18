@@ -40,43 +40,53 @@ class Module(LightningModule):
         if self.plotProgress:
             self.board.xlabel = "epoch"
             if train:
-                x = self.trainer.train_batch_idx / self.trainer.num_train_batches
-                n = self.trainer.num_train_batches / self.plot_train_per_epoch
+                epoch_position = (
+                    self.trainer.train_batch_idx / self.trainer.num_train_batches
+                )
+                batches_per_plot = (
+                    self.trainer.num_train_batches / self.plot_train_per_epoch
+                )
             else:
-                x = self.trainer.epoch + 1
-                n = self.trainer.num_val_batches / self.plot_valid_per_epoch
+                epoch_position = self.trainer.epoch + 1
+                batches_per_plot = (
+                    self.trainer.num_val_batches / self.plot_valid_per_epoch
+                )
+            plotted_value = value.detach().cpu().numpy()
+            series_label = ("train_" if train else "val_") + key
+            plot_every_n_batches = max(1, int(batches_per_plot))
             self.board.draw(
-                x,
-                value.detach().cpu().numpy(),
-                ("train_" if train else "val_") + key,
-                every_n=max(1, int(n)),
+                epoch_position,
+                plotted_value,
+                series_label,
+                every_n=plot_every_n_batches,
             )
 
     def training_step(self, batch):
-        modelOutput, auxilary_loss = self(*batch[:-1])
-        loss = self.loss(modelOutput, batch[-1])
+        predictions, auxiliary_loss = self(*batch[:-1])
+        training_loss = self.loss(predictions, batch[-1])
 
-        if auxilary_loss is not None:
-            loss += auxilary_loss
+        if auxiliary_loss is not None:
+            training_loss += auxiliary_loss
 
-        self.plot("loss", loss, train=True)
-        return loss
+        self.plot("loss", training_loss, train=True)
+        return training_loss
 
     def validation_step(self, batch):
-        modelOutput, auxilaryLoss = self(*batch[:-1])
-        loss = self.loss(modelOutput, batch[-1])
-        if auxilaryLoss is not None:
-            loss += auxilaryLoss
-        self.plot("loss", loss, train=False)
+        predictions, auxiliary_loss = self(*batch[:-1])
+        validation_loss = self.loss(predictions, batch[-1])
+        if auxiliary_loss is not None:
+            validation_loss += auxiliary_loss
+        self.plot("loss", validation_loss, train=False)
 
     def test_step(self, batch):
-        modelOutput, auxilaryLoss = self(*batch[:-1])
-        loss = self.loss(modelOutput, batch[-1])
-        if auxilaryLoss is not None:
-            loss += auxilaryLoss
+        predictions, auxiliary_loss = self(*batch[:-1])
+        test_loss = self.loss(predictions, batch[-1])
+        if auxiliary_loss is not None:
+            test_loss += auxiliary_loss
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.lr)
+        sgd_optimizer = torch.optim.SGD(self.parameters(), lr=self.lr)
+        return sgd_optimizer
 
     def apply_init(self, inputs, init=None):
         self.forward(*inputs)
@@ -86,17 +96,17 @@ class Module(LightningModule):
     def _initialize_parameters(
         self, *parameters: Linear | Parameter | Sequential
     ) -> None:
-        for parameter in parameters:
-            if isinstance(parameter, Parameter):
-                nn.init.xavier_uniform_(parameter)
+        for initialization_target in parameters:
+            if isinstance(initialization_target, Parameter):
+                nn.init.xavier_uniform_(initialization_target)
 
-            if isinstance(parameter, Linear):
-                nn.init.xavier_uniform_(parameter.weight)
-                if parameter.bias is not None:
-                    nn.init.zeros_(parameter.bias)
+            if isinstance(initialization_target, Linear):
+                nn.init.xavier_uniform_(initialization_target.weight)
+                if initialization_target.bias is not None:
+                    nn.init.zeros_(initialization_target.bias)
 
-            if isinstance(parameter, Sequential):
-                for layer in parameter:
+            if isinstance(initialization_target, Sequential):
+                for layer in initialization_target:
                     self._initialize_parameters(layer)
 
     def _override_config(
@@ -107,27 +117,34 @@ class Module(LightningModule):
         if overrides is None:
             return cfg
 
-        cfg = copy.deepcopy(cfg)
-        for value in cfg.__dataclass_fields__:
+        overridden_config = copy.deepcopy(cfg)
+        for config_field_name in overridden_config.__dataclass_fields__:
             if (
                 hasattr(overrides, "__dataclass_fields__")
-                and value in overrides.__dataclass_fields__
+                and config_field_name in overrides.__dataclass_fields__
             ):
-                if getattr(overrides, value) is not None:
-                    setattr(cfg, value, getattr(overrides, value))
+                if getattr(overrides, config_field_name) is not None:
+                    setattr(
+                        overridden_config,
+                        config_field_name,
+                        getattr(overrides, config_field_name),
+                    )
 
-        return cfg
+        return overridden_config
 
     def _resolve_config_overrides(
         self,
         config: "ConfigBase",
         **kwargs,
     ) -> "ConfigBase":
-        declared_fields = {field.name for field in fields(config)}
-        override_kwargs = {
-            name: value for name, value in kwargs.items() if name in declared_fields
+        declared_field_names = {config_field.name for config_field in fields(config)}
+        applicable_override_kwargs = {
+            config_field_name: override_value
+            for config_field_name, override_value in kwargs.items()
+            if config_field_name in declared_field_names
         }
-        return type(config)(**override_kwargs)
+        config_overrides = type(config)(**applicable_override_kwargs)
+        return config_overrides
 
     def _build_from_config(
         self,
@@ -136,14 +153,16 @@ class Module(LightningModule):
     ) -> "Module | None":
         if config is None:
             return None
-        return config.build(overrides=self._resolve_config_overrides(config, **kwargs))
+        config_overrides = self._resolve_config_overrides(config, **kwargs)
+        built_module = config.build(overrides=config_overrides)
+        return built_module
 
     def _resolve_main_config(
         self, sub_config: "ConfigBase", main_cfg: "ConfigBase"
     ) -> "ConfigBase":
-        override = getattr(sub_config, "override_config", None)
-        if override is not None:
-            return override
+        sub_config_override = getattr(sub_config, "override_config", None)
+        if sub_config_override is not None:
+            return sub_config_override
         return main_cfg
 
     def _init_parameter_bank(
@@ -155,11 +174,12 @@ class Module(LightningModule):
 
         # TODO: Ensure you have the option to initialize the biases with
         # as a zero zensor.
-        initializer = (
+        resolved_initializer = (
             initializer if initializer is not None else self._initialize_parameters
         )
-        bank = ParameterBank(parameter_shape, initializer)
-        return bank.get()
+        parameter_bank = ParameterBank(parameter_shape, resolved_initializer)
+        initialized_parameter = parameter_bank.get()
+        return initialized_parameter
 
     def construct(
         self,
