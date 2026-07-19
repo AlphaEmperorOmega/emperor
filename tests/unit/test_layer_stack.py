@@ -5,6 +5,7 @@ import torch
 from emperor.halting import (
     HaltingConfig,
     HaltingHiddenStateModeOptions,
+    SoftHaltingConfig,
     StickBreakingConfig,
 )
 from emperor.layers import (
@@ -75,7 +76,7 @@ class TestLayerStack(unittest.TestCase):
         ):
             halting_config = StickBreakingConfig(
                 threshold=0.99,
-                halting_dropout=0.0,
+                dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
                     hidden_dim=output_dim,
@@ -181,7 +182,7 @@ class TestLayerStack(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=dim,
@@ -868,7 +869,7 @@ class TestLayerStack(unittest.TestCase):
         halting_config = StickBreakingConfig(
             input_dim=dim,
             threshold=0.99,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=dim,
@@ -1020,6 +1021,28 @@ class TestLayerStack(unittest.TestCase):
 
         self.assertTrue(all(halting_model is not None for halting_model in halting_models))
         self.assertEqual(len({id(halting_model) for halting_model in halting_models}), len(layers))
+
+    def test_shared_layer_stack_rejects_soft_until_it_implements_the_interface(
+        self,
+    ):
+        dim = 4
+        cfg = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=3,
+            gate_enabled=False,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            shared_halting_config=SoftHaltingConfig(
+                input_dim=dim,
+                threshold=0.999,
+                dropout_probability=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "does not implement"):
+            LayerStack(cfg)
 
     def test_shared_halting_stack_forward_pass(self):
         batch_size = 4

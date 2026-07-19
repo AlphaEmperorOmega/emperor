@@ -6,7 +6,11 @@ import torch
 import torch.nn as nn
 
 from emperor.convs import Conv2dLayerConfig
-from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
+from emperor.halting import (
+    HaltingHiddenStateModeOptions,
+    SoftHaltingConfig,
+    StickBreakingConfig,
+)
 from emperor.layers import (
     ActivationOptions,
     GateConfig,
@@ -337,7 +341,7 @@ class TestLayer(unittest.TestCase):
         if halting_config is None and input_dim == output_dim:
             halting_config = StickBreakingConfig(
                 threshold=0.99,
-                halting_dropout=0.0,
+                dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
                     hidden_dim=output_dim,
@@ -392,7 +396,7 @@ class TestLayer(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=dim,
@@ -1862,7 +1866,7 @@ class TestLayer(unittest.TestCase):
         halting_config = StickBreakingConfig(
             input_dim=dim,
             threshold=0.99,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=dim,
@@ -1897,6 +1901,18 @@ class TestLayer(unittest.TestCase):
             with self.subTest(msg=message):
                 with self.assertRaises(ValueError):
                     Layer(self.preset(halting_config=halting_config, **case))
+
+    def test_layer_rejects_soft_until_it_implements_the_interface(self):
+        dim = 4
+        halting_config = SoftHaltingConfig(
+            input_dim=dim,
+            threshold=0.999,
+            dropout_probability=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+        )
+
+        with self.assertRaisesRegex(ValueError, "does not implement"):
+            Layer(self.preset(halting_config=halting_config))
 
     def test_maybe_apply_halting_returns_values_without_mutating_state(self):
         batch_size = 4

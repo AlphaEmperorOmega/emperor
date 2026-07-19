@@ -579,7 +579,7 @@ class TestRecurrentLayer(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=self.halting_gate_config(
                 threshold=gate_threshold,
@@ -1276,25 +1276,6 @@ class TestRecurrentLayer(unittest.TestCase):
                 ),
                 TypeError,
             ),
-            (
-                "unsupported_halting_finalization_contract",
-                RecurrentLayerConfig(
-                    input_dim=dim,
-                    output_dim=dim,
-                    max_steps=1,
-                    recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
-                    halting_config=SoftHaltingConfig(
-                        input_dim=dim,
-                        threshold=0.99,
-                        halting_dropout=0.0,
-                        hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-                        halting_gate_config=self.halting_gate_config(threshold=1.0),
-                    ),
-                ),
-                ValueError,
-            ),
         ]
 
         for name, cfg, expected_exception in invalid_cases:
@@ -1302,20 +1283,22 @@ class TestRecurrentLayer(unittest.TestCase):
                 with self.assertRaises(expected_exception):
                     RecurrentLayer(cfg)
 
-    def test_rejects_halting_without_layer_finalization_contract(self):
+    def test_soft_halting_is_rejected_until_it_implements_the_supported_interface(
+        self,
+    ):
         dim = 4
         cfg = self.recurrent_config(
             dim=dim,
             halting_config=SoftHaltingConfig(
                 input_dim=dim,
                 threshold=0.99,
-                halting_dropout=0.0,
+                dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=self.halting_gate_config(threshold=1.0),
             ),
         )
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "does not implement"):
             RecurrentLayer(cfg)
 
     def test_forward_input_validation_errors(self):
