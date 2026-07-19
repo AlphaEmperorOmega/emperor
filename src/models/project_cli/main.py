@@ -25,6 +25,11 @@ MODEL_NAME_ARG = "<name>"
 MODEL_SELECTOR_ARG = f"--model-type {MODEL_TYPE_ARG} --model {MODEL_NAME_ARG}"
 PRESET_ARG = "<preset>"
 OPTS_ARG = "[options]"
+INSPECTION_FLAGS = {
+    "--print-model": None,
+    "--print-model-shapes": "outputs",
+    "--print-model-tensor-shapes": "variables",
+}
 
 
 def _captured_lines(action: Callable[[], None]) -> list[str]:
@@ -140,6 +145,18 @@ def list_flags() -> None:
             f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} --print-model",
         ),
         (
+            "--print-model-shapes",
+            "Print the model tree with executed module input/output shapes",
+            f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} "
+            "--print-model-shapes",
+        ),
+        (
+            "--print-model-tensor-shapes",
+            "Also print every executed Python tensor variable and method output",
+            f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} "
+            "--print-model-tensor-shapes",
+        ),
+        (
             "--monitors <names...>",
             "Enable monitor callbacks for a training run",
             f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} "
@@ -187,9 +204,11 @@ def list_flags() -> None:
     )
     print("Available flags:")
     print()
+    flag_width = max(24, *(len(flag) for flag, _description, _example in rows))
+    example_indent = " " * (flag_width + 2)
     for flag, description, example in rows:
-        print(f"  {flag:24} ## {description}")
-        print(f"                          {example}")
+        print(f"  {flag:{flag_width}} ## {description}")
+        print(f"{example_indent}{example}")
         if flag != rows[-1][0]:
             print("-" * 95)
 
@@ -275,28 +294,37 @@ def _print_model_errors(
     model: str,
     arguments: Sequence[str],
 ) -> bool:
-    if "--print-model" not in arguments:
+    selected_flags = [flag for flag in INSPECTION_FLAGS if flag in arguments]
+    if not selected_flags:
         return False
+    if len(selected_flags) > 1:
+        print(
+            "Error: choose only one model inspection flag: "
+            + ", ".join(INSPECTION_FLAGS)
+            + "."
+        )
+        return True
+    selected_flag = selected_flags[0]
     if "--all-presets" in arguments or "--presets" in arguments:
         print(
-            f"Error: --print-model requires --preset {PRESET_ARG} and cannot be "
+            f"Error: {selected_flag} requires --preset {PRESET_ARG} and cannot be "
             "used with --all-presets or --presets."
         )
         print()
         print(
             f"Run '{COMMAND} --model-type {model_type} --model {model} "
-            f"--preset {PRESET_ARG} --print-model' to inspect one preset."
+            f"--preset {PRESET_ARG} {selected_flag}' to inspect one preset."
         )
         return True
     if "--monitors" in arguments:
         print(
             "Error: --monitors applies to training runs and cannot be used with "
-            "--print-model."
+            f"{selected_flag}."
         )
         print()
         print(
             f"Run '{COMMAND} --model-type {model_type} --model {model} "
-            f"--preset {PRESET_ARG} --print-model' without --monitors."
+            f"--preset {PRESET_ARG} {selected_flag}' without --monitors."
         )
         return True
     return False
@@ -309,12 +337,19 @@ def run_model_command(
 ) -> int:
     if _print_model_errors(model_type, model, arguments):
         return 1
-    if "--print-model" in arguments:
+    selected_flag = next(
+        (flag for flag in INSPECTION_FLAGS if flag in arguments),
+        None,
+    )
+    if selected_flag is not None:
         from models.inspection_cli import run_inspection
 
         inspection_arguments = [
-            argument for argument in arguments if argument != "--print-model"
+            argument for argument in arguments if argument != selected_flag
         ]
+        shape_trace = INSPECTION_FLAGS[selected_flag]
+        if shape_trace is not None:
+            inspection_arguments.extend(["--shape-trace", shape_trace])
         return run_inspection(
             ["--model-type", model_type, "--model", model, *inspection_arguments]
         )
