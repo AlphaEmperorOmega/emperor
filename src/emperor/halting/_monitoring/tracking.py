@@ -65,6 +65,15 @@ class HaltingUsageTracker(Module):
     def record_step(self, halting_state: "HaltingStateBase") -> None:
         self._survival_stage.append(self.__compute_alive_fraction(halting_state))
 
+    def replace_last_step(self, halting_state: "HaltingStateBase") -> None:
+        """Replace raw strategy capture with owner-reconciled route state."""
+
+        alive_fraction = self.__compute_alive_fraction(halting_state)
+        if self._survival_stage:
+            self._survival_stage[-1] = alive_fraction
+        else:
+            self._survival_stage.append(alive_fraction)
+
     def record_final(
         self,
         ponder_loss: Tensor | None,
