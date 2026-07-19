@@ -1,5 +1,6 @@
 import math
 from numbers import Integral, Real
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import torch
@@ -28,6 +29,10 @@ class StickBreakingValidator:
         cls._validate_hidden_state_mode(cfg.hidden_state_mode)
         cls._validate_halting_gate_config(cfg.halting_gate_config)
         cls._validate_halting_gate_layer_config(cfg.halting_gate_config.layer_config)
+
+    @classmethod
+    def validate_config(cls, cfg: "HaltingConfig") -> None:
+        cls.validate(SimpleNamespace(cfg=cfg, threshold=cfg.threshold))
 
     @classmethod
     def _validate_required_fields(cls, cfg: "HaltingConfig") -> None:

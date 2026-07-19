@@ -14,6 +14,7 @@ EXPECTED_EXPORTS = (
     "SoftHaltingConfig",
     "StickBreakingConfig",
     "HaltingHiddenStateModeOptions",
+    "HaltingInterface",
     "HaltingBase",
     "HaltingStateBase",
     "SoftHalting",
@@ -30,6 +31,7 @@ EXPECTED_OWNERS = {
     "SoftHaltingConfig": "emperor.halting._config",
     "StickBreakingConfig": "emperor.halting._config",
     "HaltingHiddenStateModeOptions": "emperor.halting._config",
+    "HaltingInterface": "emperor.halting._interface",
     "HaltingBase": "emperor.halting._base",
     "HaltingStateBase": "emperor.halting._base",
     "SoftHalting": "emperor.halting._strategies.soft",
@@ -65,6 +67,7 @@ import emperor.halting as halting
 
 private_modules = (
     "emperor.halting._config",
+    "emperor.halting._interface",
     "emperor.halting._base",
     "emperor.halting._strategies.soft",
     "emperor.halting._strategies.stick_breaking",

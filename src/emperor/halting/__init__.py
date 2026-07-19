@@ -11,6 +11,7 @@ if TYPE_CHECKING:
         SoftHaltingConfig,
         StickBreakingConfig,
     )
+    from emperor.halting._interface import HaltingInterface
     from emperor.halting._monitoring.callback import HaltingMonitorCallback
     from emperor.halting._monitoring.tracking import (
         HaltingUsageTracker,
@@ -27,6 +28,7 @@ __all__ = (
     "SoftHaltingConfig",
     "StickBreakingConfig",
     "HaltingHiddenStateModeOptions",
+    "HaltingInterface",
     "HaltingBase",
     "HaltingStateBase",
     "SoftHalting",
@@ -49,6 +51,7 @@ _LAZY_EXPORTS = {
         "emperor.halting._config",
         "HaltingHiddenStateModeOptions",
     ),
+    "HaltingInterface": ("emperor.halting._interface", "HaltingInterface"),
     "HaltingBase": ("emperor.halting._base", "HaltingBase"),
     "HaltingStateBase": ("emperor.halting._base", "HaltingStateBase"),
     "SoftHalting": ("emperor.halting._strategies.soft", "SoftHalting"),
