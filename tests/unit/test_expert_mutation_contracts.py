@@ -78,6 +78,16 @@ def _halting_expert_stack(dim: int = 2) -> LayerStackConfig:
 
 
 class ExpertMutationContractTests(unittest.TestCase):
+    def assert_exact_error(
+        self,
+        exception_type: type[Exception],
+        expected_message: str,
+        callback,
+    ) -> None:
+        with self.assertRaises(exception_type) as error:
+            callback()
+        self.assertEqual(str(error.exception), expected_message)
+
     def test_capacity_shuffle_state_is_scoped_to_one_token_routing_pair(
         self,
     ) -> None:
@@ -256,3 +266,17 @@ class ExpertMutationContractTests(unittest.TestCase):
 
         torch.testing.assert_close(loss, expected_loss)
         self.assertGreater(loss.item(), 0.0)
+
+    def test_sparse_forward_rejects_an_empty_input_batch(self) -> None:
+        model = MixtureOfExperts(_mixture_config(top_k=1, num_experts=2))
+
+        self.assert_exact_error(
+            ValueError,
+            "Input Error: MixtureOfExperts requires at least one input sample, "
+            "received input shape (0, 2).",
+            lambda: model(
+                torch.empty(0, 2),
+                probabilities=torch.empty(0),
+                indices=torch.empty(0, dtype=torch.long),
+            ),
+        )

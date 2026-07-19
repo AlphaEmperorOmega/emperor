@@ -292,6 +292,11 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 f"input_dim={model.input_dim} and input shape "
                 f"{tuple(input_batch.shape)}."
             )
+        if input_batch.shape[0] == 0:
+            raise ValueError(
+                "Input Error: MixtureOfExperts requires at least one input sample, "
+                f"received input shape {tuple(input_batch.shape)}."
+            )
 
     @classmethod
     def validate_probabilities(
