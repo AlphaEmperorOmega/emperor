@@ -100,20 +100,15 @@ class MixtureOfExperts(Module):
         input_batch: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
-        return self.__compute_routed_expert_output(input_batch, probabilities, indices)
-
-    def __compute_routed_expert_output(
-        self,
-        input_batch: Tensor,
-        probabilities: Tensor | None,
-        indices: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         self.VALIDATOR.validate_forward_inputs(
-            self, input_batch, probabilities, indices
+            self, input_batch, probabilities, indices, skip_mask
         )
-        probabilities, indices, sampler_loss = self._maybe_compute_expert_indices(
-            input_batch, probabilities, indices
+        probabilities, indices, skip_mask, sampler_loss = (
+            self._maybe_compute_expert_indices(
+                input_batch, probabilities, indices, skip_mask
+            )
         )
         expert_input_data = self._split_tokens_per_expert(
             input_batch, probabilities, indices
@@ -121,32 +116,40 @@ class MixtureOfExperts(Module):
         expert_outputs, routing_positions, probabilities, expert_loss = (
             self._compute_experts(expert_input_data, probabilities)
         )
-        output = self.__compute_expert_mixture(
+        mixture_output = self.__compute_expert_mixture(
             expert_outputs, routing_positions, probabilities
         )
         total_loss = sampler_loss + expert_loss
-        return output, total_loss
+        return mixture_output, skip_mask, total_loss
 
     def _maybe_compute_expert_indices(
         self,
         inputs: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        if self.routing_initialization_mode != RoutingInitializationMode.LAYER or (
-            indices is not None or probabilities is not None
-        ):
-            return probabilities, indices, inputs.new_zeros(())
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor | None, Tensor | None, Tensor | None, Tensor]:
+        if self.__should_skip_layer_routing(probabilities, indices):
+            return probabilities, indices, skip_mask, inputs.new_zeros(())
         self.VALIDATOR.validate_sampler_is_initialized(self)
         self.VALIDATOR.validate_external_probabilities_are_not_given(
             probabilities, indices
         )
-        # TODO: In the future see if `skip_mask` needs to be implemented
-        skip_mask = None
         probabilities, indices, skip_mask, sampler_loss = (
             self.sampler.sample_probabilities_and_indices(inputs, skip_mask)
         )
-        return probabilities, indices, sampler_loss
+        return probabilities, indices, skip_mask, sampler_loss
+
+    def __should_skip_layer_routing(
+        self,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> bool:
+        layer_routing_is_enabled = (
+            self.routing_initialization_mode == RoutingInitializationMode.LAYER
+        )
+        external_routing_is_provided = indices is not None or probabilities is not None
+        return not layer_routing_is_enabled or external_routing_is_provided
 
     def _split_tokens_per_expert(
         self,

@@ -44,15 +44,22 @@ class MixtureOfExpertsModel(Module):
         return self.stack_config.build()
 
     def forward(self, state: LayerState) -> MixtureOfExpertsLayerState:
-        probabilities, indices, shared_sampler_loss = self.__maybe_apply_shared_routing(
-            state.hidden,
-            getattr(state, "probabilities", None),
-            getattr(state, "indices", None),
+        existing_routing_probabilities = getattr(state, "probabilities", None)
+        existing_expert_indices = getattr(state, "indices", None)
+        existing_skip_mask = getattr(state, "skip_mask", None)
+        probabilities, indices, skip_mask, shared_sampler_loss = (
+            self.__maybe_apply_shared_routing(
+                state.hidden,
+                existing_routing_probabilities,
+                existing_expert_indices,
+                existing_skip_mask,
+            )
         )
         mixture_of_experts_state = MixtureOfExpertsLayerState(
             hidden=state.hidden,
             probabilities=probabilities,
             indices=indices,
+            skip_mask=skip_mask,
             loss=state.loss,
         )
         mixture_of_experts_state = self.expert_stack(mixture_of_experts_state)
@@ -66,13 +73,14 @@ class MixtureOfExpertsModel(Module):
         hidden: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
-    ) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+        skip_mask: Tensor | None,
+    ) -> tuple[Tensor | None, Tensor | None, Tensor | None, Tensor | None]:
         if self.shared_sampler is None:
-            return probabilities, indices, None
-        probabilities, indices, _, sampler_loss = (
-            self.shared_sampler.sample_probabilities_and_indices(hidden, None)
+            return probabilities, indices, skip_mask, None
+        probabilities, indices, skip_mask, sampler_loss = (
+            self.shared_sampler.sample_probabilities_and_indices(hidden, skip_mask)
         )
-        return probabilities, indices, sampler_loss
+        return probabilities, indices, skip_mask, sampler_loss
 
     def __combine_losses(
         self,

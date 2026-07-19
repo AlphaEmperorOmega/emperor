@@ -189,11 +189,13 @@ class MixtureOfExpertsValidator(ValidatorBase):
         input_batch: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
+        skip_mask: Tensor | None = None,
     ) -> None:
         cls.validate_input_batch(model, input_batch)
         cls.validate_probabilities(model, input_batch, probabilities)
         cls.validate_indices(model, input_batch, indices)
         cls.validate_external_routing_inputs(model, probabilities, indices)
+        cls.validate_skip_mask(input_batch, skip_mask, input_batch.shape[0])
 
     @classmethod
     def validate_reduce_forward_inputs(
@@ -202,6 +204,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         input_batch: Tensor,
         probabilities: Tensor | None,
         indices: Tensor | None,
+        skip_mask: Tensor | None = None,
     ) -> None:
         cls.validate_input_batch(model, input_batch)
         if probabilities is not None:
@@ -225,6 +228,48 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 "reduce input sample, received indices shape "
                 f"{tuple(indices.shape)} and input_batch shape "
                 f"{tuple(input_batch.shape)}."
+            )
+        if probabilities is not None:
+            cls.validate_skip_mask(input_batch, skip_mask, probabilities.shape[0])
+
+    @staticmethod
+    def validate_skip_mask(
+        input_batch: Tensor,
+        skip_mask,
+        expected_batch_size: int,
+    ) -> None:
+        if skip_mask is None:
+            return
+        if not isinstance(skip_mask, Tensor):
+            raise TypeError(
+                "Input Error: 'skip_mask' must be a Tensor or None for "
+                f"MixtureOfExperts, received {type(skip_mask).__name__}."
+            )
+        if skip_mask.dim() != 2:
+            raise ValueError(
+                "Input Error: 'skip_mask' must have shape (batch_size, 1) for "
+                "MixtureOfExperts, received a "
+                f"{skip_mask.dim()}D tensor with shape {tuple(skip_mask.shape)}."
+            )
+        if skip_mask.shape[1] != 1:
+            raise ValueError(
+                "Input Error: 'skip_mask' feature dimension must be 1 for "
+                "MixtureOfExperts, received shape "
+                f"{tuple(skip_mask.shape)}."
+            )
+        if skip_mask.shape[0] != expected_batch_size:
+            raise ValueError(
+                "Input Error: 'skip_mask' batch dimension must match the expected "
+                "routing batch size for MixtureOfExperts, received skip_mask shape "
+                f"{tuple(skip_mask.shape)} and expected batch size "
+                f"{expected_batch_size}."
+            )
+        if skip_mask.device != input_batch.device:
+            raise ValueError(
+                "Input Error: 'skip_mask' must be on the same device as "
+                "input_batch for MixtureOfExperts, received "
+                f"skip_mask device {skip_mask.device} and input_batch device "
+                f"{input_batch.device}."
             )
 
     @staticmethod

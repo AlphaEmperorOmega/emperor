@@ -10,6 +10,12 @@ class MixtureOfExpertsLayer(Layer):
         main_model_input: Tensor,
         state: MixtureOfExpertsLayerState,
     ) -> Tensor:
-        output, loss = self.model(main_model_input, state.probabilities, state.indices)
+        output, skip_mask, loss = self.model(
+            main_model_input,
+            state.probabilities,
+            state.indices,
+            state.skip_mask,
+        )
+        state.skip_mask = skip_mask
         state.loss = loss if state.loss is None else state.loss + loss
         return output

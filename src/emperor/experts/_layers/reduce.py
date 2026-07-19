@@ -78,9 +78,10 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         input_batch: Tensor,
         probabilities: Tensor | None = None,
         indices: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
+        skip_mask: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor]:
         self.VALIDATOR.validate_reduce_forward_inputs(
-            self, input_batch, probabilities, indices
+            self, input_batch, probabilities, indices, skip_mask
         )
 
         expert_input_data = self._split_tokens_per_expert(
@@ -92,7 +93,7 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         output = self.__compute_expert_mixture(
             expert_outputs, routing_positions, probabilities
         )
-        return output, expert_loss
+        return output, skip_mask, expert_loss
 
     def __compute_expert_mixture(
         self,

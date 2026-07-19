@@ -76,7 +76,7 @@ class ExpertMutationContractTests(unittest.TestCase):
         )
         torch.manual_seed(11)
 
-        output, loss = model(
+        output, _skip_mask, loss = model(
             torch.tensor([[2.0], [5.0], [7.0]]),
             probabilities=torch.tensor([0.1, 0.9, 0.5]),
             indices=torch.tensor([0, 0, 1]),
@@ -104,7 +104,7 @@ class ExpertMutationContractTests(unittest.TestCase):
         _copy_expert_weights(model, (torch.tensor([[1.0]]), torch.tensor([[1.0]])))
         torch.manual_seed(11)
 
-        output, _loss = model(
+        output, _, _ = model(
             torch.tensor([[2.0], [5.0]]),
             probabilities=torch.tensor([0.1, 0.9]),
             indices=torch.tensor([0, 0]),
@@ -137,7 +137,7 @@ class ExpertMutationContractTests(unittest.TestCase):
         )
         inputs = torch.tensor([[2.0], [5.0]], requires_grad=True)
 
-        output, loss = model(
+        output, _skip_mask, loss = model(
             inputs,
             probabilities=torch.tensor([[0.25], [0.75]]),
             indices=torch.tensor([[1], [0]]),
