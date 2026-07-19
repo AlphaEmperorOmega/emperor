@@ -23,9 +23,7 @@ from models.parser import (
 
 def _thaw(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {
-            _camel_case(str(key)): _thaw(item) for key, item in value.items()
-        }
+        return {_camel_case(str(key)): _thaw(item) for key, item in value.items()}
     if isinstance(value, (tuple, list)):
         return [_thaw(item) for item in value]
     if isinstance(value, Enum):

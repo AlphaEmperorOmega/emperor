@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from emperor.config import ModelConfig
-
 from models.neuron.linear_adaptive._hidden._hidden_model_config_factory import (
     HiddenModelConfigFactory,
 )

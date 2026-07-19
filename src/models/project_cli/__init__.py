@@ -20,4 +20,5 @@ def run_model_command(
 
     return implementation(model_type, model, arguments)
 
+
 __all__ = ["main", "run_experiment", "run_model_command"]

@@ -243,9 +243,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         return {
             "plan": to_wire(plan),
             "random_state": (
-                to_wire(random_source.getstate())
-                if random_source is not None
-                else None
+                to_wire(random_source.getstate()) if random_source is not None else None
             ),
         }
     if operation == "accept_run_plan":

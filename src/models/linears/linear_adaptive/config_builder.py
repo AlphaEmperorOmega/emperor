@@ -1,5 +1,4 @@
 from emperor.config import ModelConfig
-
 from models.linears.linear_adaptive._hidden_model_config_factory import (
     HiddenModelConfigFactory,
 )
