@@ -301,8 +301,18 @@ class MixtureOfExperts(Module):
         )
 
         expert_model = self.expert_modules[expert_data.expert_index]
-        output = Layer.run_model_returning_hidden(expert_model, expert_samples)
-        return output, expert_samples.new_zeros(())
+        expert_state = Layer.run_model_returning_state(expert_model, expert_samples)
+        expert_loss = self.__resolve_expert_loss(expert_state.loss, expert_samples)
+        return expert_state.hidden, expert_loss
+
+    def __resolve_expert_loss(
+        self,
+        expert_loss: Tensor | None,
+        expert_samples: Tensor,
+    ) -> Tensor:
+        if expert_loss is None:
+            return expert_samples.new_zeros(())
+        return expert_loss
 
     def __append_expert_output(
         self,
