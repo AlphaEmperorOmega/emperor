@@ -10,6 +10,7 @@ from emperor.experts._options import (
 from emperor.layers import LayerConfig
 
 if TYPE_CHECKING:
+    from emperor.experts._layers.mixture import MixtureOfExperts
     from emperor.layers import LayerStackConfig, RecurrentLayerConfig
     from emperor.sampler import SamplerConfig
 
@@ -84,6 +85,32 @@ class MixtureOfExpertsConfig(ConfigBase):
         from emperor.experts._layers.mixture import MixtureOfExperts
 
         return MixtureOfExperts
+
+
+@dataclass
+class _MixtureOfExpertsMapConfig(ConfigBase):
+    mixture_config: MixtureOfExpertsConfig
+
+    def build(
+        self,
+        overrides: MixtureOfExpertsConfig | None = None,
+    ) -> "MixtureOfExperts":
+        from emperor.experts._layers.map import MixtureOfExpertsMap
+
+        return MixtureOfExpertsMap(self.mixture_config, overrides)
+
+
+@dataclass
+class _MixtureOfExpertsReduceConfig(ConfigBase):
+    mixture_config: MixtureOfExpertsConfig
+
+    def build(
+        self,
+        overrides: MixtureOfExpertsConfig | None = None,
+    ) -> "MixtureOfExperts":
+        from emperor.experts._layers.reduce import MixtureOfExpertsReduce
+
+        return MixtureOfExpertsReduce(self.mixture_config, overrides)
 
 
 @dataclass
