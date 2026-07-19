@@ -85,6 +85,8 @@ class HaltingMonitorCallback(Callback):
         for module_name, halting_module in pl_module.named_modules():
             if not isinstance(halting_module, HaltingBase):
                 continue
+            if not self._tracker_manager.supports(halting_module):
+                continue
             self._tracker_manager.attach(halting_module)
             self._halting_layers.append((module_name, halting_module))
             self._survival_history[module_name] = MonitorTensorHistory(

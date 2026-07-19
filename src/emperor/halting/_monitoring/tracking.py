@@ -146,19 +146,15 @@ class HaltingUsageTrackerManager:
 
     Capture is installed at runtime and removed on detach, mirroring how the
     linear monitor installs and removes forward hooks. Strategy methods are
-    plain calls rather than ``__call__``, so the manager wraps
-    ``update_halting_state`` and the strategy's completion method on the
-    halting module instance. A fresh forward is detected from
-    ``previous_state is None`` (the first halting step of any owner), so no
-    owner-specific hook or ``max_steps`` is required.
+    plain calls rather than ``__call__``, so the manager wraps the two methods
+    in the supported StickBreaking lifecycle on the halting module instance.
     """
 
     TRACKER_MODULE_NAME = "_usage_tracker"
-    COMPLETION_METHOD_NAMES = (
+    WRAPPED_METHOD_NAMES = (
+        "update_halting_state",
         "finalize_weighted_accumulation",
-        "compute_output",
     )
-    WRAPPED_METHOD_NAMES = ("update_halting_state", *COMPLETION_METHOD_NAMES)
 
     def __init__(self):
         self._attachments: list[_HaltingAttachment] = []
@@ -168,13 +164,12 @@ class HaltingUsageTrackerManager:
         if existing_tracker is not None:
             return existing_tracker
 
-        completion_method_name = self.__completion_method_name(halting_model)
+        self.__validate_supported_interface(halting_model)
         tracker = HaltingUsageTracker()
         try:
             self.__wrap_halting_methods(
                 halting_model,
                 tracker,
-                completion_method_name,
             )
             halting_model.add_module(self.TRACKER_MODULE_NAME, tracker)
         except Exception:
@@ -182,6 +177,21 @@ class HaltingUsageTrackerManager:
             raise
         self._attachments.append(_HaltingAttachment(halting_model))
         return tracker
+
+    @staticmethod
+    def supports(halting_model: "HaltingBase") -> bool:
+        return type(halting_model).implements_halting_interface()
+
+    @classmethod
+    def __validate_supported_interface(cls, halting_model: "HaltingBase") -> None:
+        if cls.supports(halting_model):
+            return
+        strategy_type = type(halting_model)
+        raise TypeError(
+            f"{strategy_type.__name__} does not implement the supported halting "
+            "interface: update_halting_state and "
+            "finalize_weighted_accumulation"
+        )
 
     def detach(self, halting_model: "HaltingBase") -> None:
         attachment = next(
@@ -199,10 +209,9 @@ class HaltingUsageTrackerManager:
         self,
         halting_model: "HaltingBase",
         tracker: HaltingUsageTracker,
-        completion_method_name: str,
     ) -> None:
         original_update = halting_model.update_halting_state
-        original_completion = getattr(halting_model, completion_method_name)
+        original_finalize = halting_model.finalize_weighted_accumulation
 
         @wraps(original_update)
         def update_halting_state(previous_state, *args, **kwargs):
@@ -212,23 +221,15 @@ class HaltingUsageTrackerManager:
             tracker.record_step(state)
             return state, hidden
 
-        @wraps(original_completion)
-        def complete_halting(state, *args, **kwargs):
-            hidden, ponder_loss = original_completion(state, *args, **kwargs)
+        @wraps(original_finalize)
+        def finalize_weighted_accumulation(state, *args, **kwargs):
+            hidden, ponder_loss = original_finalize(state, *args, **kwargs)
             tracker.record_final(ponder_loss, state)
             return hidden, ponder_loss
 
         halting_model.update_halting_state = update_halting_state
-        setattr(halting_model, completion_method_name, complete_halting)
-
-    def __completion_method_name(self, halting_model: "HaltingBase") -> str:
-        for method_name in self.COMPLETION_METHOD_NAMES:
-            if callable(getattr(halting_model, method_name, None)):
-                return method_name
-        methods = ", ".join(self.COMPLETION_METHOD_NAMES)
-        raise TypeError(f"{type(halting_model).__name__} must define one of: {methods}")
+        halting_model.finalize_weighted_accumulation = finalize_weighted_accumulation
 
     def __restore_halting_methods(self, halting_model: "HaltingBase") -> None:
         for method_name in self.WRAPPED_METHOD_NAMES:
-            if method_name in halting_model.__dict__:
-                del halting_model.__dict__[method_name]
+            halting_model.__dict__.pop(method_name, None)
