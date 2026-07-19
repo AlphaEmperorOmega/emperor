@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 class StickBreakingValidator:
     OPTIONAL_FIELDS = {
-        "halting_dropout",
+        "dropout_probability",
         "override_config",
     }
 
@@ -24,7 +24,7 @@ class StickBreakingValidator:
         cls._validate_required_fields(cfg)
         cls._validate_input_dim(cfg.input_dim)
         cls._validate_threshold(cfg.threshold)
-        cls._validate_halting_dropout(cfg.halting_dropout)
+        cls._validate_dropout_probability(cfg.dropout_probability)
         cls._validate_hidden_state_mode(cfg.hidden_state_mode)
         cls._validate_halting_gate_config(cfg.halting_gate_config)
         cls._validate_halting_gate_layer_config(cfg.halting_gate_config.layer_config)
@@ -62,21 +62,23 @@ class StickBreakingValidator:
             )
 
     @staticmethod
-    def _validate_halting_dropout(halting_dropout: float | None) -> None:
-        if halting_dropout is None:
+    def _validate_dropout_probability(dropout_probability: float | None) -> None:
+        if dropout_probability is None:
             return
-        if isinstance(halting_dropout, bool) or not isinstance(halting_dropout, Real):
+        if isinstance(dropout_probability, bool) or not isinstance(
+            dropout_probability, Real
+        ):
             raise TypeError(
-                "halting_dropout must be a number or None, "
-                f"received {type(halting_dropout).__name__}"
+                "dropout_probability must be a number or None, "
+                f"received {type(dropout_probability).__name__}"
             )
         if (
-            not math.isfinite(float(halting_dropout))
-            or not 0.0 <= halting_dropout <= 1.0
+            not math.isfinite(float(dropout_probability))
+            or not 0.0 <= dropout_probability <= 1.0
         ):
             raise ValueError(
-                "halting_dropout must be finite and between 0.0 and 1.0, "
-                f"received {halting_dropout}"
+                "dropout_probability must be finite and between 0.0 and 1.0, "
+                f"received {dropout_probability}"
             )
 
     @staticmethod

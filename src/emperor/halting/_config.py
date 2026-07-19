@@ -20,7 +20,7 @@ class HaltingConfig(ConfigBase):
         "most of their probability mass has been assigned. Smaller values stop "
         "earlier, but can produce less stable accumulated representations."
     )
-    halting_dropout: float | None = optional_field(
+    dropout_probability: float | None = optional_field(
         "Dedicated dropout probability applied immediately before the final "
         "soft-halting gate projection. None or 0.0 disables it. This option is "
         "not used by StickBreaking, whose configured gate stack controls its "

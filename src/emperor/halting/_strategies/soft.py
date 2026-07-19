@@ -73,16 +73,16 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
-        self.halting_dropout: float | None = self.cfg.halting_dropout
+        self.dropout_probability: float | None = self.cfg.dropout_probability
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
         )
         self.halting_gate_config: LayerStackConfig = self.cfg.halting_gate_config
 
         dropout_probability = (
-            0.0 if self.halting_dropout is None else self.halting_dropout
+            0.0 if self.dropout_probability is None else self.dropout_probability
         )
-        self.halting_dropout_module = nn.Dropout(dropout_probability)
+        self.dropout_probability_module = nn.Dropout(dropout_probability)
         self._gate: LayerStack = self.__build_gate()
         self.__init_gate_weights()
 
@@ -101,7 +101,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         state = LayerState(hidden=flat)
         for layer in self._gate.layers[:-1]:
             state = layer(state)
-        state.hidden = self.halting_dropout_module(state.hidden)
+        state.hidden = self.dropout_probability_module(state.hidden)
         logits = self._gate[-1](state).hidden
         logits = logits.reshape(*original_shape[:-1], 2)
         return F.log_softmax(logits, dim=-1)
