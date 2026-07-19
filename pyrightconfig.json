@@ -1,18 +1,19 @@
 {
   "include": [
-    "models/catalog.py",
-    "model_runtime/__init__.py",
-    "model_runtime/cli/__init__.py",
-    "model_runtime/inspection/__init__.py",
-    "model_runtime/packages/__init__.py",
-    "model_runtime/packages/configuration.py",
-    "model_runtime/packages/identity.py",
-    "model_runtime/runs/__init__.py"
+    "src/models/catalog.py",
+    "src/model_runtime/__init__.py",
+    "src/model_runtime/cli/__init__.py",
+    "src/model_runtime/inspection/__init__.py",
+    "src/model_runtime/packages/__init__.py",
+    "src/model_runtime/packages/configuration.py",
+    "src/model_runtime/packages/identity.py",
+    "src/model_runtime/runs/__init__.py"
   ],
   "exclude": [
     "**/__pycache__",
     ".git",
     ".next",
+    ".runtime",
     ".pytest_cache",
     ".ruff_cache",
     "build",
@@ -21,14 +22,12 @@
     "logs",
     "node_modules",
     "torchenv",
-    "workbench/.runtime",
-    "workbench/frontend/.next",
-    "workbench/frontend/node_modules"
+    "apps"
   ],
   "pythonPlatform": "Linux",
   "pythonVersion": "3.13",
   "extraPaths": [
-    "."
+    "src"
   ],
   "typeCheckingMode": "strict"
 }

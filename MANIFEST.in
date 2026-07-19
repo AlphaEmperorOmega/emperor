@@ -9,13 +9,11 @@ include run_test.sh
 include experiment.sh
 include mise.toml
 recursive-include constraints *.txt
-recursive-include docs *.md
-recursive-include emperor *.py
-recursive-include models *.py
-recursive-include model_runtime *.py
-recursive-include tests *.py
+recursive-include docs *.json *.md
+recursive-include src *.py
+recursive-include tests *.json *.py *.toml
 recursive-include tools *.py
 prune build
-prune workbench
+prune apps
 global-exclude __pycache__
 global-exclude *.py[cod]

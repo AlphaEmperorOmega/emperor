@@ -48,9 +48,10 @@ Issues = "https://github.com/yourusername/emperor/issues"
 
 [tool.setuptools]
 include-package-data = false
+package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 include = [
   "emperor",
   "emperor.*",
@@ -59,35 +60,33 @@ include = [
   "model_runtime",
   "model_runtime.*",
 ]
-exclude = ["docs", "docs.*", "tests", "tests.*", "workbench", "workbench.*"]
 namespaces = false
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
-src = ["emperor", "models", "tests", "workbench/backend"]
+src = ["src", "tests"]
 exclude = [
   ".git",
   ".next",
+  ".runtime",
   ".pytest_cache",
   ".ruff_cache",
   "__pycache__",
+  "apps",
   "build",
   "data",
   "dist",
   "logs",
   "node_modules",
   "torchenv",
-  "workbench/.runtime",
-  "workbench/frontend/.next",
-  "workbench/frontend/node_modules",
 ]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["model_runtime"]
+known-first-party = ["emperor", "model_runtime", "models"]
 
 [tool.coverage.run]
 branch = true
