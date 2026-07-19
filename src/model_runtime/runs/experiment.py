@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import traceback
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from lightning import Trainer, seed_everything
@@ -57,6 +57,7 @@ class TrainingRun:
     config: ModelConfig
     config_overrides: dict
     num_epochs: int
+    parameters: dict[str, object] = field(default_factory=dict)
     run_id: str | None = None
     run_index: int | None = None
     run_total: int | None = None
@@ -458,6 +459,7 @@ class ExperimentBase:
                             config=config,
                             config_overrides=run_overrides,
                             num_epochs=run_epochs,
+                            parameters=dict(run_overrides),
                         )
                     )
         return training_runs
@@ -473,6 +475,7 @@ class ExperimentBase:
             preset = run["preset"]
             dataset_type = run["dataset_type"]
             run_overrides = run.get("config_overrides") or {}
+            run_parameters = run.get("parameters") or {}
             run_epochs = run_overrides.get("num_epochs", self.num_epochs)
             for config in self.preset_generator.get_config(
                 preset,
@@ -491,6 +494,7 @@ class ExperimentBase:
                         config=config,
                         config_overrides=run_overrides,
                         num_epochs=run_epochs,
+                        parameters=dict(run_parameters),
                         run_id=run.get("id"),
                         run_index=run.get("index", run_index),
                         run_total=run.get("run_total", run_total),
@@ -529,7 +533,7 @@ class ExperimentBase:
             name=self._build_log_path(
                 training_run.preset,
                 training_run.dataset_type,
-                training_run.config,
+                training_run.parameters,
                 log_folder,
             ),
         )
@@ -608,7 +612,7 @@ class ExperimentBase:
                 "type": "dataset_started",
                 "status": "running",
                 "logDir": logger.log_dir,
-                "params": training_run.config.get_custom_parameters(),
+                "params": training_run.parameters,
                 **(
                     {"resumedFrom": dict(resumed_from)}
                     if resumed_from is not None
@@ -704,7 +708,7 @@ class ExperimentBase:
             "dataset": training_run.dataset_type.__name__,
             "preset": self._preset_cli_name(training_run.preset),
             "presetKey": training_run.preset.name,
-            "params": training_run.config.get_custom_parameters(),
+            "params": training_run.parameters,
             **_result_metrics_payload(trainer.callback_metrics),
             **({"resumedFrom": dict(resumed_from)} if resumed_from is not None else {}),
         }
@@ -745,14 +749,14 @@ class ExperimentBase:
         self,
         preset: BaseOptions,
         dataset_type: type,
-        config: ModelConfig,
+        parameters: Mapping[str, object],
         log_folder: str | None = None,
     ) -> str:
         return self._artifact_store(log_folder).run_name(
             self._model_identity(),
             preset.name,
             dataset_type.__name__,
-            config.get_custom_parameters(),
+            parameters,
         )
 
     def _artifact_store(

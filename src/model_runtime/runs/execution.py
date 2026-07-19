@@ -95,6 +95,7 @@ def _validated_materialized_runs(
                 "run_total": len(plan.runs),
                 "preset": preset,
                 "dataset_type": dataset,
+                "parameters": dict(run.overrides),
                 "config_overrides": dict(parsed_overrides),
             }
         )
