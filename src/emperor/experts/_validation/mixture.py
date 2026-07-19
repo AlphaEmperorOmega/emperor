@@ -324,6 +324,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_batch_dimension("indices", indices, input_batch)
         cls.validate_routing_width("indices", indices, model.top_k)
         cls.validate_indices_dtype_and_range(model, indices)
+        cls.validate_unique_expert_indices(model, indices)
 
     @staticmethod
     def validate_indices_dtype_and_range(
@@ -349,6 +350,27 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 "Input Error: 'indices' values must be in [0, num_experts), "
                 f"received num_experts={model.num_experts} and indices range "
                 f"[{indices.min().item()}, {indices.max().item()}]."
+            )
+
+    @staticmethod
+    def validate_unique_expert_indices(
+        model: "MixtureOfExperts",
+        indices: Tensor,
+    ) -> None:
+        if model.top_k == 1 or model.top_k == model.num_experts:
+            return
+        sorted_indices = indices.sort(dim=-1).values
+        duplicate_rows = (
+            (sorted_indices[:, 1:] == sorted_indices[:, :-1])
+            .any(dim=-1)
+            .nonzero()
+            .flatten()
+        )
+        if duplicate_rows.numel() > 0:
+            raise ValueError(
+                "Input Error: 'indices' must contain distinct expert ids for each "
+                "input sample in sparse MixtureOfExperts routing, received duplicate "
+                f"expert ids in sample rows {duplicate_rows.tolist()}."
             )
 
     @classmethod

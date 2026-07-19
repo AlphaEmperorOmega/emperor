@@ -280,3 +280,33 @@ class ExpertMutationContractTests(unittest.TestCase):
                 indices=torch.empty(0, dtype=torch.long),
             ),
         )
+
+    def test_sparse_forward_rejects_duplicate_expert_ids_per_sample(self) -> None:
+        model = MixtureOfExperts(_mixture_config(top_k=2, num_experts=3))
+
+        self.assert_exact_error(
+            ValueError,
+            "Input Error: 'indices' must contain distinct expert ids for each "
+            "input sample in sparse MixtureOfExperts routing, received duplicate "
+            "expert ids in sample rows [0].",
+            lambda: model(
+                torch.tensor([[1.0, 2.0]]),
+                probabilities=torch.tensor([[0.25, 0.75]]),
+                indices=torch.tensor([[0, 0]]),
+            ),
+        )
+
+    def test_sparse_forward_detects_a_duplicate_after_the_first_route(self) -> None:
+        model = MixtureOfExperts(_mixture_config(top_k=3, num_experts=4))
+
+        self.assert_exact_error(
+            ValueError,
+            "Input Error: 'indices' must contain distinct expert ids for each "
+            "input sample in sparse MixtureOfExperts routing, received duplicate "
+            "expert ids in sample rows [0].",
+            lambda: model(
+                torch.tensor([[1.0, 2.0]]),
+                probabilities=torch.tensor([[0.2, 0.3, 0.5]]),
+                indices=torch.tensor([[0, 2, 2]]),
+            ),
+        )
