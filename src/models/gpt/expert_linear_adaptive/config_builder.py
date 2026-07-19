@@ -1,10 +1,10 @@
 import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
-    MixtureOfAttentionHeadsConfig,
-)
-from emperor.experts.config import MixtureOfExpertsModelConfig
 
 import models.gpt.expert_linear_adaptive.config as config
+from emperor.attention import (
+    MixtureOfAttentionHeadsConfig,
+)
+from emperor.experts import MixtureOfExpertsModelConfig
 from models.gpt.expert_linear_adaptive._base_config_builder import (
     GptBackendConfigBuilder,
 )
@@ -324,7 +324,7 @@ class GptExpertLinearAdaptiveConfigBuilder(GptBackendConfigBuilder):
             layer_norm_position=self.decoder_options.layer_norm_position,
             num_layers=self.feed_forward_options.num_layers,
             activation=self.decoder_options.activation,
-            residual_connection_option=config.ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=self.decoder_options.dropout_probability,
             last_layer_bias_option=config.LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

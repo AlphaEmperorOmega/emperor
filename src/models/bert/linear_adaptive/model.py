@@ -2,11 +2,11 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-from emperor.attention import AttentionLayerState
-from emperor.base.options import ActivationOptions
-from emperor.experiments.bert_pretraining import BertPretrainingExperiment
 from torch import Tensor
 
+from emperor.attention import AttentionLayerState
+from emperor.experiments.bert_pretraining import BertPretrainingExperiment
+from emperor.layers import ActivationOptions
 from models.bert.linear_adaptive._boundary_config_factory import BertBoundaryConfig
 from models.bert.linear_adaptive.experiment_config import ExperimentConfig
 

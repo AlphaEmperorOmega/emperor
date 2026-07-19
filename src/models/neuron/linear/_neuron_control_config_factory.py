@@ -1,17 +1,16 @@
 import copy
 from dataclasses import dataclass
 
-from emperor.base.config import ConfigBase
-from emperor.halting.config import StickBreakingConfig
-from emperor.neuron.core.config import (
+from emperor.config import ConfigBase
+from emperor.halting import HaltingConfig
+from emperor.neuron import (
     AxonsConfig,
     NeuronClusterConfig,
     NeuronConfig,
     NucleusConfig,
     TerminalConfig,
 )
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.neuron.linear._hidden_block import HiddenBlockConfig
 from models.neuron.linear._neuron_controller_stack_config_factory import (
     NeuronControllerStackConfigFactory,
@@ -161,7 +160,7 @@ class NeuronControlConfigFactory:
     def __build_cluster_halting_config(
         self,
         hidden_dim: int,
-    ) -> StickBreakingConfig | None:
+    ) -> HaltingConfig | None:
         halting_options = self.cluster_halting_options
         if not halting_options.enabled:
             return None
@@ -172,10 +171,10 @@ class NeuronControlConfigFactory:
             hidden_dim=stack_options.hidden_dim,
             output_dim=halting_options.output_dim,
         )
-        return StickBreakingConfig(
+        return halting_options.halting_option(
             input_dim=hidden_dim,
             threshold=halting_options.threshold,
-            halting_dropout=halting_options.dropout,
+            dropout_probability=halting_options.dropout,
             hidden_state_mode=halting_options.hidden_state_mode,
             halting_gate_config=halting_gate_config,
         )

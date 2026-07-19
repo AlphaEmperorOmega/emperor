@@ -1,6 +1,6 @@
-from emperor.base.layer.monitor import LayerControllerMonitorCallback
-from emperor.experiments.monitors import MonitorOption
-from emperor.parametric.core.monitor import ParametricLayerMonitorCallback
+from emperor.layers import LayerControllerMonitorCallback
+from emperor.monitoring import MonitorOption
+from emperor.parametric import ParametricLayerMonitorCallback
 
 MONITOR_OPTIONS: list[MonitorOption] = [
     MonitorOption(

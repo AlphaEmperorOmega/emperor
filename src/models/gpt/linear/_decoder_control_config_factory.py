@@ -1,17 +1,16 @@
 from dataclasses import replace
 
-from emperor.base.layer.config import (
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
+    LastLayerBiasOptions,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
 from models.gpt.linear.runtime_options import (
     DynamicMemoryOptions,
     LayerControllerOptions,
@@ -97,7 +96,9 @@ class GateConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -130,7 +131,7 @@ class HaltingConfigFactory:
             recurrent_stack_inherits_halting_stack
         )
 
-    def build_halting_config(self) -> StickBreakingConfig | None:
+    def build_halting_config(self) -> HaltingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
             return None
         halting_stack_source = self.layer_controller_options.halting_stack_source
@@ -143,14 +144,14 @@ class HaltingConfigFactory:
         halting_gate_config = self.__build_halting_gate_stack(
             resolved_halting_stack_options
         )
-        return StickBreakingConfig(
+        return self.layer_controller_options.halting_option(
             threshold=self.layer_controller_options.halting_threshold,
-            halting_dropout=self.layer_controller_options.halting_dropout,
+            dropout_probability=self.layer_controller_options.halting_dropout,
             hidden_state_mode=self.layer_controller_options.halting_hidden_state_mode,
             halting_gate_config=halting_gate_config,
         )
 
-    def build_recurrent_halting_config(self) -> StickBreakingConfig | None:
+    def build_recurrent_halting_config(self) -> HaltingConfig | None:
         if not self.recurrent_controller_options.recurrent_halting_flag:
             return None
         resolved_halting_stack_defaults = self.__recurrent_halting_stack_defaults()
@@ -163,9 +164,9 @@ class HaltingConfigFactory:
         halting_gate_config = self.__build_halting_gate_stack(
             resolved_recurrent_halting_stack_options
         )
-        return StickBreakingConfig(
+        return self.recurrent_controller_options.recurrent_halting_option(
             threshold=self.recurrent_controller_options.recurrent_halting_threshold,
-            halting_dropout=self.recurrent_controller_options.recurrent_halting_dropout,
+            dropout_probability=self.recurrent_controller_options.recurrent_halting_dropout,
             hidden_state_mode=self.recurrent_controller_options.recurrent_halting_hidden_state_mode,
             halting_gate_config=halting_gate_config,
         )
@@ -196,7 +197,9 @@ class HaltingConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -275,7 +278,9 @@ class MemoryConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -315,6 +320,6 @@ class RecurrentConfigFactory:
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=gate_config,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             halting_config=halting_config,
         )

@@ -1,11 +1,11 @@
-from emperor.base.layer.monitor import (
+from emperor.layers import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
 )
-from emperor.experiments.monitors import MonitorOption
-from emperor.linears.core.monitor import LinearMonitorCallback
-from emperor.memory.core.monitor import MemoryMonitorCallback
-from emperor.sampler.core.monitor import SamplerMonitorCallback
+from emperor.linears import LinearMonitorCallback
+from emperor.memory.monitoring import MemoryMonitorCallback
+from emperor.monitoring import MonitorOption
+from emperor.sampler import SamplerMonitorCallback
 
 MONITOR_OPTIONS: list[MonitorOption] = [
     MonitorOption(

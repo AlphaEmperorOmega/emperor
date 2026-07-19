@@ -2,10 +2,10 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-from emperor.experiments.language_model import LanguageModelExperiment
-from emperor.transformer import TransformerDecoderLayerState
 from torch import Tensor
 
+from emperor.experiments.language_model import LanguageModelExperiment
+from emperor.transformer import TransformerDecoderLayerState
 from models.gpt.expert_linear_adaptive._boundary_config_factory import GptBoundaryConfig
 from models.gpt.expert_linear_adaptive.experiment_config import ExperimentConfig
 

@@ -1,8 +1,9 @@
-from emperor.base.layer.config import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+)
+from emperor.linears import LinearLayerConfig
 from models.linears.linear.runtime_options import RuntimeOptions
 
 
@@ -14,7 +15,7 @@ class ProjectionConfigFactory:
         return LayerConfig(
             activation=self.runtime.stack.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -27,7 +28,7 @@ class ProjectionConfigFactory:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,

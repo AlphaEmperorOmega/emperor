@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-from emperor.base.layer import LayerConfig, LayerStackConfig, RecurrentLayerConfig
-from emperor.base.config import ConfigBase, optional_field
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
+from emperor.config import ConfigBase, optional_field
+from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
+from emperor.layers import LayerConfig, LayerStackConfig, RecurrentLayerConfig
 from emperor.patch import PatchConfig
 
 

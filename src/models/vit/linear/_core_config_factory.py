@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions, LayerNormPositionOptions
-
 import models.vit.linear.config as config
+from emperor.layers import (
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
 from models.vit.linear._linear_layer_config_factory import LinearLayerConfigFactory
 from models.vit.linear._vit_core_config_factory import (
     CoreConfigDependencies as _CoreDependencies,
@@ -141,7 +142,7 @@ class CoreConfigFactory:
             apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.0,
             bias_flag=self.attention_options.bias_flag,
         )
@@ -159,7 +160,7 @@ class CoreConfigFactory:
             apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=self.encoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )

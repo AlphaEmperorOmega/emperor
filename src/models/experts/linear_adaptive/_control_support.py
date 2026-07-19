@@ -1,19 +1,18 @@
 from dataclasses import replace
 from typing import Any
 
-from emperor.base.layer.config import (
+from emperor.config import ConfigBase
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
+    LastLayerBiasOptions,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions
-from emperor.base.config import ConfigBase
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
 from models.experts.linear_adaptive.runtime_options import (
     ExpertsAdaptiveGeneratorStackOptions,
     ExpertsDynamicMemoryOptions,
@@ -55,7 +54,9 @@ def build_controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -137,7 +138,7 @@ class ExpertsHaltingConfigFactory:
             recurrent_stack_inherits_halting_stack
         )
 
-    def build_halting_config(self) -> StickBreakingConfig | None:
+    def build_halting_config(self) -> HaltingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
             return None
         controller = self.layer_controller_options
@@ -145,14 +146,14 @@ class ExpertsHaltingConfigFactory:
             controller.halting_stack_source,
             self.__halting_stack_defaults(),
         )
-        return StickBreakingConfig(
+        return controller.halting_option(
             threshold=controller.halting_threshold,
-            halting_dropout=controller.halting_dropout,
+            dropout_probability=controller.halting_dropout,
             hidden_state_mode=controller.halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
         )
 
-    def build_recurrent_halting_config(self) -> StickBreakingConfig | None:
+    def build_recurrent_halting_config(self) -> HaltingConfig | None:
         if not self.recurrent_controller_options.recurrent_halting_flag:
             return None
         controller = self.recurrent_controller_options
@@ -160,9 +161,9 @@ class ExpertsHaltingConfigFactory:
             controller.recurrent_halting_stack_source,
             self.__recurrent_halting_stack_defaults(),
         )
-        return StickBreakingConfig(
+        return controller.recurrent_halting_option(
             threshold=controller.recurrent_halting_threshold,
-            halting_dropout=controller.recurrent_halting_dropout,
+            dropout_probability=controller.recurrent_halting_dropout,
             hidden_state_mode=controller.recurrent_halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
         )
@@ -250,6 +251,6 @@ class ExpertsRecurrentConfigFactory:
             ),
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             halting_config=self.halting_config_factory.build_recurrent_halting_config(),
         )

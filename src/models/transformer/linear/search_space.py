@@ -1,4 +1,4 @@
-from emperor.base.options import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions
 
 SEARCH_SPACE_LEARNING_RATE = [0.5, 1.0, 2.0]
 SEARCH_SPACE_MODEL_DIM = [64, 128, 256]

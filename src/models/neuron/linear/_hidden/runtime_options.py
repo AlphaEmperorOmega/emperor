@@ -1,15 +1,19 @@
 from dataclasses import dataclass
 
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,3 +90,5 @@ class RuntimeOptions:
     halting: HaltingOptions
     memory: MemoryOptions
     recurrence: RecurrenceOptions
+    halting_option: type[HaltingConfig] = StickBreakingConfig
+    recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig

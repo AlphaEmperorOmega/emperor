@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
+from torch import Tensor
+
 from emperor.attention import AttentionLayerState
 from emperor.experiments.translation import TranslationExperiment
 from emperor.transformer import TransformerDecoderLayerState
-from torch import Tensor
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig

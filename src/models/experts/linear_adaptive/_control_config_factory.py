@@ -1,37 +1,30 @@
 from dataclasses import dataclass
 
-from emperor.augmentations.adaptive_parameters.config import (
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
+    DynamicBiasConfig,
+    DynamicDiagonalConfig,
     DynamicWeightConfig,
 )
-from emperor.base.layer.config import (
-    LayerConfig,
-    LayerStackConfig,
-    RecurrentLayerConfig,
-)
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import (
+from emperor.experts import (
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsModelConfig,
 )
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConfig,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.experts.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -328,13 +321,15 @@ class ControlConfigFactory:
     def __build_layer_config(
         self,
         gate_config: GateConfig | None,
-        halting_config: StickBreakingConfig | None,
+        halting_config: HaltingConfig | None,
     ) -> LayerConfig:
         stack_options = self.stack_options
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_connection_option=(stack_options.residual_connection_option),
+            residual_config=None
+            if (stack_options.residual_connection_option) is None
+            else ResidualConfig(option=(stack_options.residual_connection_option)),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -384,8 +379,10 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
-                residual_connection_option=(
-                    expert_stack_options.residual_connection_option
+                residual_config=None
+                if (expert_stack_options.residual_connection_option) is None
+                else ResidualConfig(
+                    option=(expert_stack_options.residual_connection_option)
                 ),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,
@@ -495,8 +492,10 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=router_stack_options.activation,
                 layer_norm_position=router_stack_options.layer_norm_position,
-                residual_connection_option=(
-                    router_stack_options.residual_connection_option
+                residual_config=None
+                if (router_stack_options.residual_connection_option) is None
+                else ResidualConfig(
+                    option=(router_stack_options.residual_connection_option)
                 ),
                 dropout_probability=router_stack_options.dropout_probability,
                 gate_config=gate_config,
@@ -513,7 +512,7 @@ class ControlConfigFactory:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,

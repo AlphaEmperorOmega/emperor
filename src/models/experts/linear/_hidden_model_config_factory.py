@@ -1,26 +1,25 @@
 from dataclasses import dataclass, replace
 from typing import Any
 
-from emperor.base.layer.config import (
+import models.experts.linear.config as config
+from emperor.config import ConfigBase
+from emperor.experts import (
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsModelConfig,
+)
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
+    LastLayerBiasOptions,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions
-from emperor.base.config import ConfigBase
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import (
-    MixtureOfExpertsConfig,
-    MixtureOfExpertsLayerConfig,
-)
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
-import models.experts.linear.config as config
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.experts.linear.runtime_options import (
     ExpertsAdaptiveGeneratorStackOptions,
     ExpertsDynamicMemoryOptions,
@@ -67,7 +66,9 @@ def build_controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -149,21 +150,21 @@ class ExpertsHaltingConfigFactory:
             recurrent_stack_inherits_halting_stack
         )
 
-    def build_halting_config(self) -> StickBreakingConfig | None:
+    def build_halting_config(self) -> HaltingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
             return None
         controller = self.layer_controller_options
         options = resolve_experts_controller_stack_options(
             controller.halting_stack_source, self.__halting_stack_defaults()
         )
-        return StickBreakingConfig(
+        return controller.halting_option(
             threshold=controller.halting_threshold,
-            halting_dropout=controller.halting_dropout,
+            dropout_probability=controller.halting_dropout,
             hidden_state_mode=controller.halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
         )
 
-    def build_recurrent_halting_config(self) -> StickBreakingConfig | None:
+    def build_recurrent_halting_config(self) -> HaltingConfig | None:
         if not self.recurrent_controller_options.recurrent_halting_flag:
             return None
         controller = self.recurrent_controller_options
@@ -171,9 +172,9 @@ class ExpertsHaltingConfigFactory:
             controller.recurrent_halting_stack_source,
             self.__recurrent_halting_stack_defaults(),
         )
-        return StickBreakingConfig(
+        return controller.recurrent_halting_option(
             threshold=controller.recurrent_halting_threshold,
-            halting_dropout=controller.recurrent_halting_dropout,
+            dropout_probability=controller.recurrent_halting_dropout,
             hidden_state_mode=controller.recurrent_halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
         )
@@ -255,7 +256,7 @@ class ExpertsRecurrentConfigFactory:
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             halting_config=self.halting_config_factory.build_recurrent_halting_config(),
         )
 
@@ -649,13 +650,15 @@ class HiddenModelConfigFactory:
         )
 
     def __build_layer_config(
-        self, gate_config: GateConfig | None, halting_config: StickBreakingConfig | None
+        self, gate_config: GateConfig | None, halting_config: HaltingConfig | None
     ) -> LayerConfig:
         stack_options = self.stack_options
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_connection_option=stack_options.residual_connection_option,
+            residual_config=None
+            if stack_options.residual_connection_option is None
+            else ResidualConfig(option=stack_options.residual_connection_option),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -700,7 +703,11 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
-                residual_connection_option=expert_stack_options.residual_connection_option,
+                residual_config=None
+                if expert_stack_options.residual_connection_option is None
+                else ResidualConfig(
+                    option=expert_stack_options.residual_connection_option
+                ),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,

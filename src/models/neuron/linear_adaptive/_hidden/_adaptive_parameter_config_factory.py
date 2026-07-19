@@ -1,34 +1,25 @@
 from __future__ import annotations
 
-from emperor.augmentations.adaptive_parameters.config import (
+from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
-    PerAxisScoreMaskConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    DynamicBiasConfig,
+    DynamicDiagonalConfig,
     DynamicWeightConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    PerAxisScoreMaskConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
+    TopSliceAxisMaskConfig,
+    WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.linears import LinearLayerConfig
 from models.neuron.linear_adaptive._hidden.runtime_options import (
     AdaptiveProjectionOptions,
     GeneratorStackOptions,
@@ -81,7 +72,9 @@ def _stack_config(options: StackOptions) -> LayerStackConfig:
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,

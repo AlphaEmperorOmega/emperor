@@ -1,13 +1,13 @@
 from typing import TYPE_CHECKING
 
 import torch
-from emperor.base.config import ConfigBase
-from emperor.base.layer import Layer, LayerConfig, LayerStackConfig
-from emperor.base.module import Module
-from emperor.experiments.classifier import ClassifierExperiment
-from emperor.parametric.core.state import ParametricLayerState
 from torch import Tensor
 
+from emperor.config import ConfigBase
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.layers import Layer, LayerConfig, LayerStackConfig
+from emperor.nn import Module
+from emperor.parametric import ParametricLayerState
 from models.parametric.parametric_generator.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

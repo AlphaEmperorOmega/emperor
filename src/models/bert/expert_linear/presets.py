@@ -1,17 +1,17 @@
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.bert.expert_linear.config as config
+import models.bert.expert_linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
 from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.layers import LayerNormPositionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.bert.expert_linear.config as config
-import models.bert.expert_linear.dataset_options as dataset_options
 from models.bert.expert_linear._builder_adapter import (
     expert_linear_builder_kwargs_from_flat,
 )

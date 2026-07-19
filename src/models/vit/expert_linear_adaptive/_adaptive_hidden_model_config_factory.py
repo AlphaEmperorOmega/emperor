@@ -1,25 +1,23 @@
 from dataclasses import dataclass
 
-from emperor.augmentations.adaptive_parameters.config import (
+import models.vit.expert_linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
+    AxisMaskConfig,
+    DynamicBiasConfig,
     DynamicDiagonalConfig,
+    DynamicWeightConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
-from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
-from emperor.base.layer.config import (
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
-import models.vit.expert_linear_adaptive.config as config
+from emperor.memory import DynamicMemoryConfig
 from models.vit.expert_linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -460,13 +458,15 @@ class HiddenModelConfigFactory:
         self,
         *,
         gate_config: GateConfig | None,
-        halting_config: StickBreakingConfig | None,
+        halting_config: HaltingConfig | None,
     ) -> LayerConfig:
         layer_model_config = self.__build_layer_model_config()
         return LayerConfig(
             activation=self.stack_options.activation,
             layer_norm_position=self.stack_options.layer_norm_position,
-            residual_connection_option=self.stack_options.residual_connection_option,
+            residual_config=None
+            if self.stack_options.residual_connection_option is None
+            else ResidualConfig(option=self.stack_options.residual_connection_option),
             dropout_probability=self.stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

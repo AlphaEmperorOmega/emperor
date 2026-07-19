@@ -2,17 +2,17 @@
 
 from typing import Any
 
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
-
 import models.neuron.expert_linear_adaptive.config as config
+from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from models.neuron.expert_linear_adaptive._hidden.runtime_defaults import (
     runtime_from_flat,
 )

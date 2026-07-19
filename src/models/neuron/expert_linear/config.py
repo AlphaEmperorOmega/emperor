@@ -1,6 +1,6 @@
 # ruff: noqa: E402
 
-from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.layers import ResidualConnectionOptions
 
 # Trainer
 TRAINER_ACCELERATOR: str = "auto"
@@ -36,26 +36,30 @@ CALLBACK_EARLY_STOPPING_MIN_DELTA: float = 0.0
 CALLBACK_EARLY_STOPPING_STRICT: bool = True
 CALLBACK_EARLY_STOPPING_CHECK_FINITE: bool = True
 CALLBACK_CHECKPOINT_FLAG: bool = False
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+)
+from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.options import MemoryPositionOptions
 
 # Global
 INPUT_DIM: int = 28**2
@@ -77,9 +81,7 @@ TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -93,9 +95,7 @@ SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -126,6 +126,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 # Halting Options
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
+HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -200,6 +201,7 @@ RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 ## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -278,6 +280,7 @@ EXPERT_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 ## Expert Halting Options
 # If `EXPERT_HALTING_FLAG` is False, the expert halting parameters are ignored.
 EXPERT_HALTING_FLAG: bool = False
+EXPERT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 EXPERT_HALTING_DROPOUT: float = HALTING_DROPOUT
 EXPERT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -358,6 +361,7 @@ EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 ### Expert Recurrent Halting Options
 EXPERT_RECURRENT_HALTING_FLAG: bool = False
+EXPERT_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 EXPERT_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
 EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -403,9 +407,7 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 ROUTER_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ROUTER_STACK_NUM_LAYERS: int = 2
 ROUTER_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 ROUTER_STACK_DROPOUT_PROBABILITY: float = 0.0
 ROUTER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
 ROUTER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
@@ -414,8 +416,11 @@ ROUTER_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # Neuron Wrapper Options
-from emperor.neuron.core.optimizer_sync import NeuronClusterOptimizerSyncCallback
-from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
+from emperor.neuron import (
+    NeuronClusterOptimizerSyncCallback,
+    TerminalRangeOptions,
+    TerminalZAxisOffsetOptions,
+)
 
 CALLBACK_NEURON_CLUSTER_OPTIMIZER_SYNC = NeuronClusterOptimizerSyncCallback()
 
@@ -445,8 +450,8 @@ CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABL
 CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
+CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = (
+    None
 )
 CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
@@ -468,6 +473,7 @@ CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 
 ## Cluster Halting Options
 CLUSTER_HALTING_FLAG: bool = True
+CLUSTER_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 CLUSTER_HALTING_THRESHOLD: float = 0.95
 CLUSTER_HALTING_DROPOUT: float = 0.0
 CLUSTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -480,8 +486,8 @@ CLUSTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
 CLUSTER_HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
-CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
+CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = (
+    None
 )
 CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (

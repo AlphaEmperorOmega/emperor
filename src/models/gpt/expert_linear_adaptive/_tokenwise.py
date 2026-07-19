@@ -1,12 +1,13 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.base.config import ConfigBase, optional_field
-from emperor.base.module import Module
 from torch import Tensor, nn
 
+from emperor.config import ConfigBase, optional_field
+from emperor.nn import Module
+
 if TYPE_CHECKING:
-    from emperor.linears.core.config import LinearLayerConfig
+    from emperor.linears import LinearLayerConfig
 
 
 @dataclass

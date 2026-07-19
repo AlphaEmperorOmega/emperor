@@ -1,17 +1,17 @@
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.gpt.expert_linear.config as config
+import models.gpt.expert_linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
 from emperor.datasets.text.language_modeling import WikiText2
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.layers import LayerNormPositionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.gpt.expert_linear.config as config
-import models.gpt.expert_linear.dataset_options as dataset_options
 from models.gpt.expert_linear._builder_adapter import (
     expert_linear_builder_kwargs_from_flat,
 )

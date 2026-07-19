@@ -2,28 +2,25 @@
 
 from dataclasses import dataclass
 
-from emperor.augmentations.adaptive_parameters.config import (
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
-from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
-from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskConfig,
     BankExpansionFactorOptions,
+    DynamicBiasConfig,
     DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.config import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+)
 from models.neuron.expert_linear_adaptive._hidden._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -109,7 +106,7 @@ class BoundaryModelConfigFactory:
         return LayerConfig(
             activation=activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,

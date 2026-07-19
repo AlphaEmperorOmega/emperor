@@ -3,15 +3,18 @@ from emperor.augmentations.adaptive_parameters import (
     AffineTransformDynamicBiasConfig,  # noqa: F401
     AntiDynamicDiagonalConfig,  # noqa: F401
     AxisMaskConfig,
+    BankExpansionFactorOptions,
     CombinedDynamicDiagonalConfig,  # noqa: F401
     DiagonalAxisMaskConfig,  # noqa: F401
     DualModelDynamicWeightConfig,  # noqa: F401
     DynamicBiasConfig,
+    DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
     HypernetworkDynamicWeightConfig,  # noqa: F401
     LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
     LowRankDynamicWeightConfig,  # noqa: F401
+    MaskDimensionOptions,
     MultiplicativeDynamicBiasConfig,  # noqa: F401
     OuterProductMaskConfig,  # noqa: F401
     PerAxisScoreMaskConfig,  # noqa: F401
@@ -21,43 +24,42 @@ from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,  # noqa: F401
     TanhGatedDynamicBiasConfig,  # noqa: F401
     TopSliceAxisMaskConfig,  # noqa: F401
+    WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,  # noqa: F401
     WeightInformedScoreAxisMaskConfig,  # noqa: F401
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
-    WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
 from emperor.datasets.text.bert_pretraining import BERT_PRETRAINING_TARGET_VOCAB_SIZE
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
 )
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.options import MemoryPositionOptions
 
 # Trainer
 TRAINER_ACCELERATOR: str = "auto"
@@ -142,9 +144,7 @@ SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -172,6 +172,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 #########################################################################
 # Halting Options
 HALTING_FLAG: bool = False
+HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -239,6 +240,7 @@ RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -269,9 +271,7 @@ ATTN_NUM_LAYERS: int = 1
 ATTN_BIAS_FLAG: bool = False
 ATTN_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ATTN_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
-ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 ATTN_STACK_DROPOUT_PROBABILITY: float = 0.0
 ATTN_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -301,6 +301,7 @@ ATTN_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 #########################################################################
 ### Attention Projection Halting Options
 ATTN_HALTING_FLAG: bool = False
+ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 ATTN_HALTING_DROPOUT: float = HALTING_DROPOUT
 ATTN_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -375,6 +376,7 @@ ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 #### Attention Projection Recurrent Halting Options
 ATTN_RECURRENT_HALTING_FLAG: bool = False
+ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 ATTN_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
 ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -400,9 +402,7 @@ FF_NUM_LAYERS: int = 2
 FF_BIAS_FLAG: bool = True
 FF_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 FF_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
-FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 FF_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
 FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 FF_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
@@ -430,6 +430,7 @@ FF_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 #########################################################################
 ## Feed-Forward Halting Options
 FF_HALTING_FLAG: bool = False
+FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 FF_HALTING_DROPOUT: float = HALTING_DROPOUT
 FF_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = HALTING_HIDDEN_STATE_MODE
@@ -502,6 +503,7 @@ FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 ### Feed-Forward Recurrent Halting Options
 FF_RECURRENT_HALTING_FLAG: bool = False
+FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 FF_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
 FF_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -580,6 +582,7 @@ EXPERT_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 ## Expert Halting Options
 # If `EXPERT_HALTING_FLAG` is False, the expert halting parameters are ignored.
 EXPERT_HALTING_FLAG: bool = False
+EXPERT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 EXPERT_HALTING_DROPOUT: float = HALTING_DROPOUT
 EXPERT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -660,6 +663,7 @@ EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 ### Expert Recurrent Halting Options
 EXPERT_RECURRENT_HALTING_FLAG: bool = False
+EXPERT_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 EXPERT_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
 EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -705,9 +709,7 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 ROUTER_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ROUTER_STACK_NUM_LAYERS: int = 2
 ROUTER_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ROUTER_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 ROUTER_STACK_DROPOUT_PROBABILITY: float = 0.0
 ROUTER_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.BEFORE
@@ -741,6 +743,7 @@ ROUTER_GATE_STACK_BIAS_FLAG: bool | None = EXPERT_GATE_STACK_BIAS_FLAG
 ### Router Halting Options
 # If `ROUTER_HALTING_FLAG` is False, the router halting parameters are ignored.
 ROUTER_HALTING_FLAG: bool = False
+ROUTER_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ROUTER_HALTING_THRESHOLD: float = EXPERT_HALTING_THRESHOLD
 ROUTER_HALTING_DROPOUT: float = EXPERT_HALTING_DROPOUT
 ROUTER_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -823,6 +826,7 @@ ROUTER_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 #### Router Recurrent Halting Options
 ROUTER_RECURRENT_HALTING_FLAG: bool = False
+ROUTER_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ROUTER_RECURRENT_HALTING_THRESHOLD: float = EXPERT_RECURRENT_HALTING_THRESHOLD
 ROUTER_RECURRENT_HALTING_DROPOUT: float = EXPERT_RECURRENT_HALTING_DROPOUT
 ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -855,9 +859,9 @@ ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: (
+    ResidualConnectionOptions | None
+) = None
 ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT

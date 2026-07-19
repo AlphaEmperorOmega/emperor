@@ -1,7 +1,5 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions
-from emperor.parametric.core.mixtures.config import MatrixBiasMixtureConfig
-from emperor.parametric.core.mixtures.options import ClipParameterOptions
+from emperor.layers import ActivationOptions, ResidualConnectionOptions
+from emperor.parametric import ClipParameterOptions, MatrixBiasMixtureConfig
 
 # Trainer
 TRAINER_ACCELERATOR: str = "auto"
@@ -52,9 +50,7 @@ OUTPUT_DIM: int = 10
 # - hidden_dim comes from the global HIDDEN_DIM field above.
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Parametric Matrix Mixture Options

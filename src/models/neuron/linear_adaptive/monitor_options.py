@@ -1,19 +1,17 @@
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+from emperor.augmentations.adaptive_parameters.monitoring import (
+    AdaptiveParameterMonitorCallback,
     WeightBankUtilizationMonitorCallback,
 )
-from emperor.augmentations.adaptive_parameters.core.monitor import (
-    AdaptiveParameterMonitorCallback,
-)
-from emperor.base.layer.monitor import (
+from emperor.halting import HaltingMonitorCallback
+from emperor.layers import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
 )
-from emperor.experiments.monitors import MonitorOption
-from emperor.halting.core.monitor import HaltingMonitorCallback
-from emperor.linears.core.monitor import LinearMonitorCallback
-from emperor.memory.core.monitor import MemoryMonitorCallback
-from emperor.neuron.core.monitor import NeuronClusterMonitorCallback
-from emperor.sampler.core.monitor import SamplerMonitorCallback
+from emperor.linears import LinearMonitorCallback
+from emperor.memory.monitoring import MemoryMonitorCallback
+from emperor.monitoring import MonitorOption
+from emperor.neuron import NeuronClusterMonitorCallback
+from emperor.sampler import SamplerMonitorCallback
 
 MONITOR_OPTIONS: list[MonitorOption] = [
     MonitorOption(

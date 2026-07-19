@@ -2,13 +2,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+
+from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions
-from emperor.experts.config import MixtureOfExpertsModelConfig
-
+from emperor.experts import MixtureOfExpertsModelConfig
+from emperor.layers import LastLayerBiasOptions
 from models.vit.expert_linear._expert_control_config_factory import (
     ControlConfigDependencies as ExpertLinearControlConfigDependencies,
 )
@@ -162,7 +161,7 @@ class _VitExpertConfigFactoryBase:
             layer_norm_position=dependencies.encoder_options.layer_norm_position,
             num_layers=dependencies.feed_forward_options.num_layers,
             activation=dependencies.encoder_options.activation,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=dependencies.encoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from emperor.linears.core.config import LinearLayerConfig
-
 import models.vit.expert_linear_adaptive.config as config
+from emperor.linears import LinearLayerConfig
 from models.vit.expert_linear_adaptive.runtime_options import VitOutputOptions
 
 

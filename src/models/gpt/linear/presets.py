@@ -1,18 +1,17 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.gpt.linear.config as config
+import models.gpt.linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
 from emperor.datasets.text.language_modeling import WikiText2
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.gpt.linear.config as config
-import models.gpt.linear.dataset_options as dataset_options
 from models.gpt.linear.config_builder import (
     GptLinearConfigBuilder,
 )

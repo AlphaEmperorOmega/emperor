@@ -1,11 +1,12 @@
-from emperor.base.layer import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
 from emperor.config import ModelConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.parametric import GeneratorBiasMixtureConfig
-from emperor.parametric.core.mixtures.options import ClipParameterOptions
-
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.parametric import ClipParameterOptions, GeneratorBiasMixtureConfig
 from models.parametric.parametric_generator import config
 from models.parametric.parametric_generator._control_config_factory import (
     build_parametric_stack_config,
@@ -203,7 +204,7 @@ def build_linear_layer_config(
     )
     return LayerConfig(
         activation=activation,
-        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        residual_config=None,
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,

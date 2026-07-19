@@ -1,12 +1,10 @@
-from emperor.attention.core.monitor import AttentionMonitorCallback
-from emperor.augmentations.adaptive_parameters.core.bank_monitor import (
+from emperor.attention.monitoring import AttentionMonitorCallback
+from emperor.augmentations.adaptive_parameters.monitoring import (
+    AdaptiveParameterMonitorCallback,
     WeightBankUtilizationMonitorCallback,
 )
-from emperor.augmentations.adaptive_parameters.core.monitor import (
-    AdaptiveParameterMonitorCallback,
-)
-from emperor.base.layer.monitor import LayerControllerMonitorCallback
-from emperor.experiments.monitors import MonitorOption
+from emperor.layers import LayerControllerMonitorCallback
+from emperor.monitoring import MonitorOption
 
 MONITOR_OPTIONS: list[MonitorOption] = [
     MonitorOption(

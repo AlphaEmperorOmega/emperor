@@ -1,21 +1,21 @@
 from dataclasses import dataclass
 
-from emperor.base.layer.config import (
+import models.bert.expert_linear.config as config
+from emperor.experts import (
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsModelConfig,
+)
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import (
-    MixtureOfExpertsConfig,
-    MixtureOfExpertsLayerConfig,
-)
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
-import models.bert.expert_linear.config as config
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.bert.expert_linear._expert_control_support import (
     ExpertsGateConfigFactory,
     ExpertsHaltingConfigFactory,
@@ -469,13 +469,15 @@ class ControlConfigFactory:
     def __build_layer_config(
         self,
         gate_config: GateConfig | None,
-        halting_config: StickBreakingConfig | None,
+        halting_config: HaltingConfig | None,
     ) -> LayerConfig:
         stack_options = self.stack_options
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_connection_option=(stack_options.residual_connection_option),
+            residual_config=None
+            if (stack_options.residual_connection_option) is None
+            else ResidualConfig(option=(stack_options.residual_connection_option)),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -522,8 +524,10 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
-                residual_connection_option=(
-                    expert_stack_options.residual_connection_option
+                residual_config=None
+                if (expert_stack_options.residual_connection_option) is None
+                else ResidualConfig(
+                    option=(expert_stack_options.residual_connection_option)
                 ),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,

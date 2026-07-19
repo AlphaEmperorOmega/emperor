@@ -1,27 +1,29 @@
 from typing import TYPE_CHECKING
 
 import torch
-from emperor.attention.core.variants.self_attention.config import (
+
+from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.config import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
+from emperor.experts import MixtureOfExpertsModelConfig
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.transformer.core.config import (
+from emperor.linears import LinearLayerConfig
+from emperor.transformer import (
+    FeedForwardConfig,
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
-from emperor.transformer.feed_forward import FeedForwardConfig
-
 from models.bert.expert_linear_adaptive._control_support import (
     ExpertsGateConfigFactory as BertGateConfigFactory,
 )
@@ -47,8 +49,7 @@ from models.bert.expert_linear_adaptive.runtime_options import (
 )
 
 if TYPE_CHECKING:
-    from emperor.base.config import ConfigBase
-    from emperor.config import ModelConfig
+    from emperor.config import ConfigBase, ModelConfig
 
 
 class BertBackendConfigBuilder:
@@ -177,13 +178,14 @@ class BertBackendConfigBuilder:
         gate_factory = self._gate_config_factory()
         halting_factory = self._halting_config_factory()
         memory_factory = self._memory_config_factory()
+        halting_config = halting_factory.build_halting_config()
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
-            halting_config=halting_factory.build_halting_config(),
+            halting_config=None,
             layer_model_config=layer_model_config,
         )
         stack_config = LayerStackConfig(
@@ -194,6 +196,7 @@ class BertBackendConfigBuilder:
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
             shared_gate_config=self.layer_controller_options.shared_gate_config,
+            shared_halting_config=halting_config,
             shared_memory_config=memory_factory.build_memory_config(),
             # The wrapped TransformerEncoderLayer owns its own norm, residual, and
             # dropout, so the generic Layer pipeline is neutralized to a pass-through.
@@ -218,7 +221,7 @@ class BertBackendConfigBuilder:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
             causal_attention_mask_flag=options.causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
@@ -404,9 +407,7 @@ class BertBackendConfigBuilder:
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -416,7 +417,9 @@ class BertBackendConfigBuilder:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(option=residual_connection_option),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -454,7 +457,7 @@ class BertBackendConfigBuilder:
             layer_norm_position=self.encoder_options.layer_norm_position,
             num_layers=self.encoder_options.num_layers,
             activation=self.encoder_options.activation,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=self.encoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
@@ -477,7 +480,7 @@ class BertBackendConfigBuilder:
             apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.0,
             bias_flag=self.attention_options.bias_flag,
         )
@@ -492,7 +495,7 @@ class BertBackendConfigBuilder:
             apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=self.encoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )

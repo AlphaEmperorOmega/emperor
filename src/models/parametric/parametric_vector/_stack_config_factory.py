@@ -1,13 +1,14 @@
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.parametric.parametric_vector.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
@@ -45,7 +46,9 @@ def build_linear_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=activation,
-        residual_connection_option=residual_connection_option,
+        residual_config=None
+        if residual_connection_option is None
+        else ResidualConfig(option=residual_connection_option),
         dropout_probability=dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,
@@ -76,7 +79,7 @@ def build_router_config(
         output_dim=mixture_options.num_experts,
         num_layers=1,
         activation=router_options.activation,
-        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        residual_connection_option=None,
         dropout_probability=0.0,
         apply_output_pipeline_flag=False,
     )

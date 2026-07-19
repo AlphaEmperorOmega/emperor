@@ -2,27 +2,27 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+
+from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
-)
-from emperor.attention.core.variants.self_attention.config import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.experts import MixtureOfExpertsModelConfig
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.transformer.core.config import (
+from emperor.transformer import (
+    FeedForwardConfig,
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
-from emperor.transformer.feed_forward import FeedForwardConfig
-
 from models.vit.linear_adaptive._control_factory_dependencies import (
     VitControlFactoryDependencies,
 )
@@ -149,19 +149,26 @@ class VitCoreConfigFactory:
         gate_factory = VitGateConfigFactory(dependencies).build_encoder_factory()
         halting_factory = VitHaltingConfigFactory(dependencies).build_encoder_factory()
         memory_factory = VitMemoryConfigFactory(dependencies).build_encoder_factory()
+        halting_config = (
+            halting_factory.build_halting_config()
+            if halting_factory is not None
+            else None
+        )
+        stack_residual_connection_option = self._stack_residual_connection_option()
+        residual_config = (
+            None
+            if stack_residual_connection_option is None
+            else ResidualConfig(option=stack_residual_connection_option)
+        )
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=self._stack_residual_connection_option(),
+            residual_config=residual_config,
             dropout_probability=0.0,
             gate_config=(
                 gate_factory.build_gate_config() if gate_factory is not None else None
             ),
-            halting_config=(
-                halting_factory.build_halting_config()
-                if halting_factory is not None
-                else None
-            ),
+            halting_config=None,
             layer_model_config=layer_model_config,
         )
         stack_config = LayerStackConfig(
@@ -172,6 +179,7 @@ class VitCoreConfigFactory:
             last_layer_bias_option=self._stack_last_layer_bias_option(),
             apply_output_pipeline_flag=self._stack_apply_output_pipeline_flag(),
             shared_gate_config=self._shared_gate_config(),
+            shared_halting_config=halting_config,
             shared_memory_config=(
                 memory_factory.build_memory_config()
                 if memory_factory is not None
@@ -198,7 +206,7 @@ class VitCoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
             causal_attention_mask_flag=False,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
@@ -406,7 +414,7 @@ class VitCoreConfigFactory:
 
     def _stack_residual_connection_option(self) -> ResidualConnectionOptions:
         if self.encoder_stack_options is None:
-            return ResidualConnectionOptions.DISABLED
+            return None
         return self.encoder_stack_options.residual_connection_option
 
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
@@ -432,7 +440,7 @@ class VitCoreConfigFactory:
             layer_norm_position=self.encoder_options.layer_norm_position,
             num_layers=self.encoder_options.num_layers,
             activation=self.encoder_options.activation,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=self.encoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

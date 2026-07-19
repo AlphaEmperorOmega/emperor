@@ -1,30 +1,28 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.augmentations.adaptive_parameters.config import (
+import models.vit.linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
-from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
-from emperor.augmentations.adaptive_parameters.options import (
+    AxisMaskConfig,
     BankExpansionFactorOptions,
+    DynamicBiasConfig,
     DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-
-import models.vit.linear_adaptive.config as config
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+)
 from models.vit.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -40,7 +38,7 @@ from models.vit.linear_adaptive.runtime_options import (
 )
 
 if TYPE_CHECKING:
-    from emperor.halting.config import HaltingConfig
+    from emperor.halting import HaltingConfig
 
 
 @dataclass(frozen=True)
@@ -255,7 +253,7 @@ class BoundaryModelConfigFactory:
         return LayerConfig(
             activation=activation,
             layer_norm_position=layer_norm_position,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

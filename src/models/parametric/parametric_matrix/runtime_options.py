@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions
-from emperor.parametric.core.mixtures.options import ClipParameterOptions
+from emperor.layers import ActivationOptions, ResidualConnectionOptions
+from emperor.parametric import ClipParameterOptions
 
 
 @dataclass(frozen=True)

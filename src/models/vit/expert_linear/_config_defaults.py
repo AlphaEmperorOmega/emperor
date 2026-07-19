@@ -144,6 +144,11 @@ def linears_layer_controller_options(
         gate_activation=getattr(config, f"{gate_prefix}_ACTIVATION"),
         gate_stack_source=linears_controller_stack_source(config, gate_stack_prefix),
         stack_halting_flag=getattr(config, f"{halting_prefix}_FLAG"),
+        halting_option=getattr(
+            config,
+            f"{halting_prefix}_OPTION",
+            LayerControllerOptions.halting_option,
+        ),
         halting_threshold=getattr(config, f"{halting_prefix}_THRESHOLD"),
         halting_dropout=getattr(config, f"{halting_prefix}_DROPOUT"),
         halting_hidden_state_mode=getattr(
@@ -196,6 +201,11 @@ def linears_recurrent_controller_options(
             config, gate_stack_prefix
         ),
         recurrent_halting_flag=getattr(config, f"{recurrent_prefix}_HALTING_FLAG"),
+        recurrent_halting_option=getattr(
+            config,
+            f"{recurrent_prefix}_HALTING_OPTION",
+            RecurrentControllerOptions.recurrent_halting_option,
+        ),
         recurrent_halting_threshold=getattr(
             config, f"{recurrent_prefix}_HALTING_THRESHOLD"
         ),
@@ -266,6 +276,11 @@ def experts_layer_controller_options(
         gate_activation=getattr(config, f"{gate_prefix}_ACTIVATION"),
         gate_stack_source=experts_submodule_stack_source(config, gate_stack_prefix),
         stack_halting_flag=getattr(config, f"{halting_prefix}_FLAG"),
+        halting_option=getattr(
+            config,
+            f"{halting_prefix}_OPTION",
+            ExpertsLayerControllerOptions.halting_option,
+        ),
         halting_threshold=getattr(config, f"{halting_prefix}_THRESHOLD"),
         halting_dropout=getattr(config, f"{halting_prefix}_DROPOUT"),
         halting_hidden_state_mode=getattr(
@@ -317,6 +332,11 @@ def experts_recurrent_controller_options(
             config, gate_stack_prefix
         ),
         recurrent_halting_flag=getattr(config, f"{recurrent_prefix}_HALTING_FLAG"),
+        recurrent_halting_option=getattr(
+            config,
+            f"{recurrent_prefix}_HALTING_OPTION",
+            ExpertsRecurrentControllerOptions.recurrent_halting_option,
+        ),
         recurrent_halting_threshold=getattr(
             config, f"{recurrent_prefix}_HALTING_THRESHOLD"
         ),

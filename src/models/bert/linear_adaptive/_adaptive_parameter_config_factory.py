@@ -1,35 +1,27 @@
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
+from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
+    BankExpansionFactorOptions,
     DiagonalAxisMaskConfig,
-    PerAxisScoreMaskConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    DynamicBiasConfig,
+    DynamicDepthOptions,
+    DynamicDiagonalConfig,
     DynamicWeightConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MaskDimensionOptions,
+    PerAxisScoreMaskConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
+    TopSliceAxisMaskConfig,
     WeightDecayScheduleOptions,
+    WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.config import LayerStackConfig
+from emperor.layers import LayerStackConfig
 
 _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
     SingleModelDynamicWeightConfig: (

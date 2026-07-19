@@ -1,22 +1,23 @@
 from dataclasses import dataclass
 
 import torch
-from emperor.attention.core.variants.self_attention.config import (
+
+from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.transformer.core.config import (
+from emperor.transformer import (
+    FeedForwardConfig,
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
-from emperor.transformer.feed_forward import FeedForwardConfig
-
 from models.bert.linear_adaptive._control_factory_dependencies import (
     BertControlFactoryDependencies,
 )
@@ -120,21 +121,24 @@ class BertCoreConfigFactory:
         gate_factory = BertGateConfigFactory(dependencies).build_encoder_factory()
         halting_factory = BertHaltingConfigFactory(dependencies).build_encoder_factory()
         memory_factory = BertMemoryConfigFactory(dependencies).build_encoder_factory()
+        halting_config = (
+            halting_factory.build_halting_config()
+            if halting_factory is not None
+            else None
+        )
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=(
-                self.encoder_stack_options.residual_connection_option
+            residual_config=None
+            if (self.encoder_stack_options.residual_connection_option) is None
+            else ResidualConfig(
+                option=(self.encoder_stack_options.residual_connection_option)
             ),
             dropout_probability=0.0,
             gate_config=(
                 gate_factory.build_gate_config() if gate_factory is not None else None
             ),
-            halting_config=(
-                halting_factory.build_halting_config()
-                if halting_factory is not None
-                else None
-            ),
+            halting_config=None,
             layer_model_config=self._build_encoder_layer_config(),
         )
         stack_config = LayerStackConfig(
@@ -151,6 +155,7 @@ class BertCoreConfigFactory:
                 if self.encoder_layer_controller_options is not None
                 else None
             ),
+            shared_halting_config=halting_config,
             shared_memory_config=(
                 memory_factory.build_memory_config()
                 if memory_factory is not None
@@ -175,7 +180,7 @@ class BertCoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
             causal_attention_mask_flag=options.causal_attention_mask_flag,
             attention_config=self._build_attention_config(),
             feed_forward_config=self._build_feed_forward_config(),

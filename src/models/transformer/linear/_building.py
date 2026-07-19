@@ -5,24 +5,21 @@ from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.base.layer import (
+from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
     GateConfig,
+    LastLayerBiasOptions,
     LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.base.layer.gate.options import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import GatedResidualDynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.linears import LinearLayerConfig
+from emperor.memory import GatedResidualDynamicMemoryConfig, MemoryPositionOptions
 from emperor.transformer import (
     FeedForwardConfig,
     TransformerDecoderBlockLayerConfig,
@@ -56,7 +53,7 @@ def _linear_stack(
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         layer_config=LayerConfig(
             activation=activation,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=dropout_probability,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -84,7 +81,7 @@ def _controller_stack(model_dim: int, output_dim: int | None = None):
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             layer_config=LayerConfig(
                 activation=ActivationOptions.SIGMOID,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -106,12 +103,17 @@ def _gate(model_dim: int, enabled: bool):
     )
 
 
-def _halting(model_dim: int, enabled: bool):
+def _halting(
+    model_dim: int,
+    enabled: bool,
+    option: type[HaltingConfig],
+    threshold: float | None,
+):
     if not enabled:
         return None
-    return StickBreakingConfig(
-        threshold=0.99,
-        halting_dropout=0.0,
+    return option(
+        threshold=threshold,
+        dropout_probability=0.0,
         hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
         halting_gate_config=_controller_stack(model_dim, output_dim=2),
     )
@@ -139,7 +141,9 @@ def _projection_stack(model_dim: int, options: TransformerAttentionOptions):
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
-            residual_connection_option=(stack_options.residual_connection_option),
+            residual_config=None
+            if (stack_options.residual_connection_option) is None
+            else ResidualConfig(option=(stack_options.residual_connection_option)),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -222,7 +226,9 @@ def _feed_forward(
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
-            residual_connection_option=(stack_options.residual_connection_option),
+            residual_config=None
+            if (stack_options.residual_connection_option) is None
+            else ResidualConfig(option=(stack_options.residual_connection_option)),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -249,6 +255,8 @@ def _controlled_stack(
     options: TransformerStackOptions,
     layer_config: LayerConfig,
 ):
+    shared_halting_config = layer_config.halting_config
+    layer_config.halting_config = None
     stack = LayerStackConfig(
         input_dim=runtime.model_dim,
         hidden_dim=runtime.model_dim,
@@ -257,7 +265,7 @@ def _controlled_stack(
         apply_output_pipeline_flag=True,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         shared_gate_config=None,
-        shared_halting_config=None,
+        shared_halting_config=shared_halting_config,
         shared_memory_config=_memory(runtime.model_dim, options.memory_flag),
         layer_config=layer_config,
     )
@@ -270,8 +278,15 @@ def _controlled_stack(
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack,
         gate_config=_gate(runtime.model_dim, options.recurrent_gate_flag),
-        residual_connection_option=options.recurrent_residual_connection_option,
-        halting_config=_halting(runtime.model_dim, options.recurrent_halting_flag),
+        residual_config=None
+        if options.recurrent_residual_connection_option is None
+        else ResidualConfig(option=options.recurrent_residual_connection_option),
+        halting_config=_halting(
+            runtime.model_dim,
+            options.recurrent_halting_flag,
+            options.recurrent_halting_option,
+            options.recurrent_halting_threshold,
+        ),
         memory_config=None,
     )
 
@@ -282,7 +297,7 @@ def _encoder(runtime: RuntimeOptions):
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
-        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
         causal_attention_mask_flag=False,
         attention_config=_self_attention(
             runtime,
@@ -298,11 +313,18 @@ def _encoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_connection_option=options.stack_residual_connection_option,
+        residual_config=None
+        if options.stack_residual_connection_option is None
+        else ResidualConfig(option=options.stack_residual_connection_option),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
-        halting_config=_halting(runtime.model_dim, options.stack_halting_flag),
+        halting_config=_halting(
+            runtime.model_dim,
+            options.stack_halting_flag,
+            options.halting_option,
+            options.halting_threshold,
+        ),
         memory_config=None,
         layer_model_config=transformer_layer,
     )
@@ -315,7 +337,7 @@ def _decoder(runtime: RuntimeOptions):
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
-        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
         causal_attention_mask_flag=True,
         self_attention_config=_self_attention(
             runtime,
@@ -334,11 +356,18 @@ def _decoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_connection_option=options.stack_residual_connection_option,
+        residual_config=None
+        if options.stack_residual_connection_option is None
+        else ResidualConfig(option=options.stack_residual_connection_option),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
-        halting_config=_halting(runtime.model_dim, options.stack_halting_flag),
+        halting_config=_halting(
+            runtime.model_dim,
+            options.stack_halting_flag,
+            options.halting_option,
+            options.halting_threshold,
+        ),
         memory_config=None,
         layer_model_config=transformer_layer,
     )

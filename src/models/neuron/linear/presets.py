@@ -1,16 +1,15 @@
 # ruff: noqa: E501
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.neuron.linear.config as config
+import models.neuron.linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.neuron.linear.config as config
-import models.neuron.linear.dataset_options as dataset_options
 from models.neuron.linear.config_builder import NeuronLinearConfigBuilder
 from models.neuron.linear.model import Model
 

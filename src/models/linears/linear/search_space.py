@@ -1,4 +1,4 @@
-from .config import *  # noqa: F401,F403
+from emperor.layers import ActivationOptions, LayerNormPositionOptions
 
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128, 256, 512]

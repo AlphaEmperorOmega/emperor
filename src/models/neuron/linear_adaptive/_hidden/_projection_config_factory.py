@@ -1,8 +1,9 @@
-from emperor.base.layer.config import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+)
 from models.neuron.linear_adaptive._hidden._adaptive_parameter_config_factory import (
     AdaptiveParameterConfigFactory,
 )
@@ -38,7 +39,7 @@ class ProjectionConfigFactory:
         return LayerConfig(
             activation=activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,

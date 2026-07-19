@@ -3,15 +3,18 @@ from emperor.augmentations.adaptive_parameters import (
     AffineTransformDynamicBiasConfig,  # noqa: F401
     AntiDynamicDiagonalConfig,  # noqa: F401
     AxisMaskConfig,
+    BankExpansionFactorOptions,
     CombinedDynamicDiagonalConfig,  # noqa: F401
     DiagonalAxisMaskConfig,  # noqa: F401
     DualModelDynamicWeightConfig,  # noqa: F401
     DynamicBiasConfig,
+    DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
     HypernetworkDynamicWeightConfig,  # noqa: F401
     LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
     LowRankDynamicWeightConfig,  # noqa: F401
+    MaskDimensionOptions,
     MultiplicativeDynamicBiasConfig,  # noqa: F401
     OuterProductMaskConfig,  # noqa: F401
     PerAxisScoreMaskConfig,  # noqa: F401
@@ -21,33 +24,32 @@ from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,  # noqa: F401
     TanhGatedDynamicBiasConfig,  # noqa: F401
     TopSliceAxisMaskConfig,  # noqa: F401
+    WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,  # noqa: F401
     WeightInformedScoreAxisMaskConfig,  # noqa: F401
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
-    WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerGateOptions,
     LayerNormPositionOptions,
+    ResidualConnectionOptions,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import (
+from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.options import MemoryPositionOptions
 
 # Shared training defaults are deliberately copied into each Model Package.  They
 # are runtime identity, not a construction dependency shared across packages.
@@ -107,9 +109,7 @@ TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -123,9 +123,7 @@ SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -141,9 +139,9 @@ ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 2
 ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: (
+    ResidualConnectionOptions | None
+) = None
 ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
 ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -174,6 +172,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 # Halting Options
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
+HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -247,6 +246,7 @@ RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 ## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (

@@ -1,7 +1,6 @@
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
+from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
 from models.vit.expert_linear.runtime_options import (
     DynamicMemoryOptions,
     MainLayerStackOptions,
@@ -65,7 +64,9 @@ class MemoryConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,

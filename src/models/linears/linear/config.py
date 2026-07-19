@@ -1,19 +1,23 @@
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerGateOptions,
     LayerNormPositionOptions,
+    ResidualConnectionOptions,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import (
+from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.options import MemoryPositionOptions
 
 #########################################################################
 # Global
@@ -67,9 +71,7 @@ CALLBACK_CHECKPOINT_FLAG: bool = False
 STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -83,9 +85,7 @@ SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -116,6 +116,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 # Halting Options
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
+HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.99
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -187,6 +188,7 @@ RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ## Recurrent Halting Options
 RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
 RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (

@@ -1,19 +1,18 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.experts.linear.config as config
+import models.experts.linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from emperor.experts.core.options import (
-    DroppedTokenOptions,
-    ExpertWeightingPositionOptions,
-    RoutingInitializationMode,
-)
-
-import models.experts.linear.config as config
-import models.experts.linear.dataset_options as dataset_options
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 from models.experts.linear.runtime_defaults import runtime_from_flat

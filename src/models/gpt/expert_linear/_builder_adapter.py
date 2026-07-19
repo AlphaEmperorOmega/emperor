@@ -625,6 +625,11 @@ def _modern_layer_controller_options(
             f"{config_lead}GATE_STACK",
         ),
         stack_halting_flag=getattr(config_module, f"{config_lead}HALTING_FLAG"),
+        halting_option=getattr(
+            config_module,
+            f"{config_lead}HALTING_OPTION",
+            LayerControllerOptions.halting_option,
+        ),
         halting_threshold=getattr(
             config_module,
             f"{config_lead}HALTING_THRESHOLD",
@@ -648,6 +653,7 @@ def _modern_layer_controller_options(
             f"{flat_lead}gate_option": "gate_option",
             f"{flat_lead}gate_activation": "gate_activation",
             f"{flat_lead}halting_flag": "stack_halting_flag",
+            f"{flat_lead}halting_option": "halting_option",
             f"{flat_lead}halting_threshold": "halting_threshold",
             f"{flat_lead}halting_dropout": "halting_dropout",
             f"{flat_lead}halting_hidden_state_mode": "halting_hidden_state_mode",
@@ -660,6 +666,7 @@ def _modern_layer_controller_options(
             "gate_activation": "gate_activation",
             "halting_flag": "stack_halting_flag",
             "stack_halting_flag": "stack_halting_flag",
+            "halting_option": "halting_option",
             "halting_threshold": "halting_threshold",
             "halting_dropout": "halting_dropout",
             "halting_hidden_state_mode": "halting_hidden_state_mode",
@@ -763,6 +770,11 @@ def _modern_recurrent_controller_options(
             config_module,
             f"{config_prefix}_HALTING_FLAG",
         ),
+        recurrent_halting_option=getattr(
+            config_module,
+            f"{config_prefix}_HALTING_OPTION",
+            RecurrentControllerOptions.recurrent_halting_option,
+        ),
         recurrent_halting_threshold=getattr(
             config_module,
             f"{config_prefix}_HALTING_THRESHOLD",
@@ -790,6 +802,7 @@ def _modern_recurrent_controller_options(
             f"{flat_lead}gate_option": "recurrent_gate_option",
             f"{flat_lead}gate_activation": "recurrent_gate_activation",
             f"{flat_lead}halting_flag": "recurrent_halting_flag",
+            f"{flat_lead}halting_option": "recurrent_halting_option",
             f"{flat_lead}halting_threshold": "recurrent_halting_threshold",
             f"{flat_lead}halting_dropout": "recurrent_halting_dropout",
             f"{flat_lead}halting_hidden_state_mode": (

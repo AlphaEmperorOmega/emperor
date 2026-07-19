@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
-from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.config import ConfigBase, optional_field
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.config import ConfigBase, optional_field
+from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
+from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+from emperor.linears import LinearLayerConfig
 from emperor.patch import PatchConfig
 
 

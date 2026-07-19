@@ -1,10 +1,10 @@
-from emperor.base.layer.config import (
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.layers import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
-
 from models.linears.linear_adaptive._adaptive_parameter_config_factory import (
     AdaptiveParameterConfigFactory,
 )
@@ -34,7 +34,9 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=runtime.stack.activation,
                 layer_norm_position=runtime.stack.layer_norm_position,
-                residual_connection_option=(runtime.stack.residual_connection_option),
+                residual_config=None
+                if (runtime.stack.residual_connection_option) is None
+                else ResidualConfig(option=(runtime.stack.residual_connection_option)),
                 dropout_probability=runtime.stack.dropout_probability,
                 gate_config=self._control_factory.build_gate_config(runtime.gate),
                 halting_config=self._control_factory.build_halting_config(

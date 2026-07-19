@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+import models.bert.linear.config as config
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.linears.core.config import LinearLayerConfig
-
-import models.bert.linear.config as config
+from emperor.linears import LinearLayerConfig
 from models.bert.linear.runtime_options import TransformerEncoderOptions
 
 
@@ -111,9 +112,7 @@ class LinearLayerConfigFactory:
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -122,7 +121,9 @@ class LinearLayerConfigFactory:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(option=residual_connection_option),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,

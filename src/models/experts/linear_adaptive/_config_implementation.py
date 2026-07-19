@@ -1,43 +1,34 @@
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from emperor.augmentations.adaptive_parameters.core.bias import (
-    DynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
+import models.experts.linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
-    DynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import (
     BankExpansionFactorOptions,
+    DynamicBiasConfig,
     DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
-
-import models.experts.linear_adaptive.config as config
+from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.experts.linear_adaptive._control_config_factory import (
     ControlConfigDependencies,
     ControlConfigFactory,

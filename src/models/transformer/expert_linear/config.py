@@ -1,22 +1,26 @@
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,  # noqa: F401
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
-from emperor.memory.options import MemoryPositionOptions
 
 # Global
 BATCH_SIZE = 64
@@ -42,9 +46,7 @@ ATTN_NUM_LAYERS: int = 1
 ATTN_BIAS_FLAG: bool = True
 ATTN_STACK_HIDDEN_DIM: int = MODEL_DIM
 ATTN_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
-ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 ATTN_STACK_DROPOUT_PROBABILITY: float = 0.0
 ATTN_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -71,6 +73,7 @@ ATTN_GATE_STACK_BIAS_FLAG: bool | None = True
 
 ### Attention Projection Halting Options
 ATTN_HALTING_FLAG: bool = False
+ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_HALTING_THRESHOLD: float = 0.99
 ATTN_HALTING_DROPOUT: float = 0.0
 ATTN_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -140,6 +143,7 @@ ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #### Attention Projection Recurrent Halting Options
 ATTN_RECURRENT_HALTING_FLAG: bool = False
+ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_RECURRENT_HALTING_THRESHOLD: float = 0.99
 ATTN_RECURRENT_HALTING_DROPOUT: float = 0.0
 ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -166,9 +170,7 @@ FF_NUM_LAYERS: int = 2
 FF_BIAS_FLAG: bool = True
 FF_STACK_HIDDEN_DIM: int = 512
 FF_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
-FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions = (
-    ResidualConnectionOptions.DISABLED
-)
+FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 FF_STACK_DROPOUT_PROBABILITY: float = DROPOUT_PROBABILITY
 FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -195,6 +197,7 @@ FF_GATE_STACK_BIAS_FLAG: bool | None = True
 
 ## Feed-Forward Halting Options
 FF_HALTING_FLAG: bool = False
+FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_HALTING_THRESHOLD: float = 0.99
 FF_HALTING_DROPOUT: float = 0.0
 FF_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -264,6 +267,7 @@ FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ### Feed-Forward Recurrent Halting Options
 FF_RECURRENT_HALTING_FLAG: bool = False
+FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_RECURRENT_HALTING_THRESHOLD: float = 0.99
 FF_RECURRENT_HALTING_DROPOUT: float = 0.0
 FF_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
@@ -312,8 +316,8 @@ RECURRENT_FLAG = False
 RECURRENT_GATE_FLAG = False
 RECURRENT_HALTING_FLAG = False
 RECURRENT_MAX_STEPS = 2
-STACK_RESIDUAL_CONNECTION_OPTION = ResidualConnectionOptions.DISABLED
-RECURRENT_RESIDUAL_CONNECTION_OPTION = ResidualConnectionOptions.DISABLED
+STACK_RESIDUAL_CONNECTION_OPTION = None
+RECURRENT_RESIDUAL_CONNECTION_OPTION = None
 
 # Trainer
 NUM_EPOCHS = 30

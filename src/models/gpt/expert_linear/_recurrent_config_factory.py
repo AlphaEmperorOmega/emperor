@@ -1,6 +1,7 @@
-from emperor.base.layer.config import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-
+from emperor.layers import (
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
 from models.gpt.expert_linear._gate_config_factory import GateConfigFactory
 from models.gpt.expert_linear._halting_config_factory import HaltingConfigFactory
 from models.gpt.expert_linear.runtime_options import RecurrentControllerOptions
@@ -38,6 +39,6 @@ class RecurrentConfigFactory:
             ),
             block_config=block_config,
             gate_config=gate_config,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             halting_config=halting_config,
         )

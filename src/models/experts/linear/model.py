@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING
 
 import torch
-from emperor.base.layer.layer import Layer
-from emperor.base.config import ConfigBase
-from emperor.base.module import Module
-from emperor.experiments.classifier import ClassifierExperiment
 from torch import Tensor
 
+from emperor.config import ConfigBase
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.layers import Layer
+from emperor.nn import Module
 from models.experts.linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

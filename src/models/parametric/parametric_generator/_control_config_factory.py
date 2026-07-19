@@ -1,14 +1,17 @@
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import LastLayerBiasOptions, LayerNormPositionOptions
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
     RoutingInitializationMode,
+)
+from emperor.layers import (
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
 )
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -17,7 +20,6 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-
 from models.parametric.parametric_generator._stack_config_factory import (
     build_linear_stack_config,
     build_router_config,
@@ -103,7 +105,9 @@ def build_parametric_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=stack_options.activation,
-        residual_connection_option=stack_options.residual_connection_option,
+        residual_config=None
+        if stack_options.residual_connection_option is None
+        else ResidualConfig(option=stack_options.residual_connection_option),
         dropout_probability=stack_options.dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,
@@ -135,7 +139,7 @@ def build_generator_config(
         output_dim=output_dim,
         num_layers=generator_stack_options.num_layers,
         activation=generator_stack_options.activation,
-        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        residual_connection_option=None,
         dropout_probability=generator_stack_options.dropout_probability,
         apply_output_pipeline_flag=False,
     )

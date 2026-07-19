@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
 import torch.nn as nn
-from emperor.base.layer import Layer
-from emperor.experiments.classifier import ClassifierExperiment
 from torch import Tensor
 
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.layers import Layer
 from models.vit.expert_linear_adaptive.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

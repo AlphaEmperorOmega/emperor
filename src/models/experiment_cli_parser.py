@@ -1,8 +1,7 @@
 import argparse
 
-from emperor.base.option import BaseOptions
-from emperor.experiments.tasks import experiment_task_name
-
+from emperor.config import BaseOptions
+from emperor.experiments import experiment_task_name
 from models.catalog import public_id_for_module
 from models.config_overrides import add_config_override_arguments
 from models.model_metadata import load_model_metadata_from_module_path

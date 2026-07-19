@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from emperor.base.config import ConfigBase, optional_field
-from emperor.base.layer import LayerConfig, LayerStackConfig
+from emperor.config import ConfigBase, optional_field
+from emperor.layers import LayerConfig, LayerStackConfig
 
 
 @dataclass

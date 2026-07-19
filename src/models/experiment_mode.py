@@ -2,11 +2,10 @@ import argparse
 from dataclasses import dataclass, field
 from types import ModuleType
 
-from emperor.base.options import BaseOptions
+from emperor.config import BaseOptions
+from emperor.experiments import ExperimentTask, resolve_experiment_task
+from emperor.monitoring import MonitorOption, MonitorSettings
 from model_runtime.packages import GridSearch, RandomSearch, SearchMode
-from emperor.experiments.monitors import MonitorOption, MonitorSettings
-from emperor.experiments.tasks import ExperimentTask, resolve_experiment_task
-
 from models.config_overrides import (
     extract_config_overrides,
     normalize_key,

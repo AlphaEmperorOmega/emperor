@@ -5,18 +5,16 @@ from dataclasses import replace
 from enum import Enum
 from typing import Final, TypeVar
 
-from emperor.base.layer.gate import LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+import models.neuron.linear.config as config
+from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerGateOptions,
     LayerNormPositionOptions,
+    ResidualConnectionOptions,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
-
-import models.neuron.linear.config as config
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.neuron.linear._hidden.runtime_options import (
     ControllerStackOptions,
     GateOptions,
@@ -280,7 +278,7 @@ def _main_stack(
         ),
         num_layers=num_layers,
         activation=_enum(values, sources, "stack_activation", ActivationOptions),
-        residual_connection_option=_enum(
+        residual_connection_option=_optional_enum(
             values,
             sources,
             "stack_residual_connection_option",
@@ -329,7 +327,7 @@ def _submodule_stack(
             "submodule_stack_layer_norm_position",
             LayerNormPositionOptions,
         ),
-        residual_connection_option=_enum(
+        residual_connection_option=_optional_enum(
             values,
             sources,
             "submodule_stack_residual_connection_option",

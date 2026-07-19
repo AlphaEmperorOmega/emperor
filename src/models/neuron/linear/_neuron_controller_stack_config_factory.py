@@ -1,6 +1,5 @@
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.linears import LinearLayerConfig
 from models.neuron.linear.runtime_options import NeuronSubmoduleStackOptions
 
 
@@ -30,7 +29,9 @@ class NeuronControllerStackConfigFactory:
     ) -> LayerConfig:
         return LayerConfig(
             activation=options.activation,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             layer_norm_position=options.layer_norm_position,
             gate_config=None,

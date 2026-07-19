@@ -5,9 +5,8 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Final, Union, get_args, get_origin, get_type_hints
 
-from emperor.base.layer.gate import GateConfig
-
 import models.neuron.linear_adaptive.config as config
+from emperor.layers import GateConfig
 from models.neuron.linear_adaptive._hidden.runtime_options import (
     AdaptiveBiasOptions,
     AdaptiveDiagonalOptions,

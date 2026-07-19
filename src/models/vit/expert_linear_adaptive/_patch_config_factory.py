@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
-from emperor.base.options import LayerNormPositionOptions
-from emperor.patch import LinearPatchEmbeddingConfig
-
 import models.vit.expert_linear_adaptive.config as config
+from emperor.layers import LayerNormPositionOptions
+from emperor.patch import LinearPatchEmbeddingConfig
 from models.vit.expert_linear_adaptive._linear_layer_config_factory import (
     LinearLayerConfigFactory,
 )

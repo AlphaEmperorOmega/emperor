@@ -1,13 +1,17 @@
 from dataclasses import dataclass
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    ResidualConnectionOptions,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.neuron.core.options import TerminalRangeOptions, TerminalZAxisOffsetOptions
+from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,7 @@ class ClusterRouteHaltingOptions:
     hidden_state_mode: HaltingHiddenStateModeOptions
     stack_options: NeuronSubmoduleStackOptions
     output_dim: int
+    halting_option: type[HaltingConfig] = StickBreakingConfig
 
 
 # Preserve historical class paths for serialization compatibility.

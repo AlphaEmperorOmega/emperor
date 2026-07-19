@@ -1,19 +1,21 @@
 from dataclasses import dataclass
 from typing import Any
 
-from emperor.augmentations.adaptive_parameters.config import (
+import models.vit.linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-
-import models.vit.linear_adaptive.config as config
+from emperor.linears import LinearLayerConfig
 from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._adaptive_hidden_model_config_factory import (
     HiddenModelConfigDependencies,
@@ -129,9 +131,7 @@ class LinearLayerConfigFactory:
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -140,7 +140,9 @@ class LinearLayerConfigFactory:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(option=residual_connection_option),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,

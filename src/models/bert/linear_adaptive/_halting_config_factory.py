@@ -1,10 +1,13 @@
 from dataclasses import replace
 
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.options import LastLayerBiasOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerStackConfig,
+    ResidualConfig,
+)
+from emperor.linears import LinearLayerConfig
 from models.bert.linear_adaptive.runtime_options import (
     LayerControllerOptions,
     RecurrentControllerOptions,
@@ -35,7 +38,7 @@ class HaltingConfigFactory:
             recurrent_stack_inherits_halting_stack
         )
 
-    def build_halting_config(self) -> StickBreakingConfig | None:
+    def build_halting_config(self) -> HaltingConfig | None:
         if not self.layer_controller_options.stack_halting_flag:
             return None
         options = resolve_controller_stack_options(
@@ -44,23 +47,23 @@ class HaltingConfigFactory:
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED
             ),
         )
-        return StickBreakingConfig(
+        return self.layer_controller_options.halting_option(
             threshold=self.layer_controller_options.halting_threshold,
-            halting_dropout=self.layer_controller_options.halting_dropout,
+            dropout_probability=self.layer_controller_options.halting_dropout,
             hidden_state_mode=self.layer_controller_options.halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
         )
 
-    def build_recurrent_halting_config(self) -> StickBreakingConfig | None:
+    def build_recurrent_halting_config(self) -> HaltingConfig | None:
         if not self.recurrent_controller_options.recurrent_halting_flag:
             return None
         options = resolve_controller_stack_options(
             self.recurrent_controller_options.recurrent_halting_stack_source,
             self.__recurrent_halting_stack_defaults(),
         )
-        return StickBreakingConfig(
+        return self.recurrent_controller_options.recurrent_halting_option(
             threshold=self.recurrent_controller_options.recurrent_halting_threshold,
-            halting_dropout=self.recurrent_controller_options.recurrent_halting_dropout,
+            dropout_probability=self.recurrent_controller_options.recurrent_halting_dropout,
             hidden_state_mode=(
                 self.recurrent_controller_options.recurrent_halting_hidden_state_mode
             ),
@@ -93,7 +96,9 @@ class HaltingConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,

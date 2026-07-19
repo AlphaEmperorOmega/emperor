@@ -2,17 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
 )
-from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,7 @@ class LayerControllerOptions:
     halting_hidden_state_mode: HaltingHiddenStateModeOptions
     halting_stack_source: SubmoduleStackSource
     shared_gate_config: GateConfig | None = None
+    halting_option: type[HaltingConfig] = StickBreakingConfig
 
 
 @dataclass(frozen=True)
@@ -139,6 +144,7 @@ class RecurrentControllerOptions:
     recurrent_halting_dropout: float
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
     recurrent_halting_stack_source: SubmoduleStackSource
+    recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
 
 
 @dataclass(frozen=True)

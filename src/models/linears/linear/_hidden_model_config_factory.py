@@ -1,13 +1,13 @@
-from emperor.base.layer.config import (
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
 from models.linears.linear._control_config_factory import ControlConfigFactory
 from models.linears.linear.runtime_options import RuntimeOptions
 
@@ -51,13 +51,15 @@ class HiddenModelConfigFactory:
         self,
         *,
         gate_config: GateConfig | None,
-        halting_config: StickBreakingConfig | None,
+        halting_config: HaltingConfig | None,
     ) -> LayerConfig:
         options = self.runtime.stack
         return LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

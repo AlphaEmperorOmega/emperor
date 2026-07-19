@@ -1,14 +1,13 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+import models.linears.linear.config as config
+import models.linears.linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.linears.linear.config as config
-import models.linears.linear.dataset_options as dataset_options
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
 from models.linears.linear.runtime_defaults import runtime_from_flat

@@ -1,14 +1,13 @@
-from emperor.base.layer.config import (
+from emperor.halting import HaltingConfig
+from emperor.layers import (
+    GateConfig,
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
+    ResidualConfig,
 )
-from emperor.base.layer.gate import GateConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import DynamicMemoryConfig
-
+from emperor.linears import LinearLayerConfig
+from emperor.memory import DynamicMemoryConfig
 from models.neuron.linear_adaptive._hidden.runtime_options import (
     GateOptions,
     HaltingOptions,
@@ -35,12 +34,14 @@ class ControlConfigFactory:
     def build_halting_config(
         self,
         options: HaltingOptions,
-    ) -> StickBreakingConfig | None:
+        option: type[HaltingConfig] | None = None,
+    ) -> HaltingConfig | None:
         if not options.enabled:
             return None
-        return StickBreakingConfig(
+        halting_option = self._runtime.halting_option if option is None else option
+        return halting_option(
             threshold=options.threshold,
-            halting_dropout=options.dropout_probability,
+            dropout_probability=options.dropout_probability,
             hidden_state_mode=options.hidden_state_mode,
             halting_gate_config=self._build_stack(
                 options.stack,
@@ -76,8 +77,11 @@ class ControlConfigFactory:
             recurrent_layer_norm_position=recurrence.layer_norm_position,
             block_config=block_config,
             gate_config=self.build_gate_config(recurrence.gate),
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            halting_config=self.build_halting_config(recurrence.halting),
+            residual_config=None,
+            halting_config=self.build_halting_config(
+                recurrence.halting,
+                self._runtime.recurrent_halting_option,
+            ),
         )
 
     @staticmethod
@@ -96,7 +100,9 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,

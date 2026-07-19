@@ -1,50 +1,41 @@
 # ruff: noqa: E501
 
-from emperor.augmentations.adaptive_parameters.core.bias import (
+import models.neuron.linear_adaptive.config as config
+import models.neuron.linear_adaptive.dataset_options as dataset_options
+from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
-    GeneratorDynamicBiasConfig,
-    MultiplicativeDynamicBiasConfig,
-    SigmoidGatedDynamicBiasConfig,
-    TanhGatedDynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
     AntiDynamicDiagonalConfig,
     CombinedDynamicDiagonalConfig,
-    StandardDynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
     DiagonalAxisMaskConfig,
-    OuterProductMaskConfig,
-    PerAxisScoreMaskConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    DynamicDepthOptions,
+    GeneratorDynamicBiasConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MultiplicativeDynamicBiasConfig,
+    OuterProductMaskConfig,
+    PerAxisScoreMaskConfig,
+    SigmoidGatedDynamicBiasConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    DynamicDepthOptions,
+    StandardDynamicDiagonalConfig,
+    TanhGatedDynamicBiasConfig,
+    TopSliceAxisMaskConfig,
     WeightDecayScheduleOptions,
+    WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
     WeightNormalizationOptions,
 )
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+from emperor.config import BaseOptions
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.neuron.linear_adaptive.config as config
-import models.neuron.linear_adaptive.dataset_options as dataset_options
 from models.neuron.linear_adaptive.config_builder import (
     NeuronLinearAdaptiveConfigBuilder,
 )

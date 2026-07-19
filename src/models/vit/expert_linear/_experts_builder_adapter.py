@@ -157,6 +157,7 @@ def _expert_layer_controller_options_from_kwargs(
             config_module, "expert_gate_stack"
         ),
         stack_halting_flag=config_module.EXPERT_HALTING_FLAG,
+        halting_option=config_module.EXPERT_HALTING_OPTION,
         halting_threshold=config_module.EXPERT_HALTING_THRESHOLD,
         halting_dropout=config_module.EXPERT_HALTING_DROPOUT,
         halting_hidden_state_mode=config_module.EXPERT_HALTING_HIDDEN_STATE_MODE,
@@ -172,6 +173,7 @@ def _expert_layer_controller_options_from_kwargs(
             "expert_gate_option": "gate_option",
             "expert_gate_activation": "gate_activation",
             "expert_halting_flag": "stack_halting_flag",
+            "expert_halting_option": "halting_option",
             "expert_halting_threshold": "halting_threshold",
             "expert_halting_dropout": "halting_dropout",
             "expert_halting_hidden_state_mode": "halting_hidden_state_mode",
@@ -242,6 +244,7 @@ def _expert_recurrent_controller_options_from_kwargs(
             config_module, "expert_recurrent_gate_stack"
         ),
         recurrent_halting_flag=config_module.EXPERT_RECURRENT_HALTING_FLAG,
+        recurrent_halting_option=config_module.EXPERT_RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.EXPERT_RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.EXPERT_RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=config_module.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -259,6 +262,7 @@ def _expert_recurrent_controller_options_from_kwargs(
             "expert_recurrent_gate_option": "recurrent_gate_option",
             "expert_recurrent_gate_activation": "recurrent_gate_activation",
             "expert_recurrent_halting_flag": "recurrent_halting_flag",
+            "expert_recurrent_halting_option": "recurrent_halting_option",
             "expert_recurrent_halting_threshold": "recurrent_halting_threshold",
             "expert_recurrent_halting_dropout": "recurrent_halting_dropout",
             "expert_recurrent_halting_hidden_state_mode": "recurrent_halting_hidden_state_mode",

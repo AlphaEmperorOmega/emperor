@@ -1,6 +1,5 @@
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.linears import LinearLayerConfig
 from models.neuron.expert_linear_adaptive._hidden.runtime_options import (
     AdaptiveGeneratorStackOptions,
     AdaptiveGeneratorStackSource,
@@ -68,7 +67,9 @@ class AdaptiveGeneratorStackConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_connection_option=options.residual_connection_option,
+                residual_config=None
+                if options.residual_connection_option is None
+                else ResidualConfig(option=options.residual_connection_option),
                 dropout_probability=options.dropout_probability,
                 gate_config=None,
                 halting_config=None,

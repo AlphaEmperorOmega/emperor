@@ -1,8 +1,12 @@
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerStackConfig
-from emperor.base.options import LastLayerBiasOptions, LayerNormPositionOptions
+from emperor.layers import (
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+)
 from emperor.parametric import (
     AdaptiveRouterOptions,
     MatrixBiasMixtureConfig,
@@ -10,7 +14,6 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-
 from models.parametric.parametric_matrix._stack_config_factory import (
     build_router_config,
     build_sampler_config,
@@ -85,7 +88,9 @@ def build_parametric_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=stack_options.activation,
-        residual_connection_option=stack_options.residual_connection_option,
+        residual_config=None
+        if stack_options.residual_connection_option is None
+        else ResidualConfig(option=stack_options.residual_connection_option),
         dropout_probability=stack_options.dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,

@@ -1,23 +1,24 @@
 from dataclasses import dataclass
 
 import torch
-from emperor.attention.core.variants.self_attention.config import (
+
+import models.bert.linear.config as config
+from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.base.layer import LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.transformer.core.config import (
+from emperor.transformer import (
+    FeedForwardConfig,
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
-from emperor.transformer.feed_forward import FeedForwardConfig
-
-import models.bert.linear.config as config
 from models.bert.linear._encoder_control_config_factory import (
     GateConfigFactory,
     HaltingConfigFactory,
@@ -142,13 +143,16 @@ class CoreConfigFactory:
         gate_factory = self.__encoder_gate_factory()
         halting_factory = self.__encoder_halting_factory()
         memory_factory = self.__encoder_memory_factory()
+        halting_config = halting_factory.build_halting_config()
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=(self.stack_options.residual_connection_option),
+            residual_config=None
+            if (self.stack_options.residual_connection_option) is None
+            else ResidualConfig(option=(self.stack_options.residual_connection_option)),
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
-            halting_config=halting_factory.build_halting_config(),
+            halting_config=None,
             layer_model_config=encoder_layer_config,
         )
         stack_config = LayerStackConfig(
@@ -159,6 +163,7 @@ class CoreConfigFactory:
             last_layer_bias_option=self.stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=(self.stack_options.apply_output_pipeline_flag),
             shared_gate_config=self.layer_controller_options.shared_gate_config,
+            shared_halting_config=halting_config,
             shared_memory_config=memory_factory.build_memory_config(),
             layer_config=layer_config,
         )
@@ -174,7 +179,7 @@ class CoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
             causal_attention_mask_flag=options.causal_attention_mask_flag,
             attention_config=self.__build_attention_config(),
             feed_forward_config=self.__build_feed_forward_config(),

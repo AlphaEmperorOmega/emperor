@@ -2,30 +2,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from emperor.augmentations.adaptive_parameters.core.bias import DynamicBiasConfig
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
-    DynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import AxisMaskConfig
-from emperor.augmentations.adaptive_parameters.core.weight import DynamicWeightConfig
-from emperor.augmentations.adaptive_parameters.options import (
+from emperor.augmentations.adaptive_parameters import (
+    AxisMaskConfig,
     BankExpansionFactorOptions,
+    DynamicBiasConfig,
     DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.memory.config import DynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,3 +176,5 @@ class RuntimeOptions:
     mask: AdaptiveMaskOptions
     input_projection: AdaptiveProjectionOptions
     output_projection: AdaptiveProjectionOptions
+    halting_option: type[HaltingConfig] = StickBreakingConfig
+    recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig

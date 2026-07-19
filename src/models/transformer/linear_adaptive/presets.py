@@ -21,17 +21,17 @@ from emperor.augmentations.adaptive_parameters import (
     WeightedBankDynamicBiasConfig,
     WeightInformedScoreAxisMaskConfig,
 )
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
+from emperor.config import BaseOptions
 from emperor.datasets.text.translation import Multi30kDeEn
-from emperor.embedding.absolute.core.config import TextLearnedPositionalEmbeddingConfig
+from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.transformer import expand_transformer_path_locks
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from emperor.transformer import expand_transformer_path_locks
 
 from . import config, dataset_options
 from .config_builder import TransformerLinearAdaptiveConfigBuilder

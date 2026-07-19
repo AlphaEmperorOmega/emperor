@@ -1,9 +1,10 @@
 from dataclasses import dataclass, fields
 
-from emperor.base.layer import Layer
-from emperor.base.config import ConfigBase, optional_field
-from emperor.base.module import Module
 from torch import Tensor
+
+from emperor.config import ConfigBase, optional_field
+from emperor.layers import Layer
+from emperor.nn import Module
 
 
 @dataclass

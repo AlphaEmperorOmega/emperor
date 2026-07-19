@@ -2,10 +2,10 @@ from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
-from emperor.attention import AttentionLayerState
-from emperor.experiments.bert_pretraining import BertPretrainingExperiment
 from torch import Tensor
 
+from emperor.attention import AttentionLayerState
+from emperor.experiments.bert_pretraining import BertPretrainingExperiment
 from models.bert.expert_linear_adaptive.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

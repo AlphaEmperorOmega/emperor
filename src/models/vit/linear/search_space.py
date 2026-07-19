@@ -1,4 +1,4 @@
-from emperor.base.options import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions
 
 from .config import *  # noqa: F401,F403
 

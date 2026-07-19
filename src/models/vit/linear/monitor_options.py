@@ -1,6 +1,6 @@
-from emperor.attention.core.monitor import AttentionMonitorCallback
-from emperor.base.layer.monitor import LayerControllerMonitorCallback
-from emperor.experiments.monitors import MonitorOption
+from emperor.attention.monitoring import AttentionMonitorCallback
+from emperor.layers import LayerControllerMonitorCallback
+from emperor.monitoring import MonitorOption
 
 MONITOR_OPTIONS: list[MonitorOption] = [
     MonitorOption(

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from emperor.base.layer.state import LayerState
-from emperor.base.config import ConfigBase, optional_field
-from emperor.base.module import Module
+from emperor.config import ConfigBase, optional_field
+from emperor.layers import LayerState
+from emperor.nn import Module
 
 
 @dataclass

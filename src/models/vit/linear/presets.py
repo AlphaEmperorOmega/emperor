@@ -2,20 +2,19 @@
 
 from dataclasses import replace
 
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import BaseOptions, LayerNormPositionOptions
-from emperor.embedding.absolute.core.config import (
+import models.vit.linear.config as config
+import models.vit.linear.dataset_options as dataset_options
+from emperor.config import BaseOptions
+from emperor.embedding.absolute import (
     ImageSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-
-import models.vit.linear.config as config
-import models.vit.linear.dataset_options as dataset_options
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear.model import Model
 from models.vit.linear.runtime_defaults import (
