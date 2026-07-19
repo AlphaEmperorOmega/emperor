@@ -11,6 +11,7 @@ from emperor.experts import (
     RoutingInitializationMode,
 )
 from emperor.experts._layers.mixture import MixtureOfExperts
+from emperor.experts._layers.reduce import MixtureOfExpertsReduce
 from emperor.experts._model import MixtureOfExpertsModel
 from emperor.layers import (
     ActivationOptions,
@@ -138,6 +139,88 @@ def _routing_model_config(
 
 
 class ExpertBehavioralContractTests(unittest.TestCase):
+    def test_dense_mixture_matches_exact_per_sample_weighted_expert_sum(
+        self,
+    ) -> None:
+        model = MixtureOfExperts(_mixture_config())
+        expert_weights = (
+            torch.tensor([[1.0, 0.0], [0.0, 2.0]]),
+            torch.tensor([[0.0, 1.0], [3.0, 0.0]]),
+        )
+        with torch.no_grad():
+            for expert_stack, weight in zip(
+                model.expert_modules, expert_weights, strict=True
+            ):
+                expert_stack[0].model.weight_params.copy_(weight)
+
+        inputs = torch.tensor(
+            [[1.0, 2.0], [-1.0, 3.0]],
+            requires_grad=True,
+        )
+        probabilities = torch.tensor([[0.25, 0.75], [0.6, 0.4]])
+        expected = probabilities[:, :1] * (
+            inputs.detach() @ expert_weights[0]
+        ) + probabilities[:, 1:] * (inputs.detach() @ expert_weights[1])
+
+        output, skip_mask, loss = model(
+            inputs, probabilities=probabilities, indices=None
+        )
+
+        torch.testing.assert_close(output, expected)
+        self.assertIsNone(skip_mask)
+        self.assertEqual(model.get_top_k(), 2)
+        self.assertEqual(loss.item(), 0.0)
+
+    def test_dense_reduce_without_indices_matches_exact_weighted_expert_sum(
+        self,
+    ) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+        expert_weights = (
+            torch.tensor([[1.0, 0.0], [0.0, 2.0]]),
+            torch.tensor([[0.0, 1.0], [3.0, 0.0]]),
+        )
+        with torch.no_grad():
+            for expert_stack, weight in zip(
+                model.expert_modules, expert_weights, strict=True
+            ):
+                expert_stack[0].model.weight_params.copy_(weight)
+
+        flattened_map_outputs = torch.tensor(
+            [
+                [1.0, 2.0],
+                [4.0, -2.0],
+                [-1.0, 3.0],
+                [2.0, 5.0],
+            ],
+            requires_grad=True,
+        )
+        probabilities = torch.tensor([[0.25, 0.75], [0.6, 0.4]])
+        routed_inputs = flattened_map_outputs.detach().reshape(2, 2, 2)
+        expected = probabilities[:, :1] * (
+            routed_inputs[:, 0] @ expert_weights[0]
+        ) + probabilities[:, 1:] * (routed_inputs[:, 1] @ expert_weights[1])
+
+        output, skip_mask, loss = model(
+            flattened_map_outputs,
+            probabilities=probabilities,
+            indices=None,
+        )
+
+        torch.testing.assert_close(output, expected)
+        self.assertIsNone(skip_mask)
+        self.assertEqual(output.shape, (2, 2))
+        self.assertEqual(output.dtype, torch.float32)
+        self.assertEqual(loss.shape, ())
+        self.assertEqual(loss.item(), 0.0)
+        output.square().sum().backward()
+        self.assertTrue(torch.isfinite(flattened_map_outputs.grad).all())
+        self.assertGreater(flattened_map_outputs.grad.abs().sum().item(), 0.0)
+        for expert_stack in model.expert_modules:
+            gradient = expert_stack[0].model.weight_params.grad
+            self.assertIsNotNone(gradient)
+            self.assertTrue(torch.isfinite(gradient).all())
+            self.assertGreater(gradient.abs().sum().item(), 0.0)
+
     def test_owned_sampler_receives_exact_mask_and_returns_its_update(self) -> None:
         model = MixtureOfExperts(
             _owned_routing_mixture_config(RoutingInitializationMode.LAYER)

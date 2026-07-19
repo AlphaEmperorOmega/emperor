@@ -256,25 +256,39 @@ class MixtureOfExperts(Module):
         experts_data: list[ExpertInputData],
         full_probabilities: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
-        expert_outputs_list = []
-        sample_indices_for_expert_list = []
+        outputs_grouped_by_expert = []
+        routing_positions_by_expert = []
         total_loss = experts_data[0].expert_samples.new_zeros(())
 
         for expert_data in experts_data:
-            expert_output, loss = self.__compute_expert_output(expert_data)
-            self.__append_expert_output(expert_outputs_list, expert_output, expert_data)
-            self.__append_sample_indices(sample_indices_for_expert_list, expert_data)
-            total_loss = total_loss + loss
+            expert_output, expert_loss = self.__compute_expert_output(expert_data)
+            self.__append_expert_output(
+                outputs_grouped_by_expert,
+                expert_output,
+                expert_data,
+            )
+            self.__append_sample_indices(routing_positions_by_expert, expert_data)
+            total_loss = total_loss + expert_loss
 
-        expert_outputs = torch.cat(expert_outputs_list, dim=0)
-        routing_positions, reindexed_probs = self.__aggregate_sample_indices(
-            sample_indices_for_expert_list, full_probabilities
+        expert_outputs = torch.cat(outputs_grouped_by_expert, dim=0)
+        if self.top_k == self.num_experts:
+            output_dim = expert_outputs.size(-1)
+            expert_major_outputs = expert_outputs.reshape(
+                self.num_experts, -1, output_dim
+            )
+            sample_major_outputs = expert_major_outputs.transpose(0, 1)
+            flattened_sample_major_outputs = sample_major_outputs.reshape(
+                -1, output_dim
+            )
+            expert_outputs = flattened_sample_major_outputs
+        routing_positions, routing_probabilities = self.__aggregate_sample_indices(
+            routing_positions_by_expert, full_probabilities
         )
 
         return (
             expert_outputs,
             routing_positions,
-            reindexed_probs,
+            routing_probabilities,
             total_loss,
         )
 

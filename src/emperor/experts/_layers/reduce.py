@@ -43,35 +43,79 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         probabilities: Tensor | None,
         indices: Tensor | None,
     ) -> list[ExpertInputData]:
+        device = input_batch.device
         expert_input_data = []
-        empty_dropped = torch.zeros(
-            0, dtype=input_batch.dtype, device=input_batch.device
-        )
+        empty_dropped = torch.zeros(0, dtype=input_batch.dtype, device=device)
         for expert_index in range(self.num_experts):
             expert_routing_positions, dropped_routing_positions = (
-                self._get_expert_routing_positions(indices, expert_index)
-            )
-            if (
-                expert_routing_positions is not None
-                and expert_routing_positions.numel() == 0
-            ):
-                continue
-            expert_samples = (
-                input_batch[expert_routing_positions]
-                if expert_routing_positions is not None
-                else input_batch
-            )
-            expert_input_data.append(
-                ExpertInputData(
-                    expert_index=expert_index,
-                    expert_samples=expert_samples,
-                    dropped_samples=empty_dropped,
-                    expert_routing_positions=expert_routing_positions,
-                    dropped_routing_positions=dropped_routing_positions,
-                    probabilities=None,
+                self.__resolve_expert_routing_positions(
+                    input_batch, indices, expert_index, device
                 )
             )
+            if self.__should_skip_expert_without_routed_samples(
+                expert_routing_positions
+            ):
+                continue
+            expert_samples = self.__select_expert_samples(
+                input_batch, expert_routing_positions
+            )
+            expert_input = ExpertInputData(
+                expert_index=expert_index,
+                expert_samples=expert_samples,
+                dropped_samples=empty_dropped,
+                expert_routing_positions=expert_routing_positions,
+                dropped_routing_positions=dropped_routing_positions,
+                probabilities=None,
+            )
+            expert_input_data.append(expert_input)
         return expert_input_data
+
+    def __resolve_expert_routing_positions(
+        self,
+        input_batch: Tensor,
+        indices: Tensor | None,
+        expert_index: int,
+        device: torch.device,
+    ) -> tuple[Tensor, Tensor]:
+        if indices is None:
+            return self.__get_dense_expert_routing_positions(
+                input_batch, expert_index, device
+            )
+        return self._get_expert_routing_positions(indices, expert_index)
+
+    def __should_skip_expert_without_routed_samples(
+        self,
+        expert_routing_positions: Tensor | None,
+    ) -> bool:
+        return (
+            expert_routing_positions is not None
+            and expert_routing_positions.numel() == 0
+        )
+
+    def __get_dense_expert_routing_positions(
+        self,
+        input_batch: Tensor,
+        expert_index: int,
+        device: torch.device,
+    ) -> tuple[Tensor, Tensor]:
+        num_routed_samples = input_batch.size(0)
+        expert_routing_positions = torch.arange(
+            expert_index,
+            num_routed_samples,
+            self.num_experts,
+            device=device,
+        )
+        dropped_routing_positions = torch.empty(0, dtype=torch.long, device=device)
+        return expert_routing_positions, dropped_routing_positions
+
+    def __select_expert_samples(
+        self,
+        input_batch: Tensor,
+        expert_routing_positions: Tensor | None,
+    ) -> Tensor:
+        if expert_routing_positions is None:
+            return input_batch
+        return input_batch[expert_routing_positions]
 
     def forward(
         self,
