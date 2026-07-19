@@ -15,11 +15,12 @@ from emperor.layers._options import (
 from emperor.layers._state import LayerState
 from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation import RecurrentLayerValidator
+from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingBase, HaltingConfig, HaltingStateBase
     from emperor.layers._stack import LayerStack
-    from emperor.memory import DynamicMemoryAbstract, DynamicMemoryConfig
+    from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
 
 
@@ -87,7 +88,7 @@ class RecurrentLayer(LayerModuleBase):
             input_dim=self.output_dim,
         )
 
-    def __build_memory_model(self) -> "DynamicMemoryAbstract | None":
+    def __build_memory_model(self) -> "MemoryInterface | None":
         return self._build_from_config(
             self.memory_config,
             input_dim=self.output_dim,
@@ -158,7 +159,7 @@ class RecurrentLayer(LayerModuleBase):
     def __maybe_apply_memory_before_block(self, hidden: Tensor) -> Tensor:
         return self._maybe_apply_memory_by_position(
             hidden,
-            "BEFORE_AFFINE",
+            MemoryPositionOptions.BEFORE_AFFINE,
         )
 
     def __process_block(
@@ -181,7 +182,7 @@ class RecurrentLayer(LayerModuleBase):
     def __maybe_apply_memory_after_block(self, hidden: Tensor) -> Tensor:
         return self._maybe_apply_memory_by_position(
             hidden,
-            "AFTER_AFFINE",
+            MemoryPositionOptions.AFTER_AFFINE,
         )
 
     def __maybe_apply_layer_norm_default(self, hidden: Tensor) -> Tensor:

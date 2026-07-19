@@ -14,10 +14,11 @@ from emperor.layers._options import (
 from emperor.layers._state import LayerState
 from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation import LayerValidator
+from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingBase, HaltingConfig, HaltingStateBase
-    from emperor.memory import DynamicMemoryAbstract, DynamicMemoryConfig
+    from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
 
 
@@ -82,7 +83,7 @@ class Layer(LayerModuleBase):
     def __build_halting_model(self) -> "HaltingBase | None":
         return self._build_from_config(self.halting_config, input_dim=self.output_dim)
 
-    def __build_memory_model(self) -> "DynamicMemoryAbstract | None":
+    def __build_memory_model(self) -> "MemoryInterface | None":
         return self._build_from_config(
             self.memory_config, input_dim=self.input_dim, output_dim=self.output_dim
         )
@@ -169,8 +170,7 @@ class Layer(LayerModuleBase):
 
     def __maybe_apply_memory_before(self, input: Tensor) -> Tensor:
         return self._maybe_apply_memory_by_position(
-            input,
-            "BEFORE_AFFINE",
+            input, MemoryPositionOptions.BEFORE_AFFINE
         )
 
     def _handle_model_processing(
@@ -182,8 +182,7 @@ class Layer(LayerModuleBase):
 
     def __maybe_apply_memory_after(self, input: Tensor) -> Tensor:
         return self._maybe_apply_memory_by_position(
-            input,
-            "AFTER_AFFINE",
+            input, MemoryPositionOptions.AFTER_AFFINE
         )
 
     def __maybe_apply_layer_norm_default(self, input: Tensor):

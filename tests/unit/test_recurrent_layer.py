@@ -1060,6 +1060,26 @@ class TestRecurrentLayer(unittest.TestCase):
                     torch.full_like(hidden, 3.0),
                 )
 
+    def test_memory_dispatch_helper_accepts_typed_positions(self):
+        model = RecurrentLayer(self.recurrent_config(dim=3))
+        hidden = torch.zeros(2, 3)
+        model.memory_model = AddConstantMemory(
+            2.0,
+            MemoryPositionOptions.AFTER_AFFINE,
+        )
+
+        before = model._maybe_apply_memory_by_position(
+            hidden,
+            MemoryPositionOptions.BEFORE_AFFINE,
+        )
+        after = model._maybe_apply_memory_by_position(
+            hidden,
+            MemoryPositionOptions.AFTER_AFFINE,
+        )
+
+        self.assertIs(before, hidden)
+        torch.testing.assert_close(after, torch.full_like(hidden, 2.0))
+
     def test_init_with_overrides(self):
         cfg = self.recurrent_config(
             dim=2,
