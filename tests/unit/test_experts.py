@@ -1,37 +1,38 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
-
 from dataclasses import replace
-from emperor.base.layer import Layer, LayerConfig, LayerStack, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.sampler.model import SamplerModel
-from emperor.sampler.core.routers import RouterModel
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.layers import (
-    MixtureOfExperts,
-    MixtureOfExpertsMap,
-    MixtureOfExpertsReduce,
-    ExpertInputData,
-)
-from emperor.experts.core._validator import MixtureOfExpertsValidator
-from emperor.experts.core._expert_capacity import ExpertCapacityHandler
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.experts.model import MixtureOfExpertsModel
-from emperor.experts.core.config import MixtureOfExpertsLayerConfig
-from emperor.experts.core.state import MixtureOfExpertsLayerState
-from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
-from emperor.experts.core.options import (
+
+import torch
+
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsLayerState,
+    MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
+from emperor.experts._layers.map import MixtureOfExpertsMap
+from emperor.experts._layers.mixture import ExpertInputData, MixtureOfExperts
+from emperor.experts._layers.reduce import MixtureOfExpertsReduce
+from emperor.experts._model import MixtureOfExpertsModel
+from emperor.experts._routing.capacity import ExpertCapacityHandler
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    Layer,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStack,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, RouterModel, SamplerConfig, SamplerModel
+from emperor.sampler._selection.full import SamplerFull
+from emperor.sampler._selection.sparse import SamplerSparse
+from emperor.sampler._selection.top_k import SamplerTopk
 
 
 class MixtureOfExpertsPresetMixin:
@@ -50,9 +51,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        stack_residual_connection_option: ResidualConnectionOptions | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> RouterConfig:
         hidden_dim = stack_width if stack_width > 0 else max(input_dim, num_experts)
@@ -71,7 +70,9 @@ class MixtureOfExpertsPresetMixin:
                 layer_config=LayerConfig(
                     activation=stack_activation,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=stack_residual_connection_option,
+                    residual_config=None
+                    if stack_residual_connection_option is None
+                    else ResidualConfig(option=stack_residual_connection_option),
                     dropout_probability=stack_dropout_probability,
                     gate_config=None,
                     halting_config=None,
@@ -119,9 +120,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        stack_residual_connection_option: ResidualConnectionOptions | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> LayerStackConfig:
         hidden_dim = stack_width if stack_width > 0 else max(input_dim, output_dim)
@@ -135,7 +134,9 @@ class MixtureOfExpertsPresetMixin:
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=stack_residual_connection_option,
+                residual_config=None
+                if stack_residual_connection_option is None
+                else ResidualConfig(option=stack_residual_connection_option),
                 dropout_probability=stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,
@@ -170,9 +171,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        stack_residual_connection_option: ResidualConnectionOptions | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> MixtureOfExpertsConfig:
         return MixtureOfExpertsConfig(
@@ -228,9 +227,8 @@ class MixtureOfExpertsPresetMixin:
         output_dim: int = 6,
         experts_stack_num_layers: int = 2,
         experts_stack_activation: ActivationOptions = ActivationOptions.RELU,
-        experts_stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        experts_stack_residual_connection_option: ResidualConnectionOptions
+        | None = None,
         experts_stack_dropout_probability: float = 0.0,
         **kwargs: object,
     ) -> LayerStackConfig:
@@ -245,7 +243,9 @@ class MixtureOfExpertsPresetMixin:
             layer_config=MixtureOfExpertsLayerConfig(
                 activation=experts_stack_activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=experts_stack_residual_connection_option,
+                residual_config=None
+                if experts_stack_residual_connection_option is None
+                else ResidualConfig(option=experts_stack_residual_connection_option),
                 dropout_probability=experts_stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,
@@ -332,29 +332,35 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
 
     def test_validator_rejects_invalid_config_values(self):
         cases = [
-            {"input_dim": 0},
-            {"input_dim": True},
-            {"output_dim": 0},
-            {"experts_top_k": 0},
-            {"experts_top_k": True},
-            {"experts_top_k": 7, "experts_num_experts": 6},
-            {"experts_num_experts": 0},
-            {"experts_capacity_factor": -0.1},
-            {
-                "input_dim": 8,
-                "output_dim": 6,
-                "experts_capacity_factor": 1.0,
-            },
-            {
-                "experts_top_k": 6,
-                "experts_num_experts": 6,
-                "experts_capacity_factor": 1.0,
-            },
+            ({"input_dim": 0}, ValueError),
+            ({"input_dim": True}, TypeError),
+            ({"output_dim": 0}, ValueError),
+            ({"experts_top_k": 0}, ValueError),
+            ({"experts_top_k": True}, TypeError),
+            ({"experts_top_k": 7, "experts_num_experts": 6}, ValueError),
+            ({"experts_num_experts": 0}, ValueError),
+            ({"experts_capacity_factor": -0.1}, ValueError),
+            (
+                {
+                    "input_dim": 8,
+                    "output_dim": 6,
+                    "experts_capacity_factor": 1.0,
+                },
+                ValueError,
+            ),
+            (
+                {
+                    "experts_top_k": 6,
+                    "experts_num_experts": 6,
+                    "experts_capacity_factor": 1.0,
+                },
+                ValueError,
+            ),
         ]
 
-        for overrides in cases:
+        for overrides, expected_error in cases:
             with self.subTest(overrides=overrides):
-                with self.assertRaises(ValueError):
+                with self.assertRaises(expected_error):
                     MixtureOfExperts(self.preset(**overrides))
 
     def test_validator_rejects_invalid_forward_reference_types(self):
@@ -532,9 +538,12 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
         input_batch = torch.randn(5, cfg.input_dim)
         probabilities = torch.rand(5, cfg.top_k)
 
-        output, loss = model.forward(input_batch, probabilities=probabilities)
+        output, skip_mask, loss = model.forward(
+            input_batch, probabilities=probabilities
+        )
 
         self.assertEqual(output.shape, (5, cfg.output_dim))
+        self.assertIsNone(skip_mask)
         self.assertEqual(loss.item(), 0.0)
 
     def test__create_experts(self):
@@ -558,7 +567,9 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
         sampler_options = [SamplerSparse, SamplerTopk, SamplerFull]
 
         for routing_initialization_mode in routing_initialization_modes:
-            for sampler_option, expert_option in zip(sampler_options, expert_options):
+            for sampler_option, expert_option in zip(
+                sampler_options, expert_options, strict=True
+            ):
                 message = f"Testing configuration with sampler_option={sampler_option.__name__}, num_experts={num_experts}, top_k={expert_option}"
                 with self.subTest(msg=message):
                     c = self.preset(
@@ -600,7 +611,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                     if routing_initialization_mode == RoutingInitializationMode.LAYER:
                         input_indices = None
                         input_probabilities = None
-                        probabilities, indices, sampler_loss = (
+                        probabilities, indices, skip_mask, sampler_loss = (
                             m._maybe_compute_expert_indices(
                                 inputs, input_probabilities, input_indices
                             )
@@ -610,17 +621,19 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         else:
                             self.assertIsInstance(indices, torch.Tensor)
                         self.assertIsInstance(probabilities, torch.Tensor)
+                        self.assertIsNone(skip_mask)
                         self.assertIsInstance(sampler_loss, torch.Tensor)
                         self.assertEqual(sampler_loss.item(), 0.0)
                     elif (
                         routing_initialization_mode
                         == RoutingInitializationMode.DISABLED
                     ):
-                        probabilities, indices, sampler_loss = (
+                        probabilities, indices, skip_mask, sampler_loss = (
                             m._maybe_compute_expert_indices(inputs)
                         )
                         self.assertIsNone(probabilities)
                         self.assertIsNone(indices)
+                        self.assertIsNone(skip_mask)
                         self.assertEqual(sampler_loss.item(), 0.0)
 
                     probabilities_input = torch.rand(5, top_k)
@@ -629,7 +642,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         if top_k == num_experts
                         else torch.randint(0, m.num_experts, (5, top_k))
                     )
-                    probabilities, indices, sampler_loss = (
+                    probabilities, indices, skip_mask, sampler_loss = (
                         m._maybe_compute_expert_indices(
                             inputs,
                             probabilities_input,
@@ -638,7 +651,35 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                     )
                     self.assertIs(probabilities, probabilities_input)
                     self.assertIs(indices, indices_input)
+                    self.assertIsNone(skip_mask)
                     self.assertEqual(sampler_loss.item(), 0.0)
+
+    def test__should_skip_layer_routing(self):
+        probabilities = torch.ones(1, 3)
+        indices = torch.zeros(1, 3, dtype=torch.long)
+        cases = [
+            (RoutingInitializationMode.LAYER, None, None, False),
+            (RoutingInitializationMode.LAYER, probabilities, None, True),
+            (RoutingInitializationMode.LAYER, None, indices, True),
+            (RoutingInitializationMode.DISABLED, None, None, True),
+        ]
+
+        for routing_mode, input_probabilities, input_indices, expected in cases:
+            with self.subTest(
+                routing_mode=routing_mode,
+                has_probabilities=input_probabilities is not None,
+                has_indices=input_indices is not None,
+            ):
+                model = MixtureOfExperts(
+                    self.preset(experts_routing_initialization_mode=routing_mode)
+                )
+
+                should_skip = model._MixtureOfExperts__should_skip_layer_routing(
+                    input_probabilities,
+                    input_indices,
+                )
+
+                self.assertEqual(should_skip, expected)
 
     def test_get_expert_token_indices(self):
         num_experts = 6
@@ -1100,10 +1141,8 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                 dropped_routing_positions=None,
                                 probabilities=torch.zeros(num_samples),
                             )
-                            zero_output, _ = (
-                                m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
-                                    zero_probs_slice
-                                )
+                            zero_output, _ = m._MixtureOfExperts__compute_expert_output(  # type: ignore[operator]
+                                zero_probs_slice
                             )
                             expert_model: torch.nn.Module = m.expert_modules[0]  # type: ignore[assignment]
                             expected = Layer.run_model_returning_hidden(
@@ -1202,7 +1241,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                 ).view(batch_size * top_k, output_dim)
 
                 output = m._MixtureOfExperts__compute_expert_mixture(
-                    experts_output, indices, probabilities=None
+                    experts_output, indices, routing_probabilities=None
                 )
 
                 if should_sort:
@@ -1212,7 +1251,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                     expected_output = experts_output
                 self.assertTrue(torch.equal(output, expected_output))
 
-    def test_forward(self):
+    def test_forward_runs_complete_routing_pipeline(self):
         num_experts = 6
         top_k_options = [1, 3, 6]
         flag_options = [True, False]
@@ -1285,7 +1324,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                                     )
                                                 )
 
-                                            output, total_loss = m.forward(
+                                            output, skip_mask, total_loss = m(
                                                 input, probabilities, indices
                                             )
 
@@ -1301,6 +1340,7 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                             self.assertEqual(
                                                 output.shape, expected_shape
                                             )
+                                            self.assertIsNone(skip_mask)
                                             self.assertEqual(total_loss.item(), 0.0)
 
     def test_forward_backpropagates_to_each_dense_expert(self):
@@ -1322,9 +1362,12 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
             1.0 / cfg.top_k,
         )
 
-        output, total_loss = model.forward(input_batch, probabilities=probabilities)
+        output, skip_mask, total_loss = model.forward(
+            input_batch, probabilities=probabilities
+        )
         (output.sum() + total_loss).backward()
 
+        self.assertIsNone(skip_mask)
         self.assertIsNotNone(input_batch.grad)
         self.assertTrue(torch.any(input_batch.grad.abs() > 0))
         for expert in model.expert_modules:
@@ -1671,8 +1714,10 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                     leaf_cfg = (
                                         c.stack_config.layer_config.layer_model_config
                                     )
-                                    probabilities, indices = self.external_routing_inputs(
-                                        input, leaf_cfg.sampler_config
+                                    probabilities, indices = (
+                                        self.external_routing_inputs(
+                                            input, leaf_cfg.sampler_config
+                                        )
                                     )
 
                                 input_state = MixtureOfExpertsLayerState(
@@ -1709,7 +1754,10 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
                     model = MixtureOfExpertsModel(c)
                     input = torch.randn(batch_size, c.input_dim)
                     probabilities = indices = None
-                    if routing_initialization_mode == RoutingInitializationMode.DISABLED:
+                    if (
+                        routing_initialization_mode
+                        == RoutingInitializationMode.DISABLED
+                    ):
                         leaf_cfg = c.stack_config.layer_config.layer_model_config
                         probabilities, indices = self.external_routing_inputs(
                             input, leaf_cfg.sampler_config
@@ -1768,7 +1816,7 @@ class TestMixtureOfExpertsMap(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                     sampler.sample_probabilities_and_indices(logits)
                                 )
 
-                                output, total_loss = m.forward(
+                                output, skip_mask, total_loss = m.forward(
                                     input, probabilities, indices
                                 )
 
@@ -1778,6 +1826,7 @@ class TestMixtureOfExpertsMap(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                 )
 
                                 self.assertEqual(output.shape, expected_shape)
+                                self.assertIsNone(skip_mask)
 
 
 class TestMixtureOfExpertsReduce(MixtureOfExpertsPresetMixin, unittest.TestCase):
@@ -1909,16 +1958,17 @@ class TestMixtureOfExpertsReduce(MixtureOfExpertsPresetMixin, unittest.TestCase)
                                     sampler.sample_probabilities_and_indices(logits)
                                 )
 
-                                output, total_loss = m.forward(
+                                output, skip_mask, total_loss = m.forward(
                                     input, probabilities, indices
                                 )
-                                output, total_loss = r.forward(
-                                    output, probabilities, indices
+                                output, reduced_skip_mask, total_loss = r.forward(
+                                    output, probabilities, indices, skip_mask
                                 )
 
                                 expected_shape = (10, rc.output_dim)
 
                                 self.assertEqual(output.shape, expected_shape)
+                                self.assertIsNone(reduced_skip_mask)
 
 
 class TestExpertCapacityHandler(unittest.TestCase):
