@@ -243,6 +243,7 @@ class GptCoreConfigFactory:
             add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
+            batch_first_flag=True,
             projection_model_config=projection_model_config,
             projection_strategy=SelfAttentionProjectionStrategy.SEPARATE,
         )

@@ -204,6 +204,7 @@ class BertCoreConfigFactory:
             add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
             average_attention_weights_flag=False,
             return_attention_weights_flag=False,
+            batch_first_flag=True,
             projection_model_config=self._build_attention_projection_stack_config(),
             projection_strategy=SelfAttentionProjectionStrategy.SEPARATE,
         )
