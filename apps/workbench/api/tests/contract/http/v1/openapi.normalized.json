@@ -1,0 +1,626 @@
+{
+  "canonicalization": "UTF-8 JSON; object keys sorted; compact separators; array order preserved",
+  "documentSha256": "ac853d1de47530225b9c482813c850193d49813b98be7c7cf32887bb0a4f691f",
+  "info": {
+    "title": "Emperor Model Workbench API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "operationCount": 37,
+  "operations": [
+    {
+      "method": "GET",
+      "path": "/capabilities",
+      "sha256": "5ee36aa057d214ef2e34dda15eb9c6a57231c011ab692a2760cf4daae650342b"
+    },
+    {
+      "method": "GET",
+      "path": "/config-snapshots",
+      "sha256": "ff2fbbc877331e4cba0d176c8420e1f3c698f983c9d927feecf255de492f3d2a"
+    },
+    {
+      "method": "POST",
+      "path": "/config-snapshots",
+      "sha256": "6cbcb26fbfe70343a1d68ad20b09bcc5b934426194f99e8c933347e012a22e36"
+    },
+    {
+      "method": "GET",
+      "path": "/config-snapshots/library",
+      "sha256": "eb4f8b264ffc41a4acf5ddb2920ba3acbcb6506610a094470239dcc140c3e9e1"
+    },
+    {
+      "method": "DELETE",
+      "path": "/config-snapshots/{snapshot_id}",
+      "sha256": "9da5756700710b20a5e26b57cf7156fffe52e8f8ca067e365f81b96ea15b8c93"
+    },
+    {
+      "method": "PATCH",
+      "path": "/config-snapshots/{snapshot_id}",
+      "sha256": "88eb87eb50cb35a5c0423d3a0b6ed6448e1726aef59e151b514061376669d498"
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "sha256": "9bce51d25f48018113c3e1a8ebba30cff13a198c71c7c389543c65f197edabdd"
+    },
+    {
+      "method": "POST",
+      "path": "/inspect",
+      "sha256": "b463f1d9fa21e5c1e02b866531d92aa42e53f86de956c2963cde349bd95c5037"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/checkpoints",
+      "sha256": "7a999f7813e06dbb277e43e260ae2db031dd7dfbe789f4dd02aca9bc20d4cef7"
+    },
+    {
+      "method": "GET",
+      "path": "/logs/experiments",
+      "sha256": "9d05cef220f9da26a1290be7cb8a9f415a8358e6494814407cb03660d68a4d6c"
+    },
+    {
+      "method": "DELETE",
+      "path": "/logs/experiments/{experiment}",
+      "sha256": "a163ac74f8ddf8cbf524f7ca90755a8256772bbc6cb1b6d0297eed91f0fe770a"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/import",
+      "sha256": "05c7681ebd272e6934e7840f261660a38117730724d6867a6b209f519a3db84b"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/media",
+      "sha256": "5274964d2fca0650edb80ae7d5b8083968935a93b6fd028d878d12d4d2432375"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/parameter-status",
+      "sha256": "55c3532a3f9bb0279e52f1005f7b34a30a83172273b2fc6c4f12dcfef7c08b39"
+    },
+    {
+      "method": "GET",
+      "path": "/logs/runs",
+      "sha256": "0442427b84307fbb38c3f0e4dfc8178d9ef3a835c2a3ac2ead7ba5a536eb20eb"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/runs/delete",
+      "sha256": "30d7662f31dee355d40d09dd346d7f38df4764a1853c129da42cba80d51cd168"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/runs/delete-plan",
+      "sha256": "389beef037413c3c3d2857ad8c61a2e5b2552e9f79ac7f450ad31d92bed67ae4"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/runs/preset-delete",
+      "sha256": "9893c73eaba29cd6507d6c33a371d45070ab3ac572412ad1b615b3c6b8e87a39"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/runs/preset-delete-plan",
+      "sha256": "a6d73577f1101a41e6ac402f2ed1570354ba454f03d54412ffad5a5a6228a5ae"
+    },
+    {
+      "method": "GET",
+      "path": "/logs/runs/{run_id}/artifacts",
+      "sha256": "27be7881eb4306cc9416f5e278134b1f67b75a503b67eb629ef534a5d742c5d9"
+    },
+    {
+      "method": "GET",
+      "path": "/logs/runs/{run_id}/monitor-data",
+      "sha256": "4a9fbe9480b07fcace1baccfb1e77e5c62203493272e86eab6fcc9dfdd5fee69"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/scalars",
+      "sha256": "3fda789c04c384bcff8ad5e6210aafde1cff6bd66fc31b77fb2f657cb594bc3d"
+    },
+    {
+      "method": "POST",
+      "path": "/logs/tags",
+      "sha256": "7ac291a6bf3fc754d6596203ed8728bd6725cad3f4574251ebe5e168a6ebda21"
+    },
+    {
+      "method": "GET",
+      "path": "/models",
+      "sha256": "7ff53bf5505dc0340eddd795a93accf387c21b1551d321fbdecc480c6b5cd1bd"
+    },
+    {
+      "method": "GET",
+      "path": "/models/{modelType}/{model}/config-schema",
+      "sha256": "1e455ec9672518529977a2fcf75ca07be4513e44507ffb278f99708a0dedadfd"
+    },
+    {
+      "method": "GET",
+      "path": "/models/{modelType}/{model}/datasets",
+      "sha256": "ddf1be2e78812dbea254c918155fb92c56f10de124d1c0e60ac9b1cd9d6b07f9"
+    },
+    {
+      "method": "GET",
+      "path": "/models/{modelType}/{model}/monitors",
+      "sha256": "0be71252511dbbce579f5875cd7c7133a97334e9fe72718a86b5277acfc6a6ae"
+    },
+    {
+      "method": "GET",
+      "path": "/models/{modelType}/{model}/presets",
+      "sha256": "310efd3f3f5c7e31f4fdaa428534df23ffb3921adce7b9b30c28fee2db937d3e"
+    },
+    {
+      "method": "GET",
+      "path": "/models/{modelType}/{model}/search-space",
+      "sha256": "c4be2641ed7c95cf602bdf4a6f6889638d26d197ec4cbd43ff089b73aaeb313f"
+    },
+    {
+      "method": "POST",
+      "path": "/training/jobs",
+      "sha256": "597c0fc6f2586d0cf2ca08e041f3fbc557ae2ae2282a56f368961516a65db0c4"
+    },
+    {
+      "method": "GET",
+      "path": "/training/jobs/{job_id}",
+      "sha256": "34f3edd675feb625527a8d6bc0a1395099ed88ff0756d1f8e7a76835dcd6ac7c"
+    },
+    {
+      "method": "POST",
+      "path": "/training/jobs/{job_id}/cancel",
+      "sha256": "75cfeaebc6953dd5eb27aca1adb5780d00c15ff1669a23b1018e8783d67cd015"
+    },
+    {
+      "method": "GET",
+      "path": "/training/jobs/{job_id}/events",
+      "sha256": "194e098a22f8bca862e8f1efde456ad4b4bb83a31cafa19f0abef9753440061f"
+    },
+    {
+      "method": "GET",
+      "path": "/training/jobs/{job_id}/monitor-data",
+      "sha256": "b450000f9216e793f20ed3046c855d0644bc0782a4a0c93e9afaf066f384e166"
+    },
+    {
+      "method": "GET",
+      "path": "/training/jobs/{job_id}/monitor-parameter-status",
+      "sha256": "a41947d8d3606875e15d3b460df26ae469c374673b289c68c305d32118cd19c9"
+    },
+    {
+      "method": "POST",
+      "path": "/training/jobs/{job_id}/reconcile",
+      "sha256": "9302f697b3860cf57f0cbe3f1e9684f1b5ea93fdd07321fa0fdc4bccbe5c38cb"
+    },
+    {
+      "method": "POST",
+      "path": "/training/run-plan",
+      "sha256": "ae61f64d7d5eff3e98ae263af86b41bb536dedce60d738d1f946a5f09eb44d94"
+    }
+  ],
+  "schemaCount": 105,
+  "schemas": [
+    {
+      "name": "CapabilitiesResponse",
+      "sha256": "c8150c4a32616944efc7e95a0db22aa573aed5d992e94e0290c9b5105c7e0573"
+    },
+    {
+      "name": "ConfigFieldResponse",
+      "sha256": "3f6dde7aea1a5b4ce3c5eb27678f57f96f4992b35c9c4197e43957af3c058daa"
+    },
+    {
+      "name": "ConfigSchemaResponse",
+      "sha256": "c8a516b3c3075a878e04dfc03f130598c800558fee72fea5ff3555359d0bf93a"
+    },
+    {
+      "name": "ConfigSnapshotCreateRequest",
+      "sha256": "2c41823e2d167a63f9f400f1508e5cb2681471041c37b87eff035a488220cda6"
+    },
+    {
+      "name": "ConfigSnapshotLibraryResponse",
+      "sha256": "c2b979982aaa3a72d0fa50cb364f9e51125f1675028fa0a2efa42c99f7da0c3d"
+    },
+    {
+      "name": "ConfigSnapshotResponse",
+      "sha256": "065f0d776bffe97930f10dcf5ef1e9cae59e4a7ff331f204ed875d27c60186ae"
+    },
+    {
+      "name": "ConfigSnapshotRevisionResponse",
+      "sha256": "2c9d6082d7d32983f6e4003fbb41dc522a9763968491eb54ad622135961117c9"
+    },
+    {
+      "name": "ConfigSnapshotUpdateRequest",
+      "sha256": "9cd6abde7636d0083e216cd930b2e128ee9faf740bb9b64cb5d12d8c61d45576"
+    },
+    {
+      "name": "ConfigSnapshotsResponse",
+      "sha256": "d1ca7924fb0366f26b8b9ce6914eb722c69332fd3dbbd55503dcd6ed5a4663bf"
+    },
+    {
+      "name": "DatasetGroupResponse",
+      "sha256": "5b533b829ff5d8d6272b23ae0d887fce842004292c27090faf23531e7ffada47"
+    },
+    {
+      "name": "DatasetResponse",
+      "sha256": "6562baf70338a461e7fca03c5bd2ebb77542fa303b0292ca515c70a88448ec05"
+    },
+    {
+      "name": "DatasetsResponse",
+      "sha256": "b2d494e9964b79faa67e73530f76a01de08d057e54065e00b237ce6bdf07e046"
+    },
+    {
+      "name": "GraphConfigFieldResponse",
+      "sha256": "3edbc74c00d165c337eff36ee04c93d2aa54de53346376cedc299e3dd72f961d"
+    },
+    {
+      "name": "GraphConfigResponse",
+      "sha256": "8acd2efad9c1a9b880fbe86c20848dd82de9ce77829e4fb08cede8a67c2238bd"
+    },
+    {
+      "name": "GraphEdgeResponse",
+      "sha256": "dabc77ee932dd9565a8d157df229336aa2d0d748202af00896e4c590dae7bbcc"
+    },
+    {
+      "name": "GraphNodeResponse",
+      "sha256": "58497fe4deca3dfa50f42d1e08c9652dc3f77f5df5867c7a84e01e04661b704a"
+    },
+    {
+      "name": "HTTPValidationError",
+      "sha256": "7373c21f1389312367e27e440140ba11d587693c56d8aa27249b36d3f58c10c6"
+    },
+    {
+      "name": "HealthResponse",
+      "sha256": "5551fe16d14b1736dbf5023778c513ac5a96c9d83d72983807a4cd0f147b262d"
+    },
+    {
+      "name": "HistogramBucketResponse",
+      "sha256": "d3eef2073b0ceb345d1d1d87eb1ee6c92b7a56fbc4dcbeeaf8cef2422fa41a07"
+    },
+    {
+      "name": "HistogramResponse",
+      "sha256": "790b0c5950db17f03ba4c4efa9be0f4aa309b3b9ef53d496724a2c20aaeb1f2e"
+    },
+    {
+      "name": "ImageResponse",
+      "sha256": "ad82533f4d3f437a9d3935fe1c204c228453d1408b4fbdce2d72752018a37da8"
+    },
+    {
+      "name": "InspectRequest",
+      "sha256": "448a58b1ad2f09f23152015e186e5e762364457762e28484d86f6e4ffdc9f59b"
+    },
+    {
+      "name": "InspectResponse",
+      "sha256": "1f53081cd69e19f70d114750ae01279f00780969132c59de74c5ac2dc607c656"
+    },
+    {
+      "name": "JsonObject",
+      "sha256": "aa20a5cf7dcf1ec678e06896bb984d74f14794623010fa1010336e4a74d09eff"
+    },
+    {
+      "name": "JsonValue",
+      "sha256": "a29ae953b8e99fa22bbfca17dd6d7c53d33e2cb5997b2f6d5980bebfcc3726fd"
+    },
+    {
+      "name": "LogArchiveImportResponse",
+      "sha256": "eced1dc3ef431207bd2b48467153c7bff2bf8ac9c93c56319881490c75168b6d"
+    },
+    {
+      "name": "LogCheckpointResponse",
+      "sha256": "53fe5133fc6107eb85dcb2a8c4c5b4e56f6a8dd2a5c221cdf823baa4176efe92"
+    },
+    {
+      "name": "LogCheckpointsRequest",
+      "sha256": "3a7d06c1f5e3b05aa5daa1d382f04a22bb9823875ef653b311094d6478d6ae37"
+    },
+    {
+      "name": "LogCheckpointsResponse",
+      "sha256": "e32d6a30833dd3c9adae8fe956eff83c469fc0376a421470c53c126653dae51b"
+    },
+    {
+      "name": "LogExperimentDeleteResponse",
+      "sha256": "91c3a7ffe1a1a3ece4d958828054ab421b3b28769f2f0e419f26ca8d2bf91227"
+    },
+    {
+      "name": "LogExperimentResponse",
+      "sha256": "90063ae3ef994442a5de867553fee3c96491bd29917d85f1f134d5acac258174"
+    },
+    {
+      "name": "LogExperimentsResponse",
+      "sha256": "7f40f997fff64efefb2a9c7c2193e739706e58e3d97280030b0910ed5cbe133f"
+    },
+    {
+      "name": "LogImageSummaryResponse",
+      "sha256": "e98984479c917e99b5958de58a12b4b4b03187b4ce68c907cd91fb74b585261a"
+    },
+    {
+      "name": "LogMediaRequest",
+      "sha256": "9b92c2fce7b30060093ecc5afd8f6b86c6cea125d3379c40b2b4e78418772420"
+    },
+    {
+      "name": "LogMediaResponse",
+      "sha256": "0c083865edf900c97a1fa32be736b1c30005d7c533f65c0ed84d6f677efb36ad"
+    },
+    {
+      "name": "LogParameterStatusRequest",
+      "sha256": "9fda02e113cfa6b06175522aad6637474a2bf0c984cb99da0556b301e64fdbaf"
+    },
+    {
+      "name": "LogParameterStatusResponse",
+      "sha256": "4f6e5dd8b792031ca306025b10b7c51633aac6d1938c0e2fbc4912fbf09a42d0"
+    },
+    {
+      "name": "LogPresetDeleteRequest",
+      "sha256": "3918037678b96762a417868b68ceed88cf0dc7817a6e33372bd59160c57125f5"
+    },
+    {
+      "name": "LogRunArtifactResponse",
+      "sha256": "b015a4c1feaf4eeb043eb9bd5ee75c474c37896e0dbaf3cee4448aa1a8ccb652"
+    },
+    {
+      "name": "LogRunArtifactsResponse",
+      "sha256": "64a4e70c47048a00f45c674cddbf1fd86f7e9335c14494dc34be801559c9ef52"
+    },
+    {
+      "name": "LogRunDeleteAffectedValuesResponse",
+      "sha256": "e437f25d7d39fcbacdbd530c04677bade74c912258d815f7ecd95047401bcc2f"
+    },
+    {
+      "name": "LogRunDeleteBlockerResponse",
+      "sha256": "edf0e6ff0889ec39b0c023f27b0a44ee48d02ebdcb05b70b0b48c452eb08654a"
+    },
+    {
+      "name": "LogRunDeleteCandidateResponse",
+      "sha256": "b8ebf537db9299f0b93ca715d5edf9a6bd32d752b7220ec0baac5b4506d58df2"
+    },
+    {
+      "name": "LogRunDeleteCountsResponse",
+      "sha256": "eb087c27dd4522645f3caf2068fed52ab41afd353d34aa3b55b9b34685cf9d0f"
+    },
+    {
+      "name": "LogRunDeleteFiltersRequest",
+      "sha256": "0dd7b2a1be7f679dabd9d9364864e1b407099e64eaa1574cef53e001f37a47be"
+    },
+    {
+      "name": "LogRunDeletePlanResponse",
+      "sha256": "73e6dd6e7e8ddf171dde3da464f7b7ba30346aa5372bce383d7286ad8f175c1e"
+    },
+    {
+      "name": "LogRunDeleteResponse",
+      "sha256": "164acdc3314f176aa7a0a2becd1e4f428f31226e35278a54d7486749213cf2ba"
+    },
+    {
+      "name": "LogRunExperimentFacetsResponse",
+      "sha256": "7c1ea98f00739f26ef6ab48f09ddceb816cda022ab6948d73d1bcfd11542fe5d"
+    },
+    {
+      "name": "LogRunFacetValueResponse",
+      "sha256": "c34b7b0673693173a696feaa8025532b9b360f41c6d626d11602acc3f2f5ad8f"
+    },
+    {
+      "name": "LogRunFacetsResponse",
+      "sha256": "1fd66d9b20dfc87c376fb7815d3df6303d27fc0b6a3910e1d26ab60ef1b4efa7"
+    },
+    {
+      "name": "LogRunModelFacetResponse",
+      "sha256": "f3999145f03a90bcfba69aec75f593f66a2b8ae7311b4b75ad9c957515fc70bc"
+    },
+    {
+      "name": "LogRunModelFilterRequest",
+      "sha256": "c3bf13adb4671501dfa39c746c999f0ae4492df2b5d864cd22b05c585bac87e3"
+    },
+    {
+      "name": "LogRunResponse",
+      "sha256": "0d378a58ceb6f07728a217009d723057d15091bfb84b81607b738b79e1705409"
+    },
+    {
+      "name": "LogRunTagsResponse",
+      "sha256": "bbb7afb39da8c8e6562ebd011b94795f8341f0e3f67a53b3544c2b8603e881f9"
+    },
+    {
+      "name": "LogRunsResponse",
+      "sha256": "d995d1bd4893dba897e32240cee707e40c9902d0ac5773958812a88dd4e3ce90"
+    },
+    {
+      "name": "LogScalarSeriesResponse",
+      "sha256": "19c924c72f172bdb476a5222de84ba8a92293718d6370b10f73cbeef969566c5"
+    },
+    {
+      "name": "LogScalarsRequest",
+      "sha256": "f560b19dda50802dc93d22f9111b5a704acd80be5a2b222939290f1940172432"
+    },
+    {
+      "name": "LogScalarsResponse",
+      "sha256": "26310dd9008ee37c5e1ca4215020b8eb25a5f03f6965c77f057631558e962bda"
+    },
+    {
+      "name": "LogTagsRequest",
+      "sha256": "471b7162248fcea461ae689a96c79b8e11000ff767f38a78fe665f188e1b80f2"
+    },
+    {
+      "name": "LogTagsResponse",
+      "sha256": "0aaa8785017d594953701fbbd5e01925d24be40d1354b187801c98bd6632b9b1"
+    },
+    {
+      "name": "LogTextSummaryResponse",
+      "sha256": "15bf8241cf978c67baf545f1b41cbffa2ab88ba250e56f4a600020781f93d573"
+    },
+    {
+      "name": "ModelIdentityResponse",
+      "sha256": "a18f630eaeab6543a4d98ce8db2bf806c22f3da940fba337d054b105fc24ca41"
+    },
+    {
+      "name": "ModelsResponse",
+      "sha256": "7677fefb21397b1a3892d81b7ec0801252c8b1361b80c94db1afe8522cd7ad02"
+    },
+    {
+      "name": "MonitorDataResponse",
+      "sha256": "901ed4e4ac5e7e9342a4145b099b1bfa6669d049f618da2fac8604ca2fe1042a"
+    },
+    {
+      "name": "MonitorOptionResponse",
+      "sha256": "757c8d3fe14e0a33a5ab8bc6b624f199faf670962a171285416d51309cab3e23"
+    },
+    {
+      "name": "MonitorsResponse",
+      "sha256": "b96ee1bc85b46078b41f1b7b4bd2862f64a5f5301ffb9561c2ff30879559f01d"
+    },
+    {
+      "name": "ParameterChannelStatusResponse",
+      "sha256": "c9860ea1c4279f0fbf90213dd135312d1ed3219b3305ad6ee0d918bddbc4c44c"
+    },
+    {
+      "name": "ParameterNodeStatusResponse",
+      "sha256": "0ea83bd44682f87bf7a02e8b480f6467d1f847e91b68318216fab3e10f7fc8e9"
+    },
+    {
+      "name": "ParameterStatusResponse",
+      "sha256": "2d329e6d9e3569439d3e80541cedf0cd5ea162dd60f969b0a606a7f9a185668b"
+    },
+    {
+      "name": "PresetResponse",
+      "sha256": "6e38f3c17e01d8d95abf1d823bec0cb72519c6c9ea8dacea13a333f166d57eda"
+    },
+    {
+      "name": "PresetsResponse",
+      "sha256": "553b4e1d160b60196155a90e7868f3375fcd83240c0950429e399006aac26a7a"
+    },
+    {
+      "name": "ScalarPointResponse",
+      "sha256": "e4c8e12934f680e3250c4e5ca44addf9c609888fcb35c0466c922e35e462f1d1"
+    },
+    {
+      "name": "ScalarSeriesResponse",
+      "sha256": "d7db6d19c2cb8f50ca025676aa524bc5bfb6c897713c5037aeba7a7ca36c9895"
+    },
+    {
+      "name": "SearchAxisResponse",
+      "sha256": "845885f6254e2039e5fb8c041c9aa00deac69c5a6b78d64836a4877d1f1678bf"
+    },
+    {
+      "name": "SearchSpaceResponse",
+      "sha256": "e39ca9f569b3b39c41d14560aba506078d45e36256fca3b75e686d8d3906f44b"
+    },
+    {
+      "name": "SubmittedTrainingRunPlanRequest",
+      "sha256": "dcf295af3d228e97b42a58b3bce32ba1f91a75f206161115a4bc4f5aa9b1951d"
+    },
+    {
+      "name": "SubmittedTrainingRunRequest",
+      "sha256": "bf9e93802454e283292a949dff76a57ba9658b3f0ed64f966c1fb4cb75f545fb"
+    },
+    {
+      "name": "TrainingCancelledProgressEventResponse",
+      "sha256": "bca06a2ad64a1e0ac5cd38dad143a79cfee0b59072464083f47ec05948ed300d"
+    },
+    {
+      "name": "TrainingClusterGrowthAdditionResponse",
+      "sha256": "005b979aa8592955b50887bbab2b0228c9ea36e3a7302ae348d0f3a221ebcf6c"
+    },
+    {
+      "name": "TrainingClusterGrowthResponse",
+      "sha256": "ada394d711a76684f6559a56a202596271cd81cba380df97305fc3ba1d835fa1"
+    },
+    {
+      "name": "TrainingClusterInitializedProgressEventResponse",
+      "sha256": "fe0fc109d90ee9b2b23e2a15240285f5f1d98a168e45a2ee6b37cf1bfbfd37e0"
+    },
+    {
+      "name": "TrainingCommandsResponse",
+      "sha256": "77dfda8c36f887cd3b87f51b1d2ace20c7dc3d51f3a824bd2c5683821b739065"
+    },
+    {
+      "name": "TrainingDatasetCompletedProgressEventResponse",
+      "sha256": "d392a66f953f6a955c3a8f8149787d9c05978ee74b51d217fcca569f175ff0af"
+    },
+    {
+      "name": "TrainingDatasetStartedProgressEventResponse",
+      "sha256": "0e560839a4a27a7ec541e3ba00f8d6dbef8c3dbfb2124fc4ab9f445dc0a4f43a"
+    },
+    {
+      "name": "TrainingErrorProgressEventResponse",
+      "sha256": "e14fd386cea79b1c2ea53fd65f8d612933d0c21acaed4cd8a1d426a885e66161"
+    },
+    {
+      "name": "TrainingJobCreateRequest",
+      "sha256": "6bd3926416ab550a3f3facc193219d43ce06c7c6b463a07ac638fe2ccf766b42"
+    },
+    {
+      "name": "TrainingJobReconcileRequest",
+      "sha256": "c05a60ec774fcee03a0a817b8fc76abb60fed54963b3ebdde772ae49a71e73b0"
+    },
+    {
+      "name": "TrainingJobResponse",
+      "sha256": "dfaa0d418b3327f6ae9d7d474ea3d5a9244b09dafbc58e6d491acda3eabd76ac"
+    },
+    {
+      "name": "TrainingJobStartedProgressEventResponse",
+      "sha256": "4f449995021715581af04add24b639bdaca105c60786e8f95c9946ff2c9402cd"
+    },
+    {
+      "name": "TrainingNeuronAddedProgressEventResponse",
+      "sha256": "aa4956aee6b26780827345bbf01e506858c7f554d41f1e44ccad15d1a974a11f"
+    },
+    {
+      "name": "TrainingNeuronsAddedProgressEventResponse",
+      "sha256": "4c8c63c9c64e96e8b1be3d50574ffc9a5b64a7f01b32b14d1400f7c5d0455875"
+    },
+    {
+      "name": "TrainingProgressEventsResponse",
+      "sha256": "89bc76657d8a9941a72de2a6674bdf0644c7a6fdb9683881d2f0f4c6f1c7a4a1"
+    },
+    {
+      "name": "TrainingResultLinkResponse",
+      "sha256": "6a0d74f2ab0b55a1b473a8ab0006c6393aafe932892ae2a2101dab67e48745a3"
+    },
+    {
+      "name": "TrainingRunChangeResponse",
+      "sha256": "946d89379cab32be94c2909e1baedd799a1dc38e3810fec221d69c2315fb9f00"
+    },
+    {
+      "name": "TrainingRunPlanCreateRequest",
+      "sha256": "b4572fcd86afb395459f327c74994598ee7fdb2c994ad0ea6e03c3ddc7cf17cb"
+    },
+    {
+      "name": "TrainingRunPlanResponse",
+      "sha256": "79f825de6b05de7cc5a19ab9263c2aa8089646bcbc0b0a9c25130f97f078f8d8"
+    },
+    {
+      "name": "TrainingRunPlanSummaryResponse",
+      "sha256": "9e32695d3ef09b0bbf0d9114b17a263f6959b7c960efcade39b85adb177686b2"
+    },
+    {
+      "name": "TrainingRunProgressEventResponse",
+      "sha256": "640be3fe70f72a47b4736a7b0e2c2d6510269576c7a7489d11b68297ed019dfc"
+    },
+    {
+      "name": "TrainingRunResponse",
+      "sha256": "a21267f593e3646d56bc6b62ac24a96967d62f031abfc3aed253f1599d244a25"
+    },
+    {
+      "name": "TrainingSearchRequest",
+      "sha256": "2eb95df8c2726d4fbb4638d5a2ccfff471ad7830579509dde32d1f1ce8cdeec2"
+    },
+    {
+      "name": "TrainingSearchResponse",
+      "sha256": "0317781ff6a06375afcdabf2d04cb44f271b02c48b5c883a90fca47ae0428ec4"
+    },
+    {
+      "name": "TrainingWorkerCompletedProgressEventResponse",
+      "sha256": "40dd441280669cc1cc3b47ab0cf812f5ea7e3e50b58f2f80ce862af48585928b"
+    },
+    {
+      "name": "TrainingWorkerStartedProgressEventResponse",
+      "sha256": "03a4e883e387ada3430d41abd0a1ef8553ff0722d65c24efb1ffdefde10b3bb0"
+    },
+    {
+      "name": "UnknownTrainingProgressEventResponse",
+      "sha256": "1a8cb92b29541ba5827b69fa73e408660771ca5f5a201d5e0f1f58eb41a182b0"
+    },
+    {
+      "name": "ValidationError",
+      "sha256": "ca285d0c0e64c42844efd2e860edb239e77cc49d87f065c5ccb7d2f55331b862"
+    }
+  ],
+  "securitySchemes": {
+    "HTTPBearer": {
+      "type": "http",
+      "scheme": "bearer"
+    }
+  }
+}

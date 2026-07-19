@@ -1,0 +1,368 @@
+[
+  {
+    "authentication": [],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "capabilities_capabilities_get",
+    "path": "/capabilities",
+    "responseModel": "CapabilitiesResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "list_config_snapshots_config_snapshots_get",
+    "path": "/config-snapshots",
+    "responseModel": "ConfigSnapshotsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "create_config_snapshot_config_snapshots_post",
+    "path": "/config-snapshots",
+    "responseModel": "ConfigSnapshotResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "list_config_snapshot_library_config_snapshots_library_get",
+    "path": "/config-snapshots/library",
+    "responseModel": "ConfigSnapshotLibraryResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "DELETE",
+    "mutationPolicy": "local-mutation",
+    "operationId": "delete_config_snapshot_config_snapshots__snapshot_id__delete",
+    "path": "/config-snapshots/{snapshot_id}",
+    "responseModel": "ConfigSnapshotsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "PATCH",
+    "mutationPolicy": "local-mutation",
+    "operationId": "update_config_snapshot_config_snapshots__snapshot_id__patch",
+    "path": "/config-snapshots/{snapshot_id}",
+    "responseModel": "ConfigSnapshotResponse"
+  },
+  {
+    "authentication": [],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "health_health_get",
+    "path": "/health",
+    "responseModel": "HealthResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "inspect_inspect_post",
+    "path": "/inspect",
+    "responseModel": "InspectResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "logs_checkpoints_logs_checkpoints_post",
+    "path": "/logs/checkpoints",
+    "responseModel": "LogCheckpointsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "logs_experiments_logs_experiments_get",
+    "path": "/logs/experiments",
+    "responseModel": "LogExperimentsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "DELETE",
+    "mutationPolicy": "local-mutation",
+    "operationId": "delete_log_experiment_logs_experiments__experiment__delete",
+    "path": "/logs/experiments/{experiment}",
+    "responseModel": "LogExperimentDeleteResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "log-import",
+    "operationId": "import_log_archive_logs_import_post",
+    "path": "/logs/import",
+    "responseModel": "LogArchiveImportResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "logs_media_logs_media_post",
+    "path": "/logs/media",
+    "responseModel": "LogMediaResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "logs_parameter_status_logs_parameter_status_post",
+    "path": "/logs/parameter-status",
+    "responseModel": "LogParameterStatusResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "logs_runs_logs_runs_get",
+    "path": "/logs/runs",
+    "responseModel": "LogRunsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "delete_log_runs_logs_runs_delete_post",
+    "path": "/logs/runs/delete",
+    "responseModel": "LogRunDeleteResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "log_run_delete_plan_logs_runs_delete_plan_post",
+    "path": "/logs/runs/delete-plan",
+    "responseModel": "LogRunDeletePlanResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "delete_log_preset_logs_runs_preset_delete_post",
+    "path": "/logs/runs/preset-delete",
+    "responseModel": "LogRunDeleteResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "log_preset_delete_plan_logs_runs_preset_delete_plan_post",
+    "path": "/logs/runs/preset-delete-plan",
+    "responseModel": "LogRunDeletePlanResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "log_run_artifacts_logs_runs__run_id__artifacts_get",
+    "path": "/logs/runs/{run_id}/artifacts",
+    "responseModel": "LogRunArtifactsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "log_run_monitor_data_logs_runs__run_id__monitor_data_get",
+    "path": "/logs/runs/{run_id}/monitor-data",
+    "responseModel": "MonitorDataResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "logs_scalars_logs_scalars_post",
+    "path": "/logs/scalars",
+    "responseModel": "LogScalarsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "logs_tags_logs_tags_post",
+    "path": "/logs/tags",
+    "responseModel": "LogTagsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "models_models_get",
+    "path": "/models",
+    "responseModel": "ModelsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "schema_models__modelType___model__config_schema_get",
+    "path": "/models/{modelType}/{model}/config-schema",
+    "responseModel": "ConfigSchemaResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "datasets_models__modelType___model__datasets_get",
+    "path": "/models/{modelType}/{model}/datasets",
+    "responseModel": "DatasetsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "monitors_models__modelType___model__monitors_get",
+    "path": "/models/{modelType}/{model}/monitors",
+    "responseModel": "MonitorsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "presets_models__modelType___model__presets_get",
+    "path": "/models/{modelType}/{model}/presets",
+    "responseModel": "PresetsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "search_space_models__modelType___model__search_space_get",
+    "path": "/models/{modelType}/{model}/search-space",
+    "responseModel": "SearchSpaceResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "create_training_job_training_jobs_post",
+    "path": "/training/jobs",
+    "responseModel": "TrainingJobResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "training_job_training_jobs__job_id__get",
+    "path": "/training/jobs/{job_id}",
+    "responseModel": "TrainingJobResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "cancel_training_job_training_jobs__job_id__cancel_post",
+    "path": "/training/jobs/{job_id}/cancel",
+    "responseModel": "TrainingJobResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "training_job_events_training_jobs__job_id__events_get",
+    "path": "/training/jobs/{job_id}/events",
+    "responseModel": "TrainingProgressEventsResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "training_job_monitor_data_training_jobs__job_id__monitor_data_get",
+    "path": "/training/jobs/{job_id}/monitor-data",
+    "responseModel": "MonitorDataResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "GET",
+    "mutationPolicy": "safe",
+    "operationId": "training_job_monitor_parameter_status_training_jobs__job_id__monitor_parameter_status_get",
+    "path": "/training/jobs/{job_id}/monitor-parameter-status",
+    "responseModel": "ParameterStatusResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "local-mutation",
+    "operationId": "reconcile_training_job_training_jobs__job_id__reconcile_post",
+    "path": "/training/jobs/{job_id}/reconcile",
+    "responseModel": "TrainingJobResponse"
+  },
+  {
+    "authentication": [
+      "HTTPBearer"
+    ],
+    "method": "POST",
+    "mutationPolicy": "read-only",
+    "operationId": "create_training_run_plan_training_run_plan_post",
+    "path": "/training/run-plan",
+    "responseModel": "TrainingRunPlanResponse"
+  }
+]
