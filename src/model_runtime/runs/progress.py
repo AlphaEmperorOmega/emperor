@@ -125,9 +125,9 @@ class NeuronClusterGrowthCallback(Callback):
         for name, cluster in self._clusters:
             current = set(cluster.cluster.keys())
             new_names = current - self._known_names.get(name, set())
+            self._known_names[name] = current
             if not new_names:
                 continue
-            self._known_names[name] = current
             coordinates = [
                 coordinate
                 for coordinate in (

@@ -4,14 +4,49 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from model_runtime.runs import JsonlTrainingProgressCallback
 from model_runtime.runs.progress import (
+    NeuronClusterGrowthCallback,
     sanitize_metric_payload,
 )
 
 
 class RunsProgressTests(unittest.TestCase):
+    def test_growth_callback_reports_a_neuron_regrown_after_pruning(self) -> None:
+        events: list[dict[str, object]] = []
+        cluster = SimpleNamespace(
+            cluster={"neuron_1_1_1": object(), "neuron_2_1_1": object()},
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+        )
+        callback = NeuronClusterGrowthCallback(events.append)
+        callback._clusters = [("cluster", cluster)]
+        callback._known_names = {"cluster": set(cluster.cluster)}
+        trainer = SimpleNamespace(current_epoch=0, global_step=1)
+
+        del cluster.cluster["neuron_2_1_1"]
+        callback.on_train_batch_end(trainer, None, None, None, 0)
+        cluster.cluster["neuron_2_1_1"] = object()
+        callback.on_train_batch_end(trainer, None, None, None, 1)
+
+        self.assertEqual(
+            events,
+            [
+                {
+                    "type": "neuron_added",
+                    "node": "cluster",
+                    "coord": [2, 1, 1],
+                    "count": 2,
+                    "capacity": [2, 1, 1],
+                    "epoch": 0,
+                    "step": 1,
+                }
+            ],
+        )
+
     def test_metric_sanitization_and_jsonl_shape_remain_portable(self) -> None:
         sanitized, original_count, dropped_count = sanitize_metric_payload(
             {
