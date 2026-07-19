@@ -6,8 +6,9 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SOURCE_ROOT = PROJECT_ROOT / "src"
 EMPEROR_ROOT = PROJECT_ROOT / "emperor"
-MODEL_RUNTIME_ROOT = PROJECT_ROOT / "model_runtime"
+MODEL_RUNTIME_ROOT = SOURCE_ROOT / "model_runtime"
 PROJECT_CLI_ROOT = PROJECT_ROOT / "models" / "project_cli"
 PUBLIC_RUNTIME_PACKAGES = ("packages", "inspection", "runs", "cli")
 
