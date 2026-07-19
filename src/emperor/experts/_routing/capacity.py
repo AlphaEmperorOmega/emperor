@@ -26,6 +26,7 @@ class ExpertCapacityHandler:
         token_indices: Tensor,
         batch_size: int,
     ) -> tuple[Tensor, Tensor]:
+        self.shuffle_indices = None
         return self.__maybe_apply_capacity_limit(token_indices, batch_size)
 
     def maybe_apply_capacity_limit_routing_positions(

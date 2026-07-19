@@ -322,11 +322,7 @@ class MixtureOfExperts(Module):
         if self.top_k == self.num_experts:
             return None, full_probabilities
         routing_positions = torch.cat(sample_indices_for_expert_list)
-        reindexed_probs = full_probabilities
-        if self.capacity_factor > 0:
-            assert full_probabilities is not None
-            reindexed_probs = full_probabilities.flatten()[routing_positions]
-        return routing_positions, reindexed_probs
+        return routing_positions, full_probabilities
 
     def __compute_expert_mixture(
         self,
