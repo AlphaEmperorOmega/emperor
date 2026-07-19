@@ -45,6 +45,9 @@ class LayerGate(Module):
         gate_output = self.__run_gate_model(current)
         self.VALIDATOR.validate_gate_output(gate_output, current, self.option)
         gate = self.effective_values(gate_output)
+        return self.__compose_gate_with_current(current, gate)
+
+    def __compose_gate_with_current(self, current: Tensor, gate: Tensor) -> Tensor:
         if self.option == LayerGateOptions.MULTIPLIER:
             return gate * current
         if self.option == LayerGateOptions.ADDITION:

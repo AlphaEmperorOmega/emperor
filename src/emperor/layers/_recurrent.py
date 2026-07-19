@@ -103,37 +103,34 @@ class RecurrentLayer(LayerModuleBase):
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
 
-        original_halting_state = state.halting_state
+        owner_halting_state = state.halting_state
         recurrent_state = self.__run_recurrent_steps(state)
         recurrent_state = self.__maybe_finalize_recurrent_halting(recurrent_state)
         return self.__reconstruct_layer_state(
-            state, recurrent_state, original_halting_state
+            state, recurrent_state, owner_halting_state
         )
 
     def __run_recurrent_steps(
         self,
-        state: LayerState,
+        layer_state: LayerState,
     ) -> _RecurrentState:
         recurrent_state = _RecurrentState(
-            hidden=state.hidden, loss=state.loss, context_state=state
+            hidden=layer_state.hidden,
+            loss=layer_state.loss,
+            context_state=layer_state,
         )
         for _ in range(self.max_steps):
-            previous_hidden = recurrent_state.hidden
+            previous_step_hidden = recurrent_state.hidden
             recurrent_state = self.__run_recurrent_block_step(recurrent_state)
-            recurrent_state = self.__run_controllers(recurrent_state, previous_hidden)
+            recurrent_state = self.__run_controllers(
+                recurrent_state,
+                previous_step_hidden,
+            )
 
             if self.__all_items_halted(recurrent_state.halting_state):
                 break
 
         return recurrent_state
-
-    def __get_halt_mask(
-        self,
-        halting_state: "HaltingStateBase | None",
-    ) -> Tensor | None:
-        if halting_state is None:
-            return None
-        return halting_state.halt_mask
 
     def __run_recurrent_block_step(
         self,
@@ -142,10 +139,12 @@ class RecurrentLayer(LayerModuleBase):
         block_input = self.__maybe_apply_layer_norm_before(recurrent_state.hidden)
         block_input = self.__maybe_apply_memory_before_block(block_input)
         block_output_state = self.__process_block(recurrent_state, block_input)
-        candidate = self.__maybe_apply_memory_after_block(block_output_state.hidden)
-        candidate = self.__maybe_apply_layer_norm_default(candidate)
+        candidate_hidden = self.__maybe_apply_memory_after_block(
+            block_output_state.hidden
+        )
+        candidate_hidden = self.__maybe_apply_layer_norm_default(candidate_hidden)
         return _RecurrentState(
-            hidden=candidate,
+            hidden=candidate_hidden,
             loss=block_output_state.loss,
             context_state=recurrent_state.context_state,
             halting_state=recurrent_state.halting_state,
@@ -163,15 +162,17 @@ class RecurrentLayer(LayerModuleBase):
         )
 
     def __process_block(
-        self, recurrent_state: _RecurrentState, hidden: Tensor
+        self,
+        recurrent_state: _RecurrentState,
+        block_input: Tensor,
     ) -> LayerState:
-        block_state = replace(
+        block_input_state = replace(
             recurrent_state.context_state,
-            hidden=hidden,
+            hidden=block_input,
             loss=recurrent_state.loss,
             halting_state=None,
         )
-        block_output_state = self.block_model(block_state)
+        block_output_state = self.block_model(block_input_state)
         self.VALIDATOR.validate_candidate(
             block_output_state.hidden,
             recurrent_state.hidden,
@@ -195,35 +196,39 @@ class RecurrentLayer(LayerModuleBase):
         recurrent_state: _RecurrentState,
         previous_hidden: Tensor,
     ) -> _RecurrentState:
-        hidden = self.__maybe_apply_gate(recurrent_state.hidden)
-        hidden = self.__maybe_apply_residual(hidden, previous_hidden)
-        hidden = self.__maybe_apply_layer_norm_after(hidden)
-        halting_state, hidden = self.__maybe_update_halting_state(
-            recurrent_state.halting_state, hidden, previous_hidden
+        gated_hidden = self.__maybe_apply_gate(recurrent_state.hidden)
+        residual_hidden = self.__maybe_apply_residual(gated_hidden, previous_hidden)
+        normalized_hidden = self.__maybe_apply_layer_norm_after(residual_hidden)
+        updated_halting_state, next_recurrent_hidden = (
+            self.__maybe_update_halting_state(
+                recurrent_state.halting_state,
+                normalized_hidden,
+                previous_hidden,
+            )
         )
         return _RecurrentState(
-            hidden=hidden,
+            hidden=next_recurrent_hidden,
             loss=recurrent_state.loss,
             context_state=recurrent_state.context_state,
-            halting_state=halting_state,
+            halting_state=updated_halting_state,
         )
 
     def __maybe_apply_gate(
         self,
-        candidate: Tensor,
+        candidate_hidden: Tensor,
     ) -> Tensor:
         if self.recurrent_gate is None:
-            return candidate
-        return self.recurrent_gate(candidate)
+            return candidate_hidden
+        return self.recurrent_gate(candidate_hidden)
 
     def __maybe_apply_residual(
         self,
-        candidate: Tensor,
+        candidate_hidden: Tensor,
         previous_hidden: Tensor,
     ) -> Tensor:
         if self.residual_connection is None:
-            return candidate
-        return self.residual_connection(candidate, previous_hidden)
+            return candidate_hidden
+        return self.residual_connection(candidate_hidden, previous_hidden)
 
     def __maybe_apply_layer_norm_after(self, hidden: Tensor) -> Tensor:
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.AFTER:
@@ -232,59 +237,65 @@ class RecurrentLayer(LayerModuleBase):
 
     def __maybe_update_halting_state(
         self,
-        halting_state: "HaltingStateBase | None",
-        hidden: Tensor,
-        previous_hidden: Tensor,
+        previous_halting_state: "HaltingStateBase | None",
+        candidate_hidden: Tensor,
+        previous_step_hidden: Tensor,
     ) -> tuple["HaltingStateBase | None", Tensor]:
         if self.halting_model is None:
-            return halting_state, hidden
+            return previous_halting_state, candidate_hidden
 
-        halting_state, halting_hidden = self.halting_model.update_halting_state(
-            halting_state, hidden
+        updated_halting_state, halting_output_hidden = (
+            self.halting_model.update_halting_state(
+                previous_halting_state,
+                candidate_hidden,
+            )
         )
         self.VALIDATOR.validate_candidate(
-            halting_hidden, previous_hidden, self.output_dim
+            halting_output_hidden,
+            previous_step_hidden,
+            self.output_dim,
         )
-        return halting_state, halting_hidden
+        return updated_halting_state, halting_output_hidden
 
     def __maybe_finalize_recurrent_halting(
         self,
-        run_state: _RecurrentState,
+        recurrent_state: _RecurrentState,
     ) -> _RecurrentState:
-        halting_state = run_state.halting_state
+        halting_state = recurrent_state.halting_state
         if self.halting_model is None or halting_state is None:
-            return run_state
+            return recurrent_state
 
-        finalized_hidden, recurrent_loss = (
+        finalized_hidden, halting_loss = (
             self.halting_model.finalize_weighted_accumulation(
                 halting_state,
-                run_state.hidden,
+                recurrent_state.hidden,
             )
         )
-        recurrent_loss = self._reduce_auxiliary_loss(recurrent_loss)
+        reduced_halting_loss = self._reduce_auxiliary_loss(halting_loss)
         accumulated_loss = self._accumulate_auxiliary_loss(
-            run_state.loss, recurrent_loss
+            recurrent_state.loss,
+            reduced_halting_loss,
         )
         return _RecurrentState(
             hidden=finalized_hidden,
             loss=accumulated_loss,
-            context_state=run_state.context_state,
+            context_state=recurrent_state.context_state,
             halting_state=halting_state,
         )
 
     def __reconstruct_layer_state(
         self,
-        state: LayerState,
-        run_state: _RecurrentState,
-        original_halting_state: "HaltingStateBase | None",
+        layer_state: LayerState,
+        recurrent_state: _RecurrentState,
+        owner_halting_state: "HaltingStateBase | None",
     ) -> LayerState:
-        state.hidden = run_state.hidden
-        state.loss = run_state.loss
-        state.halting_state = original_halting_state
-        return state
+        layer_state.hidden = recurrent_state.hidden
+        layer_state.loss = recurrent_state.loss
+        layer_state.halting_state = owner_halting_state
+        return layer_state
 
     def __all_items_halted(self, halting_state: "HaltingStateBase | None") -> bool:
-        halt_mask = self.__get_halt_mask(halting_state)
-        if halt_mask is None:
+        if halting_state is None or halting_state.halt_mask is None:
             return False
-        return bool(halt_mask.all().item())
+        all_items_halted = bool(halting_state.halt_mask.all().item())
+        return all_items_halted

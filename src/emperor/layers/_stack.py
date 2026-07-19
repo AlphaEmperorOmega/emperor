@@ -64,28 +64,36 @@ class LayerStack(LayerModuleBase):
         return len(self.layers)
 
     def __build_layer_stack(self) -> ModuleList:
-        layers = []
-        layer_adjustment = self.__add_initial_layer(layers)
-        self.__add_hidden_layers(layers, layer_adjustment)
-        self.__add_output_layer(layers)
-        self.__maybe_share_gate_model(layers)
-        self.__maybe_share_halting_model(layers)
-        self.__maybe_share_memory_model(layers)
+        stack_layers = []
+        boundary_layer_count = self.__add_initial_layer(stack_layers)
+        self.__add_hidden_layers(stack_layers, boundary_layer_count)
+        self.__add_output_layer(stack_layers)
+        self.__maybe_share_gate_model(stack_layers)
+        self.__maybe_share_halting_model(stack_layers)
+        self.__maybe_share_memory_model(stack_layers)
 
-        self._initialize_parameters(*layers)
-        return ModuleList(layers)
+        self._initialize_parameters(*stack_layers)
+        return ModuleList(stack_layers)
 
-    def __add_initial_layer(self, layers: list) -> int:
-        if self.input_dim != self.hidden_dim and self.num_layers > 1:
-            layer = self.__create_layer(self.input_dim, self.hidden_dim)
-            layers.append(layer)
+    def __add_initial_layer(self, stack_layers: list) -> int:
+        requires_input_projection = (
+            self.input_dim != self.hidden_dim and self.num_layers > 1
+        )
+        if requires_input_projection:
+            initial_layer = self.__create_layer(self.input_dim, self.hidden_dim)
+            stack_layers.append(initial_layer)
             return self.SEPARATE_INPUT_OUTPUT_DIM
         return self.SHARED_INPUT_OUTPUT_DIM
 
-    def __add_hidden_layers(self, layers: list, layer_adjustment: int) -> None:
-        for _ in range(self.num_layers - layer_adjustment):
-            layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
-            layers.append(layer)
+    def __add_hidden_layers(
+        self,
+        stack_layers: list,
+        boundary_layer_count: int,
+    ) -> None:
+        hidden_layer_count = self.num_layers - boundary_layer_count
+        for _ in range(hidden_layer_count):
+            hidden_layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
+            stack_layers.append(hidden_layer)
 
     def __add_output_layer(self, stack_layers: list) -> None:
         output_layer_input_dim = (
@@ -103,27 +111,30 @@ class LayerStack(LayerModuleBase):
         stack_layers.append(output_layer)
 
     def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
-        overrides: LayerConfig | None = None
+        output_layer_overrides: LayerConfig | None = None
         if not self.apply_output_pipeline_flag:
-            overrides = LayerConfig(
+            output_layer_overrides = LayerConfig(
                 activation=ActivationOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
             )
-        last_layer_bias = self.__resolve_last_layer_bias_override()
-        overrides = self.__merge_layer_override(overrides, last_layer_bias)
-        return overrides
+        last_layer_bias_override = self.__resolve_last_layer_bias_override()
+        output_layer_overrides = self.__merge_layer_override(
+            output_layer_overrides,
+            last_layer_bias_override,
+        )
+        return output_layer_overrides
 
     def __merge_layer_override(
         self,
-        base: "LayerConfig | None",
-        addition: "LayerConfig | None",
+        base_override: "LayerConfig | None",
+        additional_override: "LayerConfig | None",
     ) -> "LayerConfig | None":
-        if addition is None:
-            return base
-        if base is None:
-            return addition
-        return self._override_config(base, addition)
+        if additional_override is None:
+            return base_override
+        if base_override is None:
+            return additional_override
+        return self._override_config(base_override, additional_override)
 
     def __resolve_last_layer_bias_override(self) -> LayerConfig | None:
         if self.last_layer_bias_option == LastLayerBiasOptions.DEFAULT:
@@ -131,18 +142,18 @@ class LayerStack(LayerModuleBase):
         if not hasattr(self.layer_config.layer_model_config, "bias_flag"):
             return None
 
-        model_config = deepcopy(self.layer_config.layer_model_config)
+        last_layer_model_config = deepcopy(self.layer_config.layer_model_config)
         match self.last_layer_bias_option:
             case LastLayerBiasOptions.DISABLED:
-                model_config.bias_flag = False
+                last_layer_model_config.bias_flag = False
             case LastLayerBiasOptions.ENABLED:
-                model_config.bias_flag = True
+                last_layer_model_config.bias_flag = True
             case _:
                 raise ValueError(
                     "Unsupported last layer bias option "
                     f"{self.last_layer_bias_option} for LayerStack."
                 )
-        return LayerConfig(layer_model_config=model_config)
+        return LayerConfig(layer_model_config=last_layer_model_config)
 
     def __create_layer(
         self,
@@ -174,28 +185,28 @@ class LayerStack(LayerModuleBase):
             resolved_layer_config.gate_config = None
         return resolved_layer_config.build()
 
-    def __maybe_share_gate_model(self, layers: list[Layer]) -> None:
+    def __maybe_share_gate_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_gate_config is None:
             return
-        shared_gate = self._build_from_config(
+        shared_gate_model = self._build_from_config(
             self.shared_gate_config,
             gate_dim=self.output_dim,
         )
-        for layer in layers:
-            layer.gate_config = self.shared_gate_config
-            layer.gate_model = shared_gate
+        for stack_layer in stack_layers:
+            stack_layer.gate_config = self.shared_gate_config
+            stack_layer.gate_model = shared_gate_model
 
-    def __maybe_share_halting_model(self, layers: list[Layer]) -> None:
+    def __maybe_share_halting_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_halting_config is None:
             return
         shared_halting_model = self._build_from_config(
             self.shared_halting_config,
             input_dim=self.output_dim,
         )
-        for layer in layers:
-            layer.halting_model = shared_halting_model
+        for stack_layer in stack_layers:
+            stack_layer.halting_model = shared_halting_model
 
-    def __maybe_share_memory_model(self, layers: list[Layer]) -> None:
+    def __maybe_share_memory_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_memory_config is None:
             return
         shared_memory_model = self._build_from_config(
@@ -203,10 +214,11 @@ class LayerStack(LayerModuleBase):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        for layer in layers:
-            layer.memory_model = shared_memory_model
+        for stack_layer in stack_layers:
+            stack_layer.memory_model = shared_memory_model
 
     def forward(self, state: "LayerState") -> "LayerState":
-        for layer in self.layers:
-            state = layer(state)
-        return state
+        layer_state = state
+        for stack_layer in self.layers:
+            layer_state = stack_layer(layer_state)
+        return layer_state
