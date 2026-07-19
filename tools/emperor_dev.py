@@ -21,8 +21,10 @@ from typing import Any
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 VENV_ROOT = REPOSITORY_ROOT / "torchenv"
-FRONTEND_ROOT = REPOSITORY_ROOT / "workbench" / "frontend"
-DEFAULT_RUNTIME_ROOT = REPOSITORY_ROOT / "workbench" / ".runtime"
+WORKBENCH_ROOT = REPOSITORY_ROOT / "apps" / "workbench"
+API_ROOT = WORKBENCH_ROOT / "api"
+FRONTEND_ROOT = WORKBENCH_ROOT / "web"
+DEFAULT_RUNTIME_ROOT = REPOSITORY_ROOT / ".runtime" / "workbench"
 RUNTIME_ROOT = (
     Path(os.environ.get("WORKBENCH_RUNTIME_ROOT", str(DEFAULT_RUNTIME_ROOT)))
     .expanduser()
@@ -36,7 +38,7 @@ PYTORCH_CUDA_130_INDEX = "https://download.pytorch.org/whl/cu130"
 PYTORCH_CUDA_126_INDEX = "https://download.pytorch.org/whl/cu126"
 SETUP_INPUTS = (
     REPOSITORY_ROOT / "pyproject.toml",
-    REPOSITORY_ROOT / "workbench" / "pyproject.toml",
+    API_ROOT / "pyproject.toml",
     FRONTEND_ROOT / "package.json",
     FRONTEND_ROOT / "package-lock.json",
 )
@@ -273,7 +275,7 @@ def _protect_runtime_path(path: Path) -> None:
         path.chmod(0o700 if path.is_dir() else 0o600)
         return
     if os.name == "nt":
-        from workbench.backend.storage.local_files import (
+        from emperor_workbench.filesystem import (
             apply_owner_only_permissions,
         )
 
@@ -281,7 +283,7 @@ def _protect_runtime_path(path: Path) -> None:
 
 
 def _reject_runtime_link(path: Path) -> None:
-    from workbench.backend.storage.local_files import reject_link_like
+    from emperor_workbench.filesystem import reject_link_like
 
     reject_link_like(path, "Workbench runtime path")
 
@@ -582,6 +584,7 @@ def _torch_install_matches_profile(
 
 def _dependencies_available(python: Path) -> bool:
     modules = (
+        "emperor_workbench",
         "fastapi",
         "filelock",
         "httpx",
@@ -673,7 +676,7 @@ def setup(profile: str = "cpu") -> int:
                 "--editable",
                 ".[dev]",
                 "--editable",
-                "./workbench",
+                "./apps/workbench/api[dev]",
             ]
         )
 
@@ -782,11 +785,17 @@ def _service_specs() -> tuple[ServiceSpec, ServiceSpec]:
         "WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS": os.environ.get(
             "WORKBENCH_API_ALLOW_UNSAFE_LOCAL_MUTATIONS", "true"
         ),
+        "WORKBENCH_API_SNAPSHOTS_ROOT": os.environ.get(
+            "WORKBENCH_API_SNAPSHOTS_ROOT", str(RUNTIME_ROOT / "snapshots")
+        ),
+        "WORKBENCH_API_STATE_ROOT": os.environ.get(
+            "WORKBENCH_API_STATE_ROOT", str(RUNTIME_ROOT / "state")
+        ),
     }
     backend_command = [
         str(python),
         "-m",
-        "workbench.backend.launch",
+        "emperor_workbench",
         "--host",
         "127.0.0.1",
         "--port",
@@ -808,7 +817,7 @@ def _service_specs() -> tuple[ServiceSpec, ServiceSpec]:
             "backend",
             backend_port,
             tuple(backend_command),
-            "workbench.backend.launch",
+            "emperor_workbench",
             REPOSITORY_ROOT,
             backend_environment,
             f"http://127.0.0.1:{backend_port}/health",
@@ -884,6 +893,15 @@ def _same_executable(observed: str, expected: str) -> bool:
         return os.path.normcase(os.path.abspath(observed)) == os.path.normcase(
             os.path.abspath(expected)
         )
+
+
+def _service_job_object_name(service: str, port: int) -> str:
+    safe = "".join(
+        character for character in service if character.isalnum() or character in "-_"
+    )
+    if not safe or safe != service or not 1 <= port <= 65535:
+        raise ValueError("Unsafe Workbench service Job Object identity.")
+    return f"Local\\EmperorWorkbenchService-{safe}-{port}"
 
 
 def _legacy_command_matches(spec: ServiceSpec, command: list[str]) -> bool:
@@ -1034,14 +1052,13 @@ def _start_service(spec: ServiceSpec) -> None:
         if os.name == "posix":
             kwargs["start_new_session"] = True
         if os.name == "nt":
-            from workbench.backend.windows_jobs import (
+            from emperor_workbench.training_jobs._containment._windows_job import (
                 WindowsJob,
                 WindowsJobLimits,
-                service_job_object_name,
             )
 
             windows_job = WindowsJob.create(
-                name=service_job_object_name(spec.name, spec.port),
+                name=_service_job_object_name(spec.name, spec.port),
                 limits=WindowsJobLimits(
                     memory_bytes=64 * 1024**3,
                     cpu_count=os.cpu_count() or 1,
@@ -1142,9 +1159,9 @@ def _terminate_windows_service_job(
     name = metadata.get("jobName")
     if not isinstance(name, str) or not name:
         return
-    from workbench.backend.windows_jobs import WindowsJob, service_job_object_name
+    from emperor_workbench.training_jobs._containment._windows_job import WindowsJob
 
-    if name != service_job_object_name(spec.name, spec.port):
+    if name != _service_job_object_name(spec.name, spec.port):
         return
 
     job = WindowsJob.open(name)

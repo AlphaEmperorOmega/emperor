@@ -9,15 +9,18 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-PRODUCTION_TREES = ("docs", "emperor", "model_runtime", "models")
+SOURCE_ROOT = PROJECT_ROOT / "src"
+PRODUCTION_SOURCE_ROOTS = tuple(
+    SOURCE_ROOT / package for package in ("emperor", "model_runtime", "models")
+)
 
 
 class DistributionOwnershipTests(unittest.TestCase):
     def test_executable_tests_are_external_to_production_source(self) -> None:
         leaked_tests = sorted(
             path.relative_to(PROJECT_ROOT).as_posix()
-            for tree in PRODUCTION_TREES
-            for path in (PROJECT_ROOT / tree).rglob("test*.py")
+            for source_root in PRODUCTION_SOURCE_ROOTS
+            for path in source_root.rglob("test*.py")
         )
 
         self.assertEqual(leaked_tests, [])
@@ -38,17 +41,15 @@ class DistributionOwnershipTests(unittest.TestCase):
                 "model_runtime.*",
             ],
         )
-        self.assertEqual(discovery["where"], ["."])
-        self.assertEqual(
-            discovery["exclude"],
-            ["docs", "docs.*", "tests", "tests.*", "workbench", "workbench.*"],
-        )
+        self.assertEqual(project["tool"]["setuptools"]["package-dir"], {"": "src"})
+        self.assertEqual(discovery["where"], ["src"])
+        self.assertNotIn("exclude", discovery)
         self.assertFalse(discovery["namespaces"])
 
-    def test_workbench_owns_its_web_dependencies_and_package_config(self) -> None:
+    def test_workbench_api_owns_its_dependencies_and_package_config(self) -> None:
         with (PROJECT_ROOT / "pyproject.toml").open("rb") as project_file:
             project = tomllib.load(project_file)
-        with (PROJECT_ROOT / "workbench" / "pyproject.toml").open(
+        with (PROJECT_ROOT / "apps" / "workbench" / "api" / "pyproject.toml").open(
             "rb"
         ) as project_file:
             workbench = tomllib.load(project_file)
@@ -76,22 +77,30 @@ class DistributionOwnershipTests(unittest.TestCase):
                     )
                 )
 
-        workbench_requirements = "\n".join(workbench["project"]["dependencies"])
+        workbench_requirements = "\n".join(
+            [
+                *workbench["project"]["dependencies"],
+                *workbench["project"]["optional-dependencies"]["dev"],
+            ]
+        )
         for dependency in forbidden_roots:
             with self.subTest(workbench_dependency=dependency):
                 self.assertIn(dependency, workbench_requirements)
         self.assertEqual(
             workbench["project"]["scripts"]["emperor-workbench"],
-            "workbench.backend.launch:main",
+            "emperor_workbench.cli:main",
         )
-        self.assertNotIn(
-            "workbench.backend.tests",
-            workbench["tool"]["setuptools"]["packages"],
+        self.assertEqual(
+            workbench["tool"]["setuptools"]["package-dir"],
+            {"": "src"},
         )
-        self.assertNotIn(
-            "workbench.backend.inspector",
-            workbench["tool"]["setuptools"]["packages"],
+        discovery = workbench["tool"]["setuptools"]["packages"]["find"]
+        self.assertEqual(discovery["where"], ["src"])
+        self.assertEqual(
+            discovery["include"],
+            ["emperor_workbench", "emperor_workbench.*"],
         )
+        self.assertFalse(discovery["namespaces"])
 
     def test_installed_packages_import_outside_the_checkout(self) -> None:
         smoke = """

@@ -5,11 +5,11 @@
 Emperor is a personal PyTorch research framework for building experimental neural
 network models from reusable, inspectable components. The repository combines:
 
-- `emperor/` - core neural modules, controller primitives, datasets, training
+- `src/emperor/` - core neural modules, controller primitives, datasets, training
   helpers, and monitor callbacks.
-- `models/` - reference experiment packages that compose the core modules into
+- `src/models/` - reference experiment packages that compose the core modules into
   runnable architectures.
-- `workbench/` - a local browser-based Model Visualizer for inspecting presets,
+- `apps/workbench/` - a local browser-based Model Visualizer for inspecting presets,
   editing config overrides, planning training runs, launching local jobs, and
   reviewing live or historical monitor data.
 
@@ -633,7 +633,8 @@ The Workbench should be treated as a vibecoded prototype: it is useful for local
 research workflows today, but its implementation is expected to be refactored
 as the experiment workflow and architecture settle.
 
-See [`workbench/README.md`](workbench/README.md) for the focused Workbench guide.
+See [`apps/workbench/README.md`](apps/workbench/README.md) for the focused
+Workbench guide.
 
 Hosted or non-local deployments should configure explicit CORS origins in the
 Workbench backend environment:
@@ -786,7 +787,7 @@ Capture the production Workbench browser and long-session baseline after a
 frontend build with:
 
 ```bash
-cd workbench/frontend
+cd apps/workbench/web
 npm run build
 npm run performance:budget
 npm run performance:browser
@@ -810,7 +811,7 @@ temporary filesystem roots, and fake Training Jobs. It requires the verified
 Python environment and existing frontend dependencies, but downloads nothing:
 
 ```bash
-cd workbench/frontend
+cd apps/workbench/web
 npm run test:contract:e2e
 ```
 

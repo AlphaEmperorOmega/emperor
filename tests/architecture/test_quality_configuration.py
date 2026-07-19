@@ -7,27 +7,26 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PYRIGHT_BASELINE = {
-    "models/catalog.py",
-    "model_runtime/__init__.py",
-    "model_runtime/cli/__init__.py",
-    "model_runtime/inspection/__init__.py",
-    "model_runtime/packages/__init__.py",
-    "model_runtime/packages/configuration.py",
-    "model_runtime/packages/identity.py",
-    "model_runtime/runs/__init__.py",
+    "src/models/catalog.py",
+    "src/model_runtime/__init__.py",
+    "src/model_runtime/cli/__init__.py",
+    "src/model_runtime/inspection/__init__.py",
+    "src/model_runtime/packages/__init__.py",
+    "src/model_runtime/packages/configuration.py",
+    "src/model_runtime/packages/identity.py",
+    "src/model_runtime/runs/__init__.py",
 }
 REQUIRED_GENERATED_EXCLUDES = {
     "**/__pycache__",
     ".next",
+    ".runtime",
     ".pytest_cache",
     ".ruff_cache",
     "build",
     "dist",
     "node_modules",
     "torchenv",
-    "workbench/.runtime",
-    "workbench/frontend/.next",
-    "workbench/frontend/node_modules",
+    "apps",
 }
 
 

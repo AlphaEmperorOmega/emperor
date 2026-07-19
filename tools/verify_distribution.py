@@ -27,9 +27,7 @@ PROJECT_FILES = (
 PROJECT_TREES = (
     "constraints",
     "docs",
-    "emperor",
-    "model_runtime",
-    "models",
+    "src",
     "tests",
 )
 IGNORED_TREE_NAMES = (
@@ -85,7 +83,7 @@ def _copy_project(repository: Path, destination: Path) -> None:
 
 def _copy_workbench(repository: Path, destination: Path) -> None:
     shutil.copytree(
-        repository / "workbench",
+        repository / "apps" / "workbench" / "api",
         destination,
         ignore=shutil.ignore_patterns(
             *IGNORED_TREE_NAMES,
@@ -170,9 +168,9 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
 
     required_prefixes = (
         "docs/",
-        "emperor/",
-        "models/",
-        "model_runtime/",
+        "src/emperor/",
+        "src/models/",
+        "src/model_runtime/",
         "tests/",
     )
     missing = [
@@ -190,7 +188,11 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         raise VerificationError(
             f"Source distribution is missing required files: {missing_files}"
         )
-    leaked_workbench = sorted(name for name in names if name.startswith("workbench/"))
+    leaked_workbench = sorted(
+        name
+        for name in names
+        if name.startswith("apps/workbench/") or name.startswith("workbench/")
+    )
     if leaked_workbench:
         raise VerificationError(
             f"Workbench leaked into Emperor source distribution: {leaked_workbench}"
@@ -198,9 +200,11 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
     return {
         "constraints": sum(name.startswith("constraints/") for name in names),
         "docs": sum(name.startswith("docs/") for name in names),
-        "emperor": sum(name.startswith("emperor/") for name in names),
-        "models": sum(name.startswith("models/") for name in names),
-        "model_runtime": sum(name.startswith("model_runtime/") for name in names),
+        "emperor": sum(name.startswith("src/emperor/") for name in names),
+        "models": sum(name.startswith("src/models/") for name in names),
+        "model_runtime": sum(
+            name.startswith("src/model_runtime/") for name in names
+        ),
         "tests": sum(name.startswith("tests/") for name in names),
         "total": len(names),
     }
@@ -214,27 +218,30 @@ def _verify_workbench_wheel(wheel: Path) -> dict[str, int]:
         name
         for name in names
         if not (
-            name.startswith("workbench/")
+            name.startswith("emperor_workbench/")
             or (name.startswith("emperor_workbench-") and ".dist-info/" in name)
         )
     )
     if unexpected:
         raise VerificationError(f"Unexpected Workbench wheel members: {unexpected}")
     leaked_tests = sorted(
-        name for name in names if name.startswith("workbench/backend/tests/")
+        name for name in names if name.startswith("emperor_workbench/tests/")
     )
     if leaked_tests:
         raise VerificationError(f"Tests leaked into Workbench wheel: {leaked_tests}")
     required = {
-        "workbench/__init__.py",
-        "workbench/backend/api/__init__.py",
-        "workbench/backend/launch.py",
+        "emperor_workbench/__init__.py",
+        "emperor_workbench/__main__.py",
+        "emperor_workbench/api/__init__.py",
+        "emperor_workbench/cli.py",
     }
     missing = sorted(required.difference(names))
     if missing:
         raise VerificationError(f"Workbench wheel is missing: {missing}")
     return {
-        "workbench": sum(name.startswith("workbench/") for name in names),
+        "emperor_workbench": sum(
+            name.startswith("emperor_workbench/") for name in names
+        ),
         "metadata": sum(".dist-info/" in name for name in names),
         "total": len(names),
     }
@@ -248,25 +255,24 @@ def _verify_workbench_sdist(sdist: Path) -> dict[str, int]:
             if member.isfile()
         }
     required = {
-        "__init__.py",
-        "backend/api/__init__.py",
-        "backend/launch.py",
+        "src/emperor_workbench/__init__.py",
+        "src/emperor_workbench/__main__.py",
+        "src/emperor_workbench/api/__init__.py",
+        "src/emperor_workbench/cli.py",
         "pyproject.toml",
     }
     missing = sorted(required.difference(names))
     if missing:
         raise VerificationError(f"Workbench sdist is missing: {missing}")
-    leaked = sorted(
-        name
-        for name in names
-        if name.startswith("backend/tests/") or name.startswith("frontend/")
-    )
+    leaked = sorted(name for name in names if name.startswith("web/"))
     if leaked:
         raise VerificationError(
             f"Non-runtime files leaked into Workbench sdist: {leaked}"
         )
     return {
-        "backend": sum(name.startswith("backend/") for name in names),
+        "emperor_workbench": sum(
+            name.startswith("src/emperor_workbench/") for name in names
+        ),
         "total": len(names),
     }
 
@@ -411,18 +417,21 @@ def _workbench_smoke(
     state_root: Path,
 ) -> dict[str, object]:
     smoke_code = """
+import asyncio
 import json
 import os
 from importlib.metadata import version
 
 from fastapi.routing import APIRoute, iter_route_contexts
-from workbench.backend.api import WorkbenchApiSettings, create_app
-from workbench.backend.inspection_adapter import WorkbenchInspectionAdapter
-import workbench
+from emperor_workbench.api import create_app
+from emperor_workbench.model_packages import ModelPackageCatalog
+from emperor_workbench.settings import WorkbenchApiSettings
+import emperor_workbench
 
 settings = WorkbenchApiSettings(
     logs_root=os.environ['WORKBENCH_SMOKE_LOGS'],
     snapshots_root=os.environ['WORKBENCH_SMOKE_SNAPSHOTS'],
+    state_root=os.environ['WORKBENCH_SMOKE_STATE'],
     training_cancellation_mode='process-group',
 )
 app = create_app(settings)
@@ -432,33 +441,44 @@ routes = sorted(
     if isinstance(context.original_route, APIRoute)
     for method in context.methods or ()
 )
-catalog = WorkbenchInspectionAdapter.catalog_payload()
+
+async def catalog_identities():
+    async with app.router.lifespan_context(app):
+        return ModelPackageCatalog(
+            app.state.workbench_container.project_adapter
+        ).identities()
+
+catalog = asyncio.run(catalog_identities())
 print(json.dumps({
     'catalog_count': len(catalog),
     'route_count': len(routes),
     'title': app.title,
     'version': version('emperor-workbench'),
-    'workbench_path': workbench.__file__,
+    'emperor_workbench_path': emperor_workbench.__file__,
 }, sort_keys=True))
 """
     env = _isolated_environment()
     env["EMPEROR_PROJECT_ADAPTER_COMMAND"] = f"{python} -P -m models.adapter_cli"
     env["WORKBENCH_SMOKE_LOGS"] = str(state_root / "logs")
     env["WORKBENCH_SMOKE_SNAPSHOTS"] = str(state_root / "snapshots")
+    env["WORKBENCH_SMOKE_STATE"] = str(state_root / "state")
     output = _run([str(python), "-P", "-c", smoke_code], cwd=outside, env=env)
     return json.loads(output.splitlines()[-1])
 
 
 def _require_workbench_path_under(payload: dict[str, object], root: Path) -> None:
-    installed_path = Path(str(payload["workbench_path"])).resolve()
+    installed_path = Path(str(payload["emperor_workbench_path"])).resolve()
     if not installed_path.is_relative_to(root.resolve()):
         raise VerificationError(
-            f"workbench_path resolved outside the expected install: {installed_path}"
+            "emperor_workbench_path resolved outside the expected install: "
+            f"{installed_path}"
         )
 
 
 def _workbench_semantic_payload(payload: dict[str, object]) -> dict[str, object]:
-    return {key: value for key, value in payload.items() if key != "workbench_path"}
+    return {
+        key: value for key, value in payload.items() if key != "emperor_workbench_path"
+    }
 
 
 def _semantic_payload(payload: dict[str, object]) -> dict[str, object]:
