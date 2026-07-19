@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, fields, replace
 from typing import TYPE_CHECKING
 
 import torch
@@ -6,248 +6,477 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 
-from emperor.halting._base import HaltingBase, HaltingStateBase
+from emperor.halting._base import (
+    ComputeStep,
+    HaltingBase,
+    HaltingComputation,
+    HaltingStateBase,
+)
 from emperor.halting._config import HaltingHiddenStateModeOptions
-from emperor.halting._strategies._initialization import zero_gate_parameters
-from emperor.layers import LayerStack, LayerStackConfig, LayerState
+from emperor.halting._validation import SoftHaltingValidator
+from emperor.layers import LayerStackConfig, LayerState
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.halting._config import HaltingConfig
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SoftHaltingState(HaltingStateBase):
-    step_count: int = field(
-        metadata={
-            "help": (
-                "Current step index, used to compute the expected number of "
-                "steps for regularisation"
-            )
-        },
-    )
-    log_continuation: Tensor = field(
-        metadata={
-            "help": (
-                "Log of the remaining stick length after all breaks so far; "
-                "the cumulative log probability of not yet having halted"
-            )
-        },
-    )
-    accumulated_hidden: Tensor = field(
-        metadata={
-            "help": (
-                "Weighted sum of hidden states accumulated so far, where each "
-                "step contributes proportionally to its halt probability"
-            )
-        },
-    )
-    accumulated_ponder_cost: Tensor = field(
-        metadata={
-            "help": (
-                "Running sum of halt_prob * step across all steps; used to "
-                "compute the expected computation depth"
-            )
-        },
-    )
-    continuation_probability: Tensor = field(
-        metadata={
-            "help": (
-                "Masked probability of not having halted at this step; used "
-                "by compute_output to blend the final representation"
-            )
-        },
-    )
+    raw_hidden: Tensor
+    output_hidden: Tensor
+    accumulated_hidden: Tensor
+    continuation_probability: Tensor
+    halt_mask: Tensor
+    valid_mask: Tensor
+    stop_requested: bool = False
+    step_count: Tensor
+    log_continuation: Tensor
+    accumulated_ponder_cost: Tensor
+    halt_probability: Tensor
+    gate_input: Tensor | None
+    gate_logits: Tensor | None
+    advanced_mask: Tensor
+
+
+@dataclass(frozen=True, kw_only=True)
+class _SoftPreparedStep:
+    accumulated_hidden: Tensor
+    continuation_probability: Tensor
+    halt_mask: Tensor
+    valid_mask: Tensor
+    step_count: Tensor
+    log_continuation: Tensor
+    accumulated_ponder_cost: Tensor
+    halt_probability: Tensor
+    gate_input: Tensor | None
+    gate_logits: Tensor | None
+    advanced_mask: Tensor
+
+
+@dataclass(frozen=True, kw_only=True)
+class _SoftOwnerStep:
+    previous_state: SoftHaltingState | None
+    raw_hidden: Tensor
+    valid_mask: Tensor
+    update_mask: Tensor
+    prepared: _SoftPreparedStep
+    computation: HaltingComputation
 
 
 class SoftHalting(HaltingBase[SoftHaltingState]):
+    """SUT-compatible soft adaptive computation.
+
+    In RAW mode with the canonical gate, the recurrence and ordering match the
+    pinned SUT ``ACTWrapper``: step zero skips the gate, later steps gate the
+    previous raw hidden, and computation receives the prior soft context.
+    """
+
+    VALIDATOR = SoftHaltingValidator
+    DEFAULT_THRESHOLD = 0.999
+
+    @classmethod
+    def validate_resolved_config(cls, cfg) -> None:
+        cls.VALIDATOR.validate_config(cfg)
+
     def __init__(
         self,
         cfg: "HaltingConfig | ModelConfig",
         overrides: "HaltingConfig | None" = None,
-    ):
+    ) -> None:
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
         self.cfg: HaltingConfig = self._override_config(config, overrides)
-        self.VALIDATOR.validate(self)
 
         self.input_dim: int = self.cfg.input_dim
-        self.threshold: float = self.cfg.threshold
+        self.threshold: float = (
+            self.DEFAULT_THRESHOLD if self.cfg.threshold is None else self.cfg.threshold
+        )
         self.dropout_probability: float | None = self.cfg.dropout_probability
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
         )
-        self.halting_gate_config: LayerStackConfig = self.cfg.halting_gate_config
+        self.halting_gate_config: LayerStackConfig | None = self.cfg.halting_gate_config
+        self.VALIDATOR.validate(self)
 
+        self._gate = self.__build_gate()
+        self.__initialize_output_projection()
+
+    def __build_gate(self) -> nn.Module:
         dropout_probability = (
             0.0 if self.dropout_probability is None else self.dropout_probability
         )
-        self.dropout_probability_module = nn.Dropout(dropout_probability)
-        self._gate: LayerStack = self.__build_gate()
-        self.__init_gate_weights()
+        if self.halting_gate_config is None:
+            return nn.Sequential(
+                nn.Linear(self.input_dim, self.input_dim, bias=True),
+                nn.GELU(),
+                nn.Dropout(dropout_probability),
+                nn.Linear(self.input_dim, 2, bias=False),
+            )
+        overrides = type(self.halting_gate_config)(input_dim=self.input_dim)
+        return self.halting_gate_config.build(overrides=overrides)
 
-    def __build_gate(self) -> LayerStack:
-        overrides = type(self.halting_gate_config)(
-            input_dim=self.input_dim,
-        )
-        return self.halting_gate_config.build(overrides=overrides)  # type: ignore[return-value]
+    def __initialize_output_projection(self) -> None:
+        if isinstance(self._gate, nn.Sequential):
+            nn.init.zeros_(self._gate[-1].weight)
+            return
+        self._initialize_gate_with_equal_logits(self._gate[-1].model)
 
-    def __init_gate_weights(self) -> None:
-        zero_gate_parameters(self._gate[-1].model)
+    def __compute_gate_logits(self, hidden: Tensor) -> Tensor:
+        if isinstance(self._gate, nn.Sequential):
+            return F.log_softmax(self._gate(hidden), dim=-1)
 
-    def __compute_gate_logits(self, model_hidden_state: Tensor) -> Tensor:
-        original_shape = model_hidden_state.shape
-        flat = model_hidden_state.reshape(-1, original_shape[-1])
-        state = LayerState(hidden=flat)
+        original_shape = hidden.shape
+        flat_hidden = hidden.reshape(-1, original_shape[-1])
+        state = LayerState(hidden=flat_hidden)
         for layer in self._gate.layers[:-1]:
             state = layer(state)
-        state.hidden = self.dropout_probability_module(state.hidden)
-        logits = self._gate[-1](state).hidden
-        logits = logits.reshape(*original_shape[:-1], 2)
-        return F.log_softmax(logits, dim=-1)
-
-    def __compute_step_halting_probability(
-        self,
-        current_log_gates: Tensor,
-        log_continuation: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        current_log_halting = log_continuation.unsqueeze(-1) + current_log_gates
-        log_continuation, log_halting = torch.unbind(current_log_halting, dim=-1)
-        halting_probability = torch.exp(log_halting)
-        return halting_probability, log_continuation
-
-    def __compute_act_loss(
-        self,
-        state: SoftHaltingState,
-        continuation_probability: Tensor,
-        pad_mask: Tensor,
-    ) -> Tensor:
-        act_loss = (
-            state.accumulated_ponder_cost + continuation_probability * state.step_count
-        ) * pad_mask
-        return act_loss.sum() / pad_mask.sum().clamp_min(1)
-
-    def __blend_attn_input(
-        self,
-        state: SoftHaltingState,
-        current_hidden: Tensor,
-        self_attn_input: Tensor,
-        continuation_probability: Tensor,
-    ) -> Tensor:
-        halted_output = (
-            state.accumulated_hidden
-            + continuation_probability.unsqueeze(-1) * current_hidden
-        ).type_as(self_attn_input)
-        return torch.where(
-            continuation_probability.unsqueeze(-1) < (1 - self.threshold),
-            self_attn_input,
-            halted_output,
+        dropout_probability = (
+            0.0 if self.dropout_probability is None else self.dropout_probability
         )
+        state.hidden = F.dropout(
+            state.hidden,
+            p=dropout_probability,
+            training=self.training,
+        )
+        logits = self._gate[-1](state).hidden
+        return F.log_softmax(logits.reshape(*original_shape[:-1], 2), dim=-1)
 
-    def update_halting_state(
+    def run_step(
         self,
         previous_state: SoftHaltingState | None,
-        model_hidden_state: Tensor,
-        pad_mask: Tensor | None = None,
-    ) -> tuple[SoftHaltingState, Tensor]:
-        self.VALIDATOR.validate_hidden_tensor(
-            model_hidden_state,
-            self.input_dim,
-        )
-        self.VALIDATOR.validate_pad_mask(pad_mask, model_hidden_state)
-        if pad_mask is not None:
-            pad_mask = pad_mask.to(model_hidden_state)
-        if previous_state is None:
-            state = self.__init_state(model_hidden_state, pad_mask)
-        else:
-            state = self.__update_state(previous_state, model_hidden_state, pad_mask)
-        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
-            return state, state.accumulated_hidden
-        return state, model_hidden_state
-
-    def __init_state(
-        self,
-        model_hidden_state: Tensor,
-        pad_mask: Tensor | None,
+        raw_hidden: Tensor,
+        compute_step: ComputeStep,
+        *,
+        valid_mask: Tensor | None = None,
+        update_mask: Tensor | None = None,
     ) -> SoftHaltingState:
-        leading_shape = model_hidden_state.shape[:-1]
-        ones = model_hidden_state.new_ones(leading_shape)
-        return SoftHaltingState(
-            step_count=0,
-            log_continuation=model_hidden_state.new_zeros(leading_shape),
-            accumulated_hidden=torch.zeros_like(model_hidden_state),
-            accumulated_ponder_cost=model_hidden_state.new_zeros(leading_shape),
-            continuation_probability=ones if pad_mask is None else pad_mask,
+        owner_step = self.prepare_owner_step(
+            previous_state,
+            raw_hidden,
+            valid_mask=valid_mask,
+            update_mask=update_mask,
+        )
+        candidate = compute_step(owner_step.computation)
+        return self.complete_owner_step(owner_step, candidate)
+
+    def prepare_owner_step(
+        self,
+        previous_state: SoftHaltingState | None,
+        raw_hidden: Tensor,
+        *,
+        valid_mask: Tensor | None = None,
+        update_mask: Tensor | None = None,
+    ) -> _SoftOwnerStep:
+        self._validate_hidden(raw_hidden, "raw_hidden")
+        valid_mask, update_mask = self._resolve_masks(
+            previous_state,
+            raw_hidden,
+            valid_mask,
+            update_mask,
+        )
+        if previous_state is None:
+            prepared = self.__prepare_initial_step(
+                raw_hidden,
+                valid_mask,
+                update_mask,
+            )
+        else:
+            prepared = self.__prepare_later_step(
+                previous_state,
+                raw_hidden,
+                update_mask,
+            )
+
+        computation_mask = update_mask & (
+            prepared.continuation_probability >= (1.0 - self.threshold)
+        )
+        computation = HaltingComputation(
+            raw_hidden=raw_hidden,
+            context_hidden=self.__context_hidden(previous_state),
+            continuation_probability=prepared.continuation_probability.masked_fill(
+                ~update_mask,
+                0.0,
+            ),
+            computation_mask=computation_mask,
+        )
+        return _SoftOwnerStep(
+            previous_state=previous_state,
+            raw_hidden=raw_hidden,
+            valid_mask=valid_mask,
+            update_mask=update_mask,
+            prepared=prepared,
+            computation=computation,
         )
 
-    def __update_state(
+    def complete_owner_step(
+        self,
+        owner_step: _SoftOwnerStep,
+        candidate: Tensor,
+    ) -> SoftHaltingState:
+        self._validate_computed_hidden(candidate, owner_step.raw_hidden)
+        candidate = self._preserve_uncomputed_hidden(
+            candidate,
+            owner_step.raw_hidden,
+            owner_step.computation.computation_mask,
+        )
+        return self.__complete_step(
+            owner_step.prepared,
+            owner_step.previous_state,
+            candidate,
+            owner_step.update_mask,
+        )
+
+    def gather_owner_step_rows(
+        self,
+        owner_step: _SoftOwnerStep,
+        row_indices: Tensor,
+        previous_state: SoftHaltingState | None,
+    ) -> _SoftOwnerStep:
+        source_row_count = owner_step.raw_hidden.shape[0]
+
+        def gather_tensor(value: Tensor | None) -> Tensor | None:
+            if value is None or value.dim() == 0 or value.shape[0] != source_row_count:
+                return value
+            return value.index_select(0, row_indices)
+
+        prepared_values = {
+            field.name: gather_tensor(getattr(owner_step.prepared, field.name))
+            for field in fields(owner_step.prepared)
+        }
+        computation = replace(
+            owner_step.computation,
+            raw_hidden=gather_tensor(owner_step.computation.raw_hidden),
+            context_hidden=gather_tensor(owner_step.computation.context_hidden),
+            continuation_probability=gather_tensor(
+                owner_step.computation.continuation_probability
+            ),
+            computation_mask=gather_tensor(owner_step.computation.computation_mask),
+        )
+        return _SoftOwnerStep(
+            previous_state=previous_state,
+            raw_hidden=gather_tensor(owner_step.raw_hidden),
+            valid_mask=gather_tensor(owner_step.valid_mask),
+            update_mask=gather_tensor(owner_step.update_mask),
+            prepared=_SoftPreparedStep(**prepared_values),
+            computation=computation,
+        )
+
+    def restrict_owner_step_updates(
+        self,
+        owner_step: _SoftOwnerStep,
+        retained_update_mask: Tensor,
+    ) -> _SoftOwnerStep:
+        retained_update_mask = owner_step.update_mask & retained_update_mask.bool()
+        previous_state = owner_step.previous_state
+        if previous_state is None:
+            return owner_step
+
+        def retain(updated: Tensor, previous: Tensor) -> Tensor:
+            expanded_mask = retained_update_mask
+            while expanded_mask.dim() < updated.dim():
+                expanded_mask = expanded_mask.unsqueeze(-1)
+            return torch.where(expanded_mask, updated, previous)
+
+        prepared = replace(
+            owner_step.prepared,
+            accumulated_hidden=retain(
+                owner_step.prepared.accumulated_hidden,
+                previous_state.accumulated_hidden,
+            ),
+            continuation_probability=retain(
+                owner_step.prepared.continuation_probability,
+                previous_state.continuation_probability,
+            ),
+            halt_mask=retain(
+                owner_step.prepared.halt_mask,
+                previous_state.halt_mask,
+            ),
+            step_count=retain(
+                owner_step.prepared.step_count,
+                previous_state.step_count,
+            ),
+            log_continuation=retain(
+                owner_step.prepared.log_continuation,
+                previous_state.log_continuation,
+            ),
+            accumulated_ponder_cost=retain(
+                owner_step.prepared.accumulated_ponder_cost,
+                previous_state.accumulated_ponder_cost,
+            ),
+            halt_probability=torch.where(
+                retained_update_mask,
+                owner_step.prepared.halt_probability,
+                torch.zeros_like(owner_step.prepared.halt_probability),
+            ),
+            advanced_mask=previous_state.advanced_mask | retained_update_mask,
+        )
+        computation = replace(
+            owner_step.computation,
+            continuation_probability=owner_step.computation.continuation_probability
+            * retained_update_mask.to(
+                owner_step.computation.continuation_probability.dtype
+            ),
+            computation_mask=owner_step.computation.computation_mask
+            & retained_update_mask,
+        )
+        return replace(
+            owner_step,
+            update_mask=retained_update_mask,
+            prepared=prepared,
+            computation=computation,
+        )
+
+    def __context_hidden(
+        self,
+        previous_state: SoftHaltingState | None,
+    ) -> Tensor | None:
+        if previous_state is None:
+            return None
+        if self.hidden_state_mode == HaltingHiddenStateModeOptions.ACCUMULATED:
+            return previous_state.accumulated_hidden
+        return previous_state.output_hidden
+
+    def __prepare_initial_step(
+        self,
+        raw_hidden: Tensor,
+        valid_mask: Tensor,
+        update_mask: Tensor,
+    ) -> _SoftPreparedStep:
+        leading_shape = raw_hidden.shape[:-1]
+        return _SoftPreparedStep(
+            accumulated_hidden=torch.zeros_like(raw_hidden),
+            continuation_probability=valid_mask.to(raw_hidden.dtype),
+            halt_mask=torch.zeros_like(valid_mask),
+            valid_mask=valid_mask,
+            step_count=raw_hidden.new_zeros(leading_shape),
+            log_continuation=raw_hidden.new_zeros(leading_shape),
+            accumulated_ponder_cost=raw_hidden.new_zeros(leading_shape),
+            halt_probability=raw_hidden.new_zeros(leading_shape),
+            gate_input=None,
+            gate_logits=None,
+            advanced_mask=update_mask,
+        )
+
+    def __prepare_later_step(
         self,
         previous_state: SoftHaltingState,
-        model_hidden_state: Tensor,
-        pad_mask: Tensor | None,
-    ) -> SoftHaltingState:
-        current_log_gates = self.__compute_gate_logits(model_hidden_state)
-        halting_probability, log_continuation = self.__compute_step_halting_probability(
-            current_log_gates, previous_state.log_continuation
+        raw_hidden: Tensor,
+        update_mask: Tensor,
+    ) -> _SoftPreparedStep:
+        gate_logits = self.__compute_gate_logits(raw_hidden)
+        log_probability_masses = (
+            previous_state.log_continuation.unsqueeze(-1) + gate_logits
         )
-        continuation_probability = log_continuation.exp()
-        continuation_probability = continuation_probability.masked_fill(
-            continuation_probability < (1 - self.threshold), 0
+        candidate_log_continuation, log_halt_probability = torch.unbind(
+            log_probability_masses,
+            dim=-1,
         )
-        if pad_mask is not None:
-            continuation_probability = (
-                continuation_probability * pad_mask
-            ).contiguous()
-        return SoftHaltingState(
-            step_count=previous_state.step_count + 1,
-            log_continuation=log_continuation,
-            accumulated_hidden=previous_state.accumulated_hidden
-            + halting_probability.unsqueeze(-1) * model_hidden_state,
-            accumulated_ponder_cost=previous_state.accumulated_ponder_cost
-            + previous_state.step_count * halting_probability,
+        halt_probability = log_halt_probability.exp().masked_fill(~update_mask, 0.0)
+        log_continuation = torch.where(
+            update_mask,
+            candidate_log_continuation,
+            previous_state.log_continuation,
+        )
+        continuation_probability = log_continuation.exp().masked_fill(
+            log_continuation.exp() < (1.0 - self.threshold),
+            0.0,
+        )
+        continuation_probability = torch.where(
+            update_mask,
+            continuation_probability,
+            previous_state.continuation_probability,
+        ).contiguous()
+        updated_step_count = torch.where(
+            update_mask,
+            previous_state.step_count + 1,
+            previous_state.step_count,
+        )
+        return _SoftPreparedStep(
+            accumulated_hidden=(
+                previous_state.accumulated_hidden
+                + halt_probability.unsqueeze(-1) * raw_hidden
+            ),
             continuation_probability=continuation_probability,
+            halt_mask=(
+                previous_state.halt_mask
+                | (update_mask & (continuation_probability < (1.0 - self.threshold)))
+            ),
+            valid_mask=previous_state.valid_mask,
+            step_count=updated_step_count,
+            log_continuation=log_continuation,
+            accumulated_ponder_cost=(
+                previous_state.accumulated_ponder_cost
+                + previous_state.step_count * halt_probability
+            ),
+            halt_probability=halt_probability,
+            gate_input=raw_hidden,
+            gate_logits=gate_logits,
+            advanced_mask=previous_state.advanced_mask | update_mask,
         )
 
-    def compute_output(
+    def __complete_step(
+        self,
+        prepared: _SoftPreparedStep,
+        previous_state: SoftHaltingState | None,
+        candidate: Tensor,
+        update_mask: Tensor,
+    ) -> SoftHaltingState:
+        if previous_state is None:
+            output_hidden = candidate
+        else:
+            blended_hidden = (
+                prepared.accumulated_hidden
+                + prepared.continuation_probability.unsqueeze(-1) * candidate
+            ).type_as(previous_state.output_hidden)
+            frozen_mask = prepared.continuation_probability < (1.0 - self.threshold)
+            output_hidden = torch.where(
+                frozen_mask.unsqueeze(-1),
+                previous_state.output_hidden,
+                blended_hidden,
+            )
+            output_hidden = torch.where(
+                update_mask.unsqueeze(-1),
+                output_hidden,
+                previous_state.output_hidden,
+            )
+        return SoftHaltingState(
+            raw_hidden=candidate,
+            output_hidden=output_hidden,
+            accumulated_hidden=prepared.accumulated_hidden,
+            continuation_probability=prepared.continuation_probability,
+            halt_mask=prepared.halt_mask,
+            valid_mask=prepared.valid_mask,
+            step_count=prepared.step_count,
+            log_continuation=prepared.log_continuation,
+            accumulated_ponder_cost=prepared.accumulated_ponder_cost,
+            halt_probability=prepared.halt_probability,
+            gate_input=prepared.gate_input,
+            gate_logits=prepared.gate_logits,
+            advanced_mask=prepared.advanced_mask,
+        )
+
+    def finalize(
         self,
         state: SoftHaltingState,
         current_hidden: Tensor,
-        self_attn_input: Tensor,
-        pad_mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        self.VALIDATOR.validate_hidden_tensor(
-            current_hidden,
-            self.input_dim,
-            "current_hidden",
-        )
-        self.VALIDATOR.validate_hidden_tensor(
-            self_attn_input,
-            self.input_dim,
-            "self_attn_input",
-        )
-        expected_shape = state.accumulated_hidden.shape
+        self._validate_hidden(current_hidden, "current_hidden")
         self.VALIDATOR.validate_tensor_shape(
             current_hidden,
-            expected_shape,
+            state.raw_hidden.shape,
             "current_hidden",
         )
-        self.VALIDATOR.validate_tensor_shape(
-            self_attn_input,
-            expected_shape,
-            "self_attn_input",
-        )
-        self.VALIDATOR.validate_pad_mask(
-            pad_mask,
-            current_hidden,
-            required_by="compute_output",
-        )
-        pad_mask = pad_mask.to(current_hidden)
-        if state.step_count == 0:
-            return current_hidden, current_hidden.new_zeros(())
-        self_attn_input = self.__blend_attn_input(
-            state, current_hidden, self_attn_input, state.continuation_probability
-        )
-        act_loss = self.__compute_act_loss(
-            state, state.continuation_probability, pad_mask
-        )
-        return self_attn_input, act_loss
+        valid_weight = state.valid_mask & state.advanced_mask
+        loss_by_position = (
+            state.accumulated_ponder_cost
+            + state.continuation_probability * state.step_count
+        ) * valid_weight
+        loss = loss_by_position.sum() / valid_weight.sum().clamp_min(1)
+        state.finalized = True
+        return state.output_hidden, loss
+
+    def owner_stop_mask(self, state: SoftHaltingState) -> Tensor:
+        # Soft halting freezes its own computation rows but retains the
+        # owner's configured fixed-depth schedule.
+        return torch.zeros_like(state.halt_mask, dtype=torch.bool)

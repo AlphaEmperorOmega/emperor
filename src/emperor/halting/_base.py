@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 import torch
+import torch.nn as nn
 from torch import Tensor
 
 from emperor.halting._interface import HaltingInterface
@@ -370,3 +371,10 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
         computation_mask: Tensor,
     ) -> Tensor:
         return torch.where(computation_mask.unsqueeze(-1), candidate, raw_hidden)
+
+    @staticmethod
+    def _initialize_gate_with_equal_logits(gate: nn.Module) -> None:
+        """Initialize a configurable gate to equal logits when it has parameters."""
+
+        for parameter in gate.parameters():
+            nn.init.zeros_(parameter)

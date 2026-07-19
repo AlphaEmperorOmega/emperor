@@ -221,3 +221,24 @@ class StickBreakingValidator:
             or (pad_mask > 1.0).any().item()
         ):
             raise ValueError("pad_mask values must be finite and between 0.0 and 1.0")
+
+
+class SoftHaltingValidator(StickBreakingValidator):
+    OPTIONAL_FIELDS = {
+        *StickBreakingValidator.OPTIONAL_FIELDS,
+        "halting_gate_config",
+        "threshold",
+    }
+
+    @classmethod
+    def validate(cls, model: "HaltingBase") -> None:
+        cfg = model.cfg
+        cls._validate_required_fields(cfg)
+        cls._validate_input_dim(cfg.input_dim)
+        cls._validate_threshold(model.threshold)
+        cls._validate_dropout_probability(cfg.dropout_probability)
+        cls._validate_hidden_state_mode(cfg.hidden_state_mode)
+        if cfg.halting_gate_config is None:
+            return
+        cls._validate_halting_gate_config(cfg.halting_gate_config)
+        cls._validate_halting_gate_layer_config(cfg.halting_gate_config.layer_config)
