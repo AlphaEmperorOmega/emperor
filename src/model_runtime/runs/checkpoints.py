@@ -116,6 +116,28 @@ def validate_target_epochs(
 
 def validate_model_state(
     continuation: _LoadedCheckpointContinuation,
+    model: Any,
+) -> None:
+    if isinstance(model, Mapping):
+        _validate_model_state_mapping(continuation, model)
+        return
+
+    load_state_dict = getattr(model, "load_state_dict", None)
+    state_dict = getattr(model, "state_dict", None)
+    if not callable(load_state_dict) or not callable(state_dict):
+        raise TypeError("Checkpoint model validation requires a torch module.")
+    try:
+        load_state_dict(continuation.state_dict, strict=True)
+    except RuntimeError as exc:
+        _validate_model_state_mapping(continuation, state_dict())
+        raise InvalidCheckpointContinuation(
+            "Checkpoint model state could not be loaded strictly into the "
+            f"selected Model Package: {exc}"
+        ) from exc
+
+
+def _validate_model_state_mapping(
+    continuation: _LoadedCheckpointContinuation,
     model_state_dict: Mapping[str, Any],
 ) -> None:
     checkpoint_keys = set(continuation.state_dict)

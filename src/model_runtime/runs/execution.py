@@ -192,7 +192,7 @@ def execute_runs(
         provenance = resumed_from_payload(loaded_continuation)
 
         def model_validator(model: Any) -> None:
-            validate_model_state(loaded_continuation, model.state_dict())
+            validate_model_state(loaded_continuation, model)
 
     else:
         checkpoint_path = None
