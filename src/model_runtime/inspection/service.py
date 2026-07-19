@@ -19,8 +19,17 @@ def inspect_model(
 
     if not isinstance(package, ModelPackage):
         raise TypeError("Inspection requires a selected ModelPackage.")
-    preset, configuration = _build_configuration(package, request)
+    preset, _configuration, model = _instantiate_inspection_model(package, request)
 
+    graph = inspect_model_graph(model)
+    return _inspection_result(package, preset, graph)
+
+
+def _instantiate_inspection_model(
+    package: ModelPackage,
+    request: InspectionRequest,
+):
+    preset, configuration = _build_configuration(package, request)
     try:
         model_type = package.model_class
     except Exception as exc:
@@ -32,8 +41,10 @@ def inspect_model(
             f"Failed to instantiate model '{package.catalog_key}' preset "
             f"'{request.preset}': {exc}"
         ) from exc
+    return preset, configuration, model
 
-    graph = inspect_model_graph(model)
+
+def _inspection_result(package: ModelPackage, preset, graph) -> InspectionResult:
     parameter_count = graph.nodes[0].parameter_count if graph.nodes else 0
     parameter_size_bytes = graph.nodes[0].parameter_size_bytes if graph.nodes else 0
     return InspectionResult(

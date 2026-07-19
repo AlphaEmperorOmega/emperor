@@ -46,6 +46,16 @@ if TYPE_CHECKING:
         search_space_schema,
     )
     from model_runtime.inspection.service import inspect_model, validate_configuration
+    from model_runtime.inspection.shape_trace import (
+        MethodShapeTrace,
+        ModelShapeTrace,
+        ModuleShapeCall,
+        ModuleShapeTrace,
+        ShapeTraceDetail,
+        TensorShape,
+        TensorVariableTrace,
+        inspect_model_shapes,
+    )
 
 __all__ = [
     "ARCHITECTURE_ROLE",
@@ -60,18 +70,26 @@ __all__ = [
     "InspectionError",
     "InspectionRequest",
     "InspectionResult",
+    "MethodShapeTrace",
     "ModelGraph",
+    "ModelShapeTrace",
+    "ModuleShapeCall",
+    "ModuleShapeTrace",
     "ParsedOverrides",
     "ROOT_NODE_ID",
     "ROOT_NODE_PATH",
     "RUNTIME_ROLE",
     "SearchAxis",
     "SearchSpace",
+    "ShapeTraceDetail",
+    "TensorShape",
+    "TensorVariableTrace",
     "canonicalize_overrides",
     "configuration_schema",
     "config_field_description",
     "graph_role",
     "inspect_model_graph",
+    "inspect_model_shapes",
     "inspect_model",
     "module_details",
     "parameter_count",
@@ -110,6 +128,19 @@ def __getattr__(name: str) -> Any:
         from model_runtime.inspection import records
 
         return getattr(records, name)
+    if name in {
+        "MethodShapeTrace",
+        "ModelShapeTrace",
+        "ModuleShapeCall",
+        "ModuleShapeTrace",
+        "ShapeTraceDetail",
+        "TensorShape",
+        "TensorVariableTrace",
+        "inspect_model_shapes",
+    }:
+        from model_runtime.inspection import shape_trace
+
+        return getattr(shape_trace, name)
     if name in {
         "ARCHITECTURE_ROLE",
         "INTERNAL_ROLE",

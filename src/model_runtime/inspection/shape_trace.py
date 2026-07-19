@@ -1,0 +1,559 @@
+from __future__ import annotations
+
+import inspect
+import sys
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, fields, is_dataclass
+from pathlib import Path
+from types import FrameType
+from typing import Literal
+
+import torch
+from torch import Tensor, nn
+
+from emperor.experiments import ExperimentTask
+from model_runtime.inspection.errors import InspectionError
+from model_runtime.inspection.model_graph import inspect_model_graph
+from model_runtime.inspection.records import InspectionRequest, InspectionResult
+from model_runtime.inspection.service import (
+    _inspection_result,
+    _instantiate_inspection_model,
+)
+from model_runtime.packages import ModelPackage
+
+ShapeTraceDetail = Literal["outputs", "variables"]
+
+
+@dataclass(frozen=True, slots=True)
+class TensorShape:
+    name: str
+    shape: tuple[int, ...]
+    dtype: str
+    device: str
+
+
+@dataclass(frozen=True, slots=True)
+class ModuleShapeCall:
+    inputs: tuple[TensorShape, ...]
+    outputs: tuple[TensorShape, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ModuleShapeTrace:
+    node_id: str
+    calls: tuple[ModuleShapeCall, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TensorVariableTrace:
+    order: int
+    line: int | None
+    tensors: tuple[TensorShape, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MethodShapeTrace:
+    id: int
+    parent_id: int | None
+    order: int
+    qualified_name: str
+    module_path: str | None
+    source_path: str
+    first_line: int
+    inputs: tuple[TensorShape, ...]
+    variables: tuple[TensorVariableTrace, ...]
+    outputs: tuple[TensorShape, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ModelShapeTrace:
+    dataset: str
+    experiment_task: str
+    batch_size: int
+    sample_inputs: tuple[TensorShape, ...]
+    modules: tuple[ModuleShapeTrace, ...]
+    methods: tuple[MethodShapeTrace, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservedTensor:
+    shape: TensorShape
+    object_id: int
+
+
+@dataclass(slots=True)
+class _MutableModuleCall:
+    inputs: tuple[TensorShape, ...]
+    outputs: tuple[TensorShape, ...] = ()
+
+
+@dataclass(slots=True)
+class _MutableMethodTrace:
+    id: int
+    parent_id: int | None
+    order: int
+    qualified_name: str
+    module_path: str | None
+    source_path: str
+    first_line: int
+    inputs: tuple[TensorShape, ...]
+    variables: list[TensorVariableTrace] = field(default_factory=list)
+    outputs: tuple[TensorShape, ...] = ()
+
+
+@dataclass(slots=True)
+class _FrameTrace:
+    method: _MutableMethodTrace
+    tensors: dict[str, _ObservedTensor]
+    last_line: int | None = None
+
+
+def _tensor_shape(name: str, tensor: Tensor) -> TensorShape:
+    return TensorShape(
+        name=name,
+        shape=tuple(int(dimension) for dimension in tensor.shape),
+        dtype=str(tensor.dtype).removeprefix("torch."),
+        device=str(tensor.device),
+    )
+
+
+def _mapping_path(name: str, key: object) -> str:
+    if isinstance(key, str) and key.isidentifier():
+        return f"{name}.{key}"
+    return f"{name}[{key!r}]"
+
+
+def _tensor_observations(
+    value: object,
+    name: str,
+    *,
+    _seen: set[int] | None = None,
+) -> tuple[_ObservedTensor, ...]:
+    if isinstance(value, Tensor):
+        return (
+            _ObservedTensor(
+                shape=_tensor_shape(name, value),
+                object_id=id(value),
+            ),
+        )
+    if value is None or isinstance(value, (str, bytes, int, float, bool, type)):
+        return ()
+    if isinstance(value, nn.Module):
+        return ()
+
+    seen = set() if _seen is None else _seen
+    value_id = id(value)
+    if value_id in seen:
+        return ()
+
+    if is_dataclass(value) and not isinstance(value, type):
+        seen.add(value_id)
+        tensors: list[_ObservedTensor] = []
+        for data_field in fields(value):
+            tensors.extend(
+                _tensor_observations(
+                    getattr(value, data_field.name),
+                    f"{name}.{data_field.name}",
+                    _seen=seen,
+                )
+            )
+        return tuple(tensors)
+
+    if isinstance(value, Mapping):
+        seen.add(value_id)
+        tensors = []
+        for key, item in value.items():
+            tensors.extend(
+                _tensor_observations(
+                    item,
+                    _mapping_path(name, key),
+                    _seen=seen,
+                )
+            )
+        return tuple(tensors)
+
+    if isinstance(value, Sequence):
+        seen.add(value_id)
+        tensors = []
+        for index, item in enumerate(value):
+            tensors.extend(_tensor_observations(item, f"{name}[{index}]", _seen=seen))
+        return tuple(tensors)
+
+    return ()
+
+
+def _tensor_shapes(value: object, name: str) -> tuple[TensorShape, ...]:
+    return tuple(observation.shape for observation in _tensor_observations(value, name))
+
+
+def _local_tensor_observations(
+    local_values: Mapping[str, object],
+) -> dict[str, _ObservedTensor]:
+    tensors: dict[str, _ObservedTensor] = {}
+    for name, value in local_values.items():
+        if name in {"self", "cls"}:
+            continue
+        for tensor in _tensor_observations(value, name):
+            tensors[tensor.shape.name] = tensor
+    return tensors
+
+
+def _local_tensor_shapes(local_values: Mapping[str, object]) -> dict[str, TensorShape]:
+    return {
+        name: observation.shape
+        for name, observation in _local_tensor_observations(local_values).items()
+    }
+
+
+def _bound_input_shapes(
+    module: nn.Module,
+    args: tuple[object, ...],
+    kwargs: Mapping[str, object],
+) -> tuple[TensorShape, ...]:
+    try:
+        bound = inspect.signature(module.forward).bind_partial(*args, **kwargs)
+    except (TypeError, ValueError):
+        values = {f"input[{index}]": value for index, value in enumerate(args)}
+        values.update({str(key): value for key, value in kwargs.items()})
+    else:
+        values = dict(bound.arguments)
+    return tuple(_local_tensor_shapes(values).values())
+
+
+def _source_path(filename: str) -> str:
+    path = Path(filename)
+    parts = path.parts
+    for package_name in ("models", "emperor"):
+        matching_indices = [
+            index for index, part in enumerate(parts) if part == package_name
+        ]
+        if not matching_indices:
+            continue
+        package_index = matching_indices[-1]
+        return Path(*parts[package_index:]).as_posix()
+    return path.name
+
+
+class _TensorVariableTracer:
+    def __init__(self, module_paths: Mapping[int, str]) -> None:
+        self._module_paths = module_paths
+        self._frames: dict[int, _FrameTrace] = {}
+        self._methods: list[_MutableMethodTrace] = []
+        self._next_method_id = 1
+        self._next_order = 1
+
+    def _order(self) -> int:
+        order = self._next_order
+        self._next_order += 1
+        return order
+
+    @staticmethod
+    def _is_relevant(frame: FrameType) -> bool:
+        module_name = str(frame.f_globals.get("__name__", ""))
+        filename = frame.f_code.co_filename
+        return not filename.startswith("<") and (
+            module_name == "models"
+            or module_name.startswith("models.")
+            or module_name == "emperor"
+            or module_name.startswith("emperor.")
+        )
+
+    def _parent_id(self, frame: FrameType) -> int | None:
+        parent = frame.f_back
+        while parent is not None:
+            parent_trace = self._frames.get(id(parent))
+            if parent_trace is not None:
+                return parent_trace.method.id
+            parent = parent.f_back
+        return None
+
+    def _module_path(self, local_values: Mapping[str, object]) -> str | None:
+        preferred_names = ("self", "model", "module")
+        candidates = [local_values.get(name) for name in preferred_names]
+        candidates.extend(local_values.values())
+        for candidate in candidates:
+            if isinstance(candidate, nn.Module):
+                module_path = self._module_paths.get(id(candidate))
+                if module_path is not None:
+                    return module_path
+        return None
+
+    def _start(self, frame: FrameType) -> None:
+        observations = _local_tensor_observations(frame.f_locals)
+        inputs = tuple(observation.shape for observation in observations.values())
+        method = _MutableMethodTrace(
+            id=self._next_method_id,
+            parent_id=self._parent_id(frame),
+            order=self._order(),
+            qualified_name=frame.f_code.co_qualname,
+            module_path=self._module_path(frame.f_locals),
+            source_path=_source_path(frame.f_code.co_filename),
+            first_line=frame.f_code.co_firstlineno,
+            inputs=inputs,
+        )
+        self._next_method_id += 1
+        self._methods.append(method)
+        self._frames[id(frame)] = _FrameTrace(method=method, tensors=observations)
+
+    def _capture_changes(self, frame: FrameType, trace: _FrameTrace) -> None:
+        current = _local_tensor_observations(frame.f_locals)
+        changed = tuple(
+            observation.shape
+            for name, observation in current.items()
+            if trace.tensors.get(name) != observation
+        )
+        if changed:
+            trace.method.variables.append(
+                TensorVariableTrace(
+                    order=self._order(),
+                    line=trace.last_line,
+                    tensors=changed,
+                )
+            )
+        trace.tensors = current
+
+    def __call__(self, frame: FrameType, event: str, argument: object):
+        if event == "call":
+            if not self._is_relevant(frame):
+                return None
+            self._start(frame)
+            return self
+
+        trace = self._frames.get(id(frame))
+        if trace is None:
+            return None
+        if event == "line":
+            self._capture_changes(frame, trace)
+            trace.last_line = frame.f_lineno
+        elif event == "return":
+            self._capture_changes(frame, trace)
+            trace.method.outputs = _tensor_shapes(argument, "return")
+            self._frames.pop(id(frame), None)
+        return self
+
+    def results(self) -> tuple[MethodShapeTrace, ...]:
+        return tuple(
+            MethodShapeTrace(
+                id=method.id,
+                parent_id=method.parent_id,
+                order=method.order,
+                qualified_name=method.qualified_name,
+                module_path=method.module_path,
+                source_path=method.source_path,
+                first_line=method.first_line,
+                inputs=method.inputs,
+                variables=tuple(method.variables),
+                outputs=method.outputs,
+            )
+            for method in self._methods
+        )
+
+
+def _module_for_node(model: nn.Module, node_id: str, path: str) -> nn.Module | None:
+    if node_id == "__root__":
+        return model
+    try:
+        return model.get_submodule(path)
+    except (AttributeError, KeyError):
+        return None
+
+
+def _trace_module_calls(model: nn.Module, graph):
+    calls: dict[str, list[_MutableModuleCall]] = {node.id: [] for node in graph.nodes}
+    node_by_module_id: dict[int, str] = {}
+    module_paths: dict[int, str] = {}
+    modules: dict[int, nn.Module] = {}
+    for node in graph.nodes:
+        module = _module_for_node(model, node.id, node.path)
+        if module is None or id(module) in modules:
+            continue
+        modules[id(module)] = module
+        node_by_module_id[id(module)] = node.id
+        module_paths[id(module)] = node.path
+
+    pending: dict[int, list[_MutableModuleCall]] = {
+        module_id: [] for module_id in modules
+    }
+    handles = []
+
+    def before_forward(module, args, kwargs):
+        call = _MutableModuleCall(
+            inputs=_bound_input_shapes(module, args, kwargs),
+        )
+        pending[id(module)].append(call)
+        calls[node_by_module_id[id(module)]].append(call)
+
+    def after_forward(module, _args, _kwargs, output):
+        module_pending = pending[id(module)]
+        if module_pending:
+            module_pending.pop().outputs = _tensor_shapes(output, "output")
+
+    for module in modules.values():
+        handles.append(
+            module.register_forward_pre_hook(before_forward, with_kwargs=True)
+        )
+        handles.append(module.register_forward_hook(after_forward, with_kwargs=True))
+
+    return calls, module_paths, handles
+
+
+def _positive_integer(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise InspectionError(
+            f"Cannot build a shape-trace input because {label} is not a positive "
+            f"integer: {value!r}."
+        )
+    return value
+
+
+def _token_batch(length: int, vocabulary_size: int, token_id: int = 1) -> Tensor:
+    if not 0 <= token_id < vocabulary_size:
+        token_id = 1 if vocabulary_size > 1 else 0
+    return torch.full((1, length), token_id, dtype=torch.long)
+
+
+def _sample_inputs(
+    package: ModelPackage,
+    request: InspectionRequest,
+    configuration: object,
+) -> tuple[str, str, tuple[Tensor, ...]]:
+    try:
+        task = package.resolve_experiment_task(request.experiment_task)
+        dataset = package.resolve_dataset(request.dataset, task)
+    except ValueError as exc:
+        raise InspectionError(str(exc)) from exc
+
+    if task == ExperimentTask.IMAGE_CLASSIFICATION:
+        channels = _positive_integer(
+            getattr(dataset, "num_channels", None),
+            f"{dataset.__name__}.num_channels",
+        )
+        width = _positive_integer(
+            getattr(dataset, "default_width", None),
+            f"{dataset.__name__}.default_width",
+        )
+        height = _positive_integer(
+            getattr(dataset, "default_height", None),
+            f"{dataset.__name__}.default_height",
+        )
+        inputs = (torch.zeros((1, channels, height, width), dtype=torch.float32),)
+    elif task in {
+        ExperimentTask.BERT_PRETRAINING,
+        ExperimentTask.CAUSAL_LANGUAGE_MODELING,
+    }:
+        sequence_length = _positive_integer(
+            getattr(configuration, "sequence_length", None),
+            "configuration.sequence_length",
+        )
+        vocabulary_size = _positive_integer(
+            getattr(configuration, "input_dim", None),
+            "configuration.input_dim",
+        )
+        inputs = (_token_batch(sequence_length, vocabulary_size),)
+    elif task == ExperimentTask.TEXT_TRANSLATION:
+        experiment_config = getattr(configuration, "experiment_config", None)
+        source_length = _positive_integer(
+            getattr(experiment_config, "source_sequence_length", None),
+            "configuration.experiment_config.source_sequence_length",
+        )
+        target_length = _positive_integer(
+            getattr(experiment_config, "target_sequence_length", None),
+            "configuration.experiment_config.target_sequence_length",
+        )
+        vocabulary_size = _positive_integer(
+            getattr(experiment_config, "vocab_size", None),
+            "configuration.experiment_config.vocab_size",
+        )
+        source_token = int(getattr(experiment_config, "bos_token_id", 1))
+        target_token = source_token
+        inputs = (
+            _token_batch(source_length, vocabulary_size, source_token),
+            _token_batch(max(1, target_length - 1), vocabulary_size, target_token),
+        )
+    else:
+        raise InspectionError(
+            f"Shape tracing does not have a synthetic input for Experiment Task "
+            f"'{package.task_name(task)}'."
+        )
+
+    return dataset.__name__, package.task_name(task), inputs
+
+
+def inspect_model_shapes(
+    package: ModelPackage,
+    request: InspectionRequest,
+    *,
+    detail: ShapeTraceDetail = "outputs",
+) -> tuple[InspectionResult, ModelShapeTrace]:
+    if detail not in {"outputs", "variables"}:
+        raise ValueError(f"Unknown shape-trace detail: {detail!r}")
+    if not isinstance(package, ModelPackage):
+        raise TypeError("Inspection requires a selected ModelPackage.")
+
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(0)
+        preset, configuration, model = _instantiate_inspection_model(package, request)
+        graph = inspect_model_graph(model)
+        result = _inspection_result(package, preset, graph)
+        dataset_name, task_name, inputs = _sample_inputs(
+            package,
+            request,
+            configuration,
+        )
+        calls, module_paths, handles = _trace_module_calls(model, graph)
+        variable_tracer = (
+            _TensorVariableTracer(module_paths) if detail == "variables" else None
+        )
+        previous_trace = sys.gettrace()
+        model.eval()
+        try:
+            if variable_tracer is not None:
+                sys.settrace(variable_tracer)
+            with torch.no_grad():
+                model(*inputs)
+        except Exception as exc:
+            raise InspectionError(
+                f"Failed to execute shape trace for model '{package.catalog_key}' "
+                f"preset '{request.preset}': {exc}"
+            ) from exc
+        finally:
+            if variable_tracer is not None:
+                sys.settrace(previous_trace)
+            for handle in handles:
+                handle.remove()
+
+    module_traces = tuple(
+        ModuleShapeTrace(
+            node_id=node.id,
+            calls=tuple(
+                ModuleShapeCall(inputs=call.inputs, outputs=call.outputs)
+                for call in calls[node.id]
+            ),
+        )
+        for node in graph.nodes
+    )
+    sample_inputs = tuple(
+        tensor
+        for index, value in enumerate(inputs)
+        for tensor in _tensor_shapes(value, f"input[{index}]")
+    )
+    return result, ModelShapeTrace(
+        dataset=dataset_name,
+        experiment_task=task_name,
+        batch_size=1,
+        sample_inputs=sample_inputs,
+        modules=module_traces,
+        methods=variable_tracer.results() if variable_tracer is not None else (),
+    )
+
+
+__all__ = [
+    "MethodShapeTrace",
+    "ModelShapeTrace",
+    "ModuleShapeCall",
+    "ModuleShapeTrace",
+    "ShapeTraceDetail",
+    "TensorShape",
+    "TensorVariableTrace",
+    "inspect_model_shapes",
+]
