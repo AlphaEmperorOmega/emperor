@@ -3,7 +3,11 @@ from typing import TYPE_CHECKING
 
 from torch.nn import ModuleList
 
-from emperor.layers._config import GateConfig, LayerConfig, LayerStackConfig
+from emperor.layers._config import (
+    GateConfig,
+    LayerConfig,
+    LayerStackConfig,
+)
 from emperor.layers._layer import Layer
 from emperor.layers._options import (
     ActivationOptions,
