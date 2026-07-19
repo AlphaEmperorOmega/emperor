@@ -1,0 +1,281 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from emperor.base.layer.gate import GateConfig, LayerGateOptions
+from emperor.base.layer.residual import ResidualConnectionOptions
+from emperor.base.options import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+)
+from emperor.embedding.absolute.core.config import AbsolutePositionalEmbeddingConfig
+from emperor.halting.options import HaltingHiddenStateModeOptions
+from emperor.memory.config import DynamicMemoryConfig
+from emperor.memory.options import MemoryPositionOptions
+
+
+@dataclass(frozen=True)
+class SubmoduleStackSource:
+    independent_flag: bool
+    hidden_dim: int | None
+    num_layers: int | None
+    last_layer_bias_option: LastLayerBiasOptions | None
+    apply_output_pipeline_flag: bool | None
+    activation: ActivationOptions | None
+    layer_norm_position: LayerNormPositionOptions | None
+    residual_connection_option: ResidualConnectionOptions | None
+    dropout_probability: float | None
+    bias_flag: bool | None
+
+
+@dataclass(frozen=True)
+class SubmoduleStackOptions:
+    hidden_dim: int
+    num_layers: int
+    last_layer_bias_option: LastLayerBiasOptions
+    apply_output_pipeline_flag: bool
+    activation: ActivationOptions
+    layer_norm_position: LayerNormPositionOptions
+    residual_connection_option: ResidualConnectionOptions
+    dropout_probability: float
+    bias_flag: bool
+
+
+def resolve_controller_stack_options(
+    source: SubmoduleStackSource, defaults: SubmoduleStackOptions
+) -> SubmoduleStackOptions:
+    if not source.independent_flag:
+        return defaults
+    hidden_dim = defaults.hidden_dim if source.hidden_dim is None else source.hidden_dim
+    num_layers = defaults.num_layers if source.num_layers is None else source.num_layers
+    last_layer_bias_option = (
+        defaults.last_layer_bias_option
+        if source.last_layer_bias_option is None
+        else source.last_layer_bias_option
+    )
+    apply_output_pipeline_flag = (
+        defaults.apply_output_pipeline_flag
+        if source.apply_output_pipeline_flag is None
+        else source.apply_output_pipeline_flag
+    )
+    activation = defaults.activation if source.activation is None else source.activation
+    layer_norm_position = (
+        defaults.layer_norm_position
+        if source.layer_norm_position is None
+        else source.layer_norm_position
+    )
+    residual_connection_option = (
+        defaults.residual_connection_option
+        if source.residual_connection_option is None
+        else source.residual_connection_option
+    )
+    dropout_probability = (
+        defaults.dropout_probability
+        if source.dropout_probability is None
+        else source.dropout_probability
+    )
+    bias_flag = defaults.bias_flag if source.bias_flag is None else source.bias_flag
+    return SubmoduleStackOptions(
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        last_layer_bias_option=last_layer_bias_option,
+        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        activation=activation,
+        layer_norm_position=layer_norm_position,
+        residual_connection_option=residual_connection_option,
+        dropout_probability=dropout_probability,
+        bias_flag=bias_flag,
+    )
+
+
+@dataclass(frozen=True)
+class BertEmbeddingOptions:
+    token_type_vocab_size: int
+    layer_norm_flag: bool
+    dropout_probability: float
+
+
+@dataclass(frozen=True)
+class BertMlmHeadOptions:
+    activation: ActivationOptions
+    dense_bias_flag: bool
+    layer_norm_flag: bool
+    decoder_bias_flag: bool
+    decoder_weight_tying_flag: bool
+
+
+@dataclass(frozen=True)
+class BertNspHeadOptions:
+    pooler_activation: ActivationOptions
+    pooler_bias_flag: bool
+    output_dim: int
+    head_bias_flag: bool
+
+
+@dataclass(frozen=True)
+class MainLayerStackOptions:
+    bias_flag: bool
+    layer_norm_position: LayerNormPositionOptions
+    num_layers: int
+    activation: ActivationOptions
+    residual_connection_option: ResidualConnectionOptions
+    dropout_probability: float
+    last_layer_bias_option: LastLayerBiasOptions
+    apply_output_pipeline_flag: bool
+
+
+@dataclass(frozen=True)
+class LayerControllerOptions:
+    stack_gate_flag: bool
+    gate_option: LayerGateOptions | None
+    gate_activation: ActivationOptions | None
+    gate_stack_source: SubmoduleStackSource
+    stack_halting_flag: bool
+    halting_threshold: float
+    halting_dropout: float
+    halting_hidden_state_mode: HaltingHiddenStateModeOptions
+    halting_stack_source: SubmoduleStackSource
+    shared_gate_config: GateConfig | None = None
+
+
+@dataclass(frozen=True)
+class DynamicMemoryOptions:
+    memory_flag: bool
+    memory_option: type[DynamicMemoryConfig]
+    memory_position_option: MemoryPositionOptions
+    memory_test_time_training_learning_rate: float | None
+    memory_test_time_training_num_inner_steps: int | None
+    memory_stack_source: SubmoduleStackSource
+
+
+@dataclass(frozen=True)
+class RecurrentControllerOptions:
+    recurrent_flag: bool
+    recurrent_max_steps: int
+    recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_gate_flag: bool
+    recurrent_gate_option: LayerGateOptions | None
+    recurrent_gate_activation: ActivationOptions | None
+    recurrent_gate_stack_source: SubmoduleStackSource
+    recurrent_halting_flag: bool
+    recurrent_halting_threshold: float
+    recurrent_halting_dropout: float
+    recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
+    recurrent_halting_stack_source: SubmoduleStackSource
+
+
+@dataclass(frozen=True)
+class TransformerEncoderOptions:
+    hidden_dim: int
+    num_layers: int
+    activation: ActivationOptions
+    dropout_probability: float
+    layer_norm_position: LayerNormPositionOptions
+    causal_attention_mask_flag: bool = False
+
+
+@dataclass(frozen=True)
+class TransformerPositionalEmbeddingOptions:
+    option: type[AbsolutePositionalEmbeddingConfig]
+    padding_idx: int | None
+    auto_expand_flag: bool
+
+
+@dataclass(frozen=True)
+class TransformerAttentionOptions:
+    num_heads: int
+    num_layers: int
+    bias_flag: bool
+    add_key_value_bias_flag: bool
+
+
+@dataclass(frozen=True)
+class TransformerFeedForwardOptions:
+    num_layers: int
+    bias_flag: bool
+
+
+@dataclass(frozen=True)
+class VitPatchOptions:
+    patch_size: int
+    input_channels: int
+    image_height: int
+    dropout_probability: float
+    bias_flag: bool
+
+
+@dataclass(frozen=True)
+class VitOutputOptions:
+    bias_flag: bool
+
+
+@dataclass(frozen=True)
+class RuntimeOptions:
+    batch_size: int
+    learning_rate: float
+    input_dim: int
+    output_dim: int
+    sequence_length: int
+    embedding_options: BertEmbeddingOptions | None
+    encoder_options: TransformerEncoderOptions | None
+    positional_embedding_options: TransformerPositionalEmbeddingOptions | None
+    attention_options: TransformerAttentionOptions | None
+    feed_forward_options: TransformerFeedForwardOptions | None
+    mlm_head_options: BertMlmHeadOptions | None
+    nsp_head_options: BertNspHeadOptions | None
+    attention_projection_stack_options: SubmoduleStackOptions | None
+    attention_projection_layer_controller_options: LayerControllerOptions | None
+    attention_projection_dynamic_memory_options: DynamicMemoryOptions | None
+    attention_projection_recurrent_controller_options: RecurrentControllerOptions | None
+    feed_forward_stack_options: SubmoduleStackOptions | None
+    feed_forward_layer_controller_options: LayerControllerOptions | None
+    feed_forward_dynamic_memory_options: DynamicMemoryOptions | None
+    feed_forward_recurrent_controller_options: RecurrentControllerOptions | None
+    stack_options: MainLayerStackOptions | None
+    submodule_stack_options: SubmoduleStackOptions | None
+    layer_controller_options: LayerControllerOptions | None
+    dynamic_memory_options: DynamicMemoryOptions | None
+    recurrent_controller_options: RecurrentControllerOptions | None
+
+
+__all__ = [
+    "BertEmbeddingOptions",
+    "BertMlmHeadOptions",
+    "BertNspHeadOptions",
+    "DynamicMemoryOptions",
+    "LayerControllerOptions",
+    "MainLayerStackOptions",
+    "RecurrentControllerOptions",
+    "RuntimeOptions",
+    "SubmoduleStackOptions",
+    "SubmoduleStackSource",
+    "TransformerAttentionOptions",
+    "TransformerEncoderOptions",
+    "TransformerFeedForwardOptions",
+    "TransformerPositionalEmbeddingOptions",
+    "resolve_controller_stack_options",
+]
+
+# Preserve historical class paths for serialization compatibility.
+SubmoduleStackSource.__module__ = "models.bert.linear._controller_stack"
+SubmoduleStackOptions.__module__ = "models.bert.linear._controller_stack"
+BertEmbeddingOptions.__module__ = "models.bert.linear._builder_options"
+BertMlmHeadOptions.__module__ = "models.bert.linear._builder_options"
+BertNspHeadOptions.__module__ = "models.bert.linear._builder_options"
+MainLayerStackOptions.__module__ = "models.bert.linear._linear_builder_options"
+LayerControllerOptions.__module__ = "models.bert.linear._linear_builder_options"
+DynamicMemoryOptions.__module__ = "models.bert.linear._linear_builder_options"
+RecurrentControllerOptions.__module__ = "models.bert.linear._linear_builder_options"
+TransformerEncoderOptions.__module__ = "models.bert.linear._transformer_builder_options"
+TransformerPositionalEmbeddingOptions.__module__ = (
+    "models.bert.linear._transformer_builder_options"
+)
+TransformerAttentionOptions.__module__ = (
+    "models.bert.linear._transformer_builder_options"
+)
+TransformerFeedForwardOptions.__module__ = (
+    "models.bert.linear._transformer_builder_options"
+)
+VitPatchOptions.__module__ = "models.bert.linear._transformer_builder_options"
+VitOutputOptions.__module__ = "models.bert.linear._transformer_builder_options"
