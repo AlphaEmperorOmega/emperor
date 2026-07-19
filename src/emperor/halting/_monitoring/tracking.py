@@ -75,6 +75,19 @@ class HaltingUsageTracker(Module):
 
     def __compute_alive_fraction(self, halting_state: "HaltingStateBase") -> Tensor:
         halt_mask = halting_state.halt_mask
+        valid_mask = getattr(halting_state, "valid_mask", None)
+        if valid_mask is not None:
+            valid_count = valid_mask.sum()
+            if not bool(valid_count.item()):
+                reference = getattr(
+                    halting_state,
+                    "continuation_probability",
+                    self.last_survival,
+                )
+                return reference.detach().new_zeros(())
+            if halt_mask is not None:
+                alive = valid_mask & ~halt_mask
+                return (alive.float().sum() / valid_count).detach()
         if halt_mask is not None:
             return (~halt_mask).float().mean().detach()
         continuation = getattr(halting_state, "continuation_probability", None)
@@ -100,25 +113,51 @@ class HaltingUsageTracker(Module):
     ) -> None:
         self.last_step_count.fill_(float(len(self._survival_stage)))
 
+        valid_mask = getattr(halting_state, "valid_mask", None)
         ponder_cost = getattr(halting_state, "accumulated_ponder_cost", None)
         if ponder_cost is not None:
             cost = ponder_cost.detach().float()
+            if valid_mask is not None and cost.dim() > 0:
+                cost = cost[valid_mask]
+            else:
+                cost = cost.reshape(-1)
             self.last_ponder_cost = cost.reshape(-1)
-            self.last_ponder_cost_mean.copy_(cost.mean())
-            self.last_ponder_cost_std.copy_(cost.std(unbiased=False))
+            if cost.numel() > 0:
+                self.last_ponder_cost_mean.copy_(cost.mean())
+                self.last_ponder_cost_std.copy_(cost.std(unbiased=False))
+            else:
+                self.last_ponder_cost_mean.zero_()
+                self.last_ponder_cost_std.zero_()
 
         halt_mask = halting_state.halt_mask
         if halt_mask is not None:
-            self.last_halted_fraction.copy_(halt_mask.float().mean())
+            if valid_mask is None:
+                self.last_halted_fraction.copy_(halt_mask.float().mean())
+            else:
+                valid_count = valid_mask.sum()
+                if bool(valid_count.item()):
+                    halted_count = (halt_mask & valid_mask).sum()
+                    self.last_halted_fraction.copy_(halted_count / valid_count)
+                else:
+                    self.last_halted_fraction.zero_()
 
         accumulated = getattr(halting_state, "accumulated_halt_probabilities", None)
         if accumulated is not None:
             acc = accumulated.detach().float()
-            self.last_accumulated_halt_prob_mean.copy_(acc.mean())
-            remaining = 1.0 - acc
-            if halt_mask is not None:
-                remaining = remaining.masked_fill(halt_mask, 0.0)
-            self.last_remaining_mass_mean.copy_(remaining.mean())
+            selected_halt_mask = halt_mask
+            if valid_mask is not None:
+                acc = acc[valid_mask]
+                if halt_mask is not None:
+                    selected_halt_mask = halt_mask[valid_mask]
+            if acc.numel() == 0:
+                self.last_accumulated_halt_prob_mean.zero_()
+                self.last_remaining_mass_mean.zero_()
+            else:
+                self.last_accumulated_halt_prob_mean.copy_(acc.mean())
+                remaining = 1.0 - acc
+                if selected_halt_mask is not None:
+                    remaining = remaining.masked_fill(selected_halt_mask, 0.0)
+                self.last_remaining_mass_mean.copy_(remaining.mean())
 
         if ponder_loss is not None:
             self.last_ponder_loss.copy_(ponder_loss.detach().float().mean())
