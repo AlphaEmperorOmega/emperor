@@ -74,7 +74,7 @@ ATTN_GATE_STACK_BIAS_FLAG: bool | None = True
 ### Attention Projection Halting Options
 ATTN_HALTING_FLAG: bool = False
 ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
-ATTN_HALTING_THRESHOLD: float = 0.99
+ATTN_HALTING_THRESHOLD: float = 0.999
 ATTN_HALTING_DROPOUT: float = 0.0
 ATTN_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
@@ -144,7 +144,7 @@ ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 #### Attention Projection Recurrent Halting Options
 ATTN_RECURRENT_HALTING_FLAG: bool = False
 ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
-ATTN_RECURRENT_HALTING_THRESHOLD: float = 0.99
+ATTN_RECURRENT_HALTING_THRESHOLD: float = 0.999
 ATTN_RECURRENT_HALTING_DROPOUT: float = 0.0
 ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
@@ -198,7 +198,7 @@ FF_GATE_STACK_BIAS_FLAG: bool | None = True
 ## Feed-Forward Halting Options
 FF_HALTING_FLAG: bool = False
 FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
-FF_HALTING_THRESHOLD: float = 0.99
+FF_HALTING_THRESHOLD: float = 0.999
 FF_HALTING_DROPOUT: float = 0.0
 FF_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
@@ -268,7 +268,7 @@ FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 ### Feed-Forward Recurrent Halting Options
 FF_RECURRENT_HALTING_FLAG: bool = False
 FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
-FF_RECURRENT_HALTING_THRESHOLD: float = 0.99
+FF_RECURRENT_HALTING_THRESHOLD: float = 0.999
 FF_RECURRENT_HALTING_DROPOUT: float = 0.0
 FF_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW

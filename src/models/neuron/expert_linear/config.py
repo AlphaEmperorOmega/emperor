@@ -127,7 +127,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 # If `HALTING_FLAG` is False, the halting-specific parameters below are ignored.
 HALTING_FLAG: bool = False
 HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
-HALTING_THRESHOLD: float = 0.99
+HALTING_THRESHOLD: float = 0.999
 HALTING_DROPOUT: float = 0.0
 HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
     HaltingHiddenStateModeOptions.RAW
