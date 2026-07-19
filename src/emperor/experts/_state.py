@@ -1,8 +1,12 @@
-from dataclasses import dataclass
+from __future__ import annotations
 
-from torch import Tensor
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.layers import LayerState
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 @dataclass

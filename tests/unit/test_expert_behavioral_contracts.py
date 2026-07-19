@@ -13,6 +13,9 @@ from emperor.experts import (
 from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.experts._layers.reduce import MixtureOfExpertsReduce
 from emperor.experts._model import MixtureOfExpertsModel
+from emperor.experts._routing.weighting import ExpertWeightingHandler
+from emperor.experts._validation.mixture import MixtureOfExpertsValidator
+from emperor.experts._validation.model import MixtureOfExpertsModelValidator
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -65,6 +68,36 @@ def _mixture_config(
         routing_initialization_mode=RoutingInitializationMode.DISABLED,
         sampler_config=None,
         expert_model_config=_linear_stack(input_dim, output_dim),
+    )
+
+
+def _mixture_model_config() -> MixtureOfExpertsModelConfig:
+    mixture_config = _mixture_config(top_k=1, num_experts=2)
+    stack_config = LayerStackConfig(
+        input_dim=2,
+        hidden_dim=2,
+        output_dim=2,
+        num_layers=1,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=MixtureOfExpertsLayerConfig(
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=mixture_config,
+        ),
+    )
+    return MixtureOfExpertsModelConfig(
+        input_dim=2,
+        output_dim=2,
+        top_k=1,
+        routing_initialization_mode=RoutingInitializationMode.DISABLED,
+        sampler_config=None,
+        stack_config=stack_config,
     )
 
 
@@ -139,6 +172,57 @@ def _routing_model_config(
 
 
 class ExpertBehavioralContractTests(unittest.TestCase):
+    def test_exact_guard_errors_cover_unreachable_validated_states(self) -> None:
+        model = MixtureOfExperts(_mixture_config(top_k=1, num_experts=2))
+        original_weighting = model.weighting_position_option
+        model.weighting_position_option = object()
+        with self.assertRaisesRegex(
+            TypeError,
+            "'weighting_position_option' must be of type "
+            "ExpertWeightingPositionOptions",
+        ):
+            MixtureOfExpertsValidator.validate_forward_reference_types(model)
+        model.weighting_position_option = original_weighting
+
+        model.routing_initialization_mode = object()
+        with self.assertRaisesRegex(
+            TypeError,
+            "'routing_initialization_mode' must be of type RoutingInitializationMode",
+        ):
+            MixtureOfExpertsValidator.validate_forward_reference_types(model)
+        model.routing_initialization_mode = RoutingInitializationMode.DISABLED
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "routing_initialization_mode.*RoutingInitializationMode.LAYER",
+        ):
+            MixtureOfExpertsValidator.validate_sampler_is_initialized(model)
+        with self.assertRaisesRegex(ValueError, "probabilities.*must be supplied"):
+            MixtureOfExpertsValidator.validate_probabilities_exist(None)
+        MixtureOfExpertsValidator.validate_probabilities_exist(torch.ones(1))
+
+        model.sampler_config = None
+        with self.assertRaisesRegex(ValueError, "sampler_config.*must be defined"):
+            MixtureOfExpertsValidator.validate_sampler_config_exists(model)
+        model.sampler_config = _sampler_config()
+        with self.assertRaisesRegex(
+            ValueError,
+            "sampler_config.router_config.*must be defined",
+        ):
+            MixtureOfExpertsValidator.validate_router_config_exists(model)
+
+        handler = ExpertWeightingHandler(_mixture_config(top_k=1, num_experts=2))
+        with self.assertRaisesRegex(ValueError, "Missing input: `probabilities`"):
+            handler.maybe_apply_probabilities_after(torch.ones(1, 2), None)
+
+        model_wrapper = _mixture_model_config().build()
+        model_wrapper.cfg = object()
+        with self.assertRaisesRegex(
+            TypeError,
+            "`cfg` must be of type MixtureOfExpertsModelConfig",
+        ):
+            MixtureOfExpertsModelValidator.validate_cfg_type(model_wrapper)
+
     def test_dense_mixture_matches_exact_per_sample_weighted_expert_sum(
         self,
     ) -> None:

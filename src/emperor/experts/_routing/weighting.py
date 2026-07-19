@@ -3,12 +3,15 @@ from typing import TYPE_CHECKING
 from torch import Tensor
 
 from emperor.experts._options import ExpertWeightingPositionOptions
+from emperor.experts._validation.mixture import MixtureOfExpertsValidator
 
 if TYPE_CHECKING:
     from emperor.experts._config import MixtureOfExpertsConfig
 
 
 class ExpertWeightingHandler:
+    VALIDATOR = MixtureOfExpertsValidator
+
     def __init__(
         self,
         cfg: "MixtureOfExpertsConfig",
@@ -71,10 +74,6 @@ class ExpertWeightingHandler:
         if not self.weighted_parameters_flag:
             return logits
 
-        if probabilities is None:
-            raise ValueError(
-                "Missing input: `probabilities` must be supplied when `indices` "
-                "are used "
-                "to ensure accurate weighting and processing of inputs."
-            )
-        return logits * probabilities.reshape(-1, 1)
+        self.VALIDATOR.validate_probabilities_exist(probabilities)
+        probabilities_as_column_vector = probabilities.reshape(-1, 1)
+        return logits * probabilities_as_column_vector

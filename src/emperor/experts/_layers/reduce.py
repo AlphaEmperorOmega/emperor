@@ -142,21 +142,26 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
     def __compute_expert_mixture(
         self,
         experts_output: Tensor,
-        indices: Tensor,
+        routing_positions: Tensor | None,
         probabilities: Tensor | None = None,
     ) -> Tensor:
         output_dim = experts_output.size(-1)
-        if self.top_k != self.num_experts and indices is not None:
-            _, _index_sorted_indices = indices.sort(dim=0)
-            experts_output = experts_output[_index_sorted_indices]
+        if self.__should_restore_routing_order(routing_positions):
+            _, routing_position_sort_order = routing_positions.sort(dim=0)
+            experts_output = experts_output[routing_position_sort_order]
 
         experts_output = self.expert_weighting_handler.maybe_apply_probabilities_after(
             experts_output, probabilities
         )
 
-        if not self.compute_expert_mixture_flag or self.top_k == 1:
+        if self.__should_return_expert_outputs_without_reduction():
             return experts_output
 
-        if self.top_k > 1:
-            experts_output = experts_output.view(-1, self.top_k, output_dim)
+        experts_output = experts_output.view(-1, self.top_k, output_dim)
         return experts_output.sum(dim=1)
+
+    def __should_restore_routing_order(self, routing_positions: Tensor | None) -> bool:
+        return self.top_k != self.num_experts and routing_positions is not None
+
+    def __should_return_expert_outputs_without_reduction(self) -> bool:
+        return not self.compute_expert_mixture_flag or self.top_k == 1
