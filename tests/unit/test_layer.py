@@ -63,6 +63,7 @@ class ConstantGate(nn.Module):
 class FakeHaltingState:
     def __init__(self, halt_mask: torch.Tensor):
         self.halt_mask = halt_mask
+        self.output_hidden = None
 
 
 class FakeHaltingModel(nn.Module):
@@ -88,7 +89,9 @@ class FakeHaltingModel(nn.Module):
         model_hidden_state: torch.Tensor,
     ) -> tuple[FakeHaltingState, torch.Tensor]:
         self.update_calls += 1
-        return self.halting_state, model_hidden_state + self.halting_output_offset
+        output_hidden = model_hidden_state + self.halting_output_offset
+        self.halting_state.output_hidden = output_hidden
+        return self.halting_state, output_hidden
 
     def finalize_weighted_accumulation(
         self,
@@ -1914,7 +1917,7 @@ class TestLayer(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not implement"):
             Layer(self.preset(halting_config=halting_config))
 
-    def test_maybe_apply_halting_returns_values_without_mutating_state(self):
+    def test_halting_uses_the_common_lifecycle_to_update_state(self):
         batch_size = 4
         dim = 8
         existing_loss = torch.tensor(2.0)
@@ -1931,21 +1934,15 @@ class TestLayer(unittest.TestCase):
             hidden=torch.randn(batch_size, dim),
             loss=existing_loss,
         )
-        original_hidden = state.hidden.clone()
-        candidate = torch.randn(batch_size, dim)
+        result = layer(state)
 
-        hidden, halting_state, loss = layer._Layer__maybe_apply_halting(
-            candidate,
-            state.halting_state,
-            state.loss,
+        self.assertIs(result, state)
+        self.assertIs(result.loss, existing_loss)
+        self.assertIsNotNone(result.halting_state)
+        torch.testing.assert_close(
+            result.hidden,
+            result.halting_state.output_hidden,
         )
-
-        torch.testing.assert_close(state.hidden, original_hidden)
-        self.assertIs(state.loss, existing_loss)
-        self.assertIsNone(state.halting_state)
-        torch.testing.assert_close(hidden, candidate)
-        self.assertIsNotNone(halting_state)
-        self.assertIs(loss, existing_loss)
 
     def test_halting_last_layer_finalizes_and_accumulates_vector_loss(self):
         dim = 3

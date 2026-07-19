@@ -17,7 +17,7 @@ from emperor.layers._validation import LayerValidator
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
-    from emperor.halting import HaltingBase, HaltingConfig, HaltingStateBase
+    from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
 
@@ -80,7 +80,7 @@ class Layer(LayerModuleBase):
             gate_dim=self.output_dim,
         )
 
-    def __build_halting_model(self) -> "HaltingBase | None":
+    def __build_halting_model(self) -> "HaltingInterface | None":
         return self._build_from_config(self.halting_config, input_dim=self.output_dim)
 
     def __build_memory_model(self) -> "MemoryInterface | None":
@@ -136,29 +136,24 @@ class Layer(LayerModuleBase):
         X = self.__maybe_apply_dropout(X)
         X = self.__maybe_apply_residual_connection(X, residual)
         X = self.__maybe_apply_layer_norm_after(X)
-        X, halting_state, loss = self.__maybe_apply_halting(
-            X, state.halting_state, state.loss
-        )
-        state = self.__update_output_state(state, X, halting_state, loss)
+        state = self.__maybe_apply_halting(state, X)
         return self._handle_model_output(state)
 
     def __should_skip_halted_state(self, state: LayerState) -> bool:
         if not self.__has_halting_state(state):
             return False
-
         return self.__is_halting_state_complete(state.halting_state)
 
     def __has_halting_state(self, state: LayerState) -> bool:
         return self.halting_model is not None and state.halting_state is not None
 
+    @staticmethod
     def __is_halting_state_complete(
-        self,
         halting_state: "HaltingStateBase | None",
     ) -> bool:
-        halt_mask = getattr(halting_state, "halt_mask", None)
-        if halt_mask is None:
+        if halting_state is None or halting_state.halt_mask is None:
             return False
-        return bool(halt_mask.all().item())
+        return bool(halting_state.halt_mask.all().item())
 
     def _handle_model_input(self, input: Tensor) -> Tensor:
         return input
@@ -223,45 +218,33 @@ class Layer(LayerModuleBase):
 
     def __maybe_apply_halting(
         self,
-        input: Tensor,
-        halting_state: "HaltingStateBase | None",
-        loss: Tensor | None,
-    ) -> tuple[Tensor, "HaltingStateBase | None", Tensor | None]:
+        state: "LayerState",
+        hidden: Tensor,
+    ) -> "LayerState":
         if self.halting_model is None:
-            return input, halting_state, loss
+            state.hidden = hidden
+            return state
 
         halting_state, halting_output = self.halting_model.update_halting_state(
-            halting_state, input
+            state.halting_state, hidden
         )
+        state.halting_state = halting_state
         if self.last_layer_flag or self.__is_halting_state_complete(halting_state):
-            return self.__maybe_finalize_halted_output(input, halting_state, loss)
-        return halting_output, halting_state, loss
+            return self.__finalize_halting(state, hidden)
+        state.hidden = halting_output
+        return state
 
-    def __maybe_finalize_halted_output(
+    def __finalize_halting(
         self,
-        input: Tensor,
-        halting_state: "HaltingStateBase | None",
-        loss: Tensor | None,
-    ) -> tuple[Tensor, "HaltingStateBase | None", Tensor | None]:
-        if self.halting_model is None or halting_state is None:
-            return input, halting_state, loss
-        hidden, halting_loss = self.halting_model.finalize_weighted_accumulation(
-            halting_state, input
+        state: "LayerState",
+        hidden: Tensor,
+    ) -> "LayerState":
+        state.hidden, halting_loss = self.halting_model.finalize_weighted_accumulation(
+            state.halting_state,
+            hidden,
         )
         auxiliary_loss = self._reduce_auxiliary_loss(halting_loss)
-        loss = self._accumulate_auxiliary_loss(loss, auxiliary_loss)
-        return hidden, halting_state, loss
-
-    def __update_output_state(
-        self,
-        state: LayerState,
-        hidden: Tensor,
-        halting_state: "HaltingStateBase | None",
-        loss: Tensor | None,
-    ) -> LayerState:
-        state.hidden = hidden
-        state.halting_state = halting_state
-        state.loss = loss
+        state.loss = self._accumulate_auxiliary_loss(state.loss, auxiliary_loss)
         return state
 
     def _handle_model_output(self, layer_state: LayerState) -> LayerState:
