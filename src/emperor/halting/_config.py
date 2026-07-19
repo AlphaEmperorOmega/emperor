@@ -1,5 +1,6 @@
+import copy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from emperor.config import BaseOptions, ConfigBase, optional_field
 
@@ -15,12 +16,14 @@ class HaltingHiddenStateModeOptions(BaseOptions):
 
 @dataclass
 class HaltingConfig(ConfigBase):
+    DEFAULT_THRESHOLD: ClassVar[float | None] = None
+
     input_dim: int | None = optional_field(
         "Hidden dimension used to build the halting gate network"
     )
     threshold: float | None = optional_field(
         "Halting probability threshold; tokens above this stop computing. "
-        "Recommended: use a high value such as 0.99 so tokens halt only after "
+        "Recommended: use a high value such as 0.999 so tokens halt only after "
         "most of their probability mass has been assigned. Smaller values stop "
         "earlier, but can produce less stable accumulated representations."
     )
@@ -38,9 +41,26 @@ class HaltingConfig(ConfigBase):
         "Config used to build the model module within the layer"
     )
 
+    def build(self, overrides: "HaltingConfig | None" = None):
+        configured_threshold = None if overrides is None else overrides.threshold
+        if (
+            self.threshold is not None
+            or configured_threshold is not None
+            or self.DEFAULT_THRESHOLD is None
+        ):
+            return super().build(overrides)
+
+        resolved_overrides = (
+            type(self)() if overrides is None else copy.deepcopy(overrides)
+        )
+        resolved_overrides.threshold = self.DEFAULT_THRESHOLD
+        return super().build(resolved_overrides)
+
 
 @dataclass
 class StickBreakingConfig(HaltingConfig):
+    DEFAULT_THRESHOLD: ClassVar[float] = 0.999
+
     def _registry_owner(self) -> "type[HaltingInterface]":
         from emperor.halting._strategies.stick_breaking import StickBreaking
 
@@ -49,6 +69,8 @@ class StickBreakingConfig(HaltingConfig):
 
 @dataclass
 class SoftHaltingConfig(HaltingConfig):
+    DEFAULT_THRESHOLD: ClassVar[float] = 0.999
+
     def _registry_owner(self) -> "type[HaltingInterface]":
         from emperor.halting._strategies.soft import SoftHalting
 
