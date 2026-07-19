@@ -523,7 +523,7 @@ def runtime_from_legacy_options(
             f"{len(_LEGACY_BUILDER_FIELDS) + 1} positional arguments"
         )
     builder_options = dict(kwargs)
-    for name, value in zip(_LEGACY_BUILDER_FIELDS, args):
+    for name, value in zip(_LEGACY_BUILDER_FIELDS, args, strict=False):
         if name in builder_options:
             raise TypeError(
                 "LinearConfigBuilder.__init__() got multiple values for "

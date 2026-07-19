@@ -168,7 +168,7 @@ def _preset_definition_descriptions(tree: ast.Module) -> dict[str, str]:
         value = node.value
         if not isinstance(value, ast.Dict):
             continue
-        for key_node, value_node in zip(value.keys, value.values):
+        for key_node, value_node in zip(value.keys, value.values, strict=True):
             if key_node is None:
                 continue
             key = _preset_key_from_node(key_node)
