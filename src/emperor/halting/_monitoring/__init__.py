@@ -1,0 +1,1 @@
+"""Private halting monitoring implementations."""

@@ -1,3 +1,5 @@
+"""Private halting monitoring callback implementation."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,6 +7,10 @@ from typing import TYPE_CHECKING
 
 from lightning.pytorch.callbacks import Callback
 
+from emperor.halting._monitoring.diagnostics import (
+    _HaltingDiagnosticMetrics,
+    _HaltingDiagnostics,
+)
 from emperor.monitoring import (
     MonitorEmissionPolicy,
     MonitorTensorHistory,
@@ -12,27 +18,12 @@ from emperor.monitoring import (
 
 if TYPE_CHECKING:
     from lightning import LightningModule, Trainer
-    from torch import Tensor
 
     from emperor.halting._base import HaltingBase
-    from emperor.halting._usage import (
+    from emperor.halting._monitoring.tracking import (
         HaltingUsageTracker,
         HaltingUsageTrackerManager,
     )
-
-
-@dataclass(frozen=True)
-class _HaltingDiagnosticMetrics:
-    ponder_cost_mean: Tensor
-    ponder_cost_std: Tensor
-    ponder_cost: Tensor
-    step_count: Tensor
-    halted_fraction: Tensor
-    accumulated_halt_probability_mean: Tensor
-    remaining_mass_mean: Tensor
-    final_survival_fraction: Tensor
-    ponder_loss: Tensor
-    survival: Tensor
 
 
 @dataclass(frozen=True)
@@ -42,29 +33,6 @@ class _HaltingTrackingContext:
     metrics: _HaltingDiagnosticMetrics
     experiment: object | None
     global_step: int
-
-
-class _HaltingDiagnostics:
-    @staticmethod
-    def calculate(tracker: HaltingUsageTracker) -> _HaltingDiagnosticMetrics:
-        survival = tracker.last_survival.detach().float()
-        final_survival_fraction = (
-            survival[-1] if survival.numel() else survival.new_zeros(())
-        )
-        return _HaltingDiagnosticMetrics(
-            ponder_cost_mean=tracker.last_ponder_cost_mean.detach().float(),
-            ponder_cost_std=tracker.last_ponder_cost_std.detach().float(),
-            ponder_cost=tracker.last_ponder_cost.detach().float(),
-            step_count=tracker.last_step_count.detach().float(),
-            halted_fraction=tracker.last_halted_fraction.detach().float(),
-            accumulated_halt_probability_mean=(
-                tracker.last_accumulated_halt_prob_mean.detach().float()
-            ),
-            remaining_mass_mean=tracker.last_remaining_mass_mean.detach().float(),
-            final_survival_fraction=final_survival_fraction,
-            ponder_loss=tracker.last_ponder_loss.detach().float(),
-            survival=survival,
-        )
 
 
 class HaltingMonitorCallback(Callback):
@@ -109,7 +77,7 @@ class HaltingMonitorCallback(Callback):
 
     def __ensure_tracking(self, pl_module: LightningModule) -> None:
         from emperor.halting._base import HaltingBase
-        from emperor.halting._usage import HaltingUsageTrackerManager
+        from emperor.halting._monitoring.tracking import HaltingUsageTrackerManager
 
         if self._tracker_manager is not None:
             return

@@ -11,15 +11,15 @@ if TYPE_CHECKING:
         SoftHaltingConfig,
         StickBreakingConfig,
     )
-    from emperor.halting._monitoring import HaltingMonitorCallback
+    from emperor.halting._monitoring.callback import HaltingMonitorCallback
+    from emperor.halting._monitoring.tracking import (
+        HaltingUsageTracker,
+        HaltingUsageTrackerManager,
+    )
     from emperor.halting._strategies.soft import SoftHalting, SoftHaltingState
     from emperor.halting._strategies.stick_breaking import (
         StickBreaking,
         StickBreakingState,
-    )
-    from emperor.halting._usage import (
-        HaltingUsageTracker,
-        HaltingUsageTrackerManager,
     )
 
 __all__ = (
@@ -65,15 +65,15 @@ _LAZY_EXPORTS = {
         "StickBreakingState",
     ),
     "HaltingMonitorCallback": (
-        "emperor.halting._monitoring",
+        "emperor.halting._monitoring.callback",
         "HaltingMonitorCallback",
     ),
     "HaltingUsageTracker": (
-        "emperor.halting._usage",
+        "emperor.halting._monitoring.tracking",
         "HaltingUsageTracker",
     ),
     "HaltingUsageTrackerManager": (
-        "emperor.halting._usage",
+        "emperor.halting._monitoring.tracking",
         "HaltingUsageTrackerManager",
     ),
 }

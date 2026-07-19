@@ -1,3 +1,5 @@
+"""Capture halting usage without monitoring-framework concerns."""
+
 from dataclasses import dataclass
 from functools import wraps
 from typing import TYPE_CHECKING
@@ -12,14 +14,6 @@ if TYPE_CHECKING:
 
 
 class HaltingUsageTracker(Module):
-    """Records adaptive-compute statistics for a single halting module.
-
-    Buffers hold the most recent forward's survival curve (fraction of tokens
-    still computing after each recurrence step) and scalar summaries (ponder
-    depth, halted fraction, ponder loss). Survival is staged per step and
-    committed on ``record_final``; its length equals the steps actually run, so
-    it varies between forwards when halting exits early.
-    """
 
     _DYNAMIC_BUFFER_NAMES = ("last_survival", "last_ponder_cost")
 
