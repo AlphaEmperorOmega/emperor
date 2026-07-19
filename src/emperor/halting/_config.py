@@ -1,7 +1,11 @@
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from emperor.config import BaseOptions, ConfigBase, optional_field
-from emperor.layers import LayerStackConfig
+
+if TYPE_CHECKING:
+    from emperor.halting._interface import HaltingInterface
+    from emperor.layers import LayerStackConfig
 
 
 class HaltingHiddenStateModeOptions(BaseOptions):
@@ -37,7 +41,7 @@ class HaltingConfig(ConfigBase):
 
 @dataclass
 class StickBreakingConfig(HaltingConfig):
-    def _registry_owner(self) -> type:
+    def _registry_owner(self) -> "type[HaltingInterface]":
         from emperor.halting._strategies.stick_breaking import StickBreaking
 
         return StickBreaking
@@ -45,7 +49,7 @@ class StickBreakingConfig(HaltingConfig):
 
 @dataclass
 class SoftHaltingConfig(HaltingConfig):
-    def _registry_owner(self) -> type:
+    def _registry_owner(self) -> "type[HaltingInterface]":
         from emperor.halting._strategies.soft import SoftHalting
 
         return SoftHalting
