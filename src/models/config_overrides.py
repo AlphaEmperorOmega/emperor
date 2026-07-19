@@ -22,7 +22,6 @@ from model_runtime.packages.configuration import (
 from model_runtime.packages.configuration import (
     config_key_to_param as config_key_to_param,
 )
-
 from models.catalog import model_identity_payload_from_id, module_path_for_model_id
 from models.config_ast_listing import (
     dataset_option_names_from_path,
@@ -40,6 +39,7 @@ SKIP_CONFIG_KEYS = {
     "DATASET_OPTIONS_BY_TASK",
     "MONITOR_OPTIONS",
 }
+
 
 def _display_config_default(value: Any) -> str:
     if isinstance(value, Enum):
@@ -230,13 +230,14 @@ def extract_config_overrides(
 def _catalog_source_path(
     experiment: str,
     filename: str,
-    models_dir: str = "models",
+    models_dir: str | Path | None = None,
 ) -> Path:
     module_path = module_path_for_model_id(experiment)
     if module_path is None:
         raise SystemExit(f"Unknown model: {experiment}")
     relative_package = module_path.removeprefix("models.").replace(".", "/")
-    return Path(models_dir) / relative_package / filename
+    source_root = Path(models_dir) if models_dir is not None else Path(__file__).parent
+    return source_root / relative_package / filename
 
 
 def _display_model_selector(experiment: str) -> str:
@@ -247,7 +248,11 @@ def _display_model_selector(experiment: str) -> str:
     return f"--model-type {identity['modelType']} --model {identity['model']}"
 
 
-def print_config_options(experiment: str, models_dir: str = "models") -> None:
+def print_config_options(
+    experiment: str,
+    models_dir: str | Path | None = None,
+) -> None:
+    source_root = Path(models_dir) if models_dir is not None else Path(__file__).parent
     config_path = _catalog_source_path(experiment, "config.py", models_dir)
     if not config_path.exists():
         raise SystemExit(f"Config file not found: {config_path}")
@@ -260,7 +265,7 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
         config_path,
         search_space_path=search_space_path,
         base_skip_keys=SKIP_CONFIG_KEYS,
-        models_dir=Path(models_dir),
+        models_dir=source_root,
     )
     module_path = module_path_for_model_id(experiment)
     if module_path is not None:
@@ -283,7 +288,10 @@ def print_config_options(experiment: str, models_dir: str = "models") -> None:
             print(f"  {key.lower():45} {default}")
 
 
-def print_preset_options(experiment: str, models_dir: str = "models") -> None:
+def print_preset_options(
+    experiment: str,
+    models_dir: str | Path | None = None,
+) -> None:
     presets_path = _catalog_source_path(experiment, "presets.py", models_dir)
     if not presets_path.exists():
         raise SystemExit(f"Presets file not found: {presets_path}")
@@ -302,7 +310,11 @@ def print_preset_options(experiment: str, models_dir: str = "models") -> None:
     raise SystemExit(f"ExperimentPreset not found in {presets_path}")
 
 
-def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
+def print_dataset_options(
+    experiment: str,
+    models_dir: str | Path | None = None,
+) -> None:
+    source_root = Path(models_dir) if models_dir is not None else Path(__file__).parent
     dataset_options_path = _catalog_source_path(
         experiment,
         "dataset_options.py",
@@ -313,7 +325,7 @@ def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
 
     dataset_names = dataset_option_names_from_path(
         dataset_options_path,
-        models_dir=Path(models_dir),
+        models_dir=source_root,
     )
     if dataset_names:
         for dataset_name in dataset_names:
@@ -323,7 +335,11 @@ def print_dataset_options(experiment: str, models_dir: str = "models") -> None:
     raise SystemExit(f"No DATASET_OPTIONS_BY_TASK found for {experiment}")
 
 
-def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
+def print_monitor_options(
+    experiment: str,
+    models_dir: str | Path | None = None,
+) -> None:
+    source_root = Path(models_dir) if models_dir is not None else Path(__file__).parent
     monitor_options_path = _catalog_source_path(
         experiment,
         "monitor_options.py",
@@ -334,7 +350,7 @@ def print_monitor_options(experiment: str, models_dir: str = "models") -> None:
 
     monitor_names = monitor_option_names_from_path(
         monitor_options_path,
-        models_dir=Path(models_dir),
+        models_dir=source_root,
     )
     if monitor_names is None:
         return
@@ -348,7 +364,7 @@ def main() -> None:
             "Print experiment config options without importing the training stack."
         )
     )
-    parser.add_argument("experiment", help="Experiment package under models/.")
+    parser.add_argument("experiment", help="Experiment in the models import package.")
     list_group = parser.add_mutually_exclusive_group()
     list_group.add_argument(
         "--presets",

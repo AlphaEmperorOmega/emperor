@@ -3,6 +3,8 @@ from pathlib import Path
 
 from models.dataset_naming import dataset_class_name_to_cli_name
 
+MODELS_SOURCE_ROOT = Path(__file__).parent
+
 
 def _source_value(source: str, node: ast.AST) -> str:
     value = ast.get_source_segment(source, node)
@@ -68,7 +70,7 @@ def iter_config_assignments(
     *,
     search_space_path: Path,
     base_skip_keys: set[str],
-    models_dir: Path = Path("models"),
+    models_dir: Path = MODELS_SOURCE_ROOT,
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     config_options = dict(
         iter_config_assignments_from_path(
@@ -92,7 +94,7 @@ def iter_config_assignments_from_path(
     config_path: Path,
     *,
     base_skip_keys: set[str],
-    models_dir: Path = Path("models"),
+    models_dir: Path = MODELS_SOURCE_ROOT,
     visited: set[Path] | None = None,
 ) -> list[tuple[str, str]]:
     visited = visited or set()
@@ -314,7 +316,7 @@ def _dedupe_preserving_order(values: list[str]) -> list[str]:
 def dataset_option_names_from_path(
     path: Path,
     *,
-    models_dir: Path = Path("models"),
+    models_dir: Path = MODELS_SOURCE_ROOT,
     visited: set[Path] | None = None,
 ) -> list[str] | None:
     visited = visited or set()
@@ -406,7 +408,7 @@ def _names_from_monitor_list(
 def monitor_option_names_from_path(
     path: Path,
     *,
-    models_dir: Path = Path("models"),
+    models_dir: Path = MODELS_SOURCE_ROOT,
     visited: set[Path] | None = None,
 ) -> list[str] | None:
     visited = visited or set()
@@ -450,7 +452,7 @@ def iter_search_space_assignments_from_path(
     path: Path,
     *,
     base_skip_keys: set[str],
-    models_dir: Path = Path("models"),
+    models_dir: Path = MODELS_SOURCE_ROOT,
     visited: set[Path] | None = None,
 ) -> list[tuple[str, str]]:
     visited = visited or set()

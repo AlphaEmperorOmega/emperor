@@ -54,7 +54,10 @@ def archive_logs(argv: Sequence[str], *, repository_root: Path | None = None) ->
         print(USAGE)
         return 0
     root = (repository_root or Path.cwd()).resolve()
-    if not (root / "pyproject.toml").is_file() or not (root / "models").is_dir():
+    if (
+        not (root / "pyproject.toml").is_file()
+        or not (root / "src" / "models").is_dir()
+    ):
         return _error("run this command from the project root.")
     log_root = (root / "logs").resolve()
     if not log_root.is_dir():

@@ -14,7 +14,7 @@ class PortableLogArchiveCliTests(unittest.TestCase):
     @staticmethod
     def _project(root: Path) -> None:
         (root / "pyproject.toml").write_text("[project]\nname='probe'\n")
-        (root / "models").mkdir()
+        (root / "src" / "models").mkdir(parents=True)
 
     def test_archive_supports_spaces_and_unicode_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="Emperor archive Ω ") as temporary:

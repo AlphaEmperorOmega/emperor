@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 def run_tests(argv: Sequence[str], *, repository_root: Path | None = None) -> int:
-    root = (repository_root or Path(__file__).resolve().parents[2]).resolve()
+    root = (repository_root or Path(__file__).resolve().parents[3]).resolve()
     test_root = root / "tests"
     try:
         distribution("emperor")
