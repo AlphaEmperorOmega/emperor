@@ -1,6 +1,8 @@
 import unittest
 
 import torch
+
+import emperor.experts as experts_namespace
 from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -10,6 +12,7 @@ from emperor.experts import (
     MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
+from emperor.experts._layers.map import MixtureOfExpertsMap
 from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.experts._layers.reduce import MixtureOfExpertsReduce
 from emperor.experts._model import MixtureOfExpertsModel
@@ -172,6 +175,50 @@ def _routing_model_config(
 
 
 class ExpertBehavioralContractTests(unittest.TestCase):
+    def test_missing_export_model_build_and_explicit_map_reduce_overrides(self) -> None:
+        with self.assertRaisesRegex(
+            AttributeError,
+            "module 'emperor.experts' has no attribute 'missing_contract'",
+        ):
+            _ = experts_namespace.missing_contract  # type: ignore[attr-defined]
+
+        model = _mixture_model_config().build()
+        self.assertIsInstance(model, MixtureOfExpertsModel)
+        self.assertEqual(model.expert_stack[0].model.get_top_k(), 1)
+
+        map_overrides = MixtureOfExpertsConfig(
+            weighted_parameters_flag=True,
+            compute_expert_mixture_flag=True,
+            routing_initialization_mode=RoutingInitializationMode.LAYER,
+        )
+        mapped = MixtureOfExpertsMap(_mixture_config(), map_overrides)
+        self.assertFalse(mapped.weighted_parameters_flag)
+        self.assertFalse(mapped.compute_expert_mixture_flag)
+        self.assertEqual(
+            mapped.routing_initialization_mode,
+            RoutingInitializationMode.DISABLED,
+        )
+        self.assertFalse(map_overrides.weighted_parameters_flag)
+        self.assertFalse(map_overrides.compute_expert_mixture_flag)
+
+        reduce_overrides = MixtureOfExpertsConfig(
+            weighted_parameters_flag=False,
+            compute_expert_mixture_flag=False,
+            weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+            routing_initialization_mode=RoutingInitializationMode.LAYER,
+        )
+        reduced = MixtureOfExpertsReduce(_mixture_config(), reduce_overrides)
+        self.assertTrue(reduced.weighted_parameters_flag)
+        self.assertTrue(reduced.compute_expert_mixture_flag)
+        self.assertEqual(
+            reduced.weighting_position_option,
+            ExpertWeightingPositionOptions.AFTER_EXPERTS,
+        )
+        self.assertEqual(
+            reduced.routing_initialization_mode,
+            RoutingInitializationMode.DISABLED,
+        )
+
     def test_exact_guard_errors_cover_unreachable_validated_states(self) -> None:
         model = MixtureOfExperts(_mixture_config(top_k=1, num_experts=2))
         original_weighting = model.weighting_position_option
@@ -222,6 +269,39 @@ class ExpertBehavioralContractTests(unittest.TestCase):
             "`cfg` must be of type MixtureOfExpertsModelConfig",
         ):
             MixtureOfExpertsModelValidator.validate_cfg_type(model_wrapper)
+
+    def test_reduce_validation_covers_absent_mismatched_and_legacy_inputs(
+        self,
+    ) -> None:
+        sparse = MixtureOfExpertsReduce(_mixture_config(top_k=1, num_experts=2))
+        inputs = torch.randn(4, 2)
+        with self.assertRaisesRegex(ValueError, "probabilities.*must be supplied"):
+            sparse(inputs, probabilities=None, indices=torch.tensor([0, 1, 0, 1]))
+        with self.assertRaisesRegex(ValueError, "indices.*must be supplied"):
+            sparse(inputs, probabilities=torch.ones(4), indices=None)
+        with self.assertRaisesRegex(
+            ValueError,
+            "indices.*one expert id per flattened reduce input sample",
+        ):
+            sparse(
+                inputs,
+                probabilities=torch.ones(4),
+                indices=torch.tensor([0, 1, 0]),
+            )
+
+        dense = MixtureOfExpertsReduce(_mixture_config())
+        with self.assertRaisesRegex(ValueError, "indices.*must be None"):
+            dense(
+                inputs,
+                probabilities=torch.ones(2, 2),
+                indices=torch.tensor([[0, 1], [0, 1]]),
+            )
+
+        MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(torch.ones(2))
+        with self.assertRaisesRegex(ValueError, "'tensor'.*1D or 2D"):
+            MixtureOfExpertsValidator.validate_tensor_is_vector_or_matrix(
+                torch.ones(1, 1, 1)
+            )
 
     def test_dense_mixture_matches_exact_per_sample_weighted_expert_sum(
         self,
@@ -333,6 +413,40 @@ class ExpertBehavioralContractTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(output).all())
         self.assertTrue(torch.isfinite(loss))
 
+    def test_external_routing_and_map_reduce_preserve_mask_identity(self) -> None:
+        inputs = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        probabilities = torch.tensor([[0.75, 0.25], [0.4, 0.6]])
+        skip_mask = torch.tensor([[True], [False]])
+
+        model = MixtureOfExperts(_mixture_config())
+        _, returned_mask, _ = model(
+            inputs,
+            probabilities=probabilities,
+            indices=None,
+            skip_mask=skip_mask,
+        )
+        self.assertIs(returned_mask, skip_mask)
+
+        map_model = MixtureOfExpertsMap(_mixture_config())
+        reduce_model = MixtureOfExpertsReduce(_mixture_config())
+        mapped, mapped_mask, _ = map_model(
+            inputs,
+            probabilities=probabilities,
+            indices=None,
+            skip_mask=skip_mask,
+        )
+        self.assertEqual(mapped.shape, (inputs.shape[0] * 2, inputs.shape[1]))
+        self.assertIs(mapped_mask, skip_mask)
+
+        reduced, reduced_mask, _ = reduce_model(
+            mapped,
+            probabilities=probabilities,
+            indices=None,
+            skip_mask=mapped_mask,
+        )
+        self.assertEqual(reduced.shape, inputs.shape)
+        self.assertIs(reduced_mask, skip_mask)
+
     def test_skip_mask_validation_covers_type_shape_batch_and_device(self) -> None:
         model = MixtureOfExperts(_mixture_config())
         inputs = torch.ones(2, 2)
@@ -354,6 +468,32 @@ class ExpertBehavioralContractTests(unittest.TestCase):
                         indices=None,
                         skip_mask=skip_mask,
                     )
+
+    def test_reduce_validates_mask_against_output_samples_not_mapped_rows(
+        self,
+    ) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+        mapped_inputs = torch.ones(6, 2)
+        probabilities = torch.full((3, 2), 0.5)
+        skip_mask = torch.tensor([[1.0], [0.5], [0.0]], dtype=torch.float64)
+
+        _, returned_mask, _ = model(
+            mapped_inputs,
+            probabilities=probabilities,
+            indices=None,
+            skip_mask=skip_mask,
+        )
+
+        self.assertIs(returned_mask, skip_mask)
+        self.assertEqual(returned_mask.dtype, torch.float64)
+        torch.testing.assert_close(returned_mask, skip_mask)
+        with self.assertRaises(ValueError):
+            model(
+                mapped_inputs,
+                probabilities=probabilities,
+                indices=None,
+                skip_mask=torch.ones(mapped_inputs.shape[0], 1),
+            )
 
     def test_default_and_explicit_none_mask_preserve_output_loss_and_rng(
         self,
@@ -535,3 +675,7 @@ class ExpertBehavioralContractTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(mixed_inputs.grad).all())
         active_rows = mixed_mask.squeeze(1) != 0
         self.assertGreater(mixed_inputs.grad[active_rows].abs().sum().item(), 0.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
