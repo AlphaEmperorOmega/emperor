@@ -1,8 +1,11 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import LayerStackConfig
+
+if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
 
 
 class MemoryPositionOptions(Enum):
@@ -28,7 +31,7 @@ class DynamicMemoryConfig(ConfigBase):
     test_time_training_num_inner_steps: int | None = optional_field(
         "Number of gradient steps in the TTT inner loop. When None, TTT is disabled."
     )
-    model_config: LayerStackConfig | None = optional_field(
+    model_config: "LayerStackConfig | None" = optional_field(
         "Configuration for the internal generator network."
     )
 
