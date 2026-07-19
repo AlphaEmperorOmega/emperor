@@ -18,7 +18,7 @@ from emperor.layers._validation import RecurrentLayerValidator
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
-    from emperor.halting import HaltingBase, HaltingConfig, HaltingStateBase
+    from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
     from emperor.layers._stack import LayerStack
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
@@ -82,7 +82,7 @@ class RecurrentLayer(LayerModuleBase):
             residual_dim=self.output_dim,
         )
 
-    def __build_halting_model(self) -> "HaltingBase | None":
+    def __build_halting_model(self) -> "HaltingInterface | None":
         return self._build_from_config(
             self.halting_config,
             input_dim=self.output_dim,
