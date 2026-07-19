@@ -7,11 +7,10 @@ from torch import Tensor
 from emperor.config import ConfigBase
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._composition.residual import ResidualConnection
-from emperor.layers._config import GateConfig, RecurrentLayerConfig
+from emperor.layers._config import GateConfig, RecurrentLayerConfig, ResidualConfig
 from emperor.layers._layer import Layer
 from emperor.layers._options import (
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 from emperor.layers._state import LayerState
 from emperor.layers._support import LayerModuleBase
@@ -52,9 +51,7 @@ class RecurrentLayer(LayerModuleBase):
         )
         self.block_config: ConfigBase | None = self.cfg.block_config
         self.gate_config: GateConfig | None = self.cfg.gate_config
-        self.residual_connection_option: ResidualConnectionOptions = (
-            self.cfg.residual_connection_option
-        )
+        self.residual_config: ResidualConfig | None = self.cfg.residual_config
         self.halting_config: HaltingConfig | None = self.cfg.halting_config
         self.memory_config: DynamicMemoryConfig | None = self.cfg.memory_config
 
@@ -79,9 +76,10 @@ class RecurrentLayer(LayerModuleBase):
         )
 
     def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
-            return None
-        return ResidualConnection(self.residual_connection_option)
+        return self._build_from_config(
+            self.residual_config,
+            residual_dim=self.output_dim,
+        )
 
     def __build_halting_model(self) -> "HaltingBase | None":
         return self._build_from_config(

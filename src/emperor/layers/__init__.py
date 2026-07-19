@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         LayerConfig,
         LayerStackConfig,
         RecurrentLayerConfig,
+        ResidualConfig,
     )
     from emperor.layers._layer import Layer
     from emperor.layers._monitoring.callbacks import (
@@ -36,6 +37,7 @@ __all__ = (
     "LayerNormPositionOptions",
     "LayerStackConfig",
     "RecurrentLayerConfig",
+    "ResidualConfig",
     "ResidualConnectionOptions",
     "LayerState",
     "ResidualConnection",
@@ -58,6 +60,7 @@ _LAZY_EXPORTS = {
     ),
     "LayerStackConfig": ("emperor.layers._config", "LayerStackConfig"),
     "RecurrentLayerConfig": ("emperor.layers._config", "RecurrentLayerConfig"),
+    "ResidualConfig": ("emperor.layers._config", "ResidualConfig"),
     "ResidualConnectionOptions": (
         "emperor.layers._options",
         "ResidualConnectionOptions",

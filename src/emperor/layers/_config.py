@@ -12,6 +12,7 @@ from emperor.layers._options import (
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig
+    from emperor.linears import LinearLayerConfig
     from emperor.memory import DynamicMemoryConfig
 
 
@@ -40,14 +41,39 @@ class GateConfig(ConfigBase):
 
 
 @dataclass
+class ResidualConfig(ConfigBase):
+    residual_dim: int | None = optional_field(
+        "Residual feature dimension. Layer owners override this value from their "
+        "output dimension. Required when model_config is provided."
+    )
+    option: ResidualConnectionOptions | None = optional_field(
+        "Residual composition mode. Providing ResidualConfig enables the residual "
+        "connection; use residual_config=None to disable it."
+    )
+    model_config: "LinearLayerConfig | None" = optional_field(
+        "Optional data-dependent coefficient model for weighted residual modes. "
+        "When provided, the model receives the concatenated current and previous "
+        "values and produces one raw mixing coefficient per feature. When omitted, "
+        "weighted modes use a learned scalar nn.Parameter. RESIDUAL performs direct "
+        "addition and does not accept a coefficient model."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.layers._composition.residual import ResidualConnection
+
+        return ResidualConnection
+
+
+@dataclass
 class LayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
     activation: ActivationOptions | None = optional_field(
         "Activation applied to the layer output."
     )
-    residual_connection_option: ResidualConnectionOptions | None = optional_field(
-        "Residual connection behavior. Enabled options require input_dim == output_dim."
+    residual_config: "ResidualConfig | None" = optional_field(
+        "Optional residual connection config. Set to None to disable. Enabled options "
+        "require input_dim == output_dim."
     )
     dropout_probability: float | None = optional_field(
         "Dropout probability. Use 0.0 to disable."
@@ -123,9 +149,9 @@ class RecurrentLayerConfig(ConfigBase):
     gate_config: "GateConfig | None" = optional_field(
         "Optional recurrent gate config. Set to None to disable."
     )
-    residual_connection_option: ResidualConnectionOptions = optional_field(
-        "Residual connection behavior between recurrent steps. "
-        "Use DISABLED to disable recurrent residuals."
+    residual_config: "ResidualConfig | None" = optional_field(
+        "Optional residual connection config applied between recurrent steps. Set to "
+        "None to disable recurrent residuals."
     )
     halting_config: "HaltingConfig | None" = optional_field(
         "Optional recurrent adaptive computation module. Set to None to disable."

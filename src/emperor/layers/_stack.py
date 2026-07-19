@@ -9,7 +9,6 @@ from emperor.layers._options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation import LayerStackValidator
@@ -88,19 +87,26 @@ class LayerStack(LayerModuleBase):
             layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
             layers.append(layer)
 
-    def __add_output_layer(self, layers: list) -> None:
-        layer_input_dim = self.hidden_dim if self.num_layers > 1 else self.input_dim
-        overrides = self.__resolve_output_layer_overrides()
-        layer = self.__create_layer(layer_input_dim, self.output_dim, overrides)
-        layer.mark_as_last_layer()
-        layers.append(layer)
+    def __add_output_layer(self, stack_layers: list) -> None:
+        output_layer_input_dim = (
+            self.hidden_dim if self.num_layers > 1 else self.input_dim
+        )
+        output_layer_overrides = self.__resolve_output_layer_overrides()
+        should_disable_output_residual = not self.apply_output_pipeline_flag
+        output_layer = self.__create_layer(
+            output_layer_input_dim,
+            self.output_dim,
+            output_layer_overrides,
+            disable_residual=should_disable_output_residual,
+        )
+        output_layer.mark_as_last_layer()
+        stack_layers.append(output_layer)
 
     def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
         overrides: LayerConfig | None = None
         if not self.apply_output_pipeline_flag:
             overrides = LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
             )
@@ -142,24 +148,31 @@ class LayerStack(LayerModuleBase):
         self,
         input_dim: int,
         output_dim: int,
-        overrides: LayerConfig | None = None,
+        layer_overrides: LayerConfig | None = None,
+        *,
+        disable_residual: bool = False,
     ) -> Layer:
         has_stable_dimension = input_dim == output_dim
-        residual_connection_option = (
-            None if has_stable_dimension else ResidualConnectionOptions.DISABLED
-        )
-        dim_overrides = self._resolve_config_overrides(
+        dimension_overrides = self._resolve_config_overrides(
             self.layer_config,
             input_dim=input_dim,
             output_dim=output_dim,
-            residual_connection_option=residual_connection_option,
         )
-        if overrides is not None:
-            dim_overrides = self._override_config(dim_overrides, overrides)
-        layer_config = self._override_config(self.layer_config, dim_overrides)
+        if layer_overrides is not None:
+            dimension_overrides = self._override_config(
+                dimension_overrides,
+                layer_overrides,
+            )
+        resolved_layer_config = self._override_config(
+            self.layer_config,
+            dimension_overrides,
+        )
+        should_disable_residual = disable_residual or not has_stable_dimension
+        if should_disable_residual:
+            resolved_layer_config.residual_config = None
         if not has_stable_dimension:
-            layer_config.gate_config = None
-        return layer_config.build()
+            resolved_layer_config.gate_config = None
+        return resolved_layer_config.build()
 
     def __maybe_share_gate_model(self, layers: list[Layer]) -> None:
         if self.shared_gate_config is None:

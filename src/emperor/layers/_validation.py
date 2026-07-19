@@ -17,15 +17,18 @@ if TYPE_CHECKING:
 
     from emperor.halting import HaltingConfig
     from emperor.layers._composition.gate import LayerGate
+    from emperor.layers._composition.residual import ResidualConnection
     from emperor.layers._config import (
         GateConfig,
         LayerConfig,
         LayerStackConfig,
+        ResidualConfig,
     )
     from emperor.layers._layer import Layer
     from emperor.layers._recurrent import RecurrentLayer
     from emperor.layers._stack import LayerStack
     from emperor.layers._state import LayerState
+    from emperor.linears import LinearLayerConfig
 
 
 def _config_classes():
@@ -38,6 +41,18 @@ def _gate_config_class():
     from emperor.layers._config import GateConfig
 
     return GateConfig
+
+
+def _residual_config_class():
+    from emperor.layers._config import ResidualConfig
+
+    return ResidualConfig
+
+
+def _linear_layer_config_class():
+    from emperor.linears import LinearLayerConfig
+
+    return LinearLayerConfig
 
 
 def _gate_option_field_path(owner_name: str | None = None) -> str:
@@ -65,6 +80,128 @@ def _matches_config_contract(config: object, field_names: tuple[str, ...]) -> bo
     return isinstance(config, ConfigBase) and all(
         hasattr(config, field_name) for field_name in field_names
     )
+
+
+class ResidualConnectionValidator(ValidatorBase):
+    OPTIONAL_FIELDS = {"residual_dim", "model_config"}
+    DATA_DEPENDENT_OPTIONS = (
+        ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+        ResidualConnectionOptions.WEIGHTED_BLEND,
+    )
+
+    @staticmethod
+    def option_names() -> str:
+        return ", ".join(option.name for option in ResidualConnectionOptions)
+
+    @classmethod
+    def validate(cls, model: ResidualConnection) -> None:
+        cfg = model.cfg
+        if not isinstance(cfg, _residual_config_class()):
+            raise TypeError(
+                "ResidualConnection cfg must be a ResidualConfig, "
+                f"got {type(cfg).__name__}."
+            )
+        cls.validate_option(cfg.option, owner_name="ResidualConfig.option")
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls._validate_data_dependent_model_config(cfg.option, cfg.model_config)
+        if cfg.model_config is None:
+            return
+        cls._validate_data_dependent_residual_dim(cfg.residual_dim)
+
+    @classmethod
+    def validate_residual_config(
+        cls,
+        residual_config: ResidualConfig | None,
+        owner_name: str,
+    ) -> None:
+        if residual_config is None:
+            return
+        if not isinstance(residual_config, _residual_config_class()):
+            raise TypeError(
+                f"residual_config must be an instance of ResidualConfig for "
+                f"{owner_name}, got {type(residual_config).__name__}"
+            )
+        cls.validate_option(
+            residual_config.option,
+            owner_name=f"{owner_name}.residual_config.option",
+        )
+        cls._validate_data_dependent_model_config(
+            residual_config.option,
+            residual_config.model_config,
+        )
+
+    @classmethod
+    def validate_option(
+        cls,
+        option: ResidualConnectionOptions | None,
+        owner_name: str = "residual_config.option",
+    ) -> None:
+        if option is None:
+            raise ValueError(
+                f"{owner_name} is required when residual_config is provided; pass "
+                f"one of ResidualConnectionOptions: {cls.option_names()}. Use "
+                "residual_config=None to disable the residual connection."
+            )
+        if not isinstance(option, ResidualConnectionOptions):
+            raise TypeError(
+                f"{owner_name} must be a ResidualConnectionOptions value, got "
+                f"{type(option).__name__}. Valid values are: {cls.option_names()}."
+            )
+
+    @staticmethod
+    def validate_raw_mix_coefficient(
+        raw_mix_coefficient: Tensor | None,
+        option: ResidualConnectionOptions,
+    ) -> Tensor:
+        if raw_mix_coefficient is None:
+            raise RuntimeError(
+                f"{option} requires either raw_weight or a coefficient model."
+            )
+        return raw_mix_coefficient
+
+    @staticmethod
+    def _validate_data_dependent_residual_dim(residual_dim: int | None) -> None:
+        if isinstance(residual_dim, bool) or not isinstance(residual_dim, int):
+            raise TypeError(
+                "ResidualConfig.residual_dim must be an int when model_config is "
+                "provided, "
+                f"got {type(residual_dim).__name__}."
+            )
+        if residual_dim <= 0:
+            raise ValueError(
+                "ResidualConfig.residual_dim must be greater than 0 when model_config "
+                "is provided, "
+                f"got {residual_dim}."
+            )
+
+    @classmethod
+    def _validate_data_dependent_model_config(
+        cls,
+        option: ResidualConnectionOptions,
+        model_config: LinearLayerConfig | None,
+    ) -> None:
+        if model_config is None:
+            return
+        if option not in cls.DATA_DEPENDENT_OPTIONS:
+            supported_options = ", ".join(
+                supported_option.name for supported_option in cls.DATA_DEPENDENT_OPTIONS
+            )
+            raise ValueError(
+                "ResidualConfig.model_config can only generate coefficients for "
+                f"weighted residual modes: {supported_options}; got {option.name}."
+            )
+        if not isinstance(model_config, _linear_layer_config_class()):
+            raise TypeError(
+                "ResidualConfig.model_config must be a LinearLayerConfig when "
+                "provided, "
+                f"got {type(model_config).__name__}."
+            )
+        if model_config.bias_flag is not True:
+            raise ValueError(
+                "ResidualConfig.model_config.bias_flag must be True so the initial "
+                "mixing coefficient can be represented."
+            )
 
 
 class LayerGateValidator(ValidatorBase):
@@ -273,12 +410,14 @@ class LayerGateValidator(ValidatorBase):
 
 class LayerValidator(ValidatorBase):
     GATE_VALIDATOR = LayerGateValidator
+    RESIDUAL_VALIDATOR = ResidualConnectionValidator
 
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
         "memory_config",
         "layer_model_config",
+        "residual_config",
         "override_config",
     }
 
@@ -289,8 +428,11 @@ class LayerValidator(ValidatorBase):
         cls.validate_field_types(cfg)
         cls.validate_dimensions(input_dim=cfg.input_dim, output_dim=cfg.output_dim)
         cls._validate_dropout_probability(cfg.dropout_probability)
+        cls._validate_residual_config(cfg.residual_config)
         cls._validate_residual_dimensions(
-            cfg.input_dim, cfg.output_dim, cfg.residual_connection_option
+            cfg.input_dim,
+            cfg.output_dim,
+            cfg.residual_config,
         )
         cls._validate_gate_config(cfg.gate_config)
         cls._validate_model_config(cfg.layer_model_config)
@@ -314,15 +456,15 @@ class LayerValidator(ValidatorBase):
     def _validate_residual_dimensions(
         input_dim: int,
         output_dim: int,
-        residual_connection_option: ResidualConnectionOptions,
+        residual_config: ResidualConfig | None,
     ) -> None:
-        if (
-            residual_connection_option != ResidualConnectionOptions.DISABLED
-            and input_dim != output_dim
-        ):
+        if residual_config is None:
+            return
+        residual_connection_option = residual_config.option
+        if input_dim != output_dim:
             raise ValueError(
                 "input_dim and output_dim must be equal when "
-                f"residual_connection_option is {residual_connection_option}, "
+                f"residual_config.option is {residual_connection_option}, "
                 f"got input_dim={input_dim} and output_dim={output_dim}."
             )
 
@@ -360,11 +502,11 @@ class LayerValidator(ValidatorBase):
         stride = getattr(layer_model_config, "stride", None)
         if stride is None or stride <= 1:
             return
-        if cfg.residual_connection_option == ResidualConnectionOptions.DISABLED:
+        if cfg.residual_config is None:
             return
         raise ValueError(
-            f"residual_connection_option cannot be "
-            f"{cfg.residual_connection_option} when layer_model_config has "
+            f"residual_config.option cannot be "
+            f"{cfg.residual_config.option} when layer_model_config has "
             f"stride > 1 (received stride={stride}). Spatial reduction "
             f"breaks the residual connection shape contract."
         )
@@ -373,6 +515,16 @@ class LayerValidator(ValidatorBase):
     def _validate_gate_config(cls, gate_config: GateConfig | None) -> None:
         cls.GATE_VALIDATOR.validate_layer_gate_config(
             gate_config, owner_name="LayerConfig.gate_config"
+        )
+
+    @classmethod
+    def _validate_residual_config(
+        cls,
+        residual_config: ResidualConfig | None,
+    ) -> None:
+        cls.RESIDUAL_VALIDATOR.validate_residual_config(
+            residual_config,
+            owner_name="LayerConfig",
         )
 
     @staticmethod
@@ -558,11 +710,13 @@ class LayerStackValidator(ValidatorBase):
 
 class RecurrentLayerValidator(ValidatorBase):
     GATE_VALIDATOR = LayerGateValidator
+    RESIDUAL_VALIDATOR = ResidualConnectionValidator
 
     OPTIONAL_FIELDS = {
         "gate_config",
         "halting_config",
         "memory_config",
+        "residual_config",
         "override_config",
     }
 
@@ -593,7 +747,7 @@ class RecurrentLayerValidator(ValidatorBase):
         )
         cls._validate_recurrent_layer_norm_position(cfg.recurrent_layer_norm_position)
         cls._validate_block_config(cfg.block_config)
-        cls._validate_residual_connection_option(cfg.residual_connection_option)
+        cls._validate_residual_config(cfg.residual_config)
         cls._validate_gate_config(cfg.gate_config)
         cls._validate_halting_config(cfg.halting_config)
         cls._validate_memory_config(cfg.memory_config)
@@ -700,16 +854,15 @@ class RecurrentLayerValidator(ValidatorBase):
             owner_name="RecurrentLayerConfig.gate_config",
         )
 
-    @staticmethod
-    def _validate_residual_connection_option(
-        residual_connection_option: ResidualConnectionOptions | None,
+    @classmethod
+    def _validate_residual_config(
+        cls,
+        residual_config: ResidualConfig | None,
     ) -> None:
-        if not isinstance(residual_connection_option, ResidualConnectionOptions):
-            raise TypeError(
-                "residual_connection_option must be a ResidualConnectionOptions "
-                f"value for RecurrentLayerConfig, got "
-                f"{type(residual_connection_option).__name__}"
-            )
+        cls.RESIDUAL_VALIDATOR.validate_residual_config(
+            residual_config,
+            owner_name="RecurrentLayerConfig",
+        )
 
     @staticmethod
     def _validate_halting_config(

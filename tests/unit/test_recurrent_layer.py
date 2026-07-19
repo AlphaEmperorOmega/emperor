@@ -1,46 +1,51 @@
-from dataclasses import dataclass
 import unittest
+from dataclasses import dataclass
 
 import torch
 
-from emperor.base.layer import (
+from emperor.attention import AttentionLayerState
+from emperor.config import ConfigBase, optional_field
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsModelConfig,
+    RoutingInitializationMode,
+)
+from emperor.experts._model import MixtureOfExpertsModel
+from emperor.halting import (
+    HaltingHiddenStateModeOptions,
+    HaltingStateBase,
+    SoftHaltingConfig,
+    StickBreakingConfig,
+)
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
     Layer,
     LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
     LayerState,
     RecurrentLayer,
     RecurrentLayerConfig,
+    ResidualConfig,
     ResidualConnectionOptions,
 )
-from emperor.base.layer._validator import RecurrentLayerValidator
-from emperor.base.layer.gate import GateConfig, LayerGate, LayerGateOptions
-from emperor.base.layer.recurrent import _RecurrentState
-from emperor.attention import AttentionLayerState
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
+from emperor.layers._composition.gate import LayerGate
+from emperor.layers._recurrent import _RecurrentState
+from emperor.linears import LinearLayerConfig
+from emperor.memory import (
+    DynamicMemoryConfig,
+    GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
 )
-from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import (
-    MixtureOfExpertsConfig,
-    MixtureOfExpertsLayerConfig,
-)
-from emperor.experts.core.options import (
-    DroppedTokenOptions,
-    ExpertWeightingPositionOptions,
-    RoutingInitializationMode,
-)
-from emperor.experts.model import MixtureOfExpertsModel
-from emperor.halting.config import SoftHaltingConfig, StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.halting.core.base import HaltingStateBase
-from emperor.memory.config import DynamicMemoryConfig, GatedResidualDynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
+from emperor.nn import Module
+from emperor.sampler import RouterConfig, SamplerConfig
 
 
 @dataclass
@@ -353,7 +358,7 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=input_dim,
             output_dim=output_dim,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -416,7 +421,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     apply_output_pipeline_flag=False,
                     layer_config=LayerConfig(
                         activation=ActivationOptions.DISABLED,
-                        residual_connection_option=ResidualConnectionOptions.DISABLED,
+                        residual_config=None,
                         dropout_probability=0.0,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
                         gate_config=None,
@@ -500,7 +505,7 @@ class TestRecurrentLayer(unittest.TestCase):
             apply_output_pipeline_flag=False,
             layer_config=LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -521,7 +526,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -550,7 +555,7 @@ class TestRecurrentLayer(unittest.TestCase):
             apply_output_pipeline_flag=False,
             layer_config=LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -591,14 +596,13 @@ class TestRecurrentLayer(unittest.TestCase):
         gate_config: LayerStackConfig | GateConfig | None = None,
         gate_option: LayerGateOptions | None = None,
         gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         halting_config: StickBreakingConfig | None = None,
         memory_config: DynamicMemoryConfig | None = None,
         recurrent_layer_norm_position: LayerNormPositionOptions = (
             LayerNormPositionOptions.DISABLED
         ),
+        residual_model_config: LinearLayerConfig | None = None,
     ) -> RecurrentLayerConfig:
         if block_config is None:
             block_config = self.layer_block_config()
@@ -613,7 +617,11 @@ class TestRecurrentLayer(unittest.TestCase):
                 gate_option,
                 gate_activation,
             ),
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(
+                option=residual_connection_option, model_config=residual_model_config
+            ),
             halting_config=halting_config,
             memory_config=memory_config,
         )
@@ -639,7 +647,7 @@ class TestRecurrentLayer(unittest.TestCase):
         )
 
     def test_public_exports_and_config_build_dispatch(self):
-        import emperor.base.layer as layer_package
+        import emperor.layers as layer_package
 
         expected_exports = [
             "RecurrentLayerConfig",
@@ -701,7 +709,7 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.recurrent_gate.gate_dim, cfg.output_dim)
         self.assertEqual(model.recurrent_gate.option, LayerGateOptions.MULTIPLIER)
         self.assertEqual(
-            model.residual_connection_option,
+            model.residual_config.option,
             ResidualConnectionOptions.WEIGHTED_BLEND,
         )
         self.assertEqual(model.halting_config, cfg.halting_config)
@@ -1066,7 +1074,7 @@ class TestRecurrentLayer(unittest.TestCase):
             max_steps=5,
             block_config=override_block,
             gate_config=self.recurrent_gate_config(override_gate, None),
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
         )
 
         model = RecurrentLayer(cfg, overrides)
@@ -1077,7 +1085,7 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.block_config, override_block)
         self.assertEqual(model.gate_config.model_config, override_gate)
         self.assertEqual(
-            model.residual_connection_option,
+            model.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(model.halting_config, cfg.halting_config)
@@ -1102,7 +1110,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=None,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 ValueError,
             ),
@@ -1114,7 +1122,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=object(),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1126,7 +1134,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=MissingInputDimBlockConfig(output_dim=dim),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1138,7 +1146,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=MissingOutputDimBlockConfig(input_dim=dim),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1150,7 +1158,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=0,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 ValueError,
             ),
@@ -1162,7 +1170,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps="3",
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1174,7 +1182,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 ValueError,
             ),
@@ -1185,7 +1193,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     output_dim=dim,
                     max_steps=1,
                     block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 ValueError,
             ),
@@ -1197,7 +1205,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=object(),
                     block_config=valid_block,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1210,7 +1218,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     gate_config=object(),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1223,7 +1231,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     gate_config=GateConfig(option=object()),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1235,7 +1243,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
-                    residual_connection_option=object(),
+                    residual_config=ResidualConfig(option=object()),
                 ),
                 TypeError,
             ),
@@ -1251,7 +1259,7 @@ class TestRecurrentLayer(unittest.TestCase):
                         model_config=nested_gate_config,
                         option=LayerGateOptions.MULTIPLIER,
                     ),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 ValueError,
             ),
@@ -1264,7 +1272,7 @@ class TestRecurrentLayer(unittest.TestCase):
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     halting_config=object(),
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                 ),
                 TypeError,
             ),
@@ -1486,7 +1494,7 @@ class TestRecurrentLayer(unittest.TestCase):
             max_steps=max_steps,
             block_config=LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -1602,47 +1610,93 @@ class TestRecurrentLayer(unittest.TestCase):
         ):
             RecurrentLayer(self.recurrent_config(gate_config=gate_config))
 
-    def test_recurrent_residual_option_none_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, "residual_connection_option"):
-            RecurrentLayer(self.recurrent_config(residual_connection_option=None))
+    def test_recurrent_residual_config_none_disables_residuals(self):
+        config = self.recurrent_config()
+        config.residual_config = None
+
+        model = RecurrentLayer(config)
+
+        self.assertIsNone(model.residual_config)
+        self.assertIsNone(model.residual_connection)
 
     def test_recurrent_residual_options_apply_between_steps(self):
         dim = 3
         hidden = torch.ones(2, dim)
         block_config = self.layer_block_config(increment=2.0)
+        data_dependent_model_config = LinearLayerConfig(bias_flag=True)
         cases = [
             (
-                ResidualConnectionOptions.DISABLED,
+                None,
+                None,
                 torch.full_like(hidden, 3.0),
             ),
             (
                 ResidualConnectionOptions.RESIDUAL,
+                None,
                 torch.full_like(hidden, 4.0),
             ),
             (
                 ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                None,
                 torch.full_like(hidden, 1.0),
             ),
             (
                 ResidualConnectionOptions.WEIGHTED_BLEND,
+                None,
+                torch.full_like(hidden, 2.8),
+            ),
+            (
+                ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                data_dependent_model_config,
+                torch.full_like(hidden, 1.0),
+            ),
+            (
+                ResidualConnectionOptions.WEIGHTED_BLEND,
+                data_dependent_model_config,
                 torch.full_like(hidden, 2.8),
             ),
         ]
 
-        for option, expected in cases:
-            with self.subTest(option=option):
+        for option, residual_model_config, expected in cases:
+            with self.subTest(
+                option=option,
+                data_dependent=residual_model_config is not None,
+            ):
                 model = RecurrentLayer(
                     self.recurrent_config(
                         dim=dim,
                         max_steps=1,
                         block_config=block_config,
                         residual_connection_option=option,
+                        residual_model_config=residual_model_config,
                     )
                 )
 
                 result = model(LayerState(hidden=hidden.clone()))
 
                 torch.testing.assert_close(result.hidden, expected)
+
+    def test_recurrent_data_dependent_residual_builds_configured_model(self):
+        dim = 3
+        residual_model_config = LinearLayerConfig(
+            input_dim=99,
+            output_dim=99,
+            bias_flag=True,
+        )
+
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_model_config=residual_model_config,
+            )
+        )
+
+        residual_connection = model.residual_connection
+        self.assertEqual(residual_connection.model_config, residual_model_config)
+        self.assertIsNot(residual_connection.model_config, residual_model_config)
+        self.assertEqual(residual_connection.model.input_dim, dim * 2)
+        self.assertEqual(residual_connection.model.output_dim, dim)
 
     def test_missing_recurrent_gate_config_bypasses_recurrent_gate(self):
         dim = 3

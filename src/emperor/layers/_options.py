@@ -42,7 +42,6 @@ class LayerGateOptions(BaseOptions):
 
 
 class ResidualConnectionOptions(BaseOptions):
-    DISABLED = 0
     RESIDUAL = 1
     WEIGHTED_RESIDUAL = 2
     WEIGHTED_BLEND = 3

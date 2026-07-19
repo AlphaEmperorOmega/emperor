@@ -1,10 +1,20 @@
 import unittest
 
 import torch
-from emperor.base.layer.gate._validator import LayerGateValidator
-from emperor.base.layer.gate.config import GateConfig
-from emperor.base.layer.gate.model import LayerGate
-from emperor.base.layer.gate.options import LayerGateOptions
+
+from emperor.layers import (
+    GateConfig,
+    LayerGateOptions,
+    ResidualConfig,
+    ResidualConnection,
+    ResidualConnectionOptions,
+)
+from emperor.layers._composition.gate import LayerGate
+from emperor.layers._validation import (
+    LayerGateValidator,
+    ResidualConnectionValidator,
+)
+from emperor.linears import LinearLayerConfig
 
 
 class TestLayerGateValidatorAdapter(unittest.TestCase):
@@ -65,6 +75,32 @@ class TestLayerGateValidatorAdapter(unittest.TestCase):
             "gate_dim must be greater than 0, received 0",
         ):
             LayerGate(cfg)
+
+
+class TestResidualConnectionValidatorAdapter(unittest.TestCase):
+    def test_module_exposes_validator_adapter(self):
+        self.assertIs(ResidualConnection.VALIDATOR, ResidualConnectionValidator)
+
+    def test_construction_dispatches_through_substituted_validator(self):
+        class TrackingValidator(ResidualConnectionValidator):
+            @staticmethod
+            def _validate_data_dependent_residual_dim(residual_dim):
+                raise RuntimeError("substituted residual validator was called")
+
+        class TrackingResidualConnection(ResidualConnection):
+            VALIDATOR = TrackingValidator
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted residual validator was called",
+        ):
+            TrackingResidualConnection(
+                ResidualConfig(
+                    option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                    residual_dim=3,
+                    model_config=LinearLayerConfig(bias_flag=True),
+                ),
+            )
 
 
 if __name__ == "__main__":

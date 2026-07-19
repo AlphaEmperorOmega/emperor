@@ -1,28 +1,29 @@
-from dataclasses import fields
-
+import math
 import unittest
+from dataclasses import fields
 
 import torch
 import torch.nn as nn
 
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.base.layer import (
+from emperor.convs import Conv2dLayerConfig
+from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
     Layer,
     LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
     LayerState,
-)
-from emperor.base.layer.residual import (
+    ResidualConfig,
+    ResidualConnection,
     ResidualConnectionOptions,
 )
-from emperor.base.layer.gate import GateConfig, LayerGate, LayerGateOptions
-from emperor.convs.core.config import Conv2dLayerConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.base.options import LastLayerBiasOptions
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-
+from emperor.layers._composition.gate import LayerGate
+from emperor.linears import LinearLayerConfig
 
 DEFAULT_LAYER_MODEL_CONFIG = object()
 
@@ -99,16 +100,21 @@ class FakeHaltingModel(nn.Module):
 
 class TestLayer(unittest.TestCase):
     def test_layer_package_public_exports_are_exact(self):
-        import emperor.base.layer as layer_package
+        import emperor.layers as layer_package
 
         expected_exports = {
+            "ActivationOptions",
+            "LastLayerBiasOptions",
+            "LayerNormPositionOptions",
             "LayerState",
             "LayerConfig",
             "LayerStackConfig",
             "GateConfig",
             "RecurrentLayerConfig",
+            "ResidualConfig",
             "LayerGateOptions",
             "ResidualConnectionOptions",
+            "ResidualConnection",
             "Layer",
             "LayerStack",
             "RecurrentLayer",
@@ -159,23 +165,61 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(built_gate.model.input_dim, 3)
         self.assertEqual(built_gate.model.output_dim, 3)
 
+    def test_residual_config_is_public_and_builds_the_residual_connection(self):
+        import emperor.layers as layer_package
+
+        residual_config_fields = {
+            config_field.name: config_field for config_field in fields(ResidualConfig)
+        }
+        residual_config = ResidualConfig(
+            residual_dim=3,
+            option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            model_config=LinearLayerConfig(bias_flag=True),
+        )
+
+        residual_connection = residual_config.build()
+
+        self.assertIs(layer_package.ResidualConfig, ResidualConfig)
+        self.assertEqual(
+            tuple(residual_config_fields),
+            ("residual_dim", "option", "model_config"),
+        )
+        model_config_help = residual_config_fields["model_config"].metadata["help"]
+        self.assertIn("data-dependent", model_config_help)
+        self.assertIn("nn.Parameter", model_config_help)
+        self.assertIsInstance(residual_connection, ResidualConnection)
+        self.assertEqual(residual_connection.residual_dim, 3)
+        self.assertEqual(residual_connection.model.input_dim, 6)
+        self.assertEqual(residual_connection.model.output_dim, 3)
+
+    def test_residual_options_only_contain_enabled_composition_modes(self):
+        self.assertEqual(
+            tuple(ResidualConnectionOptions),
+            (
+                ResidualConnectionOptions.RESIDUAL,
+                ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                ResidualConnectionOptions.WEIGHTED_BLEND,
+            ),
+        )
+
     def bare_config(
         self,
         input_dim: int = 4,
         output_dim: int = 4,
         bias_flag: bool = True,
         activation: ActivationOptions = ActivationOptions.DISABLED,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         dropout_probability: float = 0.0,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
+        layer_norm_position: LayerNormPositionOptions = (
+            LayerNormPositionOptions.DISABLED
+        ),
         gate_config: "LayerStackConfig | None" = None,
         gate_option: LayerGateOptions | None = None,
         gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID,
         halting_config: "StickBreakingConfig | None" = None,
         memory_config=None,
         layer_model_config=DEFAULT_LAYER_MODEL_CONFIG,
+        residual_model_config: LinearLayerConfig | None = None,
     ) -> LayerConfig:
         if layer_model_config is DEFAULT_LAYER_MODEL_CONFIG:
             layer_model_config = LinearLayerConfig(bias_flag=bias_flag)
@@ -183,7 +227,11 @@ class TestLayer(unittest.TestCase):
             input_dim=input_dim,
             output_dim=output_dim,
             activation=activation,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(
+                option=residual_connection_option, model_config=residual_model_config
+            ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
             gate_config=self.layer_gate_config(
@@ -234,7 +282,7 @@ class TestLayer(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -250,23 +298,21 @@ class TestLayer(unittest.TestCase):
         output_dim: int = 8,
         bias_flag: bool = True,
         activation: ActivationOptions = ActivationOptions.RELU,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         dropout_probability: float = 0.2,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
+        layer_norm_position: LayerNormPositionOptions = (
+            LayerNormPositionOptions.DISABLED
+        ),
         gate_config: "LayerStackConfig | None" = None,
         gate_num_layers: int = 1,
         gate_activation: ActivationOptions = ActivationOptions.DISABLED,
-        gate_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        gate_residual_connection_option: ResidualConnectionOptions | None = None,
         gate_dropout_probability: float = 0.0,
         gate_bias_flag: bool = True,
         gate_option: LayerGateOptions | None = None,
         halting_config: "StickBreakingConfig | None" = None,
+        residual_model_config: LinearLayerConfig | None = None,
     ) -> LayerConfig:
-
         if gate_config is None and (input_dim == output_dim or gate_option is not None):
             gate_config = LayerStackConfig(
                 hidden_dim=output_dim,
@@ -276,7 +322,9 @@ class TestLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=gate_activation,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=gate_residual_connection_option,
+                    residual_config=None
+                    if gate_residual_connection_option is None
+                    else ResidualConfig(option=gate_residual_connection_option),
                     dropout_probability=gate_dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -300,7 +348,9 @@ class TestLayer(unittest.TestCase):
                     layer_config=LayerConfig(
                         activation=gate_activation,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
-                        residual_connection_option=gate_residual_connection_option,
+                        residual_config=None
+                        if gate_residual_connection_option is None
+                        else ResidualConfig(option=gate_residual_connection_option),
                         dropout_probability=gate_dropout_probability,
                         halting_config=None,
                         gate_config=None,
@@ -315,7 +365,11 @@ class TestLayer(unittest.TestCase):
             input_dim=input_dim,
             output_dim=output_dim,
             activation=activation,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(
+                option=residual_connection_option, model_config=residual_model_config
+            ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
             gate_config=self.layer_gate_config(
@@ -350,7 +404,7 @@ class TestLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,
@@ -403,8 +457,8 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(layer.output_dim, cfg.output_dim)
         self.assertEqual(layer.activation_function, cfg.activation)
         self.assertEqual(
-            layer.residual_connection_option,
-            cfg.residual_connection_option,
+            layer.residual_config,
+            cfg.residual_config,
         )
         self.assertEqual(layer.dropout_probability, cfg.dropout_probability)
         self.assertEqual(layer.layer_norm_position, cfg.layer_norm_position)
@@ -431,7 +485,6 @@ class TestLayer(unittest.TestCase):
             "input_dim",
             "output_dim",
             "activation",
-            "residual_connection_option",
             "dropout_probability",
             "layer_norm_position",
         ]
@@ -447,16 +500,21 @@ class TestLayer(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "layer_model_config is required"):
             Layer(self.bare_config(layer_model_config=None))
 
+        cfg = self.bare_config()
+        cfg.residual_config = ResidualConfig()
+        with self.assertRaisesRegex(ValueError, "residual_config.option"):
+            Layer(cfg)
+
     def test_init_raises_on_wrong_config_field_types(self):
         cases = [
             ("input_dim", "4", TypeError, "input_dim"),
             ("output_dim", "4", TypeError, "output_dim"),
             ("activation", object(), TypeError, "activation"),
             (
-                "residual_connection_option",
+                "residual_config",
                 object(),
                 TypeError,
-                "residual_connection_option",
+                "residual_config",
             ),
             ("dropout_probability", "0.2", TypeError, "dropout_probability"),
             ("layer_norm_position", object(), TypeError, "layer_norm_position"),
@@ -576,7 +634,7 @@ class TestLayer(unittest.TestCase):
             self.bare_config(
                 input_dim=dim,
                 output_dim=dim,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_connection_option=None,
                 layer_model_config=spatial_config,
             )
         )
@@ -594,7 +652,7 @@ class TestLayer(unittest.TestCase):
             self.preset(
                 input_dim=8,
                 output_dim=8,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_connection_option=None,
             )
         )
         enabled_layer = Layer(
@@ -760,7 +818,7 @@ class TestLayer(unittest.TestCase):
                         residual_connection_option=(
                             ResidualConnectionOptions.RESIDUAL
                             if input_dim == output_dim
-                            else ResidualConnectionOptions.DISABLED
+                            else None
                         ),
                     )
                     layer = Layer(cfg)
@@ -837,7 +895,7 @@ class TestLayer(unittest.TestCase):
     def test_forward_training_dropout_zeros_current_before_residual(self):
         dim = 3
         cases = [
-            (ResidualConnectionOptions.DISABLED, torch.zeros(2, dim)),
+            (None, torch.zeros(2, dim)),
             (
                 ResidualConnectionOptions.RESIDUAL,
                 torch.tensor([[1.0, 2.0, 3.0], [-1.0, 0.5, 4.0]]),
@@ -934,30 +992,48 @@ class TestLayer(unittest.TestCase):
         dim = 12
         option_cases = [
             (
-                ResidualConnectionOptions.DISABLED,
+                None,
+                None,
                 lambda current, previous: current,
             ),
             (
                 ResidualConnectionOptions.RESIDUAL,
+                None,
                 lambda current, previous: current + previous,
             ),
             (
                 ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                None,
                 lambda current, previous: previous,
             ),
             (
                 ResidualConnectionOptions.WEIGHTED_BLEND,
+                None,
+                lambda current, previous: 0.9 * current + 0.1 * previous,
+            ),
+            (
+                ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                LinearLayerConfig(bias_flag=True),
+                lambda current, previous: previous,
+            ),
+            (
+                ResidualConnectionOptions.WEIGHTED_BLEND,
+                LinearLayerConfig(bias_flag=True),
                 lambda current, previous: 0.9 * current + 0.1 * previous,
             ),
         ]
 
-        for option, expected_fn in option_cases:
-            message = f"residual_connection_option={option}"
+        for option, residual_model_config, expected_fn in option_cases:
+            message = (
+                f"residual_connection_option={option}, "
+                f"data_dependent={residual_model_config is not None}"
+            )
             with self.subTest(msg=message):
                 cfg = self.preset(
                     input_dim=dim,
                     output_dim=dim,
                     residual_connection_option=option,
+                    residual_model_config=residual_model_config,
                 )
                 layer = Layer(cfg)
                 x = torch.randn(batch_size, dim)
@@ -966,6 +1042,257 @@ class TestLayer(unittest.TestCase):
                 expected = expected_fn(model_output, x)
 
                 torch.testing.assert_close(result, expected)
+
+    def test_data_dependent_weighted_blend_initializes_as_ninety_ten_blend(self):
+        output_dim = 3
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_dim=output_dim,
+                model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
+        current = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+                [[-1.0, -2.0, -3.0], [0.5, 1.5, 2.5]],
+            ]
+        )
+        previous = torch.tensor(
+            [
+                [[6.0, 5.0, 4.0], [3.0, 2.0, 1.0]],
+                [[2.0, 1.0, 0.0], [-0.5, -1.5, -2.5]],
+            ]
+        )
+
+        result = connection(current, previous)
+
+        expected_raw_blend_bias = math.log(0.9 / (1.0 - 0.9))
+        torch.testing.assert_close(result, 0.9 * current + 0.1 * previous)
+        torch.testing.assert_close(
+            connection.model.weight_params,
+            torch.zeros(output_dim * 2, output_dim),
+        )
+        torch.testing.assert_close(
+            connection.model.bias_params,
+            torch.full((output_dim,), expected_raw_blend_bias),
+        )
+        self.assertEqual(
+            tuple(connection.state_dict()),
+            ("model.weight_params", "model.bias_params"),
+        )
+
+    def test_data_dependent_residual_builds_its_model_from_configuration(self):
+        output_dim = 3
+        model_config = LinearLayerConfig(
+            input_dim=99,
+            output_dim=99,
+            bias_flag=True,
+        )
+
+        layer = Layer(
+            self.bare_config(
+                input_dim=output_dim,
+                output_dim=output_dim,
+                residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_model_config=model_config,
+            )
+        )
+        connection = layer.residual_connection
+
+        self.assertEqual(connection.model_config, model_config)
+        self.assertIsNot(connection.model_config, model_config)
+        self.assertEqual(connection.model.input_dim, output_dim * 2)
+        self.assertEqual(connection.model.output_dim, output_dim)
+
+    def test_data_dependent_weighted_blend_routes_by_position_and_feature(self):
+        output_dim = 2
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_dim=output_dim,
+                model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
+        with torch.no_grad():
+            current_feature_weights = torch.eye(output_dim)
+            previous_feature_weights = -torch.eye(output_dim)
+            connection.model.weight_params.copy_(
+                torch.cat(
+                    (current_feature_weights, previous_feature_weights),
+                    dim=0,
+                )
+            )
+            connection.model.bias_params.zero_()
+        current = torch.tensor(
+            [
+                [[2.0, -1.0], [0.0, 3.0]],
+                [[-2.0, 1.0], [4.0, -3.0]],
+            ]
+        )
+        previous = torch.tensor(
+            [
+                [[0.0, 1.0], [2.0, -1.0]],
+                [[1.0, -2.0], [-1.0, 2.0]],
+            ]
+        )
+
+        result = connection(current, previous)
+
+        current_blend_coefficients = torch.sigmoid(current - previous)
+        previous_blend_coefficients = 1.0 - current_blend_coefficients
+        expected = (
+            current_blend_coefficients * current
+            + previous_blend_coefficients * previous
+        )
+        torch.testing.assert_close(result, expected)
+
+    def test_data_dependent_weighted_blend_preserves_all_gradients(self):
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_dim=2,
+                model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
+        current = torch.tensor(
+            [[2.0, 3.0], [4.0, 5.0]],
+            requires_grad=True,
+        )
+        previous = torch.tensor(
+            [[0.5, 1.0], [1.5, 2.0]],
+            requires_grad=True,
+        )
+
+        connection(current, previous).square().sum().backward()
+
+        gradients = (
+            current.grad,
+            previous.grad,
+            connection.model.weight_params.grad,
+            connection.model.bias_params.grad,
+        )
+        for gradient in gradients:
+            self.assertIsNotNone(gradient)
+            self.assertTrue(torch.isfinite(gradient).all())
+            self.assertTrue(torch.any(gradient.abs() > 0))
+
+    def test_data_dependent_residual_requires_a_positive_integer_dimension(self):
+        invalid_dimensions = (
+            (None, TypeError),
+            (True, TypeError),
+            (0, ValueError),
+        )
+
+        for output_dim, error_type in invalid_dimensions:
+            with self.subTest(output_dim=output_dim):
+                with self.assertRaisesRegex(error_type, "residual_dim"):
+                    ResidualConnection(
+                        ResidualConfig(
+                            option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                            residual_dim=output_dim,
+                            model_config=LinearLayerConfig(bias_flag=True),
+                        ),
+                    )
+
+    def test_data_dependent_residual_requires_a_biased_linear_model_config(self):
+        invalid_model_configs = (
+            (object(), TypeError),
+            (LinearLayerConfig(bias_flag=False), ValueError),
+        )
+
+        for model_config, error_type in invalid_model_configs:
+            with self.subTest(model_config=model_config):
+                with self.assertRaisesRegex(error_type, "model_config"):
+                    ResidualConnection(
+                        ResidualConfig(
+                            option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                            residual_dim=2,
+                            model_config=model_config,
+                        ),
+                    )
+
+    def test_direct_residual_rejects_an_unused_coefficient_model(self):
+        with self.assertRaisesRegex(ValueError, "weighted residual modes"):
+            ResidualConnection(
+                ResidualConfig(
+                    option=ResidualConnectionOptions.RESIDUAL,
+                    residual_dim=2,
+                    model_config=LinearLayerConfig(bias_flag=True),
+                )
+            )
+
+    def test_existing_weighted_residual_state_is_unchanged_by_residual_dimension(self):
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_BLEND, residual_dim=4
+            ),
+        )
+
+        self.assertEqual(tuple(connection.state_dict()), ("raw_weight",))
+        self.assertIsNone(connection.model)
+        self.assertIsNone(connection.model_config)
+
+    def test_residual_options_initialize_only_their_owned_components(self):
+        model_config = LinearLayerConfig(bias_flag=True)
+        cases = (
+            (ResidualConnectionOptions.RESIDUAL, None, False, False),
+            (ResidualConnectionOptions.WEIGHTED_RESIDUAL, None, True, False),
+            (ResidualConnectionOptions.WEIGHTED_BLEND, None, True, False),
+            (ResidualConnectionOptions.WEIGHTED_RESIDUAL, model_config, False, True),
+            (ResidualConnectionOptions.WEIGHTED_BLEND, model_config, False, True),
+        )
+
+        for option, coefficient_model_config, owns_raw_weight, owns_model in cases:
+            with self.subTest(
+                option=option,
+                data_dependent=coefficient_model_config is not None,
+            ):
+                connection = ResidualConnection(
+                    ResidualConfig(
+                        option=option,
+                        residual_dim=4,
+                        model_config=coefficient_model_config,
+                    ),
+                )
+
+                self.assertEqual(connection.raw_weight is not None, owns_raw_weight)
+                self.assertEqual(connection.model is not None, owns_model)
+
+    def test_weighted_residual_rejects_a_missing_coefficient_source(self):
+        connection = ResidualConnection(
+            ResidualConfig(option=ResidualConnectionOptions.WEIGHTED_RESIDUAL)
+        )
+        connection.raw_weight = None
+        hidden = torch.ones(2, 3)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "WEIGHTED_RESIDUAL requires either raw_weight or a coefficient model",
+        ):
+            connection(hidden, hidden)
+
+    def test_data_dependent_weighted_residual_uses_model_coefficients(self):
+        output_dim = 2
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                residual_dim=output_dim,
+                model_config=LinearLayerConfig(bias_flag=True),
+            )
+        )
+        with torch.no_grad():
+            connection.model.weight_params.copy_(
+                torch.cat((torch.eye(output_dim), -torch.eye(output_dim)), dim=0)
+            )
+            connection.model.bias_params.zero_()
+        current = torch.tensor([[2.0, -1.0], [0.5, 3.0]])
+        previous = torch.tensor([[0.0, 1.0], [-0.5, 2.0]])
+
+        result = connection(current, previous)
+
+        expected = previous + torch.tanh(current - previous) * current
+        torch.testing.assert_close(result, expected)
 
     def test_weighted_residual_uses_tanh_constrained_scalar(self):
         dim = 4
@@ -1385,7 +1712,7 @@ class TestLayer(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -1483,7 +1810,7 @@ class TestLayer(unittest.TestCase):
         activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
         residual_options = [
             ResidualConnectionOptions.RESIDUAL,
-            ResidualConnectionOptions.DISABLED,
+            None,
         ]
         dropout_probabilities = [0.0, 0.2]
         layer_norm_positions = [
@@ -1515,7 +1842,7 @@ class TestLayer(unittest.TestCase):
                                         residual_connection_option=(
                                             residual_option
                                             if input_dim == output_dim
-                                            else ResidualConnectionOptions.DISABLED
+                                            else None
                                         ),
                                         dropout_probability=dropout,
                                         layer_norm_position=layer_norm,
@@ -1547,7 +1874,7 @@ class TestLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,

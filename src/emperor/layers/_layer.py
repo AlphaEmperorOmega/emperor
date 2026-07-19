@@ -6,11 +6,10 @@ from torch import Tensor
 from emperor.config import ConfigBase
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._composition.residual import ResidualConnection
-from emperor.layers._config import GateConfig, LayerConfig
+from emperor.layers._config import GateConfig, LayerConfig, ResidualConfig
 from emperor.layers._options import (
     ActivationOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 from emperor.layers._state import LayerState
 from emperor.layers._support import LayerModuleBase
@@ -41,9 +40,7 @@ class Layer(LayerModuleBase):
         )
         self.activation_function: ActivationOptions = self.cfg.activation
         self.layer_norm_dim: int | None = self.__resolve_layer_norm_dim()
-        self.residual_connection_option: ResidualConnectionOptions = (
-            self.cfg.residual_connection_option
-        )
+        self.residual_config: ResidualConfig | None = self.cfg.residual_config
         self.dropout_probability: float = self.cfg.dropout_probability
         self.gate_config: GateConfig | None = self.cfg.gate_config
         self.halting_config: HaltingConfig | None = self.cfg.halting_config
@@ -91,9 +88,10 @@ class Layer(LayerModuleBase):
         )
 
     def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
-            return None
-        return ResidualConnection(self.residual_connection_option)
+        return self._build_from_config(
+            self.residual_config,
+            residual_dim=self.output_dim,
+        )
 
     def __init_dropout_module(self) -> nn.Module | None:
         if self.__should_apply_dropout():

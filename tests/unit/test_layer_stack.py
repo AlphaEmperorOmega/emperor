@@ -1,20 +1,27 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
 
-from emperor.halting.config import HaltingConfig, StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.base.options import LayerNormPositionOptions
-from emperor.base.options import ActivationOptions, LastLayerBiasOptions
-from emperor.base.layer import (
+import torch
+
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
     Layer,
     LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
     LayerState,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears import LinearLayerConfig
 
 
 class TestLayerStack(unittest.TestCase):
@@ -27,9 +34,7 @@ class TestLayerStack(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        stack_residual_connection_option: ResidualConnectionOptions | None = None,
         stack_dropout_probability: float = 0.2,
         shared_gate_config: "LayerStackConfig | GateConfig | None" = None,
         shared_halting_config: "StickBreakingConfig | None" = None,
@@ -50,7 +55,9 @@ class TestLayerStack(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=stack_activation,
                     layer_norm_position=layer_norm_position,
-                    residual_connection_option=stack_residual_connection_option,
+                    residual_config=None
+                    if stack_residual_connection_option is None
+                    else ResidualConfig(option=stack_residual_connection_option),
                     dropout_probability=stack_dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -79,7 +86,9 @@ class TestLayerStack(unittest.TestCase):
                     layer_config=LayerConfig(
                         activation=ActivationOptions.DISABLED,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
-                        residual_connection_option=stack_residual_connection_option,
+                        residual_config=None
+                        if stack_residual_connection_option is None
+                        else ResidualConfig(option=stack_residual_connection_option),
                         dropout_probability=stack_dropout_probability,
                         halting_config=None,
                         gate_config=None,
@@ -102,7 +111,9 @@ class TestLayerStack(unittest.TestCase):
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,
-                residual_connection_option=stack_residual_connection_option,
+                residual_config=None
+                if stack_residual_connection_option is None
+                else ResidualConfig(option=stack_residual_connection_option),
                 dropout_probability=stack_dropout_probability,
                 gate_config=self.layer_gate_config(gate_config, gate_option),
                 halting_config=halting_config,
@@ -148,7 +159,7 @@ class TestLayerStack(unittest.TestCase):
                 input_dim=dim,
                 output_dim=output_dim if output_dim is not None else dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -182,7 +193,7 @@ class TestLayerStack(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,
@@ -228,10 +239,7 @@ class TestLayerStack(unittest.TestCase):
                         layer.activation_function, ActivationOptions.DISABLED
                     )
                     self.assertEqual(layer.dropout_probability, 0.0)
-                    self.assertEqual(
-                        layer.residual_connection_option,
-                        ResidualConnectionOptions.DISABLED,
-                    )
+                    self.assertIsNone(layer.residual_config)
                 else:
                     self.assertEqual(
                         layer.activation_function, cfg.layer_config.activation
@@ -481,10 +489,7 @@ class TestLayerStack(unittest.TestCase):
                                 layer.activation_function, ActivationOptions.DISABLED
                             )
                             self.assertEqual(layer.dropout_probability, 0.0)
-                            self.assertEqual(
-                                layer.residual_connection_option,
-                                ResidualConnectionOptions.DISABLED,
-                            )
+                            self.assertIsNone(layer.residual_config)
 
     def test_gate_config_rejects_nested_gates(self):
         gate_inner = LayerStackConfig(
@@ -498,7 +503,7 @@ class TestLayerStack(unittest.TestCase):
                 input_dim=6,
                 output_dim=6,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -540,7 +545,7 @@ class TestLayerStack(unittest.TestCase):
                     input_dim=6,
                     output_dim=6,
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     layer_model_config=LinearLayerConfig(bias_flag=True),
@@ -875,7 +880,7 @@ class TestLayerStack(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,
@@ -1199,14 +1204,11 @@ class TestLayerStack(unittest.TestCase):
                 self.assertEqual(layer.output_dim, output_dim)
 
                 if input_dim != output_dim:
-                    self.assertEqual(
-                        layer.residual_connection_option,
-                        ResidualConnectionOptions.DISABLED,
-                    )
+                    self.assertIsNone(layer.residual_config)
                 else:
                     self.assertEqual(
-                        layer.residual_connection_option,
-                        cfg.layer_config.residual_connection_option,
+                        layer.residual_config,
+                        cfg.layer_config.residual_config,
                     )
 
     def test_create_layer_with_overrides(self):
@@ -1221,10 +1223,7 @@ class TestLayerStack(unittest.TestCase):
         self.assertIsInstance(layer, Layer)
         self.assertEqual(layer.input_dim, 8)
         self.assertEqual(layer.output_dim, 16)
-        self.assertEqual(
-            layer.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(layer.residual_config)
         self.assertEqual(layer.activation_function, ActivationOptions.DISABLED)
         self.assertEqual(layer.dropout_probability, 0.0)
 
@@ -1237,7 +1236,7 @@ class TestLayerStack(unittest.TestCase):
         activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
         residual_options = [
             ResidualConnectionOptions.RESIDUAL,
-            ResidualConnectionOptions.DISABLED,
+            None,
         ]
         dropout_probabilities = [0.0, 0.2]
         layer_norm_positions = [
@@ -1293,7 +1292,6 @@ class TestLayerStack(unittest.TestCase):
                                             )
                                             for layer in layers:
                                                 if layer.input_dim != layer.output_dim:
-                                                    self.assertEqual(
-                                                        layer.residual_connection_option,
-                                                        ResidualConnectionOptions.DISABLED,
+                                                    self.assertIsNone(
+                                                        layer.residual_config
                                                     )
