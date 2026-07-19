@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 
 
 class HaltingUsageTracker(Module):
-
     _DYNAMIC_BUFFER_NAMES = ("last_survival", "last_ponder_cost")
 
     def __init__(self):

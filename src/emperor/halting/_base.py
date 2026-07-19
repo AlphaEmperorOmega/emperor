@@ -111,7 +111,8 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
             raw_hidden=raw_hidden,
             context_hidden=None,
             continuation_probability=(
-                continuation_probability * resolved_update_mask.to(raw_hidden.dtype)
+                continuation_probability
+                * resolved_update_mask.to(raw_hidden.dtype)
             ),
             computation_mask=resolved_update_mask,
         )
@@ -257,7 +258,9 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
                 state.accumulated_ponder_cost,
                 previous_state.accumulated_ponder_cost,
             )
-            step_indices = previous_state.step_indices + update_mask.to(candidate.dtype)
+            step_indices = previous_state.step_indices + update_mask.to(
+                candidate.dtype
+            )
             advanced_mask = previous_state.advanced_mask | update_mask
 
         state.raw_hidden = torch.where(
@@ -327,7 +330,8 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
             return default.to(device=hidden.device, dtype=torch.bool)
         if not isinstance(mask, Tensor):
             raise TypeError(
-                f"{field_name} must be a Tensor or None, received {type(mask).__name__}"
+                f"{field_name} must be a Tensor or None, "
+                f"received {type(mask).__name__}"
             )
         expected_shape = hidden.shape[:-1]
         if mask.shape != expected_shape:

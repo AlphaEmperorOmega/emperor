@@ -4,7 +4,10 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from emperor.halting._base import HaltingBase, HaltingStateBase
+    from emperor.halting._base import (
+        HaltingBase,
+        HaltingStateBase,
+    )
     from emperor.halting._config import (
         HaltingConfig,
         HaltingHiddenStateModeOptions,
