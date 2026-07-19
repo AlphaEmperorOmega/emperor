@@ -228,7 +228,7 @@ class MixtureOfExperts(Module):
     ) -> tuple[Tensor, Tensor]:
         batch_size = indices.size(0)
         samples_for_current_expert = indices == expert_index
-        if self.top_k > 1:
+        if indices.dim() > 1:
             samples_for_current_expert = samples_for_current_expert.sum(dim=-1)
         sample_indices_for_expert = samples_for_current_expert.nonzero().flatten()
         return self.capacity_handler.maybe_apply_capacity_limit_token_indices(

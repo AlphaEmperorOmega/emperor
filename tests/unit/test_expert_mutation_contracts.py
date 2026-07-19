@@ -117,3 +117,58 @@ class ExpertMutationContractTests(unittest.TestCase):
             rtol=0,
             atol=0,
         )
+
+    def test_top_k_one_column_routing_preserves_samples_and_gradients(self) -> None:
+        config = _mixture_config(
+            input_dim=1,
+            output_dim=1,
+            top_k=1,
+            num_experts=3,
+        )
+        config.capacity_factor = 1.0
+        model = MixtureOfExperts(config)
+        _copy_expert_weights(
+            model,
+            (
+                torch.tensor([[2.0]]),
+                torch.tensor([[3.0]]),
+                torch.tensor([[5.0]]),
+            ),
+        )
+        inputs = torch.tensor([[2.0], [5.0]], requires_grad=True)
+
+        output, loss = model(
+            inputs,
+            probabilities=torch.tensor([[0.25], [0.75]]),
+            indices=torch.tensor([[1], [0]]),
+        )
+
+        torch.testing.assert_close(
+            output,
+            torch.tensor([[1.5], [7.5]]),
+            rtol=0,
+            atol=0,
+        )
+        self.assertEqual(loss.item(), 0.0)
+
+        output.sum().backward()
+
+        torch.testing.assert_close(
+            inputs.grad,
+            torch.tensor([[0.75], [1.5]]),
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(
+            model.expert_modules[0][0].model.weight_params.grad,
+            torch.tensor([[3.75]]),
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(
+            model.expert_modules[1][0].model.weight_params.grad,
+            torch.tensor([[0.5]]),
+            rtol=0,
+            atol=0,
+        )
+        self.assertIsNone(model.expert_modules[2][0].model.weight_params.grad)
