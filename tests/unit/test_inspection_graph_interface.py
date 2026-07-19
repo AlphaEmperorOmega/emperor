@@ -7,9 +7,14 @@ from unittest.mock import PropertyMock, patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from models.catalog import model_package
 from torch import nn
 
+from emperor.layers import (
+    LayerConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
 from model_runtime.inspection import (
     InspectionError,
     InspectionRequest,
@@ -18,6 +23,7 @@ from model_runtime.inspection import (
     inspect_model_graph,
 )
 from model_runtime.packages import ModelPackage
+from models.catalog import model_package
 
 
 class InspectionGraphInterfaceTests(unittest.TestCase):
@@ -72,6 +78,30 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
         self.assertEqual(graph.nodes[0].id, "__root__")
         self.assertEqual(graph.nodes[0].parameter_count, 0)
         self.assertEqual(graph.edges, ())
+
+    def test_layer_residual_config_preserves_flat_inspection_fields(self) -> None:
+        configured_module = nn.Module()
+        configured_module.cfg = LayerConfig(
+            residual_config=ResidualConfig(
+                option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                model_config=LinearLayerConfig(bias_flag=True),
+            )
+        )
+
+        configuration = inspect_model_graph(configured_module).nodes[0].configuration
+
+        self.assertIsNotNone(configuration)
+        assert configuration is not None
+        serialized_fields = {field.key: field.value for field in configuration.fields}
+        self.assertNotIn("residual_config", serialized_fields)
+        self.assertEqual(
+            serialized_fields["residual_connection_option"],
+            "WEIGHTED_BLEND",
+        )
+        self.assertEqual(
+            serialized_fields["residual_model_config"],
+            "LinearLayerConfig",
+        )
 
     def test_semantic_graph_preserves_stable_paths_and_referential_integrity(
         self,

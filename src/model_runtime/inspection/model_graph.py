@@ -181,6 +181,14 @@ COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
         "Configures a layer gate network and how its output is composed with "
         "the current value."
     ),
+    "ResidualConnection": (
+        "Combines the current and previous hidden values using the configured "
+        "residual composition mode."
+    ),
+    "ResidualConfig": (
+        "Configures residual composition and optionally makes weighted mixing "
+        "coefficients data-dependent."
+    ),
     "Halting": (
         "Controls adaptive computation by deciding when recurrent processing has "
         "accumulated enough probability mass to stop."
@@ -211,6 +219,29 @@ COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
     "NeuronClusterConfig": (
         "Configures a 3D routed neuron cluster, including capacity, traversal, "
         "sampling, and growth controls."
+    ),
+}
+
+DEFAULT_RESIDUAL_OPTION_DESCRIPTION = (
+    "Residual connection behavior. Enabled options require input_dim == output_dim."
+)
+DEFAULT_RESIDUAL_MODEL_DESCRIPTION = (
+    "Optional model that generates data-dependent coefficients for weighted residual "
+    "modes. When omitted, weighted modes use a learned scalar parameter."
+)
+RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME = {
+    "RecurrentLayerConfig": (
+        "Residual connection behavior between recurrent steps. Set to null to "
+        "disable recurrent residuals.",
+        DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
+    ),
+    "TransformerEncoderLayerConfig": (
+        "Residual connection behavior applied to every encoder sub-block join.",
+        "Optional data-dependent coefficient model used at each encoder join.",
+    ),
+    "TransformerDecoderLayerConfig": (
+        "Residual connection behavior applied to every decoder sub-block join.",
+        "Optional data-dependent coefficient model used at each decoder join.",
     ),
 }
 
@@ -256,13 +287,50 @@ def _metadata_help(metadata: Any) -> str | None:
     return help_text or None
 
 
+def _flattened_residual_configuration_fields(
+    config: Any,
+) -> tuple[GraphConfigurationField, GraphConfigurationField]:
+    residual_config = config.residual_config
+    option = getattr(residual_config, "option", None)
+    model_config = getattr(residual_config, "model_config", None)
+    option_description, model_description = (
+        RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME.get(
+            type(config).__name__,
+            (
+                DEFAULT_RESIDUAL_OPTION_DESCRIPTION,
+                DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
+            ),
+        )
+    )
+    return (
+        GraphConfigurationField(
+            key="residual_connection_option",
+            value=_config_field_value(option),
+            description=option_description,
+        ),
+        GraphConfigurationField(
+            key="residual_model_config",
+            value=_config_field_value(model_config),
+            description=model_description,
+        ),
+    )
+
+
 def _module_config(module: Module) -> GraphConfiguration | None:
     config = _module_config_instance(module)
     if config is None:
         return None
 
     serialized_fields: list[GraphConfigurationField] = []
+    flattened_residual_model_field: GraphConfigurationField | None = None
     for field in fields(config):
+        if field.name == "residual_config":
+            (
+                residual_option_field,
+                flattened_residual_model_field,
+            ) = _flattened_residual_configuration_fields(config)
+            serialized_fields.append(residual_option_field)
+            continue
         description = _metadata_help(field.metadata)
         serialized_fields.append(
             GraphConfigurationField(
@@ -271,6 +339,8 @@ def _module_config(module: Module) -> GraphConfiguration | None:
                 description=description,
             )
         )
+    if flattened_residual_model_field is not None:
+        serialized_fields.append(flattened_residual_model_field)
 
     return GraphConfiguration(
         type_name=type(config).__name__,
