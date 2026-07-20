@@ -8,11 +8,13 @@ import {
   type GraphCoordinate,
 } from "@/lib/graph";
 import {
+  CLUSTER_CELL_SPACING,
+  clusterCoordinatePosition,
+} from "@/lib/graph/cluster-coordinates";
+import {
   workbenchVisualTokens,
   workbenchVisualizationTokens,
 } from "@/lib/visual-tokens";
-
-const CELL_SPACING = 1.12;
 
 type SceneProps = {
   scene: Cluster3DSceneModel;
@@ -30,18 +32,6 @@ type RenderCell = {
 
 const categoryColors: Record<Cluster3DCell["category"], string> =
   workbenchVisualizationTokens.clusterCategories;
-
-function coordinatePosition(
-  coordinate: GraphCoordinate,
-  capacity: GraphCoordinate,
-) {
-  const [x, y, z] = coordinate;
-  return [
-    (x - (capacity[0] + 1) / 2) * CELL_SPACING,
-    (z - (capacity[2] + 1) / 2) * CELL_SPACING,
-    (y - (capacity[1] + 1) / 2) * CELL_SPACING,
-  ] as const;
-}
 
 function isCoordinateVisible(
   coordinate: GraphCoordinate,
@@ -96,7 +86,7 @@ function InstancedCells({
       return;
     }
     cells.forEach((cell, index) => {
-      const [x, y, z] = coordinatePosition(cell.coordinate, capacity);
+      const [x, y, z] = clusterCoordinatePosition(cell.coordinate, capacity);
       cellTransform.position.set(x, y, z);
       cellTransform.updateMatrix();
       mesh.setMatrixAt(index, cellTransform.matrix);
@@ -146,9 +136,9 @@ function CapacityBounds({ capacity }: { capacity: GraphCoordinate }) {
     <mesh>
       <boxGeometry
         args={[
-          capacity[0] * CELL_SPACING,
-          capacity[2] * CELL_SPACING,
-          capacity[1] * CELL_SPACING,
+          capacity[0] * CLUSTER_CELL_SPACING,
+          capacity[2] * CLUSTER_CELL_SPACING,
+          capacity[1] * CLUSTER_CELL_SPACING,
         ]}
       />
       <meshBasicMaterial
@@ -171,7 +161,10 @@ function SelectedOutline({
   if (!selectedCell) {
     return null;
   }
-  const [x, y, z] = coordinatePosition(selectedCell.coordinate, capacity);
+  const [x, y, z] = clusterCoordinatePosition(
+    selectedCell.coordinate,
+    capacity,
+  );
   return (
     <mesh position={[x, y, z]}>
       <sphereGeometry args={[0.46, 20, 14]} />
