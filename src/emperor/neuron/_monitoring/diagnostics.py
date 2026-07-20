@@ -92,7 +92,7 @@ class _NeuronDiagnostics:
                 dimension=-1,
             ),
             coefficient_of_variation=(
-                marginal_probabilities.std()
+                marginal_probabilities.std(correction=0)
                 / marginal_probabilities.mean().clamp_min(1e-6)
             ),
         )
