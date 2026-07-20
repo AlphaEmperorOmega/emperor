@@ -3,18 +3,20 @@
 import importlib
 import unittest
 
+import torch
+
 import models.neuron.linear.config as config
 import models.neuron.linear.dataset_options as dataset_options
-import torch
-from emperor.base.layer import LayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
+    LayerConfig,
     LayerNormPositionOptions,
 )
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.neuron.core import NeuronClusterOptimizerSyncCallback
-from emperor.neuron.core.config import NeuronClusterConfig
+from emperor.linears import LinearLayerConfig
+from emperor.neuron import (
+    NeuronClusterConfig,
+    NeuronClusterOptimizerSyncCallback,
+)
 from models.neuron.linear._hidden_block import HiddenBlockAdapter, HiddenBlockConfig
 from models.neuron.linear.config_builder import NeuronLinearConfigBuilder
 from models.neuron.linear.experiment_config import ExperimentConfig
@@ -219,7 +221,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             output_dim=7,
             model_config=LayerConfig(
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
