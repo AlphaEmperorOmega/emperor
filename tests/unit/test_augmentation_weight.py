@@ -27,7 +27,7 @@ from emperor.augmentations.adaptive_parameters._weights.variants.dual_model impo
 from emperor.augmentations.adaptive_parameters._weights.variants.hypernetwork import (
     HypernetworkDynamicWeight,
 )
-from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
+from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (  # noqa: E501
     LayeredWeightedBankDynamicWeight,
 )
 from emperor.augmentations.adaptive_parameters._weights.variants.low_rank import (
@@ -36,7 +36,7 @@ from emperor.augmentations.adaptive_parameters._weights.variants.low_rank import
 from emperor.augmentations.adaptive_parameters._weights.variants.single_model import (
     SingleModelDynamicWeight,
 )
-from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (  # noqa: E501
     SoftWeightedBankDynamicWeight,
 )
 from emperor.layers import (
@@ -45,7 +45,6 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
@@ -94,7 +93,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.1,
                     gate_config=None,
                     halting_config=None,
