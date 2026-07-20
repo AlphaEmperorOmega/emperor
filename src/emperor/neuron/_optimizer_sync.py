@@ -7,7 +7,10 @@ from lightning.pytorch.callbacks import Callback
 from torch import nn
 from torch.optim import Optimizer
 
-from emperor.neuron._distributed_gradients import configure_conditional_ddp_strategy
+from emperor.neuron._distributed_gradients import (
+    average_post_wrap_gradients,
+    configure_conditional_ddp_strategy,
+)
 
 if TYPE_CHECKING:
     from lightning import LightningModule, Trainer
@@ -21,6 +24,8 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._clusters: list[nn.Module] = []
         self._synced_neuron_names: dict[int, set[str]] = {}
         self._synced_param_ids: dict[int, set[int]] = {}
+        self._post_wrap_param_ids: set[int] = set()
+        self._fit_started = False
 
     def setup(
         self,
@@ -33,8 +38,11 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         configure_conditional_ddp_strategy(trainer.strategy)
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self._post_wrap_param_ids.clear()
+        self._fit_started = False
         self._clusters = self.__find_neuron_clusters(pl_module)
         self.sync_optimizers(trainer, pl_module)
+        self._fit_started = True
 
     def on_train_batch_start(
         self,
@@ -54,6 +62,18 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         batch_idx: int,
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
+
+    def on_before_optimizer_step(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        optimizer: Optimizer,
+    ) -> None:
+        average_post_wrap_gradients(
+            pl_module,
+            optimizer,
+            self._post_wrap_param_ids,
+        )
 
     def __sync_optimizers_if_clusters_grew(
         self,
@@ -87,6 +107,16 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         if not clusters:
             return
 
+        new_post_wrap_param_ids = set()
+        if self._fit_started:
+            new_post_wrap_param_ids = {
+                id(parameter)
+                for cluster in clusters
+                for parameter in cluster.parameters()
+                if id(parameter)
+                not in self._synced_param_ids.get(id(cluster), set())
+            }
+
         for optimizer in optimizers:
             self.__sync_optimizer(optimizer, clusters)
         self.__warn_about_unoptimized_cluster_parameters(optimizers, clusters)
@@ -97,6 +127,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             id(cluster): {id(parameter) for parameter in cluster.parameters()}
             for cluster in clusters
         }
+        self._post_wrap_param_ids.update(new_post_wrap_param_ids)
 
     def __find_neuron_clusters(self, module: nn.Module):
         from emperor.neuron._cluster.model import NeuronCluster
