@@ -17,10 +17,10 @@ from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank im
 from emperor.augmentations.adaptive_parameters._monitoring.weight_banks import (
     _WeightBankDiagnostics,
 )
-from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
+from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (  # noqa: E501
     LayeredWeightedBankDynamicWeight,
 )
-from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (  # noqa: E501
     SoftWeightedBankDynamicWeight,
 )
 from emperor.augmentations.adaptive_parameters.monitoring import (
@@ -32,7 +32,6 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from support.monitor import orchestration_calls
@@ -111,7 +110,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
                 output_dim=output_dim,
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
@@ -442,8 +441,10 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
     def test_capture_hook_ignores_output_without_tensor_hidden_state(self):
         callback = WeightBankUtilizationMonitorCallback()
-        hook = callback._WeightBankUtilizationMonitorCallback__make_bank_logits_capture_hook(
-            "unknown"
+        hook = (
+            callback._WeightBankUtilizationMonitorCallback__make_bank_logits_capture_hook(
+                "unknown"
+            )
         )
 
         hook(nn.Identity(), (), object())
