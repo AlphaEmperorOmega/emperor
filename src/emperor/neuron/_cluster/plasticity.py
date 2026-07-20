@@ -250,7 +250,12 @@ class _NeuronClusterPlasticityMixin:
         z: int,
         parent_neuron: Module,
     ) -> Module:
-        grown_neuron = self._initialize_neuron(x, y, z)
+        grown_neuron = self._initialize_neuron(
+            x,
+            y,
+            z,
+            runtime_template=parent_neuron,
+        )
         if not self.mitosis_initialization_flag:
             return grown_neuron
         return self.__copy_and_perturb_parent_parameters(grown_neuron, parent_neuron)

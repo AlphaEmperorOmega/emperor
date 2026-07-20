@@ -13,6 +13,7 @@ from emperor.neuron._cluster.plasticity import _NeuronClusterPlasticityMixin
 from emperor.neuron._cluster.recurrent_routes import (
     _NeuronClusterRecurrentRoutesMixin,
 )
+from emperor.neuron._cluster.runtime_policy import inherit_runtime_policy
 from emperor.neuron._cluster.state import _NeuronClusterStateMixin
 from emperor.neuron._cluster.topology import _NeuronClusterTopologyMixin
 from emperor.neuron._config import NeuronClusterConfig, TerminalConfig
@@ -224,7 +225,13 @@ class NeuronCluster(
                     )
         return cluster
 
-    def _initialize_neuron(self, x: int, y: int, z: int) -> Module:
+    def _initialize_neuron(
+        self,
+        x: int,
+        y: int,
+        z: int,
+        runtime_template: Module | None = None,
+    ) -> Module:
         neuron_config = copy.deepcopy(self.cfg.neuron_config)
         terminal_config = neuron_config.terminal_config
         terminal_overrides = TerminalConfig(
@@ -236,7 +243,20 @@ class NeuronCluster(
             terminal_config,
             terminal_overrides,
         )
-        return self.__move_to_current_context(neuron_config.build())
+        initialized_neuron = neuron_config.build()
+        existing_cluster = getattr(self, "cluster", None)
+        if runtime_template is None and existing_cluster:
+            runtime_template = next(iter(existing_cluster.values()))
+        if runtime_template is not None:
+            fallback_device, fallback_dtype = self.__current_device_and_dtype()
+            inherit_runtime_policy(
+                initialized_neuron,
+                runtime_template,
+                fallback_device=fallback_device,
+                fallback_dtype=fallback_dtype,
+            )
+            return initialized_neuron
+        return self.__move_to_current_context(initialized_neuron)
 
     def __move_to_current_context(self, module: Module) -> Module:
         device, dtype = self.__current_device_and_dtype()
