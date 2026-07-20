@@ -4,39 +4,38 @@ from unittest import mock
 
 import torch
 import torch.nn as nn
-from emperor.base.layer import (
+from lightning import LightningModule, Trainer
+from torch.utils.data import DataLoader, TensorDataset
+
+from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
     Layer,
     LayerConfig,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
     LayerState,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import (
+from emperor.linears import LinearLayerConfig
+from emperor.memory import (
     AttentionDynamicMemoryConfig,
     DynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,
 )
-from emperor.memory.core import (
-    AttentionDynamicMemory,
-    DynamicMemoryAbstract,
+from emperor.memory._base import DynamicMemoryAbstract
+from emperor.memory._variants.attention import AttentionDynamicMemory
+from emperor.memory._variants.element_wise_weighted import (
     ElementWiseWeightedDynamicMemory,
-    GatedResidualDynamicMemory,
-    WeightedDynamicMemory,
 )
-from emperor.memory.options import MemoryPositionOptions
-from lightning import LightningModule, Trainer
-from torch.utils.data import DataLoader, TensorDataset
+from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
+from emperor.memory._variants.weighted import WeightedDynamicMemory
 
 MEMORY_CASES = [
     (GatedResidualDynamicMemoryConfig, GatedResidualDynamicMemory),
@@ -64,7 +63,7 @@ def make_layer_stack_config(
             input_dim=input_dim,
             output_dim=output_dim,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -83,7 +82,7 @@ def make_halting_config(input_dim: int = 4) -> StickBreakingConfig:
     return StickBreakingConfig(
         input_dim=input_dim,
         threshold=0.99,
-        halting_dropout=0.0,
+        dropout_probability=0.0,
         hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
         halting_gate_config=make_layer_stack_config(
             input_dim=input_dim,
@@ -126,9 +125,7 @@ def make_layer_config(
     input_dim: int = 4,
     output_dim: int = 4,
     activation: ActivationOptions = ActivationOptions.DISABLED,
-    residual_connection_option: ResidualConnectionOptions = (
-        ResidualConnectionOptions.DISABLED
-    ),
+    residual_connection_option: ResidualConnectionOptions | None = None,
     dropout_probability: float = 0.0,
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
     gate_config: LayerStackConfig | None = None,
@@ -151,7 +148,9 @@ def make_layer_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=activation,
-        residual_connection_option=residual_connection_option,
+        residual_config=None
+        if residual_connection_option is None
+        else ResidualConfig(option=residual_connection_option),
         dropout_probability=dropout_probability,
         layer_norm_position=layer_norm_position,
         gate_config=gate_config,
@@ -1157,9 +1156,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         input_dim: int = 4,
         output_dim: int = 4,
         activation: ActivationOptions = ActivationOptions.DISABLED,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         dropout_probability: float = 0.0,
         layer_norm_position: LayerNormPositionOptions = (
             LayerNormPositionOptions.DISABLED
@@ -1187,7 +1184,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -1241,6 +1238,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
                 layer = Layer(cfg)
                 layer.model = ScaleModule(2.0)
                 layer.memory_model = AddConstantModule(1.0)
+                layer.memory_model.memory_position_option = position
 
                 output = layer(LayerState(hidden=inputs))
 

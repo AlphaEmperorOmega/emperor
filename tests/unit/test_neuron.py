@@ -1,28 +1,29 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import math
 import os
 import tempfile
 import unittest
-
+from dataclasses import dataclass
 from unittest import mock
 
 import torch
 import torch.nn as nn
-
-from dataclasses import dataclass
 from torch import Tensor
 
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.options import (
+from emperor.config import ConfigBase, optional_field
+from emperor.halting import (
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.halting.config import StickBreakingConfig
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory import GatedResidualDynamicMemory, GatedResidualDynamicMemoryConfig
+from emperor.linears import LinearLayerConfig
+from emperor.memory import GatedResidualDynamicMemoryConfig
+from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
 from emperor.neuron import (
     Axons,
     AxonsConfig,
@@ -39,10 +40,9 @@ from emperor.neuron import (
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
+from emperor.nn import Module
+from emperor.sampler import RouterConfig, SamplerConfig
 from unit.test_memory import make_memory_config
-
 
 ROUTER_CONFIG_UNSET = object()
 
@@ -285,7 +285,7 @@ class NeuronTestCase(unittest.TestCase):
                 apply_output_pipeline_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
@@ -304,7 +304,7 @@ class NeuronTestCase(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=input_dim,
             threshold=threshold,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=input_dim,
@@ -315,7 +315,7 @@ class NeuronTestCase(unittest.TestCase):
                 apply_output_pipeline_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
