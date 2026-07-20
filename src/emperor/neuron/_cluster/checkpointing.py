@@ -95,12 +95,24 @@ class _NeuronClusterCheckpointingMixin:
             for neuron_name in incoming_neuron_names
             if neuron_name not in self.cluster
         )
-        reconstructed_neurons = {
-            neuron_name: self._initialize_neuron(
-                *self._parse_neuron_name(neuron_name)
+        reconstructed_neurons = {}
+        if missing_neuron_names:
+            rng_fork_devices = (
+                list(range(torch.cuda.device_count()))
+                if torch.cuda.is_available()
+                else []
             )
-            for neuron_name in missing_neuron_names
-        }
+            # Missing modules are initialized only to establish their shape and
+            # registration before every persistent value is overwritten by the
+            # checkpoint.  Do not let those throwaway initializers perturb
+            # continuation RNG streams.
+            with torch.random.fork_rng(devices=rng_fork_devices):
+                reconstructed_neurons = {
+                    neuron_name: self._initialize_neuron(
+                        *self._parse_neuron_name(neuron_name)
+                    )
+                    for neuron_name in missing_neuron_names
+                }
         checkpoint_ordered_neurons = [
             (
                 neuron_name,

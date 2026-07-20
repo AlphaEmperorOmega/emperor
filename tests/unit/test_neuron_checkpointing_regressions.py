@@ -132,3 +132,13 @@ class TestNeuronCheckpointTopologyReconciliation(unittest.TestCase):
             ("neuron_2_1_1", "neuron_1_1_1"),
         )
         self.assertIs(target.cluster["neuron_1_1_1"], existing_entry_neuron)
+
+    def test_rebuilding_missing_neurons_preserves_the_rng_stream(self) -> None:
+        source = _CheckpointCluster(("neuron_1_1_1", "neuron_2_1_1"))
+        target = _CheckpointCluster()
+        torch.manual_seed(20260720)
+        expected_rng_state = torch.random.get_rng_state().clone()
+
+        target.load_state_dict(source.state_dict(), strict=True)
+
+        torch.testing.assert_close(torch.random.get_rng_state(), expected_rng_state)
