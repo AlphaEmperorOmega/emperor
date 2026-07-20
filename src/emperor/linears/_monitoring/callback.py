@@ -47,6 +47,14 @@ class _PendingOptimizerStep:
     linear_states: tuple[_LinearBeforeStep, ...]
 
 
+def _log_metric(
+    pl_module: LightningModule,
+    name: str,
+    value: Tensor,
+) -> None:
+    pl_module.log(name, value, sync_dist=True)
+
+
 class LinearMonitorCallback(Callback):
     """Log activations, parameters, gradients, and matrix health for linear layers."""
 
@@ -208,7 +216,7 @@ class LinearMonitorCallback(Callback):
         module_name: str,
         input_summary: _TensorSummary,
     ) -> None:
-        pl_module.log(f"{module_name}/input/mean", input_summary.mean)
+        _log_metric(pl_module, f"{module_name}/input/mean", input_summary.mean)
 
     @staticmethod
     def __track_input_variance(
@@ -216,7 +224,7 @@ class LinearMonitorCallback(Callback):
         module_name: str,
         input_summary: _TensorSummary,
     ) -> None:
-        pl_module.log(f"{module_name}/input/var", input_summary.variance)
+        _log_metric(pl_module, f"{module_name}/input/var", input_summary.variance)
 
     @staticmethod
     def __track_output_mean(
@@ -224,7 +232,7 @@ class LinearMonitorCallback(Callback):
         module_name: str,
         output_summary: _TensorSummary,
     ) -> None:
-        pl_module.log(f"{module_name}/output/mean", output_summary.mean)
+        _log_metric(pl_module, f"{module_name}/output/mean", output_summary.mean)
 
     @staticmethod
     def __track_output_variance(
@@ -232,7 +240,7 @@ class LinearMonitorCallback(Callback):
         module_name: str,
         output_summary: _TensorSummary,
     ) -> None:
-        pl_module.log(f"{module_name}/output/var", output_summary.variance)
+        _log_metric(pl_module, f"{module_name}/output/var", output_summary.variance)
 
     def on_train_batch_end(
         self,
@@ -363,7 +371,10 @@ class LinearMonitorCallback(Callback):
         return _ParameterBeforeStep(
             parameter=parameter,
             values=parameter.detach().clone(),
-            gradient_summary=local_gradient_summary,
+            gradient_summary=_LinearDiagnostics.distributed_optional_summary(
+                local_gradient_summary,
+                parameter,
+            ),
         )
 
     def __track_buffered_activations(
@@ -396,10 +407,13 @@ class LinearMonitorCallback(Callback):
         step: int,
         linear_layer: LinearAbstract,
         channel: str,
-        _reference: Tensor,
+        reference: Tensor,
     ) -> _TensorSummary | None:
         moments = self._activation_moments.pop((step, id(linear_layer), channel), None)
-        return moments.summarize() if moments is not None else None
+        return _LinearDiagnostics.distributed_moments_summary(
+            moments,
+            reference,
+        )
 
     def __discard_activations_through(self, completed_step: int) -> None:
         for key in tuple(self._activation_moments):
@@ -537,7 +551,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/mean",
                     metrics.summary.mean,
                 )
@@ -550,7 +565,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/var",
                     metrics.summary.variance,
                 )
@@ -563,7 +579,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/l2_norm",
                     metrics.summary.norm,
                 )
@@ -576,7 +593,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None and metrics.change is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/delta_norm",
                     metrics.change.delta_norm,
                 )
@@ -589,7 +607,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None and metrics.change is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/relative_delta_norm",
                     metrics.change.relative_delta_norm,
                 )
@@ -602,7 +621,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None and metrics.gradient_summary is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/grad_mean",
                     metrics.gradient_summary.mean,
                 )
@@ -615,7 +635,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None and metrics.gradient_summary is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/grad_var",
                     metrics.gradient_summary.variance,
                 )
@@ -628,7 +649,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             metrics = self.__channel_metrics(context, parameter_channel)
             if metrics is not None and metrics.gradient_summary is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/{parameter_channel}/grad_norm",
                     metrics.gradient_summary.norm,
                 )
@@ -640,7 +662,8 @@ class LinearMonitorCallback(Callback):
         for context in contexts:
             ratio = context.weights.gradient_to_weight_norm_ratio
             if ratio is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/weights/gradient_to_weight_norm_ratio",
                     ratio,
                 )
@@ -651,7 +674,8 @@ class LinearMonitorCallback(Callback):
     ) -> None:
         for context in contexts:
             if context.weights.update_ratio is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/weights/update_ratio",
                     context.weights.update_ratio,
                 )
@@ -661,7 +685,8 @@ class LinearMonitorCallback(Callback):
         contexts: tuple[_LinearTrackingContext, ...],
     ) -> None:
         for context in contexts:
-            context.pl_module.log(
+            _log_metric(
+                context.pl_module,
                 f"{context.module_name}/weights/dead_input_fraction",
                 self.__dead_feature_fraction(context.input_feature_norms),
             )
@@ -671,7 +696,8 @@ class LinearMonitorCallback(Callback):
         contexts: tuple[_LinearTrackingContext, ...],
     ) -> None:
         for context in contexts:
-            context.pl_module.log(
+            _log_metric(
+                context.pl_module,
                 f"{context.module_name}/weights/dead_output_fraction",
                 self.__dead_feature_fraction(context.output_feature_norms),
             )
@@ -686,7 +712,8 @@ class LinearMonitorCallback(Callback):
     ) -> None:
         for context in contexts:
             if context.weight_conditioning is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/weights/spectral_norm",
                     context.weight_conditioning.spectral_norm,
                 )
@@ -697,7 +724,8 @@ class LinearMonitorCallback(Callback):
     ) -> None:
         for context in contexts:
             if context.weight_conditioning is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/weights/condition_number",
                     context.weight_conditioning.condition_number,
                 )
@@ -708,7 +736,8 @@ class LinearMonitorCallback(Callback):
     ) -> None:
         for context in contexts:
             if context.weight_conditioning is not None:
-                context.pl_module.log(
+                _log_metric(
+                    context.pl_module,
                     f"{context.module_name}/weights/effective_rank",
                     context.weight_conditioning.effective_rank,
                 )

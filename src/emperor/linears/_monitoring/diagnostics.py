@@ -160,6 +160,113 @@ class _LinearDiagnostics:
             norm=torch.linalg.vector_norm(normalized_values) * scale,
         )
 
+    @staticmethod
+    def distributed_moments_summary(
+        local_moments: _TensorMoments | None,
+        reference: Tensor,
+    ) -> _TensorSummary | None:
+        if not (
+            torch.distributed.is_available() and torch.distributed.is_initialized()
+        ):
+            return local_moments.summarize() if local_moments is not None else None
+
+        summary_dtype = {"cpu": torch.float64}.get(
+            reference.device.type,
+            _LinearDiagnostics.diagnostic_values(reference).dtype,
+        )
+        local_state = torch.zeros(
+            3,
+            dtype=summary_dtype,
+            device=reference.device,
+        )
+        if local_moments is not None and local_moments.count > 0:
+            assert local_moments.mean is not None
+            assert local_moments.second_moment is not None
+            local_state[0] = local_moments.count
+            local_state[1] = local_moments.mean.to(dtype=summary_dtype)
+            local_state[2] = local_moments.second_moment.to(dtype=summary_dtype)
+
+        gathered_states = [
+            torch.zeros_like(local_state)
+            for _ in range(torch.distributed.get_world_size())
+        ]
+        torch.distributed.all_gather(gathered_states, local_state)
+
+        total_count = 0
+        global_mean = torch.zeros_like(local_state[1])
+        global_second_moment = torch.zeros_like(local_state[2])
+        for rank_state in gathered_states:
+            rank_count = int(rank_state[0].item())
+            if rank_count == 0:
+                continue
+            rank_mean = rank_state[1]
+            rank_second_moment = rank_state[2]
+            if total_count == 0:
+                total_count = rank_count
+                global_mean = rank_mean
+                global_second_moment = rank_second_moment
+                continue
+
+            combined_count = total_count + rank_count
+            mean_delta = rank_mean - global_mean
+            global_mean = global_mean * (total_count / combined_count) + rank_mean * (
+                rank_count / combined_count
+            )
+            global_second_moment = (
+                global_second_moment
+                + rank_second_moment
+                + mean_delta.square() * (total_count * rank_count / combined_count)
+            )
+            total_count = combined_count
+
+        if total_count == 0:
+            return None
+        variance = (global_second_moment / total_count).clamp_min(0)
+        norm = torch.hypot(
+            global_second_moment.clamp_min(0).sqrt(),
+            global_mean.abs() * total_count**0.5,
+        )
+        return _TensorSummary(
+            mean=global_mean,
+            variance=variance,
+            norm=norm,
+        )
+
+    @staticmethod
+    def distributed_optional_summary(
+        local_summary: _TensorSummary | None,
+        reference: Tensor,
+    ) -> _TensorSummary | None:
+        if not (
+            torch.distributed.is_available() and torch.distributed.is_initialized()
+        ):
+            return local_summary
+
+        summary_dtype = {"cpu": torch.float64}.get(
+            reference.device.type,
+            _LinearDiagnostics.diagnostic_values(reference).dtype,
+        )
+        reduced_summary = torch.zeros(
+            4,
+            dtype=summary_dtype,
+            device=reference.device,
+        )
+        if local_summary is not None:
+            reduced_summary[0] = 1
+            reduced_summary[1] = local_summary.mean.to(dtype=summary_dtype)
+            reduced_summary[2] = local_summary.variance.to(dtype=summary_dtype)
+            reduced_summary[3] = local_summary.norm.to(dtype=summary_dtype)
+        torch.distributed.all_reduce(reduced_summary)
+
+        contributing_ranks, mean, variance, norm = reduced_summary.unbind()
+        if contributing_ranks == 0:
+            return None
+        return _TensorSummary(
+            mean=mean / contributing_ranks,
+            variance=variance / contributing_ranks,
+            norm=norm / contributing_ranks,
+        )
+
     @classmethod
     def stable_norm(cls, values: Tensor, dim: int | None = None) -> Tensor:
         diagnostic_values = cls.diagnostic_values(values)

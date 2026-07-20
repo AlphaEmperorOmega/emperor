@@ -1,8 +1,12 @@
+import os
+import tempfile
 import unittest
 from collections.abc import Callable
+from unittest.mock import patch
 
 import torch
 from torch import nn
+from torch.multiprocessing.spawn import ProcessRaisedException
 
 from emperor.linears import LinearLayer, LinearLayerConfig, LinearMonitorCallback
 from emperor.linears._monitoring.diagnostics import _LinearDiagnostics, _TensorMoments
@@ -20,6 +24,7 @@ class FakeLightningModule(nn.Module):
         self.linear = linear
         self.global_step = global_step
         self.logged_scalars: list[tuple[str, torch.Tensor]] = []
+        self.logged_options: list[dict[str, object]] = []
 
     def log(
         self,
@@ -29,6 +34,7 @@ class FakeLightningModule(nn.Module):
         **kwargs: object,
     ) -> None:
         self.logged_scalars.append((name, value))
+        self.logged_options.append(kwargs)
 
 
 class TupleOutputLinear(LinearLayer):
@@ -88,6 +94,58 @@ def complete_optimizer_step(
     )
 
 
+def _distributed_monitor_worker(
+    rank: int,
+    world_size: int,
+    init_file: str,
+) -> None:
+    os.environ.setdefault("GLOO_SOCKET_IFNAME", "lo")
+    torch.distributed.init_process_group(
+        backend="gloo",
+        init_method=f"file://{init_file}",
+        rank=rank,
+        world_size=world_size,
+    )
+    module = build_module(input_dim=1, output_dim=1, bias_flag=False)
+    callback = LinearMonitorCallback(log_every_n_steps=1)
+    trainer = FakeTrainer()
+    try:
+        with torch.no_grad():
+            module.linear.weight_params.fill_(1.0)
+        callback.on_fit_start(trainer, module)
+        if rank == 0:
+            module.linear(torch.tensor([[1.0], [3.0]]))
+            module.linear.weight_params.grad = torch.ones_like(
+                module.linear.weight_params
+            )
+
+        callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
+        trainer.global_step = 1
+        module.global_step = 1
+        callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
+
+        scalar_values = {
+            name: value.detach().cpu().item() for name, value in module.logged_scalars
+        }
+        payload = (
+            tuple(sorted(scalar_values)),
+            scalar_values["linear/input/mean"],
+            scalar_values["linear/input/var"],
+            scalar_values["linear/output/mean"],
+            scalar_values["linear/weights/grad_norm"],
+            all(options.get("sync_dist") is True for options in module.logged_options),
+        )
+        gathered_payloads: list[object | None] = [None] * world_size
+        torch.distributed.all_gather_object(gathered_payloads, payload)
+        assert gathered_payloads == [payload] * world_size
+        for actual, expected in zip(payload[1:-1], (2.0, 1.0, 2.0, 1.0), strict=True):
+            assert abs(actual - expected) < 1e-6
+        assert payload[-1] is True
+    finally:
+        callback.on_fit_end(trainer, module)
+        torch.distributed.destroy_process_group()
+
+
 class TestLinearDiagnostics(unittest.TestCase):
     def test_single_element_summary_has_population_variance(self):
         summary = _LinearDiagnostics.summarize(torch.tensor([2.0]))
@@ -141,6 +199,135 @@ class TestLinearDiagnostics(unittest.TestCase):
         self.assertEqual(summary.variance.item(), 0.0)
         self.assertTrue(torch.isfinite(summary.norm))
         self.assertAlmostEqual(summary.norm.item() / 1e308, 2.0**0.5)
+
+    def test_distributed_activation_summary_combines_counts_and_moments(self):
+        local = _TensorMoments()
+        local.add(torch.tensor([1.0, 3.0]))
+        remote_state = torch.tensor([1.0, 5.0, 0.0], dtype=torch.float64)
+
+        def gather_remote_moments(
+            gathered: list[torch.Tensor],
+            local_state: torch.Tensor,
+        ) -> None:
+            gathered[0].copy_(local_state)
+            gathered[1].copy_(remote_state)
+
+        with (
+            patch.object(torch.distributed, "is_available", return_value=True),
+            patch.object(torch.distributed, "is_initialized", return_value=True),
+            patch.object(torch.distributed, "get_world_size", return_value=2),
+            patch.object(
+                torch.distributed,
+                "all_gather",
+                side_effect=gather_remote_moments,
+            ),
+        ):
+            summary = _LinearDiagnostics.distributed_moments_summary(
+                local,
+                reference=torch.zeros(1),
+            )
+
+        self.assertIsNotNone(summary)
+        self.assertAlmostEqual(summary.mean.item(), 3.0, places=6)
+        self.assertAlmostEqual(summary.variance.item(), 8.0 / 3.0, places=6)
+        self.assertAlmostEqual(summary.norm.item(), 35.0**0.5, places=6)
+
+    def test_distributed_activation_summary_avoids_large_constant_overflow(self):
+        local = _TensorMoments()
+        local.add(torch.tensor([1e20, 1e20]))
+        assert local.mean is not None
+        remote_state = torch.tensor(
+            [2.0, local.mean.item(), 0.0],
+            dtype=torch.float64,
+        )
+
+        def gather_remote_moments(
+            gathered: list[torch.Tensor],
+            local_state: torch.Tensor,
+        ) -> None:
+            gathered[0].copy_(local_state)
+            gathered[1].copy_(remote_state)
+
+        with (
+            patch.object(torch.distributed, "is_available", return_value=True),
+            patch.object(torch.distributed, "is_initialized", return_value=True),
+            patch.object(torch.distributed, "get_world_size", return_value=2),
+            patch.object(
+                torch.distributed,
+                "all_gather",
+                side_effect=gather_remote_moments,
+            ),
+        ):
+            summary = _LinearDiagnostics.distributed_moments_summary(
+                local,
+                reference=torch.zeros(1),
+            )
+
+        self.assertIsNotNone(summary)
+        self.assertTrue(torch.isfinite(summary.mean))
+        self.assertEqual(summary.variance.item(), 0.0)
+        self.assertTrue(torch.isfinite(summary.norm))
+        self.assertAlmostEqual(summary.norm.item() / 1e20, 2.0, places=6)
+
+    def test_distributed_gradient_summary_does_not_inflate_replicated_norm(self):
+        local = _LinearDiagnostics.summarize(torch.tensor([1.0, 3.0]))
+
+        def add_remote_summary(reduced: torch.Tensor) -> None:
+            reduced.add_(
+                torch.tensor(
+                    [1.0, 2.0, 1.0, 10.0**0.5],
+                    dtype=torch.float64,
+                )
+            )
+
+        with (
+            patch.object(torch.distributed, "is_available", return_value=True),
+            patch.object(torch.distributed, "is_initialized", return_value=True),
+            patch.object(
+                torch.distributed,
+                "all_reduce",
+                side_effect=add_remote_summary,
+            ),
+        ):
+            summary = _LinearDiagnostics.distributed_optional_summary(
+                local,
+                reference=torch.zeros(1),
+            )
+
+        self.assertIsNotNone(summary)
+        self.assertAlmostEqual(summary.mean.item(), 2.0, places=6)
+        self.assertAlmostEqual(summary.variance.item(), 1.0, places=6)
+        self.assertAlmostEqual(summary.norm.item(), 10.0**0.5, places=6)
+
+    def test_distributed_summaries_remain_absent_when_no_rank_contributes(self):
+        def gather_local_state(
+            gathered: list[torch.Tensor],
+            local_state: torch.Tensor,
+        ) -> None:
+            gathered[0].copy_(local_state)
+
+        with (
+            patch.object(torch.distributed, "is_available", return_value=True),
+            patch.object(torch.distributed, "is_initialized", return_value=True),
+            patch.object(torch.distributed, "get_world_size", return_value=1),
+            patch.object(
+                torch.distributed,
+                "all_gather",
+                side_effect=gather_local_state,
+            ),
+            patch.object(torch.distributed, "all_reduce"),
+        ):
+            activation_summary = _LinearDiagnostics.distributed_moments_summary(
+                None,
+                reference=torch.zeros(1),
+            )
+            gradient_summary = _LinearDiagnostics.distributed_optional_summary(
+                None,
+                reference=torch.zeros(1),
+            )
+
+        self.assertIsNone(activation_summary)
+        self.assertIsNone(gradient_summary)
 
 class TestLinearMonitorCallback(unittest.TestCase):
     def test_init_uses_safe_monitoring_defaults(self):
@@ -874,6 +1061,43 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertIsNone(callback._discovery_hook)
         self.assertEqual(len(module.linear._forward_hooks), 0)
 
+    def test_every_metric_requests_distributed_synchronization(self):
+        module = build_module(input_dim=1, output_dim=1)
+        callback = LinearMonitorCallback(
+            log_every_n_steps=1,
+            log_weight_conditioning=True,
+        )
+        trainer = FakeTrainer()
+
+        callback.on_fit_start(trainer, module)
+        module.linear(torch.ones(1, 1)).sum().backward()
+        complete_optimizer_step(callback, trainer, module)
+
+        self.assertTrue(module.logged_options)
+        self.assertTrue(
+            all(options.get("sync_dist") is True for options in module.logged_options)
+        )
+        callback.on_fit_end(trainer, module)
+
+    @unittest.skipUnless(
+        torch.distributed.is_available() and torch.distributed.is_gloo_available(),
+        "gloo process group support is required",
+    )
+    def test_distributed_optional_channels_emit_identically_on_every_rank(self):
+        world_size = 2
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            init_file = os.path.join(temporary_directory, "process_group_init")
+            try:
+                torch.multiprocessing.spawn(
+                    _distributed_monitor_worker,
+                    args=(world_size, init_file),
+                    nprocs=world_size,
+                    join=True,
+                )
+            except ProcessRaisedException as error:
+                if "Operation not permitted" in str(error):
+                    self.skipTest("loopback sockets are blocked in this environment")
+                raise
 
 
 if __name__ == "__main__":
