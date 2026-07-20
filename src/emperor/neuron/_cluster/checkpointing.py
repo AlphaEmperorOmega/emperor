@@ -90,6 +90,13 @@ class _NeuronClusterCheckpointingMixin:
         return True
 
     def __reconcile_neurons(self, incoming_neuron_names: tuple[str, ...]) -> None:
+        incoming_neuron_name_set = set(incoming_neuron_names)
+        self._checkpoint_removed_parameter_ids.update(
+            id(parameter)
+            for neuron_name, neuron in self.cluster.items()
+            if neuron_name not in incoming_neuron_name_set
+            for parameter in neuron.parameters()
+        )
         missing_neuron_names = tuple(
             neuron_name
             for neuron_name in incoming_neuron_names

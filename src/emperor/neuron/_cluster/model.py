@@ -136,6 +136,7 @@ class NeuronCluster(
         self.entry_sampler = self.__build_entry_sampler()
         self.halting_model = self.__build_halting_model()
         self._growth_counters_are_global = False
+        self._checkpoint_removed_parameter_ids: set[int] = set()
         self.register_load_state_dict_pre_hook(self._reconcile_cluster_with_state_dict)
         self.register_load_state_dict_post_hook(
             self._mark_growth_counters_global_after_load

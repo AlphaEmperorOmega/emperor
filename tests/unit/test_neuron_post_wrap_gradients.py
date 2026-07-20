@@ -89,10 +89,11 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
         )
 
     def test_callback_forwards_only_parameters_added_after_fit_start(self) -> None:
-        initial_parameter = nn.Parameter(torch.tensor([1.0]))
-        grown_parameter = nn.Parameter(torch.tensor([2.0]))
         cluster = nn.Module()
-        cluster.cluster = nn.ParameterDict({"initial": initial_parameter})
+        cluster.cluster = nn.ModuleDict(
+            {"neuron_0_0_0": nn.Linear(1, 1, bias=False)}
+        )
+        cluster._checkpoint_removed_parameter_ids = set()
         host = nn.Module()
         host.cluster = cluster
         optimizer = torch.optim.SGD(cluster.parameters(), lr=0.1)
@@ -103,7 +104,8 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
         )
 
         callback.on_fit_start(trainer, host)
-        cluster.cluster["grown"] = grown_parameter
+        grown_neuron = nn.Linear(1, 1, bias=False)
+        cluster.cluster["neuron_1_0_0"] = grown_neuron
         callback.sync_optimizers(trainer, host)
 
         with patch(
@@ -114,5 +116,5 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
         average.assert_called_once_with(
             host,
             optimizer,
-            {id(grown_parameter)},
+            {id(grown_neuron.weight)},
         )
