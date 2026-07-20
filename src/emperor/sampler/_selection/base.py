@@ -38,7 +38,6 @@ class SamplerBase(Module):
         self.switch_loss_weight = self.cfg.switch_loss_weight
         self.zero_centred_loss_weight = self.cfg.zero_centred_loss_weight
         self.mutual_information_loss_weight = self.cfg.mutual_information_loss_weight
-        self._prepare_for_validation()
         self.VALIDATOR.validate(self)
 
         self.noise_epsilon = 1e-2
@@ -82,9 +81,6 @@ class SamplerBase(Module):
             updated_skip_mask,
             auxiliary_loss,
         )
-
-    def _prepare_for_validation(self) -> None:
-        pass
 
     def set_updated_skip_mask(self, updated_skip_mask: Tensor | None) -> None:
         self.updated_skip_mask = updated_skip_mask
