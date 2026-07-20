@@ -22,6 +22,7 @@ from emperor.layers import (
     LayerGateOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
+    ResidualConfig,
     ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
@@ -141,9 +142,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         ),
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        stack_residual_connection_option: ResidualConnectionOptions | None = None,
         stack_dropout_probability: float = 0.2,
         shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
@@ -174,7 +173,9 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=output_dim,
                     activation=stack_activation,
                     layer_norm_position=layer_norm_position,
-                    residual_connection_option=stack_residual_connection_option,
+                    residual_config=None
+                    if stack_residual_connection_option is None
+                    else ResidualConfig(option=stack_residual_connection_option),
                     dropout_probability=stack_dropout_probability,
                     gate_config=gate_config,
                     halting_config=halting_config,
@@ -203,7 +204,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=dim,
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
@@ -237,7 +238,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=dim,
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
@@ -333,7 +334,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         halting_config = StickBreakingConfig(
             input_dim=12,
             threshold=0.99,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=12,
@@ -347,7 +348,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=12,
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
@@ -368,7 +369,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         shared_halting_config = StickBreakingConfig(
             input_dim=dim,
             threshold=0.99,
-            halting_dropout=0.0,
+            dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
                 input_dim=dim,
@@ -382,7 +383,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                     output_dim=dim,
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
