@@ -480,29 +480,29 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             )
 
         try:
-            owner = halting_config._registry_owner()
-        except NotImplementedError as exc:
+            halting_model_type = halting_config._registry_owner()
+        except NotImplementedError as registry_error:
             raise ValueError(
                 "halting_config must be a concrete halting config for "
                 "NeuronClusterConfig"
-            ) from exc
+            ) from registry_error
 
         from emperor.halting import HaltingBase
 
         implements_halting_interface = (
-            isinstance(owner, type)
-            and issubclass(owner, HaltingBase)
-            and owner.implements_halting_interface()
+            isinstance(halting_model_type, type)
+            and issubclass(halting_model_type, HaltingBase)
+            and halting_model_type.implements_halting_interface()
         )
         if not implements_halting_interface:
-            owner_name = (
-                owner.__name__
-                if isinstance(owner, type)
-                else type(owner).__name__
+            halting_model_name = (
+                halting_model_type.__name__
+                if isinstance(halting_model_type, type)
+                else type(halting_model_type).__name__
             )
             raise ValueError(
                 f"halting_config {type(halting_config).__name__} builds "
-                f"{owner_name}, which does not implement the HaltingBase "
+                f"{halting_model_name}, which does not implement the HaltingBase "
                 "lifecycle required by NeuronCluster"
             )
 
@@ -522,7 +522,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         resolved_halting_config.input_dim = terminal_input_dim
         if resolved_halting_config.threshold is None:
             resolved_halting_config.threshold = halting_config.DEFAULT_THRESHOLD
-        owner.validate_resolved_config(resolved_halting_config)
+        halting_model_type.validate_resolved_config(resolved_halting_config)
 
     @staticmethod
     def validate_nucleus_model_dimensions(cfg: "NeuronClusterConfig") -> None:
