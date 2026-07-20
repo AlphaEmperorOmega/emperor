@@ -265,12 +265,29 @@ class _NeuronClusterPlasticityMixin:
         grown_neuron: Module,
         parent_neuron: Module,
     ) -> Module:
+        grown_parameters = dict(grown_neuron.named_parameters(remove_duplicate=False))
+        parent_parameters = dict(parent_neuron.named_parameters(remove_duplicate=False))
+        if grown_parameters.keys() != parent_parameters.keys():
+            raise RuntimeError(
+                "Mitosis initialization requires the grown and parent neurons "
+                "to expose the same parameter roles."
+            )
+
+        copied_sources_by_grown_parameter_id: dict[int, int] = {}
         with torch.no_grad():
-            for grown_parameter, parent_parameter in zip(
-                grown_neuron.parameters(),
-                parent_neuron.parameters(),
-                strict=True,
-            ):
+            for parameter_name, grown_parameter in grown_parameters.items():
+                parent_parameter = parent_parameters[parameter_name]
+                grown_parameter_id = id(grown_parameter)
+                existing_source_parameter_id = copied_sources_by_grown_parameter_id.get(
+                    grown_parameter_id
+                )
+                if existing_source_parameter_id is not None:
+                    if existing_source_parameter_id != id(parent_parameter):
+                        raise RuntimeError(
+                            "Mitosis initialization cannot copy distinct parent "
+                            "parameter roles into one tied grown parameter."
+                        )
+                    continue
                 grown_parameter.copy_(parent_parameter)
                 perturbation_std = parent_parameter.float().std(correction=0)
                 if perturbation_std > 1e-6:
@@ -279,6 +296,9 @@ class _NeuronClusterPlasticityMixin:
                         * perturbation_std.to(grown_parameter.dtype)
                         * 0.01
                     )
+                copied_sources_by_grown_parameter_id[grown_parameter_id] = id(
+                    parent_parameter
+                )
         return grown_neuron
 
     def _check_neuron_atrophy(self) -> None:
