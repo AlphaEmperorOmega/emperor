@@ -7,16 +7,30 @@ from lightning.pytorch.callbacks import Callback
 from torch import nn
 from torch.optim import Optimizer
 
+from emperor.neuron._distributed_gradients import configure_conditional_ddp_strategy
+
 if TYPE_CHECKING:
     from lightning import LightningModule, Trainer
 
 
 class NeuronClusterOptimizerSyncCallback(Callback):
+    """Keep dynamic parameters synchronized and configure conditional DDP."""
+
     def __init__(self) -> None:
         super().__init__()
         self._clusters: list[nn.Module] = []
         self._synced_neuron_names: dict[int, set[str]] = {}
         self._synced_param_ids: dict[int, set[int]] = {}
+
+    def setup(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        stage: str,
+    ) -> None:
+        if stage != "fit":
+            return
+        configure_conditional_ddp_strategy(trainer.strategy)
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self._clusters = self.__find_neuron_clusters(pl_module)
