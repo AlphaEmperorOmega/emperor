@@ -25,8 +25,7 @@ class _NeuronClusterCheckpointingMixin:
             error_msgs,
         ):
             return
-        self.__rebuild_grown_neurons(incoming_neuron_names)
-        self.__remove_pruned_neurons(incoming_neuron_names)
+        self.__reconcile_neurons(incoming_neuron_names)
         self.__seed_missing_atrophy_counters(state_dict, cluster_prefix)
         self.__seed_missing_growth_budget_buffers(state_dict, prefix)
         self.__register_warmup_buffers_for_incoming_keys(state_dict, cluster_prefix)
@@ -36,19 +35,19 @@ class _NeuronClusterCheckpointingMixin:
         self,
         state_dict,
         cluster_prefix: str,
-    ) -> set[str]:
-        incoming_neuron_names = set()
+    ) -> tuple[str, ...]:
+        incoming_neuron_names: dict[str, None] = {}
         for key in state_dict:
             if not key.startswith(cluster_prefix):
                 continue
             neuron_name = key[len(cluster_prefix) :].split(".", 1)[0]
             if self._is_neuron_name(neuron_name):
-                incoming_neuron_names.add(neuron_name)
-        return incoming_neuron_names
+                incoming_neuron_names.setdefault(neuron_name, None)
+        return tuple(incoming_neuron_names)
 
     def __validate_incoming_topology(
         self,
-        incoming_neuron_names: set[str],
+        incoming_neuron_names: tuple[str, ...],
         error_msgs: list[str],
     ) -> bool:
         noncanonical_names = sorted(
@@ -80,7 +79,7 @@ class _NeuronClusterCheckpointingMixin:
             for coordinate_row in self.entry_coordinates.detach().cpu().tolist()
         }
         missing_entry_neuron_names = sorted(
-            entry_neuron_names - incoming_neuron_names
+            entry_neuron_names - set(incoming_neuron_names)
         )
         if missing_entry_neuron_names:
             error_msgs.append(
@@ -90,20 +89,30 @@ class _NeuronClusterCheckpointingMixin:
             return False
         return True
 
-    def __rebuild_grown_neurons(self, incoming_neuron_names: set[str]) -> None:
-        for neuron_name in sorted(incoming_neuron_names):
-            if neuron_name in self.cluster:
-                continue
-            self._add_neuron(
-                self.cluster,
-                neuron_name,
-                self._initialize_neuron(*self._parse_neuron_name(neuron_name)),
+    def __reconcile_neurons(self, incoming_neuron_names: tuple[str, ...]) -> None:
+        missing_neuron_names = tuple(
+            neuron_name
+            for neuron_name in incoming_neuron_names
+            if neuron_name not in self.cluster
+        )
+        reconstructed_neurons = {
+            neuron_name: self._initialize_neuron(
+                *self._parse_neuron_name(neuron_name)
             )
-
-    def __remove_pruned_neurons(self, incoming_neuron_names: set[str]) -> None:
-        for neuron_name in list(self.cluster.keys()):
-            if neuron_name not in incoming_neuron_names:
-                del self.cluster[neuron_name]
+            for neuron_name in missing_neuron_names
+        }
+        checkpoint_ordered_neurons = [
+            (
+                neuron_name,
+                self.cluster[neuron_name]
+                if neuron_name in self.cluster
+                else reconstructed_neurons[neuron_name],
+            )
+            for neuron_name in incoming_neuron_names
+        ]
+        self.cluster.clear()
+        for neuron_name, neuron in checkpoint_ordered_neurons:
+            self._add_neuron(self.cluster, neuron_name, neuron)
 
     def __seed_missing_atrophy_counters(
         self,

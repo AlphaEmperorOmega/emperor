@@ -117,3 +117,18 @@ class TestNeuronCheckpointTopologyValidation(unittest.TestCase):
 
                 self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
                 self.assertIs(model.cluster["neuron_1_1_1"], original_neuron)
+
+
+class TestNeuronCheckpointTopologyReconciliation(unittest.TestCase):
+    def test_load_restores_saved_order_without_replacing_existing_neurons(self) -> None:
+        source = _CheckpointCluster(("neuron_2_1_1", "neuron_1_1_1"), capacity=3)
+        target = _CheckpointCluster(("neuron_1_1_1", "neuron_3_1_1"), capacity=3)
+        existing_entry_neuron = target.cluster["neuron_1_1_1"]
+
+        target.load_state_dict(source.state_dict(), strict=True)
+
+        self.assertEqual(
+            tuple(target.cluster),
+            ("neuron_2_1_1", "neuron_1_1_1"),
+        )
+        self.assertIs(target.cluster["neuron_1_1_1"], existing_entry_neuron)
