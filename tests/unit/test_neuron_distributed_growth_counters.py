@@ -13,6 +13,12 @@ _SYNC_BATCH_COUNTERS = (
 _SYNC_ESCAPE_COUNTS = (
     "_NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks"
 )
+_FIND_GROWTH_POSITION = (
+    "_NeuronClusterPlasticityMixin__find_closest_empty_connection"
+)
+_INITIALIZE_GROWN_NEURON = (
+    "_NeuronClusterPlasticityMixin__initialize_grown_neuron_with_synchronized_rng"
+)
 
 
 class _CounterNeuron(nn.Module):
@@ -145,3 +151,35 @@ class TestDistributedNeuronGrowthCounters(unittest.TestCase):
             model(input_batch)
 
         check_growth.assert_called_once_with(baseline)
+
+
+class TestNeuronGrowthCounterTransactions(unittest.TestCase):
+    def test_failed_growth_preserves_the_saturated_counter(self) -> None:
+        plasticity = _NeuronClusterPlasticityMixin()
+        saturated_neuron = _CounterNeuron(batch_counter=5)
+        plasticity.growth_threshold = 1
+        plasticity.cluster = nn.ModuleDict({"neuron_1_1_1": saturated_neuron})
+        plasticity.escape_counts = None
+        plasticity.total_growth_count = None
+        plasticity.forwards_since_last_growth = None
+        plasticity._growth_counters_are_global = False
+        plasticity._neurons_called_this_forward = set()
+        plasticity._neuron_name = lambda x, y, z: f"neuron_{x}_{y}_{z}"
+        plasticity._add_neuron = lambda _cluster, _name, _neuron: None
+
+        with (
+            patch.object(
+                plasticity,
+                _FIND_GROWTH_POSITION,
+                return_value=(2, 1, 1),
+            ),
+            patch.object(
+                plasticity,
+                _INITIALIZE_GROWN_NEURON,
+                side_effect=RuntimeError("initializer failed"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "initializer failed"),
+        ):
+            plasticity._check_neuron_growth(None)
+
+        self.assertEqual(int(saturated_neuron.batch_counter), 5)

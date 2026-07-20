@@ -62,7 +62,6 @@ class _NeuronClusterPlasticityMixin:
             if position is None:
                 continue
 
-            neuron.batch_counter.zero_()
             x, y, z = position
             new_name = self._neuron_name(x, y, z)
             self._add_neuron(
@@ -79,6 +78,7 @@ class _NeuronClusterPlasticityMixin:
             self.__reset_escape_count(position)
             self.__record_successful_growth()
             self._neurons_called_this_forward.add(new_name)
+            neuron.batch_counter.zero_()
             return
 
     def __start_grown_neuron_warmup(self, neuron: Module) -> None:
