@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -78,6 +79,35 @@ class PortableLauncherTests(unittest.TestCase):
             emperor_dev._run_venv(["-P", "-c", "import emperor_workbench"])
 
         self.assertNotIn("PYTHONPATH", run.call_args.kwargs["env"])
+
+    def test_workbench_status_trusts_the_checkout_when_already_in_venv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = {
+                key: value for key, value in os.environ.items() if key != "PYTHONPATH"
+            }
+            environment.update(
+                {
+                    "PYTHONSAFEPATH": "1",
+                    "WORKBENCH_RUNTIME_ROOT": temporary,
+                }
+            )
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "-P",
+                    str(PROJECT_ROOT / "tools" / "emperor_dev.py"),
+                    "workbench",
+                    "status",
+                ],
+                cwd=PROJECT_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.count("stopped"), 2)
 
     def test_runtime_subcommands_forward_help_instead_of_consuming_it(self) -> None:
         for command in ("experiment", "test", "logs-archive", "python"):
