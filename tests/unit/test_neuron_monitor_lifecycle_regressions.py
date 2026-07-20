@@ -142,3 +142,37 @@ class TestNeuronMonitorStepCadence(unittest.TestCase):
 
         self.assertEqual(len(tracked_contexts), 1)
         self.assertIsNotNone(tracked_contexts[0].observation)
+
+
+class TestNeuronMonitorTopologyEvents(unittest.TestCase):
+    def test_changes_between_emissions_are_accumulated(self) -> None:
+        cluster = _cluster_stub()
+        cluster.cluster["a"] = nn.Identity()
+        host = _ClusterHost(cluster=cluster)
+        callback = NeuronClusterMonitorCallback(log_every_n_steps=3)
+        callback.on_fit_start(trainer=None, pl_module=host)
+        tracked_contexts = []
+
+        try:
+            with patch.object(
+                callback,
+                "_NeuronClusterMonitorCallback__track_neuron_cluster_diagnostics",
+                side_effect=tracked_contexts.append,
+            ):
+                cluster.cluster["b"] = nn.Identity()
+                host.global_step = 1
+                callback.on_train_batch_end(None, host, None, None, 0)
+
+                del cluster.cluster["a"]
+                cluster.cluster["c"] = nn.Identity()
+                host.global_step = 2
+                callback.on_train_batch_end(None, host, None, None, 1)
+
+                host.global_step = 3
+                callback.on_train_batch_end(None, host, None, None, 2)
+        finally:
+            callback.on_fit_end(trainer=None, pl_module=host)
+
+        self.assertEqual(len(tracked_contexts), 1)
+        self.assertEqual(tracked_contexts[0].growth_events, 2.0)
+        self.assertEqual(tracked_contexts[0].pruning_events, 1.0)

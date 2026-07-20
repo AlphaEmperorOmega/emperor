@@ -77,6 +77,8 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_observation_steps: dict[str, int] = {}
         self._survival_history: dict[str, MonitorTensorHistory] = {}
         self._previous_neuron_names: dict[str, set[str]] = {}
+        self._pending_growth_events: dict[str, int] = {}
+        self._pending_pruning_events: dict[str, int] = {}
         self._emission_policy = MonitorEmissionPolicy()
         self._last_emitted_step = 0
 
@@ -107,6 +109,8 @@ class NeuronClusterMonitorCallback(Callback):
                     normalization="unit_interval",
                 )
                 self._previous_neuron_names[module_name] = set(cluster.cluster)
+                self._pending_growth_events[module_name] = 0
+                self._pending_pruning_events[module_name] = 0
                 if cluster.beam_width == 1:
                     self.__wrap_cluster_forward(module_name, cluster, pl_module)
         except Exception:
@@ -177,6 +181,7 @@ class NeuronClusterMonitorCallback(Callback):
         batch: object,
         batch_idx: int,
     ) -> None:
+        self.__observe_topology_events()
         global_step = getattr(pl_module, "global_step", 0)
         if (
             global_step <= self._last_emitted_step
@@ -190,7 +195,25 @@ class NeuronClusterMonitorCallback(Callback):
                 cluster,
             )
             self.__track_neuron_cluster_diagnostics(context)
+            self._pending_growth_events[module_name] = 0
+            self._pending_pruning_events[module_name] = 0
         self._last_emitted_step = global_step
+
+    def __observe_topology_events(self) -> None:
+        for module_name, cluster in self._clusters:
+            current_neuron_names = set(cluster.cluster)
+            previous_neuron_names = self._previous_neuron_names.get(
+                module_name,
+                current_neuron_names,
+            )
+            self._pending_growth_events[module_name] = self._pending_growth_events.get(
+                module_name, 0
+            ) + len(current_neuron_names - previous_neuron_names)
+            self._pending_pruning_events[module_name] = (
+                self._pending_pruning_events.get(module_name, 0)
+                + len(previous_neuron_names - current_neuron_names)
+            )
+            self._previous_neuron_names[module_name] = current_neuron_names
 
     def __build_tracking_context(
         self,
@@ -204,12 +227,6 @@ class NeuronClusterMonitorCallback(Callback):
             * cluster.y_axis_total_neurons
             * cluster.z_axis_total_neurons
         )
-        current_neuron_names = set(cluster.cluster)
-        previous_neuron_names = self._previous_neuron_names.get(
-            module_name,
-            current_neuron_names,
-        )
-        self._previous_neuron_names[module_name] = current_neuron_names
         observation_step = self._latest_observation_steps.get(module_name)
         observation = (
             self._latest_observations.pop(module_name, None)
@@ -229,8 +246,8 @@ class NeuronClusterMonitorCallback(Callback):
             cluster=cluster,
             neuron_count=neuron_count,
             capacity=capacity,
-            growth_events=float(len(current_neuron_names - previous_neuron_names)),
-            pruning_events=float(len(previous_neuron_names - current_neuron_names)),
+            growth_events=float(self._pending_growth_events.get(module_name, 0)),
+            pruning_events=float(self._pending_pruning_events.get(module_name, 0)),
             growth_pressure=self.__counter_pressure(
                 cluster,
                 "batch_counter",
@@ -620,5 +637,7 @@ class NeuronClusterMonitorCallback(Callback):
         self._latest_observation_steps.clear()
         self._survival_history.clear()
         self._previous_neuron_names.clear()
+        self._pending_growth_events.clear()
+        self._pending_pruning_events.clear()
         self._emission_policy.clear()
         self._last_emitted_step = 0
