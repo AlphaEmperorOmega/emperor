@@ -20,6 +20,11 @@ class _NeuronClusterCheckpointingMixin:
         )
         if not incoming_neuron_names:
             return
+        if not self.__validate_incoming_topology(
+            incoming_neuron_names,
+            error_msgs,
+        ):
+            return
         self.__rebuild_grown_neurons(incoming_neuron_names)
         self.__remove_pruned_neurons(incoming_neuron_names)
         self.__seed_missing_atrophy_counters(state_dict, cluster_prefix)
@@ -40,6 +45,50 @@ class _NeuronClusterCheckpointingMixin:
             if self._is_neuron_name(neuron_name):
                 incoming_neuron_names.add(neuron_name)
         return incoming_neuron_names
+
+    def __validate_incoming_topology(
+        self,
+        incoming_neuron_names: set[str],
+        error_msgs: list[str],
+    ) -> bool:
+        noncanonical_names = sorted(
+            neuron_name
+            for neuron_name in incoming_neuron_names
+            if neuron_name != self._neuron_name(*self._parse_neuron_name(neuron_name))
+        )
+        if noncanonical_names:
+            error_msgs.append(
+                "NeuronCluster checkpoint topology contains non-canonical neuron "
+                f"names: {noncanonical_names}."
+            )
+            return False
+
+        invalid_names = sorted(
+            neuron_name
+            for neuron_name in incoming_neuron_names
+            if not self._is_within_grid_capacity(self._parse_neuron_name(neuron_name))
+        )
+        if invalid_names:
+            error_msgs.append(
+                "NeuronCluster checkpoint topology contains neurons outside the "
+                f"configured cluster capacity: {invalid_names}."
+            )
+            return False
+
+        entry_neuron_names = {
+            self._neuron_name(*self._coordinate_from_row(coordinate_row))
+            for coordinate_row in self.entry_coordinates.detach().cpu().tolist()
+        }
+        missing_entry_neuron_names = sorted(
+            entry_neuron_names - incoming_neuron_names
+        )
+        if missing_entry_neuron_names:
+            error_msgs.append(
+                "NeuronCluster checkpoint topology is missing configured "
+                f"entry-plane neurons: {missing_entry_neuron_names}."
+            )
+            return False
+        return True
 
     def __rebuild_grown_neurons(self, incoming_neuron_names: set[str]) -> None:
         for neuron_name in sorted(incoming_neuron_names):
