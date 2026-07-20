@@ -1,11 +1,13 @@
 import unittest
 
-from emperor.base.config import ConfigBase
-from emperor.base.layer._validator import LayerValidator
-from emperor.base.layer.config import LayerConfig
-from emperor.base.layer.layer import Layer
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
+from emperor.config import ConfigBase
+from emperor.layers import (
+    ActivationOptions,
+    Layer,
+    LayerConfig,
+    LayerNormPositionOptions,
+)
+from emperor.layers._validation import LayerValidator
 
 
 def make_config(**overrides) -> LayerConfig:
@@ -13,7 +15,7 @@ def make_config(**overrides) -> LayerConfig:
         "input_dim": 3,
         "output_dim": 3,
         "activation": ActivationOptions.DISABLED,
-        "residual_connection_option": ResidualConnectionOptions.DISABLED,
+        "residual_config": None,
         "dropout_probability": 0.0,
         "layer_norm_position": LayerNormPositionOptions.DISABLED,
         "gate_config": None,

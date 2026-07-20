@@ -1,13 +1,15 @@
 import unittest
 
 import torch
-from emperor.base.config import ConfigBase
-from emperor.base.layer._validator import RecurrentLayerValidator
-from emperor.base.layer.config import RecurrentLayerConfig
-from emperor.base.layer.recurrent import RecurrentLayer
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.layer.state import LayerState
-from emperor.base.options import LayerNormPositionOptions
+
+from emperor.config import ConfigBase
+from emperor.layers import (
+    LayerNormPositionOptions,
+    LayerState,
+    RecurrentLayerConfig,
+)
+from emperor.layers._recurrent import RecurrentLayer
+from emperor.layers._validation import RecurrentLayerValidator
 
 
 def make_config(**overrides) -> RecurrentLayerConfig:
@@ -18,7 +20,7 @@ def make_config(**overrides) -> RecurrentLayerConfig:
         "recurrent_layer_norm_position": LayerNormPositionOptions.DISABLED,
         "block_config": ConfigBase(),
         "gate_config": None,
-        "residual_connection_option": ResidualConnectionOptions.DISABLED,
+        "residual_config": None,
         "halting_config": None,
         "memory_config": None,
     }
