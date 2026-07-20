@@ -1,11 +1,9 @@
 import unittest
 
 import torch
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.linears.core.layers import LinearLayer
-from emperor.linears.core.monitor import LinearMonitorCallback
 from torch import nn
 
+from emperor.linears import LinearLayer, LinearLayerConfig, LinearMonitorCallback
 from support.monitor import orchestration_calls
 
 
@@ -89,10 +87,30 @@ class TestLinearMonitorCallback(unittest.TestCase):
             ),
         )
 
-    def test_init_rejects_non_positive_log_interval(self):
-        for bad in (0, -1):
-            with self.assertRaises(ValueError):
-                LinearMonitorCallback(log_every_n_steps=bad)
+    def test_init_rejects_invalid_options(self):
+        for bad_interval in (True, 1.5, float("nan"), float("inf")):
+            with self.subTest(log_every_n_steps=bad_interval):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "log_every_n_steps must be an int",
+                ):
+                    LinearMonitorCallback(log_every_n_steps=bad_interval)
+
+        for bad_interval in (0, -1):
+            with self.subTest(log_every_n_steps=bad_interval):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "log_every_n_steps must be greater than 0",
+                ):
+                    LinearMonitorCallback(log_every_n_steps=bad_interval)
+
+        for bad_flag in (0, 1, "false", None):
+            with self.subTest(log_weight_conditioning=bad_flag):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "log_weight_conditioning must be a bool",
+                ):
+                    LinearMonitorCallback(log_weight_conditioning=bad_flag)
 
     def test_gradient_stats_are_finite_with_zero_weights(self):
         module = build_module(global_step=0)

@@ -33,8 +33,14 @@ class LinearMonitorCallback(Callback):
         log_weight_conditioning: bool = True,
     ) -> None:
         super().__init__()
+        if isinstance(log_every_n_steps, bool) or not isinstance(
+            log_every_n_steps, int
+        ):
+            raise TypeError("log_every_n_steps must be an int.")
         if log_every_n_steps <= 0:
             raise ValueError("log_every_n_steps must be greater than 0.")
+        if not isinstance(log_weight_conditioning, bool):
+            raise TypeError("log_weight_conditioning must be a bool.")
         self.log_every_n_steps = log_every_n_steps
         self.log_weight_conditioning = log_weight_conditioning
         self._hooks: list[RemovableHandle] = []
