@@ -189,6 +189,34 @@ source "$1" --workbench-stop
             ["mise-call:run workbench:stop"],
         )
 
+    def test_unix_workbench_start_is_atomic_across_setup(self) -> None:
+        script = """
+mise() {
+  printf 'mise-call:%s\\n' "$*"
+  if [ "$1" = "run" ] && [ "$2" = "setup" ]; then
+    printf 'Setup ready: probe\\n'
+    return 23
+  fi
+}
+export -f mise
+env_script="$1"
+set --
+source "$env_script"
+"""
+        completed = subprocess.run(
+            ["bash", "-c", script, "bash", str(PROJECT_ROOT / "env.sh")],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            ["mise-call:run dev --profile cpu"],
+        )
+
     def test_powershell_wrapper_exposes_status_and_stop_switches(self) -> None:
         source = (PROJECT_ROOT / "env.ps1").read_text(encoding="utf-8")
         self.assertIn("[switch]$WorkbenchStatus", source)
