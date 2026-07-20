@@ -86,7 +86,7 @@ def _effective_overrides_for_search(
     }
     filtered: dict[str, Any] = {}
     for raw_key, raw_value in overrides.items():
-        canonical_key, _legacy_residual_flag = resolve_override_key(
+        canonical_key = resolve_override_key(
             normalize_key(str(raw_key)),
             supported,
         )
