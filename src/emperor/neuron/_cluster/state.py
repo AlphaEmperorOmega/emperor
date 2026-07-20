@@ -1,10 +1,10 @@
-import copy
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
 
+from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
 from emperor.neuron._trace import NeuronClusterTrace
 
 if TYPE_CHECKING:
@@ -105,16 +105,13 @@ class _NeuronClusterStateMixin:
         weighted_candidate: Tensor,
         update_mask: Tensor,
     ) -> "HaltingStateBase | None":
-        if self.halting_model is None or not bool(update_mask.any().item()):
-            return previous_state
-
-        halting_input = current_hidden.clone()
-        halting_input[update_mask] = weighted_candidate[update_mask]
-        halting_state, _ = self.halting_model.update_halting_state(
+        return _NeuronHaltingLifecycle.update(
+            self.halting_model,
             previous_state,
-            halting_input,
+            current_hidden,
+            weighted_candidate,
+            update_mask,
         )
-        return halting_state
 
     def _maybe_finalize_cluster_halting(
         self,
@@ -123,17 +120,19 @@ class _NeuronClusterStateMixin:
         if self.halting_model is None or route_state.halting_state is None:
             return route_state
 
-        hidden, ponder_loss = self.halting_model.finalize_weighted_accumulation(
+        finalized_hidden, ponder_loss = _NeuronHaltingLifecycle.finalize(
+            self.halting_model,
             route_state.halting_state,
             route_state.hidden,
+            route_state.beam_scores,
         )
-        hidden = torch.where(
+        finalized_hidden = torch.where(
             route_state.final_mask.unsqueeze(-1),
             route_state.hidden,
-            hidden,
+            finalized_hidden,
         )
         return NeuronClusterRouteState(
-            hidden=hidden,
+            hidden=finalized_hidden,
             positions=route_state.positions,
             active_mask=route_state.active_mask,
             escaped_mask=route_state.escaped_mask,
@@ -141,17 +140,11 @@ class _NeuronClusterStateMixin:
             halting_state=route_state.halting_state,
             loss=self._accumulate_auxiliary_loss(
                 route_state.loss,
-                self.__reduce_ponder_loss(ponder_loss),
+                ponder_loss,
             ),
             trace=route_state.trace,
             beam_scores=route_state.beam_scores,
         )
-
-    def __reduce_ponder_loss(self, ponder_loss: Tensor) -> Tensor:
-        if ponder_loss.dim() == 0:
-            return ponder_loss
-        denominator = float(max(ponder_loss.numel(), 1))
-        return ponder_loss.sum() / denominator
 
     def _group_indices_by_position(
         self,
@@ -181,15 +174,7 @@ class _NeuronClusterStateMixin:
         self,
         halting_state: "HaltingStateBase | None",
     ) -> Tensor | None:
-        if halting_state is None:
-            return None
-        halt_mask = getattr(halting_state, "halt_mask", None)
-        if halt_mask is None:
-            return None
-        halt_mask = halt_mask.bool()
-        if halt_mask.dim() == 1:
-            return halt_mask
-        return halt_mask.reshape(halt_mask.shape[0], -1).all(dim=1)
+        return _NeuronHaltingLifecycle.halt_mask(halting_state)
 
     def _halt_mask_tensor(
         self,
@@ -197,10 +182,11 @@ class _NeuronClusterStateMixin:
         batch_size: int,
         device: torch.device,
     ) -> Tensor:
-        halt_mask = self._get_halt_mask(halting_state)
-        if halt_mask is None:
-            return torch.zeros(batch_size, dtype=torch.bool, device=device)
-        return halt_mask
+        return _NeuronHaltingLifecycle.halt_mask_tensor(
+            halting_state,
+            batch_size,
+            device,
+        )
 
     def _detach_trace_tensor(self, tensor: Tensor) -> Tensor:
         return tensor.detach().clone()
@@ -210,15 +196,7 @@ class _NeuronClusterStateMixin:
         halting_state: "HaltingStateBase | None",
         row_indices: Tensor,
     ) -> "HaltingStateBase | None":
-        if halting_state is None:
-            return None
-        gathered = copy.copy(halting_state)
-        row_count = row_indices.shape[0]
-        for attribute_name, value in vars(halting_state).items():
-            if (
-                isinstance(value, Tensor)
-                and value.dim() >= 1
-                and value.shape[0] == row_count
-            ):
-                setattr(gathered, attribute_name, value.index_select(0, row_indices))
-        return gathered
+        return _NeuronHaltingLifecycle.gather_state_rows(
+            halting_state,
+            row_indices,
+        )
