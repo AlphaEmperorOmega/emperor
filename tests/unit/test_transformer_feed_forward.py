@@ -1,18 +1,17 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
 
-from emperor.base.options import (
+import torch
+
+from emperor.experts import RoutingInitializationMode
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.experts.core.options import RoutingInitializationMode
-from emperor.transformer.feed_forward.core.config import FeedForwardConfig
-from emperor.transformer.feed_forward.core.layers import FeedForward
-
+from emperor.linears import LinearLayerConfig
+from emperor.transformer import FeedForward, FeedForwardConfig
 from unit.test_experts import MixtureOfExpertsPresetMixin
 
 
@@ -26,10 +25,11 @@ class TestFeedForward(unittest.TestCase):
         dropout_probability: float = 0.0,
         bias_flag: bool = True,
         activation: ActivationOptions = ActivationOptions.RELU,
-        layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
+        layer_norm_position: LayerNormPositionOptions = (
+            LayerNormPositionOptions.DISABLED
+        ),
         stack_config: "LayerStackConfig | None" = None,
     ) -> FeedForwardConfig:
-
         if stack_config is None:
             stack_config = LayerStackConfig(
                 input_dim=input_dim,
@@ -41,7 +41,7 @@ class TestFeedForward(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=activation,
                     layer_norm_position=layer_norm_position,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -114,7 +114,9 @@ class TestFeedForwardWithMixtureOfExperts(
         num_layers: int = 2,
         experts_top_k: int = 2,
         experts_num_experts: int = 4,
-        experts_routing_initialization_mode: RoutingInitializationMode = RoutingInitializationMode.LAYER,
+        experts_routing_initialization_mode: RoutingInitializationMode = (
+            RoutingInitializationMode.LAYER
+        ),
     ) -> FeedForwardConfig:
         mixture_of_experts_model_config = self.model_preset(
             input_dim=input_dim,
