@@ -1093,6 +1093,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                 inputs = self.input_tensor(cfg)
                 sampler_calls = []
                 routing_inputs = {}
+                sampler_updated_masks = []
 
                 original_sample = (
                     model.projector.sampler.sample_probabilities_and_indices
@@ -1104,10 +1105,18 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     *,
                     _original_sample=original_sample,
                     _sampler_calls=sampler_calls,
+                    _sampler_updated_masks=sampler_updated_masks,
                 ):
                     result = _original_sample(input_matrix, skip_mask)
-                    _sampler_calls.append(input_matrix)
-                    probabilities, indices, updated_skip_mask, loss = result
+                    _sampler_calls.append((input_matrix, skip_mask))
+                    probabilities, indices, _, loss = result
+                    updated_skip_mask = torch.ones(
+                        input_matrix.shape[0],
+                        1,
+                        dtype=torch.bool,
+                        device=input_matrix.device,
+                    )
+                    _sampler_updated_masks.append(updated_skip_mask)
                     return (
                         probabilities,
                         indices,
@@ -1137,18 +1146,26 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         input_batch,
                         probabilities=None,
                         indices=None,
+                        skip_mask=None,
                         *,
                         _label=label,
                         _original_forward=original_forward,
                         _routing_inputs=routing_inputs,
                     ):
-                        _routing_inputs[_label].append((probabilities, indices))
-                        output, loss = _original_forward(
+                        _routing_inputs[_label].append(
+                            (probabilities, indices, skip_mask)
+                        )
+                        output, updated_skip_mask, loss = _original_forward(
                             input_batch,
                             probabilities,
                             indices,
+                            skip_mask,
                         )
-                        return output, loss + input_batch.new_tensor(1.0)
+                        return (
+                            output,
+                            updated_skip_mask,
+                            loss + input_batch.new_tensor(1.0),
+                        )
 
                     expert_model.forward = forward_with_loss
 
@@ -1177,8 +1194,22 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                             for indices in routed_indices[1:]
                         )
                     )
+                    routed_skip_masks = [
+                        records[forward_index][2]
+                        for records in routing_inputs.values()
+                    ]
+                    self.assertTrue(
+                        all(
+                            skip_mask is sampler_updated_masks[forward_index]
+                            for skip_mask in routed_skip_masks
+                        )
+                    )
+                    self.assertIsNone(model.projector.skip_mask)
 
                 self.assertEqual(len(sampler_calls), 2)
+                self.assertTrue(
+                    all(skip_mask is None for _, skip_mask in sampler_calls)
+                )
                 for records in routing_inputs.values():
                     self.assertEqual(len(records), 2)
 

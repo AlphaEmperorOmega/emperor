@@ -8,12 +8,14 @@ from torch import Tensor
 
 from emperor.attention._ops.projection import ProjectorBase
 from emperor.experts import (
-    MixtureOfExperts,
     MixtureOfExpertsConfig,
-    MixtureOfExpertsMap,
-    MixtureOfExpertsReduce,
     RoutingInitializationMode,
 )
+from emperor.experts._config import (
+    _MixtureOfExpertsMapConfig,
+    _MixtureOfExpertsReduceConfig,
+)
+from emperor.experts._layers.mixture import MixtureOfExperts
 
 if TYPE_CHECKING:
     from emperor.attention._runtime import QKV
@@ -53,14 +55,14 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
 
     def __create_q_model(self, input_dim: int, output_dim: int) -> MixtureOfExperts:
         overrides = MixtureOfExpertsConfig(input_dim=input_dim, output_dim=output_dim)
-        return MixtureOfExpertsMap(self.experts_config, overrides)
+        return _MixtureOfExpertsMapConfig(self.experts_config).build(overrides)
 
     def __create_kv_model(self, input_dim: int, output_dim: int):
         if self.use_kv_expert_models_flag:
             overrides = MixtureOfExpertsConfig(
                 input_dim=input_dim, output_dim=output_dim
             )
-            return MixtureOfExpertsMap(self.experts_config, overrides)
+            return _MixtureOfExpertsMapConfig(self.experts_config).build(overrides)
         return self._create_model(input_dim, output_dim)
 
     def _build_output_model(self) -> MixtureOfExperts:
@@ -69,7 +71,7 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
             output_dim=self.embedding_dim,
             routing_initialization_mode=RoutingInitializationMode.DISABLED,
         )
-        return MixtureOfExpertsReduce(self.cfg.experts_config, overrides)
+        return _MixtureOfExpertsReduceConfig(self.cfg.experts_config).build(overrides)
 
     def compute_qkv_projections(
         self,
@@ -96,7 +98,7 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
             indices,
             skip_mask,
             sampler_loss,
-        ) = self.sampler.sample_probabilities_and_indices(X_reshaped)
+        ) = self.sampler.sample_probabilities_and_indices(X_reshaped, self.skip_mask)
 
         self.probabilities = probabilities.view(-1, self.top_k)
         self.indices = indices.view(-1, self.top_k)
@@ -126,9 +128,10 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
 
         X_reshaped = X.view(-1, embedding_dim)
         if isinstance(model, MixtureOfExperts):
-            projection, expert_loss = model(
-                X_reshaped, self.probabilities, self.indices
+            projection, skip_mask, expert_loss = model(
+                X_reshaped, self.probabilities, self.indices, self.skip_mask
             )
+            self.skip_mask = skip_mask
             self._accumulate_auxiliary_loss(expert_loss)
         else:
             projection = self._forward_accumulating_loss(model, X_reshaped)

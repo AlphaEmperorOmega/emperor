@@ -17,7 +17,7 @@ from emperor.attention._variants.mixture.projection import (
 from emperor.attention._variants.self_attention.projection import (
     SelfAttentionProjector,
 )
-from emperor.experts import MixtureOfExperts
+from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.layers import Layer, LayerStack, LayerState, RecurrentLayer
 from support.attention import build_attention_config
 
@@ -511,7 +511,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
         m.compute_qkv_projections(QKV(query=tensor, key=tensor, value=tensor))
         self.assertIsNotNone(m.probabilities)
         self.assertIsNotNone(m.indices)
-        m.skip_mask = torch.tensor([True])
+        m.skip_mask = torch.zeros_like(m.probabilities[:, :1], dtype=torch.bool)
 
         weighted_values = torch.randn(
             c.target_sequence_length,
