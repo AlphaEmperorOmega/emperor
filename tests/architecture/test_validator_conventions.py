@@ -5,7 +5,13 @@ import unittest
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-EMPEROR_ROOT = PROJECT_ROOT / "emperor"
+EMPEROR_ROOT = PROJECT_ROOT / "src" / "emperor"
+VALIDATOR_MODULE_FILENAMES = {
+    "_validation.py",
+    "_validator.py",
+    "validation.py",
+    "validator.py",
+}
 
 
 # This is a migration ledger, not a permanent exception list. Remove exactly one
@@ -21,7 +27,7 @@ def _validator_source_files() -> list[Path]:
     return sorted(
         path
         for path in EMPEROR_ROOT.rglob("*.py")
-        if path.name in {"_validator.py", "validator.py"}
+        if path.name in VALIDATOR_MODULE_FILENAMES
     )
 
 
@@ -29,7 +35,7 @@ def _production_source_files() -> list[Path]:
     return sorted(
         path
         for path in EMPEROR_ROOT.rglob("*.py")
-        if path.name not in {"_validator.py", "validator.py"}
+        if path.name not in VALIDATOR_MODULE_FILENAMES
     )
 
 
