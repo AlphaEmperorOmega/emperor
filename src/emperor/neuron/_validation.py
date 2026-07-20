@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
-from emperor.config import ConfigBase
 
 if TYPE_CHECKING:
     from emperor.memory import DynamicMemoryConfig
@@ -13,13 +12,6 @@ if TYPE_CHECKING:
 
 
 class NeuronValidationMixin:
-    @staticmethod
-    def validate_config_base(name: str, value) -> None:
-        if not isinstance(value, ConfigBase):
-            raise TypeError(
-                f"{name} must be a ConfigBase instance, got {type(value).__name__}."
-            )
-
     @staticmethod
     def validate_integer(name: str, value: int) -> None:
         if not isinstance(value, int) or isinstance(value, bool):
@@ -51,7 +43,6 @@ class NucleusValidator(ValidatorBase, NeuronValidationMixin):
     def validate(cls, model: "Nucleus") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
-        cls.validate_config_base("model_config", model.cfg.model_config)
 
     @classmethod
     def validate_forward_input(cls, input: Tensor) -> None:
@@ -126,14 +117,9 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
 
     @classmethod
     def validate_sampler_config(cls, model: "Terminal") -> None:
-        from emperor.sampler import RouterConfig, SamplerConfig
+        from emperor.sampler import RouterConfig
 
         sampler_config = model.sampler_config
-        if not isinstance(sampler_config, SamplerConfig):
-            raise TypeError(
-                "sampler_config must be a SamplerConfig for Terminal, "
-                f"got {type(sampler_config).__name__}."
-            )
         cls.validate_positive_integer(
             "sampler_config.num_experts",
             sampler_config.num_experts,
