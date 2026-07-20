@@ -289,13 +289,22 @@ class _NeuronClusterPlasticityMixin:
                         )
                     continue
                 grown_parameter.copy_(parent_parameter)
-                perturbation_std = parent_parameter.float().std(correction=0)
-                if perturbation_std > 1e-6:
-                    grown_parameter.add_(
-                        torch.randn_like(grown_parameter)
-                        * perturbation_std.to(grown_parameter.dtype)
-                        * 0.01
+                if grown_parameter.is_floating_point() or grown_parameter.is_complex():
+                    statistics_source_parameter = (
+                        parent_parameter
+                        if parent_parameter.dtype == torch.float64
+                        or parent_parameter.is_complex()
+                        else parent_parameter.float()
                     )
+                    parameter_standard_deviation = statistics_source_parameter.std(
+                        correction=0
+                    )
+                    if parameter_standard_deviation > 1e-6:
+                        grown_parameter.add_(
+                            torch.randn_like(grown_parameter)
+                            * parameter_standard_deviation.to(grown_parameter.dtype)
+                            * 0.01
+                        )
                 copied_sources_by_grown_parameter_id[grown_parameter_id] = id(
                     parent_parameter
                 )
