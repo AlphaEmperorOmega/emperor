@@ -153,7 +153,9 @@ class TrainableScaleFeatureLastLayer(Module):
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         if self.input_dim != self.output_dim:
-            raise ValueError("TrainableScaleFeatureLastLayer requires stable dimensions")
+            raise ValueError(
+                "TrainableScaleFeatureLastLayer requires stable dimensions"
+            )
         return X * self.scale
 
 
@@ -471,7 +473,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 layer_config=MixtureOfExpertsLayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
