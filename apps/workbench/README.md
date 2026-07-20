@@ -35,9 +35,6 @@ then validates and canonicalizes the submitted plan.
 - This dependency direction is enforced by
   `apps/workbench/api/tests/architecture/test_dependency_direction.py`.
 
-The request envelopes, operations, error kinds, and file-root responsibilities
-are documented in `docs/architecture/project-adapter-protocol.md`.
-
 `emperor_workbench.inspection` is the canonical semantic Inspection Interface.
 It owns transport-neutral graph records, the in-process/subprocess executor
 seam, worker protocol, and private historical checkpoint interpretation.
@@ -624,8 +621,7 @@ Training Job, import, and 3D graph workflows, and removes its temporary state.
 It never uses the configured user logs or snapshots and never starts a real
 training process. Bundle limits and stable functional checks are enforced;
 runtime, heap, API, and software-rendered WebGL measurements remain
-informational. The canonical baseline and limitations are documented in
-[`../../docs/architecture/browser-performance-baseline.md`](../../docs/architecture/browser-performance-baseline.md).
+informational.
 
 `test:contract:e2e` starts two real bearer-protected backend apps on temporary
 loopback ports and drives them through the typed frontend API client. Their
