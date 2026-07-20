@@ -329,6 +329,60 @@ class TestLinearDiagnostics(unittest.TestCase):
         self.assertIsNone(activation_summary)
         self.assertIsNone(gradient_summary)
 
+    def test_conditioning_metrics_are_scale_invariant(self):
+        matrix = torch.diag(torch.tensor([3.0, 1.0], dtype=torch.float64))
+
+        baseline = _LinearDiagnostics.weight_conditioning(matrix)
+        tiny = _LinearDiagnostics.weight_conditioning(matrix * 1e-20)
+
+        torch.testing.assert_close(tiny.condition_number, baseline.condition_number)
+        torch.testing.assert_close(tiny.effective_rank, baseline.effective_rank)
+
+    def test_conditioning_preserves_complex_matrix_structure(self):
+        matrix = torch.tensor(
+            [[1.0, 1.0j], [1.0j, 1.0]],
+            dtype=torch.complex64,
+        )
+
+        metrics = _LinearDiagnostics.weight_conditioning(matrix)
+
+        self.assertAlmostEqual(metrics.condition_number.item(), 1.0, places=5)
+
+    def test_conditioning_reports_singular_zero_and_non_finite_weights(self):
+        singular = _LinearDiagnostics.weight_conditioning(
+            torch.tensor([[2.0, 0.0], [0.0, 0.0]])
+        )
+        self.assertTrue(torch.isinf(singular.condition_number))
+        self.assertEqual(singular.effective_rank.item(), 1.0)
+
+        zero = _LinearDiagnostics.weight_conditioning(torch.zeros(2, 2))
+        self.assertEqual(zero.spectral_norm.item(), 0.0)
+        self.assertTrue(torch.isinf(zero.condition_number))
+        self.assertEqual(zero.effective_rank.item(), 0.0)
+
+        non_finite = _LinearDiagnostics.weight_conditioning(
+            torch.tensor([[float("nan"), 0.0], [0.0, 1.0]])
+        )
+        for metric in (
+            non_finite.spectral_norm,
+            non_finite.condition_number,
+            non_finite.effective_rank,
+        ):
+            self.assertTrue(torch.isnan(metric))
+
+    def test_conditioning_handles_svd_convergence_failure(self):
+        with patch.object(
+            torch.linalg,
+            "svdvals",
+            side_effect=torch.linalg.LinAlgError("did not converge"),
+        ):
+            metrics = _LinearDiagnostics.weight_conditioning(torch.eye(2))
+
+        self.assertTrue(torch.isnan(metrics.spectral_norm))
+        self.assertTrue(torch.isnan(metrics.condition_number))
+        self.assertTrue(torch.isnan(metrics.effective_rank))
+
+
 class TestLinearMonitorCallback(unittest.TestCase):
     def test_init_uses_safe_monitoring_defaults(self):
         callback = LinearMonitorCallback()

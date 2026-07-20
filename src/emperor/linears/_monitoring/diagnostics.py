@@ -291,14 +291,61 @@ class _LinearDiagnostics:
         both_zero = (numerator == 0) & (denominator == 0)
         return torch.where(both_zero, torch.zeros_like(ratio), ratio)
 
-    @staticmethod
-    def weight_conditioning(weight: Tensor) -> _WeightConditioningMetrics:
-        singular_values = torch.linalg.svdvals(weight.detach().float())
+    @classmethod
+    def weight_conditioning(cls, weight: Tensor) -> _WeightConditioningMetrics:
+        detached_weight = weight.detach()
+        diagnostic_weight = (
+            detached_weight
+            if detached_weight.is_complex()
+            else cls.diagnostic_values(detached_weight)
+        )
+        metric_dtype = (
+            torch.float64
+            if diagnostic_weight.dtype in {torch.float64, torch.complex128}
+            else torch.float32
+        )
+        if not torch.isfinite(diagnostic_weight).all():
+            non_finite_metric = torch.full(
+                (),
+                float("nan"),
+                dtype=metric_dtype,
+                device=diagnostic_weight.device,
+            )
+            return _WeightConditioningMetrics(
+                spectral_norm=non_finite_metric,
+                condition_number=non_finite_metric.clone(),
+                effective_rank=non_finite_metric.clone(),
+            )
+
+        try:
+            singular_values = torch.linalg.svdvals(diagnostic_weight)
+        except torch.linalg.LinAlgError:
+            failed_metric = torch.full(
+                (),
+                float("nan"),
+                dtype=metric_dtype,
+                device=diagnostic_weight.device,
+            )
+            return _WeightConditioningMetrics(
+                spectral_norm=failed_metric,
+                condition_number=failed_metric.clone(),
+                effective_rank=failed_metric.clone(),
+            )
+
         spectral_norm = singular_values.max()
-        condition_number = spectral_norm / singular_values.min().clamp_min(1e-12)
-        normalized_spectrum = singular_values / singular_values.sum().clamp_min(1e-12)
-        spectral_entropy = -(
-            normalized_spectrum.clamp_min(1e-12).log() * normalized_spectrum
+        if spectral_norm == 0:
+            return _WeightConditioningMetrics(
+                spectral_norm=spectral_norm,
+                condition_number=torch.full_like(spectral_norm, float("inf")),
+                effective_rank=torch.zeros_like(spectral_norm),
+            )
+
+        relative_singular_values = singular_values / spectral_norm
+        condition_number = relative_singular_values.min().reciprocal()
+        normalized_spectrum = relative_singular_values / relative_singular_values.sum()
+        spectral_entropy = -torch.xlogy(
+            normalized_spectrum,
+            normalized_spectrum,
         ).sum()
         return _WeightConditioningMetrics(
             spectral_norm=spectral_norm,
