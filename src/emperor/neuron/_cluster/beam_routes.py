@@ -1,7 +1,22 @@
+from dataclasses import dataclass
+
 import torch
 from torch import Tensor
 
+from emperor.neuron._cluster.routing_numerics import (
+    _forward_value_with_surrogate_gradient,
+    _row_has_equal_weight_cancellation,
+    _row_has_finite_difference_overflow,
+    _stable_beam_mixture_with_score_history,
+    _stable_weighted_sum,
+)
 from emperor.neuron._cluster.state import NeuronClusterRouteState
+
+
+@dataclass(frozen=True)
+class _BeamScoreHistory:
+    router_score_events: tuple[Tensor, ...]
+    selected_score_indices: tuple[Tensor, ...]
 
 
 class _NeuronClusterBeamRoutesMixin:
@@ -19,8 +34,8 @@ class _NeuronClusterBeamRoutesMixin:
             route_state = self.__run_beam_route_step(route_state, route_mask)
 
         route_state = self._maybe_finalize_cluster_halting(route_state)
-        output = self.__merge_beams_into_output(route_state, batch_size)
-        return output, route_state.loss, None
+        merged_output = self.__merge_beams_into_output(route_state, batch_size)
+        return merged_output, route_state.loss, None
 
     def __run_entry_routes_with_beams(
         self,
@@ -28,13 +43,19 @@ class _NeuronClusterBeamRoutesMixin:
     ) -> NeuronClusterRouteState:
         batch_size = input.shape[0]
         beam_width = self.beam_width
-        probabilities, selected_coords, entry_loss = self._route_entry_input(input)
+        (
+            probabilities,
+            log_probabilities,
+            router_scores,
+            selected_coords,
+            entry_loss,
+        ) = self._route_entry_input_with_router_scores(input)
         entry_called_mask = torch.ones(
             batch_size,
             dtype=torch.bool,
             device=input.device,
         )
-        branch_outputs, valid_mask, _ = self._run_process_branches(
+        branch_outputs, valid_branch_mask, _ = self._run_process_branches(
             input,
             selected_coords,
             entry_called_mask,
@@ -42,10 +63,17 @@ class _NeuronClusterBeamRoutesMixin:
         weighted_candidate = self._weighted_branch_candidate(
             branch_outputs,
             probabilities,
-            valid_mask,
+            valid_branch_mask,
+            log_probabilities=log_probabilities,
+            router_scores=router_scores,
         )
 
-        branch_scores = self.__log_branch_scores(probabilities, valid_mask)
+        branch_scores = self.__log_branch_scores(
+            probabilities,
+            valid_branch_mask,
+            log_probabilities=log_probabilities,
+            router_scores=router_scores,
+        )
         slot_scores, slot_branch_indices = self.__top_beam_slots(branch_scores)
         slot_live_mask = torch.isfinite(slot_scores)
 
@@ -75,23 +103,38 @@ class _NeuronClusterBeamRoutesMixin:
             slot_scores,
         )
 
-        hidden = slot_hidden.reshape(batch_size * beam_width, -1)
-        positions = slot_positions.reshape(batch_size * beam_width, 3)
+        flattened_hidden = slot_hidden.reshape(batch_size * beam_width, -1)
+        flattened_positions = slot_positions.reshape(batch_size * beam_width, 3)
         active_mask = slot_live_mask.reshape(-1)
         escaped_mask = escaped_slot_mask.reshape(-1)
         final_mask = ~active_mask
         beam_scores = slot_scores.reshape(-1)
+        top_k = router_scores.shape[1]
+        flattened_score_indices = (
+            torch.arange(batch_size, device=input.device).unsqueeze(1) * top_k
+            + slot_branch_indices
+        )
+        flattened_score_indices = torch.where(
+            slot_live_mask
+            & torch.isfinite(router_scores[batch_indices, slot_branch_indices]),
+            flattened_score_indices,
+            torch.full_like(flattened_score_indices, -1),
+        ).reshape(-1)
+        beam_score_history = _BeamScoreHistory(
+            router_score_events=(router_scores,),
+            selected_score_indices=(flattened_score_indices,),
+        )
 
         halting_state = self._maybe_update_halting_state(
             None,
-            hidden,
-            hidden,
+            flattened_hidden,
+            flattened_hidden,
             active_mask,
         )
 
         return NeuronClusterRouteState(
-            hidden=hidden,
-            positions=positions,
+            hidden=flattened_hidden,
+            positions=flattened_positions,
             active_mask=active_mask,
             escaped_mask=escaped_mask,
             final_mask=final_mask,
@@ -99,6 +142,7 @@ class _NeuronClusterBeamRoutesMixin:
             loss=input.new_zeros(()) + entry_loss,
             trace=None,
             beam_scores=beam_scores,
+            beam_score_history=beam_score_history,
         )
 
     def __run_beam_route_step(
@@ -107,24 +151,34 @@ class _NeuronClusterBeamRoutesMixin:
         route_mask: Tensor,
     ) -> NeuronClusterRouteState:
         beam_width = self.beam_width
-        flat_size = route_state.hidden.shape[0]
-        batch_size = flat_size // beam_width
-        device = route_state.hidden.device
+        flattened_beam_count = route_state.hidden.shape[0]
+        batch_size = flattened_beam_count // beam_width
+        route_device = route_state.hidden.device
 
         probabilities = None
+        log_probabilities = None
+        router_scores = None
         selected_coords = None
-        loss = route_state.loss
+        accumulated_loss = route_state.loss
         current_called_mask = torch.zeros_like(route_mask)
-        for neuron_name, beam_indices in self._group_indices_by_position(
+        callable_route_mask = self._callable_route_mask(
             route_state.positions,
             route_mask,
+        )
+        for neuron_name, beam_indices in self._group_indices_by_position(
+            route_state.positions,
+            callable_route_mask,
         ).items():
-            if neuron_name not in self.cluster:
-                continue
-            index_tensor = self._index_tensor(beam_indices, device)
-            route_probabilities, route_coords, neuron_loss = self._route_neuron(
+            beam_index_tensor = self._index_tensor(beam_indices, route_device)
+            (
+                route_probabilities,
+                route_log_probabilities,
+                route_router_scores,
+                route_coords,
+                neuron_loss,
+            ) = self._route_neuron_with_router_scores(
                 self.cluster[neuron_name],
-                route_state.hidden.index_select(0, index_tensor),
+                route_state.hidden.index_select(0, beam_index_tensor),
             )
             probabilities, selected_coords = self._ensure_route_buffers(
                 probabilities,
@@ -133,25 +187,42 @@ class _NeuronClusterBeamRoutesMixin:
                 route_coords,
                 route_state.hidden,
             )
-            probabilities[index_tensor] = route_probabilities
-            selected_coords[index_tensor] = route_coords.to(
-                device=device,
+            log_probabilities = self._ensure_log_probability_buffer(
+                log_probabilities,
+                route_log_probabilities,
+                route_state.hidden,
+            )
+            router_scores = self._ensure_log_probability_buffer(
+                router_scores,
+                route_router_scores,
+                route_state.hidden,
+            )
+            probabilities[beam_index_tensor] = route_probabilities
+            log_probabilities[beam_index_tensor] = route_log_probabilities
+            router_scores[beam_index_tensor] = route_router_scores
+            selected_coords[beam_index_tensor] = route_coords.to(
+                device=route_device,
                 dtype=torch.long,
             )
-            current_called_mask[index_tensor] = True
-            loss = self._accumulate_auxiliary_loss(loss, neuron_loss)
+            current_called_mask[beam_index_tensor] = True
+            accumulated_loss = self._accumulate_auxiliary_loss(
+                accumulated_loss,
+                neuron_loss,
+            )
 
         if probabilities is None or selected_coords is None:
+            missing_route_mask = route_mask & ~callable_route_mask
             return NeuronClusterRouteState(
                 hidden=route_state.hidden,
                 positions=route_state.positions,
-                active_mask=route_state.active_mask & ~route_mask,
+                active_mask=route_state.active_mask & ~missing_route_mask,
                 escaped_mask=route_state.escaped_mask,
-                final_mask=route_state.final_mask | route_mask,
+                final_mask=route_state.final_mask | missing_route_mask,
                 halting_state=route_state.halting_state,
-                loss=loss,
+                loss=accumulated_loss,
                 trace=None,
                 beam_scores=route_state.beam_scores,
+                beam_score_history=route_state.beam_score_history,
             )
 
         branch_outputs, valid_target_mask, _ = self._run_process_branches(
@@ -164,13 +235,15 @@ class _NeuronClusterBeamRoutesMixin:
         branch_scores = self.__log_branch_scores(
             probabilities,
             callable_branch_mask,
+            log_probabilities=log_probabilities,
+            router_scores=router_scores,
         )
         expansion_scores = route_state.beam_scores.unsqueeze(1) + branch_scores
 
-        has_valid_candidate = callable_branch_mask.any(dim=1)
-        expandable_mask = current_called_mask & has_valid_candidate
-        escaping_mask = current_called_mask & ~has_valid_candidate
-        missing_mask = route_mask & ~current_called_mask
+        has_finite_candidate = torch.isfinite(branch_scores).any(dim=1)
+        expandable_mask = current_called_mask & has_finite_candidate
+        escaping_mask = current_called_mask & ~has_finite_candidate
+        missing_route_mask = route_mask & ~callable_route_mask
         # Finished beams compete with expansions by their accumulated score;
         # expandable beams must expand, so their keep entry is masked out.
         keep_scores = torch.where(
@@ -193,51 +266,95 @@ class _NeuronClusterBeamRoutesMixin:
             dim=1,
         )
 
-        is_expansion = selected_pool_indices < expansion_candidate_count
+        expansion_candidate_mask = selected_pool_indices < expansion_candidate_count
         parent_beam_indices = torch.where(
-            is_expansion,
+            expansion_candidate_mask,
             selected_pool_indices // top_k,
             selected_pool_indices - expansion_candidate_count,
         )
         branch_indices = torch.where(
-            is_expansion,
+            expansion_candidate_mask,
             selected_pool_indices % top_k,
             torch.zeros_like(selected_pool_indices),
         )
-        sample_offsets = (
-            torch.arange(batch_size, device=device) * beam_width
+        sample_beam_offsets = (
+            torch.arange(batch_size, device=route_device) * beam_width
         ).unsqueeze(1)
-        parent_rows = (sample_offsets + parent_beam_indices).reshape(-1)
+        parent_rows = (sample_beam_offsets + parent_beam_indices).reshape(-1)
 
-        flat_is_expansion = is_expansion.reshape(-1)
-        flat_branch_indices = branch_indices.reshape(-1)
-        flat_scores = selected_scores.reshape(-1)
-        flat_live_mask = torch.isfinite(flat_scores)
+        flattened_expansion_mask = expansion_candidate_mask.reshape(-1)
+        flattened_branch_indices = branch_indices.reshape(-1)
+        flattened_scores = selected_scores.reshape(-1)
+        flattened_live_mask = torch.isfinite(flattened_scores)
+        prior_score_history = route_state.beam_score_history
+        prior_score_indices = (
+            ()
+            if prior_score_history is None
+            else tuple(
+                score_indices.index_select(0, parent_rows)
+                for score_indices in prior_score_history.selected_score_indices
+            )
+        )
+        current_score_indices = parent_rows * top_k + flattened_branch_indices
+        current_score_indices = torch.where(
+            flattened_expansion_mask
+            & flattened_live_mask
+            & torch.isfinite(router_scores[parent_rows, flattened_branch_indices]),
+            current_score_indices,
+            torch.full_like(current_score_indices, -1),
+        )
+        beam_score_history = _BeamScoreHistory(
+            router_score_events=(
+                (
+                    ()
+                    if prior_score_history is None
+                    else prior_score_history.router_score_events
+                )
+                + (router_scores,)
+            ),
+            selected_score_indices=prior_score_indices + (current_score_indices,),
+        )
 
         next_hidden = torch.where(
-            flat_is_expansion.unsqueeze(-1),
-            branch_outputs[parent_rows, flat_branch_indices],
+            flattened_expansion_mask.unsqueeze(-1),
+            branch_outputs[parent_rows, flattened_branch_indices],
             route_state.hidden.index_select(0, parent_rows),
         )
         next_positions = torch.where(
-            flat_is_expansion.unsqueeze(-1),
-            selected_coords[parent_rows, flat_branch_indices],
+            flattened_expansion_mask.unsqueeze(-1),
+            selected_coords[parent_rows, flattened_branch_indices],
             route_state.positions.index_select(0, parent_rows),
         )
 
-        parent_active = route_state.active_mask.index_select(0, parent_rows)
-        parent_escaped = route_state.escaped_mask.index_select(0, parent_rows)
-        parent_final = route_state.final_mask.index_select(0, parent_rows)
-        kept_escaping = escaping_mask.index_select(0, parent_rows) & ~flat_is_expansion
-        kept_missing = missing_mask.index_select(0, parent_rows) & ~flat_is_expansion
+        parent_active_mask = route_state.active_mask.index_select(0, parent_rows)
+        parent_escaped_mask = route_state.escaped_mask.index_select(0, parent_rows)
+        parent_final_mask = route_state.final_mask.index_select(0, parent_rows)
+        kept_escaping_mask = (
+            escaping_mask.index_select(
+                0,
+                parent_rows,
+            )
+            & ~flattened_expansion_mask
+        )
+        kept_missing_mask = (
+            missing_route_mask.index_select(
+                0,
+                parent_rows,
+            )
+            & ~flattened_expansion_mask
+        )
 
-        next_active = (
-            flat_is_expansion | (parent_active & ~kept_escaping & ~kept_missing)
-        ) & flat_live_mask
-        next_escaped = ~flat_is_expansion & (parent_escaped | kept_escaping)
-        next_final = (
-            ~flat_is_expansion & (parent_final | kept_escaping | kept_missing)
-        ) | ~flat_live_mask
+        next_active_mask = (
+            flattened_expansion_mask
+            | (parent_active_mask & ~kept_escaping_mask & ~kept_missing_mask)
+        ) & flattened_live_mask
+        next_escaped_mask = ~flattened_expansion_mask & (
+            parent_escaped_mask | kept_escaping_mask
+        )
+        next_final_mask = (
+            ~flattened_expansion_mask
+            & (parent_final_mask | kept_escaping_mask | kept_missing_mask)
+        ) | ~flattened_live_mask
 
         halting_state = self._gather_halting_state_rows(
             route_state.halting_state,
@@ -247,51 +364,115 @@ class _NeuronClusterBeamRoutesMixin:
             halting_state,
             next_hidden,
             next_hidden,
-            flat_is_expansion & flat_live_mask,
+            flattened_expansion_mask & flattened_live_mask,
         )
 
         return NeuronClusterRouteState(
             hidden=next_hidden,
             positions=next_positions,
-            active_mask=next_active,
-            escaped_mask=next_escaped,
-            final_mask=next_final,
+            active_mask=next_active_mask,
+            escaped_mask=next_escaped_mask,
+            final_mask=next_final_mask,
             halting_state=halting_state,
-            loss=loss,
+            loss=accumulated_loss,
             trace=None,
-            beam_scores=flat_scores,
+            beam_scores=flattened_scores,
+            beam_score_history=beam_score_history,
         )
 
     def __log_branch_scores(
         self,
         probabilities: Tensor,
         valid_branch_mask: Tensor,
+        *,
+        log_probabilities: Tensor | None = None,
+        router_scores: Tensor | None = None,
     ) -> Tensor:
-        log_probabilities = torch.log(
-            probabilities.clamp_min(torch.finfo(probabilities.dtype).tiny)
+        positive_probability_mask = probabilities > 0
+        safe_probabilities = torch.where(
+            positive_probability_mask,
+            probabilities,
+            torch.ones_like(probabilities),
         )
-        return torch.where(
-            valid_branch_mask,
-            log_probabilities,
-            torch.full_like(log_probabilities, float("-inf")),
+        forward_log_probabilities = torch.log(
+            safe_probabilities.float()
+            if probabilities.dtype in (torch.float16, torch.bfloat16)
+            else safe_probabilities
+        )
+        forward_scores = torch.where(
+            valid_branch_mask & positive_probability_mask,
+            forward_log_probabilities,
+            torch.full_like(forward_log_probabilities, float("-inf")),
+        )
+        if log_probabilities is None and router_scores is None:
+            return forward_scores
+
+        stable_log_probabilities = (
+            forward_scores
+            if log_probabilities is None
+            else (
+                log_probabilities.float()
+                if log_probabilities.dtype in (torch.float16, torch.bfloat16)
+                else log_probabilities
+            )
+        )
+        finite_stable_score_mask = torch.isfinite(stable_log_probabilities)
+        subnormal_valid_probability_mask = (
+            valid_branch_mask
+            & finite_stable_score_mask
+            & (probabilities.abs() < torch.finfo(probabilities.dtype).tiny)
+        )
+        stable_forward_score_row_mask = subnormal_valid_probability_mask.any(
+            dim=1,
+            keepdim=True,
+        )
+        forward_scores = torch.where(
+            stable_forward_score_row_mask
+            & valid_branch_mask
+            & finite_stable_score_mask,
+            stable_log_probabilities.to(forward_scores.dtype),
+            forward_scores,
+        )
+        stable_gradient_scores = (
+            stable_log_probabilities
+            if router_scores is None
+            else (
+                router_scores.float()
+                if router_scores.dtype in (torch.float16, torch.bfloat16)
+                else router_scores
+            )
+        )
+        finite_gradient_score_mask = torch.isfinite(stable_gradient_scores)
+        surrogate_scores = torch.where(
+            valid_branch_mask & finite_stable_score_mask & finite_gradient_score_mask,
+            stable_gradient_scores,
+            torch.full_like(stable_gradient_scores, float("-inf")),
+        )
+        # Forward scores remain normalized log probabilities. Backward follows
+        # the sampler's fixed-selection surrogate through accumulated selected
+        # raw scores: top-k/beam membership is held fixed, while sampler
+        # normalizer and unselected-logit gradient terms are intentionally omitted.
+        return _forward_value_with_surrogate_gradient(
+            forward_scores,
+            surrogate_scores,
         )
 
     def __top_beam_slots(self, branch_scores: Tensor) -> tuple[Tensor, Tensor]:
         slot_count = min(self.beam_width, branch_scores.shape[1])
         slot_scores, slot_branch_indices = branch_scores.topk(slot_count, dim=1)
-        pad_count = self.beam_width - slot_count
-        if pad_count == 0:
+        padding_count = self.beam_width - slot_count
+        if padding_count == 0:
             return slot_scores, slot_branch_indices
-        pad_scores = slot_scores.new_full(
-            (slot_scores.shape[0], pad_count),
+        padding_scores = slot_scores.new_full(
+            (slot_scores.shape[0], padding_count),
             float("-inf"),
         )
-        pad_indices = slot_branch_indices.new_zeros(
-            (slot_branch_indices.shape[0], pad_count)
+        padding_branch_indices = slot_branch_indices.new_zeros(
+            (slot_branch_indices.shape[0], padding_count)
         )
         return (
-            torch.cat([slot_scores, pad_scores], dim=1),
-            torch.cat([slot_branch_indices, pad_indices], dim=1),
+            torch.cat([slot_scores, padding_scores], dim=1),
+            torch.cat([slot_branch_indices, padding_branch_indices], dim=1),
         )
 
     def __merge_beams_into_output(
@@ -300,18 +481,73 @@ class _NeuronClusterBeamRoutesMixin:
         batch_size: int,
     ) -> Tensor:
         beam_width = self.beam_width
-        scores = route_state.beam_scores.reshape(batch_size, beam_width)
-        hidden = route_state.hidden.reshape(batch_size, beam_width, -1)
-        finite_mask = torch.isfinite(scores)
+        beam_scores = route_state.beam_scores.reshape(batch_size, beam_width)
+        beam_hidden = route_state.hidden.reshape(batch_size, beam_width, -1)
+        finite_score_mask = torch.isfinite(beam_scores)
         # Entry guarantees slot zero a finite score, but guard against a
         # fully dead row so the softmax cannot produce NaN weights.
-        no_finite_mask = ~finite_mask.any(dim=1, keepdim=True)
-        slot_zero_mask = torch.zeros_like(finite_mask)
+        no_finite_score_mask = ~finite_score_mask.any(dim=1, keepdim=True)
+        slot_zero_mask = torch.zeros_like(finite_score_mask)
         slot_zero_mask[:, 0] = True
-        scores = torch.where(
-            no_finite_mask & slot_zero_mask,
-            torch.zeros_like(scores),
-            scores,
+        beam_scores = torch.where(
+            no_finite_score_mask & slot_zero_mask,
+            torch.zeros_like(beam_scores),
+            beam_scores,
         )
-        weights = torch.softmax(scores, dim=1)
-        return (hidden * weights.unsqueeze(-1)).sum(dim=1)
+        mixture_finite_mask = torch.isfinite(beam_scores)
+        promoted_beam_scores = (
+            beam_scores.float()
+            if beam_scores.dtype in (torch.float16, torch.bfloat16)
+            else beam_scores
+        )
+        promoted_beam_hidden = (
+            beam_hidden.float()
+            if beam_hidden.dtype in (torch.float16, torch.bfloat16)
+            else beam_hidden
+        )
+        # A tiny weight can underflow before multiplication even though its
+        # contribution to a large hidden value is representable. Cast only the
+        # completed mixture back to the model dtype.
+        beam_weights = torch.softmax(promoted_beam_scores, dim=1)
+        mixture_output = (
+            (promoted_beam_hidden * beam_weights.unsqueeze(-1))
+            .sum(dim=1)
+            .to(beam_hidden.dtype)
+        )
+        subnormal_finite_weight_mask = mixture_finite_mask & (
+            beam_weights.abs() < torch.finfo(beam_weights.dtype).tiny
+        )
+        stable_mixture_row_mask = (
+            subnormal_finite_weight_mask.any(dim=1, keepdim=True)
+            | _row_has_finite_difference_overflow(beam_hidden, mixture_finite_mask)
+            | _row_has_equal_weight_cancellation(
+                beam_hidden,
+                promoted_beam_scores,
+                mixture_finite_mask,
+            )
+        )
+        beam_score_history = route_state.beam_score_history
+        stable_mixture_output = (
+            _stable_weighted_sum(
+                beam_hidden,
+                beam_scores,
+                mixture_finite_mask,
+            )
+            if beam_score_history is None
+            else _stable_beam_mixture_with_score_history(
+                beam_hidden,
+                beam_scores,
+                mixture_finite_mask,
+                beam_score_history.router_score_events,
+                beam_score_history.selected_score_indices,
+            )
+        )
+        selected_forward_output = torch.where(
+            stable_mixture_row_mask,
+            stable_mixture_output,
+            mixture_output,
+        )
+        return _forward_value_with_surrogate_gradient(
+            selected_forward_output,
+            stable_mixture_output,
+        )

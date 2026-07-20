@@ -5,10 +5,12 @@ import torch
 from torch import Tensor
 
 from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
+from emperor.neuron._cluster.routing_numerics import weighted_branch_candidate
 from emperor.neuron._trace import NeuronClusterTrace
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingStateBase
+    from emperor.neuron._cluster.beam_routes import _BeamScoreHistory
 
 
 @dataclass
@@ -22,6 +24,7 @@ class NeuronClusterRouteState:
     loss: Tensor
     trace: NeuronClusterTrace | None = None
     beam_scores: Tensor | None = None
+    beam_score_history: "_BeamScoreHistory | None" = None
 
 
 class _NeuronClusterStateMixin:
@@ -47,6 +50,37 @@ class _NeuronClusterStateMixin:
                 dtype=torch.long,
                 device=hidden.device,
             ),
+        )
+
+    def _ensure_log_probability_buffer(
+        self,
+        log_probabilities: Tensor | None,
+        route_log_probabilities: Tensor,
+        hidden: Tensor,
+    ) -> Tensor:
+        if log_probabilities is not None:
+            return log_probabilities
+        return route_log_probabilities.new_full(
+            (hidden.shape[0], route_log_probabilities.shape[1]),
+            float("-inf"),
+        )
+
+    def _log_probabilities_from_probabilities(self, probabilities: Tensor) -> Tensor:
+        positive_probability_mask = probabilities > 0
+        safe_probabilities = torch.where(
+            positive_probability_mask,
+            probabilities,
+            torch.ones_like(probabilities),
+        )
+        promoted_probabilities = (
+            safe_probabilities.float()
+            if safe_probabilities.dtype in (torch.float16, torch.bfloat16)
+            else safe_probabilities
+        )
+        return torch.where(
+            positive_probability_mask,
+            torch.log(promoted_probabilities),
+            torch.full_like(promoted_probabilities, float("-inf")),
         )
 
     def _ensure_probability_matrix(self, probabilities: Tensor) -> Tensor:
@@ -78,25 +112,28 @@ class _NeuronClusterStateMixin:
         branch_outputs: Tensor,
         probabilities: Tensor,
         valid_branch_mask: Tensor,
+        *,
+        log_probabilities: Tensor | None = None,
+        router_scores: Tensor | None = None,
     ) -> Tensor:
-        valid_weights = probabilities * valid_branch_mask.to(probabilities.dtype)
-        valid_weight_sums = valid_weights.sum(dim=1, keepdim=True)
-        # With no valid branches every row of branch_outputs holds the
-        # unprocessed input, so falling back to the original probabilities
-        # passes the input through scaled by their sum — exactly the input
-        # only when the sampler normalizes probabilities to 1 — while
-        # keeping the gradient path through the router.
-        renormalized_weights = torch.where(
-            valid_weight_sums > 0,
-            valid_weights
-            / valid_weight_sums.clamp_min(torch.finfo(probabilities.dtype).tiny),
+        return weighted_branch_candidate(
+            branch_outputs,
             probabilities,
+            valid_branch_mask,
+            log_probabilities=log_probabilities,
+            router_scores=router_scores,
         )
-        return (branch_outputs * renormalized_weights.unsqueeze(-1)).sum(dim=1)
 
-    def _gather_branch_mask(self, mask: Tensor, branch_indices: Tensor) -> Tensor:
-        batch_indices = torch.arange(mask.shape[0], device=mask.device)
-        return mask[batch_indices, branch_indices]
+    def _gather_branch_mask(
+        self,
+        branch_mask: Tensor,
+        branch_indices: Tensor,
+    ) -> Tensor:
+        batch_indices = torch.arange(
+            branch_mask.shape[0],
+            device=branch_mask.device,
+        )
+        return branch_mask[batch_indices, branch_indices]
 
     def _maybe_update_halting_state(
         self,
@@ -144,28 +181,42 @@ class _NeuronClusterStateMixin:
             ),
             trace=route_state.trace,
             beam_scores=route_state.beam_scores,
+            beam_score_history=route_state.beam_score_history,
         )
 
     def _group_indices_by_position(
         self,
         positions: Tensor,
-        mask: Tensor,
+        row_mask: Tensor,
     ) -> dict[str, list[int]]:
-        groups: dict[str, list[int]] = {}
+        row_indices_by_neuron: dict[str, list[int]] = {}
         position_rows = positions.detach().cpu().tolist()
-        for batch_index in self._mask_indices(mask):
-            coordinate = self._coordinate_from_row(position_rows[batch_index])
-            neuron_name = self._neuron_name(*coordinate)
-            groups.setdefault(neuron_name, []).append(batch_index)
-        return groups
+        for batch_index in self._mask_indices(row_mask):
+            route_coordinate = self._coordinate_from_row(position_rows[batch_index])
+            neuron_name = self._neuron_name(*route_coordinate)
+            row_indices_by_neuron.setdefault(neuron_name, []).append(batch_index)
+        return row_indices_by_neuron
+
+    def _callable_route_mask(self, positions: Tensor, route_mask: Tensor) -> Tensor:
+        callable_route_mask = torch.zeros_like(route_mask)
+        for neuron_name, row_indices in self._group_indices_by_position(
+            positions,
+            route_mask,
+        ).items():
+            if neuron_name not in self.cluster:
+                continue
+            callable_route_mask[self._index_tensor(row_indices, route_mask.device)] = (
+                True
+            )
+        return callable_route_mask
 
     def _is_valid_coordinate(self, coordinate: tuple[int, int, int]) -> bool:
         if not self._is_within_grid_capacity(coordinate):
             return False
         return self._neuron_name(*coordinate) in self.cluster
 
-    def _mask_indices(self, mask: Tensor) -> list[int]:
-        return torch.nonzero(mask, as_tuple=False).flatten().detach().cpu().tolist()
+    def _mask_indices(self, row_mask: Tensor) -> list[int]:
+        return torch.nonzero(row_mask, as_tuple=False).flatten().detach().cpu().tolist()
 
     def _index_tensor(self, indices: list[int], device: torch.device) -> Tensor:
         return torch.tensor(indices, dtype=torch.long, device=device)
