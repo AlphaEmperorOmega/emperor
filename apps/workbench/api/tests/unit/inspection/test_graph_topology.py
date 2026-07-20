@@ -5,8 +5,6 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from torch import nn
-
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -15,10 +13,12 @@ from emperor.layers import (
     LayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
+from models.catalog import model_package
+from torch import nn
+
 from emperor_workbench.inspection import (
     InspectionFailure,
 )
-from models.catalog import model_package
 from tests.support.inspection import (
     inspect_model,
     serialize_graph,
