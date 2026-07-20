@@ -100,21 +100,21 @@ show_missing = true
 skip_covered = false
 
 [tool.mutmut]
-source_paths = ["emperor/"]
+source_paths = ["src/emperor/"]
 only_mutate = [
-  "emperor/attention/core/_validator.py",
-  "emperor/attention/core/layers.py",
-  "emperor/attention/core/monitor.py",
-  "emperor/attention/core/runtime.py",
-  "emperor/attention/core/handlers/*.py",
-  "emperor/attention/core/variants/*/layer.py",
-  "emperor/attention/core/variants/*/validator.py",
-  "emperor/attention/core/variants/*/processor.py",
-  "emperor/attention/core/variants/*/projector.py",
-  "emperor/attention/core/variants/*/mask.py",
-  "emperor/attention/core/variants/*/bias.py",
-  "emperor/attention/core/variants/*/reshaper.py",
-  "emperor/attention/core/variants/*/zero_attention.py",
+  "src/emperor/attention/_validation.py",
+  "src/emperor/attention/_base.py",
+  "src/emperor/attention/_monitoring/*.py",
+  "src/emperor/attention/_runtime.py",
+  "src/emperor/attention/_ops/*.py",
+  "src/emperor/attention/_variants/*/layer.py",
+  "src/emperor/attention/_variants/*/validation.py",
+  "src/emperor/attention/_variants/*/processing.py",
+  "src/emperor/attention/_variants/*/projection.py",
+  "src/emperor/attention/_variants/*/masking.py",
+  "src/emperor/attention/_variants/*/bias.py",
+  "src/emperor/attention/_variants/*/reshaping.py",
+  "src/emperor/attention/_variants/*/zero_attention.py",
 ]
 do_not_mutate = ["*/__init__.py"]
 pytest_add_cli_args_test_selection = [
@@ -136,4 +136,4 @@ pytest_add_cli_args_test_selection = [
   "tests/unit/test_attention_zero_attention.py",
   "tests/unit/test_transformer_relative_positional_embedding.py",
 ]
-also_copy = ["model_runtime/", "models/", "tests/support/"]
+also_copy = ["src/model_runtime/", "src/models/", "tests/support/"]
