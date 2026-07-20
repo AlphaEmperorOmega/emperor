@@ -157,6 +157,32 @@ class TestSamplerModelValidator(unittest.TestCase):
         with self.assertRaises(ValueError):
             cfg.build_with_router_input_dim(6)
 
+    def test_config_preflight_uses_effective_router_input_without_mutation_or_rng(self):
+        router_config = self.router_config(input_dim=4)
+        router_config.input_dim = None
+        cfg = self.sampler_config(router_config=router_config)
+        torch.manual_seed(20260719)
+        rng_before = torch.random.get_rng_state().clone()
+
+        cfg.validate_for_router_input_dim(6)
+
+        self.assertIsNone(router_config.input_dim)
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
+    def test_config_preflight_covers_logits_only_and_selection_contracts(self):
+        logits_only_config = self.sampler_config(router_config=None)
+        invalid_selection_config = self.sampler_config(
+            router_config=None,
+            threshold=-0.5,
+        )
+
+        logits_only_config.validate_for_router_input_dim()
+        with self.assertRaisesRegex(
+            ValueError,
+            "threshold must be between 0.0 and 1.0",
+        ):
+            invalid_selection_config.validate_for_router_input_dim()
+
     def test_rejects_invalid_model_config_values(self):
         cases = [
             ("top_k", 0, ValueError),

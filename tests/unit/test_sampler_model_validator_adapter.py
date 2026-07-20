@@ -1,9 +1,10 @@
 import unittest
 
 import torch
-from emperor.sampler.core._validator import SamplerModelValidator
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.model import SamplerModel
+
+from emperor.config import ConfigBase
+from emperor.sampler import RouterConfig, SamplerConfig, SamplerModel
+from emperor.sampler._validation import SamplerModelValidator
 
 
 def make_config(**overrides) -> SamplerConfig:
@@ -82,6 +83,60 @@ class TestSamplerModelValidatorAdapter(unittest.TestCase):
             "received top_k=5, num_experts=4",
         ):
             SamplerModel(make_config(top_k=5))
+
+    def test_config_preflight_dispatches_through_registry_owner_validator(self):
+        class TrackingValidator:
+            @classmethod
+            def validate_config(cls, cfg, *, router_input_dim=None):
+                raise RuntimeError("registry-owner validator was called")
+
+        class TrackingSamplerModel:
+            VALIDATOR = TrackingValidator
+
+        class TrackingSamplerConfig(SamplerConfig):
+            def _registry_owner(self) -> type:
+                return TrackingSamplerModel
+
+        base_config = make_config()
+        cfg = TrackingSamplerConfig(
+            **{
+                field_name: getattr(base_config, field_name)
+                for field_name in base_config.__dataclass_fields__
+            }
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "registry-owner validator was called",
+        ):
+            cfg.validate_for_router_input_dim(7)
+
+    def test_router_config_validation_dispatches_through_registry_owner(self):
+        class TrackingRouterValidator:
+            @classmethod
+            def validate_config(cls, cfg):
+                raise RuntimeError("router registry-owner validator was called")
+
+        class TrackingRouterModel:
+            VALIDATOR = TrackingRouterValidator
+
+        class TrackingRouterConfig(RouterConfig):
+            def _registry_owner(self) -> type:
+                return TrackingRouterModel
+
+        router_config = TrackingRouterConfig(
+            input_dim=3,
+            num_experts=4,
+            noisy_topk_flag=False,
+            model_config=ConfigBase(),
+        )
+        cfg = make_config(router_config=router_config)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "router registry-owner validator was called",
+        ):
+            SamplerModelValidator.validate_config(cfg)
 
 
 if __name__ == "__main__":

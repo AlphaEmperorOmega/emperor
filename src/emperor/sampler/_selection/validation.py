@@ -1,4 +1,5 @@
 import math
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -37,6 +38,17 @@ class SamplerBaseValidator(ValidatorBase):
             cfg.mutual_information_loss_weight,
         )
         cls._validate_num_topk_samples(cfg.num_topk_samples, cfg.top_k)
+
+    @classmethod
+    def validate_config(cls, cfg) -> None:
+        validation_target = SimpleNamespace(
+            cfg=cfg,
+            **{
+                field_name: getattr(cfg, field_name)
+                for field_name in cfg.__dataclass_fields__
+            },
+        )
+        cls.validate(validation_target)
 
     @staticmethod
     def validate_positive_integer(name: str, value: int) -> None:

@@ -68,6 +68,12 @@ class SamplerConfig(ConfigBase):
             SamplerConfig(router_config=router_config_with_input_dimension)
         )
 
+    def validate_for_router_input_dim(self, input_dim: int | None = None) -> None:
+        """Validate this config for an optional effective router input dimension."""
+
+        sampler_owner = self._registry_owner()
+        sampler_owner.VALIDATOR.validate_config(self, router_input_dim=input_dim)
+
     def __override_router_config(
         self,
         router_config_overrides: "RouterConfig",

@@ -1,3 +1,5 @@
+import copy
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -18,6 +20,40 @@ class SamplerModelValidator(ValidatorBase):
         cls.validate_field_types(model.sampler_config)
         cls._validate_sampler_dimensions(model)
         cls._validate_router_config(model)
+
+    @classmethod
+    def validate_config(
+        cls,
+        sampler_config,
+        *,
+        router_input_dim: int | None = None,
+    ) -> None:
+        validation_target = SimpleNamespace(
+            sampler_config=sampler_config,
+            num_experts=sampler_config.num_experts,
+            router_config=sampler_config.router_config,
+        )
+        cls.validate(validation_target)
+
+        from emperor.sampler._selection.full import SamplerFull
+        from emperor.sampler._selection.sparse import SamplerSparse
+        from emperor.sampler._selection.top_k import SamplerTopk
+
+        if sampler_config.top_k == 1:
+            selection_owner = SamplerSparse
+        elif sampler_config.top_k == sampler_config.num_experts:
+            selection_owner = SamplerFull
+        else:
+            selection_owner = SamplerTopk
+        selection_owner.VALIDATOR.validate_config(sampler_config)
+
+        if sampler_config.router_config is None:
+            return
+        resolved_router_config = copy.deepcopy(sampler_config.router_config)
+        if router_input_dim is not None:
+            resolved_router_config.input_dim = router_input_dim
+        router_owner = resolved_router_config._registry_owner()
+        router_owner.VALIDATOR.validate_config(resolved_router_config)
 
     @classmethod
     def _validate_sampler_dimensions(cls, model: "SamplerModel") -> None:
@@ -88,6 +124,16 @@ class RouterModelValidator(ValidatorBase):
         cls._validate_positive_integer("input_dim", model.input_dim)
         cls._validate_positive_integer("num_experts", model.num_experts)
         cls._validate_model_config(model.cfg.model_config)
+
+    @classmethod
+    def validate_config(cls, router_config) -> None:
+        cls.validate(
+            SimpleNamespace(
+                cfg=router_config,
+                input_dim=router_config.input_dim,
+                num_experts=router_config.num_experts,
+            )
+        )
 
     @staticmethod
     def _validate_input_dimension(value: object) -> None:
