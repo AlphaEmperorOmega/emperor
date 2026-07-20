@@ -58,7 +58,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayer, LinearLayerConfig
 
@@ -81,7 +80,7 @@ def linear_stack_config(
             input_dim=input_dim,
             output_dim=output_dim,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,

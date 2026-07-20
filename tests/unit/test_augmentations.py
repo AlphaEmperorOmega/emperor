@@ -56,6 +56,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    ResidualConfig,
     ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
@@ -324,9 +325,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         bias_flag: bool = True,
         num_layers: int = 2,
         activation: ActivationOptions = ActivationOptions.RELU,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.DISABLED
-        ),
+        residual_connection_option: ResidualConnectionOptions | None = None,
         dropout_probability: float = 0.0,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
@@ -343,7 +342,9 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                 output_dim=output_dim,
                 activation=activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=residual_connection_option,
+                residual_config=None
+                if residual_connection_option is None
+                else ResidualConfig(option=residual_connection_option),
                 dropout_probability=dropout_probability,
                 gate_config=None,
                 halting_config=None,
