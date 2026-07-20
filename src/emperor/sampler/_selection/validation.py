@@ -72,9 +72,7 @@ class SamplerBaseValidator(ValidatorBase):
     @staticmethod
     def validate_non_negative_float(name: str, value: float) -> None:
         if not math.isfinite(value) or value < 0.0:
-            raise ValueError(
-                f"{name} must be finite and >= 0.0, received {value!r}."
-            )
+            raise ValueError(f"{name} must be finite and >= 0.0, received {value!r}.")
 
     @staticmethod
     def _validate_num_topk_samples(num_topk_samples: int, top_k: int) -> None:

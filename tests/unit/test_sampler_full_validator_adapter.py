@@ -46,8 +46,7 @@ class TestSamplerFullValidatorAdapter(unittest.TestCase):
     def test_full_error_contract_is_preserved(self):
         with self.assertRaisesRegex(
             ValueError,
-            "switch_loss_weight must be 0.0 when using SamplerFull, "
-            "received 0.5",
+            "switch_loss_weight must be 0.0 when using SamplerFull, received 0.5",
         ):
             SamplerFull(make_config(switch_loss_weight=0.5))
 

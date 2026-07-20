@@ -141,8 +141,7 @@ class RouterModelValidator(ValidatorBase):
             raise ValueError("input_dim is required for RouterConfig, received None")
         if not isinstance(value, int) or isinstance(value, bool):
             raise TypeError(
-                "input_dim must be int for RouterConfig, "
-                f"got {type(value).__name__}"
+                f"input_dim must be int for RouterConfig, got {type(value).__name__}"
             )
 
     @staticmethod
