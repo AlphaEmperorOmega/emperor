@@ -52,13 +52,52 @@ class _LinearTrackingContext:
 
 class _LinearDiagnostics:
     @staticmethod
-    def summarize(values: Tensor) -> _TensorSummary:
-        detached_values = values.detach().float()
-        return _TensorSummary(
-            mean=detached_values.mean(),
-            variance=detached_values.var(unbiased=False),
-            norm=detached_values.norm(),
+    def diagnostic_values(values: Tensor) -> Tensor:
+        detached_values = values.detach()
+        if detached_values.is_complex():
+            detached_values = detached_values.abs()
+        if detached_values.dtype in {torch.float32, torch.float64}:
+            return detached_values
+        return detached_values.float()
+
+    @classmethod
+    def summarize(cls, values: Tensor) -> _TensorSummary:
+        detached_values = cls.diagnostic_values(values)
+        scale = detached_values.abs().amax()
+        safe_scale = torch.where(
+            torch.isfinite(scale) & (scale > 0),
+            scale,
+            torch.ones_like(scale),
         )
+        normalized_values = detached_values / safe_scale
+        normalized_variance, normalized_mean = torch.var_mean(
+            normalized_values,
+            correction=0,
+        )
+        standard_deviation = normalized_variance.clamp_min(0).sqrt() * scale
+        return _TensorSummary(
+            mean=normalized_mean * scale,
+            variance=standard_deviation.square(),
+            norm=torch.linalg.vector_norm(normalized_values) * scale,
+        )
+
+    @classmethod
+    def stable_norm(cls, values: Tensor, dim: int | None = None) -> Tensor:
+        diagnostic_values = cls.diagnostic_values(values)
+        absolute_values = diagnostic_values.abs()
+        if dim is None:
+            scale = absolute_values.amax()
+        else:
+            scale = absolute_values.amax(dim=dim, keepdim=True)
+        safe_scale = torch.where(
+            torch.isfinite(scale) & (scale > 0),
+            scale,
+            torch.ones_like(scale),
+        )
+        norm = torch.linalg.vector_norm(diagnostic_values / safe_scale, dim=dim)
+        if dim is not None:
+            scale = scale.squeeze(dim)
+        return norm * scale
 
     @staticmethod
     def weight_conditioning(weight: Tensor) -> _WeightConditioningMetrics:

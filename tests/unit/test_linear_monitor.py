@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from emperor.linears import LinearLayer, LinearLayerConfig, LinearMonitorCallback
+from emperor.linears._monitoring.diagnostics import _LinearDiagnostics
 from support.monitor import orchestration_calls
 
 
@@ -37,6 +38,39 @@ def build_module(
         )
     )
     return FakeLightningModule(layer, global_step=global_step)
+
+
+class TestLinearDiagnostics(unittest.TestCase):
+    def test_single_element_summary_has_population_variance(self):
+        summary = _LinearDiagnostics.summarize(torch.tensor([2.0]))
+
+        self.assertEqual(summary.mean.item(), 2.0)
+        self.assertEqual(summary.variance.item(), 0.0)
+        self.assertEqual(summary.norm.item(), 2.0)
+
+    def test_stable_norm_preserves_complex_magnitude(self):
+        norm = _LinearDiagnostics.stable_norm(torch.tensor([3.0 + 4.0j]))
+
+        self.assertEqual(norm.item(), 5.0)
+
+    def test_low_precision_diagnostics_are_upcast(self):
+        summary = _LinearDiagnostics.summarize(
+            torch.tensor([1.0, 2.0], dtype=torch.float16)
+        )
+
+        self.assertEqual(summary.mean.dtype, torch.float32)
+        self.assertEqual(summary.variance.dtype, torch.float32)
+        self.assertEqual(summary.norm.dtype, torch.float32)
+
+    def test_summary_avoids_overflow_for_extreme_float64_constant(self):
+        summary = _LinearDiagnostics.summarize(
+            torch.tensor([1e308, 1e308], dtype=torch.float64)
+        )
+
+        self.assertEqual(summary.mean.item(), 1e308)
+        self.assertEqual(summary.variance.item(), 0.0)
+        self.assertTrue(torch.isfinite(summary.norm))
+        self.assertAlmostEqual(summary.norm.item() / 1e308, 2.0**0.5)
 
 
 class TestLinearMonitorCallback(unittest.TestCase):
