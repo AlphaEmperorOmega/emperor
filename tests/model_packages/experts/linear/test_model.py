@@ -1,34 +1,35 @@
 import inspect
 import unittest
 
+import torch
+
 import models.experts.linear.config as config
 import models.experts.linear.dataset_options as dataset_options
-import torch
-from emperor.base.layer import (
-    LayerConfig,
-    LayerStackConfig,
-    RecurrentLayerConfig,
-)
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import (
+from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.memory import (
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,
 )
-from emperor.memory.options import MemoryPositionOptions
+from model_runtime.packages import RandomSearch
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
 from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
@@ -49,8 +50,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import RandomSearch
 
 
 class TestLinearModel(unittest.TestCase):
@@ -162,10 +161,7 @@ class TestLinearModel(unittest.TestCase):
                 self.assertIsInstance(boundary_cfg, LayerConfig)
                 self.assertEqual(boundary_cfg.activation, expected_activation)
                 self.assertEqual(boundary_cfg.layer_norm_position, expected_norm)
-                self.assertEqual(
-                    boundary_cfg.residual_connection_option,
-                    ResidualConnectionOptions.DISABLED,
-                )
+                self.assertIsNone(boundary_cfg.residual_config)
                 self.assertEqual(boundary_cfg.dropout_probability, expected_dropout)
                 self.assertIsNone(boundary_cfg.gate_config)
                 self.assertIsNone(boundary_cfg.halting_config)
@@ -189,7 +185,7 @@ class TestLinearModel(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
@@ -224,7 +220,7 @@ class TestLinearModel(unittest.TestCase):
             layer_norm_position=LayerNormPositionOptions.AFTER,
             num_layers=3,
             activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.13,
             last_layer_bias_option=LastLayerBiasOptions.ENABLED,
             apply_output_pipeline_flag=True,
@@ -236,7 +232,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.ELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.06,
             bias_flag=True,
         )
@@ -257,7 +253,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.GELU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.05,
             bias_flag=False,
         )
@@ -280,7 +276,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.07,
             bias_flag=True,
         )
@@ -291,7 +287,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.TANH,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.03,
             bias_flag=False,
         )
@@ -302,7 +298,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.04,
             bias_flag=False,
         )
@@ -313,7 +309,7 @@ class TestLinearModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.02,
             bias_flag=False,
         )
@@ -706,7 +702,7 @@ class TestLinearModel(unittest.TestCase):
                     apply_output_pipeline_flag=False,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_connection_option=None,
                     dropout_probability=0.0,
                     bias_flag=True,
                 )
@@ -799,8 +795,13 @@ class TestLinearModel(unittest.TestCase):
             router_stack.layer_config.activation,
             config.ROUTER_STACK_ACTIVATION,
         )
+        router_residual_option = (
+            None
+            if router_stack.layer_config.residual_config is None
+            else router_stack.layer_config.residual_config.option
+        )
         self.assertEqual(
-            router_stack.layer_config.residual_connection_option,
+            router_residual_option,
             config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
         )
         self.assertEqual(
@@ -903,9 +904,7 @@ class TestLinearModel(unittest.TestCase):
             memory_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             memory_stack_num_layers=3,
             memory_stack_activation=ActivationOptions.SILU,
-            memory_stack_residual_connection_option=(
-                ResidualConnectionOptions.DISABLED
-            ),
+            memory_stack_residual_connection_option=None,
             memory_stack_dropout_probability=0.1,
             memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             memory_stack_apply_output_pipeline_flag=True,
@@ -1043,7 +1042,7 @@ class TestLinearModel(unittest.TestCase):
         self.assertEqual(recurrent_cfg.gate_config.model_config.hidden_dim, 64)
         self.assertEqual(block_stack.layer_config.halting_config.threshold, 0.55)
         self.assertEqual(recurrent_cfg.halting_config.threshold, 0.75)
-        self.assertEqual(recurrent_cfg.halting_config.halting_dropout, 0.2)
+        self.assertEqual(recurrent_cfg.halting_config.dropout_probability, 0.2)
         self.assertEqual(
             recurrent_cfg.halting_config.hidden_state_mode,
             HaltingHiddenStateModeOptions.ACCUMULATED,
@@ -1360,10 +1359,12 @@ class TestLinearModel(unittest.TestCase):
                 layer_cfg = stack_cfg.layer_config
 
                 if "residual" in case:
-                    self.assertEqual(
-                        layer_cfg.residual_connection_option,
-                        case["residual"],
+                    actual_residual = (
+                        None
+                        if layer_cfg.residual_config is None
+                        else layer_cfg.residual_config.option
                     )
+                    self.assertEqual(actual_residual, case["residual"])
                 if "layer_norm" in case:
                     self.assertEqual(
                         layer_cfg.layer_norm_position,
@@ -1498,10 +1499,12 @@ class TestLinearModel(unittest.TestCase):
                         moe_layer_cfg.sampler_config.router_config.noisy_topk_flag
                     )
                 if "residual" in case:
-                    self.assertEqual(
-                        layer_cfg.residual_connection_option,
-                        case["residual"],
+                    actual_residual = (
+                        None
+                        if layer_cfg.residual_config is None
+                        else layer_cfg.residual_config.option
                     )
+                    self.assertEqual(actual_residual, case["residual"])
                 if "layer_norm" in case:
                     self.assertEqual(
                         layer_cfg.layer_norm_position,
