@@ -25,7 +25,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -60,7 +59,7 @@ def make_projection_model_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -84,7 +83,7 @@ def make_adaptive_projection_model_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -108,7 +107,7 @@ def make_recurrent_projection_model_config() -> RecurrentLayerConfig:
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=make_projection_model_config(),
         gate_config=None,
-        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        residual_config=None,
         halting_config=None,
         memory_config=None,
     )
@@ -150,7 +149,7 @@ def make_router_config(
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 gate_config=None,
                 halting_config=None,
@@ -240,7 +239,7 @@ def make_mixture_of_experts_model_config(
         layer_config=MixtureOfExpertsLayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
