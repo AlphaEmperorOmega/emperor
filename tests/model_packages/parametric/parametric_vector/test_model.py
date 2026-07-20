@@ -12,14 +12,15 @@ import models.parametric.parametric_vector.search_space as search_space
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
@@ -27,6 +28,7 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
     VectorWeightsMixtureConfig,
 )
+from model_runtime.packages import GridSearch, RandomSearch
 from models.parametric.parametric_vector.config_builder import (
     ParametricVectorConfigBuilder,
 )
@@ -47,8 +49,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import GridSearch, RandomSearch
 
 
 class TestParametricVectorModel(unittest.TestCase):
@@ -156,7 +156,7 @@ class TestParametricVectorModel(unittest.TestCase):
             hidden_dim=7,
             num_layers=2,
             activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.15,
         )
         mixture_options = ParametricMixtureOptions(
@@ -310,9 +310,7 @@ class TestParametricVectorModel(unittest.TestCase):
                 "router_last_layer_bias_option": LastLayerBiasOptions.DEFAULT,
                 "router_apply_output_pipeline_flag": False,
                 "router_activation": ActivationOptions.GELU,
-                "router_residual_connection_option": (
-                    ResidualConnectionOptions.DISABLED
-                ),
+                "router_residual_connection_option": None,
                 "router_dropout_probability": 0.0,
                 "router_layer_norm_position": LayerNormPositionOptions.DISABLED,
                 "router_linear_input_dim": 9,
@@ -491,7 +489,9 @@ class TestParametricVectorModel(unittest.TestCase):
             ),
             "router_activation": router_layer_config.activation,
             "router_residual_connection_option": (
-                router_layer_config.residual_connection_option
+                None
+                if router_layer_config.residual_config is None
+                else router_layer_config.residual_config.option
             ),
             "router_dropout_probability": router_layer_config.dropout_probability,
             "router_layer_norm_position": router_layer_config.layer_norm_position,

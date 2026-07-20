@@ -13,16 +13,16 @@ import models.parametric.parametric_generator.search_space as search_space
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+
+from emperor.experts import MixtureOfExpertsConfig, RoutingInitializationMode
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.options import RoutingInitializationMode
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
@@ -31,6 +31,7 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
+from model_runtime.packages import GridSearch, RandomSearch
 from models.parametric.parametric_generator.config_builder import (
     ParametricGeneratorConfigBuilder,
 )
@@ -52,8 +53,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import GridSearch, RandomSearch
 
 
 class TestParametricGeneratorModel(unittest.TestCase):
@@ -161,7 +160,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
             hidden_dim=7,
             num_layers=2,
             activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.15,
         )
         mixture_options = ParametricMixtureOptions(
@@ -275,10 +274,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         )
         self.assertFalse(router_stack.apply_output_pipeline_flag)
         self.assertEqual(router_layer.activation, ActivationOptions.GELU)
-        self.assertEqual(
-            router_layer.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(router_layer.residual_config)
         self.assertEqual(router_layer.dropout_probability, 0.0)
         self.assertEqual(
             router_layer.layer_norm_position,

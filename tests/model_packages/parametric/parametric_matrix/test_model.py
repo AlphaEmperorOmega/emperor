@@ -13,14 +13,15 @@ import models.parametric.parametric_matrix.search_space as search_space
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 import torch
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
@@ -29,6 +30,7 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
+from model_runtime.packages import GridSearch, RandomSearch
 from models.parametric.parametric_matrix.config_builder import (
     ParametricMatrixConfigBuilder,
 )
@@ -49,8 +51,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import GridSearch, RandomSearch
 
 
 class TestParametricMatrixModel(unittest.TestCase):
@@ -158,7 +158,7 @@ class TestParametricMatrixModel(unittest.TestCase):
             hidden_dim=7,
             num_layers=2,
             activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.15,
         )
         mixture_options = ParametricMixtureOptions(
@@ -259,10 +259,7 @@ class TestParametricMatrixModel(unittest.TestCase):
         )
         self.assertFalse(router_stack.apply_output_pipeline_flag)
         self.assertEqual(router_layer.activation, ActivationOptions.GELU)
-        self.assertEqual(
-            router_layer.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(router_layer.residual_config)
         self.assertEqual(router_layer.dropout_probability, 0.0)
         self.assertEqual(
             router_layer.layer_norm_position,
