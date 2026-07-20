@@ -17,6 +17,84 @@ class _TensorSummary:
     norm: Tensor
 
 
+@dataclass
+class _TensorMoments:
+    count: int = 0
+    mean: Tensor | None = None
+    second_moment: Tensor | None = None
+
+    def add(self, values: Tensor) -> None:
+        diagnostic_values = _LinearDiagnostics.diagnostic_values(values)
+        batch_count = diagnostic_values.numel()
+        if batch_count == 0:
+            return
+
+        absolute_values = diagnostic_values.abs()
+        scale = absolute_values.amax()
+        safe_scale = torch.where(
+            torch.isfinite(scale) & (scale > 0),
+            scale,
+            torch.ones_like(scale),
+        )
+        normalized_values = diagnostic_values / safe_scale
+        normalized_variance, normalized_mean = torch.var_mean(
+            normalized_values,
+            correction=0,
+        )
+        accumulator_dtype = {"cpu": torch.float64}.get(
+            diagnostic_values.device.type,
+            diagnostic_values.dtype,
+        )
+        accumulator_scale = scale.to(dtype=accumulator_dtype)
+        batch_mean = normalized_mean.to(dtype=accumulator_dtype) * accumulator_scale
+        batch_standard_deviation = (
+            normalized_variance.clamp_min(0).sqrt().to(dtype=accumulator_dtype)
+            * accumulator_scale
+        )
+        batch_second_moment = batch_standard_deviation.square() * batch_count
+        if self.count == 0:
+            self.count = batch_count
+            self.mean = batch_mean
+            self.second_moment = batch_second_moment
+            return
+
+        assert self.mean is not None
+        assert self.second_moment is not None
+        promoted_dtype = torch.promote_types(self.mean.dtype, batch_mean.dtype)
+        current_mean = self.mean.to(dtype=promoted_dtype)
+        current_second_moment = self.second_moment.to(dtype=promoted_dtype)
+        batch_mean = batch_mean.to(dtype=promoted_dtype)
+        batch_second_moment = batch_second_moment.to(dtype=promoted_dtype)
+
+        combined_count = self.count + batch_count
+        mean_delta = batch_mean - current_mean
+        self.mean = current_mean * (self.count / combined_count) + batch_mean * (
+            batch_count / combined_count
+        )
+        self.second_moment = (
+            current_second_moment
+            + batch_second_moment
+            + mean_delta.abs().square() * (self.count * batch_count / combined_count)
+        )
+        self.count = combined_count
+
+    def summarize(self) -> _TensorSummary | None:
+        if self.count == 0:
+            return None
+        assert self.mean is not None
+        assert self.second_moment is not None
+        variance = (self.second_moment / self.count).clamp_min(0)
+        norm = torch.hypot(
+            self.second_moment.clamp_min(0).sqrt(),
+            self.mean.abs() * self.count**0.5,
+        )
+        return _TensorSummary(
+            mean=self.mean,
+            variance=variance,
+            norm=norm,
+        )
+
+
 @dataclass(frozen=True)
 class _WeightConditioningMetrics:
     spectral_norm: Tensor
@@ -98,6 +176,12 @@ class _LinearDiagnostics:
         if dim is not None:
             scale = scale.squeeze(dim)
         return norm * scale
+
+    @staticmethod
+    def safe_ratio(numerator: Tensor, denominator: Tensor) -> Tensor:
+        ratio = numerator / denominator
+        both_zero = (numerator == 0) & (denominator == 0)
+        return torch.where(both_zero, torch.zeros_like(ratio), ratio)
 
     @staticmethod
     def weight_conditioning(weight: Tensor) -> _WeightConditioningMetrics:
