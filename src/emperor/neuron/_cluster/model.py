@@ -34,6 +34,17 @@ class NeuronCluster(
     _NeuronClusterCheckpointingMixin,
     Module,
 ):
+    """A conditionally routed cluster with bounded recurrent execution.
+
+    Direct ``DistributedDataParallel`` users must enable
+    ``find_unused_parameters=True`` and leave ``static_graph`` and
+    ``skip_all_reduce_unused_params`` disabled because routes intentionally
+    evaluate a changing subset of the cluster.
+    ``NeuronClusterOptimizerSyncCallback`` configures and validates these options
+    automatically for Lightning DDP training and synchronizes optimizer
+    membership when configured growth or pruning changes the topology.
+    """
+
     VALIDATOR = NeuronClusterValidator
 
     def __init__(

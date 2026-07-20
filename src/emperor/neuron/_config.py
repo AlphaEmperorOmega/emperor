@@ -141,7 +141,10 @@ class NeuronClusterConfig(ConfigBase):
         "Neuron process_signal call count that triggers growth. Counted in "
         "training mode only and includes speculative top-k branch "
         "evaluations, so neurons in popular neighborhoods accrue pressure "
-        "without being chosen. Set to None to disable."
+        "without being chosen. Training with dynamic growth or pruning must "
+        "install NeuronClusterOptimizerSyncCallback (as the Neuron Model "
+        "Packages do) or provide equivalent optimizer and distributed "
+        "synchronization. Set to None to disable."
     )
     growth_cooldown_steps: int | None = optional_field(
         "Minimum training forwards between two growth events. The cooldown "
