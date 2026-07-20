@@ -1,3 +1,4 @@
+import copy
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -510,6 +511,12 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"got halting_config.input_dim={halting_config.input_dim} and "
                 f"terminal input_dim={terminal_input_dim}."
             )
+
+        resolved_halting_config = copy.deepcopy(halting_config)
+        resolved_halting_config.input_dim = terminal_input_dim
+        if resolved_halting_config.threshold is None:
+            resolved_halting_config.threshold = halting_config.DEFAULT_THRESHOLD
+        owner.validate_resolved_config(resolved_halting_config)
 
     @staticmethod
     def validate_nucleus_model_dimensions(cfg: "NeuronClusterConfig") -> None:
