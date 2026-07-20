@@ -21,7 +21,7 @@ from emperor.augmentations.adaptive_parameters._monitoring.weight_banks import (
     _WeightBankDiagnostics,
     _WeightBankTrackingContext,
 )
-from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (  # noqa: E501
     SoftWeightedBankDynamicWeight,
 )
 from emperor.layers import (
@@ -30,7 +30,6 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.monitoring import MonitorTensorHistory
@@ -101,7 +100,7 @@ def generator_config(
             input_dim=input_dim,
             output_dim=output_dim,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
