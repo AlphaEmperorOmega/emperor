@@ -100,6 +100,70 @@ class PortableLauncherTests(unittest.TestCase):
                 self.assertIn(delegation, source)
                 self.assertFalse(any(token in source for token in forbidden))
 
+    def test_download_logs_selects_configured_or_repository_python(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            script = root / "download_logs.sh"
+            script.write_text(
+                (PROJECT_ROOT / "download_logs.sh").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            trace = root / "python-invocation.txt"
+            interpreter_source = """#!/usr/bin/env bash
+printf '%s\\n' "$0" "$@" > "$EMPEROR_TEST_TRACE"
+"""
+            repository_python = root / "torchenv" / "bin" / "python"
+            repository_python.parent.mkdir(parents=True)
+            repository_python.write_text(interpreter_source, encoding="utf-8")
+            repository_python.chmod(0o755)
+            configured_python = root / "configured-python"
+            configured_python.write_text(interpreter_source, encoding="utf-8")
+            configured_python.chmod(0o755)
+            path_bin = root / "path-bin"
+            path_bin.mkdir()
+            path_python = path_bin / "python3"
+            path_python.write_text("#!/usr/bin/env bash\nexit 91\n", encoding="utf-8")
+            path_python.chmod(0o755)
+
+            base_environment = os.environ.copy()
+            base_environment.pop("PYTHON", None)
+            base_environment.pop("EMPEROR_PYTHON", None)
+            base_environment["EMPEROR_TEST_TRACE"] = str(trace)
+            base_environment["PATH"] = os.pathsep.join(
+                (str(path_bin), base_environment["PATH"])
+            )
+
+            cases = (
+                ("repository", None, repository_python),
+                ("configured", configured_python, configured_python),
+            )
+            for name, override, expected_python in cases:
+                with self.subTest(selection=name):
+                    environment = base_environment.copy()
+                    if override is not None:
+                        environment["EMPEROR_PYTHON"] = str(override)
+                    completed = subprocess.run(
+                        ["bash", str(script), "logs", "archive.zip"],
+                        cwd=root,
+                        env=environment,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(
+                        trace.read_text(encoding="utf-8").splitlines(),
+                        [
+                            str(expected_python),
+                            "-m",
+                            "models.project_cli",
+                            "logs:archive",
+                            "logs",
+                            "archive.zip",
+                        ],
+                    )
+
     def test_unix_workbench_stop_bypasses_setup(self) -> None:
         script = """
 mise() {
