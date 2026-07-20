@@ -125,7 +125,9 @@ class NeuronClusterConfig(ConfigBase):
         "Optional sampler used to route inputs into initialized entry-plane neurons."
     )
     max_steps: int | None = optional_field(
-        "Maximum recurrent route steps before the cluster stops traversal."
+        "Required positive hard limit on recurrent route steps. This always "
+        "terminates traversal even when routes cycle and optional adaptive "
+        "halting never fires."
     )
     beam_width: int | None = optional_field(
         "Number of routes kept alive per sample during traversal. With a "
@@ -183,7 +185,9 @@ class NeuronClusterConfig(ConfigBase):
         "initialization. Requires growth_threshold. Defaults to False."
     )
     halting_config: HaltingConfig | None = optional_field(
-        "Optional learned cluster-level halting module."
+        "Optional learned cluster-level adaptive halting module. "
+        "StickBreakingConfig is the currently supported strategy. The required "
+        "max_steps value remains an unconditional routing safety limit."
     )
     neuron_config: NeuronConfig | None = optional_field(
         "Base neuron configuration used for each cluster coordinate."
