@@ -1,72 +1,66 @@
 import inspect
 import unittest
 
+import torch
+
 import models.experts.linear_adaptive.config as config
 import models.experts.linear_adaptive.dataset_options as dataset_options
-import torch
-from emperor.augmentations.adaptive_parameters.core.bias import (
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
-    GeneratorDynamicBiasConfig,
-    MultiplicativeDynamicBiasConfig,
-    SigmoidGatedDynamicBiasConfig,
-    TanhGatedDynamicBiasConfig,
-    WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.diagonal import (
     AntiDynamicDiagonalConfig,
+    BankExpansionFactorOptions,
     CombinedDynamicDiagonalConfig,
-    StandardDynamicDiagonalConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.mask import (
     DiagonalAxisMaskConfig,
-    OuterProductMaskConfig,
-    PerAxisScoreMaskConfig,
-    TopSliceAxisMaskConfig,
-    WeightInformedScoreAxisMaskConfig,
-)
-from emperor.augmentations.adaptive_parameters.core.weight import (
     DualModelDynamicWeightConfig,
+    DynamicDepthOptions,
+    GeneratorDynamicBiasConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MaskDimensionOptions,
+    MultiplicativeDynamicBiasConfig,
+    OuterProductMaskConfig,
+    PerAxisScoreMaskConfig,
+    SigmoidGatedDynamicBiasConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.options import (
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
+    StandardDynamicDiagonalConfig,
+    TanhGatedDynamicBiasConfig,
+    TopSliceAxisMaskConfig,
     WeightDecayScheduleOptions,
+    WeightedBankDynamicBiasConfig,
+    WeightInformedScoreAxisMaskConfig,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.base.layer import (
-    LayerConfig,
-    LayerStackConfig,
-    RecurrentLayerConfig,
-)
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
-from emperor.halting.options import HaltingHiddenStateModeOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
-from emperor.memory.config import (
+from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
+from emperor.memory import (
     GatedResidualDynamicMemoryConfig,
+    MemoryPositionOptions,
     WeightedDynamicMemoryConfig,
 )
-from emperor.memory.options import MemoryPositionOptions
+from model_runtime.packages import RandomSearch
 from models.experts.linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
 )
@@ -97,8 +91,6 @@ from models.experts.linear_adaptive.runtime_options import (
     HiddenAdaptiveWeightOptions,
     RuntimeOptions,
 )
-
-from model_runtime.packages import RandomSearch
 
 
 class TestLinearAdaptiveExpertModel(unittest.TestCase):
@@ -196,10 +188,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     boundary_cfg.layer_norm_position,
                     LayerNormPositionOptions.DISABLED,
                 )
-                self.assertEqual(
-                    boundary_cfg.residual_connection_option,
-                    ResidualConnectionOptions.DISABLED,
-                )
+                self.assertIsNone(boundary_cfg.residual_config)
                 self.assertEqual(boundary_cfg.dropout_probability, 0.0)
                 self.assertIsNone(boundary_cfg.gate_config)
                 self.assertIsNone(boundary_cfg.halting_config)
@@ -260,7 +249,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             layer_norm_position=LayerNormPositionOptions.AFTER,
             num_layers=3,
             activation=ActivationOptions.MISH,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.13,
             last_layer_bias_option=LastLayerBiasOptions.ENABLED,
             apply_output_pipeline_flag=True,
@@ -272,7 +261,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.ELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.06,
             bias_flag=True,
         )
@@ -293,7 +282,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.GELU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.05,
             bias_flag=False,
         )
@@ -316,7 +305,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.07,
             bias_flag=True,
         )
@@ -327,7 +316,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.TANH,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.03,
             bias_flag=False,
         )
@@ -338,7 +327,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=False,
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.04,
             bias_flag=False,
         )
@@ -349,7 +338,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.02,
             bias_flag=False,
         )
@@ -397,7 +386,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             num_layers=2,
             activation=ActivationOptions.ELU,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_connection_option=None,
             dropout_probability=0.09,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             apply_output_pipeline_flag=False,
@@ -718,7 +707,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     apply_output_pipeline_flag=False,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_connection_option=None,
                     dropout_probability=0.0,
                     bias_flag=True,
                 )
@@ -834,8 +823,13 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_stack.layer_config.activation,
             config.ROUTER_STACK_ACTIVATION,
         )
+        router_residual_option = (
+            None
+            if router_stack.layer_config.residual_config is None
+            else router_stack.layer_config.residual_config.option
+        )
         self.assertEqual(
-            router_stack.layer_config.residual_connection_option,
+            router_residual_option,
             config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
         )
         self.assertEqual(
@@ -1124,9 +1118,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             memory_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             memory_stack_num_layers=3,
             memory_stack_activation=ActivationOptions.SILU,
-            memory_stack_residual_connection_option=(
-                ResidualConnectionOptions.DISABLED
-            ),
+            memory_stack_residual_connection_option=None,
             memory_stack_dropout_probability=0.1,
             memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             memory_stack_apply_output_pipeline_flag=True,
@@ -1264,7 +1256,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         self.assertEqual(recurrent_cfg.gate_config.model_config.hidden_dim, 64)
         self.assertEqual(block_stack.layer_config.halting_config.threshold, 0.55)
         self.assertEqual(recurrent_cfg.halting_config.threshold, 0.75)
-        self.assertEqual(recurrent_cfg.halting_config.halting_dropout, 0.2)
+        self.assertEqual(recurrent_cfg.halting_config.dropout_probability, 0.2)
         self.assertEqual(
             recurrent_cfg.halting_config.hidden_state_mode,
             HaltingHiddenStateModeOptions.ACCUMULATED,
@@ -1438,7 +1430,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.POST_NORM: (
-                ResidualConnectionOptions.DISABLED,
+                None,
                 LayerNormPositionOptions.AFTER,
                 False,
                 False,
@@ -1486,7 +1478,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 True,
             ),
             ExperimentPreset.RECURRENT_POST_NORM: (
-                ResidualConnectionOptions.DISABLED,
+                None,
                 LayerNormPositionOptions.AFTER,
                 False,
                 False,
@@ -1513,10 +1505,12 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     isinstance(model_cfg, RecurrentLayerConfig),
                     expected_recurrent,
                 )
-                self.assertEqual(
-                    layer_cfg.residual_connection_option,
-                    expected_residual,
+                actual_residual = (
+                    None
+                    if layer_cfg.residual_config is None
+                    else layer_cfg.residual_config.option
                 )
+                self.assertEqual(actual_residual, expected_residual)
                 self.assertEqual(layer_cfg.layer_norm_position, expected_norm)
                 self.assertEqual(layer_cfg.gate_config is not None, expected_gate)
                 self.assertEqual(
@@ -2345,7 +2339,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
@@ -2604,10 +2598,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             stack_cfg.layer_config.layer_norm_position,
             layer_norm_position,
         )
-        self.assertEqual(
-            stack_cfg.layer_config.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(stack_cfg.layer_config.residual_config)
         self.assertEqual(
             stack_cfg.layer_config.dropout_probability,
             dropout_probability,
