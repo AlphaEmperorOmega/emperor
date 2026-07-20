@@ -2,12 +2,12 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-from emperor.neuron.core._validator import (
+
+from emperor.neuron import NeuronCluster, NeuronClusterConfig, NeuronConfig
+from emperor.neuron._validation import (
     NeuronClusterValidator,
     NeuronValidator,
 )
-from emperor.neuron.core.config import NeuronClusterConfig, NeuronConfig
-from emperor.neuron.core.model import NeuronCluster
 
 
 class TestNeuronClusterValidatorAdapter(unittest.TestCase):
@@ -46,9 +46,7 @@ class TestNeuronClusterValidatorAdapter(unittest.TestCase):
             def validate_field_types(cls, cfg):
                 return None
 
-        model = SimpleNamespace(
-            cfg=NeuronClusterConfig(neuron_config=NeuronConfig())
-        )
+        model = SimpleNamespace(cfg=NeuronClusterConfig(neuron_config=NeuronConfig()))
 
         with self.assertRaisesRegex(
             RuntimeError,

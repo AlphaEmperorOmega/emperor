@@ -1,9 +1,9 @@
 import unittest
 
 import torch
-from emperor.neuron.core._validator import TerminalValidator
-from emperor.neuron.core.config import TerminalConfig
-from emperor.neuron.core.layers import Terminal
+
+from emperor.neuron import Terminal, TerminalConfig
+from emperor.neuron._validation import TerminalValidator
 
 
 class TestTerminalValidatorAdapter(unittest.TestCase):

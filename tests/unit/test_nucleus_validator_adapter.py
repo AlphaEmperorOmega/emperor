@@ -1,9 +1,9 @@
 import unittest
 
 import torch
-from emperor.neuron.core._validator import NucleusValidator
-from emperor.neuron.core.config import NucleusConfig
-from emperor.neuron.core.layers import Nucleus
+
+from emperor.neuron import Nucleus, NucleusConfig
+from emperor.neuron._validation import NucleusValidator
 
 
 class TestNucleusValidatorAdapter(unittest.TestCase):

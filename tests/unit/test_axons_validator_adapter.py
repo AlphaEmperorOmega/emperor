@@ -1,9 +1,9 @@
 import unittest
 
 import torch
-from emperor.neuron.core._validator import AxonsValidator
-from emperor.neuron.core.config import AxonsConfig
-from emperor.neuron.core.layers import Axons
+
+from emperor.neuron import Axons, AxonsConfig
+from emperor.neuron._validation import AxonsValidator
 
 
 class TestAxonsValidatorAdapter(unittest.TestCase):
