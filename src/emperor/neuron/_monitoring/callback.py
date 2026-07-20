@@ -59,6 +59,8 @@ class _ForwardReplacement:
 class NeuronClusterMonitorCallback(Callback):
     """Log structural, routing, and plasticity diagnostics for neuron clusters."""
 
+    _OWNER_ATTRIBUTE = "_emperor_neuron_monitor_callback_owner"
+
     def __init__(
         self,
         log_every_n_steps: int = 100,
@@ -90,19 +92,23 @@ class NeuronClusterMonitorCallback(Callback):
         from emperor.neuron._cluster.model import NeuronCluster
 
         self.__cleanup()
-        self._clusters.extend(
-            (module_name, cluster)
-            for module_name, cluster in pl_module.named_modules()
-            if isinstance(cluster, NeuronCluster)
-        )
-        for module_name, cluster in self._clusters:
-            self._survival_history[module_name] = MonitorTensorHistory(
-                self.history_size,
-                normalization="unit_interval",
+        try:
+            self._clusters.extend(
+                (module_name, cluster)
+                for module_name, cluster in pl_module.named_modules()
+                if isinstance(cluster, NeuronCluster)
             )
-            self._previous_neuron_names[module_name] = set(cluster.cluster)
-            if cluster.beam_width == 1:
-                self.__wrap_cluster_forward(module_name, cluster, pl_module)
+            for module_name, cluster in self._clusters:
+                self._survival_history[module_name] = MonitorTensorHistory(
+                    self.history_size,
+                    normalization="unit_interval",
+                )
+                self._previous_neuron_names[module_name] = set(cluster.cluster)
+                if cluster.beam_width == 1:
+                    self.__wrap_cluster_forward(module_name, cluster, pl_module)
+        except Exception:
+            self.__cleanup()
+            raise
 
     def __wrap_cluster_forward(
         self,
@@ -110,6 +116,12 @@ class NeuronClusterMonitorCallback(Callback):
         cluster: NeuronCluster,
         pl_module: LightningModule,
     ) -> None:
+        current_monitor_owner = cluster.__dict__.get(self._OWNER_ATTRIBUTE)
+        if current_monitor_owner is not None and current_monitor_owner is not self:
+            raise RuntimeError(
+                "NeuronCluster is already monitored by another "
+                "NeuronClusterMonitorCallback."
+            )
         original_forward = cluster.forward
         had_instance_forward = "forward" in cluster.__dict__
         original_instance_forward = cluster.__dict__.get("forward")
@@ -134,6 +146,7 @@ class NeuronClusterMonitorCallback(Callback):
                 return traced_output
             return output, auxiliary_loss
 
+        cluster.__dict__[self._OWNER_ATTRIBUTE] = self
         cluster.forward = monitored_forward
         self._forward_replacements.append(
             _ForwardReplacement(
@@ -581,6 +594,8 @@ class NeuronClusterMonitorCallback(Callback):
     def __cleanup(self) -> None:
         for replacement in reversed(self._forward_replacements):
             replacement.restore()
+            if replacement.cluster.__dict__.get(self._OWNER_ATTRIBUTE) is self:
+                del replacement.cluster.__dict__[self._OWNER_ATTRIBUTE]
         self._forward_replacements.clear()
         self._clusters.clear()
         self._latest_observations.clear()
