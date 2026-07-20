@@ -1,23 +1,23 @@
 import unittest
 
 import torch
-from emperor.base.layer import (
+
+from emperor.layers import (
+    ActivationOptions,
+    GateConfig,
+    LastLayerBiasOptions,
     Layer,
     LayerConfig,
+    LayerControllerMonitorCallback,
+    LayerGateOptions,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
     LayerState,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.monitor import LayerControllerMonitorCallback
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.linears.core.config import LinearLayerConfig
-
+from emperor.linears import LinearLayerConfig
 from support.monitor import (
     CaptureLightningModule,
     NoExperimentLightningModule,
@@ -94,7 +94,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -119,7 +119,9 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 input_dim=4,
                 output_dim=4,
                 activation=activation,
-                residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+                residual_config=ResidualConfig(
+                    option=ResidualConnectionOptions.RESIDUAL
+                ),
                 dropout_probability=0.25,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
                 gate_config=(
@@ -312,7 +314,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                     input_dim=4,
                     output_dim=4,
                     activation=ActivationOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
