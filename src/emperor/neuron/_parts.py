@@ -4,11 +4,6 @@ import torch
 from torch import Tensor
 
 from emperor.neuron._options import TerminalConnectionShapeOptions
-from emperor.neuron._terminal_capture import (
-    TerminalRoute,
-    publish_terminal_route,
-    run_scored_terminal_forward,
-)
 from emperor.neuron._terminal_topology import initialize_terminal_connections
 from emperor.neuron._validation import (
     AxonsValidator,
@@ -124,67 +119,11 @@ class Terminal(Module):
         return self.sampler_config.build_with_router_input_dim(self.input_dim)
 
     def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        routed_signal = self.__compute_route(input)
-        publish_terminal_route(self, routed_signal)
-        routed_input, probabilities, _, _, selected_neurons, auxiliary_loss = (
-            routed_signal
-        )
-        return routed_input, probabilities, selected_neurons, auxiliary_loss
-
-    def _forward_with_log_probabilities(
-        self,
-        input: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        (
-            routed_input,
-            probabilities,
-            log_probabilities,
-            _,
-            selected_neurons,
-            auxiliary_loss,
-        ) = self._forward_with_router_scores(input)
-        return (
-            routed_input,
-            probabilities,
-            log_probabilities,
-            selected_neurons,
-            auxiliary_loss,
-        )
-
-    def _forward_with_router_scores(
-        self,
-        input: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
-        return run_scored_terminal_forward(self, input)
-
-    def __compute_route(self, input: Tensor) -> TerminalRoute:
         self.VALIDATOR.validate_forward_input(self, input)
-        if hasattr(
-            self.sampler,
-            "sample_probabilities_log_scores_router_scores_and_indices",
-        ):
-            (
-                probabilities,
-                log_probabilities,
-                router_scores,
-                selected_connection_indices,
-                _,
-                auxiliary_loss,
-            ) = self.sampler.sample_probabilities_log_scores_router_scores_and_indices(
-                input
-            )
-        else:
-            (
-                probabilities,
-                log_probabilities,
-                selected_connection_indices,
-                _,
-                auxiliary_loss,
-            ) = self.sampler.sample_probabilities_log_scores_and_indices(input)
-            router_scores = log_probabilities
+        probabilities, selected_connection_indices, _, auxiliary_loss = (
+            self.sampler.sample_probabilities_and_indices(input)
+        )
         probabilities = self.__ensure_probability_matrix(probabilities)
-        log_probabilities = self.__ensure_probability_matrix(log_probabilities)
-        router_scores = self.__ensure_probability_matrix(router_scores)
         selected_connection_indices = self.__resolve_selected_indices(
             input,
             selected_connection_indices,
@@ -198,8 +137,6 @@ class Terminal(Module):
         return (
             input,
             probabilities,
-            log_probabilities,
-            router_scores,
             selected_neurons,
             auxiliary_loss,
         )
@@ -322,46 +259,11 @@ class Neuron(Module):
         return self.axons(processed_signal)
 
     def route_signal(self, processed_signal: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        probabilities, _, selected_neurons, auxiliary_loss = (
-            self._route_signal_with_log_probabilities(processed_signal)
-        )
-        return probabilities, selected_neurons, auxiliary_loss
-
-    def _route_signal_with_log_probabilities(
-        self,
-        processed_signal: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        (
-            probabilities,
-            log_probabilities,
-            _,
-            selected_neurons,
-            auxiliary_loss,
-        ) = self._route_signal_with_router_scores(processed_signal)
-        return probabilities, log_probabilities, selected_neurons, auxiliary_loss
-
-    def _route_signal_with_router_scores(
-        self,
-        processed_signal: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         self.VALIDATOR.validate_forward_input(processed_signal)
-        (
-            _,
-            probabilities,
-            log_probabilities,
-            router_scores,
-            selected_neurons,
-            auxiliary_loss,
-        ) = self.terminal._forward_with_router_scores(
+        _, probabilities, selected_neurons, auxiliary_loss = self.terminal(
             self.__inject_coordinate_embedding(processed_signal)
         )
-        return (
-            probabilities,
-            log_probabilities,
-            router_scores,
-            selected_neurons,
-            auxiliary_loss,
-        )
+        return probabilities, selected_neurons, auxiliary_loss
 
     def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         processed_signal = self.process_signal(input)

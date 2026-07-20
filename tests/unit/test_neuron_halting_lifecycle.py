@@ -232,7 +232,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             model,
             state,
             torch.zeros(2, 1, dtype=torch.float64),
-            torch.tensor([0.0, -torch.inf], dtype=torch.float64),
+            torch.tensor([1.0, 0.0], dtype=torch.float64),
         )
 
         torch.testing.assert_close(reduced_loss, ponder_loss)
@@ -277,7 +277,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             model,
             state,
             torch.zeros(3, 1, dtype=torch.float64),
-            torch.tensor([0.0, -torch.inf, 0.0], dtype=torch.float64),
+            torch.tensor([1.0, 0.0, 1.0], dtype=torch.float64),
         )
 
         torch.testing.assert_close(
@@ -303,10 +303,10 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
                     advanced_mask=torch.tensor([True, True]),
                 ),
                 torch.tensor([0.0]),
-                "beam scores",
+                "beam path probabilities",
             ),
         }
-        for case_name, (state, beam_scores, message) in cases.items():
+        for case_name, (state, beam_path_probabilities, message) in cases.items():
             with self.subTest(case_name=case_name):
                 model = _HaltingModelStub(ponder_loss=torch.tensor([1.0, 3.0]))
 
@@ -315,7 +315,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
                         model,
                         state,
                         torch.zeros(2, 1),
-                        beam_scores,
+                        beam_path_probabilities,
                     )
 
     def test_absent_halting_state_marks_no_rows_halted(self) -> None:

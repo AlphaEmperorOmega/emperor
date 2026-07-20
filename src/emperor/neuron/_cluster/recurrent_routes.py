@@ -32,13 +32,7 @@ class _NeuronClusterRecurrentRoutesMixin:
         input_shape: tuple[int, ...],
         return_trace: bool,
     ) -> NeuronClusterRouteState:
-        (
-            probabilities,
-            log_probabilities,
-            router_scores,
-            selected_coords,
-            entry_loss,
-        ) = self._route_entry_input_with_router_scores(input)
+        probabilities, selected_coords, entry_loss = self._route_entry_input(input)
         entry_called_mask = torch.ones(
             input.shape[0],
             dtype=torch.bool,
@@ -54,9 +48,6 @@ class _NeuronClusterRecurrentRoutesMixin:
         weighted_candidate = self._weighted_branch_candidate(
             branch_outputs,
             probabilities,
-            valid_branch_mask,
-            log_probabilities=log_probabilities,
-            router_scores=router_scores,
         )
         halting_state = self._maybe_update_halting_state(
             None,
@@ -121,72 +112,10 @@ class _NeuronClusterRecurrentRoutesMixin:
         )
 
     def _route_entry_input(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        probabilities, _, entry_coordinates, auxiliary_loss = (
-            self._route_entry_input_with_log_probabilities(input)
+        probabilities, selected_route_indices, _, auxiliary_loss = (
+            self.entry_sampler.sample_probabilities_and_indices(input)
         )
-        return probabilities, entry_coordinates, auxiliary_loss
-
-    def _route_entry_input_with_log_probabilities(
-        self,
-        input: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        (
-            probabilities,
-            log_probabilities,
-            _,
-            entry_coordinates,
-            auxiliary_loss,
-        ) = self._route_entry_input_with_router_scores(input)
-        return (
-            probabilities,
-            log_probabilities,
-            entry_coordinates,
-            auxiliary_loss,
-        )
-
-    def _route_entry_input_with_router_scores(
-        self,
-        input: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        if hasattr(
-            self.entry_sampler,
-            "sample_probabilities_log_scores_router_scores_and_indices",
-        ):
-            (
-                probabilities,
-                log_probabilities,
-                router_scores,
-                selected_route_indices,
-                _,
-                auxiliary_loss,
-            ) = (
-                self.entry_sampler.sample_probabilities_log_scores_router_scores_and_indices(
-                    input
-                )
-            )
-        elif hasattr(
-            self.entry_sampler,
-            "sample_probabilities_log_scores_and_indices",
-        ):
-            (
-                probabilities,
-                log_probabilities,
-                selected_route_indices,
-                _,
-                auxiliary_loss,
-            ) = self.entry_sampler.sample_probabilities_log_scores_and_indices(input)
-            router_scores = log_probabilities
-        else:
-            probabilities, selected_route_indices, _, auxiliary_loss = (
-                self.entry_sampler.sample_probabilities_and_indices(input)
-            )
-            log_probabilities = self._log_probabilities_from_probabilities(
-                probabilities
-            )
-            router_scores = log_probabilities
         probabilities = self._ensure_probability_matrix(probabilities)
-        log_probabilities = self._ensure_probability_matrix(log_probabilities)
-        router_scores = self._ensure_probability_matrix(router_scores)
         selected_route_indices = self._resolve_selected_indices(
             input,
             selected_route_indices,
@@ -198,8 +127,6 @@ class _NeuronClusterRecurrentRoutesMixin:
         ]
         return (
             probabilities,
-            log_probabilities,
-            router_scores,
             entry_coordinates,
             auxiliary_loss,
         )
@@ -223,8 +150,6 @@ class _NeuronClusterRecurrentRoutesMixin:
         next_final_mask = route_state.final_mask.clone()
         called_neuron_mask = torch.zeros_like(route_mask)
         probabilities = None
-        log_probabilities = None
-        router_scores = None
         selected_coords = None
         accumulated_loss = route_state.loss
         callable_route_mask = self._callable_route_mask(
@@ -240,13 +165,7 @@ class _NeuronClusterRecurrentRoutesMixin:
                 batch_indices,
                 route_state.hidden.device,
             )
-            (
-                route_probabilities,
-                route_log_probabilities,
-                route_router_scores,
-                route_coords,
-                neuron_loss,
-            ) = self._route_neuron_with_router_scores(
+            route_probabilities, route_coords, neuron_loss = self._route_neuron(
                 self.cluster[neuron_name],
                 route_state.hidden.index_select(0, batch_index_tensor),
             )
@@ -257,19 +176,7 @@ class _NeuronClusterRecurrentRoutesMixin:
                 route_coords,
                 route_state.hidden,
             )
-            log_probabilities = self._ensure_log_probability_buffer(
-                log_probabilities,
-                route_log_probabilities,
-                route_state.hidden,
-            )
-            router_scores = self._ensure_log_probability_buffer(
-                router_scores,
-                route_router_scores,
-                route_state.hidden,
-            )
             probabilities[batch_index_tensor] = route_probabilities
-            log_probabilities[batch_index_tensor] = route_log_probabilities
-            router_scores[batch_index_tensor] = route_router_scores
             selected_coords[batch_index_tensor] = route_coords.to(
                 device=route_state.hidden.device,
                 dtype=torch.long,
@@ -305,9 +212,6 @@ class _NeuronClusterRecurrentRoutesMixin:
         weighted_candidate = self._weighted_branch_candidate(
             branch_outputs,
             probabilities,
-            valid_target_mask,
-            log_probabilities=log_probabilities,
-            router_scores=router_scores,
         )
         chosen_branch_indices = torch.zeros(
             route_state.hidden.shape[0],
@@ -398,44 +302,6 @@ class _NeuronClusterRecurrentRoutesMixin:
 
         _, probabilities, selected_coords, auxiliary_loss = neuron(hidden)
         return probabilities, selected_coords, auxiliary_loss
-
-    def _route_neuron_with_log_probabilities(
-        self,
-        neuron,
-        hidden: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        if hasattr(neuron, "_route_signal_with_log_probabilities"):
-            return neuron._route_signal_with_log_probabilities(hidden)
-
-        probabilities, selected_coords, auxiliary_loss = self._route_neuron(
-            neuron,
-            hidden,
-        )
-        return (
-            probabilities,
-            self._log_probabilities_from_probabilities(probabilities),
-            selected_coords,
-            auxiliary_loss,
-        )
-
-    def _route_neuron_with_router_scores(
-        self,
-        neuron,
-        hidden: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        if hasattr(neuron, "_route_signal_with_router_scores"):
-            return neuron._route_signal_with_router_scores(hidden)
-
-        probabilities, log_probabilities, selected_coords, auxiliary_loss = (
-            self._route_neuron_with_log_probabilities(neuron, hidden)
-        )
-        return (
-            probabilities,
-            log_probabilities,
-            log_probabilities,
-            selected_coords,
-            auxiliary_loss,
-        )
 
     def _process_neuron(self, neuron, hidden: Tensor) -> Tensor:
         if hasattr(neuron, "process_signal"):

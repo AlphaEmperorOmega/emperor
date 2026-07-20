@@ -192,7 +192,7 @@ class _NeuronHaltingLifecycle:
         halting_model: "HaltingBase",
         halting_state: "HaltingStateBase",
         current_hidden: Tensor,
-        beam_scores: Tensor | None,
+        beam_path_probabilities: Tensor | None,
     ) -> tuple[Tensor, Tensor]:
         finalized_hidden, ponder_loss = halting_model.finalize_weighted_accumulation(
             halting_state,
@@ -200,7 +200,7 @@ class _NeuronHaltingLifecycle:
         )
         reduced_ponder_loss = cls.__reduce_ponder_loss(
             ponder_loss,
-            beam_scores,
+            beam_path_probabilities,
             getattr(halting_state, "advanced_mask", None),
         )
         halting_usage_tracker = getattr(halting_model, "_usage_tracker", None)
@@ -211,7 +211,7 @@ class _NeuronHaltingLifecycle:
     @staticmethod
     def __reduce_ponder_loss(
         ponder_loss: Tensor,
-        beam_scores: Tensor | None,
+        beam_path_probabilities: Tensor | None,
         advanced_mask: Tensor | None,
     ) -> Tensor:
         if ponder_loss.dim() == 0:
@@ -221,13 +221,17 @@ class _NeuronHaltingLifecycle:
                 "Vector Neuron ponder loss requires an aligned advanced mask."
             )
         valid_slot_mask = advanced_mask.bool()
-        if beam_scores is not None:
-            if ponder_loss.shape[0] != beam_scores.shape[0]:
+        if beam_path_probabilities is not None:
+            if ponder_loss.shape[0] != beam_path_probabilities.shape[0]:
                 raise ValueError(
-                    "Vector Neuron ponder loss requires aligned beam scores."
+                    "Vector Neuron ponder loss requires aligned beam path "
+                    "probabilities."
                 )
-            finite_beam_mask = torch.isfinite(beam_scores)
-            valid_slot_mask = valid_slot_mask & finite_beam_mask
+            positive_finite_path_mask = (
+                torch.isfinite(beam_path_probabilities)
+                & (beam_path_probabilities > 0)
+            )
+            valid_slot_mask = valid_slot_mask & positive_finite_path_mask
 
         while valid_slot_mask.dim() < ponder_loss.dim():
             valid_slot_mask = valid_slot_mask.unsqueeze(-1)

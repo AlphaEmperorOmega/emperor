@@ -12,6 +12,7 @@ from torch import Tensor
 from emperor.config import ConfigBase, optional_field
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
+    HaltingStateBase,
     StickBreakingConfig,
 )
 from emperor.layers import (
@@ -190,10 +191,36 @@ class ScriptedSampler(nn.Module):
         )
 
 
-@dataclass
-class RecordingHaltingState:
-    halt_mask: Tensor
-    hidden: Tensor
+class FourFieldOnlySampler(ScriptedSampler):
+    def __getattr__(self, name: str):
+        if "log_scores" in name or "router_scores" in name:
+            raise AssertionError(f"score interface requested: {name}")
+        return super().__getattr__(name)
+
+
+class LearnableFourFieldSampler(nn.Module):
+    def __init__(self, indices: list[int], probabilities: list[float]):
+        super().__init__()
+        self.register_buffer(
+            "indices",
+            torch.tensor(indices, dtype=torch.long),
+            persistent=False,
+        )
+        self.probabilities = nn.Parameter(torch.tensor(probabilities))
+
+    def sample_probabilities_and_indices(self, input: Tensor):
+        batch_size = input.shape[0]
+        return (
+            self.probabilities.to(dtype=input.dtype).expand(batch_size, -1),
+            self.indices.to(device=input.device).expand(batch_size, -1),
+            None,
+            input.new_zeros(()),
+        )
+
+
+@dataclass(kw_only=True, init=False)
+class RecordingHaltingState(HaltingStateBase):
+    pass
 
 
 class RecordingHaltingModel(nn.Module):
@@ -217,20 +244,50 @@ class RecordingHaltingModel(nn.Module):
         model_hidden_state: Tensor,
     ) -> tuple[RecordingHaltingState, Tensor]:
         self.update_count += 1
-        self.inputs.append(model_hidden_state)
-        halt_mask = torch.zeros(
-            model_hidden_state.shape[0],
+        valid_mask = torch.ones(
+            model_hidden_state.shape[:-1],
             dtype=torch.bool,
             device=model_hidden_state.device,
         )
+        previous_halt_mask = (
+            torch.zeros(
+                model_hidden_state.shape[:-1],
+                dtype=torch.bool,
+                device=model_hidden_state.device,
+            )
+            if previous_state is None
+            else previous_state.halt_mask
+        )
+        self.inputs.append(model_hidden_state)
+        previous_output = (
+            model_hidden_state
+            if previous_state is None
+            else previous_state.output_hidden
+        )
+        output_hidden = torch.where(
+            previous_halt_mask.unsqueeze(-1),
+            previous_output,
+            model_hidden_state,
+        )
+        halt_mask = previous_halt_mask.clone()
         if (
             self.halt_after_updates is not None
             and self.update_count >= self.halt_after_updates
         ):
-            halt_mask = torch.ones_like(halt_mask)
-        if previous_state is not None:
-            halt_mask = halt_mask | previous_state.halt_mask
-        return RecordingHaltingState(halt_mask, model_hidden_state), model_hidden_state
+            halt_mask |= valid_mask
+        state = RecordingHaltingState(
+            output_hidden=output_hidden,
+            accumulated_hidden=output_hidden,
+            continuation_probability=torch.ones(
+                model_hidden_state.shape[:-1],
+                dtype=model_hidden_state.dtype,
+                device=model_hidden_state.device,
+            ),
+            halt_mask=halt_mask,
+            valid_mask=valid_mask,
+            stop_requested=bool((halt_mask | ~valid_mask).all().item()),
+        )
+        return state, output_hidden
 
     def finalize_weighted_accumulation(
         self,
@@ -238,9 +295,10 @@ class RecordingHaltingModel(nn.Module):
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
         self.finalize_count += 1
+        state.finalized = True
         return (
-            state.hidden + self.finalize_offset,
-            current_hidden.new_full((current_hidden.shape[0],), self.ponder_loss),
+            state.output_hidden + self.finalize_offset,
+            current_hidden.new_full(current_hidden.shape[:-1], self.ponder_loss),
         )
 
 
@@ -584,12 +642,37 @@ class TestTerminal(NeuronTestCase):
         model = self.terminal_config().build()
         input_batch = torch.randn(self.batch_size, self.input_dim)
 
-        output, probabilities, selected_neurons, auxiliary_loss = model(input_batch)
+        result = model(input_batch)
+        self.assertEqual(len(result), 4)
+        output, probabilities, selected_neurons, auxiliary_loss = result
 
         self.assertIs(output, input_batch)
         self.assertEqual(probabilities.shape, (self.batch_size, 2))
         self.assertEqual(selected_neurons.shape, (self.batch_size, 2, 3))
         self.assertIsInstance(auxiliary_loss, Tensor)
+        self.assertEqual(auxiliary_loss.shape, ())
+
+        with self.assertRaises(TypeError):
+            model(input_batch, return_log_probabilities=True)
+
+    def test_forward_uses_only_four_field_sampler_interface(self):
+        model = self.terminal_config().build()
+        model.sampler = FourFieldOnlySampler(
+            indices=[0, 1],
+            probabilities=[0.25, 0.75],
+        )
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        routed_input, probabilities, selected_neurons, auxiliary_loss = model(
+            input_batch
+        )
+
+        self.assertIs(routed_input, input_batch)
+        torch.testing.assert_close(
+            probabilities,
+            torch.tensor([[0.25, 0.75]]).expand(self.batch_size, -1),
+        )
+        self.assertEqual(selected_neurons.shape, (self.batch_size, 2, 3))
         self.assertEqual(auxiliary_loss.shape, ())
 
     def test_sparse_forward_returns_matrix_shapes(self):
@@ -660,6 +743,24 @@ class TestNeuron(NeuronTestCase):
         self.assertIsInstance(auxiliary_loss, Tensor)
         self.assertEqual(model.batch_counter.item(), 1)
 
+    def test_forward_uses_only_four_field_sampler_interface(self):
+        model = self.neuron_config().build()
+        model.terminal.sampler = FourFieldOnlySampler(
+            indices=[0, 1],
+            probabilities=[0.25, 0.75],
+        )
+
+        _, probabilities, selected_neurons, auxiliary_loss = model(
+            torch.randn(self.batch_size, self.input_dim)
+        )
+
+        torch.testing.assert_close(
+            probabilities,
+            torch.tensor([[0.25, 0.75]]).expand(self.batch_size, -1),
+        )
+        self.assertEqual(selected_neurons.shape, (self.batch_size, 2, 3))
+        self.assertEqual(auxiliary_loss.shape, ())
+
     def test_coordinate_embedding_disabled_by_default(self):
         model = self.neuron_config().build()
 
@@ -709,6 +810,51 @@ class TestNeuron(NeuronTestCase):
         )
         torch.testing.assert_close(probabilities, expected_probabilities)
         torch.testing.assert_close(selected_neurons, expected_selected_neurons)
+
+    def test_route_signal_runs_terminal_forward_hook_once(self):
+        model = self.neuron_config().build()
+        processed_signal = torch.randn(self.batch_size, self.input_dim)
+        hook_outputs: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
+        hook_handle = model.terminal.register_forward_hook(
+            lambda _module, _inputs, output: hook_outputs.append(output)
+        )
+        try:
+            probabilities, selected_neurons, auxiliary_loss = model.route_signal(
+                processed_signal
+            )
+        finally:
+            hook_handle.remove()
+
+        self.assertEqual(len(hook_outputs), 1)
+        self.assertEqual(len(hook_outputs[0]), 4)
+        self.assertEqual(probabilities.shape[0], processed_signal.shape[0])
+        self.assertEqual(selected_neurons.shape[0], processed_signal.shape[0])
+        self.assertEqual(auxiliary_loss.shape, ())
+
+    def test_route_signal_runs_terminal_backward_hook_once(self):
+        model = self.neuron_config().build()
+        processed_signal = torch.randn(
+            self.batch_size,
+            self.input_dim,
+            requires_grad=True,
+        )
+        hook_calls: list[
+            tuple[tuple[Tensor | None, ...], tuple[Tensor | None, ...]]
+        ] = []
+        hook_handle = model.terminal.register_full_backward_hook(
+            lambda _module, grad_input, grad_output: hook_calls.append(
+                (grad_input, grad_output)
+            )
+        )
+        try:
+            probabilities, _, _ = model.route_signal(processed_signal)
+            probabilities.sum().backward()
+        finally:
+            hook_handle.remove()
+
+        self.assertEqual(len(hook_calls), 1)
+        self.assertIsNotNone(processed_signal.grad)
+        self.assertTrue(torch.isfinite(processed_signal.grad).all().item())
 
     def test_coordinate_embedding_excluded_from_state_dict(self):
         model = self.neuron_config(coordinate_embedding_flag=True).build()
@@ -776,6 +922,177 @@ class TestNeuronCluster(NeuronTestCase):
         model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
         model.halting_model = halting_model
         return model
+
+    def test_routing_uses_only_four_field_sampler_interface(self):
+        model = self.scripted_cluster(max_steps=1)
+        model.entry_sampler = FourFieldOnlySampler(
+            indices=[0],
+            probabilities=[1.0],
+        )
+
+        output, auxiliary_loss = model(torch.zeros(1, model.input_dim))
+
+        self.assertEqual(output.shape, (1, model.input_dim))
+        self.assertEqual(auxiliary_loss.shape, ())
+
+    def test_top_one_probability_uses_ordinary_product_gradients(self):
+        model = self.scripted_cluster(
+            max_steps=1,
+            halting_model=RecordingHaltingModel(halt_after_updates=1),
+        )
+        sampler = LearnableFourFieldSampler(indices=[0], probabilities=[0.25])
+        model.entry_sampler = sampler
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=[[1, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[2.0],
+                )
+            }
+        )
+        input_tensor = torch.tensor([[1.0]], requires_grad=True)
+
+        output, _ = model(input_tensor)
+        output.sum().backward()
+
+        torch.testing.assert_close(output, torch.tensor([[0.75]]))
+        torch.testing.assert_close(input_tensor.grad, torch.tensor([[0.25]]))
+        torch.testing.assert_close(sampler.probabilities.grad, torch.tensor([3.0]))
+
+    def test_scaling_sampler_probabilities_scales_output(self):
+        outputs = []
+        for probability_scale in (1.0, 0.4):
+            model = self.scripted_cluster(
+                max_steps=1,
+                halting_model=RecordingHaltingModel(halt_after_updates=1),
+                x_axis_total_neurons=2,
+                initial_x_axis_total_neurons=2,
+            )
+            model.entry_sampler = ScriptedSampler(
+                indices=[0, 1],
+                probabilities=[
+                    probability_scale * 0.25,
+                    probability_scale * 0.75,
+                ],
+            )
+            model.cluster = nn.ModuleDict(
+                {
+                    "neuron_1_1_1": ScriptedNeuron(
+                        routes=[[1, 1, 1]],
+                        probabilities=[1.0],
+                        delta=[2.0],
+                    ),
+                    "neuron_2_1_1": ScriptedNeuron(
+                        routes=[[2, 1, 1]],
+                        probabilities=[1.0],
+                        delta=[6.0],
+                    ),
+                }
+            )
+            output, _ = model(torch.zeros(1, 1))
+            outputs.append(output)
+
+        torch.testing.assert_close(outputs[1], outputs[0] * 0.4)
+
+    def test_real_sampler_probabilities_match_direct_weighted_sum(self):
+        input_tensor = torch.tensor([[2.0, 1.0, 0.0]])
+        branch_deltas = torch.tensor(
+            [
+                [1.0, 0.0, 0.0],
+                [0.0, 2.0, 0.0],
+                [0.0, 0.0, 3.0],
+            ]
+        )
+
+        for normalize_probabilities in (False, True):
+            with self.subTest(normalize_probabilities=normalize_probabilities):
+                model = self.scripted_cluster(
+                    max_steps=1,
+                    halting_model=RecordingHaltingModel(halt_after_updates=1),
+                    input_dim=3,
+                    x_axis_total_neurons=3,
+                    initial_x_axis_total_neurons=3,
+                )
+                sampler_config = self.sampler_config(
+                    input_dim=3,
+                    num_experts=3,
+                    top_k=2,
+                    router_config=None,
+                )
+                sampler_config.normalize_probabilities_flag = normalize_probabilities
+                model.entry_sampler = sampler_config.build().eval()
+                model.cluster = nn.ModuleDict(
+                    {
+                        f"neuron_{index + 1}_1_1": ScriptedNeuron(
+                            routes=[[index + 1, 1, 1]],
+                            probabilities=[1.0],
+                            delta=delta.tolist(),
+                        )
+                        for index, delta in enumerate(branch_deltas)
+                    }
+                )
+                probabilities, indices, _, _ = (
+                    model.entry_sampler.sample_probabilities_and_indices(input_tensor)
+                )
+                selected_branch_outputs = input_tensor.unsqueeze(1) + branch_deltas[
+                    indices
+                ]
+                expected_output = (
+                    selected_branch_outputs * probabilities.unsqueeze(-1)
+                ).sum(dim=1)
+
+                output, _ = model(input_tensor)
+
+                torch.testing.assert_close(output, expected_output)
+
+    def test_neuron_and_experts_share_probability_weighting_contract(self):
+        from emperor.experts._layers.reduce import MixtureOfExpertsReduce
+        from unit.test_expert_behavioral_contracts import _mixture_config
+
+        experts_model = MixtureOfExpertsReduce(
+            _mixture_config(input_dim=1, output_dim=1)
+        )
+        with torch.no_grad():
+            for expert_stack in experts_model.expert_modules:
+                expert_stack[0].model.weight_params.fill_(1.0)
+        branch_outputs = torch.tensor([[2.0], [6.0]])
+
+        for probability_values in ([0.25, 0.75], [0.2, 0.3]):
+            with self.subTest(probabilities=probability_values):
+                probabilities = torch.tensor([probability_values])
+                experts_output, _, _ = experts_model(
+                    branch_outputs,
+                    probabilities=probabilities,
+                    indices=None,
+                )
+                neuron_model = self.scripted_cluster(
+                    max_steps=1,
+                    halting_model=RecordingHaltingModel(halt_after_updates=1),
+                    x_axis_total_neurons=2,
+                    initial_x_axis_total_neurons=2,
+                )
+                neuron_model.entry_sampler = ScriptedSampler(
+                    indices=[0, 1],
+                    probabilities=probability_values,
+                )
+                neuron_model.cluster = nn.ModuleDict(
+                    {
+                        "neuron_1_1_1": ScriptedNeuron(
+                            routes=[[1, 1, 1]],
+                            probabilities=[1.0],
+                            delta=[2.0],
+                        ),
+                        "neuron_2_1_1": ScriptedNeuron(
+                            routes=[[2, 1, 1]],
+                            probabilities=[1.0],
+                            delta=[6.0],
+                        ),
+                    }
+                )
+                neuron_output, _ = neuron_model(torch.zeros(1, 1))
+
+                torch.testing.assert_close(neuron_output, experts_output)
 
     def test_initializes_expected_coordinate_keys(self):
         model = NeuronClusterConfig(
@@ -1815,7 +2132,7 @@ class TestNeuronCluster(NeuronTestCase):
             0,
         )
 
-    def test_weighted_topk_candidate_updates_halting_with_renormalized_weights(self):
+    def test_weighted_topk_candidate_updates_halting_with_sampler_weights(self):
         halting_model = RecordingHaltingModel(ponder_loss=0.5)
         model = self.scripted_cluster(
             max_steps=1,
@@ -1840,9 +2157,9 @@ class TestNeuronCluster(NeuronTestCase):
         output, auxiliary_loss = model(torch.zeros(1, 2))
 
         torch.testing.assert_close(halting_model.inputs[0], torch.tensor([[1.0, 0.0]]))
-        # The escaped invalid branch (prob 0.75) renormalizes away, so halting
-        # sees the valid branch output alone rather than a blend with the input.
-        expected_candidate = torch.tensor([[1.0, 4.0]])
+        # The invalid branch keeps its sampler-assigned mass and passes the
+        # unchanged source signal through: 0.25 * [1, 4] + 0.75 * [1, 0].
+        expected_candidate = torch.tensor([[1.0, 1.0]])
         torch.testing.assert_close(halting_model.inputs[1], expected_candidate)
         torch.testing.assert_close(output, expected_candidate)
         torch.testing.assert_close(auxiliary_loss, torch.tensor(0.5))
@@ -1972,10 +2289,9 @@ class TestNeuronCluster(NeuronTestCase):
 
         output, _ = model(torch.zeros(1, 1))
 
-        # Branch weights renormalize over valid branches, so the escaped
-        # invalid branch contributes nothing: the exit value is the valid
-        # branch output (1 + 10) alone, not a blend with the raw input.
-        torch.testing.assert_close(output, torch.tensor([[11.0]]))
+        # The invalid branch passes through the source signal with its original
+        # probability: 0.8 * 1 + 0.2 * (1 + 10) = 3.
+        torch.testing.assert_close(output, torch.tensor([[3.0]]))
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 1)
         self.assertEqual(int(model.cluster["neuron_2_1_1"].batch_counter.item()), 1)
         self.assertEqual(
@@ -2035,7 +2351,7 @@ class TestNeuronCluster(NeuronTestCase):
         # branches to 7.75, then the argmax neuron adds its delta of 10.
         torch.testing.assert_close(output, torch.tensor([[17.75]]))
 
-    def test_beam_search_continues_multiple_routes_and_merges_by_score(self):
+    def test_beam_search_continues_multiple_routes_and_merges_by_probability(self):
         model = self.beam_pair_cluster(
             entry_probabilities=[0.25, 0.75],
             first_neuron_routes=[[1, 1, 1]],
@@ -2044,8 +2360,8 @@ class TestNeuronCluster(NeuronTestCase):
         output, _ = model(torch.zeros(1, 1))
 
         # The 0.75-beam walks neuron_2 twice (0 + 10 + 10 = 20), the
-        # 0.25-beam walks neuron_1 twice (0 + 1 + 1 = 2); merge weights are
-        # softmax(ln 0.75, ln 0.25) = (0.75, 0.25) -> 15.5.
+        # 0.25-beam walks neuron_1 twice (0 + 1 + 1 = 2); the sampler
+        # probabilities directly weight the final values -> 15.5.
         torch.testing.assert_close(output, torch.tensor([[15.5]]))
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 2)
         self.assertEqual(int(model.cluster["neuron_2_1_1"].batch_counter.item()), 2)
@@ -2058,6 +2374,99 @@ class TestNeuronCluster(NeuronTestCase):
             1,
         )
 
+    def test_beam_multiplies_probabilities_across_route_steps(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.5, 0.4],
+            first_neuron_routes=[[1, 1, 1]],
+        )
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=[[1, 1, 1]],
+                    probabilities=[0.5],
+                    delta=[1.0],
+                ),
+                "neuron_2_1_1": ScriptedNeuron(
+                    routes=[[2, 1, 1]],
+                    probabilities=[0.25],
+                    delta=[10.0],
+                ),
+            }
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # Path masses are 0.5 * 0.5 and 0.4 * 0.25. Their branch values are
+        # 2 and 20, so the unnormalized merge is 0.25 * 2 + 0.1 * 20.
+        torch.testing.assert_close(output, torch.tensor([[2.5]]))
+
+    def test_beam_pruning_discards_probability_mass_without_redistribution(self):
+        model = self.scripted_cluster(
+            max_steps=1,
+            halting_model=RecordingHaltingModel(halt_after_updates=1),
+            beam_width=2,
+            x_axis_total_neurons=3,
+            initial_x_axis_total_neurons=3,
+        )
+        model.entry_sampler = ScriptedSampler(
+            indices=[0, 1, 2],
+            probabilities=[0.5, 0.3, 0.2],
+        )
+        model.cluster = nn.ModuleDict(
+            {
+                f"neuron_{index}_1_1": ScriptedNeuron(
+                    routes=[[index, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[delta],
+                )
+                for index, delta in ((1, 1.0), (2, 10.0), (3, 100.0))
+            }
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # Beam width two drops the 0.2 path entirely: 0.5 * 1 + 0.3 * 10.
+        torch.testing.assert_close(output, torch.tensor([[3.5]]))
+
+    def test_all_invalid_beam_branches_keep_identity_mass(self):
+        model = self.scripted_cluster(
+            max_steps=1,
+            beam_width=2,
+            x_axis_total_neurons=1,
+        )
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": ScriptedNeuron(
+                    routes=[[98, 1, 1], [99, 1, 1]],
+                    probabilities=[0.25, 0.75],
+                    delta=[1.0],
+                )
+            }
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        # Both invalid branches pass through the same source hidden state.
+        torch.testing.assert_close(output, torch.tensor([[1.0]]))
+
+    def test_beam_cycles_stop_at_required_max_steps_without_adaptive_halting(
+        self,
+    ) -> None:
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.5, 0.5],
+            first_neuron_routes=[[1, 1, 1]],
+            max_steps=3,
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        torch.testing.assert_close(output, torch.tensor([[22.0]]))
+        for neuron_name in ("neuron_1_1_1", "neuron_2_1_1"):
+            with self.subTest(neuron_name=neuron_name):
+                neuron = model.cluster[neuron_name]
+                self.assertEqual(int(neuron.batch_counter.item()), 4)
+                self.assertEqual(int(neuron.route_call_counter.item()), 3)
+
     def test_beam_escaped_route_competes_in_final_merge(self):
         model = self.beam_pair_cluster(
             entry_probabilities=[0.4, 0.6],
@@ -2067,8 +2476,51 @@ class TestNeuronCluster(NeuronTestCase):
         output, _ = model(torch.zeros(1, 1))
 
         # The 0.6-beam expands to 20; the 0.4-beam's only branch is invalid,
-        # so it finishes at 1 and keeps its score: 0.6 * 20 + 0.4 * 1 = 12.4.
+        # so it finishes at 1 and keeps its mass: 0.6 * 20 + 0.4 * 1 = 12.4.
         torch.testing.assert_close(output, torch.tensor([[12.4]]))
+
+    def test_beam_escaped_route_is_final_and_inactive(self) -> None:
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.4, 0.6],
+            first_neuron_routes=[[99, 1, 1]],
+        ).eval()
+        input_tensor = torch.zeros(1, 1)
+
+        entry_state = model._NeuronClusterBeamRoutesMixin__run_entry_routes_with_beams(
+            input_tensor
+        )
+        route_state = model._NeuronClusterBeamRoutesMixin__run_beam_route_step(
+            entry_state,
+            model._current_route_mask(entry_state),
+        )
+
+        torch.testing.assert_close(
+            route_state.hidden,
+            torch.tensor([[20.0], [1.0]]),
+        )
+        torch.testing.assert_close(
+            route_state.positions,
+            torch.tensor([[2, 1, 1], [99, 1, 1]]),
+        )
+        torch.testing.assert_close(
+            route_state.active_mask,
+            torch.tensor([True, False]),
+        )
+        torch.testing.assert_close(
+            route_state.escaped_mask,
+            torch.tensor([False, True]),
+        )
+        torch.testing.assert_close(
+            route_state.final_mask,
+            torch.tensor([False, True]),
+        )
+        torch.testing.assert_close(
+            route_state.beam_path_probabilities,
+            torch.tensor([0.6, 0.4]),
+        )
+        self.assertFalse(
+            bool((route_state.active_mask & route_state.final_mask).any().item())
+        )
 
     def test_beam_halting_updates_per_beam_and_merges_finalized_hidden(self):
         halting_model = RecordingHaltingModel(halt_after_updates=1)
@@ -2082,13 +2534,53 @@ class TestNeuronCluster(NeuronTestCase):
         output, _ = model(torch.zeros(1, 1))
 
         # The entry update halts every beam, so the route loop never runs;
-        # the finalized per-beam hidden states merge by entry scores.
+        # the finalized per-beam hidden states merge by entry probabilities.
         self.assertEqual(halting_model.update_count, 1)
         torch.testing.assert_close(
             halting_model.inputs[0],
             torch.tensor([[10.0], [1.0]]),
         )
         torch.testing.assert_close(output, torch.tensor([[7.75]]))
+
+    def test_beam_merge_preserves_unnormalized_sampler_mass(self):
+        model = self.beam_pair_cluster(
+            entry_probabilities=[0.2, 0.3],
+            first_neuron_routes=[[1, 1, 1]],
+            max_steps=3,
+            halting_model=RecordingHaltingModel(halt_after_updates=1),
+        )
+
+        output, _ = model(torch.zeros(1, 1))
+
+        torch.testing.assert_close(output, torch.tensor([[3.2]]))
+
+    def test_beam_halting_matches_single_route_owner_lifecycle(self):
+        results: dict[int, tuple[Tensor, Tensor]] = {}
+
+        for beam_width in (1, 2):
+            with self.subTest(beam_width=beam_width):
+                halting_model = RecordingHaltingModel(ponder_loss=0.5)
+                model = self.scripted_cluster(
+                    max_steps=1,
+                    halting_model=halting_model,
+                    input_dim=1,
+                    x_axis_total_neurons=1,
+                    beam_width=beam_width,
+                ).eval()
+                neuron = ScriptedNeuron(
+                    routes=[[1, 1, 1]],
+                    probabilities=[1.0],
+                    delta=[1.0],
+                )
+                model.cluster = nn.ModuleDict({"neuron_1_1_1": neuron})
+
+                results[beam_width] = model(torch.zeros(1, 1))
+
+                self.assertEqual(int(neuron.batch_counter), 2)
+                self.assertEqual(int(neuron.route_call_counter), 1)
+
+        torch.testing.assert_close(results[2][0], results[1][0])
+        torch.testing.assert_close(results[2][1], results[1][1])
 
     def test_return_trace_with_beam_width_raises(self):
         model = self.beam_pair_cluster(

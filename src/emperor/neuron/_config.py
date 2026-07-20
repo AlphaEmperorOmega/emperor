@@ -132,10 +132,12 @@ class NeuronClusterConfig(ConfigBase):
     beam_width: int | None = optional_field(
         "Number of routes kept alive per sample during traversal. With a "
         "width of 2 or more, every step expands each live route's top-k "
-        "branches, scores candidates by accumulated log route probability, "
-        "prunes back to this many routes, and the final output merges the "
-        "surviving routes weighted by their softmaxed scores. A width of 1 "
-        "keeps the single-route weighted continuation. Defaults to 1."
+        "branches, multiplies each branch probability by its parent's path "
+        "probability, and prunes back to this many routes. Pruning and "
+        "probability underflow may discard mass; the final output directly "
+        "sums surviving route values weighted by their path probabilities "
+        "without normalization. A width of 1 keeps the single-route weighted "
+        "continuation. Defaults to 1."
     )
     growth_threshold: int | None = optional_field(
         "Neuron process_signal call count that triggers growth. Counted in "

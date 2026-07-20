@@ -5,12 +5,10 @@ import torch
 from torch import Tensor
 
 from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
-from emperor.neuron._cluster.routing_numerics import weighted_branch_candidate
 from emperor.neuron._trace import NeuronClusterTrace
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingStateBase
-    from emperor.neuron._cluster.beam_routes import _BeamScoreHistory
 
 
 @dataclass
@@ -23,8 +21,7 @@ class NeuronClusterRouteState:
     halting_state: Any | None
     loss: Tensor
     trace: NeuronClusterTrace | None = None
-    beam_scores: Tensor | None = None
-    beam_score_history: "_BeamScoreHistory | None" = None
+    beam_path_probabilities: Tensor | None = None
 
 
 class _NeuronClusterStateMixin:
@@ -50,37 +47,6 @@ class _NeuronClusterStateMixin:
                 dtype=torch.long,
                 device=hidden.device,
             ),
-        )
-
-    def _ensure_log_probability_buffer(
-        self,
-        log_probabilities: Tensor | None,
-        route_log_probabilities: Tensor,
-        hidden: Tensor,
-    ) -> Tensor:
-        if log_probabilities is not None:
-            return log_probabilities
-        return route_log_probabilities.new_full(
-            (hidden.shape[0], route_log_probabilities.shape[1]),
-            float("-inf"),
-        )
-
-    def _log_probabilities_from_probabilities(self, probabilities: Tensor) -> Tensor:
-        positive_probability_mask = probabilities > 0
-        safe_probabilities = torch.where(
-            positive_probability_mask,
-            probabilities,
-            torch.ones_like(probabilities),
-        )
-        promoted_probabilities = (
-            safe_probabilities.float()
-            if safe_probabilities.dtype in (torch.float16, torch.bfloat16)
-            else safe_probabilities
-        )
-        return torch.where(
-            positive_probability_mask,
-            torch.log(promoted_probabilities),
-            torch.full_like(promoted_probabilities, float("-inf")),
         )
 
     def _ensure_probability_matrix(self, probabilities: Tensor) -> Tensor:
@@ -111,18 +77,8 @@ class _NeuronClusterStateMixin:
         self,
         branch_outputs: Tensor,
         probabilities: Tensor,
-        valid_branch_mask: Tensor,
-        *,
-        log_probabilities: Tensor | None = None,
-        router_scores: Tensor | None = None,
     ) -> Tensor:
-        return weighted_branch_candidate(
-            branch_outputs,
-            probabilities,
-            valid_branch_mask,
-            log_probabilities=log_probabilities,
-            router_scores=router_scores,
-        )
+        return (branch_outputs * probabilities.unsqueeze(-1)).sum(dim=1)
 
     def _gather_branch_mask(
         self,
@@ -161,7 +117,7 @@ class _NeuronClusterStateMixin:
             self.halting_model,
             route_state.halting_state,
             route_state.hidden,
-            route_state.beam_scores,
+            route_state.beam_path_probabilities,
         )
         finalized_hidden = torch.where(
             route_state.final_mask.unsqueeze(-1),
@@ -180,8 +136,7 @@ class _NeuronClusterStateMixin:
                 ponder_loss,
             ),
             trace=route_state.trace,
-            beam_scores=route_state.beam_scores,
-            beam_score_history=route_state.beam_score_history,
+            beam_path_probabilities=route_state.beam_path_probabilities,
         )
 
     def _group_indices_by_position(
