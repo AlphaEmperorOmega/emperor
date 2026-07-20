@@ -66,21 +66,6 @@ class SamplerModel(Module):
         SamplerUsageTrackerManager.maybe_record_sampler_output(self, output)
         return output
 
-    def sample_probabilities_log_scores_and_indices(
-        self,
-        input_matrix: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None, Tensor]:
-        self.VALIDATOR.validate_forward_inputs(input_matrix)
-        logits = self.__maybe_compute_routing(input_matrix)
-        output = self.sampler_model.get_probabilities_log_scores_and_indices(
-            logits,
-            skip_mask,
-        )
-        standard_output = (output[0], output[2], output[3], output[4])
-        SamplerUsageTrackerManager.maybe_record_sampler_output(self, standard_output)
-        return output
-
     def __maybe_compute_routing(self, input_matrix: Tensor) -> Tensor:
         if self.router is not None:
             return self.router.compute_logit_scores(input_matrix)

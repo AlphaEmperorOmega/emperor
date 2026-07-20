@@ -83,65 +83,6 @@ class SamplerBase(Module):
             auxiliary_loss,
         )
 
-    def get_probabilities_log_scores_and_indices(
-        self,
-        router_logit_scores: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor | None, Tensor | None, Tensor]:
-        """Return the ordinary routing result plus stable selected log scores.
-
-        The probability-valued result deliberately retains the sampler's
-        established dtype and forward values.  Selection and downstream
-        differentiable routing can use ``selected_log_probabilities`` to avoid
-        softmax underflow and the unbounded derivative of ``log(probability)``.
-        """
-        self.VALIDATOR.validate_forward_inputs(self, router_logit_scores, skip_mask)
-        (
-            masked_full_probabilities,
-            masked_router_logits,
-            masked_full_log_probabilities,
-        ) = self.__compute_masked_probabilities_and_log_probabilities(
-            router_logit_scores,
-            skip_mask,
-        )
-        (
-            selected_probabilities,
-            selected_log_probabilities,
-            selected_expert_indices,
-        ) = self._sample_probabilities_log_scores_and_indices(
-            masked_full_probabilities,
-            masked_full_log_probabilities,
-        )
-        auxiliary_loss = self._compute_loss(
-            masked_router_logits,
-            masked_full_probabilities,
-            selected_probabilities,
-            selected_expert_indices,
-            skip_mask,
-        )
-        selected_log_probabilities = self._normalize_log_probabilities(
-            selected_probabilities,
-            selected_log_probabilities,
-        )
-        normalized_selected_probabilities = self._normalize_probabilities(
-            selected_probabilities
-        )
-        updated_skip_mask = self.__update_mask_given_threshold(
-            masked_full_probabilities,
-            skip_mask,
-        )
-
-        self.set_auxiliary_loss(auxiliary_loss)
-        self.set_updated_skip_mask(updated_skip_mask)
-
-        return (
-            normalized_selected_probabilities,
-            selected_log_probabilities,
-            selected_expert_indices,
-            updated_skip_mask,
-            auxiliary_loss,
-        )
-
     def _prepare_for_validation(self) -> None:
         pass
 
@@ -163,38 +104,6 @@ class SamplerBase(Module):
             full_probabilities, noise_adjusted_logits, skip_mask
         )
         return masked_full_probabilities, masked_router_logits
-
-    def __compute_masked_probabilities_and_log_probabilities(
-        self,
-        router_logit_scores: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        noise_adjusted_logits = self.__add_noise_to_logits(router_logit_scores)
-        expert_dimension = 1
-        promoted_logits = (
-            noise_adjusted_logits.float()
-            if noise_adjusted_logits.dtype in (torch.float16, torch.bfloat16)
-            else noise_adjusted_logits
-        )
-        full_probabilities = torch.softmax(noise_adjusted_logits, dim=expert_dimension)
-        full_log_probabilities = torch.log_softmax(
-            promoted_logits,
-            dim=expert_dimension,
-        )
-        masked_full_probabilities, masked_router_logits = self.__apply_skip_mask(
-            full_probabilities,
-            noise_adjusted_logits,
-            skip_mask,
-        )
-        masked_full_log_probabilities = self.__apply_skip_mask_to_log_probabilities(
-            full_log_probabilities,
-            skip_mask,
-        )
-        return (
-            masked_full_probabilities,
-            masked_router_logits,
-            masked_full_log_probabilities,
-        )
 
     def __add_noise_to_logits(self, logit_scores_matrix: Tensor) -> Tensor:
         if not self.noisy_topk_flag:
@@ -234,19 +143,6 @@ class SamplerBase(Module):
             router_logit_scores, skipped_input_mask, 0
         )
         return masked_probabilities, masked_router_logits
-
-    def __apply_skip_mask_to_log_probabilities(
-        self,
-        log_probabilities: Tensor,
-        skip_mask: Tensor | None = None,
-    ) -> Tensor:
-        if self.threshold == 0.0 or skip_mask is None:
-            return log_probabilities
-        return torch.masked_fill(
-            log_probabilities,
-            skip_mask == 0,
-            float("-inf"),
-        )
 
     def __update_mask_given_threshold(
         self,
@@ -291,16 +187,6 @@ class SamplerBase(Module):
             "classes that inherit `SamplerBase`."
         )
 
-    def _sample_probabilities_log_scores_and_indices(
-        self,
-        probabilities: Tensor,
-        log_probabilities: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor | None]:
-        raise NotImplementedError(
-            "`_sample_probabilities_log_scores_and_indices` has to be "
-            "implemented in classes that inherit `SamplerBase`."
-        )
-
     def _normalize_probabilities(self, probabilities: Tensor) -> Tensor:
         if self.normalize_probabilities_flag:
             normalization_denominator = self._normalization_denominator(probabilities)
@@ -310,21 +196,6 @@ class SamplerBase(Module):
             )
             return normalized_probabilities
         return probabilities
-
-    def _normalize_log_probabilities(
-        self,
-        probabilities: Tensor,
-        log_probabilities: Tensor,
-    ) -> Tensor:
-        if not self.normalize_probabilities_flag:
-            return log_probabilities
-        detached_denominator = self._normalization_denominator(probabilities).detach()
-        promoted_denominator = (
-            detached_denominator.float()
-            if detached_denominator.dtype in (torch.float16, torch.bfloat16)
-            else detached_denominator
-        )
-        return log_probabilities - torch.log(promoted_denominator)
 
     def _normalization_denominator(self, probabilities: Tensor) -> Tensor:
         expert_dimension = 1
