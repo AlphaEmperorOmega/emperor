@@ -994,6 +994,23 @@ class TestLinearMonitorCallback(unittest.TestCase):
         )
         callback.on_fit_end(trainer, module)
 
+    def test_non_finite_weights_produce_unknown_dead_feature_fractions(self):
+        module = build_module(input_dim=2, output_dim=2, bias_flag=False)
+        with torch.no_grad():
+            module.linear.weight_params.copy_(
+                torch.tensor([[float("inf"), 0.0], [0.0, 1.0]])
+            )
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        trainer = FakeTrainer()
+
+        callback.on_fit_start(trainer, module)
+        complete_optimizer_step(callback, trainer, module)
+
+        scalars = dict(module.logged_scalars)
+        self.assertTrue(torch.isnan(scalars["linear/weights/dead_input_fraction"]))
+        self.assertTrue(torch.isnan(scalars["linear/weights/dead_output_fraction"]))
+        callback.on_fit_end(trainer, module)
+
     def test_refresh_replaces_hooks_when_linear_module_changes(self):
         module = build_module(input_dim=2, output_dim=1, bias_flag=False)
         original_layer = module.linear

@@ -703,6 +703,13 @@ class LinearMonitorCallback(Callback):
             )
 
     def __dead_feature_fraction(self, feature_norms: Tensor) -> Tensor:
+        if not torch.isfinite(feature_norms).all():
+            return torch.full(
+                (),
+                float("nan"),
+                dtype=feature_norms.dtype,
+                device=feature_norms.device,
+            )
         dead_threshold = self.DEAD_FEATURE_RELATIVE_FLOOR * feature_norms.mean()
         return (feature_norms <= dead_threshold).float().mean()
 
