@@ -115,6 +115,7 @@ class _LinearParameterChannelMetrics:
     change: _ParameterChangeMetrics | None
     gradient_summary: _TensorSummary | None
     update_ratio: Tensor | None
+    gradient_to_weight_norm_ratio: Tensor | None
 
 
 @dataclass(frozen=True)

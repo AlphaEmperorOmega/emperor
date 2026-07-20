@@ -365,6 +365,10 @@ class TestLinearMonitorCallback(unittest.TestCase):
 
         scalars = dict(module.logged_scalars)
         self.assertEqual(scalars["linear/weights/update_ratio"].item(), 0.0)
+        self.assertEqual(
+            scalars["linear/weights/gradient_to_weight_norm_ratio"].item(),
+            1.0,
+        )
         callback.on_fit_end(trainer, module)
 
     def test_repeated_optimizer_closures_preserve_the_first_pre_step_values(self):
@@ -647,6 +651,9 @@ class TestLinearMonitorCallback(unittest.TestCase):
             "linear/weights/grad_norm",
         ):
             self.assertTrue(torch.isfinite(scalars[name]).all(), name)
+        self.assertTrue(
+            torch.isinf(scalars["linear/weights/gradient_to_weight_norm_ratio"]).all()
+        )
         self.assertEqual(scalars["linear/weights/update_ratio"].item(), 0.0)
         callback.on_fit_end(trainer, module)
 

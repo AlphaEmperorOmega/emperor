@@ -484,6 +484,14 @@ class LinearMonitorCallback(Callback):
                 if include_update_ratio and change is not None
                 else None
             ),
+            gradient_to_weight_norm_ratio=(
+                _LinearDiagnostics.safe_ratio(
+                    gradient_summary.norm,
+                    _LinearDiagnostics.stable_norm(before_step.values),
+                )
+                if include_update_ratio and gradient_summary is not None
+                else None
+            ),
         )
 
     def __track_linear_training_diagnostics(
@@ -503,6 +511,7 @@ class LinearMonitorCallback(Callback):
         self.__track_gradient_mean(contexts, "weights")
         self.__track_gradient_variance(contexts, "weights")
         self.__track_gradient_norm(contexts, "weights")
+        self.__track_gradient_to_weight_norm_ratio(contexts)
         self.__track_update_ratio(contexts)
         self.__track_gradient_mean(contexts, "bias")
         self.__track_gradient_variance(contexts, "bias")
@@ -622,6 +631,18 @@ class LinearMonitorCallback(Callback):
                 context.pl_module.log(
                     f"{context.module_name}/{parameter_channel}/grad_norm",
                     metrics.gradient_summary.norm,
+                )
+
+    @staticmethod
+    def __track_gradient_to_weight_norm_ratio(
+        contexts: tuple[_LinearTrackingContext, ...],
+    ) -> None:
+        for context in contexts:
+            ratio = context.weights.gradient_to_weight_norm_ratio
+            if ratio is not None:
+                context.pl_module.log(
+                    f"{context.module_name}/weights/gradient_to_weight_norm_ratio",
+                    ratio,
                 )
 
     @staticmethod
