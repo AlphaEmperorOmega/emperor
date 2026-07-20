@@ -30,7 +30,7 @@ class LinearMonitorCallback(Callback):
     def __init__(
         self,
         log_every_n_steps: int = 100,
-        log_weight_conditioning: bool = True,
+        log_weight_conditioning: bool = False,
     ) -> None:
         super().__init__()
         if isinstance(log_every_n_steps, bool) or not isinstance(

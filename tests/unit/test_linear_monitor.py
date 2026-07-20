@@ -87,6 +87,12 @@ class TestLinearMonitorCallback(unittest.TestCase):
             ),
         )
 
+    def test_init_uses_safe_monitoring_defaults(self):
+        callback = LinearMonitorCallback()
+
+        self.assertEqual(callback.log_every_n_steps, 100)
+        self.assertIs(callback.log_weight_conditioning, False)
+
     def test_init_rejects_invalid_options(self):
         for bad_interval in (True, 1.5, float("nan"), float("inf")):
             with self.subTest(log_every_n_steps=bad_interval):
@@ -279,7 +285,10 @@ class TestLinearMonitorCallback(unittest.TestCase):
                     ]
                 )
             )
-        callback = LinearMonitorCallback(log_every_n_steps=1)
+        callback = LinearMonitorCallback(
+            log_every_n_steps=1,
+            log_weight_conditioning=True,
+        )
         trainer = FakeTrainer(global_step=0)
 
         callback.on_fit_start(trainer, module)
