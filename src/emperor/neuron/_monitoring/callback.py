@@ -127,15 +127,15 @@ class NeuronClusterMonitorCallback(Callback):
         original_instance_forward = cluster.__dict__.get("forward")
 
         def monitored_forward(
-            input_tensor: Tensor,
+            input: Tensor,
             return_trace: bool = False,
         ) -> object:
             if not self.__is_capture_step(pl_module):
                 self._latest_observations.pop(module_name, None)
-                return original_forward(input_tensor, return_trace=return_trace)
+                return original_forward(input, return_trace=return_trace)
             traced_output = cast(
                 "tuple[Tensor, Tensor, NeuronClusterTrace]",
-                original_forward(input_tensor, return_trace=True),
+                original_forward(input, return_trace=True),
             )
             output, auxiliary_loss, trace = traced_output
             self._latest_observations[module_name] = _NeuronObservation(

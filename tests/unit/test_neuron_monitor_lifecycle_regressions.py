@@ -1,5 +1,6 @@
 import unittest
 
+import torch
 from torch import nn
 
 from emperor.neuron import NeuronClusterMonitorCallback
@@ -60,3 +61,27 @@ class TestNeuronMonitorOwnership(unittest.TestCase):
             second_cluster.__dict__[callback._OWNER_ATTRIBUTE],
             foreign_owner,
         )
+
+
+class TestNeuronMonitorForwardInterface(unittest.TestCase):
+    def test_wrapper_preserves_the_public_input_keyword(self) -> None:
+        cluster = _cluster_stub()
+
+        def instance_forward(input, return_trace=False):
+            del return_trace
+            return input, input.new_zeros(())
+
+        cluster.forward = instance_forward
+        host = _ClusterHost(cluster=cluster)
+        host.eval()
+        callback = NeuronClusterMonitorCallback()
+        callback.on_fit_start(trainer=None, pl_module=host)
+        input_batch = torch.ones(2, 3)
+
+        try:
+            output, auxiliary_loss = cluster(input=input_batch)
+        finally:
+            callback.on_fit_end(trainer=None, pl_module=host)
+
+        self.assertIs(output, input_batch)
+        torch.testing.assert_close(auxiliary_loss, torch.zeros(()))
