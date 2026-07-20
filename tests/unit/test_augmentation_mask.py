@@ -37,7 +37,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     LayerState,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 
@@ -108,7 +107,7 @@ class TestAxisMaskHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     gate_config=None,
                     halting_config=None,
