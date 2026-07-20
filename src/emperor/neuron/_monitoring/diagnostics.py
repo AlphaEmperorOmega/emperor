@@ -70,30 +70,31 @@ class _NeuronDiagnostics:
         cls,
         trace: "NeuronClusterTrace",
     ) -> _EntryRoutingMetrics | None:
-        probabilities = trace.entry_probabilities.detach().float()
-        if probabilities.numel() == 0:
+        entry_probabilities = trace.entry_probabilities.detach().float()
+        if entry_probabilities.numel() == 0:
             return None
-        normalized_probabilities = probabilities / probabilities.sum(
+        normalized_entry_probabilities = entry_probabilities / entry_probabilities.sum(
             dim=-1,
             keepdim=True,
         ).clamp_min(1e-9)
-        per_sample_entropy = cls._distribution_entropy(
-            normalized_probabilities,
+        per_sample_entry_entropy = cls._distribution_entropy(
+            normalized_entry_probabilities,
             dimension=-1,
         )
-        marginal_probabilities = normalized_probabilities.mean(dim=0)
-        marginal_probabilities = (
-            marginal_probabilities / marginal_probabilities.sum().clamp_min(1e-9)
+        marginal_entry_probabilities = normalized_entry_probabilities.mean(dim=0)
+        marginal_entry_probabilities = (
+            marginal_entry_probabilities
+            / marginal_entry_probabilities.sum().clamp_min(1e-9)
         )
         return _EntryRoutingMetrics(
-            mean_entropy=per_sample_entropy.mean(),
+            mean_entropy=per_sample_entry_entropy.mean(),
             marginal_entropy=cls._distribution_entropy(
-                marginal_probabilities,
+                marginal_entry_probabilities,
                 dimension=-1,
             ),
             coefficient_of_variation=(
-                marginal_probabilities.std(correction=0)
-                / marginal_probabilities.mean().clamp_min(1e-6)
+                marginal_entry_probabilities.std(correction=0)
+                / marginal_entry_probabilities.mean().clamp_min(1e-6)
             ),
         )
 
@@ -107,25 +108,34 @@ class _NeuronDiagnostics:
 
     @staticmethod
     def _average_mask_fraction(masks: list[Tensor]) -> Tensor:
-        fractions = [mask.detach().float().mean() for mask in masks if mask.numel() > 0]
-        return torch.stack(fractions).mean() if fractions else torch.zeros(())
+        nonempty_mask_fractions = [
+            mask.detach().float().mean() for mask in masks if mask.numel() > 0
+        ]
+        return (
+            torch.stack(nonempty_mask_fractions).mean()
+            if nonempty_mask_fractions
+            else torch.zeros(())
+        )
 
     @classmethod
     def _count_active_neurons(cls, trace: "NeuronClusterTrace") -> Tensor:
-        coordinate_rows = []
-        for coordinates, valid_mask in cls.valid_coordinates(trace):
-            valid_coordinates = coordinates[valid_mask.bool()]
+        active_coordinate_rows = []
+        for selected_coordinates, valid_mask in cls.valid_coordinates(trace):
+            valid_coordinates = selected_coordinates[valid_mask.bool()]
             if valid_coordinates.numel() > 0:
-                coordinate_rows.append(valid_coordinates.reshape(-1, 3))
-        if not coordinate_rows:
+                active_coordinate_rows.append(valid_coordinates.reshape(-1, 3))
+        if not active_coordinate_rows:
             return torch.zeros(())
-        unique_coordinates = torch.unique(torch.cat(coordinate_rows), dim=0)
-        return torch.tensor(float(unique_coordinates.shape[0]))
+        unique_active_coordinates = torch.unique(
+            torch.cat(active_coordinate_rows),
+            dim=0,
+        )
+        return torch.tensor(float(unique_active_coordinates.shape[0]))
 
     @staticmethod
     def _distribution_entropy(
         distribution: Tensor,
         dimension: int,
     ) -> Tensor:
-        safe_distribution = distribution.clamp_min(1e-9)
-        return -(safe_distribution.log() * distribution).sum(dim=dimension)
+        clamped_distribution = distribution.clamp_min(1e-9)
+        return -(clamped_distribution.log() * distribution).sum(dim=dimension)

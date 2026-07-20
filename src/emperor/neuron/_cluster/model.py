@@ -174,12 +174,12 @@ class NeuronCluster(
         if self.cfg.entry_sampler_config is not None:
             return copy.deepcopy(self.cfg.entry_sampler_config)
 
-        entry_count = int(self.entry_coordinates.shape[0])
+        initialized_entry_count = int(self.entry_coordinates.shape[0])
         sampler_config = copy.deepcopy(
             self.cfg.neuron_config.terminal_config.sampler_config
         )
-        sampler_config.num_experts = entry_count
-        sampler_config.top_k = min(sampler_config.top_k, entry_count)
+        sampler_config.num_experts = initialized_entry_count
+        sampler_config.top_k = min(sampler_config.top_k, initialized_entry_count)
         sampler_config.num_topk_samples = min(
             sampler_config.num_topk_samples,
             sampler_config.top_k,
@@ -187,7 +187,7 @@ class NeuronCluster(
         if sampler_config.top_k == 1:
             sampler_config.normalize_probabilities_flag = False
         if sampler_config.router_config is not None:
-            sampler_config.router_config.num_experts = entry_count
+            sampler_config.router_config.num_experts = initialized_entry_count
         return sampler_config
 
     def __build_entry_sampler(self):
@@ -205,14 +205,18 @@ class NeuronCluster(
     ) -> "Module | None":
         if config is None:
             return None
-        declared_fields = {field.name for field in fields(config)}
-        overrides = type(config)(
-            **{name: value for name, value in kwargs.items() if name in declared_fields}
+        declared_config_fields = {field.name for field in fields(config)}
+        config_overrides = type(config)(
+            **{
+                name: value
+                for name, value in kwargs.items()
+                if name in declared_config_fields
+            }
         )
-        return config.build(overrides=overrides)
+        return config.build(overrides=config_overrides)
 
     def __initialize_cluster(self) -> ModuleDict:
-        cluster = ModuleDict()
+        initialized_cluster = ModuleDict()
         for x_coordinate in range(
             self.initial_x_axis_start,
             self.initial_x_axis_start + self.initial_x_axis_total_neurons,
@@ -225,21 +229,21 @@ class NeuronCluster(
                     self.initial_z_axis_start,
                     self.initial_z_axis_start + self.initial_z_axis_total_neurons,
                 ):
-                    name = self._neuron_name(
+                    neuron_name = self._neuron_name(
                         x_coordinate,
                         y_coordinate,
                         z_coordinate,
                     )
                     self._add_neuron(
-                        cluster,
-                        name,
+                        initialized_cluster,
+                        neuron_name,
                         self._initialize_neuron(
                             x_coordinate,
                             y_coordinate,
                             z_coordinate,
                         ),
                     )
-        return cluster
+        return initialized_cluster
 
     def _initialize_neuron(
         self,
@@ -313,13 +317,18 @@ class NeuronCluster(
         self._neurons_called_this_forward: set[str] = set()
         growth_counter_baseline = self._capture_growth_counter_baseline()
 
-        flat_input = input.reshape(-1, input.shape[-1])
-        output, auxiliary_loss, trace = self._propagate_signal_through_recurrent_routes(
-            flat_input,
-            tuple(input.shape),
-            return_trace,
+        flattened_input = input.reshape(-1, input.shape[-1])
+        routed_output, auxiliary_loss, trace = (
+            self._propagate_signal_through_recurrent_routes(
+                flattened_input,
+                tuple(input.shape),
+                return_trace,
+            )
         )
-        output = output.reshape(*input.shape[:-1], output.shape[-1])
+        routed_output = routed_output.reshape(
+            *input.shape[:-1],
+            routed_output.shape[-1],
+        )
 
         if self.training:
             # Warmup advances before growth so a neuron grown this forward
@@ -328,8 +337,8 @@ class NeuronCluster(
             self._check_neuron_growth(growth_counter_baseline)
             self._check_neuron_atrophy()
         if return_trace:
-            return output, auxiliary_loss, trace
-        return output, auxiliary_loss
+            return routed_output, auxiliary_loss, trace
+        return routed_output, auxiliary_loss
 
     def __validate_feature_dimension(self, input: Tensor) -> None:
         if input.shape[-1] != self.input_dim:

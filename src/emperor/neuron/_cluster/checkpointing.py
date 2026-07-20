@@ -37,10 +37,10 @@ class _NeuronClusterCheckpointingMixin:
         cluster_prefix: str,
     ) -> tuple[str, ...]:
         incoming_neuron_names: dict[str, None] = {}
-        for key in state_dict:
-            if not key.startswith(cluster_prefix):
+        for state_key in state_dict:
+            if not state_key.startswith(cluster_prefix):
                 continue
-            neuron_name = key[len(cluster_prefix) :].split(".", 1)[0]
+            neuron_name = state_key[len(cluster_prefix) :].split(".", 1)[0]
             if self._is_neuron_name(neuron_name):
                 incoming_neuron_names.setdefault(neuron_name, None)
         return tuple(incoming_neuron_names)
@@ -162,10 +162,12 @@ class _NeuronClusterCheckpointingMixin:
         cluster_prefix: str,
     ) -> None:
         buffer_suffix = ".warmup_remaining_steps"
-        for key in list(state_dict.keys()):
-            if not key.startswith(cluster_prefix) or not key.endswith(buffer_suffix):
+        for state_key in list(state_dict.keys()):
+            if not state_key.startswith(cluster_prefix) or not state_key.endswith(
+                buffer_suffix
+            ):
                 continue
-            neuron_name = key[len(cluster_prefix) :].split(".", 1)[0]
+            neuron_name = state_key[len(cluster_prefix) :].split(".", 1)[0]
             if neuron_name not in self.cluster:
                 continue
             neuron = self.cluster[neuron_name]

@@ -52,8 +52,8 @@ class _ForwardReplacement:
     def restore(self) -> None:
         if self.had_instance_forward:
             self.cluster.__dict__["forward"] = self.original_instance_forward
-        elif "forward" in self.cluster.__dict__:
-            del self.cluster.__dict__["forward"]
+        else:
+            self.cluster.__dict__.pop("forward", None)
 
 
 class NeuronClusterMonitorCallback(Callback):
@@ -145,7 +145,7 @@ class NeuronClusterMonitorCallback(Callback):
                 "tuple[Tensor, Tensor, NeuronClusterTrace]",
                 original_forward(input, return_trace=True),
             )
-            output, auxiliary_loss, trace = traced_output
+            cluster_output, auxiliary_loss, trace = traced_output
             self._latest_observations[module_name] = _NeuronObservation(
                 trace=trace,
                 auxiliary_loss=auxiliary_loss.detach(),
@@ -155,7 +155,7 @@ class NeuronClusterMonitorCallback(Callback):
             )
             if return_trace:
                 return traced_output
-            return output, auxiliary_loss
+            return cluster_output, auxiliary_loss
 
         cluster.__dict__[self._OWNER_ATTRIBUTE] = self
         cluster.forward = monitored_forward
@@ -222,22 +222,22 @@ class NeuronClusterMonitorCallback(Callback):
         cluster: NeuronCluster,
     ) -> _NeuronTrackingContext:
         neuron_count = float(len(cluster.cluster))
-        capacity = float(
+        cluster_capacity = float(
             cluster.x_axis_total_neurons
             * cluster.y_axis_total_neurons
             * cluster.z_axis_total_neurons
         )
         observation_step = self._latest_observation_steps.get(module_name)
-        observation = (
+        current_observation = (
             self._latest_observations.pop(module_name, None)
             if observation_step == getattr(pl_module, "global_step", 0)
             else None
         )
-        if observation is not None:
+        if current_observation is not None:
             self._latest_observation_steps.pop(module_name, None)
         route_metrics = (
-            _NeuronDiagnostics.calculate_route(observation.trace)
-            if observation is not None
+            _NeuronDiagnostics.calculate_route(current_observation.trace)
+            if current_observation is not None
             else None
         )
         return _NeuronTrackingContext(
@@ -245,7 +245,7 @@ class NeuronClusterMonitorCallback(Callback):
             module_name=module_name,
             cluster=cluster,
             neuron_count=neuron_count,
-            capacity=capacity,
+            capacity=cluster_capacity,
             growth_events=float(self._pending_growth_events.get(module_name, 0)),
             pruning_events=float(self._pending_pruning_events.get(module_name, 0)),
             growth_pressure=self.__counter_pressure(
@@ -258,11 +258,11 @@ class NeuronClusterMonitorCallback(Callback):
                 "atrophy_counter",
                 getattr(cluster, "pruning_threshold", None),
             ),
-            observation=observation,
+            observation=current_observation,
             route_metrics=route_metrics,
             entry_routing_metrics=(
-                _NeuronDiagnostics.calculate_entry_routing(observation.trace)
-                if observation is not None
+                _NeuronDiagnostics.calculate_entry_routing(current_observation.trace)
+                if current_observation is not None
                 else None
             ),
             experiment=getattr(
@@ -384,13 +384,13 @@ class NeuronClusterMonitorCallback(Callback):
             None,
         )
         if forwards_since_last_growth is not None:
-            remaining_cooldown = max(
+            remaining_cooldown_steps = max(
                 context.cluster.growth_cooldown_steps - int(forwards_since_last_growth),
                 0,
             )
             context.pl_module.log(
                 f"{context.module_name}/cluster/growth/cooldown_remaining",
-                float(remaining_cooldown),
+                float(remaining_cooldown_steps),
             )
 
     @staticmethod
@@ -419,14 +419,12 @@ class NeuronClusterMonitorCallback(Callback):
     ) -> Tensor | None:
         if not threshold:
             return None
-        counter_values = [
+        neuron_counter_values = [
             float(getattr(neuron, counter_name).item())
             for neuron in cluster.cluster.values()
             if hasattr(neuron, counter_name)
         ]
-        if not counter_values:
-            return None
-        return torch.tensor(counter_values) / float(threshold)
+        return torch.tensor(neuron_counter_values) / float(threshold)
 
     @staticmethod
     def __track_auxiliary_loss(context: _NeuronTrackingContext) -> None:
@@ -576,11 +574,13 @@ class NeuronClusterMonitorCallback(Callback):
                 coordinates,
                 valid_mask,
             )
-        normalized_grid = utilization_grid / utilization_grid.max().clamp_min(1e-6)
+        normalized_utilization_grid = (
+            utilization_grid / utilization_grid.max().clamp_min(1e-6)
+        )
         self._emission_policy.emit_image(
             context.experiment,
             f"{context.module_name}/cluster/heatmap/neuron_utilization",
-            normalized_grid.unsqueeze(0),
+            normalized_utilization_grid.unsqueeze(0),
             context.global_step,
             dataformats="CHW",
         )
@@ -598,21 +598,24 @@ class NeuronClusterMonitorCallback(Callback):
             return
         x_indices = valid_coordinates[:, 0].long() - 1
         y_indices = valid_coordinates[:, 1].long() - 1
-        coordinates_in_range = (
+        coordinates_in_range_mask = (
             (x_indices >= 0)
             & (x_indices < utilization_grid.shape[0])
             & (y_indices >= 0)
             & (y_indices < utilization_grid.shape[1])
         )
-        x_indices = x_indices[coordinates_in_range]
-        y_indices = y_indices[coordinates_in_range]
+        x_indices = x_indices[coordinates_in_range_mask]
+        y_indices = y_indices[coordinates_in_range_mask]
         if x_indices.numel() == 0:
             return
-        flat_indices = x_indices * utilization_grid.shape[1] + y_indices
+        flattened_coordinate_indices = x_indices * utilization_grid.shape[1] + y_indices
         utilization_grid.view(-1).index_add_(
             0,
-            flat_indices,
-            torch.ones_like(flat_indices, dtype=utilization_grid.dtype),
+            flattened_coordinate_indices,
+            torch.ones_like(
+                flattened_coordinate_indices,
+                dtype=utilization_grid.dtype,
+            ),
         )
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
@@ -627,10 +630,10 @@ class NeuronClusterMonitorCallback(Callback):
         self.__cleanup()
 
     def __cleanup(self) -> None:
-        for replacement in reversed(self._forward_replacements):
-            replacement.restore()
-            if replacement.cluster.__dict__.get(self._OWNER_ATTRIBUTE) is self:
-                del replacement.cluster.__dict__[self._OWNER_ATTRIBUTE]
+        for forward_replacement in reversed(self._forward_replacements):
+            forward_replacement.restore()
+            if forward_replacement.cluster.__dict__.get(self._OWNER_ATTRIBUTE) is self:
+                del forward_replacement.cluster.__dict__[self._OWNER_ATTRIBUTE]
         self._forward_replacements.clear()
         self._clusters.clear()
         self._latest_observations.clear()

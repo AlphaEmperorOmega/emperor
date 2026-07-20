@@ -36,8 +36,8 @@ class Nucleus(Module):
         overrides: "NucleusConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "nucleus_config", cfg)
-        self.cfg: NucleusConfig = self._override_config(config, overrides)
+        nucleus_config = getattr(cfg, "nucleus_config", cfg)
+        self.cfg: NucleusConfig = self._override_config(nucleus_config, overrides)
         self.model_config = self.cfg.model_config
         self.VALIDATOR.validate(self)
         self.model = self.model_config.build()
@@ -56,8 +56,8 @@ class Axons(Module):
         overrides: "AxonsConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "axons_config", cfg)
-        self.cfg: AxonsConfig = self._override_config(config, overrides)
+        axons_config = getattr(cfg, "axons_config", cfg)
+        self.cfg: AxonsConfig = self._override_config(axons_config, overrides)
         self.memory_config = self.cfg.memory_config
         self.VALIDATOR.validate(self)
         self.memory_model = self.__maybe_build_memory_model()
@@ -87,8 +87,8 @@ class Terminal(Module):
         overrides: "TerminalConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "terminal_config", cfg)
-        self.cfg: TerminalConfig = self._override_config(config, overrides)
+        terminal_config = getattr(cfg, "terminal_config", cfg)
+        self.cfg: TerminalConfig = self._override_config(terminal_config, overrides)
         neuron_connections = self.__initialize_configuration()
         self.VALIDATOR.validate(self)
         self.sampler = self.__build_sampler()
@@ -236,8 +236,8 @@ class Neuron(Module):
         overrides: "NeuronConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "neuron_config", cfg)
-        self.cfg: NeuronConfig = self._override_config(config, overrides)
+        neuron_config = getattr(cfg, "neuron_config", cfg)
+        self.cfg: NeuronConfig = self._override_config(neuron_config, overrides)
         self.VALIDATOR.validate(self.cfg)
         self.coordinate_embedding_flag: bool = bool(self.cfg.coordinate_embedding_flag)
         self.nucleus = self.cfg.nucleus_config.build()
@@ -296,14 +296,14 @@ class Neuron(Module):
         frequency_exponents = (channel_indices - channel_indices % 2) / float(
             axis_channel_count
         )
-        angles = float(axis_position) / torch.pow(
+        sinusoidal_angles = float(axis_position) / torch.pow(
             torch.tensor(self.COORDINATE_EMBEDDING_FREQUENCY_BASE),
             frequency_exponents,
         )
         return torch.where(
             channel_indices % 2 == 0,
-            torch.sin(angles),
-            torch.cos(angles),
+            torch.sin(sinusoidal_angles),
+            torch.cos(sinusoidal_angles),
         )
 
     def __inject_coordinate_embedding(self, input: Tensor) -> Tensor:

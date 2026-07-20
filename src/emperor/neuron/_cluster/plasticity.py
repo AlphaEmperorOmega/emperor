@@ -52,33 +52,36 @@ class _NeuronClusterPlasticityMixin:
         if self.__is_within_growth_cooldown_after_counting_forward():
             return
 
-        for name, neuron in self.__saturated_neurons_by_descending_counter(
+        for (
+            saturated_neuron_name,
+            saturated_neuron,
+        ) in self.__saturated_neurons_by_descending_counter(
             synchronized_batch_counters
         ):
-            position = self.__find_closest_empty_connection(
-                name,
+            growth_position = self.__find_closest_empty_connection(
+                saturated_neuron_name,
                 synchronized_escape_counts,
             )
-            if position is None:
+            if growth_position is None:
                 continue
 
-            x, y, z = position
-            new_name = self._neuron_name(x, y, z)
+            x, y, z = growth_position
+            grown_neuron_name = self._neuron_name(x, y, z)
             self._add_neuron(
                 self.cluster,
-                new_name,
+                grown_neuron_name,
                 self.__initialize_grown_neuron_with_synchronized_rng(
                     x,
                     y,
                     z,
-                    neuron,
+                    saturated_neuron,
                 ),
             )
-            self.__start_grown_neuron_warmup(self.cluster[new_name])
-            self.__reset_escape_count(position)
+            self.__start_grown_neuron_warmup(self.cluster[grown_neuron_name])
+            self.__reset_escape_count(growth_position)
             self.__record_successful_growth()
-            self._neurons_called_this_forward.add(new_name)
-            neuron.batch_counter.zero_()
+            self._neurons_called_this_forward.add(grown_neuron_name)
+            saturated_neuron.batch_counter.zero_()
             return
 
     def __start_grown_neuron_warmup(self, neuron: Module) -> None:
@@ -98,9 +101,16 @@ class _NeuronClusterPlasticityMixin:
         if self.growth_warmup_steps is None:
             return
         for neuron in self.cluster.values():
-            warmup_remaining = getattr(neuron, "warmup_remaining_steps", None)
-            if warmup_remaining is not None and int(warmup_remaining.item()) > 0:
-                warmup_remaining -= 1
+            warmup_remaining_steps = getattr(
+                neuron,
+                "warmup_remaining_steps",
+                None,
+            )
+            if (
+                warmup_remaining_steps is not None
+                and int(warmup_remaining_steps.item()) > 0
+            ):
+                warmup_remaining_steps -= 1
 
     def __has_exhausted_growth_budget(self) -> bool:
         if self.total_growth_count is None:
@@ -124,13 +134,13 @@ class _NeuronClusterPlasticityMixin:
         synchronized_batch_counters: dict[str, int],
     ) -> list[tuple[str, Module]]:
         saturated_neurons = [
-            (name, neuron)
-            for name, neuron in self.cluster.items()
-            if synchronized_batch_counters[name] >= self.growth_threshold
+            (neuron_name, neuron)
+            for neuron_name, neuron in self.cluster.items()
+            if synchronized_batch_counters[neuron_name] >= self.growth_threshold
         ]
         return sorted(
             saturated_neurons,
-            key=lambda entry: synchronized_batch_counters[entry[0]],
+            key=lambda named_neuron: synchronized_batch_counters[named_neuron[0]],
             reverse=True,
         )
 
@@ -142,33 +152,36 @@ class _NeuronClusterPlasticityMixin:
         growth_counter_baseline: _GrowthCounterBaseline | None,
     ) -> dict[str, int]:
         sorted_neuron_names = tuple(sorted(self.cluster.keys()))
-        stacked_counters = torch.stack(
-            [self.cluster[name].batch_counter for name in sorted_neuron_names]
+        stacked_batch_counters = torch.stack(
+            [
+                self.cluster[neuron_name].batch_counter
+                for neuron_name in sorted_neuron_names
+            ]
         )
         if self.__is_distributed_training_initialized():
-            stacked_counters = self.__distributed_sum_since_baseline(
-                stacked_counters,
+            stacked_batch_counters = self.__distributed_sum_since_baseline(
+                stacked_batch_counters,
                 self.__batch_counter_baseline(
                     growth_counter_baseline,
                     sorted_neuron_names,
                 ),
             )
             torch.distributed.all_reduce(
-                stacked_counters,
+                stacked_batch_counters,
                 op=torch.distributed.ReduceOp.SUM,
             )
-            for name, counter in zip(
+            for neuron_name, counter in zip(
                 sorted_neuron_names,
-                stacked_counters,
+                stacked_batch_counters,
                 strict=True,
             ):
-                self.cluster[name].batch_counter.copy_(counter)
+                self.cluster[neuron_name].batch_counter.copy_(counter)
         return {
-            name: int(counter)
-            for name, counter in zip(
+            neuron_name: int(counter.item())
+            for neuron_name, counter in zip(
                 sorted_neuron_names,
-                stacked_counters.tolist(),
-                strict=False,
+                stacked_batch_counters,
+                strict=True,
             )
         }
 
@@ -236,77 +249,84 @@ class _NeuronClusterPlasticityMixin:
         synchronized_escape_counts: Tensor | None,
     ) -> tuple[int, int, int] | None:
         neuron = self.cluster[neuron_name]
-        connection_rows = neuron.terminal.neuron_connections.detach().cpu().tolist()
+        connection_coordinate_rows = (
+            neuron.terminal.neuron_connections.detach().cpu().tolist()
+        )
         origin_x, origin_y, origin_z = self._parse_neuron_name(neuron_name)
 
-        empty_positions = []
-        for connection_row in connection_rows:
-            position = self._coordinate_from_row(connection_row)
-            if not self._is_within_grid_capacity(position):
+        empty_connection_positions = []
+        for connection_coordinate_row in connection_coordinate_rows:
+            connection_position = self._coordinate_from_row(connection_coordinate_row)
+            if not self._is_within_grid_capacity(connection_position):
                 continue
-            candidate_name = self._neuron_name(*position)
-            if candidate_name not in self.cluster:
-                empty_positions.append(position)
+            candidate_neuron_name = self._neuron_name(*connection_position)
+            if candidate_neuron_name not in self.cluster:
+                empty_connection_positions.append(connection_position)
 
-        if not empty_positions:
+        if not empty_connection_positions:
             return None
 
-        escape_selected_position = self.__most_escaped_position(
-            empty_positions,
+        highest_escape_position = self.__most_escaped_position(
+            empty_connection_positions,
             synchronized_escape_counts,
         )
-        if escape_selected_position is not None:
-            return escape_selected_position
+        if highest_escape_position is not None:
+            return highest_escape_position
 
         return min(
-            empty_positions,
-            key=lambda pos: (
-                abs(pos[0] - origin_x) + abs(pos[1] - origin_y) + abs(pos[2] - origin_z)
+            empty_connection_positions,
+            key=lambda candidate_position: (
+                abs(candidate_position[0] - origin_x)
+                + abs(candidate_position[1] - origin_y)
+                + abs(candidate_position[2] - origin_z)
             ),
         )
 
     def __most_escaped_position(
         self,
-        positions: list[tuple[int, int, int]],
+        candidate_positions: list[tuple[int, int, int]],
         synchronized_escape_counts: Tensor | None,
     ) -> tuple[int, int, int] | None:
         if synchronized_escape_counts is None:
             return None
-        counts_cpu = synchronized_escape_counts.detach().cpu()
-        counts = [int(counts_cpu[x - 1, y - 1, z - 1]) for x, y, z in positions]
-        max_count = max(counts)
-        if max_count == 0:
+        host_escape_counts = synchronized_escape_counts.detach().cpu()
+        position_escape_counts = [
+            int(host_escape_counts[x - 1, y - 1, z - 1])
+            for x, y, z in candidate_positions
+        ]
+        maximum_escape_count = max(position_escape_counts)
+        if maximum_escape_count == 0:
             return None
-        return positions[counts.index(max_count)]
+        return candidate_positions[position_escape_counts.index(maximum_escape_count)]
 
-    def __reset_escape_count(self, position: tuple[int, int, int]) -> None:
+    def __reset_escape_count(self, growth_position: tuple[int, int, int]) -> None:
         if self.escape_counts is None:
             return
-        x, y, z = position
+        x, y, z = growth_position
         self.escape_counts[x - 1, y - 1, z - 1] = 0
 
     def _record_escaped_missing_positions(
         self,
-        positions: list[tuple[int, int, int]],
+        escaped_positions: list[tuple[int, int, int]],
     ) -> None:
-        if self.escape_counts is None or not self.training or not positions:
+        if self.escape_counts is None or not self.training or not escaped_positions:
             return
-        coordinate_tensor = (
+        zero_based_coordinates = (
             torch.tensor(
-                positions,
+                escaped_positions,
                 dtype=torch.long,
                 device=self.escape_counts.device,
             )
             - 1
         )
-        flat_indices = (
-            coordinate_tensor[:, 0] * self.y_axis_total_neurons
-            + coordinate_tensor[:, 1]
-        ) * self.z_axis_total_neurons + coordinate_tensor[:, 2]
+        flattened_coordinate_indices = (
+            zero_based_coordinates[:, 0] * self.y_axis_total_neurons
+            + zero_based_coordinates[:, 1]
+        ) * self.z_axis_total_neurons + zero_based_coordinates[:, 2]
         self.escape_counts.view(-1).index_add_(
             0,
-            flat_indices,
-            torch.ones_like(flat_indices),
+            flattened_coordinate_indices,
+            torch.ones_like(flattened_coordinate_indices),
         )
 
     def __initialize_grown_neuron_with_synchronized_rng(
@@ -320,17 +340,17 @@ class _NeuronClusterPlasticityMixin:
             return self.__initialize_grown_neuron(x, y, z, parent_neuron)
 
         shared_seed = self.__broadcast_growth_seed_from_first_rank()
-        fork_devices = (
+        rng_fork_devices = (
             list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
         )
-        with torch.random.fork_rng(devices=fork_devices):
+        with torch.random.fork_rng(devices=rng_fork_devices):
             torch.manual_seed(shared_seed)
             return self.__initialize_grown_neuron(x, y, z, parent_neuron)
 
     def __broadcast_growth_seed_from_first_rank(self) -> int:
-        seed_container: list[int | None] = [None]
+        shared_seed_container: list[int | None] = [None]
         if torch.distributed.get_rank() == 0:
-            seed_container[0] = int(
+            shared_seed_container[0] = int(
                 torch.randint(
                     0,
                     torch.iinfo(torch.int64).max,
@@ -338,8 +358,8 @@ class _NeuronClusterPlasticityMixin:
                     dtype=torch.int64,
                 ).item()
             )
-        torch.distributed.broadcast_object_list(seed_container, src=0)
-        return seed_container[0]
+        torch.distributed.broadcast_object_list(shared_seed_container, src=0)
+        return shared_seed_container[0]
 
     def __initialize_grown_neuron(
         self,
@@ -416,41 +436,44 @@ class _NeuronClusterPlasticityMixin:
         synchronized_atrophy_counters = (
             self.__synchronize_atrophy_counters_across_ranks()
         )
-        prunable_name = self.__most_atrophied_prunable_neuron(
+        prunable_neuron_name = self.__most_atrophied_prunable_neuron(
             synchronized_atrophy_counters
         )
-        if prunable_name is None:
+        if prunable_neuron_name is None:
             return
-        del self.cluster[prunable_name]
+        del self.cluster[prunable_neuron_name]
 
     def __update_atrophy_counters(self) -> None:
-        for name, neuron in self.cluster.items():
-            if name in self._neurons_called_this_forward:
+        for neuron_name, neuron in self.cluster.items():
+            if neuron_name in self._neurons_called_this_forward:
                 neuron.atrophy_counter.zero_()
             else:
                 neuron.atrophy_counter += 1
 
     def __synchronize_atrophy_counters_across_ranks(self) -> dict[str, int]:
         sorted_neuron_names = sorted(self.cluster.keys())
-        stacked_counters = torch.stack(
-            [self.cluster[name].atrophy_counter for name in sorted_neuron_names]
+        stacked_atrophy_counters = torch.stack(
+            [
+                self.cluster[neuron_name].atrophy_counter
+                for neuron_name in sorted_neuron_names
+            ]
         )
         if self.__is_distributed_training_initialized():
             torch.distributed.all_reduce(
-                stacked_counters,
+                stacked_atrophy_counters,
                 op=torch.distributed.ReduceOp.MIN,
             )
             for neuron_name, counter in zip(
                 sorted_neuron_names,
-                stacked_counters,
+                stacked_atrophy_counters,
                 strict=True,
             ):
                 self.cluster[neuron_name].atrophy_counter.copy_(counter)
         return {
-            name: int(counter)
-            for name, counter in zip(
+            neuron_name: int(counter.item())
+            for neuron_name, counter in zip(
                 sorted_neuron_names,
-                stacked_counters.tolist(),
+                stacked_atrophy_counters,
                 strict=True,
             )
         }
@@ -460,17 +483,17 @@ class _NeuronClusterPlasticityMixin:
         synchronized_atrophy_counters: dict[str, int],
     ) -> str | None:
         entry_plane_neuron_names = self.__entry_plane_neuron_names()
-        prunable_names = [
-            name
-            for name in self.cluster.keys()
-            if name not in entry_plane_neuron_names
-            and synchronized_atrophy_counters[name] >= self.pruning_threshold
+        prunable_neuron_names = [
+            neuron_name
+            for neuron_name in self.cluster.keys()
+            if neuron_name not in entry_plane_neuron_names
+            and synchronized_atrophy_counters[neuron_name] >= self.pruning_threshold
         ]
-        if not prunable_names:
+        if not prunable_neuron_names:
             return None
         return max(
-            sorted(prunable_names),
-            key=lambda name: synchronized_atrophy_counters[name],
+            sorted(prunable_neuron_names),
+            key=lambda neuron_name: synchronized_atrophy_counters[neuron_name],
         )
 
     def __entry_plane_neuron_names(self) -> set[str]:
