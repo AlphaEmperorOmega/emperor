@@ -135,7 +135,11 @@ class NeuronCluster(
         self.cluster = self.__initialize_cluster()
         self.entry_sampler = self.__build_entry_sampler()
         self.halting_model = self.__build_halting_model()
+        self._growth_counters_are_global = False
         self.register_load_state_dict_pre_hook(self._reconcile_cluster_with_state_dict)
+        self.register_load_state_dict_post_hook(
+            self._mark_growth_counters_global_after_load
+        )
 
     def __resolve_initial_dimension(
         self,
@@ -306,6 +310,7 @@ class NeuronCluster(
                 "have no such branch."
             )
         self._neurons_called_this_forward: set[str] = set()
+        growth_counter_baseline = self._capture_growth_counter_baseline()
 
         flat_input = input.reshape(-1, input.shape[-1])
         output, auxiliary_loss, trace = self._propagate_signal_through_recurrent_routes(
@@ -319,7 +324,7 @@ class NeuronCluster(
             # Warmup advances before growth so a neuron grown this forward
             # keeps its full countdown for its first routable forward.
             self._advance_grown_neuron_warmup()
-            self._check_neuron_growth()
+            self._check_neuron_growth(growth_counter_baseline)
             self._check_neuron_atrophy()
         if return_trace:
             return output, auxiliary_loss, trace

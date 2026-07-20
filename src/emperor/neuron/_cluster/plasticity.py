@@ -1,20 +1,56 @@
+from dataclasses import dataclass
+
 import torch
 from torch import Tensor
 
 from emperor.nn import Module
 
 
+@dataclass(frozen=True)
+class _GrowthCounterBaseline:
+    neuron_names: tuple[str, ...]
+    batch_counters: Tensor
+    escape_counts: Tensor | None
+
+
 class _NeuronClusterPlasticityMixin:
-    def _check_neuron_growth(self) -> None:
+    def _capture_growth_counter_baseline(self) -> _GrowthCounterBaseline | None:
+        if self.growth_threshold is None:
+            return None
+        neuron_names = tuple(sorted(self.cluster.keys()))
+        return _GrowthCounterBaseline(
+            neuron_names=neuron_names,
+            batch_counters=torch.stack(
+                [self.cluster[name].batch_counter for name in neuron_names]
+            ).clone(),
+            escape_counts=(
+                None if self.escape_counts is None else self.escape_counts.clone()
+            ),
+        )
+
+    def _mark_growth_counters_global_after_load(self, _module, _incompatible_keys):
+        self._growth_counters_are_global = True
+
+    def _check_neuron_growth(
+        self,
+        growth_counter_baseline: _GrowthCounterBaseline | None,
+    ) -> None:
         if self.growth_threshold is None:
             return
+
+        synchronized_batch_counters = self.__synchronize_batch_counters_across_ranks(
+            growth_counter_baseline
+        )
+        synchronized_escape_counts = self.__synchronize_escape_counts_across_ranks(
+            growth_counter_baseline
+        )
+        if self.__is_distributed_training_initialized():
+            self._growth_counters_are_global = True
+
         if self.__has_exhausted_growth_budget():
             return
         if self.__is_within_growth_cooldown_after_counting_forward():
             return
-
-        synchronized_batch_counters = self.__synchronize_batch_counters_across_ranks()
-        synchronized_escape_counts = self.__synchronize_escape_counts_across_ranks()
 
         for name, neuron in self.__saturated_neurons_by_descending_counter(
             synchronized_batch_counters
@@ -101,16 +137,32 @@ class _NeuronClusterPlasticityMixin:
     def __is_distributed_training_initialized(self) -> bool:
         return torch.distributed.is_available() and torch.distributed.is_initialized()
 
-    def __synchronize_batch_counters_across_ranks(self) -> dict[str, int]:
-        sorted_neuron_names = sorted(self.cluster.keys())
+    def __synchronize_batch_counters_across_ranks(
+        self,
+        growth_counter_baseline: _GrowthCounterBaseline | None,
+    ) -> dict[str, int]:
+        sorted_neuron_names = tuple(sorted(self.cluster.keys()))
         stacked_counters = torch.stack(
             [self.cluster[name].batch_counter for name in sorted_neuron_names]
         )
         if self.__is_distributed_training_initialized():
+            stacked_counters = self.__distributed_sum_since_baseline(
+                stacked_counters,
+                self.__batch_counter_baseline(
+                    growth_counter_baseline,
+                    sorted_neuron_names,
+                ),
+            )
             torch.distributed.all_reduce(
                 stacked_counters,
                 op=torch.distributed.ReduceOp.SUM,
             )
+            for name, counter in zip(
+                sorted_neuron_names,
+                stacked_counters,
+                strict=True,
+            ):
+                self.cluster[name].batch_counter.copy_(counter)
         return {
             name: int(counter)
             for name, counter in zip(
@@ -120,16 +172,62 @@ class _NeuronClusterPlasticityMixin:
             )
         }
 
-    def __synchronize_escape_counts_across_ranks(self) -> Tensor | None:
+    def __batch_counter_baseline(
+        self,
+        growth_counter_baseline: _GrowthCounterBaseline | None,
+        neuron_names: tuple[str, ...],
+    ) -> Tensor | None:
+        if not self._growth_counters_are_global:
+            return None
+        if (
+            growth_counter_baseline is None
+            or growth_counter_baseline.neuron_names != neuron_names
+        ):
+            raise RuntimeError(
+                "Distributed Neuron growth topology changed during a forward pass."
+            )
+        return growth_counter_baseline.batch_counters
+
+    def __distributed_sum_since_baseline(
+        self,
+        current_counters: Tensor,
+        counter_baseline: Tensor | None,
+    ) -> Tensor:
+        if counter_baseline is None:
+            return current_counters.clone()
+        rank_counter_contribution = current_counters - counter_baseline
+        if torch.distributed.get_rank() == 0:
+            rank_counter_contribution.add_(counter_baseline)
+        return rank_counter_contribution
+
+    def __synchronize_escape_counts_across_ranks(
+        self,
+        growth_counter_baseline: _GrowthCounterBaseline | None,
+    ) -> Tensor | None:
         if self.escape_counts is None:
             return None
         if not self.__is_distributed_training_initialized():
             return self.escape_counts
-        synchronized_escape_counts = self.escape_counts.clone()
+        escape_count_baseline = None
+        if self._growth_counters_are_global:
+            if (
+                growth_counter_baseline is None
+                or growth_counter_baseline.escape_counts is None
+            ):
+                raise RuntimeError(
+                    "Distributed Neuron escape-count state changed during a "
+                    "forward pass."
+                )
+            escape_count_baseline = growth_counter_baseline.escape_counts
+        synchronized_escape_counts = self.__distributed_sum_since_baseline(
+            self.escape_counts,
+            escape_count_baseline,
+        )
         torch.distributed.all_reduce(
             synchronized_escape_counts,
             op=torch.distributed.ReduceOp.SUM,
         )
+        self.escape_counts.copy_(synchronized_escape_counts)
         return synchronized_escape_counts
 
     def __find_closest_empty_connection(
