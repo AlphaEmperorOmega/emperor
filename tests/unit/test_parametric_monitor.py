@@ -1,17 +1,18 @@
 import unittest
 
 import torch
+
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
@@ -19,10 +20,9 @@ from emperor.parametric import (
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerConfig,
+    ParametricLayerMonitorCallback,
 )
-from emperor.parametric.core.monitor import ParametricLayerMonitorCallback
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
+from emperor.sampler import RouterConfig, SamplerConfig
 from support.monitor import (
     CaptureLightningModule,
     NoExperimentLightningModule,
@@ -83,7 +83,7 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
                 input_dim=input_dim,
                 output_dim=output_dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
