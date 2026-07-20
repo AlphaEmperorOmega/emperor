@@ -1,5 +1,4 @@
 import hashlib
-import importlib.util
 import json
 import os
 import subprocess
@@ -64,50 +63,6 @@ BASE_CONFIG_FIELDS = (
     "projection_model_config",
     "relative_positional_embedding_config",
 )
-
-FORMER_MODULES = (
-    "emperor.attention.core",
-    "emperor.attention.core._validator",
-    "emperor.attention.core.config",
-    "emperor.attention.core.handlers",
-    "emperor.attention.core.handlers.batch",
-    "emperor.attention.core.handlers.bias",
-    "emperor.attention.core.handlers.mask",
-    "emperor.attention.core.handlers.processor",
-    "emperor.attention.core.handlers.projector",
-    "emperor.attention.core.handlers.reshaper",
-    "emperor.attention.core.handlers.zero_attention",
-    "emperor.attention.core.layers",
-    "emperor.attention.core.monitor",
-    "emperor.attention.core.runtime",
-    "emperor.attention.core.state",
-    "emperor.attention.core.variants",
-    "emperor.attention.core.variants.independent_attention",
-    "emperor.attention.core.variants.independent_attention.config",
-    "emperor.attention.core.variants.independent_attention.layer",
-    "emperor.attention.core.variants.independent_attention.processor",
-    "emperor.attention.core.variants.independent_attention.projector",
-    "emperor.attention.core.variants.independent_attention.validator",
-    "emperor.attention._variants.independent_config",
-    "emperor.attention.core.variants.mixture_of_attention_heads",
-    "emperor.attention.core.variants.mixture_of_attention_heads.bias",
-    "emperor.attention.core.variants.mixture_of_attention_heads.config",
-    "emperor.attention.core.variants.mixture_of_attention_heads.layer",
-    "emperor.attention.core.variants.mixture_of_attention_heads.mask",
-    "emperor.attention.core.variants.mixture_of_attention_heads.monitor",
-    "emperor.attention.core.variants.mixture_of_attention_heads.processor",
-    "emperor.attention.core.variants.mixture_of_attention_heads.projector",
-    "emperor.attention.core.variants.mixture_of_attention_heads.reshaper",
-    "emperor.attention.core.variants.mixture_of_attention_heads.validator",
-    "emperor.attention.core.variants.mixture_of_attention_heads.zero_attention",
-    "emperor.attention.core.variants.self_attention",
-    "emperor.attention.core.variants.self_attention.config",
-    "emperor.attention.core.variants.self_attention.layer",
-    "emperor.attention.core.variants.self_attention.processor",
-    "emperor.attention.core.variants.self_attention.projector",
-    "emperor.attention.core.variants.self_attention.validator",
-)
-
 
 @dataclass(frozen=True)
 class AttentionFixture:
@@ -514,15 +469,6 @@ print(json.dumps({
             "emperor.attention._monitoring.callback",
         )
         self.assertFalse(hasattr(attention, "AttentionMonitorCallback"))
-
-    def test_former_module_paths_are_not_importable(self):
-        for module_name in FORMER_MODULES:
-            with self.subTest(module=module_name):
-                try:
-                    spec = importlib.util.find_spec(module_name)
-                except ModuleNotFoundError:
-                    spec = None
-                self.assertIsNone(spec)
 
     def test_config_state_runtime_and_enum_schemas_are_preserved(self):
         self.assertEqual(

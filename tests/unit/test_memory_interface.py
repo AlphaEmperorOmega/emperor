@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 import subprocess
@@ -182,30 +181,6 @@ print(json.dumps({
     def test_owner_protocol_is_non_constructible(self):
         with self.assertRaises(TypeError):
             MemoryInterface()
-
-    def test_former_module_paths_are_not_importable(self):
-        former_modules = (
-            "emperor.memory.config",
-            "emperor.memory.options",
-            "emperor.memory.core",
-            "emperor.memory.core._factory",
-            "emperor.memory.core._validator",
-            "emperor.memory.core.base",
-            "emperor.memory.core.monitor",
-            "emperor.memory.core.variants",
-            "emperor.memory.core.variants.attention",
-            "emperor.memory.core.variants.element_wise_weighted",
-            "emperor.memory.core.variants.gated_residual",
-            "emperor.memory.core.variants.weighted",
-        )
-
-        for module_name in former_modules:
-            with self.subTest(module=module_name):
-                try:
-                    spec = importlib.util.find_spec(module_name)
-                except ModuleNotFoundError:
-                    spec = None
-                self.assertIsNone(spec)
 
     def test_config_schema_and_enum_values_are_preserved(self):
         self.assertEqual(

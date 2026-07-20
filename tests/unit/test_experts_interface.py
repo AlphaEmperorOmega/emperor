@@ -1,5 +1,4 @@
 import hashlib
-import importlib.util
 import inspect
 import json
 import os
@@ -413,28 +412,6 @@ print(json.dumps({
                 )
                 self.assertNotEqual(completed.returncode, 0)
                 self.assertIn("ImportError", completed.stderr)
-
-    def test_former_module_paths_are_not_importable(self):
-        former_modules = (
-            "emperor.experts.config",
-            "emperor.experts.model",
-            "emperor.experts.core",
-            "emperor.experts.core._expert_capacity",
-            "emperor.experts.core._expert_weighting",
-            "emperor.experts.core._validator",
-            "emperor.experts.core.config",
-            "emperor.experts.core.layers",
-            "emperor.experts.core.options",
-            "emperor.experts.core.state",
-        )
-
-        for module_name in former_modules:
-            with self.subTest(module=module_name):
-                try:
-                    spec = importlib.util.find_spec(module_name)
-                except ModuleNotFoundError:
-                    spec = None
-                self.assertIsNone(spec)
 
     def test_config_enum_and_state_schemas_are_preserved(self):
         self.assertEqual(

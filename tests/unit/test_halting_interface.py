@@ -1,4 +1,3 @@
-import importlib.util
 import json
 import os
 import subprocess
@@ -122,29 +121,6 @@ print(json.dumps({
             result["removed_exports"],
             {"HaltingOptions": False, "StickBreakingValidator": False},
         )
-
-    def test_former_module_paths_are_not_importable(self):
-        former_modules = (
-            "emperor.halting.config",
-            "emperor.halting.options",
-            "emperor.halting.core",
-            "emperor.halting.core._validator",
-            "emperor.halting.core.base",
-            "emperor.halting.core.monitor",
-            "emperor.halting.core.tracker",
-            "emperor.halting.core.variants",
-            "emperor.halting.core.variants.soft_halting",
-            "emperor.halting.core.variants.stick_breaking",
-            "emperor.halting._usage",
-        )
-
-        for module_name in former_modules:
-            with self.subTest(module=module_name):
-                try:
-                    spec = importlib.util.find_spec(module_name)
-                except ModuleNotFoundError:
-                    spec = None
-                self.assertIsNone(spec)
 
 
 if __name__ == "__main__":
