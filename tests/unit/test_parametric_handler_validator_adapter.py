@@ -1,38 +1,47 @@
 import unittest
 
 import torch
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.layer.state import LayerState
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.parametric.core._validator import ParametricHandlerValidator
-from emperor.parametric.core.config import (
+
+from emperor.layers import (
+    ActivationOptions,
+    Layer,
+    LayerNormPositionOptions,
+    LayerState,
+)
+from emperor.parametric import (
     AdaptiveRouterOptions,
     ParametricLayerConfig,
+    ParametricLayerHandler,
     ParametricLayerHandlerConfig,
+    VectorWeightsMixtureConfig,
 )
-from emperor.parametric.core.handlers import (
+from emperor.parametric._handlers import (
     GeneratorParameterHandler,
     MatrixParameterHandler,
     ParameterHandlerBase,
-    ParametricLayerHandler,
     VectorParameterHandler,
 )
-from emperor.parametric.core.mixtures.config import VectorWeightsMixtureConfig
+from emperor.parametric._validation import ParametricHandlerValidator
 
 
 class TestParametricHandlerValidatorAdapter(unittest.TestCase):
-    def test_handler_modules_expose_the_shared_validator_adapter(self):
+    def test_parameter_handlers_expose_the_parametric_validator(self):
         module_types = (
             ParameterHandlerBase,
             VectorParameterHandler,
             MatrixParameterHandler,
             GeneratorParameterHandler,
-            ParametricLayerHandler,
         )
 
         for module_type in module_types:
             with self.subTest(module_type=module_type.__name__):
                 self.assertIs(module_type.VALIDATOR, ParametricHandlerValidator)
+
+        self.assertIs(ParametricLayerHandler.VALIDATOR, Layer.VALIDATOR)
+        self.assertIs(
+            ParametricLayerHandler.PARAMETRIC_VALIDATOR,
+            ParametricHandlerValidator,
+        )
 
     def test_parameter_handler_construction_dispatches_through_adapter(self):
         class TrackingValidator(ParametricHandlerValidator):
@@ -56,13 +65,13 @@ class TestParametricHandlerValidatorAdapter(unittest.TestCase):
                 raise RuntimeError("substituted layer validator was called")
 
         class TrackingLayerHandler(ParametricLayerHandler):
-            VALIDATOR = TrackingValidator
+            PARAMETRIC_VALIDATOR = TrackingValidator
 
         cfg = ParametricLayerHandlerConfig(
             input_dim=3,
             output_dim=3,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -84,7 +93,7 @@ class TestParametricHandlerValidatorAdapter(unittest.TestCase):
                 raise RuntimeError("substituted runtime validator was called")
 
         class RejectingLayerHandler(ParametricLayerHandler):
-            VALIDATOR = RejectingValidator
+            PARAMETRIC_VALIDATOR = RejectingValidator
 
         model = RejectingLayerHandler.__new__(RejectingLayerHandler)
         torch.nn.Module.__init__(model)
