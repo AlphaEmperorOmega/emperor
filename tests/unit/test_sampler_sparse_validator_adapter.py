@@ -1,8 +1,8 @@
 import unittest
 
-from emperor.sampler.core._validator import SamplerSparseValidator
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.variants import SamplerSparse
+from emperor.sampler import SamplerConfig
+from emperor.sampler._selection.sparse import SamplerSparse
+from emperor.sampler._selection.validation import SamplerSparseValidator
 
 
 def make_config(**overrides) -> SamplerConfig:
@@ -43,11 +43,12 @@ class TestSamplerSparseValidatorAdapter(unittest.TestCase):
         ):
             TrackingSamplerSparse(make_config())
 
-    def test_sparse_top_k_normalization_behavior_is_preserved(self):
-        model = SamplerSparse(make_config(top_k=2))
-
-        self.assertEqual(model.cfg.top_k, 2)
-        self.assertEqual(model.top_k, 1)
+    def test_sparse_top_k_error_contract_is_preserved(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "top_k must be 1 when using SamplerSparse, received 2",
+        ):
+            SamplerSparse(make_config(top_k=2))
 
     def test_sparse_error_contract_is_preserved(self):
         with self.assertRaisesRegex(

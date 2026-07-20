@@ -1,9 +1,9 @@
-import torch
 import unittest
 
-from emperor.sampler.model import SamplerModel
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.tracker import (
+import torch
+
+from emperor.sampler import SamplerConfig, SamplerModel
+from emperor.sampler._usage import (
     SamplerUsageTracker,
     SamplerUsageTrackerManager,
 )

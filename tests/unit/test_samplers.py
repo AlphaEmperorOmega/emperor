@@ -1,11 +1,13 @@
-import torch
 import unittest
 from math import prod
 
-from emperor.sampler.model import SamplerModel
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.base import SamplerBase
-from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
+import torch
+
+from emperor.sampler import SamplerConfig, SamplerModel
+from emperor.sampler._selection.base import SamplerBase
+from emperor.sampler._selection.full import SamplerFull
+from emperor.sampler._selection.sparse import SamplerSparse
+from emperor.sampler._selection.top_k import SamplerTopk
 
 
 class SamplerTestCase(unittest.TestCase):
@@ -370,7 +372,7 @@ class TestProbabilitySampler(SamplerTestCase):
 
 class TestSamplerSparse(SamplerTestCase):
     def test_sample_probabilities_and_indices(self):
-        cfg = self.preset()
+        cfg = self.preset(top_k=1)
         m = SamplerSparse(cfg)
 
         batch_size = 3
@@ -381,7 +383,7 @@ class TestSamplerSparse(SamplerTestCase):
         self.assertEqual(indices.shape, (batch_size,))
 
     def test_sample_probabilities_and_indices_selects_max_deterministically(self):
-        cfg = self.preset()
+        cfg = self.preset(top_k=1)
         m = SamplerSparse(cfg)
         probabilities = torch.tensor(
             [
@@ -418,11 +420,13 @@ class TestSamplerSparse(SamplerTestCase):
                                 if normalize_flag:
                                     with self.assertRaises(ValueError):
                                         cfg = self.preset(
+                                            top_k=1,
                                             normalize_probabilities_flag=normalize_flag,
                                         )
                                         m = SamplerSparse(cfg)
                                 else:
                                     cfg = self.preset(
+                                        top_k=1,
                                         noisy_topk_flag=noisy_flag,
                                         threshold=thresh,
                                         filter_above_threshold=filter_flag,
@@ -462,28 +466,6 @@ class TestSamplerSparse(SamplerTestCase):
                                     )
                                     if sampler_loss > 0:
                                         self.assertTrue(sampler_loss >= 0)
-
-    def test__prepare_loss_skip_mask(self):
-        input_options = [None, torch.ones(3, 4)]
-        for input_mask in input_options:
-            message = f"Testing configuration with skip_mask={input_mask}"
-            with self.subTest(msg=message):
-                cfg = self.preset()
-                m = SamplerSparse(cfg)
-
-                skip_maks = m._SamplerSparse__prepare_loss_skip_mask(input_mask)
-
-                if input_mask is None:
-                    self.assertIsNone(skip_maks)
-                else:
-                    self.assertTrue(
-                        torch.allclose(
-                            skip_maks.round(decimals=4),
-                            input_mask.reshape(-1, 1).round(decimals=4),
-                            atol=1e-6,
-                            rtol=1e-5,
-                        )
-                    )
 
     def test__prepare_loss_gates(self):
         cfg = self.preset(

@@ -1,10 +1,10 @@
 import unittest
 
 import torch
-from emperor.base.config import ConfigBase
-from emperor.sampler.core._validator import RouterModelValidator
-from emperor.sampler.core.config import RouterConfig
-from emperor.sampler.core.routers import RouterModel
+
+from emperor.config import ConfigBase
+from emperor.sampler import RouterConfig, RouterModel
+from emperor.sampler._validation import RouterModelValidator
 
 
 def make_config(**overrides) -> RouterConfig:
@@ -55,10 +55,10 @@ class TestRouterModelValidatorAdapter(unittest.TestCase):
         ):
             model.compute_logit_scores(torch.ones(1, 3))
 
-    def test_positive_integer_error_contract_is_preserved(self):
+    def test_boolean_dimension_type_error_contract_is_preserved(self):
         with self.assertRaisesRegex(
-            ValueError,
-            "input_dim must be a positive integer, received True",
+            TypeError,
+            "input_dim must be int for RouterConfig, got bool",
         ):
             RouterModel(make_config(input_dim=True))
 

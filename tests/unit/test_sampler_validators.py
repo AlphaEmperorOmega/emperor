@@ -1,9 +1,12 @@
-import torch
 import unittest
 
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.base import SamplerBase
-from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
+import torch
+
+from emperor.sampler import SamplerConfig
+from emperor.sampler._selection.base import SamplerBase
+from emperor.sampler._selection.full import SamplerFull
+from emperor.sampler._selection.sparse import SamplerSparse
+from emperor.sampler._selection.top_k import SamplerTopk
 
 
 class TestSamplerValidators(unittest.TestCase):
@@ -34,14 +37,14 @@ class TestSamplerValidators(unittest.TestCase):
     def test_base_validator_rejects_invalid_config_values(self):
         cases = [
             ("top_k", 0, ValueError),
-            ("top_k", True, ValueError),
+            ("top_k", True, TypeError),
             ("top_k", 1.5, TypeError),
             ("threshold", -0.1, ValueError),
             ("threshold", 1.1, ValueError),
             ("num_topk_samples", -1, ValueError),
             ("num_topk_samples", 3, ValueError),
             ("num_experts", 0, ValueError),
-            ("num_experts", True, ValueError),
+            ("num_experts", True, TypeError),
             ("coefficient_of_variation_loss_weight", -0.1, ValueError),
             ("switch_loss_weight", -0.1, ValueError),
             ("zero_centred_loss_weight", -0.1, ValueError),

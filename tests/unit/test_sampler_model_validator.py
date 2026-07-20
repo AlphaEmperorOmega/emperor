@@ -1,17 +1,19 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
 
-from emperor.base.options import (
+import torch
+
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.model import SamplerModel
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-from emperor.sampler.core.variants import SamplerFull, SamplerSparse, SamplerTopk
+from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig, SamplerModel
+from emperor.sampler._selection.full import SamplerFull
+from emperor.sampler._selection.sparse import SamplerSparse
+from emperor.sampler._selection.top_k import SamplerTopk
 from unit.test_routers import ConstantRouterConfig
 
 
@@ -54,7 +56,7 @@ class TestSamplerModelValidator(unittest.TestCase):
                 apply_output_pipeline_flag=True,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.RELU,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     gate_config=None,
@@ -158,11 +160,11 @@ class TestSamplerModelValidator(unittest.TestCase):
     def test_rejects_invalid_model_config_values(self):
         cases = [
             ("top_k", 0, ValueError),
-            ("top_k", True, ValueError),
+            ("top_k", True, TypeError),
             ("top_k", 5, ValueError),
             ("top_k", 1.5, TypeError),
             ("num_experts", 0, ValueError),
-            ("num_experts", True, ValueError),
+            ("num_experts", True, TypeError),
             ("num_experts", 1.5, TypeError),
             ("router_config", object(), TypeError),
         ]

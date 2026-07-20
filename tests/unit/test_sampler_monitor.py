@@ -1,12 +1,10 @@
 import unittest
 
 import torch
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.monitor import SamplerMonitorCallback
-from emperor.sampler.core.tracker import SamplerUsageTrackerManager
-from emperor.sampler.model import SamplerModel
 from torch import nn
 
+from emperor.sampler import SamplerConfig, SamplerModel, SamplerMonitorCallback
+from emperor.sampler._usage import SamplerUsageTrackerManager
 from support.monitor import orchestration_calls
 
 
@@ -223,7 +221,9 @@ class TestSamplerMonitorCallback(unittest.TestCase):
         expected_entropy = -(
             usage_fraction.clamp_min(1e-6).log() * usage_fraction
         ).sum()
-        expected_cov = usage_counts.std() / usage_counts.mean().clamp_min(1e-6)
+        expected_cov = usage_counts.std(unbiased=False) / usage_counts.mean().clamp_min(
+            1e-6
+        )
 
         torch.testing.assert_close(
             logged["sampler/batch/active_experts"], torch.tensor(3.0)

@@ -1,8 +1,8 @@
 import unittest
 
-from emperor.sampler.core._validator import SamplerTopkValidator
-from emperor.sampler.core.config import SamplerConfig
-from emperor.sampler.core.variants import SamplerTopk
+from emperor.sampler import SamplerConfig
+from emperor.sampler._selection.top_k import SamplerTopk
+from emperor.sampler._selection.validation import SamplerTopkValidator
 
 
 def make_config(**overrides) -> SamplerConfig:

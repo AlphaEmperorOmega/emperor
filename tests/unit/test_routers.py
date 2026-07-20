@@ -1,19 +1,20 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
-
 from dataclasses import dataclass
-from emperor.base.options import (
+
+import torch
+
+from emperor.config import ConfigBase, optional_field
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    LayerState,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.base.layer.state import LayerState
-from emperor.base.utils import ConfigBase, Module, optional_field
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.sampler.core.config import RouterConfig
-from emperor.sampler.core.routers import RouterModel
+from emperor.linears import LinearLayerConfig
+from emperor.nn import Module
+from emperor.sampler import RouterConfig, RouterModel
 
 
 @dataclass
@@ -88,7 +89,7 @@ class TestRouterModel(unittest.TestCase):
             apply_output_pipeline_flag=True,
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -118,11 +119,11 @@ class TestRouterModel(unittest.TestCase):
         cases = [
             ("input_dim", 0, ValueError),
             ("input_dim", -1, ValueError),
-            ("input_dim", True, ValueError),
+            ("input_dim", True, TypeError),
             ("input_dim", 1.5, TypeError),
             ("num_experts", 0, ValueError),
             ("num_experts", -1, ValueError),
-            ("num_experts", True, ValueError),
+            ("num_experts", True, TypeError),
             ("num_experts", 1.5, TypeError),
             ("noisy_topk_flag", None, ValueError),
             ("noisy_topk_flag", 1, TypeError),
