@@ -57,7 +57,7 @@ print(json.dumps({
 import json
 import sys
 
-import emperor.base.validator
+import emperor._validation
 
 print(json.dumps({
     "ipython_display": "IPython.display" in sys.modules,
@@ -82,14 +82,26 @@ print(json.dumps({
 import json
 import sys
 
-from emperor.experiments.tasks import ExperimentTask
+from emperor.experiments import ExperimentTask
 
 print(json.dumps({
-    "language_model": "emperor.experiments.language_model" in sys.modules,
+    "bert_pretraining": (
+        "emperor.experiments.bert_pretraining._experiment" in sys.modules
+    ),
+    "classifier": "emperor.experiments.classifier._experiment" in sys.modules,
+    "language_model": (
+        "emperor.experiments.language_model._experiment" in sys.modules
+    ),
+    "masked_language_model": (
+        "emperor.experiments.masked_language_model._experiment" in sys.modules
+    ),
+    "sequence_classifier": (
+        "emperor.experiments.sequence_classifier._experiment" in sys.modules
+    ),
     "task": ExperimentTask.TEXT_TRANSLATION.name,
     "torch": "torch" in sys.modules,
     "torchmetrics": "torchmetrics" in sys.modules,
-    "translation": "emperor.experiments.translation" in sys.modules,
+    "translation": "emperor.experiments.translation._experiment" in sys.modules,
 }))
 """
         )
@@ -97,7 +109,11 @@ print(json.dumps({
         self.assertEqual(
             result,
             {
+                "bert_pretraining": False,
+                "classifier": False,
                 "language_model": False,
+                "masked_language_model": False,
+                "sequence_classifier": False,
                 "task": "TEXT_TRANSLATION",
                 "torch": False,
                 "torchmetrics": False,
@@ -105,7 +121,7 @@ print(json.dumps({
             },
         )
 
-    def test_package_level_experiment_exports_remain_compatible(self):
+    def test_experiment_task_interface_is_exact_and_lightweight(self):
         result = self.run_fresh_python(
             """
 import json
@@ -113,19 +129,17 @@ import json
 import emperor.experiments as experiments
 from emperor.experiments import (
     ExperimentTask,
-    LanguageModelExperiment,
-    LanguageModelStepOutput,
-    TranslationExperiment,
-    TranslationStepOutput,
+    experiment_task_label,
+    experiment_task_name,
+    resolve_experiment_task,
 )
 
 print(json.dumps({
     "all": experiments.__all__,
     "experiment_task": ExperimentTask.__module__,
-    "language_model": LanguageModelExperiment.__module__,
-    "language_model_output": LanguageModelStepOutput.__module__,
-    "translation": TranslationExperiment.__module__,
-    "translation_output": TranslationStepOutput.__module__,
+    "experiment_task_label": experiment_task_label.__module__,
+    "experiment_task_name": experiment_task_name.__module__,
+    "resolve_experiment_task": resolve_experiment_task.__module__,
 }))
 """
         )
@@ -135,77 +149,31 @@ print(json.dumps({
             {
                 "all": [
                     "ExperimentTask",
-                    "LanguageModelExperiment",
-                    "LanguageModelStepOutput",
-                    "TranslationExperiment",
-                    "TranslationStepOutput",
+                    "experiment_task_label",
+                    "experiment_task_name",
+                    "resolve_experiment_task",
                 ],
-                "experiment_task": "emperor.experiments.tasks",
-                "language_model": "emperor.experiments.language_model",
-                "language_model_output": "emperor.experiments.language_model",
-                "translation": "emperor.experiments.translation",
-                "translation_output": "emperor.experiments.translation",
+                "experiment_task": "emperor.experiments._tasks",
+                "experiment_task_label": "emperor.experiments._tasks",
+                "experiment_task_name": "emperor.experiments._tasks",
+                "resolve_experiment_task": "emperor.experiments._tasks",
             },
         )
 
-    def test_legacy_base_utils_imports_preserve_canonical_identity(self):
-        result = self.run_fresh_python(
-            """
-import json
-
-from emperor.base.config import ConfigBase as CanonicalConfigBase
-from emperor.base.config import optional_field as canonical_optional_field
-from emperor.base.data import DataModule as CanonicalDataModule
-from emperor.base.module import Module as CanonicalModule
-from emperor.base.module import ParameterBank as CanonicalParameterBank
-from emperor.base.visualization import ProgressBoard as CanonicalProgressBoard
-from emperor.base.visualization import show_images as canonical_show_images
-from emperor.base.utils import (
-    ConfigBase as LegacyConfigBase,
-    DataModule as LegacyDataModule,
-    Module as LegacyModule,
-    ParameterBank as LegacyParameterBank,
-    ProgressBoard as LegacyProgressBoard,
-    optional_field as legacy_optional_field,
-    show_images as legacy_show_images,
-)
-
-print(json.dumps({
-    "config_base": CanonicalConfigBase is LegacyConfigBase,
-    "data_module": CanonicalDataModule is LegacyDataModule,
-    "module": CanonicalModule is LegacyModule,
-    "optional_field": canonical_optional_field is legacy_optional_field,
-    "parameter_bank": CanonicalParameterBank is LegacyParameterBank,
-    "progress_board": CanonicalProgressBoard is LegacyProgressBoard,
-    "show_images": canonical_show_images is legacy_show_images,
-}))
-"""
-        )
-
-        self.assertEqual(
-            result,
-            {
-                "config_base": True,
-                "data_module": True,
-                "module": True,
-                "optional_field": True,
-                "parameter_bank": True,
-                "progress_board": True,
-                "show_images": True,
-            },
-        )
-
-    def test_visualization_owner_defers_plotting_and_notebook_dependencies(self):
+    def test_nn_interface_is_curated_and_defers_plotting_dependencies(self):
         result = self.run_fresh_python(
             """
 import json
 import sys
 
-import emperor.base.visualization
+import emperor.nn as nn
 
 print(json.dumps({
+    "all": nn.__all__,
     "ipython_display": "IPython.display" in sys.modules,
     "matplotlib_pyplot": "matplotlib.pyplot" in sys.modules,
+    "module_owner": nn.Module.__module__,
+    "parameter_bank_exported": hasattr(nn, "ParameterBank"),
 }))
 """
         )
@@ -213,39 +181,29 @@ print(json.dumps({
         self.assertEqual(
             result,
             {
+                "all": ["Module"],
                 "ipython_display": False,
                 "matplotlib_pyplot": False,
+                "module_owner": "emperor.nn._module",
+                "parameter_bank_exported": False,
             },
         )
 
-    def test_legacy_base_options_import_preserves_canonical_class_identity(self):
-        result = self.run_fresh_python(
-            """
-import json
-
-from emperor.base.option import BaseOptions as CanonicalBaseOptions
-from emperor.base.options import BaseOptions as LegacyBaseOptions
-
-print(json.dumps({
-    "same_class": CanonicalBaseOptions is LegacyBaseOptions,
-}))
-"""
-        )
-
-        self.assertEqual(result, {"same_class": True})
-
-    def test_monitor_metadata_import_defers_lightning(self):
+    def test_layers_interface_is_curated_and_lazy(self):
         result = self.run_fresh_python(
             """
 import json
 import sys
 
-from emperor.experiments.monitors import MonitorOption, MonitorSettings
+import emperor.layers as layers
 
 print(json.dumps({
+    "all": layers.__all__,
+    "layer_gate_exported": hasattr(layers, "LayerGate"),
     "lightning": "lightning" in sys.modules,
-    "option": MonitorOption.__name__,
-    "settings": MonitorSettings.__name__,
+    "matplotlib_pyplot": "matplotlib.pyplot" in sys.modules,
+    "torch": "torch" in sys.modules,
+    "validator_exported": hasattr(layers, "LayerValidator"),
 }))
 """
         )
@@ -253,10 +211,86 @@ print(json.dumps({
         self.assertEqual(
             result,
             {
+                "all": [
+                    "ActivationOptions",
+                    "GateConfig",
+                    "LastLayerBiasOptions",
+                    "LayerConfig",
+                    "LayerGateOptions",
+                    "LayerNormPositionOptions",
+                    "LayerStackConfig",
+                    "RecurrentLayerConfig",
+                    "ResidualConfig",
+                    "ResidualConnectionOptions",
+                    "LayerState",
+                    "ResidualConnection",
+                    "Layer",
+                    "LayerStack",
+                    "RecurrentLayer",
+                    "LayerControllerMonitorCallback",
+                    "RecurrentLayerMonitorCallback",
+                ],
+                "layer_gate_exported": False,
                 "lightning": False,
-                "option": "MonitorOption",
-                "settings": "MonitorSettings",
+                "matplotlib_pyplot": False,
+                "torch": False,
+                "validator_exported": False,
             },
+        )
+
+    def test_monitoring_interface_is_curated_and_metadata_stays_lightweight(self):
+        result = self.run_fresh_python(
+            """
+import json
+import sys
+
+import emperor.monitoring as monitoring
+from emperor.monitoring import MonitorOption, MonitorSettings
+
+print(json.dumps({
+    "all": monitoring.__all__,
+    "lightning": "lightning" in sys.modules,
+    "option_owner": MonitorOption.__module__,
+    "private_metadata_exported": hasattr(monitoring, "MonitorKind"),
+    "settings_owner": MonitorSettings.__module__,
+    "torch": "torch" in sys.modules,
+}))
+"""
+        )
+
+        self.assertEqual(
+            result,
+            {
+                "all": [
+                    "MonitorOption",
+                    "MonitorSettings",
+                    "MonitorEmissionPolicy",
+                    "MonitorTensorHistory",
+                ],
+                "lightning": False,
+                "option_owner": "emperor.monitoring._metadata",
+                "private_metadata_exported": False,
+                "settings_owner": "emperor.monitoring._metadata",
+                "torch": False,
+            },
+        )
+
+    def test_lazy_foundation_interfaces_reject_unknown_attributes_exactly(self):
+        import emperor.monitoring as monitoring
+        import emperor.nn as nn
+
+        with self.assertRaises(AttributeError) as nn_error:
+            _ = nn.MissingNeuralFoundation
+        self.assertEqual(
+            str(nn_error.exception),
+            "module 'emperor.nn' has no attribute 'MissingNeuralFoundation'",
+        )
+
+        with self.assertRaises(AttributeError) as monitoring_error:
+            _ = monitoring.MissingMonitorFoundation
+        self.assertEqual(
+            str(monitoring_error.exception),
+            "module 'emperor.monitoring' has no attribute 'MissingMonitorFoundation'",
         )
 
 
