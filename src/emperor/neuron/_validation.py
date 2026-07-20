@@ -277,7 +277,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
 
     @classmethod
     def validate_initial_grid_dimensions(cls, cfg: "NeuronClusterConfig") -> None:
-        axis_pairs = (
+        initial_capacity_pairs = (
             (
                 "initial_x_axis_total_neurons",
                 cfg.initial_x_axis_total_neurons,
@@ -297,14 +297,20 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 cfg.z_axis_total_neurons,
             ),
         )
-        for initial_name, initial_value, max_name, max_value in axis_pairs:
-            if initial_value is None:
+        for (
+            initial_dimension_name,
+            initial_dimension,
+            capacity_name,
+            capacity,
+        ) in initial_capacity_pairs:
+            if initial_dimension is None:
                 continue
-            cls.validate_positive_integer(initial_name, initial_value)
-            if initial_value > max_value:
+            cls.validate_positive_integer(initial_dimension_name, initial_dimension)
+            if initial_dimension > capacity:
                 raise ValueError(
-                    f"{initial_name} cannot exceed {max_name}, received "
-                    f"{initial_name}={initial_value} and {max_name}={max_value}."
+                    f"{initial_dimension_name} cannot exceed {capacity_name}, "
+                    f"received {initial_dimension_name}={initial_dimension} and "
+                    f"{capacity_name}={capacity}."
                 )
 
     @classmethod
@@ -322,30 +328,30 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"{type(sampler_config).__name__}."
             )
 
-        entry_count = (cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons) * (
-            cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons
-        )
+        initialized_entry_count = (
+            cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons
+        ) * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
         cls.validate_positive_integer(
             "entry_sampler_config.num_experts",
             sampler_config.num_experts,
         )
-        if sampler_config.num_experts != entry_count:
+        if sampler_config.num_experts != initialized_entry_count:
             raise ValueError(
                 "entry_sampler_config.num_experts must equal the initialized "
                 "entry coordinate count, received "
                 f"num_experts={sampler_config.num_experts} and "
-                f"entry_coordinate_count={entry_count}."
+                f"entry_coordinate_count={initialized_entry_count}."
             )
         cls.validate_positive_integer(
             "entry_sampler_config.top_k",
             sampler_config.top_k,
         )
-        if sampler_config.top_k > entry_count:
+        if sampler_config.top_k > initialized_entry_count:
             raise ValueError(
                 "entry_sampler_config.top_k cannot exceed the initialized entry "
                 "coordinate count, received "
                 f"top_k={sampler_config.top_k} and "
-                f"entry_coordinate_count={entry_count}."
+                f"entry_coordinate_count={initialized_entry_count}."
             )
 
         router_config = sampler_config.router_config
@@ -361,12 +367,12 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
             "entry_sampler_config.router_config.num_experts",
             router_config.num_experts,
         )
-        if router_config.num_experts != entry_count:
+        if router_config.num_experts != initialized_entry_count:
             raise ValueError(
                 "entry_sampler_config.router_config.num_experts must equal the "
                 "initialized entry coordinate count, received "
                 f"num_experts={router_config.num_experts} and "
-                f"entry_coordinate_count={entry_count}."
+                f"entry_coordinate_count={initialized_entry_count}."
             )
 
     @staticmethod
@@ -378,17 +384,17 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         if terminal_config.sampler_config.router_config is not None:
             return
 
-        entry_count = (cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons) * (
-            cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons
-        )
-        if terminal_config.input_dim == entry_count:
+        initialized_entry_count = (
+            cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons
+        ) * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
+        if terminal_config.input_dim == initialized_entry_count:
             return
         raise ValueError(
             "entry_sampler_config is required when the terminal sampler has no "
             "router_config and input_dim does not equal the initialized entry "
             "coordinate count, received "
             f"input_dim={terminal_config.input_dim} and "
-            f"entry_coordinate_count={entry_count}."
+            f"entry_coordinate_count={initialized_entry_count}."
         )
 
     @classmethod
@@ -411,11 +417,11 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
 
     @staticmethod
     def validate_growth_placement_options(cfg: "NeuronClusterConfig") -> None:
-        flag_fields = (
+        growth_flag_fields = (
             ("escape_driven_growth_flag", cfg.escape_driven_growth_flag),
             ("mitosis_initialization_flag", cfg.mitosis_initialization_flag),
         )
-        for flag_name, flag_value in flag_fields:
+        for flag_name, flag_value in growth_flag_fields:
             if flag_value is None:
                 continue
             if not isinstance(flag_value, bool):
@@ -432,11 +438,11 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
 
     @classmethod
     def validate_growth_budget_options(cls, cfg: "NeuronClusterConfig") -> None:
-        budget_fields = (
+        growth_budget_fields = (
             ("growth_cooldown_steps", cfg.growth_cooldown_steps),
             ("max_total_growths", cfg.max_total_growths),
         )
-        for budget_name, budget_value in budget_fields:
+        for budget_name, budget_value in growth_budget_fields:
             if budget_value is None:
                 continue
             cls.validate_positive_integer(budget_name, budget_value)
