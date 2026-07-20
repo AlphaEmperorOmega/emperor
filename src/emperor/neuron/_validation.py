@@ -200,22 +200,22 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
 
     @staticmethod
     def validate_coordinate_embedding_options(cfg: "NeuronConfig") -> None:
-        flag_value = cfg.coordinate_embedding_flag
-        if flag_value is None:
+        coordinate_embedding_flag = cfg.coordinate_embedding_flag
+        if coordinate_embedding_flag is None:
             return
-        if not isinstance(flag_value, bool):
+        if not isinstance(coordinate_embedding_flag, bool):
             raise TypeError(
                 "coordinate_embedding_flag must be a bool for NeuronConfig, "
-                f"got {type(flag_value).__name__}."
+                f"got {type(coordinate_embedding_flag).__name__}."
             )
-        if not flag_value:
+        if not coordinate_embedding_flag:
             return
-        input_dim = cfg.terminal_config.input_dim
-        if input_dim < 3:
+        terminal_input_dim = cfg.terminal_config.input_dim
+        if terminal_input_dim < 3:
             raise ValueError(
                 "coordinate_embedding_flag requires terminal_config.input_dim "
                 "of at least 3 so every coordinate axis receives at least one "
-                f"encoding channel, received input_dim={input_dim}."
+                f"encoding channel, received input_dim={terminal_input_dim}."
             )
 
     @classmethod
