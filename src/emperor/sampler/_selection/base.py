@@ -196,7 +196,12 @@ class SamplerBase(Module):
     def _normalization_denominator(self, probabilities: Tensor) -> Tensor:
         expert_dimension = 1
         normalization_epsilon = 1e-6
-        return (
-            torch.sum(probabilities, dim=expert_dimension, keepdim=True)
-            + normalization_epsilon
+        total_probability_mass = torch.sum(
+            probabilities,
+            dim=expert_dimension,
+            keepdim=True,
         )
+        stabilized_normalization_denominator = (
+            total_probability_mass + normalization_epsilon
+        )
+        return stabilized_normalization_denominator
