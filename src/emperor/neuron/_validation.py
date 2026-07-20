@@ -1,4 +1,5 @@
 import copy
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -54,9 +55,13 @@ class AxonsValidator(ValidatorBase, NeuronValidationMixin):
 
     @classmethod
     def validate(cls, model: "Axons") -> None:
-        cls.validate_required_fields(model.cfg)
-        cls.validate_field_types(model.cfg)
-        cls.validate_memory_config(model.cfg.memory_config)
+        cls.validate_config(model.cfg)
+
+    @classmethod
+    def validate_config(cls, cfg) -> None:
+        cls.validate_required_fields(cfg)
+        cls.validate_field_types(cfg)
+        cls.validate_memory_config(cfg.memory_config)
 
     @staticmethod
     def validate_memory_config(memory_config: "DynamicMemoryConfig | None") -> None:
@@ -105,6 +110,30 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
         cls.validate_integer("z_axis_position", model.z_axis_position)
         cls.validate_axis_ranges(model)
         cls.validate_sampler_config(model)
+
+    @classmethod
+    def validate_config_composition(cls, cfg) -> None:
+        """Validate Terminal composition without constructing trainable modules."""
+
+        from emperor.neuron._terminal_topology import (
+            initialize_terminal_connections,
+        )
+
+        cls.validate_config_fields(cfg)
+        terminal_validation_target = SimpleNamespace(
+            cfg=cfg,
+            input_dim=cfg.input_dim,
+            x_axis_position=cfg.x_axis_position,
+            y_axis_position=cfg.y_axis_position,
+            z_axis_position=cfg.z_axis_position,
+            xy_axis_range=cfg.xy_axis_range.value,
+            z_axis_range=cfg.z_axis_range.value,
+            z_axis_offset=cfg.z_axis_offset.value,
+            sampler_config=cfg.sampler_config,
+            total_neuron_connections=int(initialize_terminal_connections(cfg).shape[0]),
+        )
+        cls.validate(terminal_validation_target)
+        cfg.sampler_config.validate_for_router_input_dim(cfg.input_dim)
 
     @staticmethod
     def validate_axis_ranges(model: "Terminal") -> None:
@@ -176,6 +205,9 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
 
 
 class NeuronValidator(ValidatorBase, NeuronValidationMixin):
+    AXONS_VALIDATOR = AxonsValidator
+    TERMINAL_VALIDATOR = TerminalValidator
+
     OPTIONAL_FIELDS = {"coordinate_embedding_flag"}
 
     @classmethod
@@ -183,6 +215,9 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
         cls.validate_required_fields(cfg)
         cls.validate_field_types(cfg)
         cls.validate_coordinate_embedding_options(cfg)
+        cls.validate_nucleus_model_dimensions(cfg)
+        cls.validate_axons_memory_dimensions(cfg)
+        cls.validate_terminal_composition(cfg)
 
     @staticmethod
     def validate_coordinate_embedding_options(cfg: "NeuronConfig") -> None:
@@ -203,6 +238,50 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
                 "of at least 3 so every coordinate axis receives at least one "
                 f"encoding channel, received input_dim={terminal_input_dim}."
             )
+
+    @staticmethod
+    def validate_nucleus_model_dimensions(cfg: "NeuronConfig") -> None:
+        nucleus_model_config = cfg.nucleus_config.model_config
+        terminal_input_dim = cfg.terminal_config.input_dim
+        for dimension_name in ("input_dim", "output_dim"):
+            configured_dimension = getattr(
+                nucleus_model_config,
+                dimension_name,
+                None,
+            )
+            if configured_dimension is None:
+                continue
+            if configured_dimension != terminal_input_dim:
+                raise ValueError(
+                    "nucleus_config.model_config must preserve the terminal "
+                    "feature dimension for NeuronConfig, received "
+                    f"{dimension_name}={configured_dimension} and terminal "
+                    f"input_dim={terminal_input_dim}."
+                )
+
+    @classmethod
+    def validate_axons_memory_dimensions(cls, cfg: "NeuronConfig") -> None:
+        cls.AXONS_VALIDATOR.validate_config(cfg.axons_config)
+        memory_config = cfg.axons_config.memory_config
+        if memory_config is None:
+            return
+        if memory_config.input_dim is None:
+            raise ValueError(
+                "axons_config.memory_config.input_dim is required for NeuronConfig, "
+                "received None."
+            )
+        terminal_input_dim = cfg.terminal_config.input_dim
+        if memory_config.input_dim != terminal_input_dim:
+            raise ValueError(
+                "axons_config.memory_config.input_dim must preserve the terminal "
+                "feature dimension for NeuronConfig, received memory input_dim="
+                f"{memory_config.input_dim} and terminal input_dim="
+                f"{terminal_input_dim}."
+            )
+
+    @classmethod
+    def validate_terminal_composition(cls, cfg: "NeuronConfig") -> None:
+        cls.TERMINAL_VALIDATOR.validate_config_composition(cfg.terminal_config)
 
     @classmethod
     def validate_forward_input(cls, input: Tensor) -> None:
@@ -232,7 +311,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
     def validate(cls, model) -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
-        cls.NEURON_VALIDATOR.validate(model.cfg.neuron_config)
+        cls.NEURON_VALIDATOR.validate(
+            cls.__neuron_config_with_validation_positions(model.cfg.neuron_config)
+        )
         cls.validate_positive_integer(
             "x_axis_total_neurons",
             model.cfg.x_axis_total_neurons,
@@ -259,7 +340,36 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         cls.validate_growth_budget_options(model.cfg)
         cls.validate_growth_warmup_steps(model.cfg)
         cls.validate_halting_config(model.cfg)
-        cls.validate_nucleus_model_dimensions(model.cfg)
+
+    @staticmethod
+    def __neuron_config_with_validation_positions(
+        neuron_config: "NeuronConfig",
+    ) -> "NeuronConfig":
+        terminal_config = neuron_config.terminal_config
+        if terminal_config is None:
+            return neuron_config
+        if all(
+            getattr(terminal_config, field_name) is not None
+            for field_name in (
+                "x_axis_position",
+                "y_axis_position",
+                "z_axis_position",
+            )
+        ):
+            return neuron_config
+        resolved_neuron_config = copy.deepcopy(neuron_config)
+        for field_name in (
+            "x_axis_position",
+            "y_axis_position",
+            "z_axis_position",
+        ):
+            if getattr(resolved_neuron_config.terminal_config, field_name) is None:
+                setattr(
+                    resolved_neuron_config.terminal_config,
+                    field_name,
+                    0,
+                )
+        return resolved_neuron_config
 
     @classmethod
     def validate_initial_grid_dimensions(cls, cfg: "NeuronClusterConfig") -> None:
@@ -342,6 +452,7 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
 
         router_config = sampler_config.router_config
         if router_config is None:
+            sampler_config.validate_for_router_input_dim()
             return
         if not isinstance(router_config, RouterConfig):
             raise TypeError(
@@ -360,6 +471,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"num_experts={router_config.num_experts} and "
                 f"entry_coordinate_count={initialized_entry_count}."
             )
+        sampler_config.validate_for_router_input_dim(
+            cfg.neuron_config.terminal_config.input_dim
+        )
 
     @staticmethod
     def validate_derived_entry_sampler_config(cfg: "NeuronClusterConfig") -> None:
@@ -509,22 +623,6 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         if resolved_halting_config.threshold is None:
             resolved_halting_config.threshold = halting_config.DEFAULT_THRESHOLD
         halting_model_type.validate_resolved_config(resolved_halting_config)
-
-    @staticmethod
-    def validate_nucleus_model_dimensions(cfg: "NeuronClusterConfig") -> None:
-        model_config = cfg.neuron_config.nucleus_config.model_config
-        terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
-        for dimension_name in ("input_dim", "output_dim"):
-            dimension_value = getattr(model_config, dimension_name, None)
-            if dimension_value is None:
-                continue
-            if dimension_value != terminal_input_dim:
-                raise ValueError(
-                    "nucleus_config.model_config must preserve the terminal "
-                    "feature dimension for NeuronClusterConfig, received "
-                    f"{dimension_name}={dimension_value} and terminal "
-                    f"input_dim={terminal_input_dim}."
-                )
 
     @staticmethod
     def validate_forward_input(input: Tensor) -> None:
