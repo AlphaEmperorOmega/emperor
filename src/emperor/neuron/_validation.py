@@ -480,14 +480,23 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 "NeuronClusterConfig"
             ) from exc
 
-        if not hasattr(owner, "update_halting_state") or not hasattr(
-            owner,
-            "finalize_weighted_accumulation",
-        ):
+        from emperor.halting import HaltingBase
+
+        implements_halting_interface = (
+            isinstance(owner, type)
+            and issubclass(owner, HaltingBase)
+            and owner.implements_halting_interface()
+        )
+        if not implements_halting_interface:
+            owner_name = (
+                owner.__name__
+                if isinstance(owner, type)
+                else type(owner).__name__
+            )
             raise ValueError(
                 f"halting_config {type(halting_config).__name__} builds "
-                f"{owner.__name__}, which does not expose update_halting_state "
-                "and finalize_weighted_accumulation required by NeuronCluster"
+                f"{owner_name}, which does not implement the HaltingBase "
+                "lifecycle required by NeuronCluster"
             )
 
         terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
