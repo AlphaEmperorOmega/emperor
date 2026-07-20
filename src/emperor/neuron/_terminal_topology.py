@@ -58,7 +58,7 @@ def _connection_offsets(
         return _y_axis_line_offsets(cfg)
     if connection_shape is TerminalConnectionShapeOptions.LINE_FRONT_BACK:
         return _z_axis_line_offsets(cfg)
-    raise ValueError(f"Unsupported connection_shape {connection_shape!r} for Terminal.")
+    raise ValueError(f"Unsupported terminal connection shape: {connection_shape!r}")
 
 
 def _x_axis_line_offsets(cfg) -> list[tuple[int, int, int]]:
