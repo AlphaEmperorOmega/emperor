@@ -74,9 +74,11 @@ class NeuronClusterMonitorCallback(Callback):
         self._clusters: list[tuple[str, NeuronCluster]] = []
         self._forward_replacements: list[_ForwardReplacement] = []
         self._latest_observations: dict[str, _NeuronObservation] = {}
+        self._latest_observation_steps: dict[str, int] = {}
         self._survival_history: dict[str, MonitorTensorHistory] = {}
         self._previous_neuron_names: dict[str, set[str]] = {}
         self._emission_policy = MonitorEmissionPolicy()
+        self._last_emitted_step = 0
 
     @staticmethod
     def __validate_positive(option_name: str, value: int) -> None:
@@ -92,6 +94,7 @@ class NeuronClusterMonitorCallback(Callback):
         from emperor.neuron._cluster.model import NeuronCluster
 
         self.__cleanup()
+        self._last_emitted_step = int(getattr(pl_module, "global_step", 0))
         try:
             self._clusters.extend(
                 (module_name, cluster)
@@ -132,6 +135,7 @@ class NeuronClusterMonitorCallback(Callback):
         ) -> object:
             if not self.__is_capture_step(pl_module):
                 self._latest_observations.pop(module_name, None)
+                self._latest_observation_steps.pop(module_name, None)
                 return original_forward(input, return_trace=return_trace)
             traced_output = cast(
                 "tuple[Tensor, Tensor, NeuronClusterTrace]",
@@ -141,6 +145,9 @@ class NeuronClusterMonitorCallback(Callback):
             self._latest_observations[module_name] = _NeuronObservation(
                 trace=trace,
                 auxiliary_loss=auxiliary_loss.detach(),
+            )
+            self._latest_observation_steps[module_name] = (
+                int(getattr(pl_module, "global_step", 0)) + 1
             )
             if return_trace:
                 return traced_output
@@ -160,7 +167,7 @@ class NeuronClusterMonitorCallback(Callback):
         if not pl_module.training:
             return False
         global_step = getattr(pl_module, "global_step", 0)
-        return global_step % self.log_every_n_steps == 0
+        return (global_step + 1) % self.log_every_n_steps == 0
 
     def on_train_batch_end(
         self,
@@ -171,7 +178,10 @@ class NeuronClusterMonitorCallback(Callback):
         batch_idx: int,
     ) -> None:
         global_step = getattr(pl_module, "global_step", 0)
-        if global_step % self.log_every_n_steps != 0:
+        if (
+            global_step <= self._last_emitted_step
+            or global_step % self.log_every_n_steps != 0
+        ):
             return
         for module_name, cluster in self._clusters:
             context = self.__build_tracking_context(
@@ -180,6 +190,7 @@ class NeuronClusterMonitorCallback(Callback):
                 cluster,
             )
             self.__track_neuron_cluster_diagnostics(context)
+        self._last_emitted_step = global_step
 
     def __build_tracking_context(
         self,
@@ -199,7 +210,14 @@ class NeuronClusterMonitorCallback(Callback):
             current_neuron_names,
         )
         self._previous_neuron_names[module_name] = current_neuron_names
-        observation = self._latest_observations.pop(module_name, None)
+        observation_step = self._latest_observation_steps.get(module_name)
+        observation = (
+            self._latest_observations.pop(module_name, None)
+            if observation_step == getattr(pl_module, "global_step", 0)
+            else None
+        )
+        if observation is not None:
+            self._latest_observation_steps.pop(module_name, None)
         route_metrics = (
             _NeuronDiagnostics.calculate_route(observation.trace)
             if observation is not None
@@ -599,6 +617,8 @@ class NeuronClusterMonitorCallback(Callback):
         self._forward_replacements.clear()
         self._clusters.clear()
         self._latest_observations.clear()
+        self._latest_observation_steps.clear()
         self._survival_history.clear()
         self._previous_neuron_names.clear()
         self._emission_policy.clear()
+        self._last_emitted_step = 0

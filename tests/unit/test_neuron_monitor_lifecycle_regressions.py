@@ -1,4 +1,6 @@
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 from torch import nn
@@ -12,6 +14,11 @@ def _cluster_stub() -> NeuronCluster:
     nn.Module.__init__(cluster)
     cluster.beam_width = 1
     cluster.cluster = nn.ModuleDict()
+    cluster.x_axis_total_neurons = 1
+    cluster.y_axis_total_neurons = 1
+    cluster.z_axis_total_neurons = 1
+    cluster.growth_threshold = None
+    cluster.pruning_threshold = None
     return cluster
 
 
@@ -85,3 +92,53 @@ class TestNeuronMonitorForwardInterface(unittest.TestCase):
 
         self.assertIs(output, input_batch)
         torch.testing.assert_close(auxiliary_loss, torch.zeros(()))
+
+
+class TestNeuronMonitorStepCadence(unittest.TestCase):
+    def test_resumed_fit_captures_and_emits_each_completed_step_once(self) -> None:
+        cluster = _cluster_stub()
+
+        def instance_forward(input, return_trace=False):
+            auxiliary_loss = input.new_zeros(())
+            if return_trace:
+                return input, auxiliary_loss, SimpleNamespace()
+            return input, auxiliary_loss
+
+        cluster.forward = instance_forward
+        host = _ClusterHost(cluster=cluster)
+        host.global_step = 6
+        callback = NeuronClusterMonitorCallback(log_every_n_steps=3)
+        callback.on_fit_start(trainer=None, pl_module=host)
+        tracked_contexts = []
+
+        try:
+            with (
+                patch(
+                    "emperor.neuron._monitoring.callback."
+                    "_NeuronDiagnostics.calculate_route",
+                    return_value=None,
+                ),
+                patch(
+                    "emperor.neuron._monitoring.callback."
+                    "_NeuronDiagnostics.calculate_entry_routing",
+                    return_value=None,
+                ),
+                patch.object(
+                    callback,
+                    "_NeuronClusterMonitorCallback__track_neuron_cluster_diagnostics",
+                    side_effect=tracked_contexts.append,
+                ),
+            ):
+                callback.on_train_batch_end(None, host, None, None, 5)
+                host.global_step = 8
+                cluster(torch.ones(2, 3))
+                self.assertEqual(callback._latest_observation_steps["cluster"], 9)
+
+                host.global_step = 9
+                callback.on_train_batch_end(None, host, None, None, 8)
+                callback.on_train_batch_end(None, host, None, None, 8)
+        finally:
+            callback.on_fit_end(trainer=None, pl_module=host)
+
+        self.assertEqual(len(tracked_contexts), 1)
+        self.assertIsNotNone(tracked_contexts[0].observation)
