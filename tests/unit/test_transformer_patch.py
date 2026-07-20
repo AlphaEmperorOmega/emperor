@@ -1,25 +1,24 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import unittest
-import torch.nn as nn
 
+import torch
+import torch.nn as nn
 from torch import Tensor
-from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
-from emperor.base.options import (
+
+from emperor.convs import Conv2dLayerConfig
+from emperor.convs._layer import Conv2dLayer
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStack,
+    LayerStackConfig,
 )
-from emperor.convs.core.config import Conv2dLayerConfig
-from emperor.convs.core.layers import Conv2dLayer
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.linears.core.layers import LinearLayer
-from emperor.patch.core.config import (
+from emperor.linears import LinearLayer, LinearLayerConfig
+from emperor.patch import (
     ConvPatchEmbeddingConfig,
     LinearPatchEmbeddingConfig,
     PatchConfig,
-)
-from emperor.patch.core.layers import (
     PatchEmbeddingConv,
     PatchEmbeddingLinear,
 )
@@ -52,7 +51,7 @@ def make_linear_embedding_stack_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -79,7 +78,7 @@ def make_conv_stack_config(
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
