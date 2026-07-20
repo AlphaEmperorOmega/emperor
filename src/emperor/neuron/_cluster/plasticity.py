@@ -342,6 +342,12 @@ class _NeuronClusterPlasticityMixin:
                 stacked_counters,
                 op=torch.distributed.ReduceOp.MIN,
             )
+            for neuron_name, counter in zip(
+                sorted_neuron_names,
+                stacked_counters,
+                strict=True,
+            ):
+                self.cluster[neuron_name].atrophy_counter.copy_(counter)
         return {
             name: int(counter)
             for name, counter in zip(
