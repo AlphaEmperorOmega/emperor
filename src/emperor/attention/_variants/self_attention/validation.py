@@ -26,14 +26,20 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
     def validate_projection_strategy(
         model: "MultiHeadAttentionAbstract",
     ) -> None:
-        if (
-            model.cfg.projection_strategy == SelfAttentionProjectionStrategy.FUSED
-            and isinstance(model.cfg.projection_model_config, RecurrentLayerConfig)
-        ):
+        projection_strategy = model.cfg.projection_strategy
+        if not isinstance(model.cfg.projection_model_config, RecurrentLayerConfig):
+            return
+        output_multipliers = {
+            SelfAttentionProjectionStrategy.FUSED: 3,
+            SelfAttentionProjectionStrategy.FUSED_KEY_VALUE: 2,
+        }
+        output_multiplier = output_multipliers.get(projection_strategy)
+        if output_multiplier is not None:
             raise ValueError(
                 "Self-attention with RecurrentLayerConfig requires "
                 "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
-                "the FUSED strategy changes embedding_dim to 3 * embedding_dim."
+                f"the {projection_strategy.name} strategy changes embedding_dim "
+                f"to {output_multiplier} * embedding_dim."
             )
 
     @staticmethod
@@ -62,13 +68,29 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
     ) -> None:
         super().validate_forward_inputs(model, qkv, masks)
         cls.validate_query_key_value_are_same_tensor(qkv.query, qkv.key, qkv.value)
+        cls.validate_fused_projection_inputs(model, qkv)
+
+    @staticmethod
+    def validate_fused_projection_inputs(
+        model: "MultiHeadAttentionAbstract",
+        qkv: "QKV",
+    ) -> None:
+        if (
+            model.cfg.projection_strategy == SelfAttentionProjectionStrategy.FUSED
+            and qkv.query is not qkv.key
+        ):
+            raise RuntimeError(
+                "SelfAttentionProjectionStrategy.FUSED requires query, key, and "
+                "value to be the same tensor; use FUSED_KEY_VALUE when query and "
+                "context differ."
+            )
 
     @staticmethod
     def validate_query_key_value_are_same_tensor(
         query: Tensor, key: Tensor, value: Tensor
     ) -> None:
-        if not (key is value and query is key):
+        del query
+        if key is not value:
             raise RuntimeError(
-                "Self attention can only be computed when the query, key, and value "
-                "are the same tensor."
+                "Self attention requires the key and value to be the same tensor."
             )

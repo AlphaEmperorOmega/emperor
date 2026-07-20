@@ -281,24 +281,31 @@ class TestSelfAttentionValidator(unittest.TestCase):
         ).build()
         self.assertIsNone(SelfAttentionValidator.validate(model))
 
-    def test_fused_strategy_rejects_recurrent_projection_model(self):
-        cfg = build_attention_config(
-            SelfAttentionConfig,
-            embedding_dim=EMBEDDING_DIM,
-            query_key_projection_dim=EMBEDDING_DIM,
-            value_projection_dim=EMBEDDING_DIM,
-            projection_kind="recurrent",
-            self_attention_projection_strategy=(SelfAttentionProjectionStrategy.FUSED),
+    def test_fused_strategies_reject_recurrent_projection_model(self):
+        cases = (
+            (SelfAttentionProjectionStrategy.FUSED, 3),
+            (SelfAttentionProjectionStrategy.FUSED_KEY_VALUE, 2),
         )
+        for projection_strategy, output_multiplier in cases:
+            with self.subTest(projection_strategy=projection_strategy):
+                cfg = build_attention_config(
+                    SelfAttentionConfig,
+                    embedding_dim=EMBEDDING_DIM,
+                    query_key_projection_dim=EMBEDDING_DIM,
+                    value_projection_dim=EMBEDDING_DIM,
+                    projection_kind="recurrent",
+                    self_attention_projection_strategy=projection_strategy,
+                )
 
-        with self.assertRaises(ValueError) as caught:
-            cfg.build()
-        self.assertEqual(
-            str(caught.exception),
-            "Self-attention with RecurrentLayerConfig requires "
-            "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
-            "the FUSED strategy changes embedding_dim to 3 * embedding_dim.",
-        )
+                with self.assertRaises(ValueError) as caught:
+                    cfg.build()
+                self.assertEqual(
+                    str(caught.exception),
+                    "Self-attention with RecurrentLayerConfig requires "
+                    "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
+                    f"the {projection_strategy.name} strategy changes embedding_dim "
+                    f"to {output_multiplier} * embedding_dim.",
+                )
 
     def test_dimensions_equal_raises_for_unequal(self):
         model = SimpleNamespace(
@@ -322,17 +329,70 @@ class TestSelfAttentionValidator(unittest.TestCase):
             )
         )
 
-    def test_query_key_value_distinct_raises(self):
+    def test_query_may_differ_when_key_and_value_share_context(self):
         query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
         key = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
-        with self.assertRaises(RuntimeError) as caught:
+
+        self.assertIsNone(
             SelfAttentionValidator.validate_query_key_value_are_same_tensor(
                 query, key, key
             )
+        )
+
+    def test_fused_strategy_rejects_a_distinct_query_and_context(self):
+        model = build_attention_config(
+            SelfAttentionConfig,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=EMBEDDING_DIM,
+            value_projection_dim=EMBEDDING_DIM,
+            self_attention_projection_strategy=SelfAttentionProjectionStrategy.FUSED,
+        ).build()
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        context = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+
+        with self.assertRaises(RuntimeError) as caught:
+            model(query, context, context)
+
         self.assertEqual(
             str(caught.exception),
-            "Self attention can only be computed when the query, key, and value "
-            "are the same tensor.",
+            "SelfAttentionProjectionStrategy.FUSED requires query, key, and value "
+            "to be the same tensor; use FUSED_KEY_VALUE when query and context "
+            "differ.",
+        )
+
+    def test_fused_key_value_strategy_accepts_a_distinct_query_and_context(self):
+        model = build_attention_config(
+            SelfAttentionConfig,
+            batch_size=BATCH_SIZE,
+            embedding_dim=EMBEDDING_DIM,
+            query_key_projection_dim=EMBEDDING_DIM,
+            value_projection_dim=EMBEDDING_DIM,
+            target_sequence_length=TARGET_SEQUENCE_LENGTH,
+            source_sequence_length=SOURCE_SEQUENCE_LENGTH,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.FUSED_KEY_VALUE
+            ),
+        ).build()
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        context = torch.randn(SOURCE_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+
+        output, attention_weights, auxiliary_loss = model(query, context, context)
+
+        self.assertEqual(output.shape, query.shape)
+        self.assertIsNone(attention_weights)
+        self.assertIsNone(auxiliary_loss)
+
+    def test_distinct_key_and_value_raise(self):
+        query = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        key = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        value = torch.randn(TARGET_SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM)
+        with self.assertRaises(RuntimeError) as caught:
+            SelfAttentionValidator.validate_query_key_value_are_same_tensor(
+                query, key, value
+            )
+        self.assertEqual(
+            str(caught.exception),
+            "Self attention requires the key and value to be the same tensor.",
         )
 
 

@@ -77,7 +77,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
             SelfAttentionProjector(cfg)
         self.assertEqual(
             str(caught.exception),
-            "projection_strategy must be FUSED or SEPARATE for "
+            "projection_strategy must be FUSED, FUSED_KEY_VALUE, or SEPARATE for "
             "SelfAttentionProjector, got <object object at "
             f"{hex(id(cfg.projection_strategy))}>.",
         )
@@ -117,8 +117,122 @@ class TestSelfAttentionProjector(unittest.TestCase):
                 self.assertEqual(m.embedding_dim, embedding_dim)
                 self.assertIsInstance(m.qkv_model, (Layer, LayerStack))
                 self.assertIsNone(m.query_model)
+                self.assertIsNone(m.key_value_model)
                 self.assertIsNone(m.key_model)
                 self.assertIsNone(m.value_model)
+
+    def test_fused_key_value_strategy_builds_query_and_key_value_models(self):
+        cfg = build_attention_config(
+            config_class=SelfAttentionConfig,
+            embedding_dim=12,
+            query_key_projection_dim=12,
+            value_projection_dim=12,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.FUSED_KEY_VALUE
+            ),
+        )
+
+        model = SelfAttentionProjector(cfg)
+
+        self.assertIsNone(model.qkv_model)
+        self.assertIsInstance(model.query_model, (Layer, LayerStack))
+        self.assertIsInstance(model.key_value_model, (Layer, LayerStack))
+        self.assertIsNone(model.key_model)
+        self.assertIsNone(model.value_model)
+
+    def test_fused_key_value_strategy_matches_separate_projections(self):
+        embedding_dim = 4
+        shared_config_kwargs = dict(
+            config_class=SelfAttentionConfig,
+            batch_size=2,
+            embedding_dim=embedding_dim,
+            query_key_projection_dim=embedding_dim,
+            value_projection_dim=embedding_dim,
+            target_sequence_length=3,
+            source_sequence_length=5,
+        )
+        fused_key_value_config = build_attention_config(
+            **shared_config_kwargs,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.FUSED_KEY_VALUE
+            ),
+        )
+        separate_config = build_attention_config(
+            **shared_config_kwargs,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.SEPARATE
+            ),
+        )
+        fused_key_value = SelfAttentionProjector(fused_key_value_config)
+        separate = SelfAttentionProjector(separate_config)
+
+        with torch.no_grad():
+            fused_query_layer = fused_key_value.query_model.layers[0].model
+            separate_query_layer = separate.query_model.layers[0].model
+            separate_query_layer.weight_params.copy_(
+                fused_query_layer.weight_params
+            )
+            separate_query_layer.bias_params.copy_(fused_query_layer.bias_params)
+
+            fused_key_value_layer = fused_key_value.key_value_model.layers[0].model
+            fused_key_weight, fused_value_weight = (
+                fused_key_value_layer.weight_params.chunk(2, dim=1)
+            )
+            fused_key_bias, fused_value_bias = (
+                fused_key_value_layer.bias_params.chunk(2)
+            )
+            separate_key_layer = separate.key_model.layers[0].model
+            separate_value_layer = separate.value_model.layers[0].model
+            separate_key_layer.weight_params.copy_(fused_key_weight)
+            separate_key_layer.bias_params.copy_(fused_key_bias)
+            separate_value_layer.weight_params.copy_(fused_value_weight)
+            separate_value_layer.bias_params.copy_(fused_value_bias)
+
+        query = torch.randn(3, 2, embedding_dim)
+        context = torch.randn(5, 2, embedding_dim)
+
+        fused_key_value_projections = fused_key_value.compute_qkv_projections(
+            QKV(query=query, key=context, value=context)
+        )
+        separate_projections = separate.compute_qkv_projections(
+            QKV(query=query, key=context, value=context)
+        )
+
+        for projection_name in ("query", "key", "value"):
+            with self.subTest(projection=projection_name):
+                torch.testing.assert_close(
+                    getattr(fused_key_value_projections, projection_name),
+                    getattr(separate_projections, projection_name),
+                )
+
+    def test_fused_key_value_state_dict_strictly_round_trips(self):
+        cfg = build_attention_config(
+            config_class=SelfAttentionConfig,
+            embedding_dim=4,
+            query_key_projection_dim=4,
+            value_projection_dim=4,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.FUSED_KEY_VALUE
+            ),
+        )
+        model = SelfAttentionProjector(cfg)
+        expected_projection_shapes = {
+            "query_model.layers.0.model.weight_params": (4, 4),
+            "query_model.layers.0.model.bias_params": (4,),
+            "key_value_model.layers.0.model.weight_params": (4, 8),
+            "key_value_model.layers.0.model.bias_params": (8,),
+        }
+
+        state_dict = model.state_dict()
+        for parameter_name, expected_shape in expected_projection_shapes.items():
+            with self.subTest(parameter=parameter_name):
+                self.assertEqual(
+                    tuple(state_dict[parameter_name].shape),
+                    expected_shape,
+                )
+
+        restored = SelfAttentionProjector(cfg)
+        restored.load_state_dict(state_dict, strict=True)
 
     def test_separate_strategy_builds_named_projection_models(self):
         cfg = build_attention_config(
@@ -135,6 +249,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
 
         self.assertIsNone(model.qkv_model)
         self.assertIsInstance(model.query_model, (Layer, LayerStack))
+        self.assertIsNone(model.key_value_model)
         self.assertIsInstance(model.key_model, (Layer, LayerStack))
         self.assertIsInstance(model.value_model, (Layer, LayerStack))
 

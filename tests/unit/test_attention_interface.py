@@ -569,7 +569,7 @@ print(json.dumps({
                 (option.name, option.value)
                 for option in SelfAttentionProjectionStrategy
             ),
-            (("FUSED", 0), ("SEPARATE", 1)),
+            (("FUSED", 0), ("SEPARATE", 1), ("FUSED_KEY_VALUE", 2)),
         )
 
     def test_exact_state_topology_and_strict_loading_are_preserved(self):
