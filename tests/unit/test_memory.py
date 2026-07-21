@@ -1,6 +1,5 @@
 import unittest
 from dataclasses import dataclass
-from unittest import mock
 
 import torch
 import torch.nn as nn
@@ -187,48 +186,98 @@ def assert_layer_stack_shape(
     test_case.assertEqual(model[-1].output_dim, output_dim)
 
 
-class IdentityModule(nn.Module):
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return inputs
+def only_layer(model: Layer | LayerStack) -> Layer:
+    if isinstance(model, Layer):
+        return model
+    if len(model) != 1:
+        raise AssertionError(f"Expected one real Emperor Layer, received {len(model)}.")
+    return model[0]
 
 
-class ScaleModule(nn.Module):
-    def __init__(self, factor: float):
-        super().__init__()
-        self.factor = factor
+def set_affine_parameters(
+    model: Layer | LayerStack,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+) -> None:
+    layer = only_layer(model)
+    with torch.no_grad():
+        layer.model.weight_params.copy_(
+            weight.to(
+                device=layer.model.weight_params.device,
+                dtype=layer.model.weight_params.dtype,
+            )
+        )
+        if layer.model.bias_params is None:
+            if bias is not None:
+                raise AssertionError("The real Emperor LinearLayer has no bias.")
+            return
+        if bias is None:
+            layer.model.bias_params.zero_()
+        else:
+            layer.model.bias_params.copy_(
+                bias.to(
+                    device=layer.model.bias_params.device,
+                    dtype=layer.model.bias_params.dtype,
+                )
+            )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return inputs * self.factor
+
+def set_scaled_identity(model: Layer | LayerStack, scale: float) -> None:
+    layer = only_layer(model)
+    input_dim, output_dim = layer.model.weight_params.shape
+    if input_dim != output_dim:
+        raise AssertionError("Scaled identity requires equal input and output dims.")
+    set_affine_parameters(
+        model,
+        torch.eye(input_dim) * scale,
+        (torch.zeros(output_dim) if layer.model.bias_params is not None else None),
+    )
 
 
-class AddConstantModule(nn.Module):
-    def __init__(self, value: float):
-        super().__init__()
-        self.value = value
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return inputs + self.value
-
-
-class ConstantLastDimModule(nn.Module):
-    def __init__(self, values: list[float] | torch.Tensor):
-        super().__init__()
-        self.register_buffer("values", torch.as_tensor(values, dtype=torch.float32))
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        values = self.values.to(device=inputs.device, dtype=inputs.dtype)
-        view_shape = (1,) * (inputs.ndim - 1) + (values.numel(),)
-        return values.reshape(view_shape).expand(*inputs.shape[:-1], values.numel())
+def set_constant_output(
+    model: Layer | LayerStack,
+    values: list[float] | torch.Tensor,
+) -> None:
+    layer = only_layer(model)
+    values_tensor = torch.as_tensor(values, dtype=torch.float32)
+    set_affine_parameters(
+        model,
+        torch.zeros_like(layer.model.weight_params),
+        values_tensor,
+    )
 
 
-class RepeatSlotsModule(nn.Module):
-    def __init__(self, multipliers: list[float]):
-        super().__init__()
-        self.multipliers = multipliers
+def set_slot_multipliers(
+    model: Layer | LayerStack,
+    multipliers: list[float],
+) -> None:
+    layer = only_layer(model)
+    input_dim, output_dim = layer.model.weight_params.shape
+    if output_dim != input_dim * len(multipliers):
+        raise AssertionError("Slot multipliers do not match the memory-bank width.")
+    weight = torch.cat(
+        [torch.eye(input_dim) * multiplier for multiplier in multipliers],
+        dim=-1,
+    )
+    set_affine_parameters(
+        model,
+        weight,
+        (torch.zeros(output_dim) if layer.model.bias_params is not None else None),
+    )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        slots = [inputs * multiplier for multiplier in self.multipliers]
-        return torch.cat(slots, dim=-1)
+
+def configure_gated_residual_addition(
+    memory: GatedResidualDynamicMemory,
+    value: float,
+) -> None:
+    set_constant_output(
+        memory.memory_model,
+        torch.full((memory.memory_dim,), value * 2.0),
+    )
+    set_constant_output(
+        memory.memory_gate_model,
+        torch.zeros(memory.memory_dim),
+    )
 
 
 class DynamicMemoryEvaluationHarness(LightningModule):
@@ -239,12 +288,11 @@ class DynamicMemoryEvaluationHarness(LightningModule):
         self.evaluation_inference_modes = []
         self.evaluation_grad_modes = []
         self.saw_sanity_validation = False
+        self.training_memory_calls = 0
 
     def _evaluation_step(self, batch: tuple[torch.Tensor]) -> torch.Tensor:
         (inputs,) = batch
-        self.evaluation_inference_modes.append(
-            torch.is_inference_mode_enabled()
-        )
+        self.evaluation_inference_modes.append(torch.is_inference_mode_enabled())
         self.evaluation_grad_modes.append(torch.is_grad_enabled())
         output = self.memory(inputs)
         self.last_output = output
@@ -279,6 +327,7 @@ class DynamicMemoryEvaluationHarness(LightningModule):
         batch_idx: int,
     ) -> torch.Tensor:
         (inputs,) = batch
+        self.training_memory_calls += 1
         return self.memory(inputs).square().mean()
 
     def configure_optimizers(self):
@@ -379,6 +428,22 @@ class TestMemoryHandlers(unittest.TestCase):
                 if isinstance(model, AttentionDynamicMemory):
                     self.assertEqual(model.num_memory_slots, 3)
 
+    def test_direct_constructor_reads_memory_config_from_layer_owner(self):
+        memory_config = self.preset(
+            config_cls=GatedResidualDynamicMemoryConfig,
+            input_dim=3,
+            output_dim=5,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+        )
+        layer_config = LayerConfig(memory_config=memory_config)
+
+        model = GatedResidualDynamicMemory(layer_config)
+
+        self.assertIs(model.cfg, memory_config)
+        self.assertEqual(model.input_dim, 3)
+        self.assertEqual(model.output_dim, 5)
+        self.assertEqual(model.memory_dim, 3)
+
     def test_partial_overrides_keep_unset_base_fields(self):
         for config_cls, _ in self.memory_cases():
             with self.subTest(config_cls=config_cls.__name__):
@@ -475,30 +540,72 @@ class TestMemoryHandlers(unittest.TestCase):
         input_dim = 4
         output_dim = 6
         for config_cls, _ in self.memory_cases():
-            with self.subTest(config_cls=config_cls.__name__):
-                cfg = self.preset(
-                    config_cls=config_cls,
-                    input_dim=input_dim,
-                    output_dim=output_dim,
-                    test_time_training_learning_rate=0.01,
-                    test_time_training_num_inner_steps=2,
-                )
-                model = cfg.build()
-                dim = output_dim
-
-                self.assertTrue(model.test_time_training_flag)
-                self.assertEqual(model.test_time_training_learning_rate, 0.01)
-                self.assertEqual(model.test_time_training_num_inner_steps, 2)
-                self.assertIsNotNone(model.memory_decoder)
-                if isinstance(model, AttentionDynamicMemory):
-                    assert_layer_stack_shape(
-                        self,
-                        model.memory_decoder,
-                        cfg.num_memory_slots * dim,
-                        dim,
+            for position in MemoryPositionOptions:
+                with self.subTest(
+                    config_cls=config_cls.__name__,
+                    position=position,
+                ):
+                    cfg = self.preset(
+                        config_cls=config_cls,
+                        input_dim=input_dim,
+                        output_dim=output_dim,
+                        memory_position_option=position,
+                        test_time_training_learning_rate=0.01,
+                        test_time_training_num_inner_steps=2,
                     )
-                else:
-                    assert_layer_stack_shape(self, model.memory_decoder, dim, dim)
+                    model = cfg.build()
+                    dim = memory_dim(position, input_dim, output_dim)
+
+                    self.assertTrue(model.test_time_training_flag)
+                    self.assertEqual(model.test_time_training_learning_rate, 0.01)
+                    self.assertEqual(model.test_time_training_num_inner_steps, 2)
+                    self.assertIsNotNone(model.memory_decoder)
+                    if isinstance(model, AttentionDynamicMemory):
+                        assert_layer_stack_shape(
+                            self,
+                            model.memory_decoder,
+                            cfg.num_memory_slots * dim,
+                            dim,
+                        )
+                    else:
+                        assert_layer_stack_shape(
+                            self,
+                            model.memory_decoder,
+                            dim,
+                            dim,
+                        )
+
+    def test_multi_layer_gate_generators_use_the_explicit_double_width(self):
+        dim = 3
+        model_config = make_layer_stack_config(
+            input_dim=dim,
+            hidden_dim=11,
+            output_dim=dim,
+            num_layers=3,
+        )
+
+        for config_cls in (
+            GatedResidualDynamicMemoryConfig,
+            AttentionDynamicMemoryConfig,
+        ):
+            with self.subTest(config_cls=config_cls.__name__):
+                model = self.preset(
+                    config_cls=config_cls,
+                    input_dim=dim,
+                    output_dim=dim,
+                    model_config=model_config,
+                ).build()
+                gate_model = model.memory_gate_model
+
+                self.assertIsInstance(gate_model, LayerStack)
+                self.assertEqual(gate_model.input_dim, dim * 2)
+                self.assertEqual(gate_model.hidden_dim, dim * 2)
+                self.assertEqual(gate_model.output_dim, dim)
+                self.assertEqual(len(gate_model), 3)
+                self.assertEqual(gate_model[0].input_dim, dim * 2)
+                self.assertEqual(gate_model[0].output_dim, dim * 2)
+                self.assertEqual(gate_model[-1].input_dim, dim * 2)
+                self.assertEqual(gate_model[-1].output_dim, dim)
 
     def test_ttt_config_requires_learning_rate_and_inner_steps_together(self):
         cases = [
@@ -819,7 +926,7 @@ class TestMemoryHandlers(unittest.TestCase):
         with self.assertRaises(TypeError):
             cfg.build()
 
-    def test_ttt_rejects_generator_without_trainable_parameters(self):
+    def test_frozen_generators_are_allowed_only_when_ttt_is_disabled(self):
         frozen_model_config = FrozenLayerStackConfig(
             input_dim=4,
             hidden_dim=4,
@@ -829,14 +936,31 @@ class TestMemoryHandlers(unittest.TestCase):
             apply_output_pipeline_flag=False,
             layer_config=make_layer_stack_config().layer_config,
         )
-        cfg = self.preset(
-            model_config=frozen_model_config,
-            test_time_training_learning_rate=0.01,
-            test_time_training_num_inner_steps=1,
-        )
 
-        with self.assertRaises(ValueError):
-            cfg.build()
+        for config_cls, _ in self.memory_cases():
+            with self.subTest(config_cls=config_cls.__name__, ttt=False):
+                model = self.preset(
+                    config_cls=config_cls,
+                    model_config=frozen_model_config,
+                ).build()
+                self.assertTrue(
+                    all(not parameter.requires_grad for parameter in model.parameters())
+                )
+
+            with self.subTest(config_cls=config_cls.__name__, ttt=True):
+                cfg = self.preset(
+                    config_cls=config_cls,
+                    model_config=frozen_model_config,
+                    test_time_training_learning_rate=0.01,
+                    test_time_training_num_inner_steps=1,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "^Test-time-training memory requires "
+                    r"model_config\.build\(\.\.\.\) to return a generator with "
+                    "at least one trainable parameter\\.$",
+                ):
+                    cfg.build()
 
     def test_ttt_adapts_memory_without_mutating_generator_parameters(self):
         dim = 1
@@ -907,6 +1031,168 @@ class TestMemoryHandlers(unittest.TestCase):
         torch.testing.assert_close(adapted_memory, torch.tensor([[1.6]]))
         torch.testing.assert_close(memory_weight.grad, torch.tensor([[0.4]]))
 
+    def test_ttt_adaptation_is_independent_for_each_batch_sample(self):
+        dim = 1
+        model = self.preset(
+            config_cls=GatedResidualDynamicMemoryConfig,
+            input_dim=dim,
+            output_dim=dim,
+            test_time_training_learning_rate=0.1,
+            test_time_training_num_inner_steps=1,
+            model_config=make_layer_stack_config(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=dim,
+                bias_flag=False,
+            ),
+        ).build()
+        model.eval()
+        with torch.no_grad():
+            model.memory_model[0].model.weight_params.zero_()
+            model.memory_decoder[0].model.weight_params.fill_(1.0)
+        samples = torch.tensor([[1.0], [3.0]])
+
+        together = model._adapt_and_retrieve(
+            samples,
+            model.memory_model,
+            model.memory_decoder,
+        )
+        separately = torch.cat(
+            [
+                model._adapt_and_retrieve(
+                    sample.unsqueeze(0),
+                    model.memory_model,
+                    model.memory_decoder,
+                )
+                for sample in samples
+            ]
+        )
+
+        torch.testing.assert_close(
+            separately,
+            torch.tensor([[0.2], [5.4]]),
+        )
+        torch.testing.assert_close(together, separately)
+
+    def test_ttt_adaptation_shares_sequence_evidence_within_each_sample_only(
+        self,
+    ):
+        model = self.preset(
+            config_cls=GatedResidualDynamicMemoryConfig,
+            input_dim=1,
+            output_dim=1,
+            test_time_training_learning_rate=0.1,
+            test_time_training_num_inner_steps=1,
+            model_config=make_layer_stack_config(
+                input_dim=1,
+                hidden_dim=1,
+                output_dim=1,
+                bias_flag=False,
+            ),
+        ).build()
+        model.eval()
+        with torch.no_grad():
+            model.memory_model[0].model.weight_params.zero_()
+            model.memory_decoder[0].model.weight_params.fill_(1.0)
+        samples = torch.tensor([[[1.0], [2.0]], [[3.0], [4.0]]])
+
+        together = model._adapt_and_retrieve(
+            samples,
+            model.memory_model,
+            model.memory_decoder,
+        )
+        separately = torch.cat(
+            [
+                model._adapt_and_retrieve(
+                    sample.unsqueeze(0),
+                    model.memory_model,
+                    model.memory_decoder,
+                )
+                for sample in samples
+            ]
+        )
+
+        torch.testing.assert_close(
+            together,
+            torch.tensor([[[0.5], [1.0]], [[7.5], [10.0]]]),
+        )
+        torch.testing.assert_close(together, separately)
+
+    def test_ttt_empty_batch_returns_empty_base_memory_without_mutation(self):
+        model = self.preset(
+            config_cls=GatedResidualDynamicMemoryConfig,
+            input_dim=2,
+            output_dim=2,
+            test_time_training_learning_rate=0.1,
+            test_time_training_num_inner_steps=1,
+        ).build()
+        model.eval()
+        original_state = {
+            name: value.detach().clone() for name, value in model.state_dict().items()
+        }
+
+        with torch.inference_mode():
+            output = model(torch.empty(0, 2))
+
+        self.assertEqual(output.shape, torch.Size([0, 2]))
+        self.assertFalse(output.requires_grad)
+        for name, value in model.state_dict().items():
+            torch.testing.assert_close(value, original_state[name])
+
+    def test_base_generator_helpers_cover_tensor_and_error_contracts(self):
+        model = self.preset(
+            input_dim=4,
+            output_dim=4,
+        ).build()
+        generated = model._init_model(
+            LayerStackConfig(input_dim=4, hidden_dim=4, output_dim=3)
+        )
+        assert_layer_stack_shape(self, generated, 4, 3)
+
+        linear = nn.Linear(4, 3, bias=True)
+        with torch.no_grad():
+            linear.weight.copy_(
+                torch.tensor(
+                    [
+                        [1.0, 0.0, -1.0, 2.0],
+                        [0.5, 1.0, 0.0, -0.5],
+                        [2.0, -1.0, 1.0, 0.0],
+                    ]
+                )
+            )
+            linear.bias.copy_(torch.tensor([0.25, -0.5, 1.0]))
+        inputs = torch.tensor(
+            [
+                [[1.0, 2.0, 3.0, 4.0], [-1.0, 0.5, 2.0, -2.0]],
+                [[0.0, 1.0, -1.0, 2.0], [3.0, -2.0, 1.0, 0.5]],
+            ]
+        ).transpose(0, 1)
+        self.assertFalse(inputs.is_contiguous())
+
+        output = model._run_model(linear, inputs)
+
+        torch.testing.assert_close(output, linear(inputs))
+        tensor = torch.tensor([[1.0, 2.0]])
+        self.assertIs(model._extract_model_hidden(tensor), tensor)
+        with self.assertRaisesRegex(
+            TypeError,
+            "^DynamicMemory generator models must return a Tensor or LayerState, "
+            "received object\\.$",
+        ):
+            model._run_model(lambda _inputs: object(), torch.ones(2, 4))
+        with self.assertRaisesRegex(
+            TypeError,
+            "^Test-time-training memory supports only Layer, Sequential, or "
+            "LayerStack generators, received Linear\\.$",
+        ):
+            model._functional_run_model(linear, {}, torch.ones(2, 4))
+        with self.assertRaisesRegex(
+            TypeError,
+            "^DynamicMemory generator models must return a Tensor or LayerState "
+            "with Tensor hidden, received object\\.$",
+        ):
+            model._extract_model_hidden(object())
+
     def test_ttt_succeeds_through_lightning_validate_and_test(self):
         data_loader = DataLoader(
             TensorDataset(
@@ -947,35 +1233,31 @@ class TestMemoryHandlers(unittest.TestCase):
                     enable_progress_bar=False,
                 )
 
-                with mock.patch.object(
-                    memory,
-                    "_adapt_and_retrieve",
-                    wraps=memory._adapt_and_retrieve,
-                ) as adapt_and_retrieve:
-                    trainer.fit(
-                        harness,
-                        train_dataloaders=data_loader,
-                        val_dataloaders=data_loader,
-                    )
-                    trainer.validate(
-                        harness,
-                        dataloaders=data_loader,
-                        verbose=False,
-                    )
-                    trainer.test(
-                        harness,
-                        dataloaders=data_loader,
-                        verbose=False,
-                    )
-                    trainer.predict(
-                        harness,
-                        dataloaders=data_loader,
-                    )
+                trainer.fit(
+                    harness,
+                    train_dataloaders=data_loader,
+                    val_dataloaders=data_loader,
+                )
+                trainer.validate(
+                    harness,
+                    dataloaders=data_loader,
+                    verbose=False,
+                )
+                trainer.test(
+                    harness,
+                    dataloaders=data_loader,
+                    verbose=False,
+                )
+                trainer.predict(
+                    harness,
+                    dataloaders=data_loader,
+                )
 
                 self.assertFalse(any(harness.evaluation_grad_modes))
                 self.assertTrue(all(harness.evaluation_inference_modes[-3:]))
                 self.assertTrue(harness.saw_sanity_validation)
-                self.assertEqual(adapt_and_retrieve.call_count, 6)
+                self.assertEqual(harness.training_memory_calls, 1)
+                self.assertEqual(len(harness.evaluation_inference_modes), 5)
                 self.assertIsNotNone(harness.last_output)
                 self.assertTrue(torch.isfinite(harness.last_output).all().item())
                 self.assertFalse(harness.last_output.requires_grad)
@@ -989,9 +1271,9 @@ class TestMemoryHandlers(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
         ).build()
-        model.memory_model = ScaleModule(2.0)
+        set_scaled_identity(model.memory_model, 2.0)
         gate_logits = torch.tensor([2.0, -1.0, 0.5, -2.0])
-        model.memory_gate_model = ConstantLastDimModule(gate_logits)
+        set_constant_output(model.memory_gate_model, gate_logits)
         inputs = torch.tensor([[1.0, -2.0, 3.0, -4.0]])
 
         output = model(inputs)
@@ -1006,10 +1288,18 @@ class TestMemoryHandlers(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
         ).build()
-        model.memory_model = ScaleModule(3.0)
+        set_scaled_identity(model.memory_model, 3.0)
         weight_logits = torch.tensor([-1.0, 2.0])
-        model.memory_weight_model = ConstantLastDimModule(weight_logits)
-        inputs = torch.tensor([[1.0, -2.0, 3.0, -4.0]])
+        set_constant_output(model.memory_weight_model, weight_logits)
+        inputs = torch.tensor(
+            [
+                [
+                    [1.0, -2.0, 3.0, -4.0],
+                    [2.0, 1.0, -1.0, 0.5],
+                    [-3.0, 0.25, 2.0, 1.0],
+                ]
+            ]
+        )
 
         output = model(inputs)
 
@@ -1024,9 +1314,9 @@ class TestMemoryHandlers(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
         ).build()
-        model.memory_model = ScaleModule(3.0)
+        set_scaled_identity(model.memory_model, 3.0)
         weight_logits = torch.tensor([-2.0, -0.5, 1.0, 3.0])
-        model.memory_weight_model = ConstantLastDimModule(weight_logits)
+        set_constant_output(model.memory_weight_model, weight_logits)
         inputs = torch.tensor([[1.0, -2.0, 3.0, -4.0]])
 
         output = model(inputs)
@@ -1043,13 +1333,13 @@ class TestMemoryHandlers(unittest.TestCase):
             output_dim=dim,
             num_memory_slots=2,
         ).build()
-        model.memory_model = RepeatSlotsModule([1.0, 2.0])
-        model.query_model = IdentityModule()
-        model.key_model = IdentityModule()
-        model.value_model = IdentityModule()
-        model.output_model = IdentityModule()
+        set_slot_multipliers(model.memory_model, [1.0, 2.0])
+        set_scaled_identity(model.query_model, 1.0)
+        set_scaled_identity(model.key_model, 1.0)
+        set_scaled_identity(model.value_model, 1.0)
+        set_scaled_identity(model.output_model, 1.0)
         gate_logits = torch.tensor([-2.0, 0.5, 2.0])
-        model.memory_gate_model = ConstantLastDimModule(gate_logits)
+        set_constant_output(model.memory_gate_model, gate_logits)
         inputs = torch.tensor([[1.0, 2.0, -1.0]])
 
         output = model(inputs)
@@ -1236,9 +1526,12 @@ class TestLayerMemoryIntegration(unittest.TestCase):
                     memory_config=memory_config,
                 )
                 layer = Layer(cfg)
-                layer.model = ScaleModule(2.0)
-                layer.memory_model = AddConstantModule(1.0)
-                layer.memory_model.memory_position_option = position
+                set_scaled_identity(layer, 2.0)
+                self.assertIsInstance(
+                    layer.memory_model,
+                    GatedResidualDynamicMemory,
+                )
+                configure_gated_residual_addition(layer.memory_model, 1.0)
 
                 output = layer(LayerState(hidden=inputs))
 
@@ -1249,9 +1542,15 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         inputs = torch.zeros(2, dim)
         cfg = self.layer_config_without_memory(dim)
         layer = Layer(cfg)
-        layer.model = ScaleModule(2.0)
-        layer.memory_model = AddConstantModule(1.0)
-        layer.memory_model.memory_position_option = MemoryPositionOptions.BEFORE_AFFINE
+        set_scaled_identity(layer, 2.0)
+        memory_model = make_memory_config(
+            input_dim=dim,
+            output_dim=dim,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+        ).build()
+        self.assertIsInstance(memory_model, GatedResidualDynamicMemory)
+        configure_gated_residual_addition(memory_model, 1.0)
+        layer.memory_model = memory_model
 
         output = layer(LayerState(hidden=inputs))
 
