@@ -188,6 +188,8 @@ def _apply_path_updates(
             recurrent = _replace_nested(recurrent, field, value)
         elif component == "recurrent_halting_stack":
             recurrent = _replace_nested(recurrent, field, value)
+        else:
+            raise ValueError(f"Unsupported transformer override component: {component}")
     return replace(
         path,
         stack_options=stack,
