@@ -51,6 +51,17 @@ from models.transformer.linear_adaptive.model import Model as LinearAdaptiveMode
 
 
 class TestTransformerModelPackages(unittest.TestCase):
+    def test_runtime_defaults_use_a_two_projection_feed_forward_block(self):
+        for package in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            with self.subTest(package=package):
+                config = import_module(f"models.transformer.{package}.config")
+                self.assertEqual(config.FF_NUM_LAYERS, 1)
+
     def package_cases(self):
         return (
             (
