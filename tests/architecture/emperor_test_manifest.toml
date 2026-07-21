@@ -1,0 +1,739 @@
+schema_version = 1
+
+[families.foundations]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_config_foundations.py",
+  "tests/unit/test_validator_base.py",
+  "tests/unit/test_nn.py",
+  "tests/unit/test_nn_visualization.py",
+  "tests/unit/test_monitor_emission_policy.py",
+  "tests/unit/test_foundational_imports.py",
+  "tests/integration/test_nn_module_lifecycle.py",
+]
+integration_tests = ["tests/integration/test_nn_module_lifecycle.py"]
+mutation_scope = [
+  "src/emperor/_validation.py",
+  "src/emperor/config/*",
+  "src/emperor/monitoring/*",
+  "src/emperor/nn/*",
+]
+environment = ["cpu", "float32", "lightning-trainer", "matplotlib"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/foundations-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/foundations-mutation.toml"
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/__init__.py",
+  "src/emperor/_validation.py",
+  "src/emperor/config/__init__.py",
+  "src/emperor/config/_base.py",
+  "src/emperor/config/_model.py",
+  "src/emperor/config/_options.py",
+  "src/emperor/monitoring/__init__.py",
+  "src/emperor/monitoring/_emission.py",
+  "src/emperor/monitoring/_history.py",
+  "src/emperor/monitoring/_metadata.py",
+  "src/emperor/nn/__init__.py",
+  "src/emperor/nn/_module.py",
+  "src/emperor/nn/_parameters.py",
+  "src/emperor/nn/_visualization.py",
+]
+
+[families.linears]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_linears.py",
+  "tests/unit/test_linear_validator.py",
+  "tests/unit/test_linear_monitor.py",
+  "tests/integration/test_linear_monitor_lifecycle.py",
+]
+integration_tests = ["tests/integration/test_linear_monitor_lifecycle.py"]
+mutation_scope = ["src/emperor/linears/*"]
+environment = ["cpu", "float32", "lightning-trainer"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/linears-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/linears-mutation.toml"
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/linears/__init__.py",
+  "src/emperor/linears/_config.py",
+  "src/emperor/linears/_layer.py",
+  "src/emperor/linears/_monitoring/__init__.py",
+  "src/emperor/linears/_monitoring/callback.py",
+  "src/emperor/linears/_monitoring/diagnostics.py",
+  "src/emperor/linears/_options.py",
+  "src/emperor/linears/_validation.py",
+]
+
+[families.convs]
+status = "partial"
+focused_tests = ["tests/unit/test_convs.py"]
+integration_tests = [
+  "tests/unit/test_layer.py",
+  "tests/unit/test_transformer_patch.py",
+]
+mutation_scope = ["src/emperor/convs/*"]
+environment = ["cpu", "float32", "float64"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/convs-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/convs-mutation.toml"
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/convs/__init__.py",
+  "src/emperor/convs/_config.py",
+  "src/emperor/convs/_layer.py",
+  "src/emperor/convs/_validation.py",
+]
+
+[families.embedding]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_absolute_positional_embedding_validator.py",
+  "tests/unit/test_embedding_behavior.py",
+  "tests/unit/test_embedding_regressions.py",
+  "tests/unit/test_relative_positional_embedding_validator.py",
+  "tests/unit/test_transformer_absolute_positional_embedding.py",
+  "tests/unit/test_transformer_relative_positional_embedding.py",
+]
+integration_tests = []
+mutation_scope = ["src/emperor/embedding/*"]
+environment = ["cpu", "float32", "float64", "meta-device"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/embedding-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/embedding-mutation.toml"
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/embedding/__init__.py",
+  "src/emperor/embedding/absolute/__init__.py",
+  "src/emperor/embedding/absolute/_base.py",
+  "src/emperor/embedding/absolute/_config.py",
+  "src/emperor/embedding/absolute/_learned.py",
+  "src/emperor/embedding/absolute/_sinusoidal.py",
+  "src/emperor/embedding/absolute/_validation.py",
+  "src/emperor/embedding/relative/__init__.py",
+  "src/emperor/embedding/relative/_bias.py",
+  "src/emperor/embedding/relative/_config.py",
+  "src/emperor/embedding/relative/_validation.py",
+]
+
+[families.patch]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_patch_behavior.py",
+  "tests/unit/test_patch_validator.py",
+  "tests/unit/test_transformer_patch.py",
+]
+integration_tests = ["tests/model_packages/vit/linear/test_model.py"]
+mutation_scope = ["src/emperor/patch/*"]
+environment = ["cpu", "float32", "float64", "non-contiguous-tensors"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/patch-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/patch-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/patch-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/patch/__init__.py",
+  "src/emperor/patch/_base.py",
+  "src/emperor/patch/_config.py",
+  "src/emperor/patch/_validation.py",
+  "src/emperor/patch/_variants/__init__.py",
+  "src/emperor/patch/_variants/convolutional.py",
+  "src/emperor/patch/_variants/linear.py",
+]
+
+[families.halting]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_halting*.py",
+  "tests/unit/test_soft_halting_sut_parity.py",
+  "tests/integration/test_halting_monitor_lifecycle.py",
+]
+integration_tests = [
+  "tests/integration/test_halting_monitor_lifecycle.py",
+]
+mutation_scope = ["src/emperor/halting/*"]
+environment = [
+  "cpu",
+  "float32",
+  "float64",
+  "non-contiguous-tensors",
+  "lightning-trainer",
+  "tensorboard",
+]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/halting-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/halting-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/halting-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/halting/__init__.py",
+  "src/emperor/halting/_base.py",
+  "src/emperor/halting/_config.py",
+  "src/emperor/halting/_interface.py",
+  "src/emperor/halting/_monitoring/__init__.py",
+  "src/emperor/halting/_monitoring/callback.py",
+  "src/emperor/halting/_monitoring/diagnostics.py",
+  "src/emperor/halting/_monitoring/tracking.py",
+  "src/emperor/halting/_strategies/__init__.py",
+  "src/emperor/halting/_strategies/_initialization.py",
+  "src/emperor/halting/_strategies/soft.py",
+  "src/emperor/halting/_strategies/stick_breaking.py",
+  "src/emperor/halting/_validation.py",
+]
+
+[families.memory]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_memory*.py",
+  "tests/unit/test_dynamic_memory_validator_adapter.py",
+  "tests/integration/test_memory_monitor_lifecycle.py",
+]
+integration_tests = [
+  "tests/integration/test_memory_monitor_lifecycle.py",
+]
+mutation_scope = ["src/emperor/memory/*"]
+environment = [
+  "cpu",
+  "float32",
+  "float64",
+  "non-contiguous-tensors",
+  "lightning-trainer",
+]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/memory-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/memory-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/memory-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/memory/__init__.py",
+  "src/emperor/memory/_base.py",
+  "src/emperor/memory/_config.py",
+  "src/emperor/memory/_interface.py",
+  "src/emperor/memory/_monitoring.py",
+  "src/emperor/memory/_validation.py",
+  "src/emperor/memory/_variants/__init__.py",
+  "src/emperor/memory/_variants/attention.py",
+  "src/emperor/memory/_variants/element_wise_weighted.py",
+  "src/emperor/memory/_variants/gated_residual.py",
+  "src/emperor/memory/_variants/weighted.py",
+  "src/emperor/memory/monitoring/__init__.py",
+]
+
+[families.sampler]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_router*.py",
+  "tests/unit/test_sampler*.py",
+  "tests/unit/test_samplers.py",
+  "tests/integration/test_sampler_monitor_lifecycle.py",
+]
+integration_tests = [
+  "tests/integration/test_sampler_monitor_lifecycle.py",
+]
+mutation_scope = ["src/emperor/sampler/*"]
+environment = [
+  "cpu",
+  "float32",
+  "float64",
+  "non-contiguous-tensors",
+  "lightning-trainer",
+  "tensorboard",
+]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/sampler-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/sampler-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/sampler-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/sampler/__init__.py",
+  "src/emperor/sampler/_config.py",
+  "src/emperor/sampler/_monitoring.py",
+  "src/emperor/sampler/_router.py",
+  "src/emperor/sampler/_sampler.py",
+  "src/emperor/sampler/_selection/__init__.py",
+  "src/emperor/sampler/_selection/base.py",
+  "src/emperor/sampler/_selection/full.py",
+  "src/emperor/sampler/_selection/losses.py",
+  "src/emperor/sampler/_selection/sparse.py",
+  "src/emperor/sampler/_selection/top_k.py",
+  "src/emperor/sampler/_selection/validation.py",
+  "src/emperor/sampler/_usage.py",
+  "src/emperor/sampler/_validation.py",
+]
+
+[families.layers]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_layer*.py",
+  "tests/unit/test_recurrent_layer*.py",
+]
+integration_tests = ["tests/integration/test_layer_monitor_lifecycle.py"]
+mutation_scope = ["src/emperor/layers/*"]
+environment = ["cpu", "float32", "float64", "lightning-trainer", "tensorboard"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/layers-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/layers-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/layers-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/layers/__init__.py",
+  "src/emperor/layers/_composition/__init__.py",
+  "src/emperor/layers/_composition/gate.py",
+  "src/emperor/layers/_composition/residual.py",
+  "src/emperor/layers/_config.py",
+  "src/emperor/layers/_layer.py",
+  "src/emperor/layers/_monitoring/__init__.py",
+  "src/emperor/layers/_monitoring/callbacks.py",
+  "src/emperor/layers/_monitoring/diagnostics.py",
+  "src/emperor/layers/_mirrored.py",
+  "src/emperor/layers/_options.py",
+  "src/emperor/layers/_recurrent.py",
+  "src/emperor/layers/_stack.py",
+  "src/emperor/layers/_state.py",
+  "src/emperor/layers/_support.py",
+  "src/emperor/layers/_validation.py",
+]
+
+[families.adaptive_parameters]
+status = "partial"
+focused_tests = [
+  "tests/unit/test_augmentation*.py",
+  "tests/unit/test_augmentations.py",
+  "tests/unit/test_adaptive_parameter*.py",
+  "tests/unit/test_adaptive_generator_validator_base.py",
+  "tests/unit/test_dynamic_*_validator_adapter.py",
+  "tests/unit/test_axis_mask_validator_adapter.py",
+  "tests/unit/test_weight_bank_utilization_monitor.py",
+  "tests/unit/test_weight_bank_monitor_mutation_contracts.py",
+]
+integration_tests = [
+  "tests/integration/test_checkpoint_continuation.py",
+  "tests/integration/test_adaptive_parameter_monitor_lifecycle.py",
+]
+mutation_scope = ["src/emperor/augmentations/adaptive_parameters/*"]
+environment = ["cpu", "float32", "lightning-trainer"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/adaptive_parameters-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/augmentations/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_augmentation.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/additive.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/affine.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/gated.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/generator.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/multiplicative.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_config.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/anti.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/combined.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/standard.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_linear_adapter.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/diagonal.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/outer_product.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/per_axis.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/top_slice.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/weight_informed.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/adaptive_parameters.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/weight_banks.py",
+  "src/emperor/augmentations/adaptive_parameters/_options.py",
+  "src/emperor/augmentations/adaptive_parameters/_validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/depth_mapping.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/dual_model.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/hypernetwork.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/layered_weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/low_rank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/single_model.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/soft_weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/monitoring/__init__.py",
+]
+
+[families.experts]
+status = "complete"
+focused_tests = [
+  "tests/unit/test_expert_behavioral_contracts.py",
+  "tests/unit/test_expert_mutation_contracts.py",
+  "tests/unit/test_experts*.py",
+  "tests/unit/test_mixture_of_experts*.py",
+]
+integration_tests = []
+mutation_scope = ["src/emperor/experts/*"]
+environment = ["cpu", "float32"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/experts-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/experts/__init__.py",
+  "src/emperor/experts/_config.py",
+  "src/emperor/experts/_layers/__init__.py",
+  "src/emperor/experts/_layers/layer.py",
+  "src/emperor/experts/_layers/map.py",
+  "src/emperor/experts/_layers/mixture.py",
+  "src/emperor/experts/_layers/reduce.py",
+  "src/emperor/experts/_model.py",
+  "src/emperor/experts/_options.py",
+  "src/emperor/experts/_routing/__init__.py",
+  "src/emperor/experts/_routing/capacity.py",
+  "src/emperor/experts/_routing/weighting.py",
+  "src/emperor/experts/_state.py",
+  "src/emperor/experts/_validation/__init__.py",
+  "src/emperor/experts/_validation/mixture.py",
+  "src/emperor/experts/_validation/model.py",
+]
+
+[families.parametric]
+status = "complete"
+focused_tests = [
+  "tests/unit/test_parametric*.py",
+  "tests/unit/test_parametric_*_validator_adapter.py",
+  "tests/integration/test_parametric_monitor_lifecycle.py",
+]
+integration_tests = ["tests/integration/test_parametric_monitor_lifecycle.py"]
+mutation_scope = ["src/emperor/parametric/*"]
+environment = ["cpu", "float32", "lightning-trainer"]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/parametric-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/parametric-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/parametric-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/parametric/__init__.py",
+  "src/emperor/parametric/_config.py",
+  "src/emperor/parametric/_handlers.py",
+  "src/emperor/parametric/_layer.py",
+  "src/emperor/parametric/_mixtures/__init__.py",
+  "src/emperor/parametric/_mixtures/base.py",
+  "src/emperor/parametric/_mixtures/config.py",
+  "src/emperor/parametric/_mixtures/generator.py",
+  "src/emperor/parametric/_mixtures/matrix.py",
+  "src/emperor/parametric/_mixtures/validation.py",
+  "src/emperor/parametric/_mixtures/vector.py",
+  "src/emperor/parametric/_monitoring.py",
+  "src/emperor/parametric/_routing.py",
+  "src/emperor/parametric/_state.py",
+  "src/emperor/parametric/_validation.py",
+]
+
+[families.attention]
+status = "complete"
+focused_tests = [
+  "tests/unit/test_attention*.py",
+  "tests/unit/test_*attention_validator_adapter.py",
+  "tests/unit/test_transformer_relative_positional_embedding.py",
+  "tests/integration/test_attention_monitor_lifecycle.py",
+  "tests/model_packages/test_attention_layout_contract.py",
+  "tests/model_packages/test_attention_real_model_integration.py",
+]
+integration_tests = [
+  "tests/integration/test_attention_monitor_lifecycle.py",
+  "tests/model_packages/test_attention_layout_contract.py",
+  "tests/model_packages/test_attention_real_model_integration.py",
+]
+mutation_scope = ["src/emperor/attention/*"]
+environment = [
+  "cpu",
+  "float32",
+  "float64",
+  "bfloat16",
+  "non-contiguous-tensors",
+  "meta-device",
+  "lightning-trainer",
+  "cuda-optional",
+]
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/attention-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/attention-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/attention-review-request.toml"
+blocked_reason = ""
+modules = [
+  "src/emperor/attention/__init__.py",
+  "src/emperor/attention/_base.py",
+  "src/emperor/attention/_config.py",
+  "src/emperor/attention/_monitoring/__init__.py",
+  "src/emperor/attention/_monitoring/callback.py",
+  "src/emperor/attention/_monitoring/diagnostics.py",
+  "src/emperor/attention/_ops/__init__.py",
+  "src/emperor/attention/_ops/batching.py",
+  "src/emperor/attention/_ops/bias.py",
+  "src/emperor/attention/_ops/masking.py",
+  "src/emperor/attention/_ops/processing.py",
+  "src/emperor/attention/_ops/projection.py",
+  "src/emperor/attention/_ops/reshaping.py",
+  "src/emperor/attention/_ops/zero_attention.py",
+  "src/emperor/attention/_runtime.py",
+  "src/emperor/attention/_state.py",
+  "src/emperor/attention/_validation.py",
+  "src/emperor/attention/_variants/__init__.py",
+  "src/emperor/attention/_variants/independent/__init__.py",
+  "src/emperor/attention/_variants/independent/config.py",
+  "src/emperor/attention/_variants/independent/layer.py",
+  "src/emperor/attention/_variants/independent/processing.py",
+  "src/emperor/attention/_variants/independent/projection.py",
+  "src/emperor/attention/_variants/independent/validation.py",
+  "src/emperor/attention/_variants/mixture/__init__.py",
+  "src/emperor/attention/_variants/mixture/bias.py",
+  "src/emperor/attention/_variants/mixture/config.py",
+  "src/emperor/attention/_variants/mixture/layer.py",
+  "src/emperor/attention/_variants/mixture/masking.py",
+  "src/emperor/attention/_variants/mixture/monitoring.py",
+  "src/emperor/attention/_variants/mixture/processing.py",
+  "src/emperor/attention/_variants/mixture/projection.py",
+  "src/emperor/attention/_variants/mixture/reshaping.py",
+  "src/emperor/attention/_variants/mixture/validation.py",
+  "src/emperor/attention/_variants/mixture/zero_attention.py",
+  "src/emperor/attention/_variants/self_attention/__init__.py",
+  "src/emperor/attention/_variants/self_attention/config.py",
+  "src/emperor/attention/_variants/self_attention/layer.py",
+  "src/emperor/attention/_variants/self_attention/processing.py",
+  "src/emperor/attention/_variants/self_attention/projection.py",
+  "src/emperor/attention/_variants/self_attention/validation.py",
+  "src/emperor/attention/monitoring/__init__.py",
+]
+
+[families.transformer]
+status = "pending"
+focused_tests = [
+  "tests/unit/test_transformer.py",
+  "tests/unit/test_transformer_behavioral_contracts.py",
+  "tests/unit/test_transformer_decoder_block.py",
+  "tests/unit/test_transformer_feed_forward.py",
+  "tests/unit/test_transformer_interface.py",
+  "tests/unit/test_transformer_layer.py",
+  "tests/unit/test_transformer_model_packages.py",
+  "tests/unit/test_transformer_translation_integration.py",
+  "tests/unit/test_transformer_validator_adapter.py",
+]
+integration_tests = ["tests/unit/test_transformer_translation_integration.py"]
+mutation_scope = ["src/emperor/transformer/*"]
+environment = ["cpu", "float32", "lightning-trainer"]
+coverage_evidence = ""
+mutation_evidence = ""
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/transformer/__init__.py",
+  "src/emperor/transformer/_config.py",
+  "src/emperor/transformer/_feed_forward.py",
+  "src/emperor/transformer/_layers.py",
+  "src/emperor/transformer/_model.py",
+  "src/emperor/transformer/_state.py",
+  "src/emperor/transformer/_validation.py",
+]
+
+[families.neuron]
+status = "pending"
+focused_tests = [
+  "tests/unit/test_neuron*.py",
+  "tests/unit/test_axons_validator_adapter.py",
+  "tests/unit/test_nucleus_validator_adapter.py",
+  "tests/unit/test_terminal_validator_adapter.py",
+]
+integration_tests = [
+  "tests/integration/test_neuron_checkpoint_continuation.py",
+  "tests/integration/test_neuron_monitor_lifecycle.py",
+  "tests/integration/test_checkpoint_continuation.py",
+  "tests/model_packages/neuron/linear/test_model.py",
+  "tests/model_packages/neuron/expert_linear/test_model.py",
+  "tests/model_packages/neuron/linear_adaptive/test_model.py",
+  "tests/model_packages/neuron/expert_linear_adaptive/test_model.py",
+  "tests/model_packages/test_checkpoint_gradient_matrix.py",
+]
+mutation_scope = [
+  "src/emperor/neuron/*.py",
+  "src/emperor/neuron/_cluster/*.py",
+  "src/emperor/neuron/_monitoring/*.py",
+]
+mutation_exclusions = [
+  "src/emperor/neuron/_cluster/__init__.py",
+  "src/emperor/neuron/_monitoring/__init__.py",
+]
+environment = [
+  "cpu",
+  "float32",
+  "float64",
+  "lightning-trainer",
+  "gloo-distributed",
+  "cuda-optional",
+]
+coverage_evidence = ""
+mutation_evidence = ""
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/neuron/__init__.py",
+  "src/emperor/neuron/_cluster/__init__.py",
+  "src/emperor/neuron/_cluster/beam_routes.py",
+  "src/emperor/neuron/_cluster/checkpointing.py",
+  "src/emperor/neuron/_cluster/halting_lifecycle.py",
+  "src/emperor/neuron/_cluster/model.py",
+  "src/emperor/neuron/_cluster/plasticity.py",
+  "src/emperor/neuron/_cluster/recurrent_routes.py",
+  "src/emperor/neuron/_cluster/runtime_policy.py",
+  "src/emperor/neuron/_cluster/state.py",
+  "src/emperor/neuron/_cluster/topology.py",
+  "src/emperor/neuron/_config.py",
+  "src/emperor/neuron/_distributed_gradients.py",
+  "src/emperor/neuron/_monitoring/__init__.py",
+  "src/emperor/neuron/_monitoring/callback.py",
+  "src/emperor/neuron/_monitoring/diagnostics.py",
+  "src/emperor/neuron/_optimizer_checkpoint.py",
+  "src/emperor/neuron/_optimizer_layout.py",
+  "src/emperor/neuron/_optimizer_scheduler.py",
+  "src/emperor/neuron/_optimizer_sync.py",
+  "src/emperor/neuron/_options.py",
+  "src/emperor/neuron/_parts.py",
+  "src/emperor/neuron/_terminal_topology.py",
+  "src/emperor/neuron/_trace.py",
+  "src/emperor/neuron/_validation.py",
+]
+
+[families.datasets]
+status = "pending"
+focused_tests = [
+  "tests/unit/test_dataset*.py",
+  "tests/unit/test_*dataset.py",
+  "tests/unit/test_*collator.py",
+  "tests/unit/test_multi30k_translation.py",
+]
+integration_tests = ["tests/integration/datasets/test_dataset_downloads.py"]
+mutation_scope = ["src/emperor/datasets/*"]
+environment = ["cpu", "float32", "filesystem", "network-opt-in"]
+coverage_evidence = ""
+mutation_evidence = ""
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/datasets/__init__.py",
+  "src/emperor/datasets/_base.py",
+  "src/emperor/datasets/_visualization.py",
+  "src/emperor/datasets/image/__init__.py",
+  "src/emperor/datasets/image/captioning/__init__.py",
+  "src/emperor/datasets/image/captioning/_coco_captions.py",
+  "src/emperor/datasets/image/captioning/_flickr30k.py",
+  "src/emperor/datasets/image/captioning/_flickr8k.py",
+  "src/emperor/datasets/image/classification/__init__.py",
+  "src/emperor/datasets/image/classification/_cifar_10.py",
+  "src/emperor/datasets/image/classification/_cifar_100.py",
+  "src/emperor/datasets/image/classification/_fashion_mnist.py",
+  "src/emperor/datasets/image/classification/_mnist.py",
+  "src/emperor/datasets/image/classification/_svhn.py",
+  "src/emperor/datasets/image/detection/__init__.py",
+  "src/emperor/datasets/image/detection/_coco.py",
+  "src/emperor/datasets/image/detection/_voc.py",
+  "src/emperor/datasets/image/segmentation/__init__.py",
+  "src/emperor/datasets/image/segmentation/_cityscapes.py",
+  "src/emperor/datasets/image/segmentation/_coco.py",
+  "src/emperor/datasets/image/segmentation/_voc.py",
+  "src/emperor/datasets/multimodal/__init__.py",
+  "src/emperor/datasets/multimodal/vqa/__init__.py",
+  "src/emperor/datasets/multimodal/vqa/_gqa.py",
+  "src/emperor/datasets/multimodal/vqa/_vqa_v2.py",
+  "src/emperor/datasets/rl/__init__.py",
+  "src/emperor/datasets/rl/_acrobot.py",
+  "src/emperor/datasets/rl/_base.py",
+  "src/emperor/datasets/rl/_cart_pole.py",
+  "src/emperor/datasets/rl/_frozen_lake.py",
+  "src/emperor/datasets/rl/_lunar_lander.py",
+  "src/emperor/datasets/rl/_mountain_car.py",
+  "src/emperor/datasets/rl/_pendulum.py",
+  "src/emperor/datasets/text/__init__.py",
+  "src/emperor/datasets/text/_bert_vocabulary.py",
+  "src/emperor/datasets/text/bert_pretraining/__init__.py",
+  "src/emperor/datasets/text/bert_pretraining/_collation.py",
+  "src/emperor/datasets/text/bert_pretraining/_datasets.py",
+  "src/emperor/datasets/text/bert_pretraining/_examples.py",
+  "src/emperor/datasets/text/bert_pretraining/_next_sentence.py",
+  "src/emperor/datasets/text/bert_pretraining/_tokenizer.py",
+  "src/emperor/datasets/text/classification/__init__.py",
+  "src/emperor/datasets/text/classification/_ag_news.py",
+  "src/emperor/datasets/text/classification/_dbpedia.py",
+  "src/emperor/datasets/text/classification/_imdb.py",
+  "src/emperor/datasets/text/classification/_yelp_review_full.py",
+  "src/emperor/datasets/text/language_modeling/__init__.py",
+  "src/emperor/datasets/text/language_modeling/_penn_treebank.py",
+  "src/emperor/datasets/text/language_modeling/_wiki_text_103.py",
+  "src/emperor/datasets/text/language_modeling/_wiki_text_2.py",
+  "src/emperor/datasets/text/masked_language_modeling/__init__.py",
+  "src/emperor/datasets/text/masked_language_modeling/_collation.py",
+  "src/emperor/datasets/text/masked_language_modeling/_datasets.py",
+  "src/emperor/datasets/text/masked_language_modeling/_windows.py",
+  "src/emperor/datasets/text/ner/__init__.py",
+  "src/emperor/datasets/text/ner/_conll2003.py",
+  "src/emperor/datasets/text/nli/__init__.py",
+  "src/emperor/datasets/text/nli/_multi_nli.py",
+  "src/emperor/datasets/text/nli/_snli.py",
+  "src/emperor/datasets/text/question_answering/__init__.py",
+  "src/emperor/datasets/text/question_answering/_squad_v1.py",
+  "src/emperor/datasets/text/question_answering/_squad_v2.py",
+  "src/emperor/datasets/text/similarity/__init__.py",
+  "src/emperor/datasets/text/similarity/_stsb.py",
+  "src/emperor/datasets/text/summarization/__init__.py",
+  "src/emperor/datasets/text/summarization/_cnn_dailymail.py",
+  "src/emperor/datasets/text/summarization/_xsum.py",
+  "src/emperor/datasets/text/translation/__init__.py",
+  "src/emperor/datasets/text/translation/_adapter.py",
+  "src/emperor/datasets/text/translation/_download.py",
+  "src/emperor/datasets/text/translation/_manifest.py",
+  "src/emperor/datasets/text/translation/_tokenizer.py",
+]
+
+[families.experiments]
+status = "pending"
+focused_tests = [
+  "tests/unit/test_*experiment*.py",
+  "tests/unit/test_classifier.py",
+  "tests/unit/test_language_model.py",
+  "tests/unit/test_masked_language_model.py",
+  "tests/unit/test_sequence_classifier.py",
+  "tests/unit/test_translation_experiment.py",
+]
+integration_tests = ["tests/unit/test_transformer_translation_integration.py"]
+mutation_scope = ["src/emperor/experiments/*"]
+environment = ["cpu", "float32", "lightning-trainer"]
+coverage_evidence = ""
+mutation_evidence = ""
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/experiments/__init__.py",
+  "src/emperor/experiments/_tasks.py",
+  "src/emperor/experiments/bert_pretraining/__init__.py",
+  "src/emperor/experiments/bert_pretraining/_experiment.py",
+  "src/emperor/experiments/bert_pretraining/_metrics.py",
+  "src/emperor/experiments/bert_pretraining/_records.py",
+  "src/emperor/experiments/classifier/__init__.py",
+  "src/emperor/experiments/classifier/_experiment.py",
+  "src/emperor/experiments/classifier/_metrics.py",
+  "src/emperor/experiments/language_model/__init__.py",
+  "src/emperor/experiments/language_model/_experiment.py",
+  "src/emperor/experiments/language_model/_metrics.py",
+  "src/emperor/experiments/language_model/_records.py",
+  "src/emperor/experiments/masked_language_model/__init__.py",
+  "src/emperor/experiments/masked_language_model/_experiment.py",
+  "src/emperor/experiments/masked_language_model/_metrics.py",
+  "src/emperor/experiments/sequence_classifier/__init__.py",
+  "src/emperor/experiments/sequence_classifier/_experiment.py",
+  "src/emperor/experiments/sequence_classifier/_metrics.py",
+  "src/emperor/experiments/translation/__init__.py",
+  "src/emperor/experiments/translation/_experiment.py",
+  "src/emperor/experiments/translation/_metrics.py",
+  "src/emperor/experiments/translation/_records.py",
+]
