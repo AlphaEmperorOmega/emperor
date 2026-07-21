@@ -1,8 +1,9 @@
 import unittest
 
 import torch
-from emperor.base.layer.layer import Layer
-from emperor.memory.core._validator import AdaptiveGeneratorValidatorBase
+
+from emperor.layers import Layer
+from emperor.memory._validation import AdaptiveGeneratorValidatorBase
 
 
 class TestMemoryAdaptiveGeneratorValidatorBase(unittest.TestCase):

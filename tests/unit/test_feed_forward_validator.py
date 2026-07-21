@@ -1,9 +1,8 @@
 import unittest
 
-from emperor.base.config import ConfigBase
-from emperor.transformer.feed_forward.core._validator import FeedForwardValidator
-from emperor.transformer.feed_forward.core.config import FeedForwardConfig
-from emperor.transformer.feed_forward.core.layers import FeedForward
+from emperor.config import ConfigBase
+from emperor.transformer import FeedForward, FeedForwardConfig
+from emperor.transformer._validation import FeedForwardValidator
 
 
 class TestFeedForwardValidatorAdapter(unittest.TestCase):

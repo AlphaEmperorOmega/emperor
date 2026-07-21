@@ -1,6 +1,6 @@
 import unittest
 
-from emperor.experiments.tasks import ExperimentTask
+from emperor.experiments import ExperimentTask
 from models.linears.linear import dataset_options
 from models.linears.linear.presets import Experiment as LinearExperiment
 
@@ -63,9 +63,7 @@ class TestExperimentTaskMetadata(unittest.TestCase):
         for experiment_type, error_type, message in cases:
             with self.subTest(experiment_type=experiment_type.__name__):
                 with self.assertRaisesRegex(error_type, message):
-                    experiment_type(
-                        experiment_task=ExperimentTask.IMAGE_CLASSIFICATION
-                    )
+                    experiment_type(experiment_task=ExperimentTask.IMAGE_CLASSIFICATION)
 
 
 if __name__ == "__main__":

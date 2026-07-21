@@ -1,16 +1,17 @@
 import unittest
 
 import torch
-from emperor.parametric.core.mixtures._validator import AdaptiveMixtureValidator
-from emperor.parametric.core.mixtures.base import AdaptiveMixtureBase
-from emperor.parametric.core.mixtures.config import AdaptiveMixtureConfig
-from emperor.parametric.core.mixtures.options import ClipParameterOptions
-from emperor.parametric.core.mixtures.types.generator import GeneratorWeightsMixture
-from emperor.parametric.core.mixtures.types.matrix import (
+
+from emperor.parametric import (
+    AdaptiveMixtureBase,
+    AdaptiveMixtureConfig,
+    ClipParameterOptions,
+    GeneratorWeightsMixture,
     MatrixBiasMixture,
     MatrixWeightsMixture,
+    VectorWeightsMixture,
 )
-from emperor.parametric.core.mixtures.types.vector import VectorWeightsMixture
+from emperor.parametric._mixtures.validation import AdaptiveMixtureValidator
 
 
 def make_config(**overrides) -> AdaptiveMixtureConfig:

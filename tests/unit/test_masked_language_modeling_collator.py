@@ -1,18 +1,23 @@
-import torch
 import unittest
 
-from emperor.datasets.text.masked_language_modeling import (
-    MaskedLanguageModelingCollator,
-    PennTreebankMaskedLanguageModeling,
-    WikiText2MaskedLanguageModeling,
-    WikiText103MaskedLanguageModeling,
-    build_mlm_token_windows,
-)
-from emperor.datasets.text.vocabulary import (
+import torch
+
+from emperor.datasets.text._bert_vocabulary import (
     BERT_SPECIAL_TOKENS,
     BertSpecialTokenIds,
     get_bert_special_token_ids,
     set_bert_default_index,
+)
+from emperor.datasets.text.masked_language_modeling._collation import (
+    MaskedLanguageModelingCollator,
+)
+from emperor.datasets.text.masked_language_modeling._datasets import (
+    PennTreebankMaskedLanguageModeling,
+    WikiText2MaskedLanguageModeling,
+    WikiText103MaskedLanguageModeling,
+)
+from emperor.datasets.text.masked_language_modeling._windows import (
+    build_mlm_token_windows,
 )
 
 
@@ -49,7 +54,9 @@ class TestBertVocabularyHelpers(unittest.TestCase):
         self.assertEqual(token_ids, self.preset())
 
     def test_set_bert_default_index_uses_unk_token(self):
-        vocab = FakeVocab({token: index for index, token in enumerate(BERT_SPECIAL_TOKENS)})
+        vocab = FakeVocab(
+            {token: index for index, token in enumerate(BERT_SPECIAL_TOKENS)}
+        )
 
         token_ids = set_bert_default_index(vocab)
 
@@ -87,21 +94,41 @@ class TestMaskedLanguageModelingCollator(unittest.TestCase):
         token_ids = self.preset()
         collator = self.collator()
         tokens = torch.tensor(
-            [[token_ids.cls, 5, 6, token_ids.sep, token_ids.pad, token_ids.unk, token_ids.mask, 7]]
+            [
+                [
+                    token_ids.cls,
+                    5,
+                    6,
+                    token_ids.sep,
+                    token_ids.pad,
+                    token_ids.unk,
+                    token_ids.mask,
+                    7,
+                ]
+            ]
         )
 
         input_ids, labels, attention_mask = collator(tokens)
 
         torch.testing.assert_close(
             labels,
-            torch.tensor(
-                [[-100, 5, 6, -100, -100, -100, -100, 7]]
-            ),
+            torch.tensor([[-100, 5, 6, -100, -100, -100, -100, 7]]),
         )
         torch.testing.assert_close(
             input_ids,
             torch.tensor(
-                [[token_ids.cls, token_ids.mask, token_ids.mask, token_ids.sep, token_ids.pad, token_ids.unk, token_ids.mask, token_ids.mask]]
+                [
+                    [
+                        token_ids.cls,
+                        token_ids.mask,
+                        token_ids.mask,
+                        token_ids.sep,
+                        token_ids.pad,
+                        token_ids.unk,
+                        token_ids.mask,
+                        token_ids.mask,
+                    ]
+                ]
             ),
         )
         torch.testing.assert_close(
@@ -150,7 +177,9 @@ class TestMaskedLanguageModelingCollator(unittest.TestCase):
         torch.testing.assert_close(first_labels, second_labels)
         torch.testing.assert_close(first_attention_mask, second_attention_mask)
         self.assertTrue(torch.any(first_labels != -100))
-        self.assertTrue(torch.all(first_input_ids[first_labels != -100] == self.preset().mask))
+        self.assertTrue(
+            torch.all(first_input_ids[first_labels != -100] == self.preset().mask)
+        )
 
     def test_random_replacement_avoids_special_tokens(self):
         collator = self.collator(
@@ -189,7 +218,15 @@ class TestMaskedLanguageModelingCollator(unittest.TestCase):
         token_ids = self.preset()
         collator = self.collator(mlm_probability=1.0)
         tokens = torch.tensor(
-            [[token_ids.pad, token_ids.unk, token_ids.cls, token_ids.sep, token_ids.mask]]
+            [
+                [
+                    token_ids.pad,
+                    token_ids.unk,
+                    token_ids.cls,
+                    token_ids.sep,
+                    token_ids.mask,
+                ]
+            ]
         )
 
         _, labels, _ = collator(tokens)

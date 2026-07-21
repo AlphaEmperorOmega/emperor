@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 
 from emperor.config import ModelConfig
-from emperor.experiments.classifier import ClassifierExperiment, ClassifierMetricsLogger
+from emperor.experiments.classifier import ClassifierExperiment
+from emperor.experiments.classifier._metrics import ClassifierMetricsLogger
 
 
 class HealthProbeClassifier(ClassifierExperiment):
@@ -236,22 +237,19 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         )
         torch.testing.assert_close(
             confusion[
-                "validation/confusion_matrix/true_class_0"
-                "/predicted_class_1/count"
+                "validation/confusion_matrix/true_class_0/predicted_class_1/count"
             ],
             torch.tensor(1.0),
         )
         torch.testing.assert_close(
             confusion[
-                "validation/confusion_matrix/true_class_0"
-                "/predicted_class_1/rate"
+                "validation/confusion_matrix/true_class_0/predicted_class_1/rate"
             ],
             torch.tensor(0.5),
         )
         torch.testing.assert_close(
             confusion[
-                "validation/confusion_matrix/true_class_2"
-                "/predicted_class_0/rate"
+                "validation/confusion_matrix/true_class_2/predicted_class_0/rate"
             ],
             torch.tensor(1.0),
         )
@@ -285,8 +283,7 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         confusion = logger.validation_confusion_matrix_epoch_metrics()
 
         self.assertNotIn(
-            "validation/confusion_matrix/true_class_0"
-            "/predicted_class_1/count",
+            "validation/confusion_matrix/true_class_0/predicted_class_1/count",
             confusion,
         )
         self.assertIn("validation/confusion_top_pairs/rank_1/count", confusion)

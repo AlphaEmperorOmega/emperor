@@ -3,12 +3,11 @@ import unittest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from emperor.config import ModelConfig
-from emperor.experiments.language_model import (
-    LanguageModelExperiment,
-    LanguageModelMetricsLogger,
-    LanguageModelStepOutput,
-)
+from emperor.experiments.language_model import LanguageModelExperiment
+from emperor.experiments.language_model._metrics import LanguageModelMetricsLogger
+from emperor.experiments.language_model._records import LanguageModelStepOutput
 
 
 class StaticLanguageModel(LanguageModelExperiment):

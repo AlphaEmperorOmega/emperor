@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from emperor.experiments.tasks import ExperimentTask
-from models.catalog import model_package
-
+from emperor.experiments import ExperimentTask
 from model_runtime.packages import (
     config_key_to_model_param,
     dataset_cli_name,
@@ -14,6 +12,7 @@ from model_runtime.packages import (
     normalize_dataset_name,
     parse_config_value,
 )
+from models.catalog import model_package
 
 
 class ModelPackageInspectionCapabilityTests(unittest.TestCase):

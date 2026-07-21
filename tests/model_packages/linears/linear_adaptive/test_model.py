@@ -3,16 +3,22 @@ import inspect
 import unittest
 from dataclasses import FrozenInstanceError, fields, replace
 
+import torch
+
 import models.linears.linear_adaptive.dataset_options as dataset_options
 import models.linears.linear_adaptive.monitor_options as monitor_options
 import models.linears.linear_adaptive.search_space as search_space
-import torch
-from emperor.augmentations.adaptive_parameters.core.weight import (
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     DualModelDynamicWeightConfig,
 )
-from emperor.base.layer.config import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from emperor.layers import (
+    ActivationOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+)
+from model_runtime.packages import PresetDefinition
 from models.linears.linear_adaptive import (
     _adaptive_parameter_config_factory,
     _control_config_factory,
@@ -36,8 +42,6 @@ from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import PresetDefinition
 
 
 class TestRuntimeDefaults(unittest.TestCase):

@@ -10,14 +10,9 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.augmentations.adaptive_parameters.core.weight import (
+from emperor.augmentations.adaptive_parameters import (
     LowRankDynamicWeightConfig,
 )
-from models.catalog import model_package
-from models.linears.linear_adaptive.presets import ExperimentPreset
-from models.package_cli import _search_spec, run_model_package_cli
-from models.parser import get_experiment_parser
-
 from model_runtime.packages import GridSearch, RandomSearch
 from model_runtime.runs import (
     CheckpointContinuation,
@@ -25,6 +20,10 @@ from model_runtime.runs import (
     RunRequest,
     plan_runs,
 )
+from models.catalog import model_package
+from models.linears.linear_adaptive.presets import ExperimentPreset
+from models.package_cli import _search_spec, run_model_package_cli
+from models.parser import get_experiment_parser
 
 
 def _linears_linear():

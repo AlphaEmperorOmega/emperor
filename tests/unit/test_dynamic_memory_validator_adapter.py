@@ -1,18 +1,19 @@
 import unittest
 
 import torch
-from emperor.memory.config import (
+
+from emperor.memory import (
     AttentionDynamicMemoryConfig,
     DynamicMemoryConfig,
 )
-from emperor.memory.core import (
-    AttentionDynamicMemory,
-    DynamicMemoryAbstract,
+from emperor.memory._base import DynamicMemoryAbstract
+from emperor.memory._validation import DynamicMemoryValidator
+from emperor.memory._variants.attention import AttentionDynamicMemory
+from emperor.memory._variants.element_wise_weighted import (
     ElementWiseWeightedDynamicMemory,
-    GatedResidualDynamicMemory,
-    WeightedDynamicMemory,
 )
-from emperor.memory.core._validator import DynamicMemoryValidator
+from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
+from emperor.memory._variants.weighted import WeightedDynamicMemory
 
 
 class TestDynamicMemoryValidatorAdapter(unittest.TestCase):

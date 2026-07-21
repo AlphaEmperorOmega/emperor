@@ -3,18 +3,27 @@ import unittest
 from dataclasses import dataclass
 
 import torch
-from emperor.datasets.text.bert_pretraining import (
-    BertPretrainingCollator,
-    PennTreebankBertPretraining,
-    WikiText2BertPretraining,
-    build_bert_next_sentence_pairs,
-    build_bert_pretraining_examples,
-    build_bert_sentence_pair_inputs,
-    train_local_wordpiece_tokenizer,
-)
-from emperor.datasets.text.vocabulary import (
+
+from emperor.datasets.text._bert_vocabulary import (
     BertSpecialTokenIds,
     get_bert_special_token_ids,
+)
+from emperor.datasets.text.bert_pretraining import (
+    PennTreebankBertPretraining,
+    WikiText2BertPretraining,
+)
+from emperor.datasets.text.bert_pretraining._collation import (
+    BertPretrainingCollator,
+)
+from emperor.datasets.text.bert_pretraining._examples import (
+    build_bert_pretraining_examples,
+    build_bert_sentence_pair_inputs,
+)
+from emperor.datasets.text.bert_pretraining._next_sentence import (
+    build_bert_next_sentence_pairs,
+)
+from emperor.datasets.text.bert_pretraining._tokenizer import (
+    train_local_wordpiece_tokenizer,
 )
 
 OFFLINE_TEXT_SPLITS = {

@@ -1,12 +1,13 @@
 import unittest
 
 import torch
-from emperor.parametric.core._validator import ParametricLayerValidator
-from emperor.parametric.core.config import (
+
+from emperor.parametric import (
     AdaptiveRouterOptions,
+    ParametricLayer,
     ParametricLayerConfig,
 )
-from emperor.parametric.core.layers import ParametricLayer
+from emperor.parametric._validation import ParametricLayerValidator
 
 
 def make_config(**overrides) -> ParametricLayerConfig:

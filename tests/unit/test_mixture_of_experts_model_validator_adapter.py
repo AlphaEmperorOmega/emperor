@@ -1,8 +1,8 @@
 import unittest
 
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core._validator import MixtureOfExpertsModelValidator
-from emperor.experts.model import MixtureOfExpertsModel
+from emperor.experts import MixtureOfExpertsModelConfig
+from emperor.experts._model import MixtureOfExpertsModel
+from emperor.experts._validation.model import MixtureOfExpertsModelValidator
 
 
 class TestMixtureOfExpertsModelValidatorAdapter(unittest.TestCase):

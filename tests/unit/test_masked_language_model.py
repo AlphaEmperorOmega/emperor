@@ -1,12 +1,13 @@
 import math
-import torch
 import unittest
+
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from emperor.config import ModelConfig
-from emperor.experiments.masked_language_model import (
-    MaskedLanguageModelExperiment,
+from emperor.experiments.masked_language_model import MaskedLanguageModelExperiment
+from emperor.experiments.masked_language_model._metrics import (
     MaskedLanguageModelMetricsLogger,
 )
 
