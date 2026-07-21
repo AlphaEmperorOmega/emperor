@@ -6,9 +6,13 @@ from emperor.experts import RoutingInitializationMode
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    Layer,
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    MirroredLayerStack,
+    RecurrentLayer,
+    RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import FeedForward, FeedForwardConfig
@@ -102,6 +106,119 @@ class TestFeedForward(unittest.TestCase):
                         output, _ = output
 
                     self.assertEqual(output.shape, expected_output)
+
+    def test_one_layer_depth_builds_two_wrapped_layers(self):
+        model = FeedForward(self.preset(num_layers=1))
+
+        self.assertIsInstance(model.model, MirroredLayerStack)
+        self.assertEqual(len(model.model), 2)
+        self.assertTrue(all(isinstance(layer, Layer) for layer in model.model))
+        self.assertEqual(
+            [(layer.input_dim, layer.output_dim) for layer in model.model],
+            [(10, 20), (20, 10)],
+        )
+
+    def test_three_layer_depth_builds_independent_six_layer_arms(self):
+        model = FeedForward(self.preset(num_layers=3))
+
+        self.assertEqual(len(model.model.expansion_layers), 3)
+        self.assertEqual(len(model.model.contraction_layers), 3)
+        self.assertEqual(
+            [(layer.input_dim, layer.output_dim) for layer in model.model],
+            [
+                (10, 20),
+                (20, 20),
+                (20, 20),
+                (20, 20),
+                (20, 20),
+                (20, 10),
+            ],
+        )
+        expansion_parameters = {
+            id(parameter)
+            for layer in model.model.expansion_layers
+            for parameter in layer.parameters()
+        }
+        contraction_parameters = {
+            id(parameter)
+            for layer in model.model.contraction_layers
+            for parameter in layer.parameters()
+        }
+        self.assertTrue(expansion_parameters)
+        self.assertTrue(contraction_parameters)
+        self.assertTrue(expansion_parameters.isdisjoint(contraction_parameters))
+
+    def test_only_final_contraction_uses_output_pipeline_policy(self):
+        model = FeedForward(
+            self.preset(
+                num_layers=3,
+                dropout_probability=0.25,
+                activation=ActivationOptions.RELU,
+            )
+        )
+
+        for layer in model.model[:-1]:
+            self.assertEqual(layer.activation_function, ActivationOptions.RELU)
+            self.assertIsNotNone(layer.dropout_module)
+        self.assertEqual(
+            model.model[-1].activation_function,
+            ActivationOptions.DISABLED,
+        )
+        self.assertIsNone(model.model[-1].dropout_module)
+
+    def test_mirrored_stack_preserves_dtype_shape_and_gradients(self):
+        model = FeedForward(
+            self.preset(input_dim=6, output_dim=4, hidden_dim=12, num_layers=3)
+        ).double()
+        input_batch = torch.randn(2, 5, 6, dtype=torch.float64, requires_grad=True)
+
+        output, loss = model(input_batch)
+        (output.square().mean() + loss).backward()
+
+        self.assertEqual(output.shape, (2, 5, 4))
+        self.assertEqual(output.dtype, torch.float64)
+        self.assertEqual(loss.shape, ())
+        self.assertIsNotNone(input_batch.grad)
+        self.assertTrue(
+            all(
+                parameter.grad is not None
+                for parameter in model.parameters()
+                if parameter.requires_grad
+            )
+        )
+
+    def test_recurrent_feed_forward_reuses_a_mirrored_layer_stack(self):
+        block = self.preset(
+            input_dim=8,
+            output_dim=8,
+            hidden_dim=16,
+            num_layers=2,
+        ).stack_config
+        recurrent_config = RecurrentLayerConfig(
+            input_dim=8,
+            output_dim=8,
+            max_steps=2,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=block,
+            gate_config=None,
+            residual_config=None,
+            halting_config=None,
+            memory_config=None,
+        )
+        model = FeedForward(
+            FeedForwardConfig(
+                input_dim=8,
+                output_dim=8,
+                stack_config=recurrent_config,
+            )
+        )
+
+        self.assertIsInstance(model.model, RecurrentLayer)
+        self.assertIsInstance(model.model.block_model, MirroredLayerStack)
+        self.assertEqual(len(model.model.block_model), 4)
+        output, loss = model(torch.randn(2, 3, 8))
+        self.assertEqual(output.shape, (2, 3, 8))
+        self.assertEqual(loss.shape, ())
 
 
 class TestFeedForwardWithMixtureOfExperts(
@@ -198,3 +315,16 @@ class TestFeedForwardWithMixtureOfExperts(
                             output, _ = output
 
                         self.assertEqual(output.shape, expected_output)
+
+    def test_expert_feed_forward_uses_mirrored_expert_stack_and_loss(self):
+        model = FeedForward(self.feed_forward_preset(num_layers=3))
+
+        self.assertIsInstance(model.model.expert_stack, MirroredLayerStack)
+        self.assertEqual(len(model.model.expert_stack), 6)
+        input_batch = torch.randn(2, 4, 8, requires_grad=True)
+        output, loss = model(input_batch)
+        (output.square().mean() + loss).backward()
+        self.assertEqual(output.shape, (2, 4, 8))
+        self.assertEqual(loss.shape, ())
+        self.assertTrue(torch.isfinite(loss))
+        self.assertIsNotNone(input_batch.grad)

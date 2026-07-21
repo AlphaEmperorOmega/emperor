@@ -1,10 +1,16 @@
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING
 
 from torch import Tensor
 
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import Layer
+from emperor.layers import (
+    Layer,
+    LayerStackConfig,
+    MirroredLayerStackConfig,
+    RecurrentLayerConfig,
+)
 from emperor.nn import Module
 from emperor.transformer._validation import FeedForwardValidator
 
@@ -48,11 +54,58 @@ class FeedForward(Module):
         self.model = self.__build_stack_model()
 
     def __build_stack_model(self) -> Module:
-        overrides = type(self.stack_config)(
+        mirrored_config = self.__mirror_stack_config(
+            self.stack_config,
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return self.stack_config.build(overrides)
+        return mirrored_config.build()
+
+    def __mirror_stack_config(
+        self,
+        stack_config: ConfigBase,
+        *,
+        input_dim: int,
+        output_dim: int,
+    ) -> ConfigBase:
+        from emperor.experts import MixtureOfExpertsModelConfig
+
+        if isinstance(stack_config, MirroredLayerStackConfig):
+            mirrored = deepcopy(stack_config)
+            mirrored.input_dim = input_dim
+            mirrored.output_dim = output_dim
+            return mirrored
+        if isinstance(stack_config, LayerStackConfig):
+            values = {
+                config_field.name: deepcopy(getattr(stack_config, config_field.name))
+                for config_field in fields(LayerStackConfig)
+            }
+            values.update(input_dim=input_dim, output_dim=output_dim)
+            return MirroredLayerStackConfig(**values)
+        if isinstance(stack_config, MixtureOfExpertsModelConfig):
+            mirrored = deepcopy(stack_config)
+            mirrored.input_dim = input_dim
+            mirrored.output_dim = output_dim
+            mirrored.stack_config = self.__mirror_stack_config(
+                mirrored.stack_config,
+                input_dim=input_dim,
+                output_dim=output_dim,
+            )
+            return mirrored
+        if isinstance(stack_config, RecurrentLayerConfig):
+            mirrored = deepcopy(stack_config)
+            mirrored.input_dim = input_dim
+            mirrored.output_dim = output_dim
+            mirrored.block_config = self.__mirror_stack_config(
+                mirrored.block_config,
+                input_dim=output_dim,
+                output_dim=output_dim,
+            )
+            return mirrored
+        raise TypeError(
+            "FeedForward cannot mirror stack_config of type "
+            f"{type(stack_config).__name__}."
+        )
 
     def forward(self, input_batch: Tensor) -> tuple[Tensor, Tensor]:
         original_shape = input_batch.shape
