@@ -2,12 +2,22 @@ import copy
 import unittest
 
 import torch
+
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     SoftHalting,
     SoftHaltingConfig,
+    StickBreaking,
+    StickBreakingConfig,
 )
-
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+)
+from emperor.linears import LinearLayerConfig
 from support.sut_act_oracle import SutActOracle
 
 
@@ -204,6 +214,60 @@ class SoftHaltingSutParityTests(unittest.TestCase):
                     local_parameter.grad,
                     oracle_gate_parameters[name].grad,
                 )
+
+
+class CommonHaltingLifecycleTests(unittest.TestCase):
+    def test_stick_breaking_runs_computation_then_preserves_its_recurrence(
+        self,
+    ) -> None:
+        gate_config = LayerStackConfig(
+            input_dim=2,
+            hidden_dim=2,
+            output_dim=2,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                residual_config=None,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(bias_flag=False),
+            ),
+        )
+        model = StickBreaking(
+            StickBreakingConfig(
+                input_dim=2,
+                threshold=0.99,
+                dropout_probability=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=gate_config,
+            )
+        ).eval()
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+
+        first = model.run_step(None, hidden, lambda record: record.raw_hidden + 1.0)
+        second = model.run_step(
+            first,
+            first.raw_hidden,
+            lambda record: record.raw_hidden * 2.0,
+        )
+        output, loss = model.finalize(second, second.raw_hidden)
+
+        first_candidate = hidden + 1.0
+        second_candidate = first_candidate * 2.0
+        torch.testing.assert_close(
+            second.accumulated_hidden,
+            0.5 * first_candidate + 0.25 * second_candidate,
+        )
+        torch.testing.assert_close(
+            output,
+            0.5 * first_candidate + 0.5 * second_candidate,
+        )
+        torch.testing.assert_close(loss, torch.full((2,), 0.75))
 
 
 if __name__ == "__main__":
