@@ -698,7 +698,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
                             dropout_probability=probability,
                         )
                     )
-                with self.assertRaisesRegex(ValueError, "dropout probability"):
+                with self.assertRaisesRegex(ValueError, "dropout_probability"):
                     Model(
                         self._direct_config(
                             encoder_options=replace(
