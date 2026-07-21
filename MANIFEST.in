@@ -9,7 +9,6 @@ include run_test.sh
 include experiment.sh
 include mise.toml
 recursive-include constraints *.txt
-recursive-include docs *.json *.md
 recursive-include src *.py
 recursive-include tests *.json *.py *.toml
 recursive-include tools *.py
