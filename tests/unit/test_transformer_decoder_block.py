@@ -1,7 +1,8 @@
 import unittest
 
 import torch
-from emperor.base.layer import LayerState
+
+from emperor.layers import LayerState
 from emperor.transformer import TransformerDecoderLayerState
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,

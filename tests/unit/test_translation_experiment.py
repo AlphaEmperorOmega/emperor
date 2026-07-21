@@ -4,7 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
-from emperor.experiments.tasks import ExperimentTask, experiment_task_name
+
+from emperor.experiments import ExperimentTask, experiment_task_name
 from models.training_test_utils import RandomTranslationDataModule
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
