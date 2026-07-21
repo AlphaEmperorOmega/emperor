@@ -1200,6 +1200,32 @@ class TestVitLinearModel(unittest.TestCase):
 
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
+    def test_equal_batch_and_sequence_lengths_preserve_sample_isolation(self):
+        batch_size = 5
+        cfg = ExperimentPresets()._preset(
+            **self._small_image_overrides(batch_size=batch_size),
+        )
+        model = Model(cfg).eval()
+        torch.manual_seed(149)
+        original_images = torch.randn(batch_size, 3, 8, 8)
+        changed_images = original_images.clone()
+        changed_images[1] = torch.randn_like(changed_images[1]).mul_(4.0)
+
+        with torch.no_grad():
+            original_logits = model(original_images)
+            changed_logits = model(changed_images)
+
+        torch.testing.assert_close(
+            changed_logits[0],
+            original_logits[0],
+            rtol=0.0,
+            atol=0.0,
+        )
+        self.assertGreater(
+            torch.max(torch.abs(changed_logits[1] - original_logits[1])).item(),
+            1e-6,
+        )
+
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
         presets = ExperimentPresets()

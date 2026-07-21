@@ -215,6 +215,27 @@ class TestLinearPatchEmbedding(unittest.TestCase):
         self.assertIsNotNone(model.embedding_model[0].model.weight_params.grad)
         self.assertIsNotNone(input_batch.grad)
 
+    def test_state_dict_topology_and_strict_roundtrip(self):
+        cfg = self.preset(embedding_dim=6, patch_size=2, stride=2)
+        model = PatchEmbeddingLinear(cfg)
+        state = model.state_dict()
+
+        self.assertEqual(
+            tuple(state),
+            (
+                "class_token",
+                "embedding_model.layers.0.model.weight_params",
+                "embedding_model.layers.0.model.bias_params",
+            ),
+        )
+
+        restored = PatchEmbeddingLinear(cfg)
+        incompatible = restored.load_state_dict(state, strict=True)
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        for name, value in state.items():
+            torch.testing.assert_close(restored.state_dict()[name], value)
+
     def test_config_build_returns_linear_patch_embedding(self):
         cfg = self.preset()
         model = cfg.build()
@@ -258,62 +279,83 @@ class TestLinearPatchEmbedding(unittest.TestCase):
 
     def test_init_raises_on_missing_required_fields(self):
         invalid_cases = [
-            ("embedding_dim", LinearPatchEmbeddingConfig(
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-                stride=4,
-                padding=0,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("num_input_channels", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                patch_size=4,
-                dropout_probability=0.0,
-                stride=4,
-                padding=0,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("patch_size", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                dropout_probability=0.0,
-                stride=4,
-                padding=0,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("dropout_probability", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                stride=4,
-                padding=0,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("stride", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-                padding=0,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("padding", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-                stride=4,
-                embedding_stack_config=make_linear_embedding_stack_config(),
-            )),
-            ("embedding_stack_config", LinearPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-                stride=4,
-                padding=0,
-            )),
+            (
+                "embedding_dim",
+                LinearPatchEmbeddingConfig(
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    stride=4,
+                    padding=0,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "num_input_channels",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    stride=4,
+                    padding=0,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "patch_size",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    dropout_probability=0.0,
+                    stride=4,
+                    padding=0,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "dropout_probability",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    stride=4,
+                    padding=0,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "stride",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    padding=0,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "padding",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    stride=4,
+                    embedding_stack_config=make_linear_embedding_stack_config(),
+                ),
+            ),
+            (
+                "embedding_stack_config",
+                LinearPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    stride=4,
+                    padding=0,
+                ),
+            ),
         ]
 
         for field_name, cfg in invalid_cases:
@@ -446,6 +488,27 @@ class TestConvPatchEmbedding(unittest.TestCase):
         self.assertIsNotNone(model.patch_model[0].model.model.weight.grad)
         self.assertIsNotNone(input_batch.grad)
 
+    def test_state_dict_topology_and_strict_roundtrip(self):
+        cfg = self.preset(embedding_dim=6, patch_size=2, stride=2)
+        model = PatchEmbeddingConv(cfg)
+        state = model.state_dict()
+
+        self.assertEqual(
+            tuple(state),
+            (
+                "class_token",
+                "patch_model.layers.0.model.model.weight",
+                "patch_model.layers.0.model.model.bias",
+            ),
+        )
+
+        restored = PatchEmbeddingConv(cfg)
+        incompatible = restored.load_state_dict(state, strict=True)
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        for name, value in state.items():
+            torch.testing.assert_close(restored.state_dict()[name], value)
+
     def test_config_build_returns_conv_patch_embedding(self):
         cfg = self.preset()
         model = cfg.build()
@@ -490,36 +553,51 @@ class TestConvPatchEmbedding(unittest.TestCase):
 
     def test_init_raises_on_missing_required_fields(self):
         invalid_cases = [
-            ("embedding_dim", ConvPatchEmbeddingConfig(
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-                conv_stack_config=make_conv_stack_config(),
-            )),
-            ("num_input_channels", ConvPatchEmbeddingConfig(
-                embedding_dim=8,
-                patch_size=4,
-                dropout_probability=0.0,
-                conv_stack_config=make_conv_stack_config(),
-            )),
-            ("patch_size", ConvPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                dropout_probability=0.0,
-                conv_stack_config=make_conv_stack_config(),
-            )),
-            ("dropout_probability", ConvPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                conv_stack_config=make_conv_stack_config(),
-            )),
-            ("conv_stack_config", ConvPatchEmbeddingConfig(
-                embedding_dim=8,
-                num_input_channels=1,
-                patch_size=4,
-                dropout_probability=0.0,
-            )),
+            (
+                "embedding_dim",
+                ConvPatchEmbeddingConfig(
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    conv_stack_config=make_conv_stack_config(),
+                ),
+            ),
+            (
+                "num_input_channels",
+                ConvPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                    conv_stack_config=make_conv_stack_config(),
+                ),
+            ),
+            (
+                "patch_size",
+                ConvPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    dropout_probability=0.0,
+                    conv_stack_config=make_conv_stack_config(),
+                ),
+            ),
+            (
+                "dropout_probability",
+                ConvPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    conv_stack_config=make_conv_stack_config(),
+                ),
+            ),
+            (
+                "conv_stack_config",
+                ConvPatchEmbeddingConfig(
+                    embedding_dim=8,
+                    num_input_channels=1,
+                    patch_size=4,
+                    dropout_probability=0.0,
+                ),
+            ),
         ]
 
         for field_name, cfg in invalid_cases:
