@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import shutil
@@ -17,7 +18,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 VENV_ROOT = REPOSITORY_ROOT / "torchenv"
@@ -172,6 +173,43 @@ class ServiceSpec:
     @property
     def log_path(self) -> Path:
         return RUNTIME_ROOT / f"{self.name}.log"
+
+
+_CURRENT_BACKEND_IDENTITIES = {
+    "emperor_workbench": "emperor_workbench",
+    "emperor_workbench.cli": "emperor_workbench.cli",
+}
+_LEGACY_BACKEND_IDENTITIES = {
+    "emperor_workbench.launch": "emperor_workbench.launch",
+    "workbench.backend.launch": "workbench.backend.launch",
+}
+_RUNTIME_METADATA_REQUIRED_KEYS = frozenset(
+    {
+        "argv",
+        "commandIdentity",
+        "createTime",
+        "pid",
+        "port",
+    }
+)
+_RUNTIME_METADATA_OPTIONAL_KEYS = frozenset({"jobName"})
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeProcessMetadata:
+    argv: tuple[str, ...]
+    command_identity: str
+    create_time: float
+    pid: int
+    port: int
+    job_name: str | None
+    generation: Literal["current", "legacy"]
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeProcessObservation:
+    process: Any
+    metadata: _RuntimeProcessMetadata
 
 
 def _normalize_architecture(machine: str) -> str:
@@ -839,42 +877,6 @@ def _port_open(port: int) -> bool:
         return False
 
 
-def _validated_process(
-    spec: ServiceSpec,
-    *,
-    require_current_command: bool = True,
-):
-    import psutil
-
-    _reject_runtime_link(spec.metadata_path)
-    metadata = _read_json(spec.metadata_path)
-    if metadata is None:
-        return None
-    try:
-        recorded_command = metadata.get("argv")
-        if not isinstance(recorded_command, list) or not all(
-            isinstance(argument, str) for argument in recorded_command
-        ):
-            return None
-        if (
-            metadata.get("commandIdentity") != spec.command_identity
-            or int(metadata.get("port")) != spec.port
-            or (require_current_command and recorded_command != list(spec.command))
-        ):
-            return None
-        process = psutil.Process(int(metadata["pid"]))
-        observed_creation = process.create_time()
-        expected_creation = float(metadata["createTime"])
-        command = " ".join(process.cmdline())
-        if abs(observed_creation - expected_creation) > 0.01:
-            return None
-        if spec.command_identity.casefold() not in command.casefold():
-            return None
-        return process
-    except (KeyError, TypeError, ValueError, psutil.Error, OSError):
-        return None
-
-
 def _same_executable(observed: str, expected: str) -> bool:
     try:
         return os.path.samefile(observed, expected)
@@ -893,28 +895,294 @@ def _service_job_object_name(service: str, port: int) -> str:
     return f"Local\\EmperorWorkbenchService-{safe}-{port}"
 
 
+def _same_argv(
+    observed: list[str] | tuple[str, ...], expected: tuple[str, ...]
+) -> bool:
+    return (
+        bool(observed)
+        and bool(expected)
+        and _same_executable(observed[0], expected[0])
+        and tuple(observed[1:]) == expected[1:]
+    )
+
+
+def _launcher_options_match(arguments: tuple[str, ...], *, port: int) -> bool:
+    observed_port: str | None = None
+    observed_host = False
+    observed_reload = False
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--reload":
+            if observed_reload:
+                return False
+            observed_reload = True
+            index += 1
+            continue
+        if argument == "--host":
+            if observed_host or index + 1 >= len(arguments):
+                return False
+            observed_host = bool(arguments[index + 1])
+            if not observed_host:
+                return False
+            index += 2
+            continue
+        if argument.startswith("--host="):
+            if observed_host or not argument.removeprefix("--host="):
+                return False
+            observed_host = True
+            index += 1
+            continue
+        if argument == "--port":
+            if observed_port is not None or index + 1 >= len(arguments):
+                return False
+            observed_port = arguments[index + 1]
+            index += 2
+            continue
+        if argument.startswith("--port="):
+            if observed_port is not None:
+                return False
+            observed_port = argument.removeprefix("--port=")
+            index += 1
+            continue
+        return False
+    return observed_port == str(port)
+
+
+def _backend_module_command_matches(
+    spec: ServiceSpec,
+    argv: tuple[str, ...],
+    *,
+    module: str,
+) -> bool:
+    return (
+        len(argv) >= 3
+        and _same_executable(argv[0], spec.command[0])
+        and argv[1:3] == ("-m", module)
+        and _launcher_options_match(argv[3:], port=spec.port)
+    )
+
+
+def _legacy_uvicorn_options_match(
+    arguments: tuple[str, ...],
+    *,
+    port: int,
+) -> bool:
+    observed_host = False
+    observed_port = False
+    observed_reload = False
+    observed_reset_contextvars = False
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--reload":
+            if observed_reload:
+                return False
+            observed_reload = True
+            index += 1
+            continue
+        if argument == "--reset-contextvars":
+            if observed_reset_contextvars:
+                return False
+            observed_reset_contextvars = True
+            index += 1
+            continue
+        if argument == "--host":
+            if (
+                observed_host
+                or index + 1 >= len(arguments)
+                or arguments[index + 1] != "127.0.0.1"
+            ):
+                return False
+            observed_host = True
+            index += 2
+            continue
+        if argument == "--host=127.0.0.1":
+            if observed_host:
+                return False
+            observed_host = True
+            index += 1
+            continue
+        if argument == "--port":
+            if (
+                observed_port
+                or index + 1 >= len(arguments)
+                or arguments[index + 1] != str(port)
+            ):
+                return False
+            observed_port = True
+            index += 2
+            continue
+        if argument == f"--port={port}":
+            if observed_port:
+                return False
+            observed_port = True
+            index += 1
+            continue
+        return False
+    return observed_host and observed_port and observed_reset_contextvars
+
+
+def _metadata_generation(
+    spec: ServiceSpec,
+    *,
+    command_identity: str,
+    argv: tuple[str, ...],
+) -> Literal["current", "legacy"] | None:
+    if spec.name == "backend":
+        current_module = _CURRENT_BACKEND_IDENTITIES.get(command_identity)
+        if current_module is not None and _backend_module_command_matches(
+            spec,
+            argv,
+            module=current_module,
+        ):
+            return "current"
+        legacy_module = _LEGACY_BACKEND_IDENTITIES.get(command_identity)
+        if legacy_module is not None and _backend_module_command_matches(
+            spec,
+            argv,
+            module=legacy_module,
+        ):
+            return "legacy"
+        return None
+    if command_identity != spec.command_identity or not argv:
+        return None
+    if spec.name == "frontend":
+        if len(argv) != 3 or argv[2] != "dev":
+            return None
+        if not _same_executable(argv[0], spec.command[0]):
+            return None
+        if not _same_executable(argv[1], spec.command[1]):
+            return None
+        return "current"
+    if not _same_executable(argv[0], spec.command[0]):
+        return None
+    if command_identity.casefold() not in " ".join(argv[1:]).casefold():
+        return None
+    return "current"
+
+
+def _runtime_metadata(
+    spec: ServiceSpec,
+    payload: dict[str, Any] | None,
+) -> _RuntimeProcessMetadata | None:
+    if payload is None:
+        return None
+    keys = frozenset(payload)
+    if not _RUNTIME_METADATA_REQUIRED_KEYS.issubset(keys) or not keys.issubset(
+        _RUNTIME_METADATA_REQUIRED_KEYS | _RUNTIME_METADATA_OPTIONAL_KEYS
+    ):
+        return None
+    raw_argv = payload.get("argv")
+    command_identity = payload.get("commandIdentity")
+    raw_create_time = payload.get("createTime")
+    raw_pid = payload.get("pid")
+    raw_port = payload.get("port")
+    raw_job_name = payload.get("jobName")
+    if (
+        not isinstance(raw_argv, list)
+        or not raw_argv
+        or any(not isinstance(argument, str) or not argument for argument in raw_argv)
+        or not isinstance(command_identity, str)
+        or not command_identity
+        or isinstance(raw_create_time, bool)
+        or not isinstance(raw_create_time, (int, float))
+        or not math.isfinite(float(raw_create_time))
+        or float(raw_create_time) <= 0
+        or isinstance(raw_pid, bool)
+        or not isinstance(raw_pid, int)
+        or raw_pid <= 0
+        or isinstance(raw_port, bool)
+        or not isinstance(raw_port, int)
+        or raw_port != spec.port
+        or (
+            raw_job_name is not None
+            and (not isinstance(raw_job_name, str) or not raw_job_name)
+        )
+    ):
+        return None
+    argv = tuple(raw_argv)
+    generation = _metadata_generation(
+        spec,
+        command_identity=command_identity,
+        argv=argv,
+    )
+    if generation is None:
+        return None
+    return _RuntimeProcessMetadata(
+        argv=argv,
+        command_identity=command_identity,
+        create_time=float(raw_create_time),
+        pid=raw_pid,
+        port=raw_port,
+        job_name=raw_job_name,
+        generation=generation,
+    )
+
+
+def _validated_runtime_process(
+    spec: ServiceSpec,
+    *,
+    require_current_command: bool,
+) -> _RuntimeProcessObservation | None:
+    import psutil
+
+    _reject_runtime_link(spec.metadata_path)
+    metadata = _runtime_metadata(spec, _read_json(spec.metadata_path))
+    if metadata is None:
+        return None
+    if require_current_command and (
+        metadata.generation != "current" or not _same_argv(metadata.argv, spec.command)
+    ):
+        return None
+    try:
+        process = psutil.Process(metadata.pid)
+        if abs(process.create_time() - metadata.create_time) > 0.01:
+            return None
+        if process.status() == psutil.STATUS_ZOMBIE:
+            return None
+        if Path(process.cwd()).resolve() != spec.cwd.resolve():
+            return None
+        observed_argv = process.cmdline()
+        if not isinstance(observed_argv, list) or not _same_argv(
+            observed_argv,
+            metadata.argv,
+        ):
+            return None
+        return _RuntimeProcessObservation(process=process, metadata=metadata)
+    except (OSError, psutil.Error, ValueError):
+        return None
+
+
 def _legacy_command_matches(spec: ServiceSpec, command: list[str]) -> bool:
     if not command or not _same_executable(command[0], spec.command[0]):
         return False
-    folded = [argument.casefold() for argument in command]
+    argv = tuple(command)
     if spec.name == "backend":
-        identity = ["-m", "uvicorn", "workbench.backend.api:app"]
-        identity_matches = any(
-            folded[index : index + len(identity)] == identity
-            for index in range(len(folded) - len(identity) + 1)
+        launcher_modules = (
+            "emperor_workbench",
+            "emperor_workbench.cli",
+            "emperor_workbench.launch",
+            "workbench.backend.launch",
         )
-        port_matches = any(
-            argument == f"--port={spec.port}"
-            or (
-                argument == "--port"
-                and index + 1 < len(command)
-                and command[index + 1] == str(spec.port)
-            )
-            for index, argument in enumerate(folded)
+        if any(
+            _backend_module_command_matches(spec, argv, module=module)
+            for module in launcher_modules
+        ):
+            return True
+        if len(argv) < 5 or argv[1:3] != ("-m", "uvicorn"):
+            return False
+        if argv[3] not in {
+            "emperor_workbench.api:app",
+            "workbench.backend.api:app",
+        }:
+            return False
+        return _legacy_uvicorn_options_match(
+            argv[4:],
+            port=spec.port,
         )
-        return identity_matches and port_matches
     if spec.name == "frontend":
-        joined = " ".join(folded)
+        joined = " ".join(argument.casefold() for argument in command)
         return ("npm" in joined and "run dev" in joined) or (
             "next" in joined and " dev" in joined
         )
@@ -986,6 +1254,53 @@ def _retire_legacy_service(spec: ServiceSpec) -> None:
     _wait_for_stopped_port(spec)
 
 
+def _terminate_runtime_process(
+    spec: ServiceSpec,
+    observation: _RuntimeProcessObservation,
+) -> None:
+    import psutil
+
+    process = observation.process
+    descendants = process.children(recursive=True)
+    targets = [*reversed(descendants), process]
+    if os.name == "nt":
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        except (AttributeError, psutil.Error, OSError):
+            pass
+        _, alive = psutil.wait_procs(targets, timeout=5.0)
+        if alive:
+            _terminate_windows_service_job(observation.metadata.job_name, spec)
+            _, alive = psutil.wait_procs(alive, timeout=5.0)
+        for target in alive:
+            try:
+                target.kill()
+            except psutil.Error:
+                pass
+        psutil.wait_procs(alive, timeout=5.0)
+        return
+    _terminate_process_tree(process)
+
+
+def _drain_runtime_metadata(spec: ServiceSpec) -> bool:
+    observation = _validated_runtime_process(
+        spec,
+        require_current_command=False,
+    )
+    if observation is None:
+        spec.metadata_path.unlink(missing_ok=True)
+        return False
+    label = "legacy" if observation.metadata.generation == "legacy" else "previous"
+    print(
+        f"Migrating {label} Workbench {spec.name} process "
+        f"(PID {observation.process.pid}, port {spec.port})..."
+    )
+    _terminate_runtime_process(spec, observation)
+    spec.metadata_path.unlink(missing_ok=True)
+    _wait_for_stopped_port(spec)
+    return True
+
+
 def _wait_ready(spec: ServiceSpec, process, timeout: float = 45.0) -> None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -1007,20 +1322,21 @@ def _start_service(spec: ServiceSpec) -> None:
 
     _reject_runtime_link(spec.metadata_path)
     _reject_runtime_link(spec.log_path)
-    existing = _validated_process(spec)
+    existing = _validated_runtime_process(
+        spec,
+        require_current_command=True,
+    )
     if existing is not None:
         if _http_ready(spec.ready_url):
             print(
-                f"Workbench {spec.name}: running (PID {existing.pid}, port {spec.port})"
+                "Workbench "
+                f"{spec.name}: running (PID {existing.process.pid}, port {spec.port})"
             )
             return
-        _wait_ready(spec, existing)
+        _wait_ready(spec, existing.process)
         return
+    _drain_runtime_metadata(spec)
     _retire_legacy_service(spec)
-    stale_metadata = _read_json(spec.metadata_path)
-    if os.name == "nt" and stale_metadata is not None:
-        _terminate_windows_service_job(stale_metadata, spec)
-    spec.metadata_path.unlink(missing_ok=True)
     if _port_open(spec.port):
         raise SystemExit(
             f"Port {spec.port} is already occupied by an unverified process; "
@@ -1088,66 +1404,31 @@ def _start_service(spec: ServiceSpec) -> None:
 
 
 def _stop_service(spec: ServiceSpec, *, quiet: bool = False) -> None:
-    import psutil
-
     _reject_runtime_link(spec.metadata_path)
     _reject_runtime_link(spec.log_path)
-    metadata = _read_json(spec.metadata_path)
-    process = _validated_process(spec, require_current_command=False)
-    if process is None:
-        if os.name == "nt" and metadata is not None:
-            _terminate_windows_service_job(metadata, spec)
+    observation = _validated_runtime_process(
+        spec,
+        require_current_command=False,
+    )
+    if observation is None:
         spec.metadata_path.unlink(missing_ok=True)
         _retire_legacy_service(spec)
         if not quiet:
             print(f"Workbench {spec.name}: stopped")
         return
-    descendants = process.children(recursive=True)
-    targets = [*reversed(descendants), process]
-    if os.name == "nt":
-        try:
-            process.send_signal(signal.CTRL_BREAK_EVENT)
-        except (AttributeError, psutil.Error, OSError):
-            pass
-        _, alive = psutil.wait_procs(targets, timeout=5.0)
-        if alive and metadata is not None:
-            _terminate_windows_service_job(metadata, spec)
-            _, alive = psutil.wait_procs(alive, timeout=5.0)
-        for target in alive:
-            try:
-                target.kill()
-            except psutil.Error:
-                pass
-        psutil.wait_procs(alive, timeout=5.0)
-        spec.metadata_path.unlink(missing_ok=True)
-        _wait_for_stopped_port(spec)
-        if not quiet:
-            print(f"Workbench {spec.name}: stopped")
-        return
-    for target in targets:
-        try:
-            target.terminate()
-        except psutil.Error:
-            pass
-    _, alive = psutil.wait_procs(targets, timeout=5.0)
-    for target in alive:
-        try:
-            target.kill()
-        except psutil.Error:
-            pass
-    psutil.wait_procs(alive, timeout=5.0)
+    _terminate_runtime_process(spec, observation)
     spec.metadata_path.unlink(missing_ok=True)
     _wait_for_stopped_port(spec)
+    _retire_legacy_service(spec)
     if not quiet:
         print(f"Workbench {spec.name}: stopped")
 
 
 def _terminate_windows_service_job(
-    metadata: dict[str, Any],
+    name: str | None,
     spec: ServiceSpec,
 ) -> None:
-    name = metadata.get("jobName")
-    if not isinstance(name, str) or not name:
+    if name is None:
         return
     from _emperor_windows_jobs import WindowsJob, service_job_object_name
 
@@ -1203,10 +1484,30 @@ def workbench(action: str) -> int:
             _stop_service(backend)
         elif action == "status":
             for spec in (backend, frontend):
-                process = _validated_process(spec, require_current_command=False)
+                observation = _validated_runtime_process(
+                    spec,
+                    require_current_command=False,
+                )
+                process = (
+                    observation.process
+                    if observation is not None
+                    else _validated_legacy_process(spec)
+                )
                 ready = process is not None and _http_ready(spec.ready_url)
-                state = "running" if ready else "stopped"
-                suffix = f" (PID {process.pid}, port {spec.port})" if ready else ""
+                state = "running" if ready else ("unhealthy" if process else "stopped")
+                origin = ""
+                if (
+                    observation is not None
+                    and observation.metadata.generation == "legacy"
+                ):
+                    origin = ", legacy command"
+                elif observation is None and process is not None:
+                    origin = ", legacy PID metadata"
+                suffix = (
+                    f" (PID {process.pid}, port {spec.port}{origin})"
+                    if process is not None
+                    else ""
+                )
                 print(f"Workbench {spec.name}: {state}{suffix}")
         else:
             raise SystemExit(f"Unknown Workbench action: {action}")

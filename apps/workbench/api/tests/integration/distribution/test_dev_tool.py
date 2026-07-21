@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from tests.integration.distribution._environment_support import (
     PROJECT_ROOT,
@@ -302,6 +303,183 @@ source "$env_script"
         self.assertIn("mise run $Task", fast_path)
         self.assertIn("return", fast_path)
 
+    def test_pid_metadata_rejects_creation_time_and_command_mismatches(self) -> None:
+        import psutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            recorded_command = (
+                sys.executable,
+                "-c",
+                "import time; time.sleep(30)",
+            )
+            process = subprocess.Popen(  # noqa: S603
+                recorded_command,
+                cwd=PROJECT_ROOT,
+            )
+            try:
+                observed = psutil.Process(process.pid)
+                spec = emperor_dev.ServiceSpec(
+                    name="probe",
+                    port=43210,
+                    command=recorded_command,
+                    command_identity="time.sleep",
+                    cwd=PROJECT_ROOT,
+                    environment={},
+                    ready_url="http://127.0.0.1:43210/health",
+                )
+                payload = {
+                    "argv": list(spec.command),
+                    "commandIdentity": spec.command_identity,
+                    "createTime": observed.create_time(),
+                    "pid": process.pid,
+                    "port": spec.port,
+                }
+                with patch.object(emperor_dev, "RUNTIME_ROOT", runtime):
+                    spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                    self.assertIsNotNone(
+                        emperor_dev._validated_runtime_process(
+                            spec,
+                            require_current_command=True,
+                        )
+                    )
+                    payload["createTime"] = float(payload["createTime"]) - 1
+                    spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                    self.assertIsNone(
+                        emperor_dev._validated_runtime_process(
+                            spec,
+                            require_current_command=True,
+                        )
+                    )
+                    payload["createTime"] = observed.create_time()
+                    payload["commandIdentity"] = "different-command"
+                    spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                    self.assertIsNone(
+                        emperor_dev._validated_runtime_process(
+                            spec,
+                            require_current_command=True,
+                        )
+                    )
+            finally:
+                process.terminate()
+                process.wait(timeout=5)
+
+    def test_stop_uses_startup_metadata_after_launcher_command_changes(self) -> None:
+        import psutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            recorded_command = (
+                sys.executable,
+                "-c",
+                "import time; time.sleep(30)",
+            )
+            process = subprocess.Popen(  # noqa: S603
+                recorded_command,
+                cwd=PROJECT_ROOT,
+            )
+            try:
+                observed = psutil.Process(process.pid)
+                spec = emperor_dev.ServiceSpec(
+                    name="probe",
+                    port=43210,
+                    command=(*recorded_command, "--new-launcher-command"),
+                    command_identity="time.sleep",
+                    cwd=PROJECT_ROOT,
+                    environment={},
+                    ready_url="http://127.0.0.1:43210/health",
+                )
+                payload = {
+                    "argv": list(recorded_command),
+                    "commandIdentity": spec.command_identity,
+                    "createTime": observed.create_time(),
+                    "jobName": None,
+                    "pid": process.pid,
+                    "port": spec.port,
+                }
+                with patch.object(emperor_dev, "RUNTIME_ROOT", runtime):
+                    spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                    emperor_dev._stop_service(spec, quiet=True)
+
+                self.assertIsNotNone(process.poll())
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=5)
+
+    def test_legacy_backend_metadata_is_only_accepted_for_retirement(self) -> None:
+        import psutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            spec = emperor_dev.ServiceSpec(
+                name="backend",
+                port=43210,
+                command=(
+                    sys.executable,
+                    "-m",
+                    "emperor_workbench",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "43210",
+                ),
+                command_identity="emperor_workbench",
+                cwd=PROJECT_ROOT,
+                environment={},
+                ready_url="http://127.0.0.1:43210/health",
+            )
+            legacy_command = (
+                sys.executable,
+                "-m",
+                "emperor_workbench.launch",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "43210",
+            )
+            payload = {
+                "argv": list(legacy_command),
+                "commandIdentity": "emperor_workbench.launch",
+                "createTime": 123.0,
+                "jobName": None,
+                "pid": 456,
+                "port": spec.port,
+            }
+            process = Mock(pid=456)
+            process.create_time.return_value = 123.0
+            process.status.return_value = psutil.STATUS_RUNNING
+            process.cwd.return_value = str(PROJECT_ROOT)
+            process.cmdline.return_value = list(legacy_command)
+
+            with (
+                patch.object(emperor_dev, "RUNTIME_ROOT", runtime),
+                patch("psutil.Process", return_value=process),
+            ):
+                spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                observation = emperor_dev._validated_runtime_process(
+                    spec,
+                    require_current_command=False,
+                )
+                self.assertIsNotNone(observation)
+                assert observation is not None
+                self.assertEqual(observation.metadata.generation, "legacy")
+                self.assertIsNone(
+                    emperor_dev._validated_runtime_process(
+                        spec,
+                        require_current_command=True,
+                    )
+                )
+
+                payload["unexpected"] = True
+                spec.metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+                self.assertIsNone(
+                    emperor_dev._validated_runtime_process(
+                        spec,
+                        require_current_command=False,
+                    )
+                )
+
     def test_readiness_requires_an_http_response(self) -> None:
         class RunningProcess:
             pid = 123
@@ -328,6 +506,123 @@ source "$env_script"
             self.assertRaisesRegex(SystemExit, "did not become HTTP-ready"),
         ):
             emperor_dev._wait_ready(spec, RunningProcess(), timeout=0.001)
+
+    def test_start_retires_legacy_pid_before_checking_the_port(self) -> None:
+        class StartedProcess:
+            pid = 456
+
+        class ObservedProcess:
+            @staticmethod
+            def create_time() -> float:
+                return 123.0
+
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            spec = emperor_dev.ServiceSpec(
+                name="backend",
+                port=43210,
+                command=(sys.executable, "-c", "pass"),
+                command_identity="pass",
+                cwd=PROJECT_ROOT,
+                environment=os.environ.copy(),
+                ready_url="http://127.0.0.1:43210/health",
+            )
+            events = Mock()
+
+            def port_closed(_port: int) -> bool:
+                events.port_check()
+                return False
+
+            with (
+                patch.object(emperor_dev, "RUNTIME_ROOT", runtime),
+                patch.object(
+                    emperor_dev,
+                    "_retire_legacy_service",
+                    side_effect=lambda _spec: events.retire(),
+                ),
+                patch.object(
+                    emperor_dev,
+                    "_port_open",
+                    side_effect=port_closed,
+                ),
+                patch.object(
+                    emperor_dev.subprocess,
+                    "Popen",
+                    return_value=StartedProcess(),
+                ),
+                patch("psutil.Process", return_value=ObservedProcess()),
+                patch.object(emperor_dev, "_wait_ready"),
+            ):
+                emperor_dev._start_service(spec)
+
+        self.assertEqual(
+            events.mock_calls[:2],
+            [call.retire(), call.port_check()],
+        )
+
+    def test_legacy_pid_requires_matching_identity_and_creation_time(self) -> None:
+        import psutil
+
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary)
+            spec = emperor_dev.ServiceSpec(
+                name="backend",
+                port=43210,
+                command=(
+                    sys.executable,
+                    "-m",
+                    "emperor_workbench",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "43210",
+                ),
+                command_identity="emperor_workbench",
+                cwd=PROJECT_ROOT,
+                environment={},
+                ready_url="http://127.0.0.1:43210/health",
+            )
+            legacy_pid = runtime / "backend.pid"
+            legacy_pid.write_text("123\n", encoding="utf-8")
+            process = Mock(pid=123)
+            process.create_time.return_value = legacy_pid.stat().st_mtime
+            process.status.return_value = psutil.STATUS_RUNNING
+            process.cwd.return_value = str(PROJECT_ROOT)
+            process.cmdline.return_value = [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "emperor_workbench.api:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "43210",
+                "--reset-contextvars",
+            ]
+
+            with (
+                patch.object(emperor_dev, "RUNTIME_ROOT", runtime),
+                patch("psutil.Process", return_value=process),
+            ):
+                self.assertIs(
+                    emperor_dev._validated_legacy_process(spec),
+                    process,
+                )
+                process.cmdline.return_value = [sys.executable, "unrelated.py"]
+                self.assertIsNone(emperor_dev._validated_legacy_process(spec))
+                process.cmdline.return_value = [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "emperor_workbench.api:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "43210",
+                    "--reset-contextvars",
+                ]
+                process.create_time.return_value = legacy_pid.stat().st_mtime + 2
+                self.assertIsNone(emperor_dev._validated_legacy_process(spec))
 
     def test_canonical_workbench_cli_has_no_launch_module_alias(self) -> None:
         self.assertIsNone(
