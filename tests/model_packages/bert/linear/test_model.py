@@ -94,6 +94,27 @@ def _nsp_head_options() -> BertNspHeadOptions:
 
 
 class TestBertLinearModel(unittest.TestCase):
+    def test_runtime_defaults_describe_a_conventional_bert_block(self):
+        self.assertEqual(
+            config.STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertEqual(config.FF_NUM_LAYERS, 1)
+        self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertEqual(
+            config.FF_STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+
+    def test_post_normalized_profile_has_no_extra_final_encoder_norm(self):
+        model = Model(self._direct_config())
+
+        self.assertFalse(
+            any(name.startswith("encoder_layer_norm.") for name in model.state_dict())
+        )
+
     def test_public_imports_remain_available(self):
         for module_name in (
             "models.bert.linear.config",
@@ -261,11 +282,11 @@ class TestBertLinearModel(unittest.TestCase):
             ).build(),
         )
 
-    def test_shared_defaults_match_vit_transformer_defaults(self):
+    def test_bert_defaults_build_conventional_encoder_profile(self):
         self.assertEqual(config.STACK_NUM_LAYERS, 5)
         self.assertIs(
             config.STACK_LAYER_NORM_POSITION,
-            LayerNormPositionOptions.BEFORE,
+            LayerNormPositionOptions.AFTER,
         )
         self.assertIs(config.LAYER_NORM_POSITION, config.STACK_LAYER_NORM_POSITION)
         self.assertTrue(config.ATTN_BIAS_FLAG)
@@ -288,7 +309,7 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(encoder_stack.num_layers, 5)
         self.assertEqual(
             encoder_layer.layer_norm_position,
-            LayerNormPositionOptions.BEFORE,
+            LayerNormPositionOptions.AFTER,
         )
         self.assertTrue(
             attention.projection_model_config.layer_config.layer_model_config.bias_flag
@@ -1507,7 +1528,7 @@ class TestBertLinearModel(unittest.TestCase):
         )
         self.assertEqual(
             self._encoder_layer_config(cfg).layer_norm_position,
-            LayerNormPositionOptions.BEFORE,
+            LayerNormPositionOptions.AFTER,
         )
         self.assertFalse(self._attention_config(cfg).causal_attention_mask_flag)
 
@@ -1609,11 +1630,7 @@ class TestBertLinearModel(unittest.TestCase):
             model.embedding_layer_norm.normalized_shape,
             (cfg.hidden_dim,),
         )
-        self.assertIsInstance(model.encoder_layer_norm, nn.LayerNorm)
-        self.assertEqual(
-            model.encoder_layer_norm.normalized_shape,
-            (cfg.hidden_dim,),
-        )
+        self.assertIsInstance(model.encoder_layer_norm, nn.Identity)
         self.assertIs(model.mlm_decoder.weight, model.token_embedding.weight)
         self.assertEqual(model.nsp_head.out_features, 2)
         state_dict = model.state_dict()
@@ -1629,8 +1646,6 @@ class TestBertLinearModel(unittest.TestCase):
                 "positional_embedding.embedding_model.weight",
                 "embedding_layer_norm.weight",
                 "embedding_layer_norm.bias",
-                "encoder_layer_norm.weight",
-                "encoder_layer_norm.bias",
                 "mlm_dense.weight",
                 "mlm_dense.bias",
                 "mlm_layer_norm.weight",
@@ -1652,8 +1667,6 @@ class TestBertLinearModel(unittest.TestCase):
             ),
             "embedding_layer_norm.weight": (cfg.hidden_dim,),
             "embedding_layer_norm.bias": (cfg.hidden_dim,),
-            "encoder_layer_norm.weight": (cfg.hidden_dim,),
-            "encoder_layer_norm.bias": (cfg.hidden_dim,),
             "mlm_dense.weight": (cfg.hidden_dim, cfg.hidden_dim),
             "mlm_dense.bias": (cfg.hidden_dim,),
             "mlm_layer_norm.weight": (cfg.hidden_dim,),
@@ -1881,6 +1894,105 @@ class TestBertLinearModel(unittest.TestCase):
 
         for default, explicit in zip(default_outputs, explicit_outputs, strict=True):
             torch.testing.assert_close(default, explicit)
+
+    def test_equal_batch_and_sequence_lengths_preserve_sample_isolation(self):
+        cfg = self._direct_config(sequence_length=2)
+        model = Model(cfg).eval()
+        original_ids = torch.tensor([[2, 5], [7, 11]])
+        changed_ids = torch.tensor([[2, 5], [13, 17]])
+        attention_mask = torch.ones_like(original_ids)
+        token_type_ids = torch.zeros_like(original_ids)
+
+        with torch.no_grad():
+            original_mlm, original_nsp, _ = model(
+                original_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, changed_nsp, _ = model(
+                changed_ids,
+                attention_mask,
+                token_type_ids,
+            )
+
+        torch.testing.assert_close(
+            changed_mlm[0],
+            original_mlm[0],
+            rtol=0.0,
+            atol=0.0,
+        )
+        torch.testing.assert_close(
+            changed_nsp[0],
+            original_nsp[0],
+            rtol=0.0,
+            atol=0.0,
+        )
+        self.assertGreater(
+            torch.max(torch.abs(changed_mlm[1] - original_mlm[1])).item(),
+            1e-6,
+        )
+        self.assertGreater(
+            torch.max(torch.abs(changed_nsp[1] - original_nsp[1])).item(),
+            1e-6,
+        )
+
+    def test_default_encoder_uses_future_context(self):
+        torch.manual_seed(17)
+        model = Model(self._direct_config()).eval()
+        original_ids = torch.tensor([[2, 3, 4, 5]])
+        changed_ids = torch.tensor([[2, 3, 9, 5]])
+        attention_mask = torch.ones_like(original_ids)
+        token_type_ids = torch.zeros_like(original_ids)
+
+        with torch.no_grad():
+            original_mlm, _, _ = model(
+                original_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, _, _ = model(
+                changed_ids,
+                attention_mask,
+                token_type_ids,
+            )
+
+        self.assertGreater(
+            torch.max(torch.abs(changed_mlm[:, 0] - original_mlm[:, 0])).item(),
+            1e-6,
+        )
+
+    def test_padding_token_values_do_not_change_visible_outputs(self):
+        torch.manual_seed(19)
+        model = Model(self._direct_config()).eval()
+        original_ids = torch.tensor([[2, 3, 4, 5]])
+        changed_ids = torch.tensor([[2, 3, 11, 12]])
+        attention_mask = torch.tensor([[1, 1, 0, 0]])
+        token_type_ids = torch.zeros_like(original_ids)
+
+        with torch.no_grad():
+            original_mlm, original_nsp, _ = model(
+                original_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, changed_nsp, _ = model(
+                changed_ids,
+                attention_mask,
+                token_type_ids,
+            )
+
+        torch.testing.assert_close(
+            changed_mlm[:, :2],
+            original_mlm[:, :2],
+            rtol=0.0,
+            atol=0.0,
+        )
+        torch.testing.assert_close(
+            changed_nsp,
+            original_nsp,
+            rtol=0.0,
+            atol=0.0,
+        )
 
     def test_encoder_auxiliary_loss_is_returned_and_added_to_pretraining_loss(self):
         batch_size = 2

@@ -6,6 +6,7 @@ from torch import Tensor
 
 from emperor.attention import AttentionLayerState
 from emperor.experiments.bert_pretraining import BertPretrainingExperiment
+from emperor.layers import LayerNormPositionOptions
 from models.bert.expert_linear_adaptive.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
@@ -74,8 +75,13 @@ class Model(BertPretrainingExperiment):
     def __build_encoder_model(self) -> nn.Module:
         return self.experiment_config.encoder_config.build()
 
-    def __build_encoder_layer_norm(self) -> nn.LayerNorm:
-        return nn.LayerNorm(self.cfg.hidden_dim)
+    def __build_encoder_layer_norm(self) -> nn.Module:
+        encoder_config = self.experiment_config.encoder_config
+        stack_config = getattr(encoder_config, "block_config", encoder_config)
+        layer_config = stack_config.layer_config.layer_model_config
+        if layer_config.layer_norm_position == LayerNormPositionOptions.BEFORE:
+            return nn.LayerNorm(self.cfg.hidden_dim)
+        return nn.Identity()
 
     def __build_mlm_dense(self) -> nn.Linear:
         return nn.Linear(self.cfg.hidden_dim, self.cfg.hidden_dim)

@@ -11,7 +11,7 @@ import models.bert.linear_adaptive.config as config
 import models.bert.linear_adaptive.dataset_options as dataset_options
 import models.bert.linear_adaptive.runtime_options as runtime_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
-from emperor.layers import ActivationOptions
+from emperor.layers import ActivationOptions, LayerNormPositionOptions
 from models.bert.linear_adaptive import _config_defaults as config_defaults
 from models.bert.linear_adaptive._builder_adapter import (
     linear_adaptive_builder_kwargs_from_flat,
@@ -33,6 +33,85 @@ from models.training_test_utils import (
 
 
 class TestBertLinearAdaptiveModel(unittest.TestCase):
+    def test_runtime_defaults_describe_a_conventional_bert_block(self):
+        self.assertEqual(
+            config.STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertEqual(config.FF_NUM_LAYERS, 1)
+        self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertEqual(
+            config.FF_STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+
+    def test_post_normalized_profile_has_no_extra_final_encoder_norm(self):
+        model = Model(self._config(ExperimentPreset.BASELINE))
+
+        self.assertFalse(
+            any(name.startswith("encoder_layer_norm.") for name in model.state_dict())
+        )
+
+    def test_default_encoder_uses_future_context(self):
+        torch.manual_seed(17)
+        model = Model(self._config(ExperimentPreset.BASELINE)).eval()
+        original_ids = torch.tensor([[2, 3, 4, 5]])
+        changed_ids = torch.tensor([[2, 3, 9, 5]])
+        attention_mask = torch.ones_like(original_ids)
+        token_type_ids = torch.zeros_like(original_ids)
+
+        with torch.no_grad():
+            original_mlm, _, _ = model(
+                original_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, _, _ = model(
+                changed_ids,
+                attention_mask,
+                token_type_ids,
+            )
+
+        self.assertGreater(
+            torch.max(torch.abs(changed_mlm[:, 0] - original_mlm[:, 0])).item(),
+            1e-6,
+        )
+
+    def test_padding_token_values_do_not_change_visible_outputs(self):
+        torch.manual_seed(19)
+        model = Model(self._config(ExperimentPreset.BASELINE)).eval()
+        original_ids = torch.tensor([[2, 3, 4, 5]])
+        changed_ids = torch.tensor([[2, 3, 11, 12]])
+        attention_mask = torch.tensor([[1, 1, 0, 0]])
+        token_type_ids = torch.zeros_like(original_ids)
+
+        with torch.no_grad():
+            original_mlm, original_nsp, _ = model(
+                original_ids,
+                attention_mask,
+                token_type_ids,
+            )
+            changed_mlm, changed_nsp, _ = model(
+                changed_ids,
+                attention_mask,
+                token_type_ids,
+            )
+
+        torch.testing.assert_close(
+            changed_mlm[:, :2],
+            original_mlm[:, :2],
+            rtol=0.0,
+            atol=0.0,
+        )
+        torch.testing.assert_close(
+            changed_nsp,
+            original_nsp,
+            rtol=0.0,
+            atol=0.0,
+        )
+
     def test_public_surface_and_catalog_id(self):
         for module_name in (
             "models.bert.linear_adaptive.config",

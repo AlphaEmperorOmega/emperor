@@ -2,10 +2,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import models.bert.expert_linear.config as config
-from emperor.layers import (
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
 from models.bert.expert_linear._bert_core_config_factory import BertCoreConfigFactory
 from models.bert.expert_linear._bert_core_config_factory import (
     CoreConfigDependencies as _CoreDependencies,
@@ -140,12 +136,12 @@ class CoreConfigFactory:
         return SubmoduleStackOptions(
             hidden_dim=self.encoder_options.hidden_dim,
             num_layers=self.attention_options.num_layers,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
             activation=self.encoder_options.activation,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=None,
-            dropout_probability=0.0,
+            layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
+            dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
             bias_flag=self.attention_options.bias_flag,
         )
 
@@ -158,11 +154,11 @@ class CoreConfigFactory:
         return SubmoduleStackOptions(
             hidden_dim=self.__scaled_feed_forward_hidden_dim(),
             num_layers=self.feed_forward_options.num_layers,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
             activation=self.encoder_options.activation,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=None,
+            layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
             dropout_probability=self.encoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )
