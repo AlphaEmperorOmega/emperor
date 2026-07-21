@@ -421,20 +421,6 @@ def _constraint_version(lock: Path, package: str) -> str | None:
     return None
 
 
-def _cpu_torch_requirements(lock: Path) -> tuple[str, str]:
-    versions = tuple(
-        _constraint_version(lock, package) for package in ("torch", "torchvision")
-    )
-    if any(version is None for version in versions):
-        raise SystemExit(f"CPU constraint is missing torch pins: {lock}")
-    torch_version, torchvision_version = versions
-    assert torch_version is not None and torchvision_version is not None
-    return (
-        f"torch=={torch_version}",
-        f"torchvision=={torchvision_version}",
-    )
-
-
 def _pytorch_install_command(
     python: Path,
     profile: str,

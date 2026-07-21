@@ -106,18 +106,6 @@ class PortableEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(emperor_dev._constraint_version(lock, "torch"), "2.12.0+cpu")
 
-    def test_desktop_cpu_locks_select_exact_cpu_wheels(self) -> None:
-        for os_name in ("linux", "windows"):
-            with self.subTest(os_name=os_name):
-                lock = emperor_dev.constraint_path(
-                    "cpu",
-                    emperor_dev.PlatformSpec(os_name, "x86_64"),
-                )
-                self.assertEqual(
-                    emperor_dev._cpu_torch_requirements(lock),
-                    ("torch==2.12.0+cpu", "torchvision==0.27.0+cpu"),
-                )
-
     def test_cpu_profile_rejects_a_cuda_enabled_torch_runtime(self) -> None:
         spec = emperor_dev.PlatformSpec("linux", "x86_64")
         self.assertFalse(
