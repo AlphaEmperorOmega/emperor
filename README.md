@@ -777,6 +777,26 @@ The task maps the first argument to `tests/unit/test_<name>.py` and then passes
 any class or method name through to `python -P -m unittest -f`. The historical
 `bash run_test.sh` entry point delegates to the same implementation.
 
+Verify the protected Emperor interfaces, private-import boundaries, dependency
+direction, and zero external legacy-import ledger with:
+
+```text
+mise run test:emperor-interfaces
+```
+
+Attention has focused correctness, complete statement-and-branch coverage, and
+mutation-strength gates:
+
+```text
+mise run test:attention
+mise run test:attention-coverage
+mise run test:attention-mutation
+```
+
+The family runner reports only the Attention modules declared in the test
+manifest and requires 100% statement and branch coverage. Mutation scope comes
+from the same manifest and the task fails when any mutant remains unreviewed.
+
 Verify the wheel/source-distribution manifests and compare clean editable and
 regular installs from outside the checkout with:
 
