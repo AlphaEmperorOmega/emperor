@@ -92,7 +92,7 @@ class TransformerEncoderLayer(Module):
             return None
         if not self.cfg.causal_attention_mask_flag:
             return None
-        sequence_length = source_token_embeddings.size(1)
+        sequence_length = self.__resolve_source_sequence_length(source_token_embeddings)
         return torch.triu(
             torch.ones(
                 sequence_length,
@@ -102,6 +102,20 @@ class TransformerEncoderLayer(Module):
             ),
             diagonal=1,
         )
+
+    def __resolve_source_sequence_length(
+        self,
+        source_token_embeddings: Tensor,
+    ) -> int:
+        if source_token_embeddings.dim() != 3:
+            return source_token_embeddings.size(0)
+        batch_first_flag = self.self_attention_model.batch_first_flag
+        if batch_first_flag is None:
+            batch_first_flag = (
+                source_token_embeddings.size(1) != self.self_attention_model.batch_size
+            )
+        sequence_dimension = 1 if batch_first_flag else 0
+        return source_token_embeddings.size(sequence_dimension)
 
     def __apply_self_attention_sublayer(
         self,

@@ -227,6 +227,184 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             self.assertEqual(coefficient_model.input_dim, cfg.embedding_dim * 2)
             self.assertEqual(coefficient_model.output_dim, cfg.embedding_dim)
 
+    def test_implicit_causal_mask_with_padding_matches_explicit_sequence_mask(self):
+        torch.manual_seed(1701)
+        model = TransformerEncoderLayer(self.preset(causal_attention_mask_flag=True))
+        model.eval()
+        source = torch.arange(6 * 4 * 10, dtype=torch.float32).reshape(6, 4, 10)
+        source = source / source.numel()
+        padding_mask = torch.tensor(
+            [
+                [False, False, False, False, False, True],
+                [False, False, True, False, False, False],
+                [False, True, False, False, True, False],
+                [False, False, False, True, False, False],
+            ]
+        )
+        explicit_causal_mask = torch.triu(
+            torch.ones(6, 6, dtype=torch.bool),
+            diagonal=1,
+        )
+
+        implicit_output, implicit_loss = model(
+            source_token_embeddings=source,
+            source_key_padding_mask=padding_mask,
+        )
+        explicit_output, explicit_loss = model(
+            source_token_embeddings=source,
+            source_key_padding_mask=padding_mask,
+            attention_mask=explicit_causal_mask,
+        )
+
+        torch.testing.assert_close(implicit_output, explicit_output)
+        torch.testing.assert_close(implicit_loss, explicit_loss)
+        self.assertTrue(torch.isfinite(implicit_output).all())
+        self.assertTrue(torch.isfinite(implicit_loss))
+
+    def test_batch_first_implicit_causal_mask_matches_explicit_and_gradients(self):
+        torch.manual_seed(1702)
+        config = self.preset(
+            embedding_dim=4,
+            batch_size=2,
+            num_heads=2,
+            target_sequence_length=5,
+            source_sequence_length=5,
+            feed_forward_hidden_dim=8,
+            causal_attention_mask_flag=True,
+        )
+        config.attention_config.batch_first_flag = True
+        implicit_model = TransformerEncoderLayer(config).eval()
+        explicit_model = TransformerEncoderLayer(config).eval()
+        explicit_model.load_state_dict(implicit_model.state_dict(), strict=True)
+        source_values = torch.tensor(
+            (
+                (
+                    (0.10, -0.20, 0.30, -0.40),
+                    (0.50, -0.60, 0.70, -0.80),
+                    (0.90, 0.15, -0.25, 0.35),
+                    (-0.45, 0.55, -0.65, 0.75),
+                    (0.85, -0.95, 0.05, -0.15),
+                ),
+                (
+                    (-0.12, 0.22, -0.32, 0.42),
+                    (-0.52, 0.62, -0.72, 0.82),
+                    (-0.92, -0.18, 0.28, -0.38),
+                    (0.48, -0.58, 0.68, -0.78),
+                    (-0.88, 0.98, -0.08, 0.18),
+                ),
+            ),
+            dtype=torch.float32,
+        )
+        implicit_source = source_values.clone().requires_grad_()
+        explicit_source = source_values.clone().requires_grad_()
+        padding_mask = torch.tensor(
+            (
+                (False, False, False, True, False),
+                (False, False, True, False, False),
+            )
+        )
+        explicit_causal_mask = torch.triu(
+            torch.ones(5, 5, dtype=torch.bool),
+            diagonal=1,
+        )
+
+        implicit_output, implicit_loss = implicit_model(
+            implicit_source,
+            source_key_padding_mask=padding_mask,
+        )
+        explicit_output, explicit_loss = explicit_model(
+            explicit_source,
+            source_key_padding_mask=padding_mask,
+            attention_mask=explicit_causal_mask,
+        )
+
+        torch.testing.assert_close(implicit_output, explicit_output)
+        torch.testing.assert_close(implicit_loss, explicit_loss)
+        self.assertEqual(implicit_output.shape, (2, 5, 4))
+        self.assertTrue(torch.isfinite(implicit_output).all())
+        self.assertTrue(torch.isfinite(implicit_loss))
+        (implicit_output.square().sum() + implicit_loss).backward()
+        (explicit_output.square().sum() + explicit_loss).backward()
+        torch.testing.assert_close(implicit_source.grad, explicit_source.grad)
+        self.assertGreater(torch.count_nonzero(implicit_source.grad).item(), 0)
+        for (implicit_name, implicit_parameter), (
+            explicit_name,
+            explicit_parameter,
+        ) in zip(
+            implicit_model.named_parameters(),
+            explicit_model.named_parameters(),
+            strict=True,
+        ):
+            with self.subTest(parameter=implicit_name):
+                self.assertEqual(implicit_name, explicit_name)
+                torch.testing.assert_close(
+                    implicit_parameter.grad,
+                    explicit_parameter.grad,
+                )
+                self.assertTrue(torch.isfinite(implicit_parameter.grad).all())
+
+        changed_future = source_values.clone()
+        changed_future[:, -1] += torch.tensor((3.0, -4.0, 5.0, -6.0))
+        baseline_output, _ = implicit_model(
+            source_values,
+            source_key_padding_mask=padding_mask,
+        )
+        changed_output, _ = implicit_model(
+            changed_future,
+            source_key_padding_mask=padding_mask,
+        )
+        torch.testing.assert_close(
+            changed_output[:, :-1],
+            baseline_output[:, :-1],
+        )
+        self.assertFalse(torch.allclose(changed_output[:, -1], baseline_output[:, -1]))
+
+    def test_unbatched_implicit_causal_mask_uses_sequence_dimension(self):
+        torch.manual_seed(1703)
+        config = self.preset(
+            embedding_dim=4,
+            batch_size=1,
+            num_heads=2,
+            target_sequence_length=5,
+            source_sequence_length=5,
+            feed_forward_hidden_dim=8,
+            causal_attention_mask_flag=True,
+        )
+        model = TransformerEncoderLayer(config).eval()
+        source = torch.tensor(
+            (
+                (0.10, -0.20, 0.30, -0.40),
+                (0.50, -0.60, 0.70, -0.80),
+                (0.90, 0.15, -0.25, 0.35),
+                (-0.45, 0.55, -0.65, 0.75),
+                (0.85, -0.95, 0.05, -0.15),
+            ),
+            requires_grad=True,
+        )
+        padding_mask = torch.tensor((False, False, True, False, False))
+        explicit_causal_mask = torch.triu(
+            torch.ones(5, 5, dtype=torch.bool),
+            diagonal=1,
+        )
+
+        implicit_output, implicit_loss = model(
+            source,
+            source_key_padding_mask=padding_mask,
+        )
+        explicit_output, explicit_loss = model(
+            source,
+            source_key_padding_mask=padding_mask,
+            attention_mask=explicit_causal_mask,
+        )
+
+        torch.testing.assert_close(implicit_output, explicit_output)
+        torch.testing.assert_close(implicit_loss, explicit_loss)
+        self.assertEqual(implicit_output.shape, (5, 4))
+        self.assertTrue(torch.isfinite(implicit_output).all())
+        (implicit_output.square().sum() + implicit_loss).backward()
+        self.assertTrue(torch.isfinite(source.grad).all())
+        self.assertGreater(torch.count_nonzero(source.grad).item(), 0)
+
     def test_forward_with_different_inputs(self):
         batch_size = 4
         num_heads = 2

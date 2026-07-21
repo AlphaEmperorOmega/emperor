@@ -56,7 +56,7 @@ class TransformerEncoderStack(Module):
 
         if self.causal_attention_mask_flag is None and attention_mask is not None:
             causal_mask = self.__generate_causal_mask(
-                attention_mask.device, attention_mask.dtype
+                attention_mask.device, attention_mask.dtype, attention_mask.size(-1)
             )
             if attention_mask.size() == causal_mask.size():
                 return bool((attention_mask == causal_mask).all())
@@ -66,8 +66,9 @@ class TransformerEncoderStack(Module):
         self,
         device: torch.device,
         dtype: torch.dtype,
+        sequence_length: int,
     ) -> Tensor:
-        mask_shape = (self.source_sequence_length, self.source_sequence_length)
+        mask_shape = (sequence_length, sequence_length)
         negative_infinity_tensor = torch.full(
             mask_shape, float("-inf"), dtype=dtype, device=device
         )
@@ -82,7 +83,11 @@ class TransformerEncoderStack(Module):
             return attention_mask
         if attention_mask is not None:
             return attention_mask
-        return self.__generate_causal_mask(embeddings.device, embeddings.dtype)
+        return self.__generate_causal_mask(
+            embeddings.device,
+            embeddings.dtype,
+            embeddings.size(0),
+        )
 
     def forward(
         self,
@@ -152,7 +157,9 @@ class TransformerDecoderStack(Module):
 
         if self.causal_attention_mask_flag is None and attention_mask is not None:
             causal_mask = self.__generate_causal_mask(
-                attention_mask.device, attention_mask.dtype
+                attention_mask.device,
+                attention_mask.dtype,
+                attention_mask.size(-1),
             )
             if attention_mask.size() == causal_mask.size():
                 return bool((attention_mask == causal_mask).all())
@@ -162,8 +169,9 @@ class TransformerDecoderStack(Module):
         self,
         device: torch.device,
         dtype: torch.dtype,
+        sequence_length: int,
     ) -> Tensor:
-        mask_shape = (self.target_sequence_length, self.target_sequence_length)
+        mask_shape = (sequence_length, sequence_length)
         negative_infinity_tensor = torch.full(
             mask_shape, float("-inf"), dtype=dtype, device=device
         )
@@ -178,7 +186,11 @@ class TransformerDecoderStack(Module):
             return attention_mask
         if attention_mask is not None:
             return attention_mask
-        return self.__generate_causal_mask(embeddings.device, embeddings.dtype)
+        return self.__generate_causal_mask(
+            embeddings.device,
+            embeddings.dtype,
+            embeddings.size(0),
+        )
 
     def forward(
         self,

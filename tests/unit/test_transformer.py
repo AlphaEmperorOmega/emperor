@@ -493,6 +493,42 @@ class TestTransformerEncoderStack(unittest.TestCase):
 
         self.assertFalse(torch.allclose(causal_output, plain_output))
 
+    def test_causal_mask_uses_runtime_encoder_length_below_configured_maximum(self):
+        torch.manual_seed(1702)
+        model = TransformerEncoderStack(
+            self.preset(
+                sequence_length=10,
+                causal_attention_mask_flag=True,
+            )
+        )
+        model.eval()
+
+        for runtime_length in (1, 6, 10):
+            with self.subTest(runtime_length=runtime_length):
+                source = torch.arange(
+                    runtime_length * BATCH_SIZE * EMBEDDING_DIM,
+                    dtype=torch.float32,
+                ).reshape(runtime_length, BATCH_SIZE, EMBEDDING_DIM)
+                source = source / max(source.numel(), 1)
+                explicit_mask = torch.triu(
+                    torch.full(
+                        (runtime_length, runtime_length),
+                        float("-inf"),
+                    ),
+                    diagonal=1,
+                )
+
+                implicit_output, implicit_loss = model(source_token_embeddings=source)
+                explicit_output, explicit_loss = model(
+                    source_token_embeddings=source,
+                    attention_mask=explicit_mask,
+                )
+
+                torch.testing.assert_close(implicit_output, explicit_output)
+                torch.testing.assert_close(implicit_loss, explicit_loss)
+                self.assertTrue(torch.isfinite(implicit_output).all())
+                self.assertTrue(torch.isfinite(implicit_loss))
+
     def test_forward_rejects_wrong_embedding_dim(self):
         model = TransformerEncoderStack(encoder_stack_config())
         with self.assertRaises(ValueError):
@@ -714,6 +750,44 @@ class TestTransformerDecoderStack(unittest.TestCase):
 
         self.assertEqual(output.shape, (SEQUENCE_LENGTH, BATCH_SIZE, EMBEDDING_DIM))
         self.assertIsInstance(loss, torch.Tensor)
+
+    def test_causal_mask_uses_runtime_decoder_length_below_configured_maximum(self):
+        torch.manual_seed(1703)
+        model = TransformerDecoderStack(
+            self.preset(
+                cross_attention=False,
+                target_sequence_length=10,
+                source_sequence_length=10,
+                causal_attention_mask_flag=True,
+            )
+        )
+        model.eval()
+
+        for runtime_length in (1, 6, 10):
+            with self.subTest(runtime_length=runtime_length):
+                target = torch.arange(
+                    runtime_length * BATCH_SIZE * EMBEDDING_DIM,
+                    dtype=torch.float32,
+                ).reshape(runtime_length, BATCH_SIZE, EMBEDDING_DIM)
+                target = target / max(target.numel(), 1)
+                explicit_mask = torch.triu(
+                    torch.full(
+                        (runtime_length, runtime_length),
+                        float("-inf"),
+                    ),
+                    diagonal=1,
+                )
+
+                implicit_output, implicit_loss = model(target_token_embeddings=target)
+                explicit_output, explicit_loss = model(
+                    target_token_embeddings=target,
+                    attention_mask=explicit_mask,
+                )
+
+                torch.testing.assert_close(implicit_output, explicit_output)
+                torch.testing.assert_close(implicit_loss, explicit_loss)
+                self.assertTrue(torch.isfinite(implicit_output).all())
+                self.assertTrue(torch.isfinite(implicit_loss))
 
     def test_cross_attention_requires_encoder_output(self):
         model = TransformerDecoderStack(decoder_stack_config(cross_attention=True))
