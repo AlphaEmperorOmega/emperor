@@ -2,7 +2,6 @@ from emperor.config import BaseOptions
 from emperor.datasets.text.translation import Multi30kDeEn
 from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
 from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
-from emperor.transformer import expand_transformer_path_locks
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -13,6 +12,24 @@ from model_runtime.runs import ExperimentBase
 from . import config, dataset_options
 from .config_builder import TransformerLinearConfigBuilder
 from .model import Model
+
+
+def expand_transformer_path_locks(locks: dict) -> dict:
+    expanded = dict(locks)
+    for key, value in tuple(locks.items()):
+        if key.startswith("attn_"):
+            suffix = key[len("attn_") :]
+            for prefix in (
+                "encoder_attn_",
+                "decoder_self_attn_",
+                "decoder_cross_attn_",
+            ):
+                expanded[f"{prefix}{suffix}"] = value
+        elif key.startswith("ff_"):
+            suffix = key[len("ff_") :]
+            expanded[f"encoder_ff_{suffix}"] = value
+            expanded[f"decoder_ff_{suffix}"] = value
+    return expanded
 
 
 class ExperimentPreset(BaseOptions):
@@ -253,9 +270,9 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
                 "decoder_recurrent_residual_connection_option",
             ),
             "attn_bias_flag": (
-                "encoder_attn_projection_bias_flag",
-                "decoder_self_attn_projection_bias_flag",
-                "decoder_cross_attn_projection_bias_flag",
+                "encoder_attn_bias_flag",
+                "decoder_self_attn_bias_flag",
+                "decoder_cross_attn_bias_flag",
             ),
             "attn_add_key_value_bias_flag": (
                 "encoder_attn_add_key_value_bias_flag",

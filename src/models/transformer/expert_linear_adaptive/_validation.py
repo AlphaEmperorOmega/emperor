@@ -58,14 +58,11 @@ def _validate_controller_stack(name: str, options) -> None:
         )
 
 
-def _validate_path(name: str, options, *, feed_forward: bool) -> None:
+def _validate_path(name: str, options) -> None:
     stack = options.stack_options
     _positive_integer(f"{name}_stack_hidden_dim", stack.hidden_dim)
     _positive_integer(f"{name}_num_layers", stack.num_layers)
     _probability(f"{name}_stack_dropout_probability", stack.dropout_probability)
-    if feed_forward:
-        _positive_integer(f"{name}_hidden_dim", options.hidden_dim)
-
     controllers = options.layer_controller_options
     _probability(f"{name}_halting_threshold", controllers.halting_threshold)
     _probability(f"{name}_halting_dropout", controllers.halting_dropout)
@@ -151,13 +148,13 @@ def validate_runtime(runtime: RuntimeOptions) -> None:
         _positive_integer(f"{name}_num_heads", options.num_heads)
         if runtime.model_dim % options.num_heads:
             raise ValueError(f"{name}_num_heads must divide model_dim.")
-        _validate_path(name, options, feed_forward=False)
+        _validate_path(name, options)
 
     for name, options in (
         ("encoder_ff", runtime.encoder_feed_forward_options),
         ("decoder_ff", runtime.decoder_feed_forward_options),
     ):
-        _validate_path(name, options, feed_forward=True)
+        _validate_path(name, options)
 
     _validate_experts("attention_expert", runtime.attention_expert_options)
     _validate_experts("feed_forward_expert", runtime.feed_forward_expert_options)

@@ -44,9 +44,9 @@ from emperor.transformer import (
     TransformerDecoderLayerConfig,
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
-    configure_transformer_submodule,
 )
 
+from ._transformer_submodule import configure_transformer_submodule
 from .experiment_config import ExperimentConfig
 from .runtime_options import (
     AdaptiveParameterOptions,

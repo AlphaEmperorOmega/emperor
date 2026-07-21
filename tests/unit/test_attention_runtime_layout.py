@@ -33,7 +33,7 @@ class TestAttentionRuntimeLayout(unittest.TestCase):
             encoder_num_layers=1,
             decoder_num_layers=1,
             attn_num_heads=2,
-            feed_forward_hidden_dim=32,
+            ff_stack_hidden_dim=32,
             dropout_probability=0.0,
         )
         if "Expert" in builder_type.__name__:

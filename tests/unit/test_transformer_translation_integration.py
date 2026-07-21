@@ -49,7 +49,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
             encoder_num_layers=1,
             decoder_num_layers=1,
             attn_num_heads=4,
-            feed_forward_hidden_dim=64,
+            ff_stack_hidden_dim=64,
             dropout_probability=0.0,
         )
         if "Expert" in builder_type.__name__:

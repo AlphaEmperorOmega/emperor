@@ -27,12 +27,7 @@ from emperor.layers import ActivationOptions, LastLayerBiasOptions, RecurrentLay
 from emperor.layers._composition.gate import LayerGate
 from emperor.linears import LinearLayer
 from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
-from emperor.transformer import (
-    TransformerAttentionOptions,
-    TransformerDecoderLayer,
-    TransformerEncoderLayer,
-    TransformerFeedForwardOptions,
-)
+from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
 from models.config_overrides import (
     iter_supported_config_keys,
     print_config_options,
@@ -186,37 +181,9 @@ class TestTransformerModelPackages(unittest.TestCase):
                 self.assertIn("FF_RECURRENT_HALTING_STACK_BIAS_FLAG", config_source)
                 self.assertFalse((config_path.parent / "path").exists())
 
-    def test_shared_path_types_preserve_constructor_fields_and_are_reexported(self):
-        attention = replace(
-            TransformerAttentionOptions(),
-            projection_bias_flag=False,
-            num_layers=3,
-        )
-        feed_forward = replace(
-            TransformerFeedForwardOptions(),
-            hidden_dim=96,
-            num_layers=4,
-            bias_flag=False,
-        )
-        self.assertTrue(
-            {
-                "num_heads",
-                "projection_bias_flag",
-                "add_key_value_bias_flag",
-                "zero_attention_flag",
-            }.issubset({field.name for field in fields(attention)})
-        )
-        self.assertTrue(
-            {"hidden_dim", "num_layers"}.issubset(
-                {field.name for field in fields(feed_forward)}
-            )
-        )
-        self.assertFalse(attention.stack_options.bias_flag)
-        self.assertEqual(attention.stack_options.num_layers, 3)
-        self.assertEqual(feed_forward.stack_options.hidden_dim, 96)
-        self.assertEqual(feed_forward.stack_options.num_layers, 4)
-        self.assertFalse(feed_forward.stack_options.bias_flag)
-
+    def test_path_types_are_package_local_and_canonical(self):
+        attention_types = []
+        feed_forward_types = []
         for package in (
             "linear",
             "linear_adaptive",
@@ -227,14 +194,47 @@ class TestTransformerModelPackages(unittest.TestCase):
                 runtime_options = import_module(
                     f"models.transformer.{package}.runtime_options"
                 )
-                self.assertIs(
-                    runtime_options.TransformerAttentionOptions,
-                    TransformerAttentionOptions,
+                attention_type = runtime_options.TransformerAttentionOptions
+                feed_forward_type = runtime_options.TransformerFeedForwardOptions
+                attention_types.append(attention_type)
+                feed_forward_types.append(feed_forward_type)
+                attention = attention_type()
+                feed_forward = feed_forward_type()
+                self.assertEqual(
+                    {field.name for field in fields(attention)},
+                    {
+                        "num_heads",
+                        "add_key_value_bias_flag",
+                        "zero_attention_flag",
+                        "stack_options",
+                        "layer_controller_options",
+                        "dynamic_memory_options",
+                        "recurrent_controller_options",
+                    },
                 )
-                self.assertIs(
-                    runtime_options.TransformerFeedForwardOptions,
-                    TransformerFeedForwardOptions,
+                self.assertEqual(
+                    {field.name for field in fields(feed_forward)},
+                    {
+                        "stack_options",
+                        "layer_controller_options",
+                        "dynamic_memory_options",
+                        "recurrent_controller_options",
+                    },
                 )
+                self.assertFalse(hasattr(attention, "projection_bias_flag"))
+                self.assertFalse(hasattr(attention, "num_layers"))
+                self.assertFalse(hasattr(feed_forward, "hidden_dim"))
+                self.assertFalse(hasattr(feed_forward, "num_layers"))
+                self.assertEqual(
+                    attention_type.__module__,
+                    f"models.transformer.{package}.runtime_options",
+                )
+                self.assertEqual(
+                    feed_forward_type.__module__,
+                    f"models.transformer.{package}.runtime_options",
+                )
+        self.assertEqual(len(set(attention_types)), 4)
+        self.assertEqual(len(set(feed_forward_types)), 4)
 
     def test_all_config_path_keys_map_in_unscoped_and_scoped_forms(self):
         for package in (
@@ -336,7 +336,7 @@ class TestTransformerModelPackages(unittest.TestCase):
             self.assertIn("--ff-memory-stack-hidden-dim", listing)
             self.assertIn("--ff-recurrent-gate-stack-num-layers", listing)
 
-    def test_path_broadcast_scoped_precedence_legacy_aliases_and_errors(self):
+    def test_path_broadcast_scoped_precedence_and_canonical_errors(self):
         for builder_type, *_ in self.package_cases():
             with self.subTest(package=builder_type.__name__):
                 runtime = builder_type(
@@ -371,11 +371,11 @@ class TestTransformerModelPackages(unittest.TestCase):
                         20,
                     )
                 self.assertEqual(
-                    runtime.encoder_feed_forward_options.hidden_dim,
+                    runtime.encoder_feed_forward_options.stack_options.hidden_dim,
                     48,
                 )
                 self.assertEqual(
-                    runtime.decoder_feed_forward_options.hidden_dim,
+                    runtime.decoder_feed_forward_options.stack_options.hidden_dim,
                     40,
                 )
                 self.assertTrue(
@@ -401,25 +401,30 @@ class TestTransformerModelPackages(unittest.TestCase):
                         0.25,
                     )
 
-                legacy = builder_type(
-                    feed_forward_hidden_dim=36,
-                    encoder_feed_forward_hidden_dim=28,
-                    attn_projection_bias_flag=False,
+                canonical = builder_type(
+                    ff_stack_hidden_dim=36,
+                    encoder_ff_stack_hidden_dim=28,
+                    attn_bias_flag=False,
                 ).runtime
-                self.assertEqual(legacy.encoder_feed_forward_options.hidden_dim, 28)
-                self.assertEqual(legacy.decoder_feed_forward_options.hidden_dim, 36)
-                self.assertFalse(legacy.encoder_attention_options.projection_bias_flag)
+                self.assertEqual(
+                    canonical.encoder_feed_forward_options.stack_options.hidden_dim,
+                    28,
+                )
+                self.assertEqual(
+                    canonical.decoder_feed_forward_options.stack_options.hidden_dim,
+                    36,
+                )
+                self.assertFalse(
+                    canonical.encoder_attention_options.stack_options.bias_flag
+                )
 
-                with self.assertRaisesRegex(ValueError, "Conflicting values"):
-                    builder_type(
-                        ff_stack_hidden_dim=48,
-                        feed_forward_hidden_dim=32,
-                    )
-                with self.assertRaisesRegex(ValueError, "Conflicting values"):
-                    builder_type(
-                        attn_bias_flag=True,
-                        attn_projection_bias_flag=False,
-                    )
+                for legacy_name in (
+                    "feed_forward_hidden_dim",
+                    "feed_forward_num_layers",
+                    "attn_projection_bias_flag",
+                ):
+                    with self.assertRaises(TypeError):
+                        builder_type(**{legacy_name: 32})
                 with self.assertRaises(TypeError):
                     builder_type(not_a_transformer_option=True)
 
@@ -507,8 +512,8 @@ class TestTransformerModelPackages(unittest.TestCase):
                     encoder_attn_num_heads=2,
                     decoder_self_attn_num_heads=4,
                     decoder_cross_attn_num_heads=1,
-                    encoder_feed_forward_hidden_dim=24,
-                    decoder_feed_forward_hidden_dim=40,
+                    encoder_ff_stack_hidden_dim=24,
+                    decoder_ff_stack_hidden_dim=40,
                 )
                 config = self.preset(builder_type, **options)
                 experiment_config = config.experiment_config
