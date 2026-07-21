@@ -6,8 +6,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from emperor.experiments.tasks import ExperimentTask
-
+from emperor.experiments import ExperimentTask
 from model_runtime.packages.identity import ModelIdentity
 from model_runtime.runs.artifacts import (
     FilesystemRunArtifacts,
@@ -27,7 +26,6 @@ class RunsArtifactsTests(unittest.TestCase):
             "batch_size": 128,
             "input_dim": 784,
             "output_dim": 10,
-            "gather_frequency_flag": False,
         }
 
         run_name = artifacts.run_name(
@@ -39,8 +37,7 @@ class RunsArtifactsTests(unittest.TestCase):
 
         self.assertEqual(
             run_name,
-            "runs_fixture/linears/linear/BASELINE/Mnist/"
-            "8f5046e2_20260601_010203",
+            "runs_fixture/linears/linear/BASELINE/Mnist/408b10c0_20260601_010203",
         )
         with tempfile.TemporaryDirectory() as tmp:
             path = write_run_result(

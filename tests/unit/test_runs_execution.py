@@ -14,7 +14,6 @@ import torch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
-from models.catalog import model_package
 
 from model_runtime.packages.identity import ModelIdentity
 from model_runtime.runs import (
@@ -26,6 +25,7 @@ from model_runtime.runs import (
     plan_runs,
 )
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
+from models.catalog import model_package
 
 
 class _Metric:
@@ -152,6 +152,9 @@ class RunsExecutionTests(unittest.TestCase):
                 result.payload["metrics"],
                 {"validation_accuracy": 0.75},
             )
+            self.assertEqual(result.payload["params"], {})
+            self.assertEqual(progress.events[0]["params"], {})
+            self.assertIn("/default_20260601_010203/", result.log_dir)
             self.assertNotIn("resumedFrom", result.payload)
             self.assertTrue(Path(result.log_dir, "result.json").is_file())
             self.assertTrue(artifacts.best_results_path(package.identity).is_file())
@@ -196,11 +199,20 @@ class RunsExecutionTests(unittest.TestCase):
                 patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
                 patch("model_runtime.runs.experiment.seed_everything"),
             ):
-                execute_runs(
+                results = execute_runs(
                     package,
                     plan,
                     artifacts=FilesystemRunArtifacts(root=Path(tmp)),
                 )
+
+        self.assertEqual(
+            results[0].payload["params"],
+            {
+                "RUN_TEST_AFTER_FIT": False,
+                "CALLBACK_CHECKPOINT_FLAG": True,
+            },
+        )
+        self.assertNotIn("/default_", results[0].log_dir)
 
         checkpoints = [
             callback

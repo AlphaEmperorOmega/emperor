@@ -7,12 +7,11 @@ from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
 
-from emperor.experiments.monitors import MonitorOption
-from emperor.experiments.tasks import ExperimentTask
 from lightning.pytorch.callbacks import Callback
-from models.parser import resolve_dataset_names
 
 import model_runtime.runs.experiment as experiments_base
+from emperor.experiments import ExperimentTask
+from emperor.monitoring import MonitorOption
 from model_runtime.packages import (
     ExperimentPresetsBase,
     PresetDefinition,
@@ -21,6 +20,7 @@ from model_runtime.packages import (
 )
 from model_runtime.runs import ExperimentBase, JsonlTrainingProgressCallback
 from model_runtime.runs.experiment import _result_metrics_payload
+from models.parser import resolve_dataset_names
 
 
 class FakeMetric:
@@ -33,9 +33,6 @@ class FakeMetric:
 
 class FakeConfig:
     batch_size = 2
-
-    def get_custom_parameters(self):
-        return {}
 
 
 class FakeDatasetA:
@@ -340,6 +337,7 @@ class TestExperimentTraining(unittest.TestCase):
                     "run_total": 9,
                     "preset": FakeOption.HALTING,
                     "dataset_type": FakeDatasetB,
+                    "parameters": {"NUM_EPOCHS": 3},
                     "config_overrides": {"num_epochs": 3},
                 }
             ],
@@ -363,9 +361,10 @@ class TestExperimentTraining(unittest.TestCase):
         )
         self.assertTrue(
             callback.contexts[0]["logDir"].startswith(
-                f"logs/{experiment._public_model_id()}/HALTING/FakeDatasetB/default_"
+                f"logs/{experiment._public_model_id()}/HALTING/FakeDatasetB/"
             )
         )
+        self.assertNotIn("/default_", callback.contexts[0]["logDir"])
         self.assertEqual(
             [event["type"] for event in callback.events],
             ["dataset_started", "dataset_completed"],
@@ -380,7 +379,7 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(started["runIndex"], 7)
         self.assertEqual(started["runTotal"], 9)
         self.assertEqual(started["totalEpochs"], 3)
-        self.assertEqual(started["params"], {})
+        self.assertEqual(started["params"], {"NUM_EPOCHS": 3})
         self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
 
     def test_train_model_rejects_path_like_log_folder(self):
