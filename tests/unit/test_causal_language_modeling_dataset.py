@@ -3,8 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
-from emperor.experiments.tasks import ExperimentTask, experiment_task_name
+from emperor.experiments import ExperimentTask, experiment_task_name
 
 
 class _InMemoryCorpusMixin:
@@ -105,16 +106,15 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
         cases = (
             (
                 WikiText2,
-                "emperor.datasets.text.language_modeling.wiki_text_2."
-                "WikiText2Dataset",
-                "emperor.datasets.text.language_modeling.wiki_text_2."
+                "emperor.datasets.text.language_modeling._wiki_text_2.WikiText2Dataset",
+                "emperor.datasets.text.language_modeling._wiki_text_2."
                 "_legacy_text_field",
             ),
             (
                 PennTreebank,
-                "emperor.datasets.text.language_modeling.penn_treebank."
+                "emperor.datasets.text.language_modeling._penn_treebank."
                 "PennTreebankDataset",
-                "emperor.datasets.text.language_modeling.penn_treebank."
+                "emperor.datasets.text.language_modeling._penn_treebank."
                 "_legacy_text_field",
             ),
         )

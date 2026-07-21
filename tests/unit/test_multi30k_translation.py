@@ -5,10 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import emperor.datasets.text.translation.multi30k as multi30k_module
 import torch
-from emperor.datasets.text.translation import Multi30k, Multi30kDeEn, Multi30kEnDe
-from emperor.datasets.text.translation.multi30k import (
+
+import emperor.datasets.text.translation._adapter as multi30k_module
+from emperor.datasets.text.translation import Multi30kDeEn, Multi30kEnDe
+from emperor.datasets.text.translation._manifest import (
     BOS_ID,
     BOS_TOKEN,
     EOS_ID,
@@ -74,8 +75,7 @@ class TestMulti30kTranslation(unittest.TestCase):
         )
         return data, files, calls
 
-    def test_compatibility_alias_and_direction_metadata(self):
-        self.assertIs(Multi30k, Multi30kDeEn)
+    def test_supported_direction_metadata(self):
         self.assertEqual(Multi30kDeEn.language_pair, ("de", "en"))
         self.assertEqual(Multi30kEnDe.language_pair, ("en", "de"))
         for dataset in (Multi30kDeEn, Multi30kEnDe):
@@ -86,7 +86,7 @@ class TestMulti30kTranslation(unittest.TestCase):
     def test_prepare_verifies_hashes_recovers_corruption_and_reuses_cache(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             data, files, calls = self.data_module(Path(temporary_directory))
-            with patch.object(multi30k_module, "FILES", files):
+            with patch.object(Multi30kDeEn, "files", files):
                 data.prepare_data()
                 self.assertEqual(len(calls), 6)
                 data.prepare_data()
@@ -120,7 +120,7 @@ class TestMulti30kTranslation(unittest.TestCase):
                 sha256="0" * 64,
                 line_count=files[0].line_count,
             )
-            with patch.object(multi30k_module, "FILES", (bad_file,)):
+            with patch.object(Multi30kDeEn, "files", (bad_file,)):
                 with self.assertRaises(RuntimeError):
                     data.prepare_data()
 
@@ -134,7 +134,7 @@ class TestMulti30kTranslation(unittest.TestCase):
         for _ in range(2):
             with tempfile.TemporaryDirectory() as temporary_directory:
                 data, files, _ = self.data_module(Path(temporary_directory))
-                with patch.object(multi30k_module, "FILES", files):
+                with patch.object(Multi30kDeEn, "files", files):
                     data.prepare_data()
                 tokenizer = multi30k_module.Tokenizer.from_file(
                     str(data.tokenizer_path)
@@ -154,7 +154,10 @@ class TestMulti30kTranslation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
             de_en, files, _ = self.data_module(root, Multi30kDeEn)
-            with patch.object(multi30k_module, "FILES", files):
+            with (
+                patch.object(Multi30kDeEn, "files", files),
+                patch.object(Multi30kEnDe, "files", files),
+            ):
                 de_en.setup("fit")
                 train_batches = list(de_en.train_dataloader())
                 de_en.setup("validate")
