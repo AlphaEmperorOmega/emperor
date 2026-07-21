@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from dataclasses import dataclass
-from unittest import mock
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -13,6 +13,7 @@ from emperor.config import ConfigBase, optional_field
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     HaltingStateBase,
+    SoftHaltingConfig,
     StickBreakingConfig,
 )
 from emperor.layers import (
@@ -75,6 +76,126 @@ class TestProjectionModel(Module):
 
     def forward(self, input: Tensor) -> Tensor:
         return input @ self.weight
+
+
+@dataclass
+class ModeAwareProjectionConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+
+    def _registry_owner(self) -> type:
+        return ModeAwareProjectionModel
+
+
+class ModeAwareProjectionModel(Module):
+    def __init__(
+        self,
+        cfg: ModeAwareProjectionConfig,
+        overrides: ModeAwareProjectionConfig | None = None,
+    ):
+        super().__init__()
+        self.cfg: ModeAwareProjectionConfig = self._override_config(cfg, overrides)
+        self.mode_multiplier = 1.0
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        self.mode_multiplier = 1.0 if mode else -1.0
+        return self
+
+    def forward(self, input: Tensor) -> Tensor:
+        return input * self.mode_multiplier
+
+
+class DtypeObservingModule(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(()))
+        self.observed_dtype = self.weight.dtype
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        self.observed_dtype = self.weight.dtype
+        return self
+
+
+@dataclass
+class LifecycleProjectionConfig(TestProjectionConfig):
+    fixture: str | None = optional_field(
+        "Optional lifecycle role fixture installed by the projection model."
+    )
+
+    def _registry_owner(self) -> type:
+        return LifecycleProjectionModel
+
+
+class LifecycleProjectionModel(TestProjectionModel):
+    def __init__(
+        self,
+        cfg: LifecycleProjectionConfig,
+        overrides: LifecycleProjectionConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        reference = self.weight
+
+        match self.cfg.fixture:
+            case "context_markers":
+                self.runtime_context_marker = nn.Parameter(torch.ones(()))
+                self.register_buffer(
+                    "runtime_context_buffer",
+                    torch.ones(()),
+                    persistent=True,
+                )
+            case "tied_context_parameters":
+                shared_parameter = nn.Parameter(torch.zeros_like(reference))
+                self.context_role_a = shared_parameter
+                self.context_role_b = shared_parameter
+            case "tied_context_buffers":
+                shared_buffer = torch.zeros_like(reference)
+                self.register_buffer("context_buffer_a", shared_buffer)
+                self.register_buffer("context_buffer_b", shared_buffer)
+            case "dtype_observer":
+                self.dtype_observer = DtypeObservingModule()
+            case "tied_mode_modules":
+                shared_mode = nn.Dropout(p=0.1)
+                self.mode_role_a = shared_mode
+                self.mode_role_b = shared_mode
+            case "tied_policy_parameters":
+                shared_parameter = nn.Parameter(torch.zeros_like(reference))
+                self.policy_role_a = shared_parameter
+                self.policy_role_b = shared_parameter
+            case "distinct_mitosis_parameters":
+                self.mitosis_role_a = nn.Parameter(torch.zeros_like(reference))
+                self.mitosis_role_b = nn.Parameter(torch.zeros_like(reference))
+            case "tied_mitosis_parameters":
+                shared_parameter = nn.Parameter(torch.zeros_like(reference))
+                self.mitosis_role_a = shared_parameter
+                self.mitosis_role_b = shared_parameter
+            case "integer_mitosis_parameter":
+                self.integer_mitosis_role = nn.Parameter(
+                    torch.tensor([1, 3], dtype=torch.long),
+                    requires_grad=False,
+                )
+            case None:
+                pass
+            case fixture:
+                raise ValueError(f"Unknown lifecycle projection fixture: {fixture}")
+
+
+@dataclass
+class MixedTrainingModeNeuronConfig(NeuronConfig):
+    def _registry_owner(self) -> type:
+        return MixedTrainingModeNeuron
+
+
+class MixedTrainingModeNeuron(Neuron):
+    def __init__(
+        self,
+        cfg: MixedTrainingModeNeuronConfig,
+        overrides: MixedTrainingModeNeuronConfig | None = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.nucleus.eval()
+        self.terminal.train()
+        self.terminal.sampler.eval()
 
 
 class ScriptedTerminal(nn.Module):
@@ -318,6 +439,17 @@ class NeuronTestCase(unittest.TestCase):
             scale=scale,
         )
 
+    def lifecycle_projection_config(
+        self,
+        fixture: str,
+    ) -> LifecycleProjectionConfig:
+        return LifecycleProjectionConfig(
+            input_dim=self.input_dim,
+            output_dim=self.input_dim,
+            scale=0.25,
+            fixture=fixture,
+        )
+
     def terminal_total_connections(
         self,
         xy_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
@@ -474,14 +606,19 @@ class NeuronTestCase(unittest.TestCase):
     def full_sampler_neuron_config(
         self,
         coordinate_embedding_flag: bool | None = None,
+        model_config: ConfigBase | None = None,
     ) -> NeuronConfig:
         total_connections = self.terminal_total_connections()
         return NeuronConfig(
             nucleus_config=NucleusConfig(
-                model_config=self.projection_config(
-                    input_dim=self.input_dim,
-                    output_dim=self.input_dim,
-                    scale=0.25,
+                model_config=(
+                    model_config
+                    if model_config is not None
+                    else self.projection_config(
+                        input_dim=self.input_dim,
+                        output_dim=self.input_dim,
+                        scale=0.25,
+                    )
                 )
             ),
             axons_config=AxonsConfig(memory_config=None),
@@ -544,6 +681,25 @@ class TestNeuronConfigs(NeuronTestCase):
         self.assertIsInstance(model, NeuronCluster)
         self.assertIsNotNone(model.halting_model)
 
+    def test_cluster_rejects_soft_halting_until_it_implements_the_interface(self):
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=1,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=2,
+            growth_threshold=None,
+            halting_config=SoftHaltingConfig(
+                input_dim=self.input_dim,
+                threshold=0.999,
+                dropout_probability=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            ),
+            neuron_config=self.neuron_config(),
+        )
+
+        with self.assertRaisesRegex(ValueError, "does not implement"):
+            config.build()
+
     def test_overrides_replace_config_fields(self):
         cfg = NucleusConfig(model_config=self.projection_config(scale=1.0))
         overrides = NucleusConfig(model_config=self.projection_config(scale=2.0))
@@ -555,6 +711,25 @@ class TestNeuronConfigs(NeuronTestCase):
             output,
             torch.full((1, self.input_dim), 8.0),
         )
+
+    def test_cluster_overrides_are_applied_without_mutating_base_config(self):
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=1,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            beam_width=1,
+            growth_threshold=None,
+            neuron_config=self.neuron_config(),
+        )
+        overrides = NeuronClusterConfig(max_steps=3, beam_width=2)
+
+        model = config.build(overrides)
+
+        self.assertEqual(model.max_steps, 3)
+        self.assertEqual(model.beam_width, 2)
+        self.assertEqual(config.max_steps, 1)
+        self.assertEqual(config.beam_width, 1)
 
 
 class TestNucleus(NeuronTestCase):
@@ -675,6 +850,26 @@ class TestTerminal(NeuronTestCase):
         self.assertEqual(selected_neurons.shape, (self.batch_size, 2, 3))
         self.assertEqual(auxiliary_loss.shape, ())
 
+    def test_routerless_full_selection_follows_input_device(self) -> None:
+        total_connections = self.terminal_total_connections()
+        model = self.terminal_config(
+            input_dim=total_connections,
+            sampler_config=self.sampler_config(
+                input_dim=total_connections,
+                num_experts=total_connections,
+                top_k=total_connections,
+                router_config=None,
+            ),
+        ).build()
+        meta_input = torch.empty(2, total_connections, device="meta")
+
+        output, probabilities, selected_neurons, _ = model(meta_input)
+
+        self.assertEqual(output.device, meta_input.device)
+        self.assertEqual(probabilities.device, meta_input.device)
+        self.assertEqual(selected_neurons.device, meta_input.device)
+        self.assertEqual(selected_neurons.shape, (2, total_connections, 3))
+
     def test_sparse_forward_returns_matrix_shapes(self):
         total_connections = self.terminal_total_connections()
         model = self.terminal_config(
@@ -707,7 +902,9 @@ class TestTerminal(NeuronTestCase):
         )
 
         self.assertEqual(probabilities.shape, (self.batch_size, total_connections))
-        self.assertEqual(selected_neurons.shape, (self.batch_size, total_connections, 3))
+        self.assertEqual(
+            selected_neurons.shape, (self.batch_size, total_connections, 3)
+        )
 
     def test_logits_only_path_works_without_router(self):
         total_connections = self.terminal_total_connections()
@@ -1035,9 +1232,9 @@ class TestNeuronCluster(NeuronTestCase):
                 probabilities, indices, _, _ = (
                     model.entry_sampler.sample_probabilities_and_indices(input_tensor)
                 )
-                selected_branch_outputs = input_tensor.unsqueeze(1) + branch_deltas[
-                    indices
-                ]
+                selected_branch_outputs = (
+                    input_tensor.unsqueeze(1) + branch_deltas[indices]
+                )
                 expected_output = (
                     selected_branch_outputs * probabilities.unsqueeze(-1)
                 ).sum(dim=1)
@@ -1109,6 +1306,39 @@ class TestNeuronCluster(NeuronTestCase):
             {"neuron_1_1_1", "neuron_2_1_1"},
         )
 
+    def test_initial_neurons_preserve_builder_owned_mixed_training_modes(self):
+        base_neuron_config = self.full_sampler_neuron_config()
+        neuron_config = MixedTrainingModeNeuronConfig(
+            nucleus_config=base_neuron_config.nucleus_config,
+            axons_config=base_neuron_config.axons_config,
+            terminal_config=base_neuron_config.terminal_config,
+            coordinate_embedding_flag=base_neuron_config.coordinate_embedding_flag,
+        )
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=1,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=None,
+            neuron_config=neuron_config,
+        ).build()
+
+        neuron = model.cluster["neuron_1_1_1"]
+        self.assertTrue(neuron.training)
+        self.assertFalse(neuron.nucleus.training)
+        self.assertFalse(neuron.nucleus.model.training)
+        self.assertTrue(neuron.terminal.training)
+        self.assertFalse(neuron.terminal.sampler.training)
+        self.assertTrue(
+            all(
+                not module.training
+                for name, module in neuron.terminal.sampler.named_modules(
+                    remove_duplicate=False
+                )
+                if name
+            )
+        )
+
     def test_sparse_initial_grid_centers_within_xy_capacity(self):
         model = NeuronClusterConfig(
             x_axis_total_neurons=10,
@@ -1122,9 +1352,7 @@ class TestNeuronCluster(NeuronTestCase):
             neuron_config=self.neuron_config(),
         ).build()
 
-        expected_keys = {
-            f"neuron_{x}_{y}_1" for x in range(5, 7) for y in range(5, 7)
-        }
+        expected_keys = {f"neuron_{x}_{y}_1" for x in range(5, 7) for y in range(5, 7)}
         self.assertEqual(
             set(model.cluster.keys()),
             expected_keys,
@@ -1154,9 +1382,7 @@ class TestNeuronCluster(NeuronTestCase):
             neuron_config=self.neuron_config(),
         ).build()
 
-        expected_keys = {
-            f"neuron_{x}_{y}_2" for x in range(2, 5) for y in range(2, 4)
-        }
+        expected_keys = {f"neuron_{x}_{y}_2" for x in range(2, 5) for y in range(2, 4)}
         self.assertEqual(set(model.cluster.keys()), expected_keys)
         torch.testing.assert_close(
             model.entry_coordinates,
@@ -1213,6 +1439,323 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(auxiliary_loss.shape, ())
         self.assertEqual(len(model.cluster), 2)
         self.assertIn("neuron_1_1_1", model.cluster)
+
+    def test_grown_neuron_inherits_frozen_parameter_policy(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.requires_grad_(False)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        grown_neuron = model.cluster["neuron_2_1_1"]
+        self.assertTrue(grown_neuron.training)
+        self.assertTrue(tuple(grown_neuron.parameters()))
+        self.assertTrue(
+            all(not parameter.requires_grad for parameter in grown_neuron.parameters())
+        )
+
+    def test_grown_neuron_inherits_parent_role_modes_and_trainability(self):
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.eval()
+        parent.terminal.train()
+        parent.terminal.sampler.eval()
+        parent.nucleus.model.weight.requires_grad_(False)
+        parent.terminal.sampler.router.model.layers[0].model.bias_params.requires_grad_(
+            False
+        )
+        expected_training_modes = {
+            name: module.training
+            for name, module in parent.named_modules(remove_duplicate=False)
+        }
+        expected_trainability = {
+            name: parameter.requires_grad
+            for name, parameter in parent.named_parameters(remove_duplicate=False)
+        }
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        grown_neuron = model.cluster["neuron_2_1_1"]
+        self.assertEqual(
+            {
+                name: module.training
+                for name, module in grown_neuron.named_modules(remove_duplicate=False)
+            },
+            expected_training_modes,
+        )
+        self.assertEqual(
+            {
+                name: parameter.requires_grad
+                for name, parameter in grown_neuron.named_parameters(
+                    remove_duplicate=False
+                )
+            },
+            expected_trainability,
+        )
+
+    def test_grown_neuron_inherits_parameter_and_buffer_context_by_role(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("context_markers")
+        )
+        model = (
+            self.growth_cluster_config(
+                growth_threshold=1,
+                neuron_config=neuron_config,
+            )
+            .build()
+            .double()
+        )
+        parent = model.cluster["neuron_1_1_1"]
+        parent_model = parent.nucleus.model
+        parent_model.runtime_context_marker.data = (
+            parent_model.runtime_context_marker.data.float()
+        )
+        parent_model.runtime_context_buffer = (
+            parent_model.runtime_context_buffer.float()
+        )
+        expected_parameter_contexts = {
+            name: (parameter.device, parameter.dtype)
+            for name, parameter in parent.named_parameters(remove_duplicate=False)
+        }
+        expected_buffer_contexts = {
+            name: (buffer.device, buffer.dtype)
+            for name, buffer in parent.named_buffers(remove_duplicate=False)
+        }
+
+        model(
+            torch.randn(
+                self.batch_size,
+                self.input_dim,
+                dtype=torch.float64,
+            )
+        )
+
+        grown = model.cluster["neuron_2_1_1"]
+        self.assertEqual(
+            {
+                name: (parameter.device, parameter.dtype)
+                for name, parameter in grown.named_parameters(remove_duplicate=False)
+            },
+            expected_parameter_contexts,
+        )
+        self.assertEqual(
+            {
+                name: (buffer.device, buffer.dtype)
+                for name, buffer in grown.named_buffers(remove_duplicate=False)
+            },
+            expected_buffer_contexts,
+        )
+
+    def test_growth_rejects_conflicting_contexts_for_tied_child_parameters(
+        self,
+    ) -> None:
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_context_parameters")
+        )
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.context_role_b = nn.Parameter(
+            parent.nucleus.model.context_role_a.detach().double()
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "grown parameter roles.*context_role_a.*context_role_b.*"
+            "device or dtype contexts differ",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+    def test_growth_rejects_conflicting_contexts_for_tied_child_buffers(
+        self,
+    ) -> None:
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_context_buffers")
+        )
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.context_buffer_b = (
+            parent.nucleus.model.context_buffer_a.double()
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "grown buffer roles.*context_buffer_a.*context_buffer_b.*"
+            "device or dtype contexts differ",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+    def test_growth_applies_inherited_mode_through_module_train_contract(self):
+        neuron_config = self.full_sampler_neuron_config()
+        neuron_config.nucleus_config = NucleusConfig(
+            model_config=ModeAwareProjectionConfig(input_dim=self.input_dim)
+        )
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.eval()
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        grown_model = model.cluster["neuron_2_1_1"].nucleus.model
+        self.assertFalse(grown_model.training)
+        self.assertEqual(grown_model.mode_multiplier, -1.0)
+        input_batch = torch.ones(self.batch_size, self.input_dim)
+        torch.testing.assert_close(grown_model(input_batch), -input_batch)
+
+    def test_growth_applies_context_before_custom_train_contract(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("dtype_observer")
+        )
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=3,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=2,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_2_1_1"]
+        parent_observer = parent.nucleus.model.dtype_observer
+        parent_observer.to(dtype=torch.float64)
+        parent_observer.eval()
+        parent.batch_counter.fill_(100)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        grown_observer = model.cluster["neuron_3_1_1"].nucleus.model.dtype_observer
+        self.assertFalse(grown_observer.training)
+        self.assertEqual(grown_observer.weight.dtype, torch.float64)
+        self.assertEqual(grown_observer.observed_dtype, torch.float64)
+
+    def test_empty_cluster_initialization_inherits_owner_device_and_dtype(self):
+        model = self.growth_cluster_config(growth_threshold=1).build().double()
+        owner_parameter = next(model.entry_sampler.parameters())
+        model.cluster = nn.ModuleDict()
+
+        initialized_neuron = model._initialize_neuron(2, 1, 1)
+
+        floating_tensors = [
+            *(
+                parameter
+                for parameter in initialized_neuron.parameters()
+                if parameter.is_floating_point() or parameter.is_complex()
+            ),
+            *(
+                buffer
+                for buffer in initialized_neuron.buffers()
+                if buffer.is_floating_point() or buffer.is_complex()
+            ),
+        ]
+        self.assertTrue(floating_tensors)
+        for tensor in floating_tensors:
+            with self.subTest(shape=tuple(tensor.shape)):
+                self.assertEqual(tensor.device, owner_parameter.device)
+                self.assertEqual(tensor.dtype, owner_parameter.dtype)
+
+    def test_empty_cluster_initialization_inherits_meta_owner_device(self):
+        model = self.growth_cluster_config(growth_threshold=1).build().to("meta")
+        model.cluster = nn.ModuleDict()
+
+        initialized_neuron = model._initialize_neuron(2, 1, 1)
+
+        initialized_tensors = [
+            *initialized_neuron.parameters(),
+            *initialized_neuron.buffers(),
+        ]
+        self.assertTrue(initialized_tensors)
+        for tensor in initialized_tensors:
+            with self.subTest(shape=tuple(tensor.shape), dtype=tensor.dtype):
+                self.assertEqual(tensor.device, torch.device("meta"))
+
+    def test_growth_rejects_conflicting_parent_policy_for_tied_child_modules(
+        self,
+    ) -> None:
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_mode_modules")
+        )
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.mode_role_b = nn.Dropout(p=0.1)
+        parent.nucleus.model.mode_role_a.eval()
+        parent.nucleus.model.mode_role_b.train()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "grown module roles.*mode_role_a.*mode_role_b.*training modes differ",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+    def test_growth_rejects_conflicting_parent_policy_for_tied_child_parameters(
+        self,
+    ) -> None:
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_policy_parameters")
+        )
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.policy_role_b = nn.Parameter(
+            parent.nucleus.model.policy_role_a.detach().clone()
+        )
+        parent.nucleus.model.policy_role_a.requires_grad_(False)
+        parent.nucleus.model.policy_role_b.requires_grad_(True)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "grown parameter roles.*policy_role_a.*policy_role_b.*"
+            "requires_grad policies differ",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
 
     def test_cluster_neurons_receive_their_own_coordinate_embedding(self):
         model = NeuronClusterConfig(
@@ -1350,6 +1893,73 @@ class TestNeuronCluster(NeuronTestCase):
             neuron_config=self.full_sampler_neuron_config(),
         ).build()
 
+    def three_dimensional_growth_cluster(
+        self,
+        *,
+        escape_driven_growth_flag: bool,
+    ) -> NeuronCluster:
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=3,
+            y_axis_total_neurons=7,
+            z_axis_total_neurons=9,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            escape_driven_growth_flag=escape_driven_growth_flag,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        model.cluster = nn.ModuleDict(
+            {
+                "neuron_2_4_5": ScriptedNeuron(
+                    routes=[[1, 2, 4], [3, 5, 5]],
+                    probabilities=[0.5, 0.5],
+                    delta=[0.0] * self.input_dim,
+                )
+            }
+        )
+        return model
+
+    def test_three_dimensional_growth_uses_true_manhattan_distance(self) -> None:
+        model = self.three_dimensional_growth_cluster(escape_driven_growth_flag=False)
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn("neuron_3_5_5", model.cluster)
+        self.assertNotIn("neuron_1_2_4", model.cluster)
+        grown_terminal = model.cluster["neuron_3_5_5"].terminal
+        self.assertEqual(
+            (
+                grown_terminal.x_axis_position,
+                grown_terminal.y_axis_position,
+                grown_terminal.z_axis_position,
+            ),
+            (3, 5, 5),
+        )
+
+    def test_three_dimensional_escape_signal_overrides_distance_and_resets(
+        self,
+    ) -> None:
+        model = self.three_dimensional_growth_cluster(escape_driven_growth_flag=True)
+        model.escape_counts[0, 1, 3] = 5
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn("neuron_1_2_4", model.cluster)
+        self.assertNotIn("neuron_3_5_5", model.cluster)
+        self.assertEqual(int(model.escape_counts[0, 1, 3]), 0)
+        grown_terminal = model.cluster["neuron_1_2_4"].terminal
+        self.assertEqual(
+            (
+                grown_terminal.x_axis_position,
+                grown_terminal.y_axis_position,
+                grown_terminal.z_axis_position,
+            ),
+            (1, 2, 4),
+        )
+
     def test_escape_driven_growth_targets_most_escaped_coordinate(self):
         model = self.escape_growth_cluster()
         self.assertEqual(set(model.cluster.keys()), {"neuron_3_1_1"})
@@ -1368,6 +1978,29 @@ class TestNeuronCluster(NeuronTestCase):
 
         self.assertIn("neuron_2_1_1", model.cluster)
         self.assertNotIn("neuron_4_1_1", model.cluster)
+
+    def test_zero_escape_counts_use_stable_manhattan_growth_fallback(self):
+        model = self.escape_growth_cluster()
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        parent = ScriptedNeuron(
+            routes=[[3, 1, 1]],
+            probabilities=[1.0],
+            delta=[0.0] * self.input_dim,
+        )
+        parent.terminal.neuron_connections = torch.tensor(
+            [[2, 1, 1], [3, 1, 1], [4, 1, 1]],
+            dtype=torch.long,
+        )
+        model.cluster = nn.ModuleDict({"neuron_3_1_1": parent})
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertIn("neuron_2_1_1", model.cluster)
+        self.assertNotIn("neuron_4_1_1", model.cluster)
+        torch.testing.assert_close(
+            model.escape_counts,
+            torch.zeros_like(model.escape_counts),
+        )
 
     def test_mitosis_initialization_copies_parent_parameters(self):
         model = NeuronClusterConfig(
@@ -1401,15 +2034,218 @@ class TestNeuronCluster(NeuronTestCase):
             strict=True,
         ):
             with self.subTest(shape=tuple(child_param.shape)):
-                parent_std = float(
-                    parent_param.detach().float().std(correction=0)
-                )
+                parent_std = float(parent_param.detach().float().std(correction=0))
                 max_difference = float((child_param - parent_param).abs().max())
                 if parent_std > 1e-6:
                     self.assertGreater(max_difference, 0.0)
                     self.assertLess(max_difference, 0.1 * parent_std)
                 else:
                     self.assertEqual(max_difference, 0.0)
+
+    def test_mitosis_perturbs_float64_parent_using_float64_variance(self):
+        torch.manual_seed(20260719)
+        model = (
+            NeuronClusterConfig(
+                x_axis_total_neurons=2,
+                y_axis_total_neurons=1,
+                z_axis_total_neurons=1,
+                initial_x_axis_total_neurons=1,
+                initial_y_axis_total_neurons=1,
+                initial_z_axis_total_neurons=1,
+                max_steps=1,
+                growth_threshold=1,
+                mitosis_initialization_flag=True,
+                neuron_config=self.full_sampler_neuron_config(),
+            )
+            .build()
+            .double()
+        )
+        parent_weight = model.cluster["neuron_1_1_1"].nucleus.model.weight
+        parent_values = (
+            torch.arange(
+                parent_weight.numel(),
+                dtype=torch.float64,
+                device=parent_weight.device,
+            )
+            .remainder(2)
+            .mul(2.0)
+            .add(100_000_000.0)
+            .reshape_as(parent_weight)
+        )
+        with torch.no_grad():
+            parent_weight.copy_(parent_values)
+        parent_population_std = float(parent_weight.detach().std(correction=0).item())
+
+        torch.manual_seed(20260719)
+        model(
+            torch.zeros(
+                self.batch_size,
+                self.input_dim,
+                dtype=torch.float64,
+                device=parent_weight.device,
+            )
+        )
+
+        child_weight = model.cluster["neuron_2_1_1"].nucleus.model.weight
+        maximum_difference = float((child_weight - parent_weight).abs().max().item())
+        self.assertEqual(parent_population_std, 1.0)
+        self.assertGreater(maximum_difference, 0.0)
+        self.assertLess(maximum_difference, 0.1 * parent_population_std)
+
+    def test_mitosis_copies_tied_parent_parameter_roles_by_name(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("distinct_mitosis_parameters")
+        )
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            mitosis_initialization_flag=True,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        shared_parent_parameter = nn.Parameter(
+            torch.arange(
+                parent.nucleus.model.weight.numel(),
+                dtype=parent.nucleus.model.weight.dtype,
+                device=parent.nucleus.model.weight.device,
+            ).reshape_as(parent.nucleus.model.weight),
+            requires_grad=False,
+        )
+        parent.nucleus.model.mitosis_role_a = shared_parent_parameter
+        parent.nucleus.model.mitosis_role_b = shared_parent_parameter
+
+        torch.manual_seed(20260718)
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        child = model.cluster["neuron_2_1_1"]
+        child_roles = (
+            child.nucleus.model.mitosis_role_a,
+            child.nucleus.model.mitosis_role_b,
+        )
+        self.assertIsNot(child_roles[0], child_roles[1])
+        for child_parameter in child_roles:
+            self.assertFalse(child_parameter.requires_grad)
+            maximum_difference = float(
+                (child_parameter - shared_parent_parameter).abs().max()
+            )
+            parent_std = float(
+                shared_parent_parameter.detach().float().std(correction=0)
+            )
+            self.assertGreater(maximum_difference, 0.0)
+            self.assertLess(maximum_difference, 0.1 * parent_std)
+
+    def test_mitosis_rejects_mismatched_parent_and_child_parameter_roles(self):
+        config = self.growth_cluster_config(growth_threshold=1)
+        config.mitosis_initialization_flag = True
+        model = config.build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.parent_only_mitosis_role = nn.Parameter(
+            torch.zeros_like(parent.nucleus.model.weight)
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Mitosis initialization requires the grown and parent neurons "
+            "to expose the same parameter roles",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+    def test_mitosis_rejects_distinct_parent_roles_tied_in_child(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_mitosis_parameters")
+        )
+        config = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        )
+        config.mitosis_initialization_flag = True
+        model = config.build()
+        parent = model.cluster["neuron_1_1_1"]
+        reference = parent.nucleus.model.weight
+        parent.nucleus.model.mitosis_role_a = nn.Parameter(torch.zeros_like(reference))
+        parent.nucleus.model.mitosis_role_b = nn.Parameter(torch.ones_like(reference))
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Mitosis initialization cannot copy distinct parent parameter "
+            "roles into one tied grown parameter",
+        ):
+            model(torch.randn(self.batch_size, self.input_dim))
+
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+    def test_mitosis_preserves_matching_tied_parent_and_child_roles(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_mitosis_parameters")
+        )
+        config = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        )
+        config.mitosis_initialization_flag = True
+        model = config.build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent_parameter = parent.nucleus.model.mitosis_role_a
+        parent_parameter.data.copy_(
+            torch.arange(
+                parent_parameter.numel(),
+                dtype=parent_parameter.dtype,
+                device=parent_parameter.device,
+            ).reshape_as(parent_parameter)
+        )
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        child = model.cluster["neuron_2_1_1"]
+        self.assertIs(
+            child.nucleus.model.mitosis_role_a,
+            child.nucleus.model.mitosis_role_b,
+        )
+        self.assertIs(
+            parent.nucleus.model.mitosis_role_a,
+            parent.nucleus.model.mitosis_role_b,
+        )
+        self.assertFalse(
+            torch.equal(
+                child.nucleus.model.mitosis_role_a,
+                torch.zeros_like(child.nucleus.model.mitosis_role_a),
+            )
+        )
+
+    def test_mitosis_copies_non_floating_parameter_without_perturbation(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("integer_mitosis_parameter")
+        )
+        config = self.growth_cluster_config(
+            growth_threshold=1,
+            neuron_config=neuron_config,
+        )
+        config.mitosis_initialization_flag = True
+        model = config.build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.nucleus.model.integer_mitosis_role.copy_(
+            torch.tensor([2, 7], dtype=torch.long)
+        )
+
+        model(torch.randn(self.batch_size, self.input_dim))
+
+        child_parameter = model.cluster[
+            "neuron_2_1_1"
+        ].nucleus.model.integer_mitosis_role
+        self.assertEqual(child_parameter.dtype, torch.long)
+        self.assertFalse(child_parameter.requires_grad)
+        torch.testing.assert_close(
+            child_parameter,
+            torch.tensor([2, 7], dtype=torch.long),
+        )
 
     def test_mitosis_flag_disabled_uses_fresh_initialization(self):
         model = self.growth_cluster_config(growth_threshold=1).build()
@@ -1496,6 +2332,7 @@ class TestNeuronCluster(NeuronTestCase):
         growth_cooldown_steps: int | None = None,
         max_total_growths: int | None = None,
         x_axis_total_neurons: int = 2,
+        neuron_config: NeuronConfig | None = None,
     ) -> NeuronClusterConfig:
         return NeuronClusterConfig(
             x_axis_total_neurons=x_axis_total_neurons,
@@ -1508,7 +2345,11 @@ class TestNeuronCluster(NeuronTestCase):
             growth_threshold=growth_threshold,
             growth_cooldown_steps=growth_cooldown_steps,
             max_total_growths=max_total_growths,
-            neuron_config=self.full_sampler_neuron_config(),
+            neuron_config=(
+                neuron_config
+                if neuron_config is not None
+                else self.full_sampler_neuron_config()
+            ),
         )
 
     def test_growth_cooldown_blocks_growth_until_elapsed(self):
@@ -1538,6 +2379,38 @@ class TestNeuronCluster(NeuronTestCase):
         model(input_batch)
         self.assertEqual(int(model.forwards_since_last_growth.item()), 0)
 
+    def test_failed_growth_preserves_saturated_parent_counter_until_retry(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("tied_context_parameters")
+        )
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            x_axis_total_neurons=2,
+            neuron_config=neuron_config,
+        ).build()
+        parent = model.cluster["neuron_1_1_1"]
+        parent.batch_counter.fill_(100)
+        parent.nucleus.model.context_role_b = nn.Parameter(
+            parent.nucleus.model.context_role_a.detach().double()
+        )
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "grown parameter roles.*context_role_a.*context_role_b.*"
+            "device or dtype contexts differ",
+        ):
+            model(input_batch)
+
+        self.assertGreaterEqual(int(parent.batch_counter.item()), 100)
+        self.assertEqual(tuple(model.cluster), ("neuron_1_1_1",))
+
+        parent.nucleus.model.context_role_b = parent.nucleus.model.context_role_a
+        model(input_batch)
+
+        self.assertIn("neuron_2_1_1", model.cluster)
+        self.assertEqual(int(parent.batch_counter.item()), 0)
+
     def test_max_total_growths_caps_lifetime_growth(self):
         model = self.growth_cluster_config(
             growth_threshold=1,
@@ -1563,6 +2436,23 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertIsNone(model.total_growth_count)
         self.assertNotIn("forwards_since_last_growth", model.state_dict())
         self.assertNotIn("total_growth_count", model.state_dict())
+
+    def test_escape_counts_persist_through_strict_state_dict_round_trip(self):
+        source_model = self.escape_growth_cluster()
+        expected_counts = torch.arange(
+            source_model.escape_counts.numel(),
+            dtype=source_model.escape_counts.dtype,
+        ).reshape_as(source_model.escape_counts)
+        source_model.escape_counts.copy_(expected_counts)
+        state_dict = source_model.state_dict()
+        target_model = self.escape_growth_cluster()
+
+        incompatible_keys = target_model.load_state_dict(state_dict, strict=True)
+
+        self.assertIn("escape_counts", state_dict)
+        self.assertEqual(incompatible_keys.missing_keys, [])
+        self.assertEqual(incompatible_keys.unexpected_keys, [])
+        torch.testing.assert_close(target_model.escape_counts, expected_counts)
 
     def test_load_state_dict_restores_growth_budget_buffers(self):
         source_model = self.growth_cluster_config(
@@ -1605,6 +2495,116 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(int(target_model.forwards_since_last_growth.item()), 0)
         self.assertEqual(int(target_model.total_growth_count.item()), 0)
 
+    def test_distributed_growth_rejects_missing_forward_topology_baseline(self):
+        model = self.growth_cluster_config(growth_threshold=1).build()
+        model._growth_counters_are_global = True
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "Distributed Neuron growth topology changed during a forward pass",
+            ),
+        ):
+            model._check_neuron_growth(None)
+
+    def test_public_forward_passes_captured_growth_baseline_to_growth_check(self):
+        model = self.growth_cluster_config(growth_threshold=1).build()
+        captured_baseline = object()
+        input_batch = torch.randn(self.batch_size, self.input_dim)
+
+        with (
+            patch.object(
+                model,
+                "_capture_growth_counter_baseline",
+                return_value=captured_baseline,
+            ) as capture_baseline,
+            patch.object(model, "_check_neuron_growth") as check_growth,
+        ):
+            model(input_batch)
+
+        capture_baseline.assert_called_once_with()
+        check_growth.assert_called_once_with(captured_baseline)
+
+    def test_distributed_growth_rejects_topology_changed_during_forward(self):
+        model = self.growth_cluster_config(
+            growth_threshold=1,
+            x_axis_total_neurons=3,
+        ).build()
+        model._growth_counters_are_global = True
+        baseline = model._capture_growth_counter_baseline()
+        model.cluster["neuron_1_1_1"] = model._initialize_neuron(1, 1, 1)
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "Distributed Neuron growth topology changed during a forward pass",
+            ),
+        ):
+            model._check_neuron_growth(baseline)
+
+    def test_distributed_growth_rejects_missing_escape_count_baseline(self):
+        model = self.escape_growth_cluster()
+        model._growth_counters_are_global = True
+        captured_baseline = model._capture_growth_counter_baseline()
+        self.assertIsNotNone(captured_baseline)
+        baseline_without_escape_counts = type(captured_baseline)(
+            neuron_names=captured_baseline.neuron_names,
+            batch_counters=captured_baseline.batch_counters,
+            escape_counts=None,
+        )
+        synchronize_escape_counts = (
+            model._NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks
+        )
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "Distributed Neuron escape-count state changed during a forward pass",
+            ),
+        ):
+            synchronize_escape_counts(baseline_without_escape_counts)
+
+    def test_distributed_escape_counts_advance_from_captured_global_baseline(self):
+        model = self.escape_growth_cluster()
+        model._growth_counters_are_global = True
+        baseline = model._capture_growth_counter_baseline()
+        self.assertIsNotNone(baseline)
+        self.assertIsNotNone(baseline.escape_counts)
+        model.escape_counts.add_(torch.ones_like(model.escape_counts))
+        remote_escape_count_contribution = torch.full_like(model.escape_counts, 2)
+        expected_escape_counts = (
+            model.escape_counts.clone() + remote_escape_count_contribution
+        )
+        synchronize_escape_counts = (
+            model._NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks
+        )
+
+        def add_remote_escape_count_contribution(
+            tensor: Tensor,
+            op: torch.distributed.ReduceOp,
+        ) -> None:
+            self.assertIs(op, torch.distributed.ReduceOp.SUM)
+            tensor.add_(remote_escape_count_contribution)
+
+        with (
+            patch("torch.distributed.is_initialized", return_value=True),
+            patch("torch.distributed.get_rank", return_value=0),
+            patch(
+                "torch.distributed.all_reduce",
+                side_effect=add_remote_escape_count_contribution,
+            ),
+        ):
+            synchronized_escape_counts = synchronize_escape_counts(baseline)
+
+        torch.testing.assert_close(
+            synchronized_escape_counts,
+            expected_escape_counts,
+        )
+        torch.testing.assert_close(model.escape_counts, expected_escape_counts)
+
     @unittest.skipUnless(
         torch.distributed.is_available() and torch.distributed.is_gloo_available(),
         "gloo process group support is required",
@@ -1633,15 +2633,9 @@ class TestNeuronCluster(NeuronTestCase):
         eval_model.eval()
         growthless_model = self.growth_cluster_config(growth_threshold=None).build()
 
-        with mock.patch.object(
-            torch.distributed,
-            "is_initialized",
-            return_value=True,
-        ):
+        with patch("torch.distributed.is_initialized", return_value=True):
             with self.subTest(case="eval_forward"), torch.no_grad():
-                output, _ = eval_model(
-                    torch.randn(self.batch_size, self.input_dim)
-                )
+                output, _ = eval_model(torch.randn(self.batch_size, self.input_dim))
                 self.assertEqual(output.shape, (self.batch_size, self.input_dim))
             with self.subTest(case="growth_disabled"):
                 output, _ = growthless_model(
@@ -2186,6 +3180,55 @@ class TestNeuronCluster(NeuronTestCase):
             3,
         )
 
+    def test_cluster_uses_split_phase_neuron_lifecycle(self):
+        class ForwardCapableScriptedNeuron(ScriptedNeuron):
+            def forward(self, input: Tensor):
+                processed_signal = self.process_signal(input)
+                probabilities, routes, auxiliary_loss = self.route_signal(
+                    processed_signal
+                )
+                return processed_signal, probabilities, routes, auxiliary_loss
+
+        model = self.scripted_cluster(
+            max_steps=1,
+            input_dim=1,
+            x_axis_total_neurons=1,
+        )
+        neuron = ForwardCapableScriptedNeuron(
+            routes=[[1, 1, 1]],
+            probabilities=[1.0],
+            delta=[1.0],
+        )
+        model.cluster = nn.ModuleDict({"neuron_1_1_1": neuron})
+        pre_hook_inputs: list[Tensor] = []
+        forward_hook_outputs: list[tuple[Tensor, Tensor, Tensor, Tensor]] = []
+        pre_hook_handle = neuron.register_forward_pre_hook(
+            lambda _module, inputs: pre_hook_inputs.append(inputs[0])
+        )
+        forward_hook_handle = neuron.register_forward_hook(
+            lambda _module, _inputs, output: forward_hook_outputs.append(output)
+        )
+
+        try:
+            output, _ = model(torch.zeros(1, 1))
+
+            torch.testing.assert_close(output, torch.tensor([[2.0]]))
+            self.assertEqual(pre_hook_inputs, [])
+            self.assertEqual(forward_hook_outputs, [])
+            self.assertEqual(int(neuron.batch_counter.item()), 2)
+            self.assertEqual(int(neuron.route_call_counter.item()), 1)
+
+            direct_output = neuron(torch.zeros(1, 1))
+        finally:
+            forward_hook_handle.remove()
+            pre_hook_handle.remove()
+
+        self.assertEqual(len(pre_hook_inputs), 1)
+        self.assertEqual(len(forward_hook_outputs), 1)
+        self.assertEqual(len(direct_output), 4)
+        self.assertEqual(int(neuron.batch_counter.item()), 3)
+        self.assertEqual(int(neuron.route_call_counter.item()), 2)
+
     def test_ping_pong_route_stops_at_max_steps(self):
         model = self.scripted_cluster(max_steps=3)
         model.cluster = nn.ModuleDict(
@@ -2680,9 +3723,7 @@ class TestNeuronCluster(NeuronTestCase):
         target_model.load_state_dict(source_model.state_dict(), strict=True)
 
         self.assertEqual(
-            int(
-                target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()
-            ),
+            int(target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()),
             2,
         )
 
@@ -2697,9 +3738,7 @@ class TestNeuronCluster(NeuronTestCase):
         target_model.load_state_dict(legacy_state_dict, strict=True)
 
         self.assertEqual(
-            int(
-                target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()
-            ),
+            int(target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()),
             0,
         )
 
@@ -2831,6 +3870,47 @@ class TestNeuronCluster(NeuronTestCase):
             int(model.cluster["neuron_1_1_1"].route_call_counter.item()),
             0,
         )
+
+    def test_extra_halting_methods_do_not_replace_the_supported_lifecycle(self) -> None:
+        class PartialPreparedHaltingModel(RecordingHaltingModel):
+            def prepare_owner_step(self, *args, **kwargs):
+                raise AssertionError("partial prepared lifecycle must not be used")
+
+            def complete_owner_step(self, *args, **kwargs):
+                raise AssertionError("partial prepared lifecycle must not be used")
+
+        for beam_width in (1, 2):
+            with self.subTest(beam_width=beam_width):
+                halting_model = PartialPreparedHaltingModel()
+                model = self.scripted_cluster(
+                    max_steps=1,
+                    halting_model=halting_model,
+                    input_dim=1,
+                    x_axis_total_neurons=1,
+                    beam_width=beam_width,
+                )
+                model.cluster = nn.ModuleDict(
+                    {
+                        "neuron_1_1_1": ScriptedNeuron(
+                            routes=[[1, 1, 1]],
+                            probabilities=[1.0],
+                            delta=[1.0],
+                        )
+                    }
+                )
+
+                output, auxiliary_loss = model(torch.zeros(1, 1))
+
+                torch.testing.assert_close(
+                    output,
+                    torch.full_like(output, 2.0),
+                )
+                torch.testing.assert_close(
+                    auxiliary_loss,
+                    torch.zeros_like(auxiliary_loss),
+                )
+                self.assertEqual(halting_model.update_count, 2)
+                self.assertEqual(halting_model.finalize_count, 1)
 
     def test_return_trace_records_detached_entry_and_route_steps(self):
         model = self.scripted_cluster(
@@ -2974,9 +4054,9 @@ def _distributed_growth_worker_assert_identical_growth(
         )
         grown_neuron_state = {
             key: value.detach().cpu().clone()
-            for key, value in model.cluster[
-                expected_grown_neuron_name
-            ].state_dict().items()
+            for key, value in model.cluster[expected_grown_neuron_name]
+            .state_dict()
+            .items()
         }
         _assert_tensors_bitwise_equal_across_ranks(
             world_size,
@@ -3045,6 +4125,54 @@ def _distributed_growth_worker_assert_escape_count_alignment(
         )
         assert int(model.escape_counts[3, 0, 0].item()) == 0, (
             f"rank {rank} did not reset the grown coordinate's escape count"
+        )
+    finally:
+        torch.distributed.destroy_process_group()
+
+
+def _distributed_growth_worker_assert_post_load_counter_deltas(
+    rank: int,
+    world_size: int,
+    init_file: str,
+    config: NeuronClusterConfig,
+) -> None:
+    _init_distributed_growth_process_group(rank, world_size, init_file)
+    try:
+        torch.manual_seed(0)
+        source = config.build()
+        source.cluster["neuron_1_1_1"].batch_counter.fill_(5)
+        source.escape_counts[1, 0, 0] = 7
+        target = config.build()
+        target.load_state_dict(source.state_dict(), strict=True)
+        assert target._growth_counters_are_global
+
+        contribution_sum = world_size * (world_size + 1) // 2
+        observed_intervals = []
+        for interval in (1, 2):
+            baseline = target._capture_growth_counter_baseline()
+            target.cluster["neuron_1_1_1"].batch_counter.add_(rank + 1)
+            target.escape_counts[1, 0, 0].add_(2 * (rank + 1))
+
+            target._check_neuron_growth(baseline)
+
+            observed = (
+                int(target.cluster["neuron_1_1_1"].batch_counter),
+                int(target.escape_counts[1, 0, 0]),
+            )
+            expected = (
+                5 + interval * contribution_sum,
+                7 + 2 * interval * contribution_sum,
+            )
+            assert observed == expected, (
+                f"rank {rank} duplicated or dropped a post-load distributed "
+                f"counter delta at interval {interval}: {observed} != {expected}"
+            )
+            observed_intervals.append(observed)
+
+        _assert_equal_across_ranks(
+            world_size,
+            observed_intervals,
+            "post-load growth counter intervals",
         )
     finally:
         torch.distributed.destroy_process_group()
@@ -3179,6 +4307,32 @@ class TestNeuronClusterDistributedGrowth(NeuronTestCase):
             _distributed_growth_worker_assert_escape_count_alignment,
             self.distributed_escape_growth_cluster_config(),
         )
+
+    def test_post_load_global_counters_add_each_rank_delta_once_per_interval(
+        self,
+    ) -> None:
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            initial_y_axis_total_neurons=1,
+            initial_z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=10_000,
+            escape_driven_growth_flag=True,
+            neuron_config=self.full_sampler_neuron_config(),
+        )
+        for world_size in (1, 3):
+            with self.subTest(world_size=world_size):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    init_file = os.path.join(temp_dir, "process_group_init")
+                    torch.multiprocessing.spawn(
+                        _distributed_growth_worker_assert_post_load_counter_deltas,
+                        args=(world_size, init_file, config),
+                        nprocs=world_size,
+                        join=True,
+                    )
 
     def distributed_pruning_cluster_config(
         self,
