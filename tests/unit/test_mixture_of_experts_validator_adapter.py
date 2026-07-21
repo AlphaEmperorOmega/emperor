@@ -1,13 +1,12 @@
 import unittest
 
 import torch
-from emperor.experts.core._validator import MixtureOfExpertsValidator
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.layers import (
-    MixtureOfExperts,
-    MixtureOfExpertsMap,
-    MixtureOfExpertsReduce,
-)
+
+from emperor.experts import MixtureOfExpertsConfig
+from emperor.experts._layers.map import MixtureOfExpertsMap
+from emperor.experts._layers.mixture import MixtureOfExperts
+from emperor.experts._layers.reduce import MixtureOfExpertsReduce
+from emperor.experts._validation.mixture import MixtureOfExpertsValidator
 
 
 class TestMixtureOfExpertsValidatorAdapter(unittest.TestCase):
@@ -46,6 +45,7 @@ class TestMixtureOfExpertsValidatorAdapter(unittest.TestCase):
                 input_batch,
                 probabilities,
                 indices,
+                skip_mask,
             ):
                 raise RuntimeError("substituted runtime validator was called")
 
