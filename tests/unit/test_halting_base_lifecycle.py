@@ -3,8 +3,9 @@ from dataclasses import fields
 from types import SimpleNamespace
 
 import torch
-from emperor.halting import HaltingBase, HaltingStateBase
 from torch import Tensor
+
+from emperor.halting import HaltingBase, HaltingStateBase
 
 
 class _LifecycleHalting(HaltingBase[SimpleNamespace]):

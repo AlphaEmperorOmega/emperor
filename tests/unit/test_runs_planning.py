@@ -7,8 +7,6 @@ from dataclasses import FrozenInstanceError
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from models.catalog import model_package
-
 from model_runtime.packages import config_key_to_model_param
 from model_runtime.runs import (
     InvalidRunRequest,
@@ -19,6 +17,7 @@ from model_runtime.runs import (
     SearchSpec,
     plan_runs,
 )
+from models.catalog import model_package
 
 
 def _linears_linear():
@@ -105,10 +104,7 @@ class RunsPlanningTests(unittest.TestCase):
         assert plan.search is not None
         self.assertNotIn(
             "top_k",
-            {
-                config_key_to_model_param(axis.key)
-                for axis in plan.search.axes or ()
-            },
+            {config_key_to_model_param(axis.key) for axis in plan.search.axes or ()},
         )
         equal_plan = plan_runs(
             package,
@@ -142,9 +138,7 @@ class RunsPlanningTests(unittest.TestCase):
                     datasets=("Multi30kDeEn",),
                     search=SearchSpec(
                         mode="grid",
-                        axes=(
-                            SearchAxisSelection("expert_top_k", (2,)),
-                        ),
+                        axes=(SearchAxisSelection("expert_top_k", (2,)),),
                     ),
                 ),
             )
@@ -205,8 +199,7 @@ class RunsPlanningTests(unittest.TestCase):
         self.assertIsNotNone(plan.search)
         assert plan.search is not None
         model_params = [
-            config_key_to_model_param(axis.key)
-            for axis in plan.search.axes or ()
+            config_key_to_model_param(axis.key) for axis in plan.search.axes or ()
         ]
         self.assertEqual(len(model_params), len(set(model_params)))
         self.assertIn("STACK_LAYER_NORM_POSITION", plan.runs[0].overrides)

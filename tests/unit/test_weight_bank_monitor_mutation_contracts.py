@@ -202,19 +202,14 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
         torch.testing.assert_close(
             soft_summary.mean_per_sample_entropy,
             (
-                -(
-                    soft_distribution.clamp_min(1.0e-9).log()
-                    * soft_distribution
-                )
+                -(soft_distribution.clamp_min(1.0e-9).log() * soft_distribution)
                 .sum(dim=-1)
                 .mean()
             ),
         )
 
         bias_bank = weighted_bias(input_dim=3)
-        bias_logits = torch.tensor(
-            [[3.0, -1.0], [0.5, 2.0], [-2.0, 0.25]]
-        )
+        bias_logits = torch.tensor([[3.0, -1.0], [0.5, 2.0], [-2.0, 0.25]])
         bias_distribution = torch.softmax(bias_logits, dim=-1)
         bias_summary = _WeightBankDiagnostics.summarize(
             bias_bank,
@@ -228,10 +223,7 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
         torch.testing.assert_close(
             bias_summary.mean_per_sample_entropy,
             (
-                -(
-                    bias_distribution.clamp_min(1.0e-9).log()
-                    * bias_distribution
-                )
+                -(bias_distribution.clamp_min(1.0e-9).log() * bias_distribution)
                 .sum(dim=-1)
                 .mean()
             ),
@@ -253,9 +245,7 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
         expected_marginal_entropy = -(
             utilization.clamp_min(1.0e-9).log() * utilization
         ).sum()
-        expected_coefficient = utilization.std() / utilization.mean().clamp_min(
-            1.0e-6
-        )
+        expected_coefficient = utilization.std() / utilization.mean().clamp_min(1.0e-6)
         expected = {
             "selection_entropy_marginal": expected_marginal_entropy,
             "selection_entropy_mean": mean_sample_entropy,
@@ -269,12 +259,9 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
             "slot_2/utilization": utilization[2],
         }
         module = RecordingLightningModule()
-        callback = WeightBankUtilizationMonitorCallback(
-            log_per_slot_scalars=True
-        )
+        callback = WeightBankUtilizationMonitorCallback(log_per_slot_scalars=True)
         context = (
-            callback
-            ._WeightBankUtilizationMonitorCallback__build_tracking_context(
+            callback._WeightBankUtilizationMonitorCallback__build_tracking_context(
                 module,
                 "dynamic_bank",
                 metrics,
@@ -365,9 +352,7 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
             "second_bank/bank/selection_entropy_marginal",
             names,
         )
-        self.assertFalse(
-            any(name and name.startswith("first_bank/") for name in names)
-        )
+        self.assertFalse(any(name and name.startswith("first_bank/") for name in names))
         callback.on_fit_end(trainer=None, pl_module=module)
 
 

@@ -5,8 +5,6 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from models.catalog import model_package
-
 from model_runtime.inspection import (
     ConfigurationSchema,
     InspectionError,
@@ -22,6 +20,7 @@ from model_runtime.inspection import (
     validate_configuration,
 )
 from model_runtime.packages import ModelPackage
+from models.catalog import model_package
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):

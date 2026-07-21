@@ -85,7 +85,6 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         feed_forward_config: "FeedForwardConfig | None" = None,
         residual_model_config: LinearLayerConfig | None = None,
     ) -> TransformerEncoderLayerConfig:
-
         if projection_model_config is None:
             projection_model_config = LayerStackConfig(
                 input_dim=embedding_dim,
@@ -512,7 +511,6 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         feed_forward_config: "FeedForwardConfig | None" = None,
         residual_model_config: LinearLayerConfig | None = None,
     ) -> TransformerDecoderLayerConfig:
-
         if projection_model_config is None:
             projection_model_config = LayerStackConfig(
                 input_dim=embedding_dim,

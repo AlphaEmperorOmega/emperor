@@ -1,8 +1,9 @@
 import unittest
 
+from torch import Tensor, nn
+
 from emperor.halting import HaltingBase, HaltingMonitorCallback, HaltingStateBase
 from emperor.halting._monitoring.tracking import HaltingUsageTrackerManager
-from torch import Tensor, nn
 
 
 class _IncompleteHalting(HaltingBase[HaltingStateBase]):

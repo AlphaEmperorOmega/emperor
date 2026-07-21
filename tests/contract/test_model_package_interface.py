@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import unittest
 
+from torch.nn import Module
+
 from emperor.config import ModelConfig
+from model_runtime.packages import ModelPackage
 from models.catalog import (
     MODEL_CATALOG,
     discover_model_ids,
     discover_model_packages,
     model_package,
 )
-from torch.nn import Module
-
-from model_runtime.packages import ModelPackage
 
 
 class TestModelPackageInterface(unittest.TestCase):

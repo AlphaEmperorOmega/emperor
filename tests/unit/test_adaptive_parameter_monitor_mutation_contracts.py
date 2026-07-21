@@ -237,8 +237,7 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             "delta_var": delta.float().var(unbiased=False),
             "delta_l2_norm": delta.float().norm(),
             "relative_delta_norm": (
-                delta.float().norm()
-                / base.float().norm().clamp_min(1.0e-6)
+                delta.float().norm() / base.float().norm().clamp_min(1.0e-6)
             ),
         }
         for suffix, expected in common_expected.items():
@@ -256,8 +255,7 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
                 centered.norm() / per_sample.norm().clamp_min(1.0e-12)
             ),
             "centroid_cosine_mean": (
-                F.normalize(per_sample, dim=1)
-                @ F.normalize(centroid, dim=0)
+                F.normalize(per_sample, dim=1) @ F.normalize(centroid, dim=0)
             ).mean(),
         }
         for suffix, expected in adaptivity_expected.items():
@@ -288,10 +286,7 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         self.assertNotIn(None, actual)
 
     def test_adaptivity_handles_scalar_rank_one_and_two_sample_boundary(self) -> None:
-        calculate = (
-            AdaptiveParameterMonitorCallback
-            ._AdaptiveParameterMonitorCallback__calculate_input_adaptivity
-        )
+        calculate = AdaptiveParameterMonitorCallback._AdaptiveParameterMonitorCallback__calculate_input_adaptivity
         scalar = _AdaptiveParameterObservation(
             output=torch.tensor(2.0),
             base=None,
@@ -320,20 +315,14 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         )
         torch.testing.assert_close(
             metrics.centroid_cosine_mean,
-            (
-                F.normalize(samples, dim=1)
-                @ F.normalize(centroid, dim=0)
-            ).mean(),
+            (F.normalize(samples, dim=1) @ F.normalize(centroid, dim=0)).mean(),
         )
 
     def test_effective_bias_scale_requires_every_guard_and_includes_boundary(
         self,
     ) -> None:
         callback = AdaptiveParameterMonitorCallback()
-        method = (
-            callback
-            ._AdaptiveParameterMonitorCallback__effective_bias_scale
-        )
+        method = callback._AdaptiveParameterMonitorCallback__effective_bias_scale
         base = torch.tensor([0.25, -0.5])
         output = torch.tensor([0.5, 1.5])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
@@ -350,9 +339,7 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             (threshold_base,),
             torch.ones(2),
         )
-        self.assertIsNone(
-            method("bias", multiplicative, threshold_observation)
-        )
+        self.assertIsNone(method("bias", multiplicative, threshold_observation))
 
     def test_bias_context_logs_exact_effective_scale_without_weight_internals(
         self,

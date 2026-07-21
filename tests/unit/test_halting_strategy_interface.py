@@ -1,5 +1,7 @@
 import unittest
 
+from torch import Tensor
+
 from emperor.halting import (
     HaltingBase,
     HaltingInterface,
@@ -7,7 +9,6 @@ from emperor.halting import (
     SoftHalting,
     StickBreaking,
 )
-from torch import Tensor
 
 
 class _IncompleteHalting(HaltingBase[HaltingStateBase]):

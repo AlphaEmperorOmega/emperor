@@ -59,11 +59,7 @@ class RunsSearchTests(unittest.TestCase):
         expected = random.Random(31)
 
         self.assertEqual(
-            list(
-                PreparedSearch(axes=((1, 2), (3, 4))).combinations(
-                    random_source
-                )
-            ),
+            list(PreparedSearch(axes=((1, 2), (3, 4))).combinations(random_source)),
             [(1, 3), (1, 4), (2, 3), (2, 4)],
         )
         self.assertEqual(random_source.random(), expected.random())

@@ -60,9 +60,7 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
     def test_setup_and_dev_parsers_accept_cuda_legacy(self) -> None:
         for command in ("setup", "dev"):
             with self.subTest(command=command):
-                parsed = emperor_dev.parse_args(
-                    [command, "--profile", "cuda-legacy"]
-                )
+                parsed = emperor_dev.parse_args([command, "--profile", "cuda-legacy"])
                 self.assertEqual(parsed.command, command)
                 self.assertEqual(parsed.profile, "cuda-legacy")
 
@@ -306,9 +304,7 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
     def test_cuda_legacy_lock_is_standalone_sorted_and_cu126_only(self) -> None:
         base_path = PROJECT_ROOT / "constraints" / "python-3.13-linux-x86_64.txt"
         legacy_path = (
-            PROJECT_ROOT
-            / "constraints"
-            / "python-3.13-linux-x86_64-cuda-legacy.txt"
+            PROJECT_ROOT / "constraints" / "python-3.13-linux-x86_64-cuda-legacy.txt"
         )
         base_pins = {
             line
@@ -326,10 +322,7 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
 
         self.assertTrue(base_pins.issubset(legacy_pins))
         self.assertFalse(
-            any(
-                line.startswith(("-c ", "--constraint"))
-                for line in legacy_pins
-            )
+            any(line.startswith(("-c ", "--constraint")) for line in legacy_pins)
         )
         self.assertEqual(legacy_pins, sorted(legacy_pins))
         self.assertIn("torch==2.12.0+cu126", legacy_pins)

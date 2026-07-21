@@ -91,9 +91,7 @@ class TestFeedForward(unittest.TestCase):
                         input = torch.randn(batch_size, cfg.input_dim)
                         expected_output = (batch_size, cfg.output_dim)
                     else:
-                        input = torch.randn(
-                            batch_size, sequence_length, cfg.input_dim
-                        )
+                        input = torch.randn(batch_size, sequence_length, cfg.input_dim)
                         expected_output = (
                             batch_size,
                             sequence_length,
@@ -268,9 +266,7 @@ class TestFeedForwardWithMixtureOfExperts(
                     )
                     m = FeedForward(cfg)
                     self.assertIsInstance(m, cfg._registry_owner())
-                    self.assertEqual(
-                        m.stack_config.stack_config.num_layers, num_layers
-                    )
+                    self.assertEqual(m.stack_config.stack_config.num_layers, num_layers)
 
     def test_forward(self):
         routing_modes = [

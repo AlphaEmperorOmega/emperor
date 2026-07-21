@@ -253,13 +253,10 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
         single = SingleModelDynamicWeight(single_config())
         assign_depth_mapping(single.model, identity, torch.zeros(2))
         single_base = base[:, :2]
-        single_expected = (
-            single_base.unsqueeze(0)
-            + torch.einsum("bi,bj->bij", inputs, inputs)
+        single_expected = single_base.unsqueeze(0) + torch.einsum(
+            "bi,bj->bij", inputs, inputs
         )
-        self.assertTrue(
-            torch.equal(single(single_base, inputs), single_expected)
-        )
+        self.assertTrue(torch.equal(single(single_base, inputs), single_expected))
 
         dual = DualModelDynamicWeight(dual_config())
         assign_depth_mapping(dual.input_model, identity, torch.zeros(2))

@@ -5,8 +5,6 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from models.catalog import model_package
-
 from model_runtime.runs import (
     InvalidRunPlan,
     PlanningBudget,
@@ -14,6 +12,7 @@ from model_runtime.runs import (
     SubmittedRun,
     accept_run_plan,
 )
+from models.catalog import model_package
 
 
 def _linears_linear():

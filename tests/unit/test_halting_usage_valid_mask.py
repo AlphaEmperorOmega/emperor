@@ -2,6 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 import torch
+
 from emperor.halting._monitoring.tracking import HaltingUsageTracker
 
 

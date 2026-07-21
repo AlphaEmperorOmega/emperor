@@ -72,16 +72,10 @@ class TestValidatorConventions(unittest.TestCase):
                     and isinstance(node.func, ast.Attribute)
                 ):
                     owner = call.func.value
-                    if (
-                        isinstance(owner, ast.Name)
-                        and (
-                            "Validator" in owner.id
-                            or owner.id.endswith("ValidationMixin")
-                        )
+                    if isinstance(owner, ast.Name) and (
+                        "Validator" in owner.id or owner.id.endswith("ValidationMixin")
                     ):
-                        actual.add(
-                            _qualified_class_name(path, validator_class.name)
-                        )
+                        actual.add(_qualified_class_name(path, validator_class.name))
 
         self.assertEqual(actual, LEGACY_HARDCODED_DISPATCH)
 
@@ -100,9 +94,7 @@ class TestValidatorConventions(unittest.TestCase):
                     if method.name != "validate":
                         continue
                     if "classmethod" not in _decorator_names(method):
-                        actual.add(
-                            _qualified_class_name(path, validator_class.name)
-                        )
+                        actual.add(_qualified_class_name(path, validator_class.name))
 
         self.assertEqual(actual, LEGACY_STATIC_VALIDATE_ENTRYPOINTS)
 
@@ -113,8 +105,7 @@ class TestValidatorConventions(unittest.TestCase):
             for call in (
                 node
                 for node in ast.walk(tree)
-                if isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
             ):
                 owner = call.func.value
                 if isinstance(owner, ast.Name) and "Validator" in owner.id:
@@ -149,13 +140,8 @@ class TestValidatorConventions(unittest.TestCase):
         violations = []
         for path in EMPEROR_ROOT.rglob("*.py"):
             tree = ast.parse(path.read_text())
-            for call in (
-                node for node in ast.walk(tree) if isinstance(node, ast.Call)
-            ):
-                if (
-                    isinstance(call.func, ast.Name)
-                    and "Validator" in call.func.id
-                ):
+            for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+                if isinstance(call.func, ast.Name) and "Validator" in call.func.id:
                     violations.append(
                         f"{path.relative_to(PROJECT_ROOT).as_posix()}:{call.lineno}:"
                         f"{call.func.id}"

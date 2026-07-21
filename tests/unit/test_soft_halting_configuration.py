@@ -1,6 +1,8 @@
 import unittest
 
 import torch
+from torch import nn
+
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     HaltingStateBase,
@@ -8,7 +10,6 @@ from emperor.halting import (
     SoftHaltingConfig,
     SoftHaltingState,
 )
-from torch import nn
 
 
 class SoftHaltingConfigurationTests(unittest.TestCase):

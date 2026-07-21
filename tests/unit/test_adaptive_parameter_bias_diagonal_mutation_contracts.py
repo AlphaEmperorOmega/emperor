@@ -215,17 +215,13 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
             ),
             (
                 MultiplicativeDynamicBias(
-                    MultiplicativeDynamicBiasConfig(
-                        **common_bias_arguments(2, 3)
-                    )
+                    MultiplicativeDynamicBiasConfig(**common_bias_arguments(2, 3))
                 ),
                 bias_params * generated,
             ),
             (
                 SigmoidGatedDynamicBias(
-                    SigmoidGatedDynamicBiasConfig(
-                        **common_bias_arguments(2, 3)
-                    )
+                    SigmoidGatedDynamicBiasConfig(**common_bias_arguments(2, 3))
                 ),
                 bias_params * torch.sigmoid(generated),
             ),
@@ -245,9 +241,7 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
         for model, expected in shared_cases:
             with self.subTest(model_type=type(model).__name__):
                 assign_generator(model.model, projection, projection_bias)
-                self.assertTrue(
-                    torch.equal(model(bias_params, logits), expected)
-                )
+                self.assertTrue(torch.equal(model(bias_params, logits), expected))
 
         affine = AffineTransformDynamicBias(
             AffineTransformDynamicBiasConfig(**common_bias_arguments(2, 3))
@@ -257,12 +251,9 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
         assign_generator(affine.model, affine_projection, affine_bias)
         affine_parameters = logits @ affine_projection + affine_bias
         expected_affine = (
-            affine_parameters[:, :1] * bias_params
-            + affine_parameters[:, 1:]
+            affine_parameters[:, :1] * bias_params + affine_parameters[:, 1:]
         )
-        self.assertTrue(
-            torch.equal(affine(bias_params, logits), expected_affine)
-        )
+        self.assertTrue(torch.equal(affine(bias_params, logits), expected_affine))
 
         weighted = WeightedBankDynamicBias(
             WeightedBankDynamicBiasConfig(
@@ -374,9 +365,7 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
                 input_dim=2,
                 output_dim=3,
                 bias_flag=True,
-                adaptive_augmentation_config=(
-                    AdaptiveParameterAugmentationConfig()
-                ),
+                adaptive_augmentation_config=(AdaptiveParameterAugmentationConfig()),
             ),
             AdaptiveLinearLayerConfig(
                 input_dim=4,

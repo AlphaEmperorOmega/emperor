@@ -13,7 +13,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import torch
 from lightning import LightningDataModule
 from lightning.pytorch.callbacks import Callback
-from models.catalog import model_package
 from torch.utils.data import DataLoader, TensorDataset
 
 from model_runtime.runs import (
@@ -23,6 +22,7 @@ from model_runtime.runs import (
     execute_runs,
     plan_runs,
 )
+from models.catalog import model_package
 
 
 class _InMemoryMnist(LightningDataModule):
