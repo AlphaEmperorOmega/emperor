@@ -673,5 +673,184 @@ class WorkbenchLauncherVerificationTests(unittest.TestCase):
         self.assertEqual(payload, workbench_payload | launcher_payload)
 
 
+class WorkbenchWorkerVerificationTests(unittest.TestCase):
+    def test_bounded_probe_rejects_unexpected_exit_status(self) -> None:
+        completed = verify_distribution.subprocess.CompletedProcess(
+            ["worker"],
+            2,
+            stdout="output",
+            stderr="failure",
+        )
+        with patch.object(
+            verify_distribution.subprocess,
+            "run",
+            return_value=completed,
+        ):
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                r"expected \[0\]",
+            ):
+                verify_distribution._run_bounded_probe(
+                    ["worker"],
+                    cwd=Path("/outside"),
+                    env={},
+                )
+
+    def test_bounded_probe_translates_timeout(self) -> None:
+        timeout = verify_distribution.subprocess.TimeoutExpired(["worker"], 3)
+        with patch.object(
+            verify_distribution.subprocess,
+            "run",
+            side_effect=timeout,
+        ):
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                "exceeded 3 seconds",
+            ):
+                verify_distribution._run_bounded_probe(
+                    ["worker"],
+                    cwd=Path("/outside"),
+                    env={},
+                    timeout_seconds=3,
+                )
+
+    def test_exercises_installed_worker_protocols(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            python = root / "venv" / "bin" / "python"
+            outside = root / "outside"
+            outside.mkdir()
+            state_root = root / "state"
+            module_paths = {
+                module_name: str(root / "venv" / f"{module_name}.py")
+                for module_name in verify_distribution.WORKBENCH_WORKER_MODULES
+            }
+            inspection_envelope = {
+                "ok": False,
+                "failure": "internal",
+                "detail": "Inspection worker failed.",
+                "failureKind": "unavailable",
+            }
+            invoked_modules: list[str] = []
+
+            def run_probe(
+                command: list[str],
+                **options: object,
+            ) -> verify_distribution.subprocess.CompletedProcess[str]:
+                if "-m" not in command:
+                    return verify_distribution.subprocess.CompletedProcess(
+                        command,
+                        0,
+                        stdout=json.dumps(module_paths),
+                        stderr="",
+                    )
+                module_name = command[command.index("-m") + 1]
+                invoked_modules.append(module_name)
+                if module_name == "emperor_workbench.inspection.worker":
+                    self.assertEqual(options["input_text"], "[]")
+                    return verify_distribution.subprocess.CompletedProcess(
+                        command,
+                        0,
+                        stdout=json.dumps(inspection_envelope),
+                        stderr="",
+                    )
+                if module_name == "emperor_workbench.training_jobs.worker":
+                    self.assertEqual(options["expected_returncodes"], (1,))
+                    progress_path = Path(command[command.index("--progress") + 1])
+                    progress_path.write_text(
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "status": "failed",
+                                "error": "requires a non-empty materialized run plan",
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    return verify_distribution.subprocess.CompletedProcess(
+                        command,
+                        1,
+                        stdout="",
+                        stderr="",
+                    )
+                self.assertEqual(
+                    module_name,
+                    "emperor_workbench.training_jobs.cgroup_worker",
+                )
+                cgroup_root = Path(command[command.index("--cgroup") + 1])
+                ready_path = Path(command[command.index("--ready") + 1])
+                command_marker_path = Path(command[-1])
+                (cgroup_root / "cgroup.procs").write_text("41", encoding="utf-8")
+                ready_path.write_text("41", encoding="utf-8")
+                command_marker_path.write_text("executed", encoding="utf-8")
+                return verify_distribution.subprocess.CompletedProcess(
+                    command,
+                    0,
+                    stdout="",
+                    stderr="",
+                )
+
+            with (
+                patch.object(
+                    verify_distribution,
+                    "_isolated_environment",
+                    return_value={"PYTHONSAFEPATH": "1"},
+                ),
+                patch.object(
+                    verify_distribution,
+                    "_run_bounded_probe",
+                    side_effect=run_probe,
+                ),
+            ):
+                payload = verify_distribution._installed_workbench_worker_smoke(
+                    python,
+                    outside,
+                    state_root,
+                )
+
+        self.assertEqual(
+            invoked_modules,
+            list(verify_distribution.WORKBENCH_WORKER_MODULES),
+        )
+        self.assertEqual(payload["module_paths"], module_paths)
+        self.assertEqual(payload["modules"], sorted(module_paths))
+        self.assertTrue(payload["inspection_error_protocol"])
+        self.assertTrue(payload["training_pre_execution_error_marker"])
+        self.assertTrue(payload["cgroup_ready_and_command_markers"])
+
+    def test_rejects_worker_modules_outside_the_install(self) -> None:
+        module_paths = {
+            module_name: f"/venv/{module_name}.py"
+            for module_name in verify_distribution.WORKBENCH_WORKER_MODULES
+        }
+        module_paths[verify_distribution.WORKBENCH_WORKER_MODULES[0]] = (
+            "/checkout/worker.py"
+        )
+
+        with self.assertRaisesRegex(
+            verify_distribution.VerificationError,
+            "outside the regular wheel install",
+        ):
+            verify_distribution._require_workbench_worker_paths_under(
+                {"module_paths": module_paths},
+                Path("/venv"),
+            )
+
+    def test_worker_semantic_payload_removes_install_paths(self) -> None:
+        payload = {
+            "module_paths": {"worker": "/venv/worker.py"},
+            "modules": ["worker"],
+            "inspection_error_protocol": True,
+        }
+
+        self.assertEqual(
+            verify_distribution._workbench_worker_semantic_payload(payload),
+            {
+                "modules": ["worker"],
+                "inspection_error_protocol": True,
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

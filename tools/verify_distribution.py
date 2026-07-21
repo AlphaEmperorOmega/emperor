@@ -535,6 +535,43 @@ def _run(
     return completed.stdout.strip()
 
 
+def _run_bounded_probe(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    expected_returncodes: tuple[int, ...] = (0,),
+    input_text: str | None = None,
+    timeout_seconds: float = 30.0,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        completed = subprocess.run(  # noqa: S603 - installed artifact probe
+            command,
+            cwd=cwd,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+            input=input_text,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise VerificationError(
+            "Installed-artifact probe exceeded "
+            f"{timeout_seconds:g} seconds: {' '.join(command)}"
+        ) from exc
+    if completed.returncode not in expected_returncodes:
+        output = "\n".join(
+            part for part in (completed.stdout, completed.stderr) if part
+        )
+        raise VerificationError(
+            "Installed-artifact probe returned "
+            f"{completed.returncode}, expected "
+            f"{sorted(expected_returncodes)}: {' '.join(command)}\n{output}"
+        )
+    return completed
+
+
 def _copy_project(repository: Path, destination: Path) -> None:
     destination.mkdir(parents=True)
     for relative_name in PROJECT_FILES:
@@ -1113,6 +1150,164 @@ def _installed_workbench_cli_smoke(
     }
 
 
+def _installed_workbench_worker_smoke(
+    python: Path,
+    outside: Path,
+    state_root: Path,
+) -> dict[str, object]:
+    state_root.mkdir(parents=True)
+    environment = _isolated_environment()
+    module_probe_code = f"""
+import importlib
+import json
+
+module_paths = {{}}
+for module_name in {WORKBENCH_WORKER_MODULES!r}:
+    module = importlib.import_module(module_name)
+    module_paths[module_name] = module.__file__
+print(json.dumps(module_paths, sort_keys=True))
+"""
+    module_probe = _run_bounded_probe(
+        [str(python), "-P", "-c", module_probe_code],
+        cwd=outside,
+        env=environment,
+    )
+    try:
+        module_paths = json.loads(module_probe.stdout)
+    except json.JSONDecodeError as exc:
+        raise VerificationError(
+            "Installed Workbench worker module probe returned invalid JSON."
+        ) from exc
+    if not isinstance(module_paths, dict):
+        raise VerificationError(
+            "Installed Workbench worker module probe returned a non-object."
+        )
+
+    inspection_probe = _run_bounded_probe(
+        [
+            str(python),
+            "-P",
+            "-m",
+            "emperor_workbench.inspection.worker",
+        ],
+        cwd=outside,
+        env=environment,
+        input_text="[]",
+    )
+    try:
+        inspection_envelope = json.loads(inspection_probe.stdout)
+    except json.JSONDecodeError as exc:
+        raise VerificationError(
+            "Installed Inspection worker returned an invalid error envelope."
+        ) from exc
+    expected_inspection_envelope = {
+        "ok": False,
+        "failure": "internal",
+        "detail": "Inspection worker failed.",
+        "failureKind": "unavailable",
+    }
+    if inspection_envelope != expected_inspection_envelope:
+        raise VerificationError(
+            "Installed Inspection worker error protocol differs from the "
+            f"canonical contract: {inspection_envelope!r}"
+        )
+
+    training_root = state_root / "training"
+    training_root.mkdir()
+    payload_path = training_root / "payload.json"
+    progress_path = training_root / "progress.jsonl"
+    payload_path.write_text("{}", encoding="utf-8")
+    _run_bounded_probe(
+        [
+            str(python),
+            "-P",
+            "-m",
+            "emperor_workbench.training_jobs.worker",
+            "--payload",
+            str(payload_path),
+            "--progress",
+            str(progress_path),
+        ],
+        cwd=outside,
+        env=environment,
+        expected_returncodes=(1,),
+    )
+    try:
+        training_events = [
+            json.loads(line)
+            for line in progress_path.read_text(encoding="utf-8").splitlines()
+            if line
+        ]
+    except (json.JSONDecodeError, OSError) as exc:
+        raise VerificationError(
+            "Installed Training worker did not write a valid error marker."
+        ) from exc
+    if (
+        len(training_events) != 1
+        or not isinstance(training_events[0], dict)
+        or training_events[0].get("type") != "error"
+        or training_events[0].get("status") != "failed"
+        or "non-empty materialized run plan" not in str(training_events[0].get("error"))
+    ):
+        raise VerificationError(
+            "Installed Training worker did not stop on the bounded pre-training "
+            f"error path: {training_events!r}"
+        )
+
+    cgroup_root = state_root / "cgroup"
+    cgroup_root.mkdir()
+    cgroup_process_path = cgroup_root / "cgroup.procs"
+    cgroup_process_path.write_text("", encoding="utf-8")
+    ready_path = state_root / "cgroup-ready"
+    command_marker_path = state_root / "cgroup-command"
+    command_marker_code = (
+        "from pathlib import Path; import sys; "
+        "Path(sys.argv[1]).write_text('executed', encoding='utf-8')"
+    )
+    _run_bounded_probe(
+        [
+            str(python),
+            "-P",
+            "-m",
+            "emperor_workbench.training_jobs.cgroup_worker",
+            "--cgroup",
+            str(cgroup_root),
+            "--ready",
+            str(ready_path),
+            "--",
+            str(python),
+            "-P",
+            "-c",
+            command_marker_code,
+            str(command_marker_path),
+        ],
+        cwd=outside,
+        env=environment,
+    )
+    try:
+        cgroup_pid = int(cgroup_process_path.read_text(encoding="utf-8"))
+        ready_pid = int(ready_path.read_text(encoding="utf-8"))
+        command_marker = command_marker_path.read_text(encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        raise VerificationError(
+            "Installed cgroup worker did not write its marker files."
+        ) from exc
+    if cgroup_pid < 1 or ready_pid != cgroup_pid or command_marker != "executed":
+        raise VerificationError(
+            "Installed cgroup worker marker protocol differs from the canonical "
+            f"contract: cgroup_pid={cgroup_pid!r}, ready_pid={ready_pid!r}, "
+            f"command_marker={command_marker!r}"
+        )
+
+    return {
+        "module_paths": module_paths,
+        "modules": sorted(module_paths),
+        "inspection_error_protocol": True,
+        "training_pre_execution_error_marker": True,
+        "cgroup_ready_and_command_markers": True,
+    }
+
+
 def _workbench_smoke(
     python: Path,
     outside: Path,
@@ -1187,6 +1382,36 @@ def _require_workbench_path_under(payload: dict[str, object], root: Path) -> Non
             "emperor_workbench_path resolved outside the expected install: "
             f"{installed_path}"
         )
+
+
+def _require_workbench_worker_paths_under(
+    payload: dict[str, object],
+    root: Path,
+) -> None:
+    module_paths = payload.get("module_paths")
+    if not isinstance(module_paths, dict):
+        raise VerificationError(
+            "Installed Workbench worker probe did not report module paths."
+        )
+    if set(module_paths) != set(WORKBENCH_WORKER_MODULES):
+        raise VerificationError(
+            "Installed Workbench worker probe reported the wrong modules: "
+            f"{sorted(module_paths)}"
+        )
+    resolved_root = root.resolve()
+    for module_name, raw_path in module_paths.items():
+        module_path = Path(str(raw_path)).resolve()
+        if not module_path.is_relative_to(resolved_root):
+            raise VerificationError(
+                f"{module_name} resolved outside the regular wheel install: "
+                f"{module_path}"
+            )
+
+
+def _workbench_worker_semantic_payload(
+    payload: dict[str, object],
+) -> dict[str, object]:
+    return {key: value for key, value in payload.items() if key != "module_paths"}
 
 
 def _workbench_semantic_payload(payload: dict[str, object]) -> dict[str, object]:
@@ -1300,8 +1525,17 @@ def verify(
                 outside,
                 root / "regular-workbench-state",
             )
+            regular_workbench_workers = _installed_workbench_worker_smoke(
+                regular_python,
+                outside,
+                root / "regular-workbench-worker-state",
+            )
             _require_workbench_path_under(editable_workbench, workbench_source)
             _require_workbench_path_under(regular_workbench, regular_environment)
+            _require_workbench_worker_paths_under(
+                regular_workbench_workers,
+                regular_environment,
+            )
             if _workbench_semantic_payload(
                 editable_workbench
             ) != _workbench_semantic_payload(regular_workbench):
@@ -1312,6 +1546,9 @@ def verify(
             result["workbench_sdist_manifest"] = workbench_sdist_manifest
             result["workbench_startup"] = _workbench_semantic_payload(
                 editable_workbench
+            )
+            result["workbench_workers"] = _workbench_worker_semantic_payload(
+                regular_workbench_workers
             )
             result["workbench_wheel_manifest"] = workbench_wheel_manifest
         return result
