@@ -1,64 +1,28 @@
+import math
 import unittest
 
 import torch
-from emperor.memory.config import (
+from lightning import LightningModule, Trainer
+from torch import nn
+
+from emperor.layers import LayerState
+from emperor.memory import (
     GatedResidualDynamicMemoryConfig,
     WeightedDynamicMemoryConfig,
 )
-from emperor.memory.core._validator import DynamicMemoryValidator
-from emperor.memory.core.base import DynamicMemoryAbstract
-from emperor.memory.core.monitor import MemoryMonitorCallback
-from torch import nn
-
-from support.monitor import orchestration_calls
-from unit.test_memory import (
-    MEMORY_CASES,
-    ConstantLastDimModule,
-    IdentityModule,
-    make_memory_config,
+from emperor.memory._base import DynamicMemoryAbstract
+from emperor.memory._monitoring import (
+    _MemoryDiagnostics,
+    _MemoryObservation,
 )
+from emperor.memory.monitoring import MemoryMonitorCallback
+from support.monitor import orchestration_calls
+from unit.test_memory import make_memory_config
 
 
-class FakeTrainer:
-    def __init__(self, global_step: int = 0):
-        self.global_step = global_step
-
-
-class FakeLightningModule(nn.Module):
-    def __init__(self, memory: DynamicMemoryAbstract, global_step: int = 0):
-        super().__init__()
-        self.memory = memory
-        self.global_step = global_step
-        self.logged_scalars = []
-
-    def log(self, name, value, *args, **kwargs):
-        self.logged_scalars.append((name, value))
-
-
-class MultiMemoryLightningModule(nn.Module):
-    def __init__(
-        self,
-        first_memory: DynamicMemoryAbstract,
-        second_memory: DynamicMemoryAbstract,
-        global_step: int = 0,
-    ):
-        super().__init__()
-        self.first_memory = first_memory
-        self.second_memory = second_memory
-        self.global_step = global_step
-        self.logged_scalars = []
-
-    def log(self, name, value, *args, **kwargs):
-        self.logged_scalars.append((name, value))
-
-
-class GateFreeMemory(DynamicMemoryAbstract):
-    def forward(self, logits: torch.Tensor) -> torch.Tensor:
-        DynamicMemoryValidator.validate_forward_inputs(logits, self.memory_dim)
-        return logits + 1.0
-
-
-def build_memory(config_cls=GatedResidualDynamicMemoryConfig) -> DynamicMemoryAbstract:
+def build_memory(
+    config_cls=GatedResidualDynamicMemoryConfig,
+):
     return make_memory_config(
         config_cls=config_cls,
         input_dim=4,
@@ -66,8 +30,38 @@ def build_memory(config_cls=GatedResidualDynamicMemoryConfig) -> DynamicMemoryAb
     ).build()
 
 
+class _MemoryOwner(LightningModule):
+    def __init__(self) -> None:
+        super().__init__()
+        self.memory = build_memory()
+        self.logged_scalars: list[tuple[str, torch.Tensor]] = []
+
+    def log(
+        self,
+        name: str,
+        value: object,
+        *args: object,
+        **kwargs: object,
+    ) -> None:
+        if torch.is_tensor(value):
+            self.logged_scalars.append((name, value))
+
+
+class _GateFreeMemory(DynamicMemoryAbstract):
+    def forward(self, logits: torch.Tensor) -> torch.Tensor:
+        self.VALIDATOR.validate_forward_inputs(logits, self.memory_dim)
+        return logits + 1.0
+
+
+class _GateFreeOwner(_MemoryOwner):
+    def __init__(self) -> None:
+        LightningModule.__init__(self)
+        self.memory = _GateFreeMemory(make_memory_config(input_dim=4, output_dim=4))
+        self.logged_scalars = []
+
+
 class TestMemoryMonitorCallback(unittest.TestCase):
-    def test_tracking_orchestration_lists_each_tracked_fact(self):
+    def test_tracking_orchestration_lists_each_tracked_fact(self) -> None:
         orchestration = (
             MemoryMonitorCallback._MemoryMonitorCallback__track_memory_diagnostics
         )
@@ -88,234 +82,301 @@ class TestMemoryMonitorCallback(unittest.TestCase):
             ),
         )
 
-    def assert_logged_close(
+    def test_constructor_preserves_defaults_and_rejects_invalid_intervals(
         self,
-        scalars: dict[str, torch.Tensor],
-        name: str,
-        expected: torch.Tensor,
     ) -> None:
-        self.assertIn(name, scalars)
-        torch.testing.assert_close(scalars[name], expected)
-
-    def test_init_rejects_invalid_log_interval_types(self):
-        for bad in (True, 1.5, "1"):
-            with self.subTest(log_every_n_steps=bad):
-                with self.assertRaises(TypeError):
-                    MemoryMonitorCallback(log_every_n_steps=bad)
-
-    def test_init_rejects_non_positive_log_interval(self):
-        for bad in (0, -1):
-            with self.subTest(log_every_n_steps=bad):
-                with self.assertRaises(ValueError):
-                    MemoryMonitorCallback(log_every_n_steps=bad)
-
-    def test_forward_hook_respects_trainer_global_step(self):
-        skipped = FakeLightningModule(build_memory(), global_step=10)
-        skipped_callback = MemoryMonitorCallback(log_every_n_steps=10)
-        skipped_trainer = FakeTrainer(global_step=5)
-        skipped_callback.on_fit_start(skipped_trainer, skipped)
-        skipped.memory(torch.randn(2, 4))
-        self.assertEqual(skipped.logged_scalars, [])
-        skipped_callback.on_fit_end(skipped_trainer, skipped)
-
-        logged = FakeLightningModule(build_memory(), global_step=5)
-        logged_callback = MemoryMonitorCallback(log_every_n_steps=10)
-        logged_trainer = FakeTrainer(global_step=10)
-        logged_callback.on_fit_start(logged_trainer, logged)
-        logged.memory(torch.randn(2, 4))
-
-        keys = {name for name, _ in logged.logged_scalars}
-        self.assertIn("memory/memory/output_mean", keys)
-        self.assertIn("memory/memory/contribution/relative_delta_norm", keys)
-        logged_callback.on_fit_end(logged_trainer, logged)
-
-    def test_logs_finite_metrics_for_all_memory_variants(self):
-        for config_cls, _ in MEMORY_CASES:
-            with self.subTest(config_cls=config_cls.__name__):
-                module = FakeLightningModule(build_memory(config_cls))
-                callback = MemoryMonitorCallback(log_every_n_steps=1)
-                trainer = FakeTrainer(global_step=0)
-
-                callback.on_fit_start(trainer, module)
-                module.memory(torch.randn(3, 4))
-
-                scalars = dict(module.logged_scalars)
-                for name in (
-                    "memory/memory/output_mean",
-                    "memory/memory/output_var",
-                    "memory/memory/output_l2_norm",
-                    "memory/memory/contribution/delta_mean",
-                    "memory/memory/contribution/delta_var",
-                    "memory/memory/contribution/delta_norm",
-                    "memory/memory/contribution/relative_delta_norm",
-                    "memory/memory/gate/open_mean",
-                    "memory/memory/gate/open_fraction",
+        self.assertEqual(MemoryMonitorCallback().log_every_n_steps, 100)
+        self.assertEqual(
+            MemoryMonitorCallback(log_every_n_steps=7).log_every_n_steps,
+            7,
+        )
+        for value in (True, 1.5, "1"):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "^log_every_n_steps must be a positive integer, "
+                    f"received {type(value).__name__}\\.$",
                 ):
-                    self.assertIn(name, scalars)
-                    self.assertTrue(
-                        torch.isfinite(scalars[name]).all(),
-                        f"{name} not finite",
-                    )
-                callback.on_fit_end(trainer, module)
+                    MemoryMonitorCallback(log_every_n_steps=value)
+        for value in (0, -1):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "^log_every_n_steps must be greater than 0\\.$",
+                ):
+                    MemoryMonitorCallback(log_every_n_steps=value)
 
-    def test_hook_cleanup_removes_forward_hooks_and_state(self):
-        module = FakeLightningModule(build_memory())
+    def test_diagnostics_match_exact_output_and_contribution_equations(self) -> None:
+        inputs = torch.tensor(
+            [[1.0, -2.0], [3.0, 0.5]],
+            dtype=torch.float64,
+        )
+        outputs = torch.tensor(
+            [[2.0, -1.0], [1.0, 4.5]],
+            dtype=torch.float64,
+        )
+        metrics = _MemoryDiagnostics.calculate(inputs, outputs)
+        delta = outputs - inputs
+
+        torch.testing.assert_close(metrics.output_mean, outputs.mean())
+        torch.testing.assert_close(
+            metrics.output_variance,
+            outputs.var(unbiased=False),
+        )
+        torch.testing.assert_close(metrics.output_norm, outputs.norm())
+        torch.testing.assert_close(metrics.delta_mean, delta.mean())
+        torch.testing.assert_close(
+            metrics.delta_variance,
+            delta.var(unbiased=False),
+        )
+        torch.testing.assert_close(metrics.delta_norm, delta.norm())
+        torch.testing.assert_close(
+            metrics.relative_delta_norm,
+            delta.norm() / inputs.norm().clamp_min(1e-6),
+        )
+
+        zero_inputs = torch.zeros(2, 2)
+        nonzero_outputs = torch.ones(2, 2)
+        zero_metrics = _MemoryDiagnostics.calculate(
+            zero_inputs,
+            nonzero_outputs,
+        )
+        torch.testing.assert_close(
+            zero_metrics.relative_delta_norm,
+            (nonzero_outputs - zero_inputs).norm() / 1e-6,
+        )
+
+    def test_gate_diagnostics_distinguish_weighted_and_sigmoid_variants(
+        self,
+    ) -> None:
+        low_saturation_logit = math.log(0.01 / 0.99)
+        high_saturation_logit = math.log(0.99 / 0.01)
+        sigmoid_logits = torch.tensor(
+            [
+                -10.0,
+                low_saturation_logit,
+                0.0,
+                high_saturation_logit,
+                10.0,
+                1.0,
+            ]
+        )
+        sigmoid_metrics = _MemoryDiagnostics.calculate_gate(
+            build_memory(GatedResidualDynamicMemoryConfig),
+            sigmoid_logits,
+        )
+        sigmoid_values = torch.sigmoid(sigmoid_logits)
+        torch.testing.assert_close(
+            sigmoid_metrics.open_mean,
+            sigmoid_values.mean(),
+        )
+        torch.testing.assert_close(
+            sigmoid_metrics.open_fraction,
+            (sigmoid_values > 0.5).float().mean(),
+        )
+        torch.testing.assert_close(
+            sigmoid_metrics.saturation_fraction,
+            (
+                (sigmoid_logits < low_saturation_logit)
+                | (sigmoid_logits > high_saturation_logit)
+            )
+            .float()
+            .mean(),
+        )
+
+        weighted_logits = torch.tensor(
+            [
+                [[0.0, 0.0], [0.0, 2.0], [3.0, -1.0]],
+                [[1.0, 2.0], [-2.0, 1.0], [4.0, 4.0]],
+            ]
+        )
+        weighted_metrics = _MemoryDiagnostics.calculate_gate(
+            build_memory(WeightedDynamicMemoryConfig),
+            weighted_logits,
+        )
+        memory_share = torch.softmax(weighted_logits, dim=-1)[..., -1]
+        torch.testing.assert_close(
+            weighted_metrics.open_mean,
+            memory_share.mean(),
+        )
+        torch.testing.assert_close(
+            weighted_metrics.open_fraction,
+            (memory_share > 0.5).float().mean(),
+        )
+        self.assertIsNone(weighted_metrics.saturation_fraction)
+
+    def test_hidden_extraction_accepts_tensor_and_layer_state_only(self) -> None:
+        extract = MemoryMonitorCallback._MemoryMonitorCallback__extract_hidden_tensor
+        tensor = torch.tensor([[1.0, 2.0]])
+        self.assertIs(extract(tensor), tensor)
+        state = LayerState(hidden=tensor)
+        self.assertIs(extract(state), tensor)
+        self.assertIsNone(extract(object()))
+
+    def test_gate_discovery_uses_real_variant_submodules(self) -> None:
+        find_gate = MemoryMonitorCallback._MemoryMonitorCallback__find_gate_submodule
+        gated = build_memory(GatedResidualDynamicMemoryConfig)
+        weighted = build_memory(WeightedDynamicMemoryConfig)
+
+        self.assertIs(find_gate(gated), gated.memory_gate_model)
+        self.assertIs(find_gate(weighted), weighted.memory_weight_model)
+        self.assertIsNone(find_gate(nn.Linear(2, 2)))
+
+    def test_capture_and_pre_hooks_replace_only_fresh_tensor_logits(self) -> None:
+        callback = MemoryMonitorCallback()
+        memory = build_memory()
+        capture = callback._MemoryMonitorCallback__make_gate_capture_hook("memory")
+        clear = callback._MemoryMonitorCallback__make_memory_pre_hook("memory")
+        first = torch.tensor([[1.0, 2.0]])
+        second = torch.tensor([[3.0, 4.0]])
+
+        capture(memory.memory_gate_model, (), object())
+        self.assertEqual(callback._latest_gate_logits, {})
+        capture(memory.memory_gate_model, (), LayerState(hidden=first))
+        torch.testing.assert_close(
+            callback._latest_gate_logits["memory"],
+            first,
+        )
+        capture(memory.memory_gate_model, (), second)
+        torch.testing.assert_close(
+            callback._latest_gate_logits["memory"],
+            second,
+        )
+        clear(memory, ())
+        self.assertEqual(callback._latest_gate_logits, {})
+
+    def test_malformed_forward_hook_payloads_are_ignored_after_gate_cleanup(
+        self,
+    ) -> None:
         callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
+        trainer = Trainer(
+            accelerator="cpu",
+            devices=1,
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+        owner = _MemoryOwner()
+        memory = owner.memory
+        hook = callback._MemoryMonitorCallback__make_memory_forward_hook(
+            "memory",
+            trainer,
+            owner,
+        )
 
-        callback.on_fit_start(trainer, module)
-        self.assertTrue(callback._hooks)
+        for inputs, output in (
+            ((), torch.ones(1, 4)),
+            ((object(),), torch.ones(1, 4)),
+            ((torch.ones(1, 4),), object()),
+        ):
+            callback._latest_gate_logits["memory"] = torch.ones(1, 4)
+            hook(memory, inputs, output)
+            self.assertEqual(callback._latest_gate_logits, {})
+        self.assertEqual(owner.logged_scalars, [])
 
-        callback.on_fit_end(trainer, module)
+    def test_build_context_detaches_inputs_outputs_and_optional_gate(self) -> None:
+        owner = _MemoryOwner()
+        inputs = torch.tensor([[1.0, -2.0]], requires_grad=True)
+        outputs = torch.tensor([[3.0, 4.0]], requires_grad=True)
+        observation = _MemoryObservation(
+            memory_module=owner.memory,
+            input_values=inputs,
+            output_values=outputs,
+            gate_logits=None,
+        )
+
+        context = MemoryMonitorCallback._MemoryMonitorCallback__build_tracking_context(
+            owner,
+            "memory",
+            observation,
+        )
+
+        self.assertIsNone(context.gate_metrics)
+        for metric in (
+            context.memory_metrics.output_mean,
+            context.memory_metrics.output_variance,
+            context.memory_metrics.output_norm,
+            context.memory_metrics.delta_mean,
+            context.memory_metrics.delta_variance,
+            context.memory_metrics.delta_norm,
+            context.memory_metrics.relative_delta_norm,
+        ):
+            self.assertEqual(metric.dtype, torch.float32)
+            self.assertFalse(metric.requires_grad)
+
+        callback = MemoryMonitorCallback()
+        callback._MemoryMonitorCallback__track_memory_diagnostics(context)
+        self.assertEqual(len(owner.logged_scalars), 7)
+        self.assertFalse(any("/gate/" in name for name, _ in owner.logged_scalars))
+
+    def test_owner_without_memory_registers_no_hooks(self) -> None:
+        trainer = Trainer(
+            accelerator="cpu",
+            devices=1,
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+        callback = MemoryMonitorCallback()
+        owner = LightningModule()
+
+        callback.on_fit_start(trainer, owner)
 
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._latest_gate_logits, {})
-        module.logged_scalars.clear()
-        module.memory(torch.randn(2, 4))
-        self.assertEqual(module.logged_scalars, [])
 
-    def test_repeated_fit_start_does_not_duplicate_hooks(self):
-        module = FakeLightningModule(build_memory())
+    def test_gate_free_memory_registers_only_memory_hooks_and_logs_no_gate(
+        self,
+    ) -> None:
+        trainer = Trainer(
+            accelerator="cpu",
+            devices=1,
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
         callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
+        owner = _GateFreeOwner()
 
-        callback.on_fit_start(trainer, module)
-        callback.on_fit_start(trainer, module)
-        module.memory(torch.randn(2, 4))
+        callback.on_fit_start(trainer, owner)
+        callback._latest_gate_logits["memory"] = torch.full((2, 4), 100.0)
+        output = owner.memory(torch.zeros(2, 4))
 
-        logged_names = [name for name, _ in module.logged_scalars]
-        self.assertEqual(len(logged_names), len(set(logged_names)))
-        callback.on_fit_end(trainer, module)
+        self.assertEqual(len(callback._hooks), 2)
+        torch.testing.assert_close(output, torch.ones(2, 4))
+        self.assertEqual(len(owner.logged_scalars), 7)
+        self.assertFalse(any("/gate/" in name for name, _ in owner.logged_scalars))
+        callback.on_fit_end(trainer, owner)
 
-    def test_logs_exact_output_and_contribution_formulas(self):
-        memory = GateFreeMemory(make_memory_config(input_dim=4, output_dim=4))
-        module = FakeLightningModule(memory)
+    def test_real_objects_allow_repeated_start_and_cleanup_without_duplicates(
+        self,
+    ) -> None:
+        trainer = Trainer(
+            accelerator="cpu",
+            devices=1,
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+        )
+        owner = _MemoryOwner()
         callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
-        logits = torch.tensor([[1.0, -2.0, 3.0, 0.0], [0.5, 2.0, -1.0, 4.0]])
-        output = logits + 1.0
-        delta = output - logits
 
-        callback.on_fit_start(trainer, module)
-        module.memory(logits)
+        callback.on_fit_start(trainer, owner)
+        first_hook_count = len(callback._hooks)
+        callback.on_fit_start(trainer, owner)
 
-        scalars = dict(module.logged_scalars)
-        prefix = "memory/memory"
-        self.assert_logged_close(scalars, f"{prefix}/output_mean", output.mean())
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/output_var",
-            output.var(unbiased=False),
-        )
-        self.assert_logged_close(scalars, f"{prefix}/output_l2_norm", output.norm())
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/contribution/delta_mean",
-            delta.mean(),
-        )
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/contribution/delta_var",
-            delta.var(unbiased=False),
-        )
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/contribution/delta_norm",
-            delta.norm(),
-        )
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/contribution/relative_delta_norm",
-            delta.norm() / logits.norm().clamp_min(1e-6),
-        )
-        callback.on_fit_end(trainer, module)
-
-    def test_logs_exact_sigmoid_gate_metrics(self):
-        memory = build_memory(GatedResidualDynamicMemoryConfig)
-        gate_logits = torch.tensor([-10.0, 0.0, 10.0, 1.0])
-        memory.memory_model = IdentityModule()
-        memory.memory_gate_model = ConstantLastDimModule(gate_logits)
-        module = FakeLightningModule(memory)
-        callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
-
-        callback.on_fit_start(trainer, module)
-        module.memory(torch.ones(2, 4))
-
-        gate = torch.sigmoid(gate_logits)
-        scalars = dict(module.logged_scalars)
-        prefix = "memory/memory/gate"
-        self.assert_logged_close(scalars, f"{prefix}/open_mean", gate.mean())
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/open_fraction",
-            (gate > 0.5).float().mean(),
-        )
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/saturation_fraction",
-            ((gate < 0.01) | (gate > 0.99)).float().mean(),
-        )
+        self.assertEqual(len(callback._hooks), first_hook_count)
+        self.assertEqual(first_hook_count, 3)
+        owner.memory(torch.ones(2, 4))
+        self.assertTrue(owner.logged_scalars)
+        callback.on_fit_end(trainer, owner)
+        callback.on_fit_end(trainer, owner)
+        self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._latest_gate_logits, {})
-        callback.on_fit_end(trainer, module)
-
-    def test_logs_exact_weighted_memory_share_metrics(self):
-        memory = build_memory(WeightedDynamicMemoryConfig)
-        weight_logits = torch.tensor([0.0, 2.0])
-        memory.memory_model = IdentityModule()
-        memory.memory_weight_model = ConstantLastDimModule(weight_logits)
-        module = FakeLightningModule(memory)
-        callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
-
-        callback.on_fit_start(trainer, module)
-        module.memory(torch.ones(2, 4))
-
-        memory_share = torch.softmax(weight_logits, dim=-1)[-1]
-        scalars = dict(module.logged_scalars)
-        prefix = "memory/memory/gate"
-        self.assert_logged_close(scalars, f"{prefix}/open_mean", memory_share)
-        self.assert_logged_close(
-            scalars,
-            f"{prefix}/open_fraction",
-            (memory_share > 0.5).float(),
-        )
-        self.assertNotIn(f"{prefix}/saturation_fraction", scalars)
-        callback.on_fit_end(trainer, module)
-
-    def test_logs_distinct_prefixes_for_multiple_memory_modules(self):
-        module = MultiMemoryLightningModule(
-            GateFreeMemory(make_memory_config(input_dim=4, output_dim=4)),
-            GateFreeMemory(make_memory_config(input_dim=4, output_dim=4)),
-        )
-        callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
-
-        callback.on_fit_start(trainer, module)
-        module.first_memory(torch.zeros(1, 4))
-        module.second_memory(torch.zeros(1, 4))
-
-        keys = {name for name, _ in module.logged_scalars}
-        self.assertIn("first_memory/memory/output_mean", keys)
-        self.assertIn("second_memory/memory/output_mean", keys)
-        callback.on_fit_end(trainer, module)
-
-    def test_logs_output_and_contribution_without_gate_submodule(self):
-        memory = GateFreeMemory(make_memory_config(input_dim=4, output_dim=4))
-        module = FakeLightningModule(memory)
-        callback = MemoryMonitorCallback(log_every_n_steps=1)
-        trainer = FakeTrainer(global_step=0)
-
-        callback.on_fit_start(trainer, module)
-        module.memory(torch.zeros(2, 4))
-
-        keys = {name for name, _ in module.logged_scalars}
-        self.assertIn("memory/memory/output_mean", keys)
-        self.assertIn("memory/memory/contribution/delta_norm", keys)
-        self.assertFalse(any("/gate/" in key for key in keys))
-        for name, value in module.logged_scalars:
-            self.assertTrue(torch.isfinite(value).all(), f"{name} not finite")
-        callback.on_fit_end(trainer, module)
 
 
 if __name__ == "__main__":
