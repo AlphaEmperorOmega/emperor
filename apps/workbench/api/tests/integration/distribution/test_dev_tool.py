@@ -98,6 +98,31 @@ class PortableLauncherTests(unittest.TestCase):
         self.assertTrue(callable(emperor_dev.service_specs))
         self.assertFalse(hasattr(emperor_dev, "_service_specs"))
 
+    def test_windows_service_job_names_are_scoped_and_validated(self) -> None:
+        name = "_emperor_windows_jobs_test"
+        spec = importlib.util.spec_from_file_location(
+            name,
+            PROJECT_ROOT / "tools" / "_emperor_windows_jobs.py",
+        )
+        self.assertIsNotNone(spec)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+
+        self.assertEqual(
+            module.service_job_object_name("backend", 9999),
+            "Local\\EmperorWorkbenchService-backend-9999",
+        )
+        for service, port in (
+            ("unsafe/name", 9999),
+            ("backend", 0),
+            ("backend", 65536),
+        ):
+            with self.subTest(service=service, port=port):
+                with self.assertRaises(ValueError):
+                    module.service_job_object_name(service, port)
+
     def test_workbench_status_trusts_the_checkout_when_already_in_venv(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             environment = {

@@ -1041,13 +1041,14 @@ def _start_service(spec: ServiceSpec) -> None:
         if os.name == "posix":
             kwargs["start_new_session"] = True
         if os.name == "nt":
-            from emperor_workbench.training_jobs._containment._windows_job import (
+            from _emperor_windows_jobs import (
                 WindowsJob,
                 WindowsJobLimits,
+                service_job_object_name,
             )
 
             windows_job = WindowsJob.create(
-                name=_service_job_object_name(spec.name, spec.port),
+                name=service_job_object_name(spec.name, spec.port),
                 limits=WindowsJobLimits(
                     memory_bytes=64 * 1024**3,
                     cpu_count=os.cpu_count() or 1,
@@ -1148,9 +1149,9 @@ def _terminate_windows_service_job(
     name = metadata.get("jobName")
     if not isinstance(name, str) or not name:
         return
-    from emperor_workbench.training_jobs._containment._windows_job import WindowsJob
+    from _emperor_windows_jobs import WindowsJob, service_job_object_name
 
-    if name != _service_job_object_name(spec.name, spec.port):
+    if name != service_job_object_name(spec.name, spec.port):
         return
 
     job = WindowsJob.open(name)
