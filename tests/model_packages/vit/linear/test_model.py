@@ -1613,7 +1613,6 @@ class TestVitLinearModel(unittest.TestCase):
             self._encoder_layer_config(cfg).layer_norm_position,
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertFalse(self._encoder_layer_config(cfg).causal_attention_mask_flag)
         self.assertFalse(self._attention_config(cfg).causal_attention_mask_flag)
 
         cfg = presets.get_config(ExperimentPreset.POST_NORM)[0]

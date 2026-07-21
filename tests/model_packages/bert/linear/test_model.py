@@ -302,7 +302,6 @@ class TestBertLinearModel(unittest.TestCase):
             cfg.experiment_config.boundary_config.embedding_options.dropout_probability,
             0.1,
         )
-        self.assertFalse(encoder_layer.causal_attention_mask_flag)
         self.assertEqual(config.HALTING_OUTPUT_DIM, 2)
 
     def test_main_stack_controls_build_into_encoder_stack(self):
@@ -1531,7 +1530,6 @@ class TestBertLinearModel(unittest.TestCase):
         )
 
         cfg = presets.get_config(ExperimentPreset.CAUSAL)[0]
-        self.assertTrue(self._encoder_layer_config(cfg).causal_attention_mask_flag)
         self.assertTrue(self._attention_config(cfg).causal_attention_mask_flag)
 
         cfg = presets.get_config(ExperimentPreset.ATTENTION_BIAS)[0]

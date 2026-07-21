@@ -530,7 +530,6 @@ class TestBertExpertLinearModel(unittest.TestCase):
         cfg = self._config(ExperimentPreset.CAUSAL)
         attention_config = self._encoder_layer_config(cfg).attention_config
         self.assertTrue(attention_config.causal_attention_mask_flag)
-        self.assertTrue(self._encoder_layer_config(cfg).causal_attention_mask_flag)
 
         model = Model(cfg).eval()
         input_ids, attention_mask, token_type_ids = self._fake_bert_inputs(cfg)

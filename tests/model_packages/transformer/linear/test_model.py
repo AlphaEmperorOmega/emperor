@@ -146,9 +146,7 @@ class TestTransformerLinearModel(unittest.TestCase):
                 self.assertEqual(auxiliary_loss.shape, ())
                 self.assertTrue(torch.isfinite(logits).all())
                 self.assertTrue(torch.isfinite(auxiliary_loss))
-                self.assertFalse(encoder.causal_attention_mask_flag)
                 self.assertFalse(encoder.attention_config.causal_attention_mask_flag)
-                self.assertTrue(decoder.causal_attention_mask_flag)
                 self.assertTrue(
                     decoder.self_attention_config.causal_attention_mask_flag
                 )

@@ -97,7 +97,6 @@ class TestGptLinearModel(unittest.TestCase):
                 decoder_config = configs[0].experiment_config.decoder_config
                 block_config = getattr(decoder_config, "block_config", decoder_config)
                 layer_config = block_config.layer_config.layer_model_config
-                self.assertTrue(layer_config.causal_attention_mask_flag)
                 self.assertTrue(
                     layer_config.self_attention_config.causal_attention_mask_flag
                 )
@@ -373,7 +372,6 @@ class TestGptLinearModel(unittest.TestCase):
             layer.layer_norm_position,
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertTrue(layer.causal_attention_mask_flag)
         self.assertTrue(attention.causal_attention_mask_flag)
         self.assertIsNone(layer.cross_attention_config)
         self.assertEqual(
@@ -854,7 +852,6 @@ class TestGptLinearModel(unittest.TestCase):
                     self.assertTrue(torch.isfinite(logits).all())
                     self.assertTrue(torch.isfinite(auxiliary_loss))
                     layer = self._decoder_layer_config(cfg)
-                    self.assertTrue(layer.causal_attention_mask_flag)
                     self.assertTrue(
                         layer.self_attention_config.causal_attention_mask_flag
                     )
@@ -1033,7 +1030,6 @@ class TestGptLinearModel(unittest.TestCase):
             baseline.experiment_config.positional_embedding_config,
             TextLearnedPositionalEmbeddingConfig,
         )
-        self.assertTrue(self._decoder_layer_config(baseline).causal_attention_mask_flag)
         post_norm = presets.get_config(ExperimentPreset.POST_NORM)[0]
         self.assertEqual(
             self._decoder_layer_config(post_norm).layer_norm_position,

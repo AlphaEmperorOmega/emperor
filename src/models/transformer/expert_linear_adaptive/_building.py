@@ -441,7 +441,6 @@ def _encoder(runtime: RuntimeOptions):
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
         residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
-        causal_attention_mask_flag=False,
         attention_config=_attention(
             runtime,
             runtime.encoder_attention_options,
@@ -484,7 +483,6 @@ def _decoder(runtime: RuntimeOptions):
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
         residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
-        causal_attention_mask_flag=True,
         self_attention_config=_attention(
             runtime,
             runtime.decoder_self_attention_options,

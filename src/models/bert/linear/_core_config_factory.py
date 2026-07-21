@@ -180,7 +180,6 @@ class CoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
-            causal_attention_mask_flag=options.causal_attention_mask_flag,
             attention_config=self.__build_attention_config(),
             feed_forward_config=self.__build_feed_forward_config(),
         )

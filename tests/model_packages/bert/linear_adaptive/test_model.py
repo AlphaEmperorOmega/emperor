@@ -233,7 +233,6 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             self._config(ExperimentPreset.CAUSAL)
         )
 
-        self.assertTrue(encoder_layer_config.causal_attention_mask_flag)
         self.assertTrue(
             encoder_layer_config.attention_config.causal_attention_mask_flag
         )

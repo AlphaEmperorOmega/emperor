@@ -68,7 +68,6 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                 decoder_config = configs[0].experiment_config.decoder_config
                 block_config = getattr(decoder_config, "block_config", decoder_config)
                 layer_config = block_config.layer_config.layer_model_config
-                self.assertTrue(layer_config.causal_attention_mask_flag)
                 self.assertTrue(
                     layer_config.self_attention_config.causal_attention_mask_flag
                 )
@@ -498,7 +497,6 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                 self.assertTrue(torch.isfinite(logits).all())
                 self.assertTrue(torch.isfinite(auxiliary_loss))
                 layer = self._decoder_layer_config(cfg)
-                self.assertTrue(layer.causal_attention_mask_flag)
                 self.assertTrue(layer.self_attention_config.causal_attention_mask_flag)
                 self.assertIsNone(layer.cross_attention_config)
 
