@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
+import sys
 import tempfile
+import tomllib
 import unittest
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,6 +18,8 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute, iter_route_contexts
 
 CONTRACT_DIRECTORY = Path(__file__).resolve().parent
+API_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[7]
 SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 OPENAPI_HTTP_METHODS = frozenset(
     {"delete", "get", "head", "options", "patch", "post", "put", "trace"}
@@ -178,6 +183,132 @@ def _normalized_openapi_manifest(app: FastAPI) -> dict[str, Any]:
     }
 
 
+def _console_script(project_root: Path, name: str) -> str:
+    project = tomllib.loads(
+        (project_root / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    return project["project"]["scripts"][name]
+
+
+def _portable_development_backend() -> dict[str, Any]:
+    name = "_emperor_dev_http_v1_contract"
+    spec = importlib.util.spec_from_file_location(
+        name,
+        REPOSITORY_ROOT / "tools" / "emperor_dev.py",
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load the portable development launcher.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+
+    with (
+        patch.object(
+            module,
+            "venv_python",
+            return_value=Path(sys.executable),
+        ),
+        patch.object(module, "resolve_executable", return_value="node"),
+        patch.dict(
+            os.environ,
+            {
+                "WORKBENCH_BACKEND_PORT": "9999",
+                "WORKBENCH_BACKEND_RELOAD": "false",
+                "WORKBENCH_FRONTEND_PORT": "9000",
+            },
+        ),
+    ):
+        backend, _frontend = module.service_specs()
+
+    return {
+        "command": _normalize_python_command(backend.command),
+        "commandIdentity": backend.command_identity,
+    }
+
+
+def _normalize_python_command(command: Any) -> list[str]:
+    return [
+        "<python>" if argument == sys.executable else argument for argument in command
+    ]
+
+
+def _process_target_manifest() -> dict[str, Any]:
+    import emperor_workbench.inspection.worker as inspection_worker
+    import emperor_workbench.training_jobs.cgroup_worker as cgroup_worker
+    import emperor_workbench.training_jobs.worker as training_worker
+    from emperor_workbench.cli import main as workbench_main
+    from emperor_workbench.project_adapter import (
+        PROJECT_ADAPTER_COMMAND_ENV,
+        ProjectAdapterClient,
+    )
+
+    with (
+        patch.object(sys, "argv", ["emperor-workbench"]),
+        patch("uvicorn.run") as run,
+    ):
+        workbench_main()
+    if run.call_args is None:
+        raise AssertionError("The Workbench launcher did not invoke Uvicorn.")
+    asgi_target = run.call_args.args[0]
+
+    training_command = [
+        sys.executable,
+        "-m",
+        training_worker.__name__,
+        "--payload",
+        "{payload}",
+        "--progress",
+        "{progress}",
+    ]
+    strict_cgroup_command = [
+        sys.executable,
+        "-m",
+        cgroup_worker.__name__,
+        "--cgroup",
+        "{cgroup}",
+        "--ready",
+        "{ready}",
+        "--",
+        *training_command,
+    ]
+    with (
+        patch.dict(os.environ, {PROJECT_ADAPTER_COMMAND_ENV: ""}),
+        patch("shutil.which", return_value=None),
+        ProjectAdapterClient() as project_adapter,
+    ):
+        project_adapter_fallback = project_adapter.command
+
+    return {
+        "asgiTarget": asgi_target,
+        "consoleScripts": {
+            "emperor-project-adapter": _console_script(
+                REPOSITORY_ROOT,
+                "emperor-project-adapter",
+            ),
+            "emperor-workbench": _console_script(
+                API_ROOT,
+                "emperor-workbench",
+            ),
+        },
+        "moduleCommands": {
+            "inspection": _normalize_python_command(
+                [
+                    sys.executable,
+                    "-P",
+                    "-m",
+                    inspection_worker.__name__,
+                ]
+            ),
+            "projectAdapterFallback": _normalize_python_command(
+                project_adapter_fallback
+            ),
+            "training": _normalize_python_command(training_command),
+            "trainingStrictCgroup": _normalize_python_command(strict_cgroup_command),
+        },
+        "portableDevelopmentBackend": _portable_development_backend(),
+    }
+
+
 class HttpV1ContractFreezeTests(unittest.TestCase):
     def test_contract_runtime_environment_is_scoped_and_isolated(self) -> None:
         unsafe_environment = {
@@ -205,6 +336,16 @@ class HttpV1ContractFreezeTests(unittest.TestCase):
         self.assertEqual(
             actual,
             _read_json_fixture("openapi.normalized.json"),
+        )
+
+    def test_process_targets_match_frozen_http_v1_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with _isolated_runtime_environment(root):
+                actual = _process_target_manifest()
+        self.assertEqual(
+            actual,
+            _read_json_fixture("process-targets.json"),
         )
 
     def test_route_manifest_matches_frozen_http_v1_contract(self) -> None:

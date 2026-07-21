@@ -1,0 +1,58 @@
+{
+  "asgiTarget": "emperor_workbench.api:app",
+  "consoleScripts": {
+    "emperor-project-adapter": "models.adapter_cli:main",
+    "emperor-workbench": "emperor_workbench.cli:main"
+  },
+  "moduleCommands": {
+    "inspection": [
+      "<python>",
+      "-P",
+      "-m",
+      "emperor_workbench.inspection.worker"
+    ],
+    "projectAdapterFallback": [
+      "<python>",
+      "-m",
+      "models.adapter_cli"
+    ],
+    "training": [
+      "<python>",
+      "-m",
+      "emperor_workbench.training_jobs.worker",
+      "--payload",
+      "{payload}",
+      "--progress",
+      "{progress}"
+    ],
+    "trainingStrictCgroup": [
+      "<python>",
+      "-m",
+      "emperor_workbench.training_jobs.cgroup_worker",
+      "--cgroup",
+      "{cgroup}",
+      "--ready",
+      "{ready}",
+      "--",
+      "<python>",
+      "-m",
+      "emperor_workbench.training_jobs.worker",
+      "--payload",
+      "{payload}",
+      "--progress",
+      "{progress}"
+    ]
+  },
+  "portableDevelopmentBackend": {
+    "command": [
+      "<python>",
+      "-m",
+      "emperor_workbench",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "9999"
+    ],
+    "commandIdentity": "emperor_workbench"
+  }
+}
