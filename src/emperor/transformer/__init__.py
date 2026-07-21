@@ -1,5 +1,3 @@
-"""Public Interface for Transformer modules."""
-
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
