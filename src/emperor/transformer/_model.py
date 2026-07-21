@@ -25,7 +25,6 @@ class Transformer(Module):
         super().__init__()
         config = getattr(cfg, "transformer_config", cfg)
         self.cfg: TransformerConfig = self._override_config(config, overrides)
-
         self.VALIDATOR.validate_transformer(self)
 
         self.encoder_model = self.__build_stack_if_configured(

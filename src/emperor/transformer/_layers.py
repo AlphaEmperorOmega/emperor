@@ -135,12 +135,10 @@ class TransformerEncoderLayer(Module):
         self.cfg: TransformerEncoderLayerConfig = self._override_config(
             config, overrides
         )
-
         self.embedding_dim: int = self.cfg.embedding_dim
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability: float = self.cfg.dropout_probability
         self.residual_config = self.cfg.residual_config
-
         self.VALIDATOR.validate_encoder_layer(self)
 
         self.self_attention_layer = _EncoderSelfAttentionLayer(
@@ -251,12 +249,10 @@ class TransformerDecoderLayer(Module):
         self.cfg: TransformerDecoderLayerConfig = self._override_config(
             config, overrides
         )
-
         self.embedding_dim: int = self.cfg.embedding_dim
         self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability: float = self.cfg.dropout_probability
         self.residual_config = self.cfg.residual_config
-
         self.VALIDATOR.validate_decoder_layer(self)
 
         self.self_attention_layer = _DecoderSelfAttentionLayer(
