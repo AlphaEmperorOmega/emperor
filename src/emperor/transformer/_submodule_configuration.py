@@ -7,7 +7,7 @@ from emperor.layers import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer._options.records import (
@@ -39,7 +39,9 @@ def _controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_connection_option=options.residual_connection_option,
+            residual_config=None
+            if options.residual_connection_option is None
+            else ResidualConfig(option=options.residual_connection_option),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -166,7 +168,7 @@ def configure_transformer_submodule(
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
         block_config=model_config,
         gate_config=_gate_config(path_options, recurrent=True),
-        residual_connection_option=ResidualConnectionOptions.DISABLED,
+        residual_config=None,
         halting_config=_halting_config(path_options, recurrent=True),
         memory_config=None,
     )

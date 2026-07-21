@@ -9,8 +9,8 @@ from emperor.layers import (
     Layer,
     LayerNormPositionOptions,
     LayerState,
+    ResidualConfig,
     ResidualConnection,
-    ResidualConnectionOptions,
 )
 from emperor.nn import Module
 from emperor.transformer._state import TransformerDecoderLayerState
@@ -42,9 +42,7 @@ class TransformerEncoderLayer(Module):
             self.cfg.layer_norm_position
         )
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.residual_connection_option: ResidualConnectionOptions = (
-            self.cfg.residual_connection_option
-        )
+        self.residual_config: ResidualConfig | None = self.cfg.residual_config
 
         self.VALIDATOR.validate_encoder_layer(self)
 
@@ -173,9 +171,12 @@ class TransformerEncoderLayer(Module):
         return x
 
     def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
+        if self.residual_config is None:
             return None
-        return ResidualConnection(self.residual_connection_option)
+        return self._build_from_config(
+            self.residual_config,
+            residual_dim=self.embedding_dim,
+        )
 
     def __maybe_apply_residual_connection(
         self,
@@ -256,9 +257,7 @@ class TransformerDecoderLayer(Module):
             self.cfg.layer_norm_position
         )
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.residual_connection_option: ResidualConnectionOptions = (
-            self.cfg.residual_connection_option
-        )
+        self.residual_config: ResidualConfig | None = self.cfg.residual_config
 
         self.VALIDATOR.validate_decoder_layer(self)
 
@@ -431,9 +430,12 @@ class TransformerDecoderLayer(Module):
         return x
 
     def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_connection_option == ResidualConnectionOptions.DISABLED:
+        if self.residual_config is None:
             return None
-        return ResidualConnection(self.residual_connection_option)
+        return self._build_from_config(
+            self.residual_config,
+            residual_dim=self.embedding_dim,
+        )
 
     def __maybe_apply_residual_connection(
         self,

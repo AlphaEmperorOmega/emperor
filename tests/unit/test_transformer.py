@@ -1,33 +1,34 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import itertools
 import unittest
 
+import torch
 from torch.nn import LayerNorm, ModuleList
-from emperor.base.options import (
+
+from emperor.attention import (
+    IndependentAttentionConfig,
+    MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
+)
+from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
+    LayerConfig,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.attention.core.variants.self_attention.config import SelfAttentionConfig
-from emperor.attention.core.variants.independent_attention.config import IndependentAttentionConfig
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
-    MixtureOfAttentionHeadsConfig,
-)
-from emperor.transformer.feed_forward.core.config import FeedForwardConfig
-from emperor.transformer.config import TransformerConfig
-from emperor.transformer.model import Transformer
-from emperor.transformer.core.config import (
-    TransformerEncoderLayerConfig,
+from emperor.linears import LinearLayerConfig
+from emperor.transformer import (
+    FeedForwardConfig,
+    Transformer,
+    TransformerConfig,
     TransformerDecoderLayerConfig,
-    TransformerEncoderStackConfig,
-    TransformerDecoderStackConfig,
-)
-from emperor.transformer.core.stack import (
-    TransformerEncoderStack,
     TransformerDecoderStack,
+    TransformerDecoderStackConfig,
+    TransformerEncoderLayerConfig,
+    TransformerEncoderStack,
+    TransformerEncoderStackConfig,
 )
 from support.attention import (
     build_attention_config,
@@ -90,7 +91,7 @@ def feed_forward_config(
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -142,7 +143,7 @@ def encoder_layer_config(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.DEFAULT,
         dropout_probability=dropout_probability,
-        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
         causal_attention_mask_flag=causal_attention_mask_flag,
         attention_config=attention_config,
         feed_forward_config=feed_forward_config(
@@ -221,7 +222,7 @@ def decoder_layer_config(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.DEFAULT,
         dropout_probability=dropout_probability,
-        residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
         causal_attention_mask_flag=causal_attention_mask_flag,
         self_attention_config=self_attention_config,
         cross_attention_config=cross_attention_config,

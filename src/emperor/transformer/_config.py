@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from emperor.config import ConfigBase, optional_field
-from emperor.layers import LayerConfig, ResidualConnectionOptions
+from emperor.layers import LayerConfig
 
 if TYPE_CHECKING:
     from emperor.attention import (
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
         MixtureOfAttentionHeadsConfig,
         SelfAttentionConfig,
     )
-    from emperor.layers import LayerNormPositionOptions
+    from emperor.layers import LayerNormPositionOptions, ResidualConfig
     from emperor.transformer._feed_forward import FeedForwardConfig
 
     DecoderSelfAttentionConfig = SelfAttentionConfig | MixtureOfAttentionHeadsConfig
@@ -30,8 +30,8 @@ class TransformerEncoderLayerConfig(ConfigBase):
     dropout_probability: float | None = optional_field(
         "Dropout applied after each sub-block. Use 0.0 to disable."
     )
-    residual_connection_option: ResidualConnectionOptions | None = optional_field(
-        "Residual connection behavior applied to every encoder sub-block join."
+    residual_config: "ResidualConfig | None" = optional_field(
+        "Optional residual connection config applied to every encoder sub-block join."
     )
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."
@@ -76,8 +76,8 @@ class TransformerDecoderLayerConfig(ConfigBase):
     dropout_probability: float | None = optional_field(
         "Dropout applied after each sub-block. Use 0.0 to disable."
     )
-    residual_connection_option: ResidualConnectionOptions | None = optional_field(
-        "Residual connection behavior applied to every decoder sub-block join."
+    residual_config: "ResidualConfig | None" = optional_field(
+        "Optional residual connection config applied to every decoder sub-block join."
     )
     causal_attention_mask_flag: bool | None = optional_field(
         "Force a causal attention mask in the stack-level mask generation."

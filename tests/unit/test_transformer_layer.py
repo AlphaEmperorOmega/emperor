@@ -1,28 +1,29 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
-import torch
 import itertools
 import unittest
 
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.base.layer import LayerConfig, LayerStackConfig
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.attention.core.variants.self_attention.config import (
+import torch
+
+from emperor.attention import (
+    IndependentAttentionConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention.core.variants.independent_attention.config import IndependentAttentionConfig
-from emperor.transformer.feed_forward.core.config import FeedForwardConfig
-from emperor.transformer.core.config import (
-    TransformerEncoderLayerConfig,
-    TransformerDecoderLayerConfig,
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
-from emperor.transformer.core.layers import (
+from emperor.linears import LinearLayerConfig
+from emperor.transformer import (
+    FeedForwardConfig,
     TransformerDecoderLayer,
+    TransformerDecoderLayerConfig,
     TransformerEncoderLayer,
+    TransformerEncoderLayerConfig,
 )
 
 
@@ -81,6 +82,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         feed_forward_stack_config: "LayerStackConfig | None" = None,
         attention_config: "SelfAttentionConfig | None" = None,
         feed_forward_config: "FeedForwardConfig | None" = None,
+        residual_model_config: LinearLayerConfig | None = None,
     ) -> TransformerEncoderLayerConfig:
 
         if projection_model_config is None:
@@ -94,7 +96,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,
@@ -135,7 +137,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -156,7 +158,11 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             embedding_dim=embedding_dim,
             layer_norm_position=layer_norm_position,
             dropout_probability=dropout_probability,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(
+                option=residual_connection_option, model_config=residual_model_config
+            ),
             causal_attention_mask_flag=causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
@@ -173,8 +179,8 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             m.feed_forward_model, cfg.feed_forward_config._registry_owner()
         )
         self.assertEqual(
-            m.residual_connection_option,
-            cfg.residual_connection_option,
+            m.residual_config,
+            cfg.residual_config,
         )
 
     def test_weighted_residual_uses_separate_parameters_per_encoder_join(self):
@@ -195,6 +201,31 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             model.self_attention_residual_connection.raw_weight,
             model.feed_forward_residual_connection.raw_weight,
         )
+
+    def test_data_dependent_residual_uses_separate_models_per_encoder_join(self):
+        residual_model_config = LinearLayerConfig(
+            input_dim=99,
+            output_dim=99,
+            bias_flag=True,
+        )
+        cfg = self.preset(
+            residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_model_config=residual_model_config,
+        )
+        model = TransformerEncoderLayer(cfg)
+        residual_connections = [
+            model.self_attention_residual_connection,
+            model.feed_forward_residual_connection,
+        ]
+        coefficient_models = [connection.model for connection in residual_connections]
+
+        self.assertEqual(len({id(model) for model in coefficient_models}), 2)
+        for connection in residual_connections:
+            self.assertEqual(connection.model_config, residual_model_config)
+            self.assertIsNot(connection.model_config, residual_model_config)
+        for coefficient_model in coefficient_models:
+            self.assertEqual(coefficient_model.input_dim, cfg.embedding_dim * 2)
+            self.assertEqual(coefficient_model.output_dim, cfg.embedding_dim)
 
     def test_forward_with_different_inputs(self):
         batch_size = 4
@@ -292,6 +323,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         self_attention_config: "SelfAttentionConfig | None" = None,
         cross_attention_config: "IndependentAttentionConfig | None" = None,
         feed_forward_config: "FeedForwardConfig | None" = None,
+        residual_model_config: LinearLayerConfig | None = None,
     ) -> TransformerDecoderLayerConfig:
 
         if projection_model_config is None:
@@ -305,7 +337,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=0.0,
                     halting_config=None,
                     gate_config=None,
@@ -365,7 +397,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
                 layer_config=LayerConfig(
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
-                    residual_connection_option=ResidualConnectionOptions.DISABLED,
+                    residual_config=None,
                     dropout_probability=dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -386,7 +418,11 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             embedding_dim=embedding_dim,
             layer_norm_position=layer_norm_position,
             dropout_probability=dropout_probability,
-            residual_connection_option=residual_connection_option,
+            residual_config=None
+            if residual_connection_option is None
+            else ResidualConfig(
+                option=residual_connection_option, model_config=residual_model_config
+            ),
             causal_attention_mask_flag=causal_attention_mask_flag,
             self_attention_config=self_attention_config,
             cross_attention_config=cross_attention_config,
@@ -410,8 +446,8 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             cfg.feed_forward_config._registry_owner(),
         )
         self.assertEqual(
-            model.residual_connection_option,
-            cfg.residual_connection_option,
+            model.residual_config,
+            cfg.residual_config,
         )
 
     def test_weighted_residual_uses_separate_parameters_per_decoder_join(self):
@@ -434,6 +470,32 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         )
         raw_weights = [connection.raw_weight for connection in residual_connections]
         self.assertEqual(len({id(raw_weight) for raw_weight in raw_weights}), 3)
+
+    def test_data_dependent_residual_uses_separate_models_per_decoder_join(self):
+        residual_model_config = LinearLayerConfig(
+            input_dim=99,
+            output_dim=99,
+            bias_flag=True,
+        )
+        cfg = self.preset(
+            residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_model_config=residual_model_config,
+        )
+        model = TransformerDecoderLayer(cfg)
+        residual_connections = [
+            model.self_attention_residual_connection,
+            model.cross_attention_residual_connection,
+            model.feed_forward_residual_connection,
+        ]
+        coefficient_models = [connection.model for connection in residual_connections]
+
+        self.assertEqual(len({id(model) for model in coefficient_models}), 3)
+        for connection in residual_connections:
+            self.assertEqual(connection.model_config, residual_model_config)
+            self.assertIsNot(connection.model_config, residual_model_config)
+        for coefficient_model in coefficient_models:
+            self.assertEqual(coefficient_model.input_dim, cfg.embedding_dim * 2)
+            self.assertEqual(coefficient_model.output_dim, cfg.embedding_dim)
 
     def test_forward_with_different_inputs(self):
         batch_size = 4

@@ -31,12 +31,8 @@ class TransformerStackOptions:
     recurrent_gate_flag: bool = False
     recurrent_halting_flag: bool = False
     recurrent_max_steps: int = 2
-    stack_residual_connection_option: ResidualConnectionOptions = (
-        ResidualConnectionOptions.DISABLED
-    )
-    recurrent_residual_connection_option: ResidualConnectionOptions = (
-        ResidualConnectionOptions.DISABLED
-    )
+    stack_residual_connection_option: ResidualConnectionOptions | None = None
+    recurrent_residual_connection_option: ResidualConnectionOptions | None = None
 
 
 @dataclass(frozen=True)
@@ -49,9 +45,7 @@ class SubmoduleStackOptions:
     apply_output_pipeline_flag: bool = False
     activation: ActivationOptions = ActivationOptions.DISABLED
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
-    residual_connection_option: ResidualConnectionOptions = (
-        ResidualConnectionOptions.DISABLED
-    )
+    residual_connection_option: ResidualConnectionOptions | None = None
     dropout_probability: float = 0.0
     bias_flag: bool = True
 

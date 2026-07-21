@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
+from emperor.layers._validation import ResidualConnectionValidator
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -19,10 +20,13 @@ if TYPE_CHECKING:
 
 
 class TransformerValidator(ValidatorBase):
+    RESIDUAL_VALIDATOR = ResidualConnectionValidator
+
     OPTIONAL_FIELDS = {
         "override_config",
         "cross_attention_config",
         "causal_attention_mask_flag",
+        "residual_config",
     }
 
     # --- build-time structural validation ---
@@ -61,12 +65,27 @@ class TransformerValidator(ValidatorBase):
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
+        cls._validate_residual_config(
+            model.residual_config,
+            owner_name="TransformerEncoderLayerConfig",
+        )
 
     @classmethod
     def validate_decoder_layer(cls, model: "TransformerDecoderLayer") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
+        cls._validate_residual_config(
+            model.residual_config,
+            owner_name="TransformerDecoderLayerConfig",
+        )
+
+    @classmethod
+    def _validate_residual_config(cls, residual_config, owner_name: str) -> None:
+        cls.RESIDUAL_VALIDATOR.validate_residual_config(
+            residual_config,
+            owner_name=owner_name,
+        )
 
     @classmethod
     def validate_encoder_stack(cls, model: "TransformerEncoderStack") -> None:
