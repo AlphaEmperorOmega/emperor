@@ -1,9 +1,12 @@
 import unittest
 
-from emperor.base.layer._validator import LayerStackValidator
-from emperor.base.layer.config import LayerConfig, LayerStackConfig
-from emperor.base.layer.stack import LayerStack
-from emperor.base.options import LastLayerBiasOptions
+from emperor.layers import (
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerStack,
+    LayerStackConfig,
+)
+from emperor.layers._validation import LayerStackValidator
 
 
 def make_config(**overrides) -> LayerStackConfig:
@@ -29,8 +32,8 @@ class TestLayerStackValidatorAdapter(unittest.TestCase):
 
     def test_construction_dispatches_through_substituted_validator(self):
         class TrackingValidator(LayerStackValidator):
-            @staticmethod
-            def _validate_num_layers(num_layers):
+            @classmethod
+            def _validate_gate_config(cls, cfg):
                 raise RuntimeError("substituted construction validator was called")
 
         class TrackingLayerStack(LayerStack):
