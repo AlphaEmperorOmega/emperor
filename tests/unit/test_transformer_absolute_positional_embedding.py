@@ -3,6 +3,7 @@ import unittest
 
 import torch
 import torch.nn as nn
+
 from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbeddingConfig,
@@ -71,6 +72,16 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
 
         self.assertIsInstance(output, torch.Tensor)
         self.assertEqual(output.shape, (3, 5, cfg.embedding_dim))
+
+    def test_state_dict_and_gradient_contract(self):
+        cfg = self.preset(num_embeddings=10, embedding_dim=4)
+        model = TextLearnedPositionalEmbedding(cfg)
+        output = model(torch.randint(1, cfg.num_embeddings, (3, 5)))
+
+        output.sum().backward()
+
+        self.assertEqual(tuple(model.state_dict()), ("embedding_model.weight",))
+        self.assertIsNotNone(model.embedding_model.weight.grad)
 
     def test_forward_incremental(self):
         cfg = self.preset(num_embeddings=10, embedding_dim=4)
@@ -245,6 +256,12 @@ class TestTextSinusoidalPositionalEmbedding(unittest.TestCase):
         self.assertEqual(output.shape, (2, 10, cfg.embedding_dim))
         self.assertGreaterEqual(model.weights.size(0), 11)
 
+    def test_weights_remain_a_nonpersistent_buffer(self):
+        model = TextSinusoidalPositionalEmbedding(self.preset())
+
+        self.assertEqual(model.state_dict(), {})
+        self.assertIn("weights", dict(model.named_buffers()))
+
     def test_config_build_returns_text_sinusoidal_embedding(self):
         cfg = self.preset()
         model = cfg.build()
@@ -306,7 +323,12 @@ class TestTextSinusoidalPositionalEmbedding(unittest.TestCase):
                     )
                 expected[cfg.padding_idx] = 0
 
-                torch.testing.assert_close(model.weights, expected)
+                torch.testing.assert_close(
+                    model.weights,
+                    expected,
+                    rtol=0,
+                    atol=0,
+                )
 
 
 class TestImageSinusoidalPositionalEmbedding(unittest.TestCase):

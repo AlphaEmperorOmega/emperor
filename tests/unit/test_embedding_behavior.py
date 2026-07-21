@@ -4,14 +4,40 @@ import json
 import subprocess
 import sys
 import unittest
+from dataclasses import dataclass
 
 import torch
+import torch.nn as nn
+
+from emperor.attention import MultiHeadAttentionConfig
+from emperor.config import ConfigBase, optional_field
 from emperor.embedding.absolute import (
+    AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbeddingConfig,
     ImageSinusoidalPositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.embedding.absolute._learned import LearnedPositionalEmbedding
+from emperor.embedding.absolute._sinusoidal import TextSinusoidalPositionalEmbedding
+from emperor.embedding.relative import (
+    DynamicPositionalBiasConfig,
+    RelativePositionalEmbeddingConfig,
+)
+
+
+@dataclass
+class _InnerPositionalConfig(ConfigBase):
+    positional_embedding_config: ConfigBase | None = optional_field(
+        "Nested positional embedding configuration."
+    )
+
+
+@dataclass
+class _OuterAbsoluteConfig(ConfigBase):
+    absolute_positional_embedding_config: ConfigBase | None = optional_field(
+        "Nested absolute positional embedding configuration."
+    )
 
 
 def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingConfig:
@@ -26,7 +52,274 @@ def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingCo
     return TextLearnedPositionalEmbeddingConfig(**values)
 
 
+def relative_config(**overrides: object) -> DynamicPositionalBiasConfig:
+    values: dict[str, object] = {
+        "text_processing_flag": True,
+        "num_heads": 2,
+        "num_embeddings": 5,
+        "embedding_dim": 4,
+        "init_size": 5,
+        "padding_idx": None,
+        "auto_expand_flag": False,
+        "max_positions": 2,
+    }
+    values.update(overrides)
+    return DynamicPositionalBiasConfig(**values)
+
+
+class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
+    def test_base_configs_have_exact_defaults_and_cannot_build(self) -> None:
+        absolute = AbsolutePositionalEmbeddingConfig()
+        relative = RelativePositionalEmbeddingConfig()
+
+        self.assertEqual(
+            (
+                absolute.num_embeddings,
+                absolute.embedding_dim,
+                absolute.init_size,
+                absolute.padding_idx,
+                absolute.auto_expand_flag,
+            ),
+            (None, None, None, None, None),
+        )
+        self.assertEqual(
+            (
+                relative.text_processing_flag,
+                relative.num_heads,
+                relative.num_embeddings,
+                relative.embedding_dim,
+                relative.init_size,
+                relative.padding_idx,
+                relative.auto_expand_flag,
+                relative.max_positions,
+            ),
+            (None, None, None, None, None, None, None, None),
+        )
+        self.assertEqual(absolute.get_custom_parameters(), {})
+        self.assertEqual(relative.get_custom_parameters(), {})
+        for config in (absolute, relative):
+            with self.subTest(config=type(config).__name__):
+                with self.assertRaises(NotImplementedError) as error:
+                    config.build()
+                self.assertEqual(
+                    str(error.exception),
+                    f"{type(config).__name__} must implement "
+                    "`_registry_owner` or override `build`",
+                )
+
+    def test_concrete_registry_dispatch_and_partial_override_precedence(
+        self,
+    ) -> None:
+        base = text_learned_config(
+            embedding_dim=3,
+            padding_idx=1,
+            auto_expand_flag=True,
+        )
+        override = TextLearnedPositionalEmbeddingConfig(
+            embedding_dim=2,
+            auto_expand_flag=False,
+        )
+
+        model = base.build(override)
+
+        self.assertIsInstance(model, base.registry_owner())
+        self.assertEqual(model.embedding_dim, 2)
+        self.assertEqual(model.padding_idx, 1)
+        self.assertFalse(model.auto_expand_flag)
+        self.assertEqual(model.embedding_model.num_embeddings, 6)
+        self.assertEqual(
+            (base.embedding_dim, base.padding_idx, base.auto_expand_flag),
+            (3, 1, True),
+        )
+        self.assertEqual(
+            (
+                override.embedding_dim,
+                override.padding_idx,
+                override.auto_expand_flag,
+            ),
+            (2, None, False),
+        )
+
+    def test_absolute_nested_config_adapters_resolve_real_config(self) -> None:
+        concrete = text_learned_config(embedding_dim=3)
+        inner = _InnerPositionalConfig(positional_embedding_config=concrete)
+        outer = _OuterAbsoluteConfig(absolute_positional_embedding_config=inner)
+
+        model = concrete.registry_owner()(outer)
+
+        self.assertIs(model.cfg, concrete)
+        self.assertEqual(model.embedding_dim, 3)
+
+    def test_image_nested_configs_and_partial_overrides_reach_base_models(
+        self,
+    ) -> None:
+        learned_config = ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=0,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        )
+        learned_wrapper = _OuterAbsoluteConfig(
+            absolute_positional_embedding_config=_InnerPositionalConfig(
+                positional_embedding_config=learned_config
+            )
+        )
+        learned_override = ImageLearnedPositionalEmbeddingConfig(
+            embedding_dim=4,
+            class_token_flag=False,
+        )
+
+        learned = learned_config.registry_owner()(
+            learned_wrapper,
+            learned_override,
+        )
+
+        self.assertEqual(
+            (
+                learned.cfg.num_embeddings,
+                learned.embedding_dim,
+                learned.padding_idx,
+                learned.auto_expand_flag,
+                learned.class_token_flag,
+            ),
+            (2, 4, 0, False, False),
+        )
+        self.assertEqual(learned.embedding_model.weight.shape, (2, 4))
+
+        sinusoidal_config = ImageSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=None,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        )
+        sinusoidal_wrapper = _OuterAbsoluteConfig(
+            absolute_positional_embedding_config=_InnerPositionalConfig(
+                positional_embedding_config=sinusoidal_config
+            )
+        )
+        sinusoidal_override = ImageSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=3,
+            embedding_dim=4,
+            auto_expand_flag=True,
+            class_token_flag=False,
+        )
+
+        sinusoidal = sinusoidal_config.registry_owner()(
+            sinusoidal_wrapper,
+            sinusoidal_override,
+        )
+
+        self.assertEqual(
+            (
+                sinusoidal.cfg.num_embeddings,
+                sinusoidal.embedding_dim,
+                sinusoidal.padding_idx,
+                sinusoidal.auto_expand_flag,
+                sinusoidal.class_token_flag,
+                sinusoidal.position_offset,
+                sinusoidal.init_size,
+            ),
+            (3, 4, None, True, False, 0, 3),
+        )
+        self.assertEqual(sinusoidal.weights.shape, (3, 4))
+
+    def test_relative_attention_wrapper_and_false_overrides_are_preserved(
+        self,
+    ) -> None:
+        concrete = relative_config(
+            text_processing_flag=True,
+            auto_expand_flag=True,
+        )
+        wrapper = MultiHeadAttentionConfig(
+            relative_positional_embedding_config=concrete
+        )
+        wrapped_model = concrete.registry_owner()(wrapper)
+        override = DynamicPositionalBiasConfig(
+            text_processing_flag=False,
+            auto_expand_flag=False,
+        )
+        overridden_model = concrete.build(override)
+
+        self.assertIs(wrapped_model.cfg, concrete)
+        self.assertTrue(wrapped_model.text_processing_flag)
+        self.assertTrue(wrapped_model.auto_expand_flag)
+        self.assertFalse(overridden_model.text_processing_flag)
+        self.assertFalse(overridden_model.auto_expand_flag)
+        self.assertTrue(concrete.text_processing_flag)
+        self.assertTrue(concrete.auto_expand_flag)
+
+    def test_all_concrete_absolute_config_types_dispatch_correctly(self) -> None:
+        configs = (
+            text_learned_config(),
+            ImageLearnedPositionalEmbeddingConfig(
+                num_embeddings=3,
+                embedding_dim=2,
+                init_size=3,
+                padding_idx=0,
+                auto_expand_flag=False,
+                class_token_flag=True,
+            ),
+            TextSinusoidalPositionalEmbeddingConfig(
+                num_embeddings=3,
+                embedding_dim=2,
+                init_size=3,
+                padding_idx=0,
+                auto_expand_flag=False,
+            ),
+            ImageSinusoidalPositionalEmbeddingConfig(
+                num_embeddings=3,
+                embedding_dim=2,
+                init_size=3,
+                padding_idx=None,
+                auto_expand_flag=False,
+                class_token_flag=True,
+            ),
+        )
+
+        for config in configs:
+            with self.subTest(config=type(config).__name__):
+                model = config.build()
+                self.assertIsInstance(model, config.registry_owner())
+
+
 class LearnedEmbeddingBehaviorTests(unittest.TestCase):
+    def test_generic_learned_embedding_uses_unadjusted_table_size(self) -> None:
+        model = LearnedPositionalEmbedding(text_learned_config())
+
+        self.assertEqual(model.num_embeddings, 4)
+        self.assertEqual(model.embedding_model.weight.shape, (4, 2))
+
+    def test_initialization_matches_scaled_normal_and_zero_padding_exactly(
+        self,
+    ) -> None:
+        for padding_idx in (None, 1):
+            with self.subTest(padding_idx=padding_idx), torch.random.fork_rng():
+                config = text_learned_config(
+                    num_embeddings=4,
+                    embedding_dim=3,
+                    padding_idx=padding_idx,
+                )
+                table_size = 4 if padding_idx is None else 6
+
+                torch.manual_seed(8675309)
+                model = config.build()
+                torch.manual_seed(8675309)
+                expected = nn.Embedding(table_size, 3, padding_idx)
+                nn.init.normal_(expected.weight, std=3**-0.5)
+                if padding_idx is not None:
+                    nn.init.constant_(expected.weight[padding_idx], 0)
+
+                torch.testing.assert_close(
+                    model.embedding_model.weight,
+                    expected.weight,
+                    rtol=0,
+                    atol=0,
+                )
+
     def test_no_padding_table_positions_and_device_follow_input(self) -> None:
         model = text_learned_config(
             num_embeddings=4,
@@ -62,6 +355,145 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         self.assertEqual(meta_positions.device.type, "meta")
         self.assertEqual(meta_positions.dtype, torch.long)
         self.assertEqual(meta_positions.shape, meta_tokens.shape)
+
+    def test_text_learned_exact_positions_gradients_optimizer_and_state(
+        self,
+    ) -> None:
+        config = text_learned_config(num_embeddings=4, padding_idx=0)
+        source = config.build()
+        target = config.build()
+        weights = torch.tensor(
+            [
+                [0.0, 0.0],
+                [1.0, 10.0],
+                [2.0, 20.0],
+                [3.0, 30.0],
+                [4.0, 40.0],
+            ]
+        )
+        with torch.no_grad():
+            source.embedding_model.weight.copy_(weights)
+            target.embedding_model.weight.fill_(-1.0)
+        tokens = torch.tensor([[5, 0, 7], [8, 9, 0]])
+        expected_positions = torch.tensor([[1, 0, 2], [1, 2, 0]])
+
+        output = source(tokens)
+
+        torch.testing.assert_close(
+            output,
+            weights[expected_positions],
+            rtol=0,
+            atol=0,
+        )
+        output.sum().backward()
+        gradient = source.embedding_model.weight.grad
+        assert gradient is not None
+        torch.testing.assert_close(
+            gradient,
+            torch.tensor(
+                [
+                    [0.0, 0.0],
+                    [2.0, 2.0],
+                    [2.0, 2.0],
+                    [0.0, 0.0],
+                    [0.0, 0.0],
+                ]
+            ),
+            rtol=0,
+            atol=0,
+        )
+        optimizer = torch.optim.SGD(source.parameters(), lr=0.25)
+        optimizer.step()
+        expected_updated = weights.clone()
+        expected_updated[1:3] -= 0.5
+        torch.testing.assert_close(
+            source.embedding_model.weight,
+            expected_updated,
+            rtol=0,
+            atol=0,
+        )
+
+        incompatible = target.load_state_dict(
+            source.state_dict(),
+            strict=True,
+        )
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        torch.testing.assert_close(target(tokens), source(tokens))
+
+    def test_explicit_positions_override_tokens_and_preserve_batch_isolation(
+        self,
+    ) -> None:
+        model = text_learned_config().build().double()
+        with torch.no_grad():
+            model.embedding_model.weight.copy_(
+                torch.tensor(
+                    [
+                        [0.0, 0.0],
+                        [1.0, -1.0],
+                        [2.0, -2.0],
+                        [3.0, -3.0],
+                        [4.0, -4.0],
+                    ],
+                    dtype=torch.float64,
+                )
+            )
+        tokens = torch.zeros(2, 2, dtype=torch.long)
+        positions = torch.tensor([[0, 3], [4, 2]], dtype=torch.int32)
+
+        output = model(tokens, positions=positions)
+
+        self.assertEqual(output.dtype, torch.float64)
+        torch.testing.assert_close(
+            output,
+            model.embedding_model.weight[positions.long()],
+            rtol=0,
+            atol=0,
+        )
+        self.assertFalse(torch.equal(output[0], output[1]))
+
+    def test_image_learned_adds_exact_values_and_routes_gradients(self) -> None:
+        config = ImageLearnedPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=None,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        )
+        model = config.build()
+        weights = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        with torch.no_grad():
+            model.embedding_model.weight.copy_(weights)
+        patches = torch.tensor(
+            [
+                [[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]],
+                [[-1.0, -2.0], [-3.0, -4.0], [-5.0, -6.0]],
+            ],
+            requires_grad=True,
+        )
+
+        output = model(patches)
+
+        torch.testing.assert_close(
+            output,
+            patches.detach() + weights,
+            rtol=0,
+            atol=0,
+        )
+        output.sum().backward()
+        torch.testing.assert_close(
+            patches.grad,
+            torch.ones_like(patches),
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(
+            model.embedding_model.weight.grad,
+            torch.full_like(weights, 2.0),
+            rtol=0,
+            atol=0,
+        )
 
     def test_image_learned_padding_row_stays_zero_after_optimizer_step(
         self,
@@ -134,6 +566,31 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
 
 
 class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
+    def test_script_module_hybrid_rejects_nonpersistent_position_buffer(
+        self,
+    ) -> None:
+        class ScriptSinusoidalEmbedding(
+            TextSinusoidalPositionalEmbedding,
+            torch.jit.ScriptModule,
+        ):
+            pass
+
+        config = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            init_size=4,
+            padding_idx=0,
+            auto_expand_flag=False,
+        )
+
+        with self.assertRaises(RuntimeError) as error:
+            ScriptSinusoidalEmbedding(config)
+
+        self.assertEqual(
+            str(error.exception),
+            "ScriptModule does not support non-persistent buffers",
+        )
+
     def test_sinusoidal_table_dtype_is_independent_of_global_default_dtype(
         self,
     ) -> None:
@@ -211,6 +668,71 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
             atol=0,
         )
 
+    def test_padding_positions_and_repeated_calls_are_exact_and_stateless(
+        self,
+    ) -> None:
+        model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=5,
+            embedding_dim=2,
+            init_size=5,
+            padding_idx=0,
+            auto_expand_flag=False,
+        ).build()
+        tokens = torch.tensor([[7, 0, 8, 9], [0, 3, 0, 4]])
+        expected_positions = torch.tensor([[1, 0, 2, 3], [0, 1, 0, 2]])
+
+        first = model(tokens)
+        second = model(tokens)
+
+        torch.testing.assert_close(
+            first,
+            model.weights[expected_positions],
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(second, first, rtol=0, atol=0)
+        self.assertFalse(first.requires_grad)
+        self.assertEqual(model.state_dict(), {})
+        self.assertEqual(list(model.parameters()), [])
+
+    def test_image_sinusoidal_adds_exact_values_and_only_patches_receive_gradients(
+        self,
+    ) -> None:
+        model = ImageSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=3,
+            init_size=2,
+            padding_idx=None,
+            auto_expand_flag=False,
+            class_token_flag=True,
+        ).build()
+        patches = (
+            torch.arange(
+                1.0,
+                19.0,
+            )
+            .reshape(2, 3, 3)
+            .transpose(1, 2)
+            .detach()
+            .requires_grad_()
+        )
+        self.assertFalse(patches.is_contiguous())
+
+        output = model(patches)
+
+        torch.testing.assert_close(
+            output,
+            patches.detach() + model.weights,
+        )
+        output.sum().backward()
+        torch.testing.assert_close(
+            patches.grad,
+            torch.ones_like(patches),
+            rtol=0,
+            atol=0,
+        )
+        self.assertFalse(model.weights.requires_grad)
+
     def test_image_sinusoidal_class_token_has_zero_positional_offset(
         self,
     ) -> None:
@@ -238,6 +760,222 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
             rtol=0,
             atol=0,
         )
+
+    def test_auto_expansion_boundaries_disabled_mode_and_device_are_exact(
+        self,
+    ) -> None:
+        boundary_model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=5,
+            embedding_dim=2,
+            init_size=5,
+            padding_idx=0,
+            auto_expand_flag=True,
+        ).build()
+        original_weights = boundary_model.weights.clone()
+        original_pointer = boundary_model.weights.data_ptr()
+
+        boundary_output = boundary_model(torch.ones(2, 5, dtype=torch.long))
+
+        self.assertEqual(boundary_model.weights.data_ptr(), original_pointer)
+        torch.testing.assert_close(
+            boundary_model.weights,
+            original_weights,
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(
+            boundary_output,
+            original_weights[torch.arange(1, 6).reshape(1, -1).expand(2, -1)],
+            rtol=0,
+            atol=0,
+        )
+
+        disabled_model = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=2,
+            embedding_dim=2,
+            init_size=2,
+            padding_idx=0,
+            auto_expand_flag=False,
+        ).build()
+        disabled_shape = disabled_model.weights.shape
+        with self.assertRaises(IndexError) as error:
+            disabled_model(torch.ones(1, 4, dtype=torch.long))
+        self.assertEqual(str(error.exception), "index out of range in self")
+        self.assertEqual(disabled_model.weights.shape, disabled_shape)
+
+        meta_model = (
+            TextSinusoidalPositionalEmbeddingConfig(
+                num_embeddings=2,
+                embedding_dim=2,
+                init_size=2,
+                padding_idx=0,
+                auto_expand_flag=True,
+            )
+            .build()
+            .to("meta")
+        )
+        expand_weights = (
+            meta_model._TextSinusoidalPositionalEmbedding__maybe_expand_weights
+        )
+        expand_weights(
+            torch.ones(1, 4, dtype=torch.long, device="meta"),
+            incremental_state=None,
+            timestep=None,
+        )
+        self.assertEqual(meta_model.weights.device.type, "meta")
+        self.assertEqual(meta_model.weights.shape, (5, 2))
+
+
+class RelativeEmbeddingBehaviorTests(unittest.TestCase):
+    def test_exact_multihead_projection_preserves_batch_and_head_isolation(
+        self,
+    ) -> None:
+        model = relative_config().build()
+        with torch.no_grad():
+            model.relative_positional_embeddings.copy_(
+                torch.tensor(
+                    [
+                        [[1.0] * 5, [2.0] * 5],
+                        [[3.0] * 5, [4.0] * 5],
+                    ]
+                )
+            )
+        query = torch.tensor(
+            [
+                [
+                    [[1.0, 10.0], [1.0, 10.0]],
+                    [[1.0, 10.0], [1.0, 10.0]],
+                ],
+                [
+                    [[2.0, 20.0], [2.0, 20.0]],
+                    [[2.0, 20.0], [2.0, 20.0]],
+                ],
+            ]
+        )
+
+        output = model(query, sequence_length=3)
+
+        expected = torch.tensor(
+            [
+                [
+                    [[21.0] * 3, [21.0] * 3],
+                    [[43.0] * 3, [43.0] * 3],
+                ],
+                [
+                    [[42.0] * 3, [42.0] * 3],
+                    [[86.0] * 3, [86.0] * 3],
+                ],
+            ]
+        )
+        torch.testing.assert_close(output, expected, rtol=0, atol=0)
+        self.assertEqual(output.shape, (2, 2, 2, 3))
+
+    def test_selected_offsets_receive_gradients_and_optimizer_updates(
+        self,
+    ) -> None:
+        model = relative_config(
+            num_heads=1,
+            embedding_dim=1,
+            max_positions=3,
+        ).build()
+        with torch.no_grad():
+            model.relative_positional_embeddings.copy_(
+                torch.arange(7, dtype=torch.float32).reshape(1, 1, 7)
+            )
+        query = torch.tensor([[[[2.0]]]], requires_grad=True)
+        original = model.relative_positional_embeddings.detach().clone()
+
+        output = model(query, sequence_length=1)
+        output.sum().backward()
+
+        gradient = model.relative_positional_embeddings.grad
+        assert gradient is not None
+        expected_gradient = torch.zeros_like(gradient)
+        expected_gradient[..., 3] = 2.0
+        torch.testing.assert_close(
+            gradient,
+            expected_gradient,
+            rtol=0,
+            atol=0,
+        )
+        torch.testing.assert_close(
+            query.grad,
+            torch.tensor([[[[3.0]]]]),
+            rtol=0,
+            atol=0,
+        )
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.25)
+        optimizer.step()
+        expected_parameters = original.clone()
+        expected_parameters[..., 3] -= 0.5
+        torch.testing.assert_close(
+            model.relative_positional_embeddings,
+            expected_parameters,
+            rtol=0,
+            atol=0,
+        )
+
+    def test_float64_non_contiguous_query_and_strict_state_round_trip(
+        self,
+    ) -> None:
+        config = relative_config()
+        source = config.build().double()
+        target = config.build().double()
+        with torch.no_grad():
+            source.relative_positional_embeddings.fill_(0.5)
+            target.relative_positional_embeddings.zero_()
+        query = (
+            torch.arange(1.0, 9.0, dtype=torch.float64)
+            .reshape(1, 2, 2, 2)
+            .transpose(2, 3)
+            .detach()
+            .requires_grad_()
+        )
+        self.assertFalse(query.is_contiguous())
+
+        output = source(query, sequence_length=3)
+        incompatible = target.load_state_dict(
+            source.state_dict(),
+            strict=True,
+        )
+
+        self.assertEqual(output.dtype, torch.float64)
+        self.assertTrue(torch.isfinite(output).all())
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        torch.testing.assert_close(
+            target(query.detach(), sequence_length=3),
+            output.detach(),
+            rtol=0,
+            atol=0,
+        )
+
+    def test_relative_grid_helpers_preserve_meta_device_for_both_modes(
+        self,
+    ) -> None:
+        model = relative_config(
+            num_heads=1,
+            embedding_dim=1,
+        ).build()
+        compute_grid = model._DynamicPositionalBias__compute_embedding_grid
+
+        full_grid = compute_grid(
+            torch.empty(1, 1, 3, 1, device="meta"),
+            4,
+            False,
+        )
+        last_grid = compute_grid(
+            torch.empty(1, 1, 1, 1, device="meta"),
+            4,
+            True,
+        )
+
+        self.assertEqual(full_grid.device.type, "meta")
+        self.assertEqual(last_grid.device.type, "meta")
+        self.assertEqual(full_grid.dtype, torch.long)
+        self.assertEqual(last_grid.dtype, torch.long)
+        self.assertEqual(full_grid.shape, (3, 4))
+        self.assertEqual(last_grid.shape, (1, 4))
 
 
 class EmbeddingInterfaceBehaviorTests(unittest.TestCase):

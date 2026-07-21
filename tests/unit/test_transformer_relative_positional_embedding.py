@@ -1,6 +1,7 @@
 import unittest
 
 import torch
+
 from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
@@ -49,17 +50,35 @@ class TestDynamicPositionalBias(unittest.TestCase):
         )
 
     def test_init(self):
-        cfg = self.preset(num_heads=4, embedding_dim=12, max_positions=6)
+        cfg = self.preset(
+            text_processing_flag=True,
+            num_heads=4,
+            num_embeddings=16,
+            embedding_dim=12,
+            init_size=19,
+            padding_idx=2,
+            auto_expand_flag=True,
+            max_positions=6,
+        )
         model = DynamicPositionalBias(cfg)
 
         self.assertIsInstance(model, DynamicPositionalBias)
+        self.assertEqual(model.text_processing_flag, cfg.text_processing_flag)
         self.assertEqual(model.embedding_dim, cfg.embedding_dim)
+        self.assertEqual(model.padding_idx, cfg.padding_idx)
+        self.assertEqual(model.num_embeddings, 19)
+        self.assertEqual(model.init_size, cfg.init_size)
+        self.assertEqual(model.auto_expand_flag, cfg.auto_expand_flag)
         self.assertEqual(model.num_heads, cfg.num_heads)
         self.assertEqual(model.head_dim, cfg.embedding_dim // cfg.num_heads)
         self.assertEqual(model.max_positions, cfg.max_positions)
         self.assertEqual(
             model.relative_positional_embeddings.shape,
             (cfg.num_heads, model.head_dim, cfg.max_positions * 2 + 1),
+        )
+        self.assertEqual(
+            tuple(model.state_dict()),
+            ("relative_positional_embeddings",),
         )
 
     def test_forward(self):
