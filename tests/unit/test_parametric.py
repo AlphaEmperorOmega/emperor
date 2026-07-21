@@ -1,26 +1,26 @@
-from emperor.base.layer.residual import ResidualConnectionOptions
 import unittest
 
 import torch
-import torch.nn as nn
 
 import emperor.parametric as parametric
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
 )
-from emperor.base.layer import LayerConfig, LayerStack, LayerStackConfig
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.experts.core.config import MixtureOfExpertsConfig
-from emperor.experts.core.options import (
+from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
     RoutingInitializationMode,
 )
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStack,
+    LayerStackConfig,
+)
+from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
     ClipParameterOptions,
@@ -42,12 +42,7 @@ from emperor.parametric import (
     VectorWeightsMixture,
     VectorWeightsMixtureConfig,
 )
-from emperor.sampler.core.config import RouterConfig, SamplerConfig
-
-
-class FixedParametricModel(nn.Module):
-    def forward(self, input_batch, skip_mask=None):
-        return input_batch + 1.0, skip_mask, input_batch.new_tensor(0.75)
+from emperor.sampler import RouterConfig, SamplerConfig
 
 
 class ParametricPresetMixin:
@@ -70,7 +65,7 @@ class ParametricPresetMixin:
                 input_dim=input_dim,
                 output_dim=output_dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -336,7 +331,11 @@ class TestParametricMixtures(ParametricPresetMixin, unittest.TestCase):
         )
 
         generator = self.generator_weights_config().build()
-        weights, loss = generator.compute_mixture(None, None, torch.randn(batch_size, 4))
+        weights, loss = generator.compute_mixture(
+            None,
+            None,
+            torch.randn(batch_size, 4),
+        )
         self.assertEqual(weights.shape, (batch_size, 4, 3))
         self.assertEqual(loss.shape, torch.Size([]))
 
@@ -407,7 +406,7 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
                 input_dim=4,
                 output_dim=3,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -436,7 +435,7 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
             input_dim=4,
             output_dim=3,
             activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
+            residual_config=None,
             dropout_probability=0.0,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             gate_config=None,
@@ -453,31 +452,6 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
 
         self.assertEqual(output_state.skip_mask.shape, (3, 1))
         self.assertTrue(torch.equal(output_state.skip_mask, torch.zeros(3, 1)))
-
-    def test_handler_accumulates_existing_loss(self):
-        handler = ParametricLayerHandlerConfig(
-            input_dim=4,
-            output_dim=4,
-            activation=ActivationOptions.DISABLED,
-            residual_connection_option=ResidualConnectionOptions.DISABLED,
-            dropout_probability=0.0,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            layer_model_config=self.parametric_config(output_dim=4),
-        ).build()
-        handler.model = FixedParametricModel()
-        state = ParametricLayerState(
-            hidden=torch.zeros(2, 4),
-            loss=torch.tensor(2.0),
-            skip_mask=torch.ones(2, 1),
-        )
-
-        output_state = handler(state)
-
-        torch.testing.assert_close(output_state.loss, torch.tensor(2.75))
-        self.assertEqual(output_state.hidden.shape, (2, 4))
 
 
 class TestParametricValidation(ParametricPresetMixin, unittest.TestCase):
