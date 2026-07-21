@@ -400,19 +400,20 @@ class TestLayerStack(unittest.TestCase):
                         stack_num_layers=num_layers,
                     )
                     stack = LayerStack(cfg)
-                    layers = []
-                    adjustment = stack._LayerStack__add_initial_layer(layers)
+                    dimensions = []
+                    adjustment = stack._LayerStack__add_initial_layer_dimensions(
+                        dimensions
+                    )
 
                     should_add = input_dim != hidden_dim and num_layers > 1
                     if should_add:
-                        self.assertEqual(len(layers), 1)
+                        self.assertEqual(len(dimensions), 1)
                         self.assertEqual(
                             adjustment, LayerStack.SEPARATE_INPUT_OUTPUT_DIM
                         )
-                        self.assertEqual(layers[0].input_dim, input_dim)
-                        self.assertEqual(layers[0].output_dim, hidden_dim)
+                        self.assertEqual(dimensions[0], (input_dim, hidden_dim))
                     else:
-                        self.assertEqual(len(layers), 0)
+                        self.assertEqual(len(dimensions), 0)
                         self.assertEqual(adjustment, LayerStack.SHARED_INPUT_OUTPUT_DIM)
 
     def test_add_hidden_layers(self):
@@ -432,15 +433,17 @@ class TestLayerStack(unittest.TestCase):
                         stack_num_layers=num_layers,
                     )
                     stack = LayerStack(cfg)
-                    layers = []
-                    stack._LayerStack__add_hidden_layers(layers, adjustment)
+                    dimensions = []
+                    stack._LayerStack__add_hidden_layer_dimensions(
+                        dimensions, adjustment
+                    )
 
                     expected_count = max(0, num_layers - adjustment)
-                    self.assertEqual(len(layers), expected_count)
+                    self.assertEqual(len(dimensions), expected_count)
 
-                    for layer in layers:
-                        self.assertEqual(layer.input_dim, hidden_dim)
-                        self.assertEqual(layer.output_dim, hidden_dim)
+                    for input_dim, output_dim in dimensions:
+                        self.assertEqual(input_dim, hidden_dim)
+                        self.assertEqual(output_dim, hidden_dim)
 
     def test_add_output_layer(self):
         num_layers_options = [1, 2, 3]
@@ -462,12 +465,7 @@ class TestLayerStack(unittest.TestCase):
                             apply_output_pipeline_flag=apply_pipeline,
                         )
                         stack = LayerStack(cfg)
-                        layers = []
-                        stack._LayerStack__add_output_layer(layers)
-
-                        self.assertEqual(len(layers), 1)
-
-                        layer = layers[0]
+                        layer = stack.layers[-1]
                         expected_input_dim = (
                             cfg.hidden_dim if num_layers > 1 else cfg.input_dim
                         )

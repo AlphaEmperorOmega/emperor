@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
+from emperor.layers._config import MirroredLayerStackConfig
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
     _MEMORY_CONFIG_FIELDS,
@@ -81,7 +82,12 @@ class LayerStackValidator(ValidatorBase):
             if cfg.shared_halting_config is not None
             else cfg.layer_config.halting_config
         )
-        if halting_config is not None and cfg.num_layers < 2:
+        physical_layer_count = (
+            cfg.num_layers * 2
+            if isinstance(cfg, MirroredLayerStackConfig)
+            else cfg.num_layers
+        )
+        if halting_config is not None and physical_layer_count < 2:
             raise ValueError(
                 f"num_layers must be at least 2 when halting_config is provided, "
                 f"got {cfg.num_layers}. The halting mechanism requires multiple "

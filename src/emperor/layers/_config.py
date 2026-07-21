@@ -134,6 +134,14 @@ class LayerStackConfig(ConfigBase):
 
 
 @dataclass
+class MirroredLayerStackConfig(LayerStackConfig):
+    def _registry_owner(self) -> type:
+        from emperor.layers._mirrored import MirroredLayerStack
+
+        return MirroredLayerStack
+
+
+@dataclass
 class RecurrentLayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")

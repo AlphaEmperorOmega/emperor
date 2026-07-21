@@ -29,6 +29,7 @@ class LayerStack(LayerModuleBase):
 
     SHARED_INPUT_OUTPUT_DIM = 1
     SEPARATE_INPUT_OUTPUT_DIM = 2
+    _supports_rectangular_gate = False
 
     def __init__(
         self,
@@ -68,10 +69,8 @@ class LayerStack(LayerModuleBase):
         return len(self.layers)
 
     def __build_layer_stack(self) -> ModuleList:
-        stack_layers = []
-        boundary_layer_count = self.__add_initial_layer(stack_layers)
-        self.__add_hidden_layers(stack_layers, boundary_layer_count)
-        self.__add_output_layer(stack_layers)
+        dimensions = self._layer_dimensions()
+        stack_layers = self.__create_stack_layers(dimensions)
         self.__maybe_share_gate_model(stack_layers)
         self.__maybe_share_halting_model(stack_layers)
         self.__maybe_share_memory_model(stack_layers)
@@ -79,40 +78,112 @@ class LayerStack(LayerModuleBase):
         self._initialize_parameters(*stack_layers)
         return ModuleList(stack_layers)
 
-    def __add_initial_layer(self, stack_layers: list) -> int:
-        requires_input_projection = (
-            self.input_dim != self.hidden_dim and self.num_layers > 1
-        )
-        if requires_input_projection:
-            initial_layer = self.__create_layer(self.input_dim, self.hidden_dim)
-            stack_layers.append(initial_layer)
+    def _layer_dimensions(self) -> list[tuple[int, int]]:
+        dimensions: list[tuple[int, int]] = []
+        boundary_layer_count = self.__add_initial_layer_dimensions(dimensions)
+        self.__add_hidden_layer_dimensions(dimensions, boundary_layer_count)
+        self.__add_output_layer_dimensions(dimensions)
+        return dimensions
+
+    def __add_initial_layer_dimensions(
+        self,
+        dimensions: list[tuple[int, int]],
+    ) -> int:
+        if self.__requires_input_projection():
+            dimensions.append((self.input_dim, self.hidden_dim))
             return self.SEPARATE_INPUT_OUTPUT_DIM
         return self.SHARED_INPUT_OUTPUT_DIM
 
-    def __add_hidden_layers(
+    def __requires_input_projection(self) -> bool:
+        input_dimension_differs_from_hidden_dimension = (
+            self.input_dim != self.hidden_dim
+        )
+        stack_has_multiple_layers = self.num_layers > 1
+        return (
+            input_dimension_differs_from_hidden_dimension and stack_has_multiple_layers
+        )
+
+    def __add_hidden_layer_dimensions(
         self,
-        stack_layers: list,
+        dimensions: list[tuple[int, int]],
         boundary_layer_count: int,
     ) -> None:
         hidden_layer_count = self.num_layers - boundary_layer_count
         for _ in range(hidden_layer_count):
-            hidden_layer = self.__create_layer(self.hidden_dim, self.hidden_dim)
-            stack_layers.append(hidden_layer)
+            dimensions.append((self.hidden_dim, self.hidden_dim))
 
-    def __add_output_layer(self, stack_layers: list) -> None:
+    def __add_output_layer_dimensions(
+        self,
+        dimensions: list[tuple[int, int]],
+    ) -> None:
         output_layer_input_dim = (
             self.hidden_dim if self.num_layers > 1 else self.input_dim
         )
-        output_layer_overrides = self.__resolve_output_layer_overrides()
-        should_disable_output_residual = not self.apply_output_pipeline_flag
-        output_layer = self.__create_layer(
-            output_layer_input_dim,
-            self.output_dim,
-            output_layer_overrides,
-            disable_residual=should_disable_output_residual,
+        dimensions.append((output_layer_input_dim, self.output_dim))
+
+    def __create_stack_layers(
+        self,
+        dimensions: list[tuple[int, int]],
+    ) -> list[Layer]:
+        stack_layers: list[Layer] = []
+        layer_count = len(dimensions)
+        for layer_number, (input_dim, output_dim) in enumerate(dimensions, start=1):
+            is_last_layer = layer_number == layer_count
+            stack_layer = self.__create_layer(
+                input_dim,
+                output_dim,
+                is_last_layer=is_last_layer,
+            )
+            stack_layers.append(stack_layer)
+        return stack_layers
+
+    def __create_layer(
+        self,
+        input_dim: int,
+        output_dim: int,
+        layer_overrides: LayerConfig | None = None,
+        is_last_layer: bool = False,
+    ) -> Layer:
+        has_stable_dimension = input_dim == output_dim
+        resolved_layer_config = self.__resolve_layer_config(
+            input_dim, output_dim, layer_overrides, is_last_layer
         )
-        output_layer.mark_as_last_layer()
-        stack_layers.append(output_layer)
+        self.__apply_layer_compatibility_overrides(
+            resolved_layer_config,
+            is_last_layer,
+            has_stable_dimension,
+        )
+        layer = resolved_layer_config.build()
+        if is_last_layer:
+            layer.mark_as_last_layer()
+        return layer
+
+    def __resolve_layer_config(
+        self,
+        input_dim: int,
+        output_dim: int,
+        layer_overrides: LayerConfig | None,
+        is_last_layer: bool,
+    ) -> LayerConfig:
+        dimension_overrides = self._resolve_config_overrides(
+            self.layer_config,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
+        if is_last_layer:
+            output_layer_overrides = self.__resolve_output_layer_overrides()
+            layer_overrides = self.__merge_layer_override(
+                layer_overrides,
+                output_layer_overrides,
+            )
+        if layer_overrides is not None:
+            dimension_overrides = self._override_config(
+                dimension_overrides, layer_overrides
+            )
+        resolved_layer_config = self._override_config(
+            self.layer_config, dimension_overrides
+        )
+        return resolved_layer_config
 
     def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
         output_layer_overrides: LayerConfig | None = None
@@ -128,17 +199,6 @@ class LayerStack(LayerModuleBase):
             last_layer_bias_override,
         )
         return output_layer_overrides
-
-    def __merge_layer_override(
-        self,
-        base_override: "LayerConfig | None",
-        additional_override: "LayerConfig | None",
-    ) -> "LayerConfig | None":
-        if additional_override is None:
-            return base_override
-        if base_override is None:
-            return additional_override
-        return self._override_config(base_override, additional_override)
 
     def __resolve_last_layer_bias_override(self) -> LayerConfig | None:
         if self.last_layer_bias_option == LastLayerBiasOptions.DEFAULT:
@@ -159,35 +219,44 @@ class LayerStack(LayerModuleBase):
                 )
         return LayerConfig(layer_model_config=last_layer_model_config)
 
-    def __create_layer(
+    def __merge_layer_override(
         self,
-        input_dim: int,
-        output_dim: int,
-        layer_overrides: LayerConfig | None = None,
-        *,
-        disable_residual: bool = False,
-    ) -> Layer:
-        has_stable_dimension = input_dim == output_dim
-        dimension_overrides = self._resolve_config_overrides(
-            self.layer_config,
-            input_dim=input_dim,
-            output_dim=output_dim,
+        base_override: "LayerConfig | None",
+        additional_override: "LayerConfig | None",
+    ) -> "LayerConfig | None":
+        if additional_override is None:
+            return base_override
+        if base_override is None:
+            return additional_override
+        return self._override_config(base_override, additional_override)
+
+    def __apply_layer_compatibility_overrides(
+        self,
+        resolved_layer_config: LayerConfig,
+        is_last_layer: bool,
+        has_stable_dimension: bool,
+    ) -> None:
+        should_disable_residual = self.__should_disable_residual(
+            is_last_layer, has_stable_dimension
         )
-        if layer_overrides is not None:
-            dimension_overrides = self._override_config(
-                dimension_overrides,
-                layer_overrides,
-            )
-        resolved_layer_config = self._override_config(
-            self.layer_config,
-            dimension_overrides,
-        )
-        should_disable_residual = disable_residual or not has_stable_dimension
         if should_disable_residual:
             resolved_layer_config.residual_config = None
-        if not has_stable_dimension:
+        if not has_stable_dimension and not self._supports_rectangular_gate:
             resolved_layer_config.gate_config = None
-        return resolved_layer_config.build()
+
+    def __should_disable_residual(
+        self,
+        is_last_layer: bool,
+        has_stable_dimension: bool,
+    ) -> bool:
+        output_layer_pipeline_is_disabled = (
+            is_last_layer and not self.apply_output_pipeline_flag
+        )
+        layer_dimensions_do_not_support_residual = not has_stable_dimension
+        return (
+            output_layer_pipeline_is_disabled
+            or layer_dimensions_do_not_support_residual
+        )
 
     def __maybe_share_gate_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_gate_config is None:

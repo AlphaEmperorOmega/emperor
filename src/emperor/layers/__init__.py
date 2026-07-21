@@ -9,10 +9,12 @@ if TYPE_CHECKING:
         GateConfig,
         LayerConfig,
         LayerStackConfig,
+        MirroredLayerStackConfig,
         RecurrentLayerConfig,
         ResidualConfig,
     )
     from emperor.layers._layer import Layer
+    from emperor.layers._mirrored import MirroredLayerStack
     from emperor.layers._monitoring.callbacks import (
         LayerControllerMonitorCallback,
         RecurrentLayerMonitorCallback,
@@ -36,6 +38,7 @@ __all__ = (
     "LayerGateOptions",
     "LayerNormPositionOptions",
     "LayerStackConfig",
+    "MirroredLayerStackConfig",
     "RecurrentLayerConfig",
     "ResidualConfig",
     "ResidualConnectionOptions",
@@ -43,6 +46,7 @@ __all__ = (
     "ResidualConnection",
     "Layer",
     "LayerStack",
+    "MirroredLayerStack",
     "RecurrentLayer",
     "LayerControllerMonitorCallback",
     "RecurrentLayerMonitorCallback",
@@ -59,6 +63,10 @@ _LAZY_EXPORTS = {
         "LayerNormPositionOptions",
     ),
     "LayerStackConfig": ("emperor.layers._config", "LayerStackConfig"),
+    "MirroredLayerStackConfig": (
+        "emperor.layers._config",
+        "MirroredLayerStackConfig",
+    ),
     "RecurrentLayerConfig": ("emperor.layers._config", "RecurrentLayerConfig"),
     "ResidualConfig": ("emperor.layers._config", "ResidualConfig"),
     "ResidualConnectionOptions": (
@@ -72,6 +80,7 @@ _LAZY_EXPORTS = {
     ),
     "Layer": ("emperor.layers._layer", "Layer"),
     "LayerStack": ("emperor.layers._stack", "LayerStack"),
+    "MirroredLayerStack": ("emperor.layers._mirrored", "MirroredLayerStack"),
     "RecurrentLayer": ("emperor.layers._recurrent", "RecurrentLayer"),
     "LayerControllerMonitorCallback": (
         "emperor.layers._monitoring.callbacks",
