@@ -107,11 +107,7 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_config_schema_excludes_dataset_monitor_and_search_modules(self) -> None:
         blocked_keys = {"DATASET_OPTIONS", "MONITOR_OPTIONS"}
-        for model_name in (
-            model_id
-            for model_id in discover_model_ids()
-            if not model_id.startswith("transformer/")
-        ):
+        for model_name in discover_model_ids():
             with self.subTest(model_name=model_name):
                 fields = config_schema(model_name)["fields"]
                 field_keys = {field["key"] for field in fields}
@@ -228,11 +224,7 @@ class InspectorSchemaTests(unittest.TestCase):
             },
         }
 
-        for model_name in (
-            model_id
-            for model_id in discover_model_ids()
-            if not model_id.startswith("transformer/")
-        ):
+        for model_name in discover_model_ids():
             with self.subTest(model_name=model_name):
                 fields = _fields_by_key(config_schema(model_name))
                 for field in fields.values():
@@ -648,6 +640,10 @@ class InspectorSchemaTests(unittest.TestCase):
         for model_name in (
             "bert/linear",
             "bert/expert_linear_adaptive",
+            "transformer/linear",
+            "transformer/linear_adaptive",
+            "transformer/expert_linear",
+            "transformer/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
 
@@ -717,6 +713,10 @@ class InspectorSchemaTests(unittest.TestCase):
         for model_name in (
             "bert/linear",
             "bert/expert_linear_adaptive",
+            "transformer/linear",
+            "transformer/linear_adaptive",
+            "transformer/expert_linear",
+            "transformer/expert_linear_adaptive",
         ):
             fields = _fields_by_key(config_schema(model_name))
 
@@ -754,6 +754,53 @@ class InspectorSchemaTests(unittest.TestCase):
             with self.subTest(model_name=model_name):
                 for field_key in expected_sections:
                     self.assertNotIn(field_key, fields)
+
+    def test_transformer_schemas_and_search_axes_cover_translation_backends(
+        self,
+    ) -> None:
+        for backend in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            model_name = f"transformer/{backend}"
+            with self.subTest(model_name=model_name):
+                fields = _fields_by_key(config_schema(model_name))
+                self.assertTrue(
+                    {
+                        "vocab_size",
+                        "model_dim",
+                        "source_sequence_length",
+                        "target_sequence_length",
+                        "encoder_num_layers",
+                        "decoder_num_layers",
+                    }.issubset(fields)
+                )
+                axes = _axes_by_key(search_space_schema(model_name, "baseline"))
+                self.assertTrue(
+                    {
+                        "learning_rate",
+                        "model_dim",
+                        "encoder_num_layers",
+                        "decoder_num_layers",
+                        "attn_num_heads",
+                        "ff_stack_hidden_dim",
+                    }.issubset(axes)
+                )
+                if "expert" in backend:
+                    self.assertTrue(
+                        {"expert_num_experts", "expert_top_k"}.issubset(axes)
+                    )
+                if "adaptive" in backend:
+                    self.assertTrue(
+                        {
+                            "weight_option",
+                            "bias_option",
+                            "diagonal_option",
+                            "row_mask_option",
+                        }.issubset(axes)
+                    )
 
     def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
         removed_field_keys = {
