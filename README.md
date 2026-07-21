@@ -522,7 +522,7 @@ Run that network-dependent suite only when the required sources are available:
 
 ```bash
 EMPEROR_RUN_DATASET_DOWNLOAD_TESTS=1 \
-  PYTHONSAFEPATH=1 PYTHONPATH=tests \
+  PYTHONSAFEPATH=1 PYTHONPATH=src:tests \
   python -P -m unittest integration.datasets.test_dataset_downloads
 ```
 
