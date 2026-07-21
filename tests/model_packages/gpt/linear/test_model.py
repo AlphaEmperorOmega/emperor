@@ -65,6 +65,21 @@ from models.training_test_utils import (
 class TestGptLinearModel(unittest.TestCase):
     backend_module_name = "LinearLayer"
 
+    def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
+        self.assertEqual(
+            config.STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
+        self.assertEqual(config.FF_NUM_LAYERS, 1)
+        self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertEqual(
+            config.FF_STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+
     def config(self, **overrides):
         return GptLinearConfigBuilder(
             input_dim=16,
@@ -159,6 +174,39 @@ class TestGptLinearModel(unittest.TestCase):
             changed_logits[:, :3],
             rtol=0.0,
             atol=0.0,
+        )
+
+    def test_equal_batch_and_sequence_lengths_preserve_sample_isolation(self):
+        runtime = runtime_from_flat(
+            {
+                "batch_size": 2,
+                "input_dim": 16,
+                "output_dim": 16,
+                "sequence_length": 2,
+                "hidden_dim": 8,
+                "stack_num_layers": 1,
+                "stack_dropout_probability": 0.0,
+                "attn_num_heads": 2,
+            },
+            config,
+        )
+        model = Model(GptLinearConfigBuilder(runtime=runtime).build()).eval()
+        original_ids = torch.tensor([[1, 2], [3, 4]])
+        changed_ids = torch.tensor([[5, 6], [3, 4]])
+
+        with torch.no_grad():
+            original_logits, _ = model(original_ids)
+            changed_logits, _ = model(changed_ids)
+
+        torch.testing.assert_close(
+            changed_logits[1],
+            original_logits[1],
+            rtol=0.0,
+            atol=0.0,
+        )
+        self.assertGreater(
+            torch.max(torch.abs(changed_logits[0] - original_logits[0])).item(),
+            1e-6,
         )
 
     def test_training_loss_has_gradient_flow(self):
@@ -1178,7 +1226,7 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertIsNotNone(model.token_embedding.weight.grad)
         self.assertGreater(model.token_embedding.weight.grad.abs().sum().item(), 0)
 
-    def test_forward_converts_attention_mask_and_supplies_causal_mask(self):
+    def test_forward_converts_padding_mask_and_leaves_causality_to_attention(self):
         cfg = self._direct_config()
         model = Model(cfg)
 
@@ -1203,11 +1251,7 @@ class TestGptLinearModel(unittest.TestCase):
             spy.state.target_key_padding_mask,
             attention_mask == 0,
         )
-        expected = torch.triu(
-            torch.ones(8, 8, dtype=torch.bool),
-            diagonal=1,
-        )
-        torch.testing.assert_close(spy.state.target_attention_mask, expected)
+        self.assertIsNone(spy.state.target_attention_mask)
 
     def test_decoder_auxiliary_loss_is_returned_and_added_to_total_loss(self):
         cfg = self._direct_config()

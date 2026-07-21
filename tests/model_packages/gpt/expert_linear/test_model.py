@@ -57,6 +57,21 @@ _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
 class TestGptExpertLinearModel(unittest.TestCase):
+    def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
+        self.assertEqual(
+            config.STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
+        self.assertEqual(config.FF_NUM_LAYERS, 1)
+        self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertEqual(
+            config.FF_STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+
     backend_module_name = "MixtureOfExperts"
 
     def config(self, **overrides):
@@ -151,8 +166,8 @@ class TestGptExpertLinearModel(unittest.TestCase):
         torch.testing.assert_close(
             original_logits[:, :3],
             changed_logits[:, :3],
-            rtol=0.0,
-            atol=0.0,
+            rtol=1e-5,
+            atol=1e-5,
         )
 
     def test_training_loss_has_gradient_flow(self):
@@ -565,7 +580,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
             output.cross_entropy + output.auxiliary_loss,
         )
 
-    def test_attention_mask_becomes_decoder_padding_and_causal_masks(self):
+    def test_forward_runs_one_decoder_pass_and_leaves_causality_to_attention(self):
         cfg = self._preset_config(ExperimentPreset.BASELINE)
         model = Model(cfg)
 
@@ -573,8 +588,10 @@ class TestGptExpertLinearModel(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.state = None
+                self.calls = 0
 
             def forward(self, state):
+                self.calls += 1
                 self.state = state
                 state.loss = state.hidden.new_zeros(())
                 return state
@@ -585,20 +602,13 @@ class TestGptExpertLinearModel(unittest.TestCase):
         attention_mask = torch.ones_like(input_ids)
         attention_mask[:, -1] = 0
         model(input_ids, attention_mask)
+        self.assertEqual(spy.calls, 1)
         self.assertIsInstance(spy.state, TransformerDecoderLayerState)
         torch.testing.assert_close(
             spy.state.target_key_padding_mask,
             attention_mask == 0,
         )
-        expected_causal = torch.triu(
-            torch.ones(
-                cfg.sequence_length,
-                cfg.sequence_length,
-                dtype=torch.bool,
-            ),
-            diagonal=1,
-        )
-        torch.testing.assert_close(spy.state.target_attention_mask, expected_causal)
+        self.assertIsNone(spy.state.target_attention_mask)
 
     def test_boundary_options_and_tying_are_fully_configurable(self):
         defaults = self._default_builder_kwargs()

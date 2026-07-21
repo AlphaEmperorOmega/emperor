@@ -12,7 +12,8 @@ import models.gpt.linear_adaptive.dataset_options as dataset_options
 import models.gpt.linear_adaptive.runtime_options as runtime_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.language_model import LanguageModelExperiment
-from emperor.transformer import TransformerDecoderLayer
+from emperor.layers import ActivationOptions, LayerNormPositionOptions
+from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
 from models.catalog import MODEL_CATALOG, catalog_entry
 from models.gpt.linear_adaptive import (
     Experiment,
@@ -35,6 +36,21 @@ from models.training_test_utils import (
 
 class TestGptLinearAdaptiveModel(unittest.TestCase):
     backend_module_name = "AdaptiveLinearLayer"
+
+    def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
+        self.assertEqual(
+            config.STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
+        self.assertEqual(config.FF_NUM_LAYERS, 1)
+        self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertEqual(
+            config.FF_STACK_LAYER_NORM_POSITION,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
 
     def config(self, **overrides):
         return GptLinearAdaptiveConfigBuilder(
@@ -131,6 +147,26 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
             rtol=0.0,
             atol=0.0,
         )
+
+    def test_forward_leaves_causality_to_attention(self):
+        model = Model(self.config())
+
+        class SpyDecoder(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.state = None
+
+            def forward(self, state):
+                self.state = state
+                state.loss = state.hidden.new_zeros(())
+                return state
+
+        spy = SpyDecoder()
+        model.transformer = spy
+        model(torch.tensor([[1, 2, 3, 4]]))
+
+        self.assertIsInstance(spy.state, TransformerDecoderLayerState)
+        self.assertIsNone(spy.state.target_attention_mask)
 
     def test_training_loss_has_gradient_flow(self):
         torch.manual_seed(11)

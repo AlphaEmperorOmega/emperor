@@ -98,21 +98,10 @@ class Model(LanguageModelExperiment):
         hidden = self.token_embedding(input_ids) + self.positional_embedding(input_ids)
         hidden = self.embedding_layer_norm(hidden)
         hidden = self.embedding_dropout(hidden)
-        sequence_length = input_ids.size(1)
-        causal_mask = torch.triu(
-            torch.ones(
-                sequence_length,
-                sequence_length,
-                dtype=torch.bool,
-                device=input_ids.device,
-            ),
-            diagonal=1,
-        )
         decoder_state = self.transformer(
             TransformerDecoderLayerState(
                 hidden=hidden,
                 target_key_padding_mask=attention_mask == 0,
-                target_attention_mask=causal_mask,
             )
         )
         sequence_output = self.decoder_layer_norm(decoder_state.hidden)

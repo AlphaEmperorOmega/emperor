@@ -125,11 +125,11 @@ POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG: bool = False
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.0
-STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT
+STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
 #########################################################################
 # EMBEDDING PIPELINE (applied to the summed token+positional embedding)
-EMBEDDING_LAYER_NORM_FLAG: bool = True
+EMBEDDING_LAYER_NORM_FLAG: bool = False
 EMBEDDING_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
 
 #########################################################################
@@ -271,14 +271,14 @@ ATTN_ADD_KEY_VALUE_BIAS_FLAG: bool = False
 ATTN_NUM_LAYERS: int = 1
 ATTN_BIAS_FLAG: bool = False
 ATTN_STACK_HIDDEN_DIM: int = HIDDEN_DIM
-ATTN_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
+ATTN_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
 ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 ATTN_STACK_DROPOUT_PROBABILITY: float = 0.0
 ATTN_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
 ATTN_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
-ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
+ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
 ### Attention Projection Gate Options
@@ -399,15 +399,17 @@ ATTN_RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 # Feed-Forward Stack Options
-FF_NUM_LAYERS: int = 2
+FF_NUM_LAYERS: int = 1
 FF_BIAS_FLAG: bool = True
 FF_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 FF_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
 FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 FF_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
-FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
+FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
 FF_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
-FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
+FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
 ## Feed-Forward Gate Options

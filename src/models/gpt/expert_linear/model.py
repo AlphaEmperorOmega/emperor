@@ -97,47 +97,19 @@ class Model(LanguageModelExperiment):
         hidden = self.token_embedding(input_ids) + self.positional_embedding(input_ids)
         hidden = self.embedding_layer_norm(hidden)
         hidden = self.embedding_dropout(hidden)
-        sequence_output, auxiliary_loss = self.__run_causal_decoder(
-            hidden,
-            attention_mask,
+        decoder_state = self.transformer(
+            TransformerDecoderLayerState(
+                hidden=hidden,
+                target_key_padding_mask=attention_mask == 0,
+            )
         )
-        sequence_output = self.decoder_layer_norm(sequence_output)
-        return self.lm_head(sequence_output), auxiliary_loss.reshape(())
-
-    def __run_causal_decoder(
-        self,
-        hidden: Tensor,
-        attention_mask: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        outputs = []
-        auxiliary_losses = []
-        for prefix_length in range(1, hidden.size(1) + 1):
-            causal_mask = torch.triu(
-                torch.ones(
-                    prefix_length,
-                    prefix_length,
-                    dtype=torch.bool,
-                    device=hidden.device,
-                ),
-                diagonal=1,
-            )
-            decoder_state = self.transformer(
-                TransformerDecoderLayerState(
-                    hidden=hidden[:, :prefix_length],
-                    target_key_padding_mask=attention_mask[:, :prefix_length] == 0,
-                    target_attention_mask=causal_mask,
-                )
-            )
-            outputs.append(decoder_state.hidden[:, -1:])
-            if decoder_state.loss is not None:
-                auxiliary_losses.append(decoder_state.loss.reshape(()))
-        sequence_output = torch.cat(outputs, dim=1)
+        sequence_output = self.decoder_layer_norm(decoder_state.hidden)
         auxiliary_loss = (
-            torch.stack(auxiliary_losses).mean()
-            if auxiliary_losses
+            decoder_state.loss
+            if decoder_state.loss is not None
             else sequence_output.new_zeros(())
         )
-        return sequence_output, auxiliary_loss
+        return self.lm_head(sequence_output), auxiliary_loss.reshape(())
 
     def __prepare_inputs(
         self,
