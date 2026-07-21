@@ -19,31 +19,7 @@ if TYPE_CHECKING:
         TransformerEncoderLayer,
     )
     from emperor.transformer._model import Transformer
-    from emperor.transformer._options.config_adapter import (
-        attention_options_from_config,
-        feed_forward_options_from_config,
-    )
-    from emperor.transformer._options.overrides import (
-        expand_transformer_path_locks,
-        resolve_transformer_path_options,
-    )
-    from emperor.transformer._options.records import (
-        ControllerStackOptions,
-        DynamicMemoryOptions,
-        LayerControllerOptions,
-        RecurrentControllerOptions,
-        SubmoduleStackOptions,
-        SubmoduleStackSource,
-        TransformerAttentionOptions,
-        TransformerFeedForwardOptions,
-        TransformerPathOptions,
-        TransformerStackOptions,
-        resolve_controller_stack_options,
-    )
     from emperor.transformer._state import TransformerDecoderLayerState
-    from emperor.transformer._submodule_configuration import (
-        configure_transformer_submodule,
-    )
 
 __all__ = (
     "Transformer",
@@ -59,22 +35,6 @@ __all__ = (
     "TransformerDecoderLayerConfig",
     "FeedForward",
     "FeedForwardConfig",
-    "ControllerStackOptions",
-    "DynamicMemoryOptions",
-    "LayerControllerOptions",
-    "RecurrentControllerOptions",
-    "SubmoduleStackOptions",
-    "SubmoduleStackSource",
-    "TransformerAttentionOptions",
-    "TransformerFeedForwardOptions",
-    "TransformerPathOptions",
-    "TransformerStackOptions",
-    "attention_options_from_config",
-    "configure_transformer_submodule",
-    "expand_transformer_path_locks",
-    "feed_forward_options_from_config",
-    "resolve_controller_stack_options",
-    "resolve_transformer_path_options",
 )
 
 _LAZY_EXPORTS = {
@@ -120,70 +80,6 @@ _LAZY_EXPORTS = {
     "FeedForwardConfig": (
         "emperor.transformer._feed_forward",
         "FeedForwardConfig",
-    ),
-    "ControllerStackOptions": (
-        "emperor.transformer._options.records",
-        "ControllerStackOptions",
-    ),
-    "DynamicMemoryOptions": (
-        "emperor.transformer._options.records",
-        "DynamicMemoryOptions",
-    ),
-    "LayerControllerOptions": (
-        "emperor.transformer._options.records",
-        "LayerControllerOptions",
-    ),
-    "RecurrentControllerOptions": (
-        "emperor.transformer._options.records",
-        "RecurrentControllerOptions",
-    ),
-    "SubmoduleStackOptions": (
-        "emperor.transformer._options.records",
-        "SubmoduleStackOptions",
-    ),
-    "SubmoduleStackSource": (
-        "emperor.transformer._options.records",
-        "SubmoduleStackSource",
-    ),
-    "TransformerAttentionOptions": (
-        "emperor.transformer._options.records",
-        "TransformerAttentionOptions",
-    ),
-    "TransformerFeedForwardOptions": (
-        "emperor.transformer._options.records",
-        "TransformerFeedForwardOptions",
-    ),
-    "TransformerPathOptions": (
-        "emperor.transformer._options.records",
-        "TransformerPathOptions",
-    ),
-    "TransformerStackOptions": (
-        "emperor.transformer._options.records",
-        "TransformerStackOptions",
-    ),
-    "attention_options_from_config": (
-        "emperor.transformer._options.config_adapter",
-        "attention_options_from_config",
-    ),
-    "configure_transformer_submodule": (
-        "emperor.transformer._submodule_configuration",
-        "configure_transformer_submodule",
-    ),
-    "expand_transformer_path_locks": (
-        "emperor.transformer._options.overrides",
-        "expand_transformer_path_locks",
-    ),
-    "feed_forward_options_from_config": (
-        "emperor.transformer._options.config_adapter",
-        "feed_forward_options_from_config",
-    ),
-    "resolve_controller_stack_options": (
-        "emperor.transformer._options.records",
-        "resolve_controller_stack_options",
-    ),
-    "resolve_transformer_path_options": (
-        "emperor.transformer._options.overrides",
-        "resolve_transformer_path_options",
     ),
 }
 
