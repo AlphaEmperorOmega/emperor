@@ -434,7 +434,37 @@ mise run experiment -- \
   --print-model
 ```
 
-Monitor callbacks apply to training runs, not `--print-model`.
+Run one deterministic synthetic batch and annotate the same tree with every
+executed PyTorch module's tensor input and output shapes:
+
+```bash
+mise run experiment -- \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --print-model-shapes
+```
+
+For the most detailed trace, also print an executed Python method tree with the
+shape of each tensor argument, local variable, and return value, including source
+line numbers:
+
+```bash
+mise run experiment -- \
+  --model-type linears \
+  --model linear \
+  --preset baseline \
+  --datasets mnist \
+  --print-model-tensor-shapes
+```
+
+Shape inspection uses a synthetic batch of size 1 in evaluation mode with
+gradients disabled. It does not download the selected dataset. Tensor-variable
+tracing covers executed Python under `models` and `emperor`; native PyTorch kernel
+temporaries are represented by their surrounding module inputs and outputs.
+
+Monitor callbacks apply to training runs, not model inspection flags.
 
 Run one preset with selected monitors:
 
