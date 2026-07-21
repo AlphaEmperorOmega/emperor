@@ -8,7 +8,6 @@ nul
 torchenv/
 /build/
 /dist/
-CONTEXT.md
 conventions/
 logs
 !apps/workbench/web/src/components/features/workbench/logs/
@@ -39,4 +38,3 @@ mutants/
 /apps/workbench/web/tsconfig.tsbuildinfo
 /.runtime/
 /docs/agents/
-/docs/architecture/
