@@ -85,6 +85,32 @@ class TestSamplerModelValidator(unittest.TestCase):
 
         self.assertIsNotNone(model.router)
 
+    def test_router_preserves_exact_state_keys_and_strict_roundtrip(self):
+        cfg = self.sampler_config(router_config=self.router_config())
+        source = SamplerModel(cfg)
+        expected_keys = (
+            "sampler_model.default_loss",
+            "sampler_model.auxiliary_loss_model.default_loss",
+            "router.model.layers.0.model.weight_params",
+            "router.model.layers.0.model.bias_params",
+            "router.model.layers.1.model.weight_params",
+            "router.model.layers.1.model.bias_params",
+        )
+
+        with torch.no_grad():
+            for index, value in enumerate(source.state_dict().values(), start=1):
+                value.fill_(index / 10)
+        state = source.state_dict()
+
+        self.assertEqual(tuple(state), expected_keys)
+
+        restored = SamplerModel(cfg)
+        restored.load_state_dict(state, strict=True)
+
+        self.assertEqual(tuple(restored.state_dict()), expected_keys)
+        for key in expected_keys:
+            torch.testing.assert_close(restored.state_dict()[key], state[key])
+
     def test_accepts_router_config_with_config_base_model_config(self):
         router_config = self.router_config(input_dim=6)
         router_config.model_config = ConstantRouterConfig(input_dim=6, output_dim=4)

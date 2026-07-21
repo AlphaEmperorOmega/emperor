@@ -1,13 +1,29 @@
+import hashlib
 import unittest
 from math import prod
 
 import torch
 
+import emperor.sampler as sampler_interface
 from emperor.sampler import SamplerConfig, SamplerModel
 from emperor.sampler._selection.base import SamplerBase
 from emperor.sampler._selection.full import SamplerFull
 from emperor.sampler._selection.sparse import SamplerSparse
 from emperor.sampler._selection.top_k import SamplerTopk
+
+
+class TestSamplerPublicInterface(unittest.TestCase):
+    def test_exports_only_supported_sampler_symbols(self):
+        self.assertEqual(
+            tuple(sampler_interface.__all__),
+            (
+                "RouterConfig",
+                "SamplerConfig",
+                "RouterModel",
+                "SamplerModel",
+                "SamplerMonitorCallback",
+            ),
+        )
 
 
 class SamplerTestCase(unittest.TestCase):
@@ -95,7 +111,7 @@ class TestProbabilitySampler(SamplerTestCase):
         m = SamplerBase(cfg)
         probabilities = torch.randn(2, 4)
 
-        with self.assertRaises(NotImplementedError) as context:
+        with self.assertRaises(NotImplementedError):
             m._sample_probabilities_and_indices(probabilities)
 
     def test__update_mask_given_threshold__threshold__zero(self):
@@ -453,9 +469,12 @@ class TestSamplerSparse(SamplerTestCase):
                                     mask = torch.ones(
                                         batch_size, sequence_length
                                     ).reshape(-1, 1)
-                                    probabilities, selected_indices, skip_mask, sampler_loss = (
-                                        m.get_probabilities_and_indices(logits, mask)
-                                    )
+                                    (
+                                        probabilities,
+                                        selected_indices,
+                                        skip_mask,
+                                        sampler_loss,
+                                    ) = m.get_probabilities_and_indices(logits, mask)
                                     self.assertEqual(
                                         probabilities.shape,
                                         (batch_size * sequence_length,),
@@ -493,7 +512,11 @@ class TestSamplerSparse(SamplerTestCase):
         for cross_option in loss_options:
             for coeff_option in loss_options:
                 for zero_option in loss_options:
-                    message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}"
+                    message = (
+                        f"Running test with cross_option={cross_option}, "
+                        f"coeff_option={coeff_option}, "
+                        f"zero_option={zero_option}"
+                    )
                     with self.subTest(msg=message):
                         cfg = self.preset(
                             top_k=1,
@@ -514,9 +537,7 @@ class TestSamplerSparse(SamplerTestCase):
 
                         logits = torch.randn(*shape)
                         full_probabilities = torch.softmax(torch.randn(*shape), dim=-1)
-                        sampled_probabilities = torch.rand(
-                            batch_size * sequence_length
-                        )
+                        sampled_probabilities = torch.rand(batch_size * sequence_length)
                         indices = torch.randint(
                             0, m.num_experts, (batch_size * sequence_length, m.top_k)
                         )
@@ -596,18 +617,23 @@ class TestSamplerTopk(SamplerTestCase):
                 [0.1, 0.2, 0.3, 0.4, 0.5],
             ]
         )
-        torch.manual_seed(7)
+        with torch.random.fork_rng():
+            torch.manual_seed(7)
 
-        probability, indices = m._sample_probabilities_and_indices(probabilities)
+            probability, indices = m._sample_probabilities_and_indices(probabilities)
+            rng_digest = hashlib.sha256(
+                torch.random.get_rng_state().numpy().tobytes()
+            ).hexdigest()
 
-        self.assertEqual(probability.shape, (2, 3))
-        self.assertEqual(indices.shape, (2, 3))
-        torch.testing.assert_close(indices[:, :2], torch.tensor([[0, 1], [4, 3]]))
-        self.assertFalse(torch.any(indices[0, 2:] == 0))
-        self.assertFalse(torch.any(indices[0, 2:] == 1))
-        self.assertFalse(torch.any(indices[1, 2:] == 4))
-        self.assertFalse(torch.any(indices[1, 2:] == 3))
-        torch.testing.assert_close(probability, torch.gather(probabilities, 1, indices))
+        torch.testing.assert_close(indices, torch.tensor([[0, 1, 3], [4, 3, 1]]))
+        torch.testing.assert_close(
+            probability,
+            torch.tensor([[0.5, 0.4, 0.2], [0.5, 0.4, 0.2]]),
+        )
+        self.assertEqual(
+            rng_digest,
+            "3b3cfc3d9fbb5271ef903d4001525a803564b7ae3087ce1d6d5e44041919f0cf",
+        )
 
     def test_sample_probabilities_and_indices_uses_deterministic_topk_in_eval(self):
         cfg = self.preset(top_k=3, num_experts=5, num_topk_samples=1)
@@ -678,9 +704,12 @@ class TestSamplerTopk(SamplerTestCase):
                                 mask = torch.ones(batch_size, sequence_length).reshape(
                                     -1, 1
                                 )
-                                probabilities, selected_indices, skip_mask, sampler_loss = (
-                                    m.get_probabilities_and_indices(logits, mask)
-                                )
+                                (
+                                    probabilities,
+                                    selected_indices,
+                                    skip_mask,
+                                    sampler_loss,
+                                ) = m.get_probabilities_and_indices(logits, mask)
                                 self.assertEqual(
                                     probabilities.shape,
                                     (batch_size * sequence_length, m.top_k),
@@ -747,7 +776,12 @@ class TestSamplerTopk(SamplerTestCase):
             for coeff_option in loss_options:
                 for zero_option in loss_options:
                     for mutual_option in loss_options:
-                        message = f"Running test with cross_option={cross_option}, coeff_option={coeff_option}, zero_option={zero_option}, mutual_option={mutual_option}"
+                        message = (
+                            f"Running test with cross_option={cross_option}, "
+                            f"coeff_option={coeff_option}, "
+                            f"zero_option={zero_option}, "
+                            f"mutual_option={mutual_option}"
+                        )
                         with self.subTest(msg=message):
                             cfg = self.preset(
                                 top_k=3,
@@ -856,9 +890,7 @@ class TestSamplerFull(SamplerTestCase):
                             num_expert_dim,
                         )
                         logits = torch.softmax(torch.randn(*shape), dim=-1)
-                        mask = torch.ones(batch_size, sequence_length).reshape(
-                            -1, 1
-                        )
+                        mask = torch.ones(batch_size, sequence_length).reshape(-1, 1)
                         probabilities, selected_indices, skip_mask, loss = (
                             m.get_probabilities_and_indices(logits, mask)
                         )
@@ -956,7 +988,7 @@ class TestSamplerModel(SamplerTestCase):
         topk_options = [1, 3, 5]
         model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-        for top_k, model_type in zip(topk_options, model_types):
+        for top_k, model_type in zip(topk_options, model_types, strict=True):
             message = f"Testing configuration with top_k={top_k}"
             with self.subTest(msg=message):
                 cfg = self.preset(
@@ -966,12 +998,38 @@ class TestSamplerModel(SamplerTestCase):
                 model = SamplerModel(cfg)
                 self.assertIsInstance(model.sampler_model, model_type)
 
+    def test_selection_variants_preserve_exact_state_keys_and_strict_roundtrip(self):
+        expected_keys = (
+            "sampler_model.default_loss",
+            "sampler_model.auxiliary_loss_model.default_loss",
+        )
+
+        for top_k in (1, 3, 5):
+            with self.subTest(top_k=top_k):
+                cfg = self.preset(top_k=top_k, num_experts=5)
+                source = SamplerModel(cfg)
+                source.sampler_model.default_loss.fill_(1.25)
+                source.sampler_model.auxiliary_loss_model.default_loss.fill_(2.5)
+                state = source.state_dict()
+
+                self.assertEqual(tuple(state), expected_keys)
+
+                restored = SamplerModel(cfg)
+                restored.load_state_dict(state, strict=True)
+
+                self.assertEqual(tuple(restored.state_dict()), expected_keys)
+                for key in expected_keys:
+                    torch.testing.assert_close(restored.state_dict()[key], state[key])
+
     def test_sample_probs_and_indexes_logits_only(self):
         topk_options = [1, 3, 5]
         model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-        for top_k, model_type in zip(topk_options, model_types):
-            message = f"Running test with configuration top_k={top_k}, model_type={model_type}"
+        for top_k, model_type in zip(topk_options, model_types, strict=True):
+            message = (
+                f"Running test with configuration top_k={top_k}, "
+                f"model_type={model_type}"
+            )
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5
@@ -1036,8 +1094,11 @@ class TestSamplerModel(SamplerTestCase):
         topk_options = [1, 3, 5]
         model_types = [SamplerSparse, SamplerTopk, SamplerFull]
 
-        for top_k, model_type in zip(topk_options, model_types):
-            message = f"Running test with configuration top_k={top_k}, model_type={model_type}"
+        for top_k, model_type in zip(topk_options, model_types, strict=True):
+            message = (
+                f"Running test with configuration top_k={top_k}, "
+                f"model_type={model_type}"
+            )
             with self.subTest(msg=message):
                 num_experts = 5
                 loss = 0.0 if num_experts == top_k else 0.5

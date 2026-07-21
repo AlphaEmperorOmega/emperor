@@ -64,6 +64,36 @@ class TestAvailableDevices(unittest.TestCase):
         self.assertEqual(devices, [torch.device("cpu"), torch.device("cuda")])
 
 
+class TestAuxiliaryLossBase(unittest.TestCase):
+    def test_abstract_operations_raise_exact_errors(self):
+        loss = AuxiliaryLossBase()
+
+        cases = (
+            (
+                loss.reset_loss,
+                "`reset_loss` method must be implemented by subclasses of "
+                "AuxiliaryLossBase",
+            ),
+            (
+                loss.update_loss,
+                "`update_loss` method must be implemented by subclasses of "
+                "AuxiliaryLossBase",
+            ),
+            (
+                loss._compute_loss,
+                "`_compute_loss` method must be implemented by subclasses of "
+                "AuxiliaryLossBase",
+            ),
+        )
+        for operation, message in cases:
+            with self.subTest(operation=operation.__name__):
+                with self.assertRaisesRegex(
+                    NotImplementedError,
+                    f"^{message}$",
+                ):
+                    operation()
+
+
 class TestCoefficientOfVariationLoss(unittest.TestCase):
     def gates(self) -> torch.Tensor:
         return torch.tensor(
@@ -418,10 +448,9 @@ class TestMutualInformationLoss(unittest.TestCase):
             + 0.25 * torch.log(torch.tensor(0.25))
             + 0.75 * torch.log(torch.tensor(0.75))
         )
-        marginal_entropy_term = (
-            0.525 * torch.log(torch.tensor(0.525))
-            + 0.475 * torch.log(torch.tensor(0.475))
-        )
+        marginal_entropy_term = 0.525 * torch.log(
+            torch.tensor(0.525)
+        ) + 0.475 * torch.log(torch.tensor(0.475))
         return -(conditional_entropy_term + marginal_entropy_term)
 
     def test_init_stores_loss_weight(self):
@@ -494,12 +523,9 @@ class TestMutualInformationLoss(unittest.TestCase):
 
         kept_probabilities = probabilities[:1]
         expected = -(
-            (
-                kept_probabilities * kept_probabilities.log()
-            ).sum()
+            (kept_probabilities * kept_probabilities.log()).sum()
             + (
-                kept_probabilities.squeeze(0)
-                * kept_probabilities.squeeze(0).log()
+                kept_probabilities.squeeze(0) * kept_probabilities.squeeze(0).log()
             ).sum()
         )
         torch.testing.assert_close(output, expected)
@@ -646,14 +672,10 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
 
         model.update_accumulated_statistics(logits, probabilities, gates, skip_mask)
 
-        self.assertIsNotNone(
-            model.coefficient_of_variation_loss.gates_accumulation
-        )
+        self.assertIsNotNone(model.coefficient_of_variation_loss.gates_accumulation)
         self.assertIsNotNone(model.switch_loss.probability_accumulation)
         self.assertIsNotNone(model.switch_loss.frequency_accumulation)
-        self.assertIsNotNone(
-            model.zero_centred_loss.squared_log_sum_exp_accumulation
-        )
+        self.assertIsNotNone(model.zero_centred_loss.squared_log_sum_exp_accumulation)
         self.assertIsNotNone(model.zero_centred_loss.count_accumulation)
         self.assertEqual(len(model.mutual_information_loss.log_probabilities), 1)
         self.assertEqual(len(model.mutual_information_loss.probabilities), 1)
@@ -815,18 +837,12 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
         reference_mask = skip_mask.double()
         p_x = reference_mask / reference_mask.sum()
         p_e = (p_x * reference_probabilities).sum(dim=0)
-        zero_centred = torch.logsumexp(
-            reference_logits, dim=-1
-        ).square().mean()
+        zero_centred = torch.logsumexp(reference_logits, dim=-1).square().mean()
         marginal_entropy_term = torch.special.xlogy(p_e, p_e).sum()
         conditional_entropy_term = (
-            p_x
-            * reference_probabilities
-            * torch.log_softmax(reference_logits, dim=-1)
+            p_x * reference_probabilities * torch.log_softmax(reference_logits, dim=-1)
         ).sum()
-        expected = zero_centred - (
-            conditional_entropy_term + marginal_entropy_term
-        )
+        expected = zero_centred - (conditional_entropy_term + marginal_entropy_term)
 
         torch.testing.assert_close(output.double(), expected)
 
@@ -868,9 +884,7 @@ class TestSamplerAuxiliaryLosses(unittest.TestCase):
                     requires_grad=True,
                 )
                 probabilities = torch.softmax(logits, dim=-1)
-                skip_mask = torch.tensor(
-                    [[1.0], [0.0], [0.5]], dtype=dtype
-                )
+                skip_mask = torch.tensor([[1.0], [0.0], [0.5]], dtype=dtype)
 
                 model.update_accumulated_statistics(
                     logits=logits,

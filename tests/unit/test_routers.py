@@ -115,6 +115,42 @@ class TestRouterModel(unittest.TestCase):
         self.assertEqual(model.num_experts, 4)
         self.assertEqual(model.router_output_dim, 8)
 
+    def test_preserves_exact_state_keys_and_strict_roundtrip(self):
+        cfg = self.preset(input_dim=8, hidden_dim=12, num_experts=4, num_layers=2)
+        source = RouterModel(cfg)
+        expected_keys = (
+            "model.layers.0.model.weight_params",
+            "model.layers.0.model.bias_params",
+            "model.layers.1.model.weight_params",
+            "model.layers.1.model.bias_params",
+        )
+
+        with torch.no_grad():
+            for index, value in enumerate(source.state_dict().values(), start=1):
+                value.fill_(index / 10)
+        state = source.state_dict()
+
+        self.assertEqual(tuple(state), expected_keys)
+
+        restored = RouterModel(cfg)
+        restored.load_state_dict(state, strict=True)
+
+        self.assertEqual(tuple(restored.state_dict()), expected_keys)
+        for key in expected_keys:
+            torch.testing.assert_close(restored.state_dict()[key], state[key])
+
+    def test_invalid_config_is_rejected_before_parameter_initialization_uses_rng(self):
+        with torch.random.fork_rng():
+            torch.manual_seed(7)
+            expected_next_values = torch.randn(8)
+
+            torch.manual_seed(7)
+            with self.assertRaises(ValueError):
+                RouterModel(self.preset(input_dim=0))
+            actual_next_values = torch.randn(8)
+
+        torch.testing.assert_close(actual_next_values, expected_next_values)
+
     def test_invalid_config_values_raise(self):
         cases = [
             ("input_dim", 0, ValueError),
