@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tarfile
 import tempfile
 import unittest
 import zipfile
@@ -58,6 +59,12 @@ def _without_dependency(
         if verify_distribution._canonical_dependency_name(requirement)
         != dependency_name
     )
+
+
+def _write_sdist(path: Path, root_name: str, members: set[str]) -> None:
+    with tarfile.open(path, mode="w:gz") as archive:
+        for member in sorted(members):
+            archive.addfile(tarfile.TarInfo(f"{root_name}/{member}"))
 
 
 class DistributionMetadataVerificationTests(unittest.TestCase):
@@ -291,6 +298,100 @@ class DistributionMetadataVerificationTests(unittest.TestCase):
                 r"external modules.*\['httpx'\]",
             ):
                 verify_distribution._verify_wheel(wheel)
+
+
+class SourceDistributionVerificationTests(unittest.TestCase):
+    def test_root_sdist_requires_runtime_scripts(self) -> None:
+        members = {
+            "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
+            "download_logs.sh",
+            "env.ps1",
+            "env.sh",
+            "experiment.sh",
+            "run_test.sh",
+            "src/emperor/__init__.py",
+            "src/model_runtime/__init__.py",
+            "src/models/__init__.py",
+            "tests/test_package.py",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            sdist = Path(temporary) / "emperor-0.1.0.tar.gz"
+            _write_sdist(sdist, "emperor-0.1.0", members)
+
+            manifest = verify_distribution._verify_sdist(sdist)
+
+        self.assertNotIn("docs", manifest)
+        self.assertEqual(manifest["emperor"], 1)
+        self.assertEqual(manifest["models"], 1)
+        self.assertEqual(manifest["model_runtime"], 1)
+
+    def test_root_sdist_rejects_a_missing_runtime_script(self) -> None:
+        members = {
+            "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
+            "download_logs.sh",
+            "env.ps1",
+            "experiment.sh",
+            "run_test.sh",
+            "src/emperor/__init__.py",
+            "src/model_runtime/__init__.py",
+            "src/models/__init__.py",
+            "tests/test_package.py",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            sdist = Path(temporary) / "emperor-0.1.0.tar.gz"
+            _write_sdist(sdist, "emperor-0.1.0", members)
+
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                "env.sh",
+            ):
+                verify_distribution._verify_sdist(sdist)
+
+    def test_workbench_sdist_requires_runtime_and_test_support(self) -> None:
+        members = set(verify_distribution.WORKBENCH_REQUIRED_SDIST_MEMBERS)
+        with tempfile.TemporaryDirectory() as temporary:
+            sdist = Path(temporary) / "emperor_workbench-0.1.0.tar.gz"
+            _write_sdist(sdist, "emperor_workbench-0.1.0", members)
+
+            manifest = verify_distribution._verify_workbench_sdist(sdist)
+
+        self.assertGreater(manifest["emperor_workbench"], 0)
+        self.assertGreater(manifest["tests"], 0)
+
+    def test_workbench_sdist_rejects_frontend_files(self) -> None:
+        members = {
+            *verify_distribution.WORKBENCH_REQUIRED_SDIST_MEMBERS,
+            "web/index.html",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            sdist = Path(temporary) / "emperor_workbench-0.1.0.tar.gz"
+            _write_sdist(sdist, "emperor_workbench-0.1.0", members)
+
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                "Frontend leaked",
+            ):
+                verify_distribution._verify_workbench_sdist(sdist)
+
+    def test_workbench_copy_keeps_api_and_excludes_frontend(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repository = root / "repository"
+            api_file = repository / "apps" / "workbench" / "api" / "sentinel.py"
+            web_file = repository / "apps" / "workbench" / "web" / "sentinel.js"
+            api_file.parent.mkdir(parents=True)
+            web_file.parent.mkdir(parents=True)
+            api_file.write_text("api", encoding="utf-8")
+            web_file.write_text("web", encoding="utf-8")
+            destination = root / "copy"
+
+            verify_distribution._copy_workbench(repository, destination)
+
+            self.assertEqual(
+                (destination / "api" / "sentinel.py").read_text(encoding="utf-8"),
+                "api",
+            )
+            self.assertFalse((destination / "web").exists())
 
 
 if __name__ == "__main__":

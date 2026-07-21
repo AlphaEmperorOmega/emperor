@@ -24,6 +24,9 @@ PROJECT_FILES = (
     "LICENSE",
     "MANIFEST.in",
     "README.md",
+    "download_logs.sh",
+    "env.ps1",
+    "env.sh",
     "experiment.sh",
     "mise.toml",
     "pyproject.toml",
@@ -31,7 +34,6 @@ PROJECT_FILES = (
 )
 PROJECT_TREES = (
     "constraints",
-    "docs",
     "src",
     "tests",
 )
@@ -542,13 +544,14 @@ def _copy_project(repository: Path, destination: Path) -> None:
 
 def _copy_workbench(repository: Path, destination: Path) -> None:
     shutil.copytree(
-        repository / "apps" / "workbench" / "api",
+        repository / "apps" / "workbench",
         destination,
         ignore=shutil.ignore_patterns(
             *IGNORED_TREE_NAMES,
             ".next",
             ".runtime",
             "node_modules",
+            "web",
         ),
     )
 
@@ -643,7 +646,6 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         ]
 
     required_prefixes = (
-        "docs/",
         "src/emperor/",
         "src/models/",
         "src/model_runtime/",
@@ -658,6 +660,11 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         raise VerificationError(f"Source distribution is missing: {missing}")
     required_files = {
         "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
+        "download_logs.sh",
+        "env.ps1",
+        "env.sh",
+        "experiment.sh",
+        "run_test.sh",
     }
     missing_files = sorted(required_files.difference(names))
     if missing_files:
@@ -665,9 +672,7 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
             f"Source distribution is missing required files: {missing_files}"
         )
     leaked_workbench = sorted(
-        name
-        for name in names
-        if name.startswith("apps/workbench/") or name.startswith("workbench/")
+        name for name in names if name.startswith(("apps/workbench/", "workbench/"))
     )
     if leaked_workbench:
         raise VerificationError(
@@ -675,7 +680,6 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         )
     return {
         "constraints": sum(name.startswith("constraints/") for name in names),
-        "docs": sum(name.startswith("docs/") for name in names),
         "emperor": sum(name.startswith("src/emperor/") for name in names),
         "models": sum(name.startswith("src/models/") for name in names),
         "model_runtime": sum(name.startswith("src/model_runtime/") for name in names),
@@ -760,25 +764,32 @@ def _verify_workbench_sdist(sdist: Path) -> dict[str, int]:
             for member in archive.getmembers()
             if member.isfile()
         }
-    required = {
-        "src/emperor_workbench/__init__.py",
-        "src/emperor_workbench/__main__.py",
-        "src/emperor_workbench/api/__init__.py",
-        "src/emperor_workbench/cli.py",
-        "pyproject.toml",
-    }
-    missing = sorted(required.difference(names))
+    missing = sorted(WORKBENCH_REQUIRED_SDIST_MEMBERS.difference(names))
     if missing:
         raise VerificationError(f"Workbench sdist is missing: {missing}")
-    leaked = sorted(name for name in names if name.startswith("web/"))
-    if leaked:
+    forbidden = {"src/emperor_workbench/launch.py"}.intersection(names)
+    if forbidden:
         raise VerificationError(
-            f"Non-runtime files leaked into Workbench sdist: {leaked}"
+            f"Legacy Workbench launcher leaked into sdist: {sorted(forbidden)}"
         )
+    leaked = sorted(
+        name
+        for name in names
+        if name.startswith(
+            (
+                "apps/workbench/web/",
+                "frontend/",
+                "web/",
+            )
+        )
+    )
+    if leaked:
+        raise VerificationError(f"Frontend leaked into Workbench sdist: {leaked}")
     return {
         "emperor_workbench": sum(
             name.startswith("src/emperor_workbench/") for name in names
         ),
+        "tests": sum(name.startswith("tests/") for name in names),
         "total": len(names),
     }
 
@@ -1013,13 +1024,14 @@ def verify(
         root = Path(temporary)
         build_source = root / "build-source"
         editable_source = root / "editable-source"
-        workbench_source = root / "workbench-source"
+        workbench_checkout = root / "workbench-source"
+        workbench_source = workbench_checkout / "api"
         outside = root / "outside"
         outside.mkdir()
         _copy_project(repository, build_source)
         _copy_project(repository, editable_source)
         if include_workbench_smoke:
-            _copy_workbench(repository, workbench_source)
+            _copy_workbench(repository, workbench_checkout)
 
         wheel, sdist = _build_artifacts(build_source, root / "artifacts")
         wheel_manifest = _verify_wheel(wheel)
