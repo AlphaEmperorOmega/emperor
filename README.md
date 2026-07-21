@@ -7,11 +7,14 @@ network models from reusable, inspectable components. The repository combines:
 
 - `src/emperor/` - core neural modules, controller primitives, datasets, training
   helpers, and monitor callbacks.
+- `src/model_runtime/` - consumer-neutral Model Package, Inspection, Run, and
+  project Adapter interfaces shared by the CLI and Workbench.
 - `src/models/` - reference experiment packages that compose the core modules into
   runnable architectures.
-- `apps/workbench/` - a local browser-based Model Visualizer for inspecting presets,
-  editing config overrides, planning training runs, launching local jobs, and
-  reviewing live or historical monitor data.
+- `apps/workbench/api/` - the separately installable FastAPI application for
+  inspection, run history, config snapshots, and local training jobs.
+- `apps/workbench/web/` - the Next.js Model Visualizer for planning experiments
+  and reviewing live or historical monitor data.
 
 The main goal is repeatable model experimentation: build small models, compare
 variants, watch what happens during training, and use the results to decide
