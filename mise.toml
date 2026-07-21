@@ -44,35 +44,36 @@ description = "Run Emperor's unittest suite"
 raw = true
 run = "python tools/emperor_dev.py test"
 
+[tasks."test:emperor-interfaces"]
+description = "Run Emperor package Interface and architecture contracts"
+run = "PYTHONPATH=src python -m unittest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces"
+
+[tasks."test:family"]
+description = "Run focused tests for one Emperor family"
+raw = true
+run = "python tools/emperor_test_family.py tests"
+
+[tasks."test:family-coverage"]
+description = "Require complete statement and branch coverage for one Emperor family"
+raw = true
+run = "python tools/emperor_test_family.py coverage"
+
+[tasks."test:family-mutation"]
+description = "Run mutation testing for one Emperor family"
+raw = true
+run = "python tools/emperor_test_family.py mutation"
+
 [tasks."test:attention"]
 description = "Run the attention unittest suite"
-run = "PYTHONPATH=tests python -m unittest discover -s tests -p 'test_attention*.py'"
+run = "python tools/emperor_test_family.py tests attention"
 
 [tasks."test:attention-coverage"]
 description = "Require complete statement and branch coverage for emperor.attention"
-run = """
-python -m coverage erase
-PYTHONPATH=tests python -m coverage run -m unittest discover -s tests -p 'test_attention*.py'
-python -m coverage report
-"""
+run = "python tools/emperor_test_family.py coverage attention"
 
 [tasks."test:attention-mutation"]
 description = "Run attention mutation testing (Linux or WSL only)"
-run = """
-export OMP_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
-export VECLIB_MAXIMUM_THREADS=1
-export BLIS_NUM_THREADS=1
-export MPLCONFIGDIR=/tmp/matplotlib
-PYTHONPATH=tests python -m mutmut run --max-children 4
-results="$(python -m mutmut results)"
-if [ -n "$results" ]; then
-  printf '%s\n' "$results"
-  exit 1
-fi
-"""
+run = "python tools/emperor_test_family.py mutation attention"
 
 [tasks."logs:archive"]
 description = "Create a portable Workbench log archive"

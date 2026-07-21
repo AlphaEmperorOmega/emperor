@@ -279,7 +279,10 @@ modules = [
   "src/emperor/layers/_config.py",
   "src/emperor/layers/_layer.py",
   "src/emperor/layers/_monitoring/__init__.py",
-  "src/emperor/layers/_monitoring/callbacks.py",
+  "src/emperor/layers/_monitoring/callbacks/__init__.py",
+  "src/emperor/layers/_monitoring/callbacks/_hooks.py",
+  "src/emperor/layers/_monitoring/callbacks/layer_controller.py",
+  "src/emperor/layers/_monitoring/callbacks/recurrent.py",
   "src/emperor/layers/_monitoring/diagnostics.py",
   "src/emperor/layers/_mirrored.py",
   "src/emperor/layers/_options.py",
@@ -287,7 +290,13 @@ modules = [
   "src/emperor/layers/_stack.py",
   "src/emperor/layers/_state.py",
   "src/emperor/layers/_support.py",
-  "src/emperor/layers/_validation.py",
+  "src/emperor/layers/_validation/__init__.py",
+  "src/emperor/layers/_validation/common.py",
+  "src/emperor/layers/_validation/gate.py",
+  "src/emperor/layers/_validation/layer.py",
+  "src/emperor/layers/_validation/recurrent.py",
+  "src/emperor/layers/_validation/residual.py",
+  "src/emperor/layers/_validation/stack.py",
 ]
 
 [families.adaptive_parameters]

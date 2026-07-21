@@ -84,13 +84,16 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["emperor", "model_runtime", "models"]
 
 [tool.coverage.run]
 branch = true
-source = ["emperor.attention"]
+source = ["emperor"]
+concurrency = ["multiprocessing"]
+parallel = true
 
 [tool.coverage.report]
 exclude_lines = ["if TYPE_CHECKING:"]
@@ -101,39 +104,5 @@ skip_covered = false
 
 [tool.mutmut]
 source_paths = ["src/emperor/"]
-only_mutate = [
-  "src/emperor/attention/_validation.py",
-  "src/emperor/attention/_base.py",
-  "src/emperor/attention/_monitoring/*.py",
-  "src/emperor/attention/_runtime.py",
-  "src/emperor/attention/_ops/*.py",
-  "src/emperor/attention/_variants/*/layer.py",
-  "src/emperor/attention/_variants/*/validation.py",
-  "src/emperor/attention/_variants/*/processing.py",
-  "src/emperor/attention/_variants/*/projection.py",
-  "src/emperor/attention/_variants/*/masking.py",
-  "src/emperor/attention/_variants/*/bias.py",
-  "src/emperor/attention/_variants/*/reshaping.py",
-  "src/emperor/attention/_variants/*/zero_attention.py",
-]
 do_not_mutate = ["*/__init__.py"]
-pytest_add_cli_args_test_selection = [
-  "tests/unit/test_attention.py",
-  "tests/unit/test_attention_batch_dimension_manager.py",
-  "tests/unit/test_attention_contracts.py",
-  "tests/unit/test_attention_correctness_regressions.py",
-  "tests/unit/test_attention_key_value_bias.py",
-  "tests/unit/test_attention_mask.py",
-  "tests/unit/test_attention_mask_validator.py",
-  "tests/unit/test_attention_mixture_of_attention_heads.py",
-  "tests/unit/test_attention_monitor.py",
-  "tests/unit/test_attention_mutation_contracts.py",
-  "tests/unit/test_attention_processor.py",
-  "tests/unit/test_attention_projector.py",
-  "tests/unit/test_attention_runtime_shape.py",
-  "tests/unit/test_attention_runtime_values.py",
-  "tests/unit/test_attention_validator.py",
-  "tests/unit/test_attention_zero_attention.py",
-  "tests/unit/test_transformer_relative_positional_embedding.py",
-]
 also_copy = ["src/model_runtime/", "src/models/", "tests/support/"]

@@ -85,6 +85,24 @@ class EmperorTestFamilyRunnerTests(unittest.TestCase):
             ),
         )
 
+    def test_linears_test_patterns_resolve_to_unique_existing_files(self) -> None:
+        family = load_family(PROJECT_ROOT, "linears")
+
+        test_paths = resolve_test_paths(PROJECT_ROOT, family["focused_tests"])
+
+        self.assertEqual(
+            test_paths,
+            (
+                PROJECT_ROOT
+                / "tests"
+                / "integration"
+                / "test_linear_monitor_lifecycle.py",
+                PROJECT_ROOT / "tests" / "unit" / "test_linear_monitor.py",
+                PROJECT_ROOT / "tests" / "unit" / "test_linear_validator.py",
+                PROJECT_ROOT / "tests" / "unit" / "test_linears.py",
+            ),
+        )
+
     def test_resolved_test_files_convert_to_unittest_module_names(self) -> None:
         paths = (
             PROJECT_ROOT / "tests" / "unit" / "test_linears.py",
