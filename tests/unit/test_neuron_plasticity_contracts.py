@@ -9,6 +9,9 @@ from emperor.neuron._cluster.plasticity import _NeuronClusterPlasticityMixin
 _COPY_AND_PERTURB_PARAMETERS = (
     "_NeuronClusterPlasticityMixin__copy_and_perturb_parent_parameters"
 )
+_SATURATED_NEURONS_BY_COUNTER = (
+    "_NeuronClusterPlasticityMixin__saturated_neurons_by_descending_counter"
+)
 
 
 class _SingleParameterModule(nn.Module):
@@ -28,6 +31,15 @@ class _TiedAndUntiedParameterModule(nn.Module):
         self.shared_role_a = shared_parameter
         self.shared_role_b = shared_parameter
         self.later_weight = nn.Parameter(later_values.clone())
+
+
+class _WarmupModule(nn.Module):
+    def __init__(self, remaining_steps: int) -> None:
+        super().__init__()
+        self.register_buffer(
+            "warmup_remaining_steps",
+            torch.tensor(remaining_steps, dtype=torch.int64),
+        )
 
 
 class TestNeuronPlasticityNumerics(unittest.TestCase):
@@ -168,3 +180,71 @@ class TestNeuronPlasticityNumerics(unittest.TestCase):
 
         torch.testing.assert_close(grown.weight, parent.weight, rtol=0.0, atol=0.0)
         torch.testing.assert_close(torch.random.get_rng_state(), expected_rng_state)
+
+
+class TestNeuronPlasticityStateContracts(unittest.TestCase):
+    def test_growth_priority_depends_on_counter_not_name_or_insertion_order(
+        self,
+    ) -> None:
+        plasticity = _NeuronClusterPlasticityMixin()
+        plasticity.growth_threshold = 2
+        plasticity.cluster = nn.ModuleDict(
+            {
+                "neuron_1_1_1": nn.Identity(),
+                "neuron_5_1_1": nn.Identity(),
+                "neuron_9_1_1": nn.Identity(),
+                "neuron_3_1_1": nn.Identity(),
+            }
+        )
+        synchronized_counters = {
+            "neuron_1_1_1": 8,
+            "neuron_5_1_1": 3,
+            "neuron_9_1_1": 5,
+            "neuron_3_1_1": 1,
+        }
+        saturated_by_counter = getattr(
+            plasticity,
+            _SATURATED_NEURONS_BY_COUNTER,
+        )
+
+        ordered_names = [
+            name for name, _ in saturated_by_counter(synchronized_counters)
+        ]
+
+        self.assertEqual(
+            ordered_names,
+            ["neuron_1_1_1", "neuron_9_1_1", "neuron_5_1_1"],
+        )
+
+    def test_non_cubic_escape_counter_mapping_preserves_all_three_axes(self) -> None:
+        plasticity = _NeuronClusterPlasticityMixin()
+        plasticity.training = True
+        plasticity.y_axis_total_neurons = 3
+        plasticity.z_axis_total_neurons = 4
+        plasticity.escape_counts = torch.zeros((2, 3, 4), dtype=torch.int64)
+        positions = [(1, 2, 3), (2, 1, 4), (2, 3, 2), (1, 2, 3)]
+
+        plasticity._record_escaped_missing_positions(positions)
+
+        expected_counts = torch.zeros_like(plasticity.escape_counts)
+        expected_counts[0, 1, 2] = 2
+        expected_counts[1, 0, 3] = 1
+        expected_counts[1, 2, 1] = 1
+        torch.testing.assert_close(plasticity.escape_counts, expected_counts)
+
+    def test_warmup_countdown_reaches_zero_and_does_not_underflow(self) -> None:
+        plasticity = _NeuronClusterPlasticityMixin()
+        plasticity.growth_warmup_steps = 2
+        warmup_module = _WarmupModule(2)
+        plasticity.cluster = nn.ModuleDict({"grown": warmup_module})
+
+        observed_countdown = []
+        for _ in range(3):
+            plasticity._advance_grown_neuron_warmup()
+            observed_countdown.append(int(warmup_module.warmup_remaining_steps))
+
+        self.assertEqual(observed_countdown, [1, 0, 0])
+
+
+if __name__ == "__main__":
+    unittest.main()
