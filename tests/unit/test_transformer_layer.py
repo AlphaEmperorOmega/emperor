@@ -164,7 +164,6 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             else ResidualConfig(
                 option=residual_connection_option, model_config=residual_model_config
             ),
-            causal_attention_mask_flag=causal_attention_mask_flag,
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
         )
@@ -611,7 +610,6 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             else ResidualConfig(
                 option=residual_connection_option, model_config=residual_model_config
             ),
-            causal_attention_mask_flag=causal_attention_mask_flag,
             self_attention_config=self_attention_config,
             cross_attention_config=cross_attention_config,
             feed_forward_config=feed_forward_config,

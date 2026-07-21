@@ -8,10 +8,8 @@ if TYPE_CHECKING:
         TransformerConfig,
         TransformerDecoderBlockLayerConfig,
         TransformerDecoderLayerConfig,
-        TransformerDecoderStackConfig,
         TransformerEncoderBlockLayerConfig,
         TransformerEncoderLayerConfig,
-        TransformerEncoderStackConfig,
     )
     from emperor.transformer._feed_forward import FeedForward, FeedForwardConfig
     from emperor.transformer._layers import (
@@ -42,10 +40,6 @@ if TYPE_CHECKING:
         TransformerStackOptions,
         resolve_controller_stack_options,
     )
-    from emperor.transformer._stacks import (
-        TransformerDecoderStack,
-        TransformerEncoderStack,
-    )
     from emperor.transformer._state import TransformerDecoderLayerState
     from emperor.transformer._submodule_configuration import (
         configure_transformer_submodule,
@@ -54,10 +48,6 @@ if TYPE_CHECKING:
 __all__ = (
     "Transformer",
     "TransformerConfig",
-    "TransformerEncoderStack",
-    "TransformerDecoderStack",
-    "TransformerEncoderStackConfig",
-    "TransformerDecoderStackConfig",
     "TransformerEncoderLayer",
     "TransformerEncoderBlockLayer",
     "TransformerDecoderBlockLayer",
@@ -90,22 +80,6 @@ __all__ = (
 _LAZY_EXPORTS = {
     "Transformer": ("emperor.transformer._model", "Transformer"),
     "TransformerConfig": ("emperor.transformer._config", "TransformerConfig"),
-    "TransformerEncoderStack": (
-        "emperor.transformer._stacks",
-        "TransformerEncoderStack",
-    ),
-    "TransformerDecoderStack": (
-        "emperor.transformer._stacks",
-        "TransformerDecoderStack",
-    ),
-    "TransformerEncoderStackConfig": (
-        "emperor.transformer._config",
-        "TransformerEncoderStackConfig",
-    ),
-    "TransformerDecoderStackConfig": (
-        "emperor.transformer._config",
-        "TransformerDecoderStackConfig",
-    ),
     "TransformerEncoderLayer": (
         "emperor.transformer._layers",
         "TransformerEncoderLayer",

@@ -2,17 +2,15 @@ import unittest
 from types import SimpleNamespace
 
 import torch
-from emperor.transformer.config import TransformerConfig
-from emperor.transformer.core._validator import TransformerValidator
-from emperor.transformer.core.layers import (
+
+from emperor.transformer import (
+    Transformer,
+    TransformerConfig,
     TransformerDecoderLayer,
     TransformerEncoderLayer,
 )
-from emperor.transformer.core.stack import (
-    TransformerDecoderStack,
-    TransformerEncoderStack,
-)
-from emperor.transformer.model import Transformer
+from emperor.transformer._validation import TransformerValidator
+from unit.test_transformer import encoder_stack
 
 
 class TestTransformerValidatorAdapter(unittest.TestCase):
@@ -21,8 +19,6 @@ class TestTransformerValidatorAdapter(unittest.TestCase):
             Transformer,
             TransformerEncoderLayer,
             TransformerDecoderLayer,
-            TransformerEncoderStack,
-            TransformerDecoderStack,
         )
 
         for module_type in module_types:
@@ -40,7 +36,7 @@ class TestTransformerValidatorAdapter(unittest.TestCase):
 
         model = SimpleNamespace(
             cfg=SimpleNamespace(
-                encoder_stack_config=object(),
+                encoder_stack_config=encoder_stack(),
                 decoder_stack_config=None,
             )
         )

@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
-from emperor.layers._validation import ResidualConnectionValidator
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -13,19 +12,12 @@ if TYPE_CHECKING:
         TransformerEncoderLayer,
     )
     from emperor.transformer._model import Transformer
-    from emperor.transformer._stacks import (
-        TransformerDecoderStack,
-        TransformerEncoderStack,
-    )
 
 
 class TransformerValidator(ValidatorBase):
-    RESIDUAL_VALIDATOR = ResidualConnectionValidator
-
     OPTIONAL_FIELDS = {
         "override_config",
         "cross_attention_config",
-        "causal_attention_mask_flag",
         "residual_config",
     }
 
@@ -41,19 +33,41 @@ class TransformerValidator(ValidatorBase):
                 "encoder_stack_config or decoder_stack_config to be set; "
                 "both are None."
             )
+        cls._validate_stack_config_types(
+            encoder_stack_config,
+            decoder_stack_config,
+        )
         cls._validate_decoder_cross_attention_has_encoder(
             encoder_stack_config, decoder_stack_config
         )
 
     @staticmethod
+    def _validate_stack_config_types(*stack_configs) -> None:
+        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+
+        for stack_config in stack_configs:
+            if stack_config is None:
+                continue
+            if not isinstance(stack_config, (LayerStackConfig, RecurrentLayerConfig)):
+                raise TypeError(
+                    "Transformer stack configurations must be LayerStackConfig or "
+                    "RecurrentLayerConfig, got "
+                    f"{type(stack_config).__name__}."
+                )
+
+    @classmethod
     def _validate_decoder_cross_attention_has_encoder(
+        cls,
         encoder_stack_config,
         decoder_stack_config,
     ) -> None:
         if encoder_stack_config is not None or decoder_stack_config is None:
             return
-        layer_config = decoder_stack_config.layer_config
-        if layer_config is not None and layer_config.cross_attention_config is not None:
+        decoder_layer_config = cls._find_decoder_layer_config(decoder_stack_config)
+        if (
+            decoder_layer_config is not None
+            and decoder_layer_config.cross_attention_config is not None
+        ):
             raise ValueError(
                 "A decoder-only Transformer (no encoder_stack_config) must "
                 "configure the decoder layer with cross_attention_config=None; "
@@ -61,15 +75,26 @@ class TransformerValidator(ValidatorBase):
             )
 
     @classmethod
+    def _find_decoder_layer_config(cls, config):
+        from emperor.transformer._config import TransformerDecoderLayerConfig
+
+        if isinstance(config, TransformerDecoderLayerConfig):
+            return config
+        for field_name in ("block_config", "layer_config", "layer_model_config"):
+            nested_config = getattr(config, field_name, None)
+            if nested_config is None:
+                continue
+            match = cls._find_decoder_layer_config(nested_config)
+            if match is not None:
+                return match
+        return None
+
+    @classmethod
     def validate_encoder_layer(cls, model: "TransformerEncoderLayer") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
         cls._validate_layer_norm_position(model.layer_norm_position)
-        cls._validate_residual_config(
-            model.residual_config,
-            owner_name="TransformerEncoderLayerConfig",
-        )
 
     @classmethod
     def validate_decoder_layer(cls, model: "TransformerDecoderLayer") -> None:
@@ -77,10 +102,6 @@ class TransformerValidator(ValidatorBase):
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
         cls._validate_layer_norm_position(model.layer_norm_position)
-        cls._validate_residual_config(
-            model.residual_config,
-            owner_name="TransformerDecoderLayerConfig",
-        )
 
     @staticmethod
     def _validate_layer_norm_position(layer_norm_position) -> None:
@@ -91,39 +112,6 @@ class TransformerValidator(ValidatorBase):
                 "layer_norm_position must be a LayerNormPositionOptions value, "
                 f"got {type(layer_norm_position).__name__}"
             )
-
-    @classmethod
-    def _validate_residual_config(cls, residual_config, owner_name: str) -> None:
-        cls.RESIDUAL_VALIDATOR.validate_residual_config(
-            residual_config,
-            owner_name=owner_name,
-        )
-
-    @classmethod
-    def validate_encoder_stack(cls, model: "TransformerEncoderStack") -> None:
-        cls.validate_required_fields(model.cfg)
-        cls.validate_dimensions(
-            num_layers=model.num_layers,
-            embedding_dim=model.embedding_dim,
-            source_sequence_length=model.source_sequence_length,
-            target_sequence_length=model.target_sequence_length,
-        )
-        if model.source_sequence_length != model.target_sequence_length:
-            raise ValueError(
-                "TransformerEncoderStack requires source_sequence_length == "
-                f"target_sequence_length, got {model.source_sequence_length} "
-                f"and {model.target_sequence_length}"
-            )
-
-    @classmethod
-    def validate_decoder_stack(cls, model: "TransformerDecoderStack") -> None:
-        cls.validate_required_fields(model.cfg)
-        cls.validate_dimensions(
-            num_layers=model.num_layers,
-            embedding_dim=model.embedding_dim,
-            source_sequence_length=model.source_sequence_length,
-            target_sequence_length=model.target_sequence_length,
-        )
 
     # --- forward-boundary validation ---
 
@@ -155,27 +143,6 @@ class TransformerValidator(ValidatorBase):
                 "encoder_output, received None."
             )
         cls._validate_last_dim(encoder_output, model.embedding_dim, "encoder_output")
-
-    @classmethod
-    def validate_encoder_stack_forward_inputs(
-        cls,
-        model: "TransformerEncoderStack",
-        source_token_embeddings: "Tensor",
-    ) -> None:
-        cls._validate_last_dim(
-            source_token_embeddings, model.embedding_dim, "source_token_embeddings"
-        )
-
-    @classmethod
-    def validate_decoder_stack_forward_inputs(
-        cls,
-        model: "TransformerDecoderStack",
-        target_token_embeddings: "Tensor",
-        encoder_output: "Tensor | None",
-    ) -> None:
-        cls._validate_last_dim(
-            target_token_embeddings, model.embedding_dim, "target_token_embeddings"
-        )
 
     @staticmethod
     def validate_transformer_forward_inputs(

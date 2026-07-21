@@ -10,7 +10,12 @@ if TYPE_CHECKING:
         MixtureOfAttentionHeadsConfig,
         SelfAttentionConfig,
     )
-    from emperor.layers import LayerNormPositionOptions, ResidualConfig
+    from emperor.layers import (
+        LayerNormPositionOptions,
+        LayerStackConfig,
+        RecurrentLayerConfig,
+        ResidualConfig,
+    )
     from emperor.transformer._feed_forward import FeedForwardConfig
 
     DecoderSelfAttentionConfig = SelfAttentionConfig | MixtureOfAttentionHeadsConfig
@@ -32,9 +37,6 @@ class TransformerEncoderLayerConfig(ConfigBase):
     )
     residual_config: "ResidualConfig | None" = optional_field(
         "Optional residual connection config applied to every encoder sub-block join."
-    )
-    causal_attention_mask_flag: bool | None = optional_field(
-        "Force a causal attention mask in the stack-level mask generation."
     )
     attention_config: "SelfAttentionConfig | MixtureOfAttentionHeadsConfig | None" = (
         optional_field("Supported attention configuration for the encoder sub-block.")
@@ -71,9 +73,6 @@ class TransformerDecoderLayerConfig(ConfigBase):
     residual_config: "ResidualConfig | None" = optional_field(
         "Optional residual connection config applied to every decoder sub-block join."
     )
-    causal_attention_mask_flag: bool | None = optional_field(
-        "Force a causal attention mask in the stack-level mask generation."
-    )
     self_attention_config: "DecoderSelfAttentionConfig | None" = optional_field(
         "Self-attention configuration for the decoder sub-block."
     )
@@ -99,62 +98,12 @@ class TransformerDecoderBlockLayerConfig(LayerConfig):
 
 
 @dataclass
-class TransformerEncoderStackConfig(ConfigBase):
-    num_layers: int | None = optional_field("Number of encoder layers in the stack.")
-    embedding_dim: int | None = optional_field(
-        "Token embedding dimension. Drives final layer-norm sizing."
-    )
-    source_sequence_length: int | None = optional_field(
-        "Source sequence length used by causal mask generation."
-    )
-    target_sequence_length: int | None = optional_field(
-        "Target sequence length, asserted equal to source for encoder."
-    )
-    causal_attention_mask_flag: bool | None = optional_field(
-        "Force causal masking when generating attention masks."
-    )
-    layer_config: "TransformerEncoderLayerConfig | None" = optional_field(
-        "Encoder layer config used to build each layer in the stack."
-    )
-
-    def _registry_owner(self) -> type:
-        from emperor.transformer._stacks import TransformerEncoderStack
-
-        return TransformerEncoderStack
-
-
-@dataclass
-class TransformerDecoderStackConfig(ConfigBase):
-    num_layers: int | None = optional_field("Number of decoder layers in the stack.")
-    embedding_dim: int | None = optional_field(
-        "Token embedding dimension. Drives final layer-norm sizing."
-    )
-    source_sequence_length: int | None = optional_field(
-        "Source sequence length used by causal mask generation."
-    )
-    target_sequence_length: int | None = optional_field(
-        "Target sequence length used by causal mask generation."
-    )
-    causal_attention_mask_flag: bool | None = optional_field(
-        "Force causal masking when generating attention masks."
-    )
-    layer_config: "TransformerDecoderLayerConfig | None" = optional_field(
-        "Decoder layer config used to build each layer in the stack."
-    )
-
-    def _registry_owner(self) -> type:
-        from emperor.transformer._stacks import TransformerDecoderStack
-
-        return TransformerDecoderStack
-
-
-@dataclass
 class TransformerConfig(ConfigBase):
-    encoder_stack_config: "TransformerEncoderStackConfig | None" = optional_field(
-        "Encoder stack configuration."
+    encoder_stack_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+        optional_field("Generic encoder block-stack configuration.")
     )
-    decoder_stack_config: "TransformerDecoderStackConfig | None" = optional_field(
-        "Decoder stack configuration."
+    decoder_stack_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+        optional_field("Generic decoder block-stack configuration.")
     )
 
     def _registry_owner(self) -> type:
