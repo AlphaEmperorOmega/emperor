@@ -116,6 +116,7 @@ class TestLayer(unittest.TestCase):
             "LayerState",
             "LayerConfig",
             "LayerStackConfig",
+            "MirroredLayerStackConfig",
             "GateConfig",
             "RecurrentLayerConfig",
             "ResidualConfig",
@@ -124,6 +125,7 @@ class TestLayer(unittest.TestCase):
             "ResidualConnection",
             "Layer",
             "LayerStack",
+            "MirroredLayerStack",
             "RecurrentLayer",
             "RecurrentLayerMonitorCallback",
             "LayerControllerMonitorCallback",
@@ -133,25 +135,25 @@ class TestLayer(unittest.TestCase):
         for name in expected_exports:
             with self.subTest(name=name):
                 self.assertTrue(hasattr(layer_package, name))
+        self.assertFalse(hasattr(layer_package, "LayerGate"))
 
-    def test_gate_import_paths_are_compatible(self):
-        from emperor.base.layer import (
+    def test_gate_config_is_public_and_builds_the_private_implementation(self):
+        from emperor.layers import (
             GateConfig as LayerPackageGateConfig,
+        )
+        from emperor.layers import (
             LayerGateOptions as LayerPackageGateOptions,
         )
-        from emperor.base.layer.config import GateConfig as LayerConfigGateConfig
-        from emperor.base.layer.gate import (
-            GateConfig as GatePackageGateConfig,
-            LayerGate as GatePackageLayerGate,
-            LayerGateOptions as GatePackageGateOptions,
-        )
 
-        self.assertIs(GatePackageGateConfig, GateConfig)
-        self.assertIs(GatePackageLayerGate, LayerGate)
-        self.assertIs(GatePackageGateOptions, LayerGateOptions)
         self.assertIs(LayerPackageGateConfig, GateConfig)
         self.assertIs(LayerPackageGateOptions, LayerGateOptions)
-        self.assertIs(LayerConfigGateConfig, GateConfig)
+
+        gate_config = GateConfig(
+            gate_dim=1,
+            option=LayerGateOptions.MULTIPLIER,
+            model_config=self.gate_stack_config(dim=1),
+        )
+        self.assertIsInstance(gate_config.build(), LayerGate)
 
     def test_gate_config_uses_single_gate_dimension(self):
         field_names = {field.name for field in fields(GateConfig)}
@@ -680,7 +682,10 @@ class TestLayer(unittest.TestCase):
     def test_layer_state_contains_only_generic_fields(self):
         state_fields = [field.name for field in fields(LayerState)]
 
-        self.assertEqual(state_fields, ["hidden", "loss", "halting_state"])
+        self.assertEqual(
+            state_fields,
+            ["hidden", "loss", "halting_state"],
+        )
 
     def test_shared_controller_configs_belong_to_layer_stack_config(self):
         layer_fields = {field.name for field in fields(LayerConfig)}
@@ -1411,8 +1416,7 @@ class TestLayer(unittest.TestCase):
         for dropout_probability in dropout_probabilities:
             for training in training_modes:
                 message = (
-                    f"dropout_probability={dropout_probability}, "
-                    f"training={training}"
+                    f"dropout_probability={dropout_probability}, training={training}"
                 )
                 with self.subTest(msg=message):
                     cfg = self.preset(
@@ -2013,6 +2017,7 @@ class TestLayer(unittest.TestCase):
             loss=loss,
             halting_state=fake_halting_state,
         )
+        fake_halting_state.finalized = True
 
         result = layer(state)
 

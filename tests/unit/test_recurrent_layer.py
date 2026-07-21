@@ -319,9 +319,21 @@ class ThresholdHaltingGateLayer(Module):
         return torch.stack((continue_logit, halt_logit), dim=-1)
 
 
-@dataclass
+@dataclass(init=False)
 class DummyHaltingState(HaltingStateBase):
     marker: str
+
+    def __init__(self, marker: str):
+        hidden = torch.zeros(1, 1)
+        super().__init__(
+            output_hidden=hidden.clone(),
+            accumulated_hidden=hidden.clone(),
+            continuation_probability=torch.ones(1),
+            halt_mask=torch.zeros(1, dtype=torch.bool),
+            valid_mask=torch.ones(1, dtype=torch.bool),
+            stop_requested=False,
+        )
+        self.marker = marker
 
 
 class RecordingTransform(torch.nn.Module):
@@ -817,15 +829,7 @@ class TestRecurrentLayer(unittest.TestCase):
         torch.testing.assert_close(transform.inputs[0], torch.full_like(hidden, 3.0))
         torch.testing.assert_close(result.hidden, torch.full_like(hidden, 30.0))
 
-    def test_recurrent_layer_norm_after_normalizes_before_halting_update(self):
-        class RecordingHalting:
-            def __init__(self):
-                self.received_hidden = None
-
-            def update_halting_state(self, previous_state, hidden):
-                self.received_hidden = hidden.detach().clone()
-                return previous_state, hidden + 1.0
-
+    def test_recurrent_layer_norm_after_normalizes_after_controllers(self):
         dim = 2
         model = RecurrentLayer(
             self.recurrent_config(
@@ -835,9 +839,7 @@ class TestRecurrentLayer(unittest.TestCase):
             )
         )
         transform = RecordingTransform(offset=10.0)
-        halting = RecordingHalting()
         model.recurrent_layer_norm_module = transform
-        model.halting_model = halting
         previous_hidden = torch.zeros(2, dim)
         candidate_hidden = torch.full_like(previous_hidden, 3.0)
         recurrent_state = _RecurrentState(
@@ -853,10 +855,9 @@ class TestRecurrentLayer(unittest.TestCase):
         )
 
         torch.testing.assert_close(transform.inputs[0], candidate_hidden)
-        torch.testing.assert_close(halting.received_hidden, candidate_hidden + 10.0)
-        torch.testing.assert_close(result.hidden, candidate_hidden + 11.0)
+        torch.testing.assert_close(result.hidden, candidate_hidden + 10.0)
 
-    def test_recurrent_controllers_apply_gate_residual_norm_before_halting(self):
+    def test_recurrent_controllers_apply_gate_residual_and_norm_in_order(self):
         class RecordingGate(torch.nn.Module):
             def __init__(self):
                 super().__init__()
@@ -881,17 +882,6 @@ class TestRecurrentLayer(unittest.TestCase):
                 self.received_previous = previous.detach().clone()
                 return current + 3.0 * previous
 
-        class RecordingHalting:
-            def __init__(self, next_state):
-                self.next_state = next_state
-                self.received_state = None
-                self.received_hidden = None
-
-            def update_halting_state(self, previous_state, hidden):
-                self.received_state = previous_state
-                self.received_hidden = hidden.detach().clone()
-                return self.next_state, hidden + 7.0
-
         dim = 2
         model = RecurrentLayer(
             self.recurrent_config(
@@ -903,12 +893,9 @@ class TestRecurrentLayer(unittest.TestCase):
         gate = RecordingGate()
         residual = RecordingResidual()
         layer_norm = RecordingTransform(scale=5.0)
-        next_halting_state = DummyHaltingState(marker="next")
-        halting = RecordingHalting(next_halting_state)
         model.recurrent_gate = gate
         model.residual_connection = residual
         model.recurrent_layer_norm_module = layer_norm
-        model.halting_model = halting
         candidate_hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         previous_hidden = torch.tensor([[10.0, 20.0], [30.0, 40.0]])
         previous_halting_state = DummyHaltingState(marker="previous")
@@ -928,16 +915,14 @@ class TestRecurrentLayer(unittest.TestCase):
         gated_hidden = candidate_hidden + 2.0
         residual_hidden = gated_hidden + 3.0 * previous_hidden
         normalized_hidden = residual_hidden * 5.0
-        expected_hidden = normalized_hidden + 7.0
+        expected_hidden = normalized_hidden
         torch.testing.assert_close(gate.received_hidden, candidate_hidden)
         torch.testing.assert_close(residual.received_current, gated_hidden)
         torch.testing.assert_close(residual.received_previous, previous_hidden)
         torch.testing.assert_close(layer_norm.inputs[0], residual_hidden)
-        self.assertIs(halting.received_state, previous_halting_state)
-        torch.testing.assert_close(halting.received_hidden, normalized_hidden)
         torch.testing.assert_close(result.hidden, expected_hidden)
         self.assertIs(result.loss, existing_loss)
-        self.assertIs(result.halting_state, next_halting_state)
+        self.assertIs(result.halting_state, previous_halting_state)
 
     def test_recurrent_layer_norm_parameters_receive_gradients_when_enabled(self):
         dim = 3
@@ -1875,10 +1860,6 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(result.hidden.shape, hidden.shape)
 
     def test_recurrent_loss_accumulates_block_and_halting_loss_exactly(self):
-        class FakeMaskHaltingState:
-            def __init__(self, halt_mask: torch.Tensor):
-                self.halt_mask = halt_mask
-
         class VectorLossHalting:
             def __init__(self, loss: torch.Tensor):
                 self.loss = loss
@@ -1886,17 +1867,27 @@ class TestRecurrentLayer(unittest.TestCase):
                 self.finalize_calls = 0
                 self.finalize_input = None
 
-            def update_halting_state(self, previous_state, hidden):
+            def update_halting_state(
+                self,
+                previous_state,
+                model_hidden_state,
+            ):
                 self.update_calls += 1
-                if previous_state is None:
-                    previous_state = FakeMaskHaltingState(
-                        torch.zeros(
-                            hidden.shape[:-1],
-                            dtype=torch.bool,
-                            device=hidden.device,
-                        )
-                    )
-                return previous_state, hidden
+                leading_shape = model_hidden_state.shape[:-1]
+                halt_mask = torch.zeros(
+                    model_hidden_state.shape[:-1],
+                    dtype=torch.bool,
+                    device=model_hidden_state.device,
+                )
+                state = HaltingStateBase(
+                    output_hidden=model_hidden_state,
+                    accumulated_hidden=torch.zeros_like(model_hidden_state),
+                    continuation_probability=model_hidden_state.new_ones(leading_shape),
+                    halt_mask=halt_mask,
+                    valid_mask=torch.ones_like(halt_mask),
+                    stop_requested=False,
+                )
+                return state, model_hidden_state
 
             def finalize_weighted_accumulation(self, state, current_hidden):
                 self.finalize_calls += 1

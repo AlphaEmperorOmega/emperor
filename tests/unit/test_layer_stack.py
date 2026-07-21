@@ -46,7 +46,6 @@ class TestLayerStack(unittest.TestCase):
         gate_option: LayerGateOptions | None = None,
         halting_config: "StickBreakingConfig | None" = None,
     ) -> "LayerStackConfig":
-
         if gate_enabled and gate_config is None and shared_gate_config is None:
             gate_config = LayerStackConfig(
                 hidden_dim=hidden_dim,
@@ -778,12 +777,11 @@ class TestLayerStack(unittest.TestCase):
         ]
         changed = any(
             not torch.equal(before_parameter, after_parameter)
-            for before_parameter, after_parameter in zip(before, after)
+            for before_parameter, after_parameter in zip(before, after, strict=True)
         )
         self.assertTrue(changed)
 
     def test_unshared_stack_layers_receive_gradients(self):
-        batch_size = 4
         cfg = self.preset(
             input_dim=4,
             hidden_dim=5,
@@ -995,10 +993,14 @@ class TestLayerStack(unittest.TestCase):
         layers = [model] if isinstance(model, Layer) else list(model)
         halting_models = [layer.halting_model for layer in layers]
 
-        self.assertTrue(all(halting_model is not None for halting_model in halting_models))
+        self.assertTrue(
+            all(halting_model is not None for halting_model in halting_models)
+        )
         first_halting_model = halting_models[0]
         self.assertTrue(
-            all(halting_model is first_halting_model for halting_model in halting_models)
+            all(
+                halting_model is first_halting_model for halting_model in halting_models
+            )
         )
         for layer in layers:
             self.assertIsNone(layer.cfg.halting_config)
@@ -1017,8 +1019,12 @@ class TestLayerStack(unittest.TestCase):
         layers = [model] if isinstance(model, Layer) else list(model)
         halting_models = [layer.halting_model for layer in layers]
 
-        self.assertTrue(all(halting_model is not None for halting_model in halting_models))
-        self.assertEqual(len({id(halting_model) for halting_model in halting_models}), len(layers))
+        self.assertTrue(
+            all(halting_model is not None for halting_model in halting_models)
+        )
+        self.assertEqual(
+            len({id(halting_model) for halting_model in halting_models}), len(layers)
+        )
 
     def test_shared_layer_stack_rejects_soft_until_it_implements_the_interface(
         self,
@@ -1104,7 +1110,7 @@ class TestLayerStack(unittest.TestCase):
         ]
         changed = any(
             not torch.equal(before_parameter, after_parameter)
-            for before_parameter, after_parameter in zip(before, after)
+            for before_parameter, after_parameter in zip(before, after, strict=True)
         )
         self.assertTrue(changed)
 
