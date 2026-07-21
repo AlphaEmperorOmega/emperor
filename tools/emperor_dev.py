@@ -751,7 +751,7 @@ def _port(value: str | None, default: int, name: str) -> int:
     return result
 
 
-def _service_specs() -> tuple[ServiceSpec, ServiceSpec]:
+def service_specs() -> tuple[ServiceSpec, ServiceSpec]:
     python = _require_venv_python()
     node = resolve_executable("node", windows_name="node.exe")
     backend_port = _port(
@@ -1188,7 +1188,7 @@ def workbench(action: str) -> int:
         ) from exc
     RUNTIME_ROOT.mkdir(parents=True, exist_ok=True)
     _protect_runtime_path(RUNTIME_ROOT)
-    backend, frontend = _service_specs()
+    backend, frontend = service_specs()
     with FileLock(str(RUNTIME_ROOT / "launcher.lock"), timeout=30):
         if action == "start":
             _start_service(backend)

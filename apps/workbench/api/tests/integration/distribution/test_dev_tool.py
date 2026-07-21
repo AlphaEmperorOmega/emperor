@@ -94,6 +94,10 @@ class PortableLauncherTests(unittest.TestCase):
             )
         )
 
+    def test_service_specs_are_exposed_for_launcher_contracts(self) -> None:
+        self.assertTrue(callable(emperor_dev.service_specs))
+        self.assertFalse(hasattr(emperor_dev, "_service_specs"))
+
     def test_workbench_status_trusts_the_checkout_when_already_in_venv(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             environment = {
