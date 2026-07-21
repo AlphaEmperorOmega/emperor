@@ -10,28 +10,29 @@ from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+
 import models.linears.linear.config as config
 import models.linears.linear.dataset_options as dataset_options
 import models.linears.linear.monitor_options as monitor_options
 import models.linears.linear.search_space as search_space
-import torch
-from emperor.base.layer import LayerConfig, LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.gate import GateConfig, LayerGateOptions
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
+from emperor.config import BaseOptions
+from emperor.datasets.image.classification import Cifar10, Cifar100, FashionMNIST, Mnist
+from emperor.experiments import ExperimentTask
+from emperor.layers import (
     ActivationOptions,
-    BaseOptions,
+    GateConfig,
     LastLayerBiasOptions,
+    LayerConfig,
+    LayerGateOptions,
     LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
 )
-from emperor.datasets.image.classification.cifar_10 import Cifar10
-from emperor.datasets.image.classification.cifar_100 import Cifar100
-from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.datasets.image.classification.mnist import Mnist
-from emperor.experiments.tasks import ExperimentTask
-from emperor.linears.core.config import LinearLayerConfig
-from emperor.memory.config import WeightedDynamicMemoryConfig
-from emperor.memory.options import MemoryPositionOptions
+from emperor.linears import LinearLayerConfig
+from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
+from model_runtime.packages import GridSearch, PresetDefinition
 from models.config_overrides import (
     config_key_to_model_param,
     iter_supported_config_keys,
@@ -61,8 +62,6 @@ from models.training_test_utils import (
     tiny_cpu_trainer,
 )
 
-from model_runtime.packages import GridSearch, PresetDefinition
-
 _NON_MODEL_PREFIXES = (
     "TRAINER_",
     "CALLBACK_",
@@ -70,6 +69,11 @@ _NON_MODEL_PREFIXES = (
     "RUN_",
     "MONITOR_",
 )
+_NON_MODEL_KEYS = {
+    "HALTING_OPTION",
+    "NUM_EPOCHS",
+    "RECURRENT_HALTING_OPTION",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +94,7 @@ def _shared_gate_config(dim: int = 16) -> GateConfig:
                 input_dim=dim,
                 output_dim=dim,
                 activation=ActivationOptions.DISABLED,
-                residual_connection_option=ResidualConnectionOptions.DISABLED,
+                residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -136,7 +140,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
         model_keys = [
             key
             for key in iter_supported_config_keys(config)
-            if key != "NUM_EPOCHS"
+            if key not in _NON_MODEL_KEYS
             and not any(key.startswith(prefix) for prefix in _NON_MODEL_PREFIXES)
         ]
 
@@ -455,10 +459,7 @@ class TestLinearConstruction(unittest.TestCase):
                     projection.layer_norm_position,
                     LayerNormPositionOptions.DISABLED,
                 )
-                self.assertIs(
-                    projection.residual_connection_option,
-                    ResidualConnectionOptions.DISABLED,
-                )
+                self.assertIsNone(projection.residual_config)
                 self.assertEqual(projection.dropout_probability, 0.0)
                 self.assertIsNone(projection.gate_config)
                 self.assertIsNone(projection.halting_config)
@@ -737,7 +738,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 config.STACK_LAYER_NORM_POSITION,
             ),
             ExperimentPreset.POST_NORM: (
-                ResidualConnectionOptions.DISABLED,
+                None,
                 LayerNormPositionOptions.AFTER,
             ),
             ExperimentPreset.RESIDUAL_POST_NORM: (
@@ -764,7 +765,12 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                     .get_config(preset)[0]
                     .experiment_config.model_config.layer_config
                 )
-                self.assertIs(layer.residual_connection_option, residual)
+                actual_residual = (
+                    None
+                    if layer.residual_config is None
+                    else layer.residual_config.option
+                )
+                self.assertIs(actual_residual, residual)
                 self.assertIs(layer.layer_norm_position, norm)
 
     def test_recurrent_presets_wire_optional_controllers(self):
