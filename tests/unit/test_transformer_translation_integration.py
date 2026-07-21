@@ -6,9 +6,10 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from emperor.datasets.text.translation import Multi30kDeEn
 from lightning import Trainer, seed_everything
 from lightning.pytorch.callbacks import EarlyStopping
+
+from emperor.datasets.text.translation import Multi30kDeEn
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,
 )
