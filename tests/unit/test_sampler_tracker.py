@@ -237,6 +237,39 @@ class TestSamplerUsageTrackerManager(unittest.TestCase):
         torch.testing.assert_close(tracker.last_expert_usage_mass, expected_mass)
         torch.testing.assert_close(tracker.cumulative_expert_usage_mass, expected_mass)
 
+    def test_tracker_preserves_exact_state_keys_and_counters_on_strict_roundtrip(self):
+        cfg = self.sampler_config(top_k=2, num_experts=4)
+        source = SamplerModel(cfg)
+        SamplerUsageTrackerManager().attach(source)
+        source.sample_probabilities_and_indices(
+            torch.tensor(
+                [
+                    [5.0, 4.0, 0.0, 0.0],
+                    [0.0, 5.0, 4.0, 0.0],
+                    [0.0, 0.0, 5.0, 4.0],
+                ]
+            )
+        )
+        expected_keys = (
+            "sampler_model.default_loss",
+            "sampler_model.auxiliary_loss_model.default_loss",
+            "_usage_tracker.last_expert_usage_counts",
+            "_usage_tracker.last_expert_usage_mass",
+            "_usage_tracker.cumulative_expert_usage_counts",
+            "_usage_tracker.cumulative_expert_usage_mass",
+        )
+        state = source.state_dict()
+
+        self.assertEqual(tuple(state), expected_keys)
+
+        restored = SamplerModel(cfg)
+        SamplerUsageTrackerManager().attach(restored)
+        restored.load_state_dict(state, strict=True)
+
+        self.assertEqual(tuple(restored.state_dict()), expected_keys)
+        for key in expected_keys:
+            torch.testing.assert_close(restored.state_dict()[key], state[key])
+
 
 if __name__ == "__main__":
     unittest.main()
