@@ -7,26 +7,30 @@ from dataclasses import replace
 from io import StringIO
 from unittest.mock import patch
 
+import torch
+import torch.nn as nn
+
 import models.vit.linear.config as config
 import models.vit.linear.dataset_options as dataset_options
 import models.vit.linear.search_space as search_space
-import torch
-import torch.nn as nn
 from emperor.attention import SelfAttentionProjectionStrategy
-from emperor.base.layer import LayerConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     ImageLearnedPositionalEmbeddingConfig,
     ImageSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.halting import SoftHaltingConfig
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
+from emperor.linears import LinearLayerConfig
 from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
+from model_runtime.packages import GridSearch, PresetLock
 from models.config_overrides import iter_supported_config_keys, print_config_options
 from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.training_test_utils import (
@@ -43,8 +47,6 @@ from models.vit.linear.presets import (
 )
 from models.vit.linear.runtime_defaults import runtime_from_flat
 from models.vit.linear.runtime_options import RuntimeOptions, VitPatchOptions
-
-from model_runtime.packages import GridSearch, PresetLock
 
 
 def _patch_options():
@@ -337,7 +339,7 @@ class TestVitLinearModel(unittest.TestCase):
         encoder_cfg = self._encoder_stack_config(cfg)
 
         self.assertEqual(
-            encoder_cfg.layer_config.residual_connection_option,
+            encoder_cfg.layer_config.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(
@@ -360,7 +362,7 @@ class TestVitLinearModel(unittest.TestCase):
 
         self.assertIsNotNone(self._encoder_block_config(cfg).gate_config)
 
-    def test_stack_halting_flag_creates_encoder_block_halting_config(self):
+    def test_stack_halting_flag_creates_shared_encoder_halting_config(self):
         cfg = ExperimentPresets()._preset(
             **self._small_image_overrides(batch_size=2),
             layer_controller_options=replace(
@@ -369,7 +371,32 @@ class TestVitLinearModel(unittest.TestCase):
             ),
         )
 
-        self.assertIsNotNone(self._encoder_block_config(cfg).halting_config)
+        encoder_stack = self._encoder_stack_config(cfg)
+        self.assertIsNone(self._encoder_block_config(cfg).halting_config)
+        self.assertIsNotNone(encoder_stack.shared_halting_config)
+
+    def test_soft_halting_option_is_forwarded_but_rejected_until_supported(self):
+        overrides = self._small_image_overrides(batch_size=2)
+        overrides["encoder_options"] = replace(
+            overrides["encoder_options"],
+            num_layers=2,
+        )
+        cfg = ExperimentPresets()._preset(
+            **overrides,
+            layer_controller_options=replace(
+                _layer_controller_options(),
+                stack_halting_flag=True,
+                halting_option=SoftHaltingConfig,
+            ),
+        )
+
+        encoder_stack = self._encoder_stack_config(cfg)
+        self.assertIsInstance(
+            encoder_stack.shared_halting_config,
+            SoftHaltingConfig,
+        )
+        with self.assertRaisesRegex(ValueError, "does not implement"):
+            encoder_stack.build()
 
     def test_memory_flag_creates_encoder_stack_shared_memory(self):
         cfg = ExperimentPresets()._preset(
@@ -435,10 +462,7 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNone(outer_layer_cfg.gate_config)
         self.assertIsNone(outer_layer_cfg.halting_config)
         self.assertIsNone(encoder_cfg.shared_memory_config)
-        self.assertEqual(
-            outer_layer_cfg.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(outer_layer_cfg.residual_config)
         self.assertEqual(
             outer_layer_cfg.layer_norm_position,
             LayerNormPositionOptions.DISABLED,
@@ -453,7 +477,7 @@ class TestVitLinearModel(unittest.TestCase):
             config.STACK_DROPOUT_PROBABILITY,
         )
         self.assertEqual(
-            inner_layer_cfg.residual_connection_option,
+            inner_layer_cfg.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         attention_projection_layer_cfg = (
@@ -479,10 +503,7 @@ class TestVitLinearModel(unittest.TestCase):
             attention_projection_stack_cfg.layer_config.layer_norm_position,
             LayerNormPositionOptions.DISABLED,
         )
-        self.assertEqual(
-            attention_projection_stack_cfg.layer_config.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(attention_projection_stack_cfg.layer_config.residual_config)
         self.assertEqual(
             attention_projection_stack_cfg.layer_config.dropout_probability,
             0.0,
@@ -509,10 +530,7 @@ class TestVitLinearModel(unittest.TestCase):
             feed_forward_stack_cfg.layer_config.layer_norm_position,
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertEqual(
-            feed_forward_stack_cfg.layer_config.residual_connection_option,
-            ResidualConnectionOptions.DISABLED,
-        )
+        self.assertIsNone(feed_forward_stack_cfg.layer_config.residual_config)
         self.assertEqual(
             feed_forward_stack_cfg.layer_config.dropout_probability,
             config.STACK_DROPOUT_PROBABILITY,
@@ -545,7 +563,7 @@ class TestVitLinearModel(unittest.TestCase):
             ActivationOptions.SILU,
         )
         self.assertEqual(
-            projection_stack_cfg.layer_config.residual_connection_option,
+            projection_stack_cfg.layer_config.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(projection_stack_cfg.layer_config.dropout_probability, 0.2)
@@ -742,7 +760,7 @@ class TestVitLinearModel(unittest.TestCase):
             ActivationOptions.SILU,
         )
         self.assertEqual(
-            feed_forward_stack_cfg.layer_config.residual_connection_option,
+            feed_forward_stack_cfg.layer_config.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(feed_forward_stack_cfg.layer_config.dropout_probability, 0.2)
@@ -1621,14 +1639,14 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNotNone(self._encoder_block_config(cfg).gate_config)
 
         cfg = presets.get_config(ExperimentPreset.HALTING)[0]
-        self.assertIsNotNone(self._encoder_block_config(cfg).halting_config)
+        self.assertIsNotNone(self._encoder_stack_config(cfg).shared_halting_config)
 
         cfg = presets.get_config(ExperimentPreset.MEMORY)[0]
         self.assertIsNotNone(self._encoder_stack_config(cfg).shared_memory_config)
 
         cfg = presets.get_config(ExperimentPreset.RESIDUAL)[0]
         self.assertEqual(
-            self._encoder_block_config(cfg).residual_connection_option,
+            self._encoder_block_config(cfg).residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
 

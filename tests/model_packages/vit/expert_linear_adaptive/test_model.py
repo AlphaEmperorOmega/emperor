@@ -3,19 +3,16 @@ import inspect
 import unittest
 from dataclasses import fields, replace
 
+import torch
+
 import models.vit.expert_linear_adaptive.config as config
 import models.vit.expert_linear_adaptive.dataset_options as dataset_options
-import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
 )
-from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
-    MixtureOfAttentionHeads,
-)
-from emperor.attention.core.variants.self_attention.layer import SelfAttention
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from models.catalog import catalog_entry
 from models.vit.expert_linear_adaptive import _config_defaults as config_defaults
 from models.vit.expert_linear_adaptive._expert_config_factory import (
@@ -33,6 +30,11 @@ from models.vit.expert_linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
+
+_MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
+_SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
 class TestVitExpertLinearAdaptiveModel(unittest.TestCase):
@@ -208,7 +210,7 @@ class TestVitExpertLinearAdaptiveModel(unittest.TestCase):
                 attention = next(
                     module
                     for module in model.modules()
-                    if isinstance(module, MixtureOfAttentionHeads)
+                    if isinstance(module, _MIXTURE_ATTENTION_TYPE)
                 )
 
                 self.assertEqual(
@@ -234,7 +236,9 @@ class TestVitExpertLinearAdaptiveModel(unittest.TestCase):
                         "value": projector.value_model,
                     }.items():
                         with self.subTest(name=name, role=role):
-                            self.assertIsInstance(expert_model, MixtureOfExperts)
+                            self.assertIsInstance(
+                                expert_model, _MIXTURE_OF_EXPERTS_LAYER_TYPE
+                            )
                             self._assert_nonzero_parameter_gradients(
                                 expert_model,
                                 role,
@@ -277,12 +281,12 @@ class TestVitExpertLinearAdaptiveModel(unittest.TestCase):
                 )
                 self.assertTrue(
                     any(
-                        isinstance(module, MixtureOfAttentionHeads)
+                        isinstance(module, _MIXTURE_ATTENTION_TYPE)
                         for module in modules
                     )
                 )
                 self.assertFalse(
-                    any(isinstance(module, SelfAttention) for module in modules)
+                    any(isinstance(module, _SELF_ATTENTION_TYPE) for module in modules)
                 )
                 self.assertEqual(logits.shape, (2, cfg.output_dim))
 

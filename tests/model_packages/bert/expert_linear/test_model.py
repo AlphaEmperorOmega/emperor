@@ -3,27 +3,28 @@ import inspect
 import unittest
 from dataclasses import replace
 
+import torch
+from torch import nn
+
 import models.bert.expert_linear.config as config
 import models.bert.expert_linear.dataset_options as dataset_options
 import models.bert.expert_linear.runtime_options as runtime_options
-import torch
-from emperor.attention import AttentionLayerState
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+from emperor.attention import (
+    AttentionLayerState,
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
 )
-from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
-    MixtureOfAttentionHeads,
-)
-from emperor.attention.core.variants.self_attention.layer import SelfAttention
-from emperor.base.layer import RecurrentLayerConfig
-from emperor.base.options import ActivationOptions, LayerNormPositionOptions
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.bert_pretraining import BertPretrainingExperiment
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
+from emperor.layers import (
+    ActivationOptions,
+    LayerNormPositionOptions,
+    RecurrentLayerConfig,
+)
+from emperor.linears import LinearLayerConfig
 from models.bert.expert_linear._builder_adapter import (
     expert_linear_builder_kwargs_from_flat,
 )
@@ -50,7 +51,11 @@ from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
-from torch import nn
+
+_MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
+_SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
 def _default_builder_kwargs() -> dict:
@@ -356,12 +361,12 @@ class TestBertExpertLinearModel(unittest.TestCase):
 
                 self.assertTrue(
                     any(
-                        isinstance(module, MixtureOfAttentionHeads)
+                        isinstance(module, _MIXTURE_ATTENTION_TYPE)
                         for module in modules
                     )
                 )
                 self.assertFalse(
-                    any(isinstance(module, SelfAttention) for module in modules)
+                    any(isinstance(module, _SELF_ATTENTION_TYPE) for module in modules)
                 )
                 self.assertEqual(
                     mlm_logits.shape,
@@ -392,7 +397,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         self.assertEqual(len(encoder_layers), 2)
         self.assertTrue(
             all(
-                isinstance(attention, MixtureOfAttentionHeads)
+                isinstance(attention, _MIXTURE_ATTENTION_TYPE)
                 for attention in attentions
             )
         )
@@ -437,7 +442,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
                 attention = next(
                     module
                     for module in model.modules()
-                    if isinstance(module, MixtureOfAttentionHeads)
+                    if isinstance(module, _MIXTURE_ATTENTION_TYPE)
                 )
                 self.assertEqual(
                     attention.cfg.use_kv_expert_models_flag,
@@ -467,7 +472,9 @@ class TestBertExpertLinearModel(unittest.TestCase):
                     }
                     for role, expert_model in expert_models.items():
                         with self.subTest(name=name, role=role):
-                            self.assertIsInstance(expert_model, MixtureOfExperts)
+                            self.assertIsInstance(
+                                expert_model, _MIXTURE_OF_EXPERTS_LAYER_TYPE
+                            )
                             self._assert_nonzero_parameter_gradients(
                                 expert_model,
                                 role,

@@ -5,8 +5,11 @@ import unittest
 from unittest.mock import patch
 
 import torch
+
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.translation import TranslationExperiment
-from emperor.linears import AdaptiveLinearLayer, LinearLayer
+from emperor.linears import LinearLayer
+from model_runtime.packages import GridSearch, PresetLock
 from models.catalog import catalog_entry
 from models.training_test_utils import (
     RandomTranslationDataModule,
@@ -21,7 +24,7 @@ from models.transformer.linear.presets import (
     ExperimentPresets,
 )
 
-from model_runtime.packages import GridSearch, PresetLock
+_ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
 
 
 class TestTransformerLinearModel(unittest.TestCase):
@@ -232,7 +235,7 @@ class TestTransformerLinearModel(unittest.TestCase):
         modules = tuple(model.modules())
         self.assertTrue(any(isinstance(module, LinearLayer) for module in modules))
         self.assertFalse(
-            any(isinstance(module, AdaptiveLinearLayer) for module in modules)
+            any(isinstance(module, _ADAPTIVE_LINEAR_LAYER_TYPE) for module in modules)
         )
         self.assertIs(model.source_embedding, model.target_embedding)
         self.assertIs(model.output_projection.weight, model.shared_embedding.weight)

@@ -4,13 +4,14 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+import torch.nn as nn
+
 import models.gpt.linear_adaptive.config as config
 import models.gpt.linear_adaptive.dataset_options as dataset_options
 import models.gpt.linear_adaptive.runtime_options as runtime_options
-import torch
-import torch.nn as nn
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.language_model import LanguageModelExperiment
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
 from emperor.transformer import TransformerDecoderLayer
 from models.catalog import MODEL_CATALOG, catalog_entry
 from models.gpt.linear_adaptive import (

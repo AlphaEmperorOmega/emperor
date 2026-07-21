@@ -7,27 +7,31 @@ from dataclasses import replace
 from io import StringIO
 from unittest.mock import patch
 
+import torch
+from torch import nn
+
 import models.bert.linear.config as config
 import models.bert.linear.dataset_options as dataset_options
 import models.bert.linear.search_space as search_space
-import torch
 from emperor.attention import AttentionLayerState, SelfAttentionProjectionStrategy
-from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.bert_pretraining import BertPretrainingExperiment
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
 from emperor.transformer import (
     TransformerEncoderBlockLayer,
     TransformerEncoderLayer,
 )
+from model_runtime.packages import GridSearch, PresetLock, RandomSearch
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.bert.linear.config_builder import (
     BertLinearConfigBuilder,
@@ -55,9 +59,6 @@ from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
-from torch import nn
-
-from model_runtime.packages import GridSearch, PresetLock, RandomSearch
 
 
 def _default_builder_kwargs() -> dict:
@@ -318,7 +319,7 @@ class TestBertLinearModel(unittest.TestCase):
         encoder_stack = self._encoder_stack_config(cfg)
 
         self.assertEqual(
-            encoder_stack.layer_config.residual_connection_option,
+            encoder_stack.layer_config.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(
@@ -402,7 +403,7 @@ class TestBertLinearModel(unittest.TestCase):
         cfg = BertLinearConfigBuilder(**builder_kwargs).build()
         stack = self._encoder_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
-        halting_stack = stack.layer_config.halting_config.halting_gate_config
+        halting_stack = stack.shared_halting_config.halting_gate_config
         memory_stack = stack.shared_memory_config.model_config
 
         self.assertEqual(stack.hidden_dim, cfg.hidden_dim)
@@ -426,9 +427,7 @@ class TestBertLinearModel(unittest.TestCase):
                 "attn_stack_hidden_dim": 24,
                 "attn_stack_activation": ActivationOptions.MISH,
                 "attn_stack_layer_norm_position": LayerNormPositionOptions.AFTER,
-                "attn_stack_residual_connection_option": (
-                    ResidualConnectionOptions.DISABLED
-                ),
+                "attn_stack_residual_connection_option": None,
                 "attn_stack_dropout_probability": 0.2,
                 "attn_stack_last_layer_bias_option": (LastLayerBiasOptions.DISABLED),
                 "attn_stack_apply_output_pipeline_flag": False,
@@ -579,9 +578,7 @@ class TestBertLinearModel(unittest.TestCase):
                 "ff_stack_hidden_dim": 24,
                 "ff_stack_activation": ActivationOptions.MISH,
                 "ff_stack_layer_norm_position": LayerNormPositionOptions.AFTER,
-                "ff_stack_residual_connection_option": (
-                    ResidualConnectionOptions.DISABLED
-                ),
+                "ff_stack_residual_connection_option": None,
                 "ff_stack_dropout_probability": 0.2,
                 "ff_stack_last_layer_bias_option": LastLayerBiasOptions.DISABLED,
                 "ff_stack_apply_output_pipeline_flag": False,
@@ -1559,7 +1556,7 @@ class TestBertLinearModel(unittest.TestCase):
                 encoder_block = encoder_stack.layer_config
 
                 self.assertEqual(
-                    encoder_block.residual_connection_option,
+                    encoder_block.residual_config.option,
                     ResidualConnectionOptions.RESIDUAL,
                 )
                 self.assertEqual(
@@ -1571,7 +1568,7 @@ class TestBertLinearModel(unittest.TestCase):
                     expected.get("gate", False),
                 )
                 self.assertEqual(
-                    encoder_block.halting_config is not None,
+                    encoder_stack.shared_halting_config is not None,
                     expected.get("halting", False),
                 )
                 self.assertEqual(

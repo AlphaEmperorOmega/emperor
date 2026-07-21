@@ -5,11 +5,13 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+
 import models.vit.linear_adaptive.config as config
 import models.vit.linear_adaptive.dataset_options as dataset_options
-import torch
-from emperor.base.layer import LayerConfig
-from emperor.linears.core.config import AdaptiveLinearLayerConfig, LinearLayerConfig
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.layers import LayerConfig
+from emperor.linears import LinearLayerConfig
 from models.catalog import catalog_entry
 from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive.config_builder import VitLinearAdaptiveConfigBuilder

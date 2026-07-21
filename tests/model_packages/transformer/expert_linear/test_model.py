@@ -5,12 +5,14 @@ import unittest
 from unittest.mock import patch
 
 import torch
-from emperor.attention import MixtureOfAttentionHeads
+
+from emperor.attention import MixtureOfAttentionHeadsConfig
 from emperor.experiments.translation import TranslationExperiment
-from emperor.experts.core.layers import MixtureOfExperts
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.linears import LinearLayer
-from emperor.sampler.core.routers import RouterModel
+from emperor.sampler import RouterModel
 from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
+from model_runtime.packages import GridSearch, PresetLock
 from models.catalog import catalog_entry
 from models.training_test_utils import (
     RandomTranslationDataModule,
@@ -27,7 +29,9 @@ from models.transformer.expert_linear.presets import (
     ExperimentPresets,
 )
 
-from model_runtime.packages import GridSearch, PresetLock
+_MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
 
 
 class TestTransformerExpertLinearModel(unittest.TestCase):
@@ -268,17 +272,27 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
         )
         self_attention = encoder_layer.self_attention_model
         cross_attention = decoder_layer.cross_attention_model
-        self.assertIsInstance(self_attention, MixtureOfAttentionHeads)
-        self.assertIsInstance(cross_attention, MixtureOfAttentionHeads)
-        self.assertIsInstance(self_attention.projector.key_model, MixtureOfExperts)
-        self.assertIsInstance(self_attention.projector.value_model, MixtureOfExperts)
-        self.assertNotIsInstance(cross_attention.projector.key_model, MixtureOfExperts)
+        self.assertIsInstance(self_attention, _MIXTURE_ATTENTION_TYPE)
+        self.assertIsInstance(cross_attention, _MIXTURE_ATTENTION_TYPE)
+        self.assertIsInstance(
+            self_attention.projector.key_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+        )
+        self.assertIsInstance(
+            self_attention.projector.value_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+        )
         self.assertNotIsInstance(
-            cross_attention.projector.value_model, MixtureOfExperts
+            cross_attention.projector.key_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+        )
+        self.assertNotIsInstance(
+            cross_attention.projector.value_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
         )
         self.assertTrue(
             any(
-                isinstance(module, MixtureOfExperts)
+                isinstance(module, _MIXTURE_OF_EXPERTS_TYPE)
                 for module in encoder_layer.feed_forward_model.modules()
             )
         )

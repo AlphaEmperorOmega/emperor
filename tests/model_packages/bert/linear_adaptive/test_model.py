@@ -4,13 +4,14 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import torch
+import torch.nn as nn
+
 import models.bert.linear_adaptive.config as config
 import models.bert.linear_adaptive.dataset_options as dataset_options
 import models.bert.linear_adaptive.runtime_options as runtime_options
-import torch
-import torch.nn as nn
-from emperor.base.options import ActivationOptions
-from emperor.linears.core.config import AdaptiveLinearLayerConfig
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.layers import ActivationOptions
 from models.bert.linear_adaptive import _config_defaults as config_defaults
 from models.bert.linear_adaptive._builder_adapter import (
     linear_adaptive_builder_kwargs_from_flat,

@@ -3,20 +3,17 @@ import inspect
 import unittest
 from dataclasses import replace
 
+import torch
+
 import models.vit.expert_linear.config as config
 import models.vit.expert_linear.dataset_options as dataset_options
-import torch
-from emperor.attention.core.variants.mixture_of_attention_heads.config import (
+from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
 )
-from emperor.attention.core.variants.mixture_of_attention_heads.layer import (
-    MixtureOfAttentionHeads,
-)
-from emperor.attention.core.variants.self_attention.layer import SelfAttention
-from emperor.base.layer import RecurrentLayerConfig
-from emperor.experts.config import MixtureOfExpertsModelConfig
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.linears.core.config import LinearLayerConfig
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
+from emperor.layers import RecurrentLayerConfig
+from emperor.linears import LinearLayerConfig
 from models.catalog import catalog_entry
 from models.vit.expert_linear import _config_defaults as config_defaults
 from models.vit.expert_linear.config_builder import VitExpertLinearConfigBuilder
@@ -26,6 +23,11 @@ from models.vit.expert_linear.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
+
+_MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
+_SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
 class TestVitExpertLinearModel(unittest.TestCase):
@@ -185,12 +187,12 @@ class TestVitExpertLinearModel(unittest.TestCase):
 
                 self.assertTrue(
                     any(
-                        isinstance(module, MixtureOfAttentionHeads)
+                        isinstance(module, _MIXTURE_ATTENTION_TYPE)
                         for module in modules
                     )
                 )
                 self.assertFalse(
-                    any(isinstance(module, SelfAttention) for module in modules)
+                    any(isinstance(module, _SELF_ATTENTION_TYPE) for module in modules)
                 )
 
     def test_encoder_layers_own_separate_attention_and_feed_forward_experts(self):
@@ -212,7 +214,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
         self.assertEqual(len(encoder_layers), 2)
         self.assertTrue(
             all(
-                isinstance(attention, MixtureOfAttentionHeads)
+                isinstance(attention, _MIXTURE_ATTENTION_TYPE)
                 for attention in attentions
             )
         )
@@ -298,7 +300,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
                 attention = next(
                     module
                     for module in model.modules()
-                    if isinstance(module, MixtureOfAttentionHeads)
+                    if isinstance(module, _MIXTURE_ATTENTION_TYPE)
                 )
                 projector = attention.projector
                 self.assertEqual(
@@ -321,7 +323,9 @@ class TestVitExpertLinearModel(unittest.TestCase):
                     }
                     for role, expert_model in expert_models.items():
                         with self.subTest(name=name, role=role):
-                            self.assertIsInstance(expert_model, MixtureOfExperts)
+                            self.assertIsInstance(
+                                expert_model, _MIXTURE_OF_EXPERTS_LAYER_TYPE
+                            )
                             self._assert_nonzero_parameter_gradients(
                                 expert_model,
                                 role,

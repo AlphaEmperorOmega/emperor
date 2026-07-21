@@ -5,12 +5,14 @@ import unittest
 from unittest.mock import patch
 
 import torch
-from emperor.augmentations.adaptive_parameters import LowRankDynamicWeightConfig
-from emperor.augmentations.adaptive_parameters.core.weight.variants.low_rank import (
-    LowRankDynamicWeight,
+
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    LowRankDynamicWeightConfig,
 )
 from emperor.experiments.translation import TranslationExperiment
-from emperor.linears import AdaptiveLinearLayer, LinearLayer
+from emperor.linears import LinearLayer
+from model_runtime.packages import GridSearch, PresetLock
 from models.catalog import catalog_entry
 from models.training_test_utils import (
     RandomTranslationDataModule,
@@ -27,7 +29,7 @@ from models.transformer.linear_adaptive.presets import (
     ExperimentPresets,
 )
 
-from model_runtime.packages import GridSearch, PresetLock
+_ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
 
 
 class TestTransformerLinearAdaptiveModel(unittest.TestCase):
@@ -247,12 +249,17 @@ class TestTransformerLinearAdaptiveModel(unittest.TestCase):
         adaptive_layers = [
             module
             for module in model.modules()
-            if isinstance(module, AdaptiveLinearLayer)
+            if isinstance(module, _ADAPTIVE_LINEAR_LAYER_TYPE)
         ]
         low_rank = [
-            module
-            for module in model.modules()
-            if isinstance(module, LowRankDynamicWeight)
+            module.adaptive_behaviour.weight_model
+            for module in adaptive_layers
+            if module.adaptive_behaviour is not None
+            and isinstance(
+                module.adaptive_behaviour.weight_config,
+                LowRankDynamicWeightConfig,
+            )
+            and module.adaptive_behaviour.weight_model is not None
         ]
         self.assertTrue(adaptive_layers)
         self.assertTrue(low_rank)

@@ -5,16 +5,18 @@ import unittest
 from unittest.mock import patch
 
 import torch
-from emperor.attention import MixtureOfAttentionHeads
-from emperor.augmentations.adaptive_parameters import LowRankDynamicWeightConfig
-from emperor.augmentations.adaptive_parameters.core.weight.variants.low_rank import (
-    LowRankDynamicWeight,
+
+from emperor.attention import MixtureOfAttentionHeadsConfig
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    LowRankDynamicWeightConfig,
 )
 from emperor.experiments.translation import TranslationExperiment
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.linears import AdaptiveLinearLayer, LinearLayer
-from emperor.sampler.core.routers import RouterModel
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
+from emperor.linears import LinearLayer
+from emperor.sampler import RouterModel
 from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
+from model_runtime.packages import GridSearch, PresetLock
 from models.catalog import catalog_entry
 from models.training_test_utils import (
     RandomTranslationDataModule,
@@ -31,7 +33,10 @@ from models.transformer.expert_linear_adaptive.presets import (
     ExperimentPresets,
 )
 
-from model_runtime.packages import GridSearch, PresetLock
+_MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
+_ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
+_MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
 
 
 class TestTransformerExpertLinearAdaptiveModel(unittest.TestCase):
@@ -286,23 +291,37 @@ class TestTransformerExpertLinearAdaptiveModel(unittest.TestCase):
         )
         self_attention = encoder_layer.self_attention_model
         cross_attention = decoder_layer.cross_attention_model
-        self.assertIsInstance(self_attention, MixtureOfAttentionHeads)
-        self.assertIsInstance(cross_attention, MixtureOfAttentionHeads)
-        self.assertIsInstance(self_attention.projector.key_model, MixtureOfExperts)
-        self.assertNotIsInstance(cross_attention.projector.key_model, MixtureOfExperts)
+        self.assertIsInstance(self_attention, _MIXTURE_ATTENTION_TYPE)
+        self.assertIsInstance(cross_attention, _MIXTURE_ATTENTION_TYPE)
+        self.assertIsInstance(
+            self_attention.projector.key_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+        )
+        self.assertNotIsInstance(
+            cross_attention.projector.key_model,
+            _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+        )
         self.assertTrue(
             any(
-                isinstance(module, MixtureOfExperts)
+                isinstance(module, _MIXTURE_OF_EXPERTS_TYPE)
                 for module in encoder_layer.feed_forward_model.modules()
             )
         )
-        self.assertTrue(
-            any(isinstance(module, AdaptiveLinearLayer) for module in model.modules())
-        )
-        low_rank = [
+        adaptive_layers = [
             module
             for module in model.modules()
-            if isinstance(module, LowRankDynamicWeight)
+            if isinstance(module, _ADAPTIVE_LINEAR_LAYER_TYPE)
+        ]
+        self.assertTrue(adaptive_layers)
+        low_rank = [
+            module.adaptive_behaviour.weight_model
+            for module in adaptive_layers
+            if module.adaptive_behaviour is not None
+            and isinstance(
+                module.adaptive_behaviour.weight_config,
+                LowRankDynamicWeightConfig,
+            )
+            and module.adaptive_behaviour.weight_model is not None
         ]
         routers = [
             module for module in model.modules() if isinstance(module, RouterModel)

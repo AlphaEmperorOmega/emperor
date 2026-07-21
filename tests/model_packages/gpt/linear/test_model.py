@@ -8,29 +8,32 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+import torch.nn as nn
+
 import models.gpt.linear.config as config
 import models.gpt.linear.dataset_options as dataset_options
 import models.gpt.linear.search_space as search_space
-import torch
-import torch.nn as nn
 from emperor.attention import SelfAttentionProjectionStrategy
-from emperor.base.layer import LayerStackConfig, RecurrentLayerConfig
-from emperor.base.layer.residual import ResidualConnectionOptions
-from emperor.base.options import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
-from emperor.embedding.absolute.core.config import (
+from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.language_model import LanguageModelExperiment
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+    RecurrentLayerConfig,
+    ResidualConnectionOptions,
+)
 from emperor.transformer import (
     TransformerDecoderBlockLayer,
     TransformerDecoderLayer,
     TransformerDecoderLayerState,
 )
+from model_runtime.packages import GridSearch, PresetLock, RandomSearch
 from models.catalog import MODEL_CATALOG, catalog_entry
 from models.config_overrides import iter_supported_config_keys, print_config_options
 from models.gpt.linear import (
@@ -57,8 +60,6 @@ from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
-
-from model_runtime.packages import GridSearch, PresetLock, RandomSearch
 
 
 class TestGptLinearModel(unittest.TestCase):
@@ -396,7 +397,7 @@ class TestGptLinearModel(unittest.TestCase):
         ).build()
         stack = self._decoder_stack_config(cfg)
         self.assertEqual(
-            stack.layer_config.residual_connection_option,
+            stack.layer_config.residual_config.option,
             ResidualConnectionOptions.RESIDUAL,
         )
         self.assertEqual(
@@ -469,7 +470,7 @@ class TestGptLinearModel(unittest.TestCase):
         ).build()
         stack = self._decoder_stack_config(cfg)
         gate = stack.layer_config.gate_config.model_config
-        halting = stack.layer_config.halting_config.halting_gate_config
+        halting = stack.shared_halting_config.halting_gate_config
         memory = stack.shared_memory_config.model_config
         self.assertEqual((gate.hidden_dim, gate.num_layers), (23, 3))
         self.assertEqual((halting.hidden_dim, halting.num_layers), (19, 2))
@@ -1058,7 +1059,7 @@ class TestGptLinearModel(unittest.TestCase):
                 cfg = presets.get_config(preset)[0]
                 stack = self._decoder_stack_config(cfg)
                 self.assertEqual(
-                    stack.layer_config.residual_connection_option,
+                    stack.layer_config.residual_config.option,
                     ResidualConnectionOptions.RESIDUAL,
                 )
                 self.assertEqual(
@@ -1073,7 +1074,7 @@ class TestGptLinearModel(unittest.TestCase):
                     expected.get("gate", False),
                 )
                 self.assertEqual(
-                    stack.layer_config.halting_config is not None,
+                    stack.shared_halting_config is not None,
                     expected.get("halting", False),
                 )
                 self.assertEqual(
