@@ -9,21 +9,17 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
-import emperor.datasets.text.translation.multi30k as multi30k_module
-from emperor.datasets.image.classification.cifar_10 import Cifar10
-from emperor.datasets.image.classification.cifar_100 import Cifar100
-from emperor.datasets.image.classification.fashion_mnist import FashionMNIST
-from emperor.datasets.image.classification.mnist import Mnist
+from PIL import Image
+from torch.utils.data import Dataset
+
+from emperor.datasets.image.classification import Cifar10, Cifar100, FashionMNIST, Mnist
 from emperor.datasets.text.bert_pretraining import (
     PennTreebankBertPretraining,
     WikiText2BertPretraining,
 )
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
 from emperor.datasets.text.translation import Multi30kDeEn, Multi30kEnDe
-from emperor.datasets.text.translation.multi30k import Multi30kFile
-from emperor.experiments.tasks import ExperimentTask
-from PIL import Image
-from torch.utils.data import Dataset
+from emperor.experiments import ExperimentTask
 
 OFFLINE_TEXT_SPLITS = {
     "train": (
@@ -73,27 +69,44 @@ class _VisionSpec:
     num_classes: int
 
 
+@dataclass(frozen=True)
+class _Multi30kFile:
+    split: str
+    language: str
+    filename: str
+    sha256: str
+    line_count: int
+
+    @property
+    def url(self) -> str:
+        return f"https://offline.invalid/{self.filename}"
+
+    @property
+    def text_filename(self) -> str:
+        return self.filename.removesuffix(".gz")
+
+
 _VISION_SPECS = {
     Mnist: _VisionSpec(
-        "emperor.datasets.image.classification.mnist.datasets.MNIST",
+        "emperor.datasets.image.classification._mnist.datasets.MNIST",
         "L",
         (28, 28),
         10,
     ),
     FashionMNIST: _VisionSpec(
-        "emperor.datasets.image.classification.fashion_mnist.datasets.FashionMNIST",
+        "emperor.datasets.image.classification._fashion_mnist.datasets.FashionMNIST",
         "L",
         (28, 28),
         10,
     ),
     Cifar10: _VisionSpec(
-        "emperor.datasets.image.classification.cifar_10.datasets.CIFAR10",
+        "emperor.datasets.image.classification._cifar_10.datasets.CIFAR10",
         "RGB",
         (32, 32),
         10,
     ),
     Cifar100: _VisionSpec(
-        "emperor.datasets.image.classification.cifar_100.datasets.CIFAR100",
+        "emperor.datasets.image.classification._cifar_100.datasets.CIFAR100",
         "RGB",
         (32, 32),
         100,
@@ -163,7 +176,7 @@ def _causal_source_module(dataset_type: type) -> tuple[ModuleType, str]:
     return module, source_name
 
 
-def _translation_archives() -> tuple[dict[str, bytes], tuple[Multi30kFile, ...]]:
+def _translation_archives() -> tuple[dict[str, bytes], tuple[_Multi30kFile, ...]]:
     text = {
         "train.de.gz": "Hallo Welt\nEin rotes Haus\nKleine Katze\nVogel fliegt\n",
         "train.en.gz": "Hello world\nA red house\nSmall cat\nBird flies\n",
@@ -185,7 +198,7 @@ def _translation_archives() -> tuple[dict[str, bytes], tuple[Multi30kFile, ...]]
         "test_2016_flickr.en.gz": ("test", "en", 1),
     }
     files = tuple(
-        Multi30kFile(
+        _Multi30kFile(
             split=split,
             language=language,
             filename=name,
@@ -219,15 +232,23 @@ def offline_dataset_metadata(
 
     if dataset_type in (PennTreebank, WikiText2):
         module, source_name = _causal_source_module(dataset_type)
+        original_metadata = {
+            name: getattr(dataset_type, name)
+            for name in ("vocab_size", "flattened_input_dim", "num_classes")
+        }
         with patch.object(module, source_name, _offline_modern_text_source):
-            yield dataset_type(
-                batch_size=2,
-                sequence_length=4,
-                root=str(root),
-                num_workers=0,
-                drop_last=False,
-                seed=seed,
-            )
+            try:
+                yield dataset_type(
+                    batch_size=2,
+                    sequence_length=4,
+                    root=str(root),
+                    num_workers=0,
+                    drop_last=False,
+                    seed=seed,
+                )
+            finally:
+                for name, value in original_metadata.items():
+                    setattr(dataset_type, name, value)
         return
 
     if dataset_type in (
@@ -252,7 +273,7 @@ def offline_dataset_metadata(
         def downloader(url: str, destination: Path) -> None:
             destination.write_bytes(archives[url.rsplit("/", 1)[-1]])
 
-        with patch.object(multi30k_module, "FILES", files):
+        with patch.object(dataset_type, "files", files):
             yield dataset_type(
                 batch_size=2,
                 source_sequence_length=7,

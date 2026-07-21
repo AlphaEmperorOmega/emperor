@@ -5,8 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from emperor.experiments.tasks import ExperimentTask
-
+from emperor.experiments import ExperimentTask
 from support.dataset_metadata import DATASET_TASKS
 
 RUN_DOWNLOAD_TESTS = os.environ.get("EMPEROR_RUN_DATASET_DOWNLOAD_TESTS") == "1"

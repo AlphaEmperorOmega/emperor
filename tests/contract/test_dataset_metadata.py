@@ -7,9 +7,10 @@ from inspect import signature
 from pathlib import Path
 
 import torch
-from emperor.experiments.tasks import ExperimentTask
-from models.catalog import discover_model_packages
 
+from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
+from emperor.experiments import ExperimentTask
+from models.catalog import discover_model_packages
 from support.dataset_metadata import DATASET_TASKS, offline_dataset_metadata
 
 SEED = 17
@@ -26,6 +27,29 @@ def declared_dataset_tasks() -> dict[type, set[ExperimentTask]]:
 
 
 class DatasetMetadataContractTests(unittest.TestCase):
+    def test_a_offline_fixture_restores_dataset_class_metadata(self) -> None:
+        metadata_names = ("vocab_size", "flattened_input_dim", "num_classes")
+        for dataset_type in (PennTreebank, WikiText2):
+            with self.subTest(dataset=dataset_type.__name__):
+                expected = {
+                    name: getattr(dataset_type, name) for name in metadata_names
+                }
+                with tempfile.TemporaryDirectory() as temporary_directory:
+                    with offline_dataset_metadata(
+                        dataset_type,
+                        Path(temporary_directory),
+                        seed=SEED,
+                    ) as dataset:
+                        dataset.prepare_data()
+                        dataset.setup("fit")
+                        self.assertNotEqual(
+                            dataset_type.vocab_size,
+                            expected["vocab_size"],
+                        )
+
+                actual = {name: getattr(dataset_type, name) for name in metadata_names}
+                self.assertEqual(actual, expected)
+
     def test_every_declared_dataset_seed_is_optional_by_default(self) -> None:
         for dataset_type in DATASET_TASKS:
             with self.subTest(dataset=dataset_type.__name__):
@@ -147,9 +171,7 @@ class DatasetMetadataContractTests(unittest.TestCase):
             self.assertTrue(torch.all((attention_mask == 0) | (attention_mask == 1)))
             self.assertTrue(torch.all((token_type_ids == 0) | (token_type_ids == 1)))
             self.assertTrue(
-                torch.all(
-                    (next_sentence_labels == 0) | (next_sentence_labels == 1)
-                )
+                torch.all((next_sentence_labels == 0) | (next_sentence_labels == 1))
             )
             return
 
