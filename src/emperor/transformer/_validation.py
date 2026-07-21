@@ -65,6 +65,7 @@ class TransformerValidator(ValidatorBase):
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
+        cls._validate_layer_norm_position(model.layer_norm_position)
         cls._validate_residual_config(
             model.residual_config,
             owner_name="TransformerEncoderLayerConfig",
@@ -75,10 +76,21 @@ class TransformerValidator(ValidatorBase):
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
+        cls._validate_layer_norm_position(model.layer_norm_position)
         cls._validate_residual_config(
             model.residual_config,
             owner_name="TransformerDecoderLayerConfig",
         )
+
+    @staticmethod
+    def _validate_layer_norm_position(layer_norm_position) -> None:
+        from emperor.layers import LayerNormPositionOptions
+
+        if not isinstance(layer_norm_position, LayerNormPositionOptions):
+            raise TypeError(
+                "layer_norm_position must be a LayerNormPositionOptions value, "
+                f"got {type(layer_norm_position).__name__}"
+            )
 
     @classmethod
     def _validate_residual_config(cls, residual_config, owner_name: str) -> None:

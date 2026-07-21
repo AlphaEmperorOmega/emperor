@@ -1,5 +1,6 @@
 import itertools
 import unittest
+from typing import cast
 
 import torch
 
@@ -226,6 +227,15 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         for coefficient_model in coefficient_models:
             self.assertEqual(coefficient_model.input_dim, cfg.embedding_dim * 2)
             self.assertEqual(coefficient_model.output_dim, cfg.embedding_dim)
+
+    def test_rejects_invalid_encoder_layer_norm_position(self):
+        invalid_position = cast(LayerNormPositionOptions, "invalid")
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "layer_norm_position must be a LayerNormPositionOptions value",
+        ):
+            TransformerEncoderLayer(self.preset(layer_norm_position=invalid_position))
 
     def test_implicit_causal_mask_with_padding_matches_explicit_sequence_mask(self):
         torch.manual_seed(1701)
@@ -674,6 +684,15 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         for coefficient_model in coefficient_models:
             self.assertEqual(coefficient_model.input_dim, cfg.embedding_dim * 2)
             self.assertEqual(coefficient_model.output_dim, cfg.embedding_dim)
+
+    def test_rejects_invalid_decoder_layer_norm_position(self):
+        invalid_position = cast(LayerNormPositionOptions, "invalid")
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "layer_norm_position must be a LayerNormPositionOptions value",
+        ):
+            TransformerDecoderLayer(self.preset(layer_norm_position=invalid_position))
 
     def test_forward_with_different_inputs(self):
         batch_size = 4
