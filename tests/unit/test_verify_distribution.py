@@ -463,5 +463,27 @@ class DependencyBridgeVerificationTests(unittest.TestCase):
             )
 
 
+class DependencyCheckVerificationTests(unittest.TestCase):
+    def test_runs_pip_check_in_the_isolated_environment(self) -> None:
+        python = Path("/venv/bin/python")
+        outside = Path("/outside")
+        environment = {"PYTHONSAFEPATH": "1"}
+        with (
+            patch.object(verify_distribution, "_run") as run,
+            patch.object(
+                verify_distribution,
+                "_isolated_environment",
+                return_value=environment,
+            ),
+        ):
+            verify_distribution._pip_check(python, outside)
+
+        run.assert_called_once_with(
+            [str(python), "-P", "-m", "pip", "check"],
+            cwd=outside,
+            env=environment,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

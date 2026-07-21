@@ -893,6 +893,14 @@ def _install_wheel(python: Path, wheel: Path, outside: Path) -> None:
     )
 
 
+def _pip_check(python: Path, outside: Path) -> None:
+    _run(
+        [str(python), "-P", "-m", "pip", "check"],
+        cwd=outside,
+        env=_isolated_environment(),
+    )
+
+
 def _isolated_environment(extra_python_path: Path | None = None) -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONSAFEPATH"] = "1"
@@ -1121,6 +1129,8 @@ def verify(
             assert workbench_wheel is not None
             _install_editable(editable_python, workbench_source, outside)
             _install_wheel(regular_python, workbench_wheel, outside)
+        _pip_check(editable_python, outside)
+        _pip_check(regular_python, outside)
 
         editable_payload = _installed_smoke(editable_python, outside)
         regular_payload = _installed_smoke(regular_python, outside)
@@ -1137,6 +1147,10 @@ def verify(
         result = {
             "install_contract": _semantic_payload(editable_payload),
             "installed_contract_tests": 3,
+            "installed_dependency_checks": {
+                "editable": True,
+                "regular": True,
+            },
             "sdist_manifest": sdist_manifest,
             "wheel_manifest": wheel_manifest,
         }
