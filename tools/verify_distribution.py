@@ -8,10 +8,15 @@ import json
 import os
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
+import urllib.error
+import urllib.request
 import venv
 import zipfile
 from email.parser import BytesParser
@@ -990,6 +995,124 @@ def _installed_contract(python: Path, outside: Path, test_root: Path) -> None:
     )
 
 
+def _available_loopback_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def _stop_smoke_process(process: subprocess.Popen[str]) -> str:
+    if process.poll() is None:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    process.kill()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+    output, _stderr = process.communicate()
+    return output
+
+
+def _installed_workbench_cli_smoke(
+    python: Path,
+    outside: Path,
+    state_root: Path,
+) -> dict[str, object]:
+    executable = python.parent / (
+        "emperor-workbench.exe" if os.name == "nt" else "emperor-workbench"
+    )
+    if not executable.is_file():
+        raise VerificationError(
+            f"Installed Workbench console script is missing: {executable}"
+        )
+    environment = _isolated_environment()
+    environment["EMPEROR_PROJECT_ADAPTER_COMMAND"] = (
+        f"{python} -P -m models.adapter_cli"
+    )
+    environment["WORKBENCH_API_LOGS_ROOT"] = str(state_root / "logs")
+    environment["WORKBENCH_API_SNAPSHOTS_ROOT"] = str(state_root / "snapshots")
+    environment["WORKBENCH_API_STATE_ROOT"] = str(state_root / "state")
+    environment["WORKBENCH_API_TRAINING_JOBS_ROOT"] = str(state_root / "training-jobs")
+    console_help = _run(
+        [str(executable), "--help"],
+        cwd=outside,
+        env=environment,
+    )
+    module_help = _run(
+        [str(python), "-P", "-m", "emperor_workbench", "--help"],
+        cwd=outside,
+        env=environment,
+    )
+    expected_help = "Run the Emperor Workbench API."
+    if expected_help not in console_help or expected_help not in module_help:
+        raise VerificationError(
+            "Installed Workbench launchers did not expose the canonical CLI help."
+        )
+
+    port = _available_loopback_port()
+    popen_options: dict[str, object] = {
+        "cwd": outside,
+        "env": environment,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if os.name == "posix":
+        popen_options["start_new_session"] = True
+    elif os.name == "nt":
+        popen_options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    process = subprocess.Popen(  # noqa: S603 - installed artifact under verification
+        [
+            str(executable),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        **popen_options,
+    )
+    deadline = time.monotonic() + 30.0
+    status: int | None = None
+    output = ""
+    try:
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                break
+            try:
+                with urllib.request.urlopen(  # noqa: S310 - loopback smoke probe
+                    f"http://127.0.0.1:{port}/health",
+                    timeout=0.5,
+                ) as response:
+                    status = response.status
+                    break
+            except (OSError, urllib.error.URLError):
+                time.sleep(0.1)
+    finally:
+        output = _stop_smoke_process(process)
+    if status != 200:
+        raise VerificationError(
+            "Installed emperor-workbench server did not become healthy. "
+            f"exit={process.returncode}, output={output}"
+        )
+    return {
+        "console_help": True,
+        "module_help": True,
+        "server_health_status": status,
+    }
+
+
 def _workbench_smoke(
     python: Path,
     outside: Path,
@@ -1002,7 +1125,7 @@ import os
 from importlib.metadata import version
 
 from fastapi.routing import APIRoute, iter_route_contexts
-from emperor_workbench.api import create_app
+from emperor_workbench.api import app as global_app, create_app
 from emperor_workbench.model_packages import ModelPackageCatalog
 from emperor_workbench.settings import WorkbenchApiSettings
 import emperor_workbench
@@ -1031,6 +1154,7 @@ catalog = asyncio.run(catalog_identities())
 print(json.dumps({
     'catalog_count': len(catalog),
     'route_count': len(routes),
+    'asgi_title': global_app.title,
     'title': app.title,
     'version': version('emperor-workbench'),
     'emperor_workbench_path': emperor_workbench.__file__,
@@ -1041,8 +1165,19 @@ print(json.dumps({
     env["WORKBENCH_SMOKE_LOGS"] = str(state_root / "logs")
     env["WORKBENCH_SMOKE_SNAPSHOTS"] = str(state_root / "snapshots")
     env["WORKBENCH_SMOKE_STATE"] = str(state_root / "state")
+    env["WORKBENCH_API_LOGS_ROOT"] = env["WORKBENCH_SMOKE_LOGS"]
+    env["WORKBENCH_API_SNAPSHOTS_ROOT"] = env["WORKBENCH_SMOKE_SNAPSHOTS"]
+    env["WORKBENCH_API_STATE_ROOT"] = env["WORKBENCH_SMOKE_STATE"]
     output = _run([str(python), "-P", "-c", smoke_code], cwd=outside, env=env)
-    return json.loads(output.splitlines()[-1])
+    payload = json.loads(output.splitlines()[-1])
+    payload.update(
+        _installed_workbench_cli_smoke(
+            python,
+            outside,
+            state_root / "cli",
+        )
+    )
+    return payload
 
 
 def _require_workbench_path_under(payload: dict[str, object], root: Path) -> None:

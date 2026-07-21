@@ -8,7 +8,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -483,6 +483,194 @@ class DependencyCheckVerificationTests(unittest.TestCase):
             cwd=outside,
             env=environment,
         )
+
+
+class WorkbenchLauncherVerificationTests(unittest.TestCase):
+    def test_runs_both_launchers_and_probes_server_health(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            python = root / "venv" / "bin" / "python"
+            python.parent.mkdir(parents=True)
+            executable = python.parent / (
+                "emperor-workbench.exe"
+                if verify_distribution.os.name == "nt"
+                else "emperor-workbench"
+            )
+            executable.touch()
+            outside = root / "outside"
+            outside.mkdir()
+            state_root = root / "state"
+            response = MagicMock()
+            response.__enter__.return_value.status = 200
+            process = MagicMock(returncode=None)
+            process.poll.return_value = None
+            with (
+                patch.object(
+                    verify_distribution,
+                    "_isolated_environment",
+                    return_value={},
+                ),
+                patch.object(
+                    verify_distribution,
+                    "_run",
+                    return_value="Run the Emperor Workbench API.",
+                ) as run,
+                patch.object(
+                    verify_distribution,
+                    "_available_loopback_port",
+                    return_value=43121,
+                ),
+                patch.object(
+                    verify_distribution.subprocess,
+                    "Popen",
+                    return_value=process,
+                ) as popen,
+                patch.object(
+                    verify_distribution.urllib.request,
+                    "urlopen",
+                    return_value=response,
+                ) as urlopen,
+                patch.object(
+                    verify_distribution,
+                    "_stop_smoke_process",
+                    return_value="",
+                ) as stop,
+                patch.object(
+                    verify_distribution.time,
+                    "monotonic",
+                    side_effect=(0.0, 0.0),
+                ),
+            ):
+                payload = verify_distribution._installed_workbench_cli_smoke(
+                    python,
+                    outside,
+                    state_root,
+                )
+
+        self.assertEqual(
+            [invocation.args[0] for invocation in run.call_args_list],
+            [
+                [str(executable), "--help"],
+                [str(python), "-P", "-m", "emperor_workbench", "--help"],
+            ],
+        )
+        environment = run.call_args_list[0].kwargs["env"]
+        self.assertEqual(
+            environment["EMPEROR_PROJECT_ADAPTER_COMMAND"],
+            f"{python} -P -m models.adapter_cli",
+        )
+        self.assertEqual(
+            environment["WORKBENCH_API_TRAINING_JOBS_ROOT"],
+            str(state_root / "training-jobs"),
+        )
+        self.assertEqual(
+            popen.call_args.args[0],
+            [
+                str(executable),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "43121",
+            ],
+        )
+        urlopen.assert_called_once_with(
+            "http://127.0.0.1:43121/health",
+            timeout=0.5,
+        )
+        stop.assert_called_once_with(process)
+        self.assertEqual(
+            payload,
+            {
+                "console_help": True,
+                "module_help": True,
+                "server_health_status": 200,
+            },
+        )
+
+    def test_rejects_noncanonical_launcher_help(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            python = root / "venv" / "bin" / "python"
+            python.parent.mkdir(parents=True)
+            executable = python.parent / (
+                "emperor-workbench.exe"
+                if verify_distribution.os.name == "nt"
+                else "emperor-workbench"
+            )
+            executable.touch()
+            outside = root / "outside"
+            outside.mkdir()
+            with (
+                patch.object(
+                    verify_distribution,
+                    "_isolated_environment",
+                    return_value={},
+                ),
+                patch.object(
+                    verify_distribution,
+                    "_run",
+                    return_value="unexpected help",
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    verify_distribution.VerificationError,
+                    "canonical CLI help",
+                ):
+                    verify_distribution._installed_workbench_cli_smoke(
+                        python,
+                        outside,
+                        root / "state",
+                    )
+
+    def test_workbench_smoke_merges_launcher_results(self) -> None:
+        workbench_payload = {
+            "asgi_title": "Emperor Workbench API",
+            "emperor_workbench_path": "/venv/emperor_workbench/__init__.py",
+        }
+        launcher_payload = {
+            "console_help": True,
+            "module_help": True,
+            "server_health_status": 200,
+        }
+        with (
+            patch.object(
+                verify_distribution,
+                "_isolated_environment",
+                return_value={},
+            ),
+            patch.object(
+                verify_distribution,
+                "_run",
+                return_value=json.dumps(workbench_payload),
+            ) as run,
+            patch.object(
+                verify_distribution,
+                "_installed_workbench_cli_smoke",
+                return_value=launcher_payload,
+            ) as launcher_smoke,
+        ):
+            payload = verify_distribution._workbench_smoke(
+                Path("/venv/bin/python"),
+                Path("/outside"),
+                Path("/state"),
+            )
+
+        probe_code = run.call_args.args[0][-1]
+        self.assertIn(
+            "from emperor_workbench.api import app as global_app, create_app",
+            probe_code,
+        )
+        self.assertIn("'asgi_title': global_app.title", probe_code)
+        self.assertEqual(
+            run.call_args.kwargs["env"]["WORKBENCH_API_STATE_ROOT"],
+            "/state/state",
+        )
+        launcher_smoke.assert_called_once_with(
+            Path("/venv/bin/python"),
+            Path("/outside"),
+            Path("/state/cli"),
+        )
+        self.assertEqual(payload, workbench_payload | launcher_payload)
 
 
 if __name__ == "__main__":
