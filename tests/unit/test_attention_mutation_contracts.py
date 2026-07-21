@@ -226,9 +226,9 @@ class TestAttentionValidatorMutationContracts(ExactErrorMixin, unittest.TestCase
         )
         self.assert_exact_error(
             RuntimeError,
-            "Need an attention_mask when the causal_attention_mask_flag is set. "
-            "Use the Transformer module method generate_square_subsequent_mask to "
-            "create this mask.",
+            "Causal attention requires a prepared attention_mask. The attention "
+            "masking module generates this mask from the runtime query and key "
+            "lengths before validation.",
             AttentionValidatorBase.validate_attention_mask_for_required_causal_mask,
             None,
             True,

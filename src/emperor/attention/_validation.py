@@ -295,9 +295,9 @@ class AttentionValidatorBase:
     ) -> None:
         if causal_attention_mask_flag and attention_mask is None:
             raise RuntimeError(
-                "Need an attention_mask when the causal_attention_mask_flag is set. "
-                "Use the Transformer module method generate_square_subsequent_mask to "
-                "create this mask."
+                "Causal attention requires a prepared attention_mask. The attention "
+                "masking module generates this mask from the runtime query and key "
+                "lengths before validation."
             )
 
 
