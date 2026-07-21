@@ -886,15 +886,6 @@ def _same_executable(observed: str, expected: str) -> bool:
         )
 
 
-def _service_job_object_name(service: str, port: int) -> str:
-    safe = "".join(
-        character for character in service if character.isalnum() or character in "-_"
-    )
-    if not safe or safe != service or not 1 <= port <= 65535:
-        raise ValueError("Unsafe Workbench service Job Object identity.")
-    return f"Local\\EmperorWorkbenchService-{safe}-{port}"
-
-
 def _same_argv(
     observed: list[str] | tuple[str, ...], expected: tuple[str, ...]
 ) -> bool:
