@@ -817,25 +817,6 @@ The strict Pyright include list covers stable capability areas and may only
 grow. CI supplies the pinned Pyright executable; local Pyright use requires the
 command to already be available.
 
-Capture the informational PyTorch hot-path baseline with the platform-aware
-project Python:
-
-```text
-mise exec -- python tools/emperor_dev.py python -- \
-  -P tools/benchmark_pytorch_hotspots.py \
-  --device all --warmup 5 --repetitions 30 --threads 1
-```
-
-The harness measures DataLoader behavior, placement and scalar synchronization
-candidates, routing and halting presets, and MEMORY test-time-training inner
-loops. It records timing variance, memory, environment, and exact model/input
-identity. CUDA is synchronized for every sample when the installed PyTorch
-build can execute on the available GPU; otherwise the hardware compatibility
-reason is recorded as a skip. See
-[`docs/architecture/pytorch-performance-baseline.md`](docs/architecture/pytorch-performance-baseline.md)
-for the canonical conditions and interpretation. Runtime results remain
-informational rather than hard CI thresholds.
-
 Capture the production Workbench browser and long-session baseline after a
 frontend build with:
 
@@ -850,11 +831,8 @@ The browser harness uses temporary backend data and a fake process only at the
 Training Job runner boundary. It measures hydration, main-thread and React
 work, repeated workspace/graph/chart cycles, API timings, heap growth, completed
 Training and log-import flows, WebGL frames and disposal, and the existing
-bundle budgets. See
-[`docs/architecture/browser-performance-baseline.md`](docs/architecture/browser-performance-baseline.md)
-for the canonical conditions and interpretation. Machine-sensitive results are
-informational; stable workflow, disposal, error, and bundle checks fail the
-harness.
+bundle budgets. Machine-sensitive results are informational; stable workflow,
+disposal, error, and bundle checks fail the harness.
 
 For Workbench-specific changes, run the relevant backend or frontend checks from
 the package being changed after the unit suite is green.
