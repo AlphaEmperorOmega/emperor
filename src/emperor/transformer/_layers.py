@@ -1,25 +1,124 @@
 from typing import TYPE_CHECKING
 
-import torch
-import torch.nn as nn
 from torch import Tensor
 
 from emperor.attention import AttentionLayerState
-from emperor.layers import (
-    Layer,
-    LayerNormPositionOptions,
-    LayerState,
-    ResidualConfig,
-    ResidualConnection,
-)
+from emperor.layers import ActivationOptions, Layer, LayerConfig, LayerState
 from emperor.nn import Module
 from emperor.transformer._state import TransformerDecoderLayerState
 from emperor.transformer._validation import TransformerValidator
 
 if TYPE_CHECKING:
+    from emperor.config import ConfigBase
     from emperor.transformer._config import (
         TransformerDecoderLayerConfig,
         TransformerEncoderLayerConfig,
+    )
+
+
+class _TransformerSubLayer(Layer):
+    def _accumulate_model_loss(
+        self,
+        state: LayerState,
+        loss: Tensor | None,
+    ) -> None:
+        if loss is None:
+            return
+        state.loss = self._accumulate_auxiliary_loss(
+            state.loss,
+            self._reduce_auxiliary_loss(loss),
+        )
+
+
+class _EncoderSelfAttentionLayer(_TransformerSubLayer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: LayerState,
+    ) -> Tensor:
+        if not isinstance(state, AttentionLayerState):
+            raise TypeError("Encoder self-attention requires an AttentionLayerState.")
+        output, _attention_weights, loss = self.model(
+            q=main_model_input,
+            k=main_model_input,
+            v=main_model_input,
+            k_padding_mask=state.key_padding_mask,
+            attention_mask=state.attention_mask,
+        )
+        self._accumulate_model_loss(state, loss)
+        return output
+
+
+class _DecoderSelfAttentionLayer(_TransformerSubLayer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: LayerState,
+    ) -> Tensor:
+        if not isinstance(state, TransformerDecoderLayerState):
+            raise TypeError(
+                "Decoder self-attention requires a TransformerDecoderLayerState."
+            )
+        output, _attention_weights, loss = self.model(
+            q=main_model_input,
+            k=main_model_input,
+            v=main_model_input,
+            k_padding_mask=state.target_key_padding_mask,
+            attention_mask=state.target_attention_mask,
+        )
+        self._accumulate_model_loss(state, loss)
+        return output
+
+
+class _DecoderCrossAttentionLayer(_TransformerSubLayer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: LayerState,
+    ) -> Tensor:
+        if not isinstance(state, TransformerDecoderLayerState):
+            raise TypeError(
+                "Decoder cross-attention requires a TransformerDecoderLayerState."
+            )
+        output, _attention_weights, loss = self.model(
+            q=main_model_input,
+            k=state.encoder_output,
+            v=state.encoder_output,
+            k_padding_mask=state.encoder_padding_mask,
+            attention_mask=state.cross_attention_mask,
+        )
+        self._accumulate_model_loss(state, loss)
+        return output
+
+
+class _FeedForwardLayer(_TransformerSubLayer):
+    def _handle_model_processing(
+        self,
+        main_model_input: Tensor,
+        state: LayerState,
+    ) -> Tensor:
+        output, loss = self.model(main_model_input)
+        self._accumulate_model_loss(state, loss)
+        return output
+
+
+def _sub_layer_config(
+    *,
+    embedding_dim: int,
+    owner_config: "TransformerEncoderLayerConfig | TransformerDecoderLayerConfig",
+    model_config: "ConfigBase",
+) -> LayerConfig:
+    return LayerConfig(
+        input_dim=embedding_dim,
+        output_dim=embedding_dim,
+        activation=ActivationOptions.DISABLED,
+        residual_config=owner_config.residual_config,
+        dropout_probability=owner_config.dropout_probability,
+        layer_norm_position=owner_config.layer_norm_position,
+        gate_config=None,
+        halting_config=None,
+        memory_config=None,
+        layer_model_config=model_config,
     )
 
 
@@ -38,23 +137,34 @@ class TransformerEncoderLayer(Module):
         )
 
         self.embedding_dim: int = self.cfg.embedding_dim
-        self.layer_norm_position: LayerNormPositionOptions = (
-            self.cfg.layer_norm_position
-        )
+        self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.residual_config: ResidualConfig | None = self.cfg.residual_config
+        self.residual_config = self.cfg.residual_config
 
         self.VALIDATOR.validate_encoder_layer(self)
 
-        self.self_attention_model = self.cfg.attention_config.build()
-        self.feed_forward_model = self.cfg.feed_forward_config.build()
-        self.self_attention_residual_connection = self.__build_residual_connection()
-        self.feed_forward_residual_connection = self.__build_residual_connection()
+        self.self_attention_layer = _EncoderSelfAttentionLayer(
+            _sub_layer_config(
+                embedding_dim=self.embedding_dim,
+                owner_config=self.cfg,
+                model_config=self.cfg.attention_config,
+            )
+        )
+        self.feed_forward_layer = _FeedForwardLayer(
+            _sub_layer_config(
+                embedding_dim=self.embedding_dim,
+                owner_config=self.cfg,
+                model_config=self.cfg.feed_forward_config,
+            )
+        )
 
-        self.self_attention_layer_norm = nn.LayerNorm(self.embedding_dim)
-        self.feed_forward_layer_norm = nn.LayerNorm(self.embedding_dim)
-        self.self_attention_dropout = nn.Dropout(self.dropout_probability)
-        self.feed_forward_dropout = nn.Dropout(self.dropout_probability)
+    @property
+    def self_attention_model(self):
+        return self.self_attention_layer.model
+
+    @property
+    def feed_forward_model(self):
+        return self.feed_forward_layer.model
 
     def forward(
         self,
@@ -65,156 +175,26 @@ class TransformerEncoderLayer(Module):
         self.VALIDATOR.validate_encoder_layer_forward_inputs(
             self, source_token_embeddings
         )
-        x = source_token_embeddings
-        attention_mask = self.__resolve_attention_mask_for_padding_mask(
-            source_token_embeddings,
-            source_key_padding_mask,
-            attention_mask,
-        )
-        x, attention_loss = self.__apply_self_attention_sublayer(
-            x,
-            source_key_padding_mask=source_key_padding_mask,
+        state = AttentionLayerState(
+            hidden=source_token_embeddings,
+            key_padding_mask=source_key_padding_mask,
             attention_mask=attention_mask,
         )
-        x, feed_forward_loss = self.__apply_feed_forward_sublayer(x)
-        total_loss = attention_loss + feed_forward_loss
-        return x, total_loss
-
-    def __resolve_attention_mask_for_padding_mask(
-        self,
-        source_token_embeddings: Tensor,
-        source_key_padding_mask: Tensor | None,
-        attention_mask: Tensor | None,
-    ) -> Tensor | None:
-        if attention_mask is not None:
-            return attention_mask
-        if source_key_padding_mask is None:
-            return None
-        if not self.cfg.causal_attention_mask_flag:
-            return None
-        sequence_length = self.__resolve_source_sequence_length(source_token_embeddings)
-        return torch.triu(
-            torch.ones(
-                sequence_length,
-                sequence_length,
-                dtype=torch.bool,
-                device=source_token_embeddings.device,
-            ),
-            diagonal=1,
+        state = self.self_attention_layer(state)
+        state = self.feed_forward_layer(state)
+        loss = (
+            state.loss
+            if state.loss is not None
+            else source_token_embeddings.new_zeros(())
         )
-
-    def __resolve_source_sequence_length(
-        self,
-        source_token_embeddings: Tensor,
-    ) -> int:
-        if source_token_embeddings.dim() != 3:
-            return source_token_embeddings.size(0)
-        batch_first_flag = self.self_attention_model.batch_first_flag
-        if batch_first_flag is None:
-            batch_first_flag = (
-                source_token_embeddings.size(1) != self.self_attention_model.batch_size
-            )
-        sequence_dimension = 1 if batch_first_flag else 0
-        return source_token_embeddings.size(sequence_dimension)
-
-    def __apply_self_attention_sublayer(
-        self,
-        residual: Tensor,
-        source_key_padding_mask: Tensor | None,
-        attention_mask: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(residual, self.self_attention_layer_norm)
-        attention_output, _attention_weights, auxiliary_loss = (
-            self.self_attention_model(
-                q=normed_input,
-                k=normed_input,
-                v=normed_input,
-                k_padding_mask=source_key_padding_mask,
-                attention_mask=attention_mask,
-            )
-        )
-        attention_output = self.__apply_default_norm(
-            attention_output, self.self_attention_layer_norm
-        )
-        attention_output = self.self_attention_dropout(attention_output)
-        attention_output = self.__maybe_apply_residual_connection(
-            self.self_attention_residual_connection,
-            attention_output,
-            residual,
-        )
-        attention_output = self.__apply_post_norm(
-            attention_output, self.self_attention_layer_norm
-        )
-        loss = self.__resolve_auxiliary_loss(residual, auxiliary_loss)
-        return attention_output, loss
-
-    def __apply_feed_forward_sublayer(
-        self,
-        residual: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(residual, self.feed_forward_layer_norm)
-        feed_forward_output, feed_forward_loss = self.feed_forward_model(normed_input)
-        feed_forward_output = self.__apply_default_norm(
-            feed_forward_output, self.feed_forward_layer_norm
-        )
-        feed_forward_output = self.feed_forward_dropout(feed_forward_output)
-        feed_forward_output = self.__maybe_apply_residual_connection(
-            self.feed_forward_residual_connection,
-            feed_forward_output,
-            residual,
-        )
-        feed_forward_output = self.__apply_post_norm(
-            feed_forward_output, self.feed_forward_layer_norm
-        )
-        loss = self.__resolve_auxiliary_loss(residual, feed_forward_loss)
-        return feed_forward_output, loss
-
-    def __apply_pre_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
-            return layer_norm(x)
-        return x
-
-    def __apply_default_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
-            return layer_norm(x)
-        return x
-
-    def __apply_post_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.AFTER:
-            return layer_norm(x)
-        return x
-
-    def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_config is None:
-            return None
-        return self._build_from_config(
-            self.residual_config,
-            residual_dim=self.embedding_dim,
-        )
-
-    def __maybe_apply_residual_connection(
-        self,
-        connection: ResidualConnection | None,
-        current: Tensor,
-        residual: Tensor,
-    ) -> Tensor:
-        if connection is None:
-            return current
-        return connection(current, residual)
-
-    def __resolve_auxiliary_loss(
-        self, reference: Tensor, loss: Tensor | None
-    ) -> Tensor:
-        if loss is None:
-            return reference.new_zeros(())
-        return loss
+        return state.hidden, loss
 
 
 class TransformerEncoderBlockLayer(Layer):
     def _handle_model_processing(
         self,
         main_model_input: Tensor,
-        state: "LayerState",
+        state: LayerState,
     ) -> Tensor:
         source_key_padding_mask = None
         attention_mask = None
@@ -226,7 +206,10 @@ class TransformerEncoderBlockLayer(Layer):
             source_key_padding_mask=source_key_padding_mask,
             attention_mask=attention_mask,
         )
-        state.loss = loss if state.loss is None else state.loss + loss
+        state.loss = self._accumulate_auxiliary_loss(
+            state.loss,
+            self._reduce_auxiliary_loss(loss),
+        )
         return output
 
 
@@ -234,7 +217,7 @@ class TransformerDecoderBlockLayer(Layer):
     def _handle_model_processing(
         self,
         main_model_input: Tensor,
-        state: "LayerState",
+        state: LayerState,
     ) -> Tensor:
         if not isinstance(state, TransformerDecoderLayerState):
             raise TypeError(
@@ -248,7 +231,10 @@ class TransformerDecoderBlockLayer(Layer):
             attention_mask=state.target_attention_mask,
             encoder_attention_mask=state.cross_attention_mask,
         )
-        state.loss = loss if state.loss is None else state.loss + loss
+        state.loss = self._accumulate_auxiliary_loss(
+            state.loss,
+            self._reduce_auxiliary_loss(loss),
+        )
         return output
 
 
@@ -267,38 +253,52 @@ class TransformerDecoderLayer(Module):
         )
 
         self.embedding_dim: int = self.cfg.embedding_dim
-        self.layer_norm_position: LayerNormPositionOptions = (
-            self.cfg.layer_norm_position
-        )
+        self.layer_norm_position = self.cfg.layer_norm_position
         self.dropout_probability: float = self.cfg.dropout_probability
-        self.residual_config: ResidualConfig | None = self.cfg.residual_config
+        self.residual_config = self.cfg.residual_config
 
         self.VALIDATOR.validate_decoder_layer(self)
 
-        self.self_attention_model = self.cfg.self_attention_config.build()
-        self.cross_attention_model = self.__build_cross_attention_model()
-        self.feed_forward_model = self.cfg.feed_forward_config.build()
-        self.self_attention_residual_connection = self.__build_residual_connection()
-        self.cross_attention_residual_connection = (
-            self.__build_residual_connection()
-            if self.cross_attention_model is not None
-            else None
+        self.self_attention_layer = _DecoderSelfAttentionLayer(
+            _sub_layer_config(
+                embedding_dim=self.embedding_dim,
+                owner_config=self.cfg,
+                model_config=self.cfg.self_attention_config,
+            )
         )
-        self.feed_forward_residual_connection = self.__build_residual_connection()
+        self.cross_attention_layer = self.__build_cross_attention_layer()
+        self.feed_forward_layer = _FeedForwardLayer(
+            _sub_layer_config(
+                embedding_dim=self.embedding_dim,
+                owner_config=self.cfg,
+                model_config=self.cfg.feed_forward_config,
+            )
+        )
 
-        self.self_attention_layer_norm = nn.LayerNorm(self.embedding_dim)
-        self.feed_forward_layer_norm = nn.LayerNorm(self.embedding_dim)
-        self.self_attention_dropout = nn.Dropout(self.dropout_probability)
-        self.feed_forward_dropout = nn.Dropout(self.dropout_probability)
-
-        if self.cross_attention_model is not None:
-            self.cross_attention_layer_norm = nn.LayerNorm(self.embedding_dim)
-            self.cross_attention_dropout = nn.Dropout(self.dropout_probability)
-
-    def __build_cross_attention_model(self):
+    def __build_cross_attention_layer(self):
         if self.cfg.cross_attention_config is None:
             return None
-        return self.cfg.cross_attention_config.build()
+        return _DecoderCrossAttentionLayer(
+            _sub_layer_config(
+                embedding_dim=self.embedding_dim,
+                owner_config=self.cfg,
+                model_config=self.cfg.cross_attention_config,
+            )
+        )
+
+    @property
+    def self_attention_model(self):
+        return self.self_attention_layer.model
+
+    @property
+    def cross_attention_model(self):
+        if self.cross_attention_layer is None:
+            return None
+        return self.cross_attention_layer.model
+
+    @property
+    def feed_forward_model(self):
+        return self.feed_forward_layer.model
 
     def forward(
         self,
@@ -312,158 +312,21 @@ class TransformerDecoderLayer(Module):
         self.VALIDATOR.validate_decoder_layer_forward_inputs(
             self, target_token_embeddings, encoder_output
         )
-        x = target_token_embeddings
-        x, self_attention_loss = self.__apply_self_attention_sublayer(
-            x,
+        state = TransformerDecoderLayerState(
+            hidden=target_token_embeddings,
             target_key_padding_mask=key_padding_mask,
-            attention_mask=attention_mask,
-        )
-        x, cross_attention_loss = self.__apply_cross_attention_sublayer_if_present(
-            x,
+            target_attention_mask=attention_mask,
             encoder_output=encoder_output,
             encoder_padding_mask=encoder_padding_mask,
-            encoder_attention_mask=encoder_attention_mask,
+            cross_attention_mask=encoder_attention_mask,
         )
-        x, feed_forward_loss = self.__apply_feed_forward_sublayer(x)
-        total_loss = self_attention_loss + cross_attention_loss + feed_forward_loss
-        return x, total_loss
-
-    def __apply_cross_attention_sublayer_if_present(
-        self,
-        residual: Tensor,
-        encoder_output: Tensor | None,
-        encoder_padding_mask: Tensor | None,
-        encoder_attention_mask: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
-        if self.cross_attention_model is None:
-            return residual, residual.new_zeros(())
-        return self.__apply_cross_attention_sublayer(
-            residual,
-            encoder_output=encoder_output,
-            encoder_padding_mask=encoder_padding_mask,
-            encoder_attention_mask=encoder_attention_mask,
+        state = self.self_attention_layer(state)
+        if self.cross_attention_layer is not None:
+            state = self.cross_attention_layer(state)
+        state = self.feed_forward_layer(state)
+        loss = (
+            state.loss
+            if state.loss is not None
+            else target_token_embeddings.new_zeros(())
         )
-
-    def __apply_self_attention_sublayer(
-        self,
-        residual: Tensor,
-        target_key_padding_mask: Tensor | None,
-        attention_mask: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(residual, self.self_attention_layer_norm)
-        attention_output, _attention_weights, auxiliary_loss = (
-            self.self_attention_model(
-                q=normed_input,
-                k=normed_input,
-                v=normed_input,
-                k_padding_mask=target_key_padding_mask,
-                attention_mask=attention_mask,
-            )
-        )
-        attention_output = self.__apply_default_norm(
-            attention_output, self.self_attention_layer_norm
-        )
-        attention_output = self.self_attention_dropout(attention_output)
-        attention_output = self.__maybe_apply_residual_connection(
-            self.self_attention_residual_connection,
-            attention_output,
-            residual,
-        )
-        attention_output = self.__apply_post_norm(
-            attention_output, self.self_attention_layer_norm
-        )
-        loss = self.__resolve_auxiliary_loss(residual, auxiliary_loss)
-        return attention_output, loss
-
-    def __apply_cross_attention_sublayer(
-        self,
-        residual: Tensor,
-        encoder_output: Tensor,
-        encoder_padding_mask: Tensor | None,
-        encoder_attention_mask: Tensor | None,
-    ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(residual, self.cross_attention_layer_norm)
-        attention_output, _attention_weights, auxiliary_loss = (
-            self.cross_attention_model(
-                q=normed_input,
-                k=encoder_output,
-                v=encoder_output,
-                k_padding_mask=encoder_padding_mask,
-                attention_mask=encoder_attention_mask,
-            )
-        )
-        attention_output = self.__apply_default_norm(
-            attention_output, self.cross_attention_layer_norm
-        )
-        attention_output = self.cross_attention_dropout(attention_output)
-        attention_output = self.__maybe_apply_residual_connection(
-            self.cross_attention_residual_connection,
-            attention_output,
-            residual,
-        )
-        attention_output = self.__apply_post_norm(
-            attention_output, self.cross_attention_layer_norm
-        )
-        loss = self.__resolve_auxiliary_loss(residual, auxiliary_loss)
-        return attention_output, loss
-
-    def __apply_feed_forward_sublayer(
-        self,
-        residual: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        normed_input = self.__apply_pre_norm(residual, self.feed_forward_layer_norm)
-        feed_forward_output, feed_forward_loss = self.feed_forward_model(normed_input)
-        feed_forward_output = self.__apply_default_norm(
-            feed_forward_output, self.feed_forward_layer_norm
-        )
-        feed_forward_output = self.feed_forward_dropout(feed_forward_output)
-        feed_forward_output = self.__maybe_apply_residual_connection(
-            self.feed_forward_residual_connection,
-            feed_forward_output,
-            residual,
-        )
-        feed_forward_output = self.__apply_post_norm(
-            feed_forward_output, self.feed_forward_layer_norm
-        )
-        loss = self.__resolve_auxiliary_loss(residual, feed_forward_loss)
-        return feed_forward_output, loss
-
-    def __apply_pre_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.BEFORE:
-            return layer_norm(x)
-        return x
-
-    def __apply_default_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.DEFAULT:
-            return layer_norm(x)
-        return x
-
-    def __apply_post_norm(self, x: Tensor, layer_norm: nn.LayerNorm) -> Tensor:
-        if self.layer_norm_position == LayerNormPositionOptions.AFTER:
-            return layer_norm(x)
-        return x
-
-    def __build_residual_connection(self) -> ResidualConnection | None:
-        if self.residual_config is None:
-            return None
-        return self._build_from_config(
-            self.residual_config,
-            residual_dim=self.embedding_dim,
-        )
-
-    def __maybe_apply_residual_connection(
-        self,
-        connection: ResidualConnection | None,
-        current: Tensor,
-        residual: Tensor,
-    ) -> Tensor:
-        if connection is None:
-            return current
-        return connection(current, residual)
-
-    def __resolve_auxiliary_loss(
-        self, reference: Tensor, loss: Tensor | None
-    ) -> Tensor:
-        if loss is None:
-            return reference.new_zeros(())
-        return loss
+        return state.hidden, loss
