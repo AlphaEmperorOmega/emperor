@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tarfile
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -392,6 +394,73 @@ class SourceDistributionVerificationTests(unittest.TestCase):
                 "api",
             )
             self.assertFalse((destination / "web").exists())
+
+
+class DependencyBridgeVerificationTests(unittest.TestCase):
+    def test_rejects_first_party_modules_from_the_host(self) -> None:
+        payload = {
+            "module_origins": {
+                "emperor": "/host/site-packages/emperor/__init__.py",
+            },
+            "sys_path": [],
+        }
+        with patch.object(
+            verify_distribution,
+            "_run",
+            return_value=json.dumps(payload),
+        ):
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                "first-party host packages",
+            ):
+                verify_distribution._require_dependency_bridge_isolated(
+                    Path("/venv/bin/python"),
+                    outside=Path("/outside"),
+                    repository=Path("/checkout"),
+                )
+
+    def test_rejects_checkout_paths(self) -> None:
+        payload = {
+            "module_origins": {},
+            "sys_path": ["/checkout/src"],
+        }
+        with patch.object(
+            verify_distribution,
+            "_run",
+            return_value=json.dumps(payload),
+        ):
+            with self.assertRaisesRegex(
+                verify_distribution.VerificationError,
+                "checkout paths",
+            ):
+                verify_distribution._require_dependency_bridge_isolated(
+                    Path("/venv/bin/python"),
+                    outside=Path("/outside"),
+                    repository=Path("/checkout"),
+                )
+
+    def test_allows_the_host_dependency_bridge(self) -> None:
+        payload = {
+            "module_origins": {},
+            "sys_path": ["/checkout/host-site-packages"],
+        }
+        with (
+            patch.object(
+                verify_distribution,
+                "_run",
+                return_value=json.dumps(payload),
+            ),
+            patch.object(
+                verify_distribution,
+                "get_path",
+                return_value="/checkout/host-site-packages",
+            ),
+        ):
+            verify_distribution._require_dependency_bridge_isolated(
+                Path("/venv/bin/python"),
+                outside=Path("/outside"),
+                repository=Path("/checkout"),
+            )
 
 
 if __name__ == "__main__":

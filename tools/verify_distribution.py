@@ -808,11 +808,65 @@ def _create_environment(path: Path) -> Path:
             cwd=path,
         )
     )
-    (environment_site_packages / "emperor-build-dependencies.pth").write_text(
+    (environment_site_packages / "emperor-verified-dependencies.pth").write_text(
         f"{Path(get_path('purelib')).resolve()}\n",
         encoding="utf-8",
     )
     return python
+
+
+def _require_dependency_bridge_isolated(
+    python: Path,
+    *,
+    outside: Path,
+    repository: Path,
+) -> None:
+    probe_code = f"""
+import importlib.util
+import json
+import sys
+
+module_origins = {{}}
+for module_name in {FIRST_PARTY_IMPORT_NAMES!r}:
+    spec = importlib.util.find_spec(module_name)
+    module_origins[module_name] = None if spec is None else spec.origin
+print(json.dumps({{
+    'module_origins': module_origins,
+    'sys_path': sys.path,
+}}, sort_keys=True))
+"""
+    payload = json.loads(
+        _run(
+            [str(python), "-P", "-c", probe_code],
+            cwd=outside,
+            env=_isolated_environment(),
+        ).splitlines()[-1]
+    )
+    leaked_modules = {
+        module_name: origin
+        for module_name, origin in payload["module_origins"].items()
+        if origin is not None
+    }
+    if leaked_modules:
+        raise VerificationError(
+            "The offline dependency bridge exposes first-party host packages "
+            f"before artifact installation: {leaked_modules}"
+        )
+
+    repository_root = repository.resolve()
+    dependency_bridge_root = Path(get_path("purelib")).resolve()
+    leaked_paths = []
+    for raw_path in payload["sys_path"]:
+        if not raw_path:
+            continue
+        path = Path(raw_path).resolve()
+        if path.is_relative_to(repository_root) and path != dependency_bridge_root:
+            leaked_paths.append(str(path))
+    if leaked_paths:
+        raise VerificationError(
+            "The isolated verification environment exposes checkout paths: "
+            f"{sorted(leaked_paths)}"
+        )
 
 
 def _install_editable(python: Path, source: Path, outside: Path) -> None:
@@ -1051,6 +1105,16 @@ def verify(
         regular_environment = root / "regular-environment"
         editable_python = _create_environment(editable_environment)
         regular_python = _create_environment(regular_environment)
+        _require_dependency_bridge_isolated(
+            editable_python,
+            outside=outside,
+            repository=repository,
+        )
+        _require_dependency_bridge_isolated(
+            regular_python,
+            outside=outside,
+            repository=repository,
+        )
         _install_editable(editable_python, editable_source, outside)
         _install_wheel(regular_python, wheel, outside)
         if include_workbench_smoke:
