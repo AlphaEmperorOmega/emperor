@@ -58,14 +58,6 @@ class TransformerEncoderBlockLayerConfig(LayerConfig):
 
 
 @dataclass
-class TransformerDecoderBlockLayerConfig(LayerConfig):
-    def _registry_owner(self) -> type:
-        from emperor.transformer._layers import TransformerDecoderBlockLayer
-
-        return TransformerDecoderBlockLayer
-
-
-@dataclass
 class TransformerDecoderLayerConfig(ConfigBase):
     embedding_dim: int | None = optional_field(
         "Token embedding dimension shared by attention and feed-forward."
@@ -96,6 +88,14 @@ class TransformerDecoderLayerConfig(ConfigBase):
         from emperor.transformer._layers import TransformerDecoderLayer
 
         return TransformerDecoderLayer
+
+
+@dataclass
+class TransformerDecoderBlockLayerConfig(LayerConfig):
+    def _registry_owner(self) -> type:
+        from emperor.transformer._layers import TransformerDecoderBlockLayer
+
+        return TransformerDecoderBlockLayer
 
 
 @dataclass
