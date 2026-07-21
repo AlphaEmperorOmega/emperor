@@ -804,6 +804,82 @@ class TestTransformerModelPackages(unittest.TestCase):
                     rtol=1e-5 if expert else 1e-6,
                 )
 
+    def test_decoder_output_depends_on_source_content(self):
+        for builder_type, model_type, *_rest in self.package_cases():
+            with self.subTest(package=builder_type.__name__):
+                torch.manual_seed(23)
+                model = model_type(
+                    self.preset(
+                        builder_type,
+                        vocab_size=32,
+                        dropout_probability=0.0,
+                    )
+                ).eval()
+                source = torch.tensor([[2, 8, 9, 3]])
+                changed_source = torch.tensor([[2, 18, 19, 3]])
+                target = torch.tensor([[2, 12, 13, 3]])
+
+                with torch.no_grad():
+                    original, _ = model(source, target)
+                    modified, _ = model(changed_source, target)
+
+                self.assertGreater(
+                    torch.max(torch.abs(modified - original)).item(),
+                    1e-5,
+                )
+
+    def test_trailing_source_padding_does_not_change_decoder_output(self):
+        for builder_type, model_type, *_prefix, expert in self.package_cases():
+            with self.subTest(package=builder_type.__name__):
+                torch.manual_seed(29)
+                model = model_type(
+                    self.preset(
+                        builder_type,
+                        vocab_size=32,
+                        dropout_probability=0.0,
+                    )
+                ).eval()
+                source = torch.tensor([[2, 8, 3]])
+                padded_source = torch.tensor([[2, 8, 3, 0, 0]])
+                target = torch.tensor([[2, 12, 13, 3]])
+
+                with torch.no_grad():
+                    original, _ = model(source, target)
+                    padded, _ = model(padded_source, target)
+
+                torch.testing.assert_close(
+                    padded,
+                    original,
+                    atol=1e-5 if expert else 1e-6,
+                    rtol=1e-5 if expert else 1e-6,
+                )
+
+    def test_trailing_target_padding_does_not_change_existing_positions(self):
+        for builder_type, model_type, *_prefix, expert in self.package_cases():
+            with self.subTest(package=builder_type.__name__):
+                torch.manual_seed(31)
+                model = model_type(
+                    self.preset(
+                        builder_type,
+                        vocab_size=32,
+                        dropout_probability=0.0,
+                    )
+                ).eval()
+                source = torch.tensor([[2, 8, 9, 3]])
+                target = torch.tensor([[2, 12, 3]])
+                padded_target = torch.tensor([[2, 12, 3, 0, 0]])
+
+                with torch.no_grad():
+                    original, _ = model(source, target)
+                    padded, _ = model(source, padded_target)
+
+                torch.testing.assert_close(
+                    padded[:, : target.size(1)],
+                    original,
+                    atol=1e-5 if expert else 1e-6,
+                    rtol=1e-5 if expert else 1e-6,
+                )
+
     def test_source_target_and_encoder_padding_masks_propagate(self):
         for builder_type, model_type, *_rest in self.package_cases():
             with self.subTest(package=builder_type.__name__):
