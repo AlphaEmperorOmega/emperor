@@ -202,9 +202,7 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         "docs": sum(name.startswith("docs/") for name in names),
         "emperor": sum(name.startswith("src/emperor/") for name in names),
         "models": sum(name.startswith("src/models/") for name in names),
-        "model_runtime": sum(
-            name.startswith("src/model_runtime/") for name in names
-        ),
+        "model_runtime": sum(name.startswith("src/model_runtime/") for name in names),
         "tests": sum(name.startswith("tests/") for name in names),
         "total": len(names),
     }
