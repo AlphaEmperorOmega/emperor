@@ -13,6 +13,7 @@ from pathlib import Path
 from models.catalog import MODEL_CATALOG
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SOURCE_ROOT = PROJECT_ROOT / "src"
 
 _OPERATIONAL_MODEL_MODULES = frozenset(
     {
@@ -121,7 +122,7 @@ _REMOVED_MODEL_MODULES = (
 
 
 def _module_name(path: Path) -> str:
-    relative = path.relative_to(PROJECT_ROOT).with_suffix("")
+    relative = path.relative_to(SOURCE_ROOT).with_suffix("")
     parts = list(relative.parts)
     if parts[-1] == "__init__":
         parts.pop()
@@ -167,7 +168,7 @@ class TestModelPackageIsolation(unittest.TestCase):
         violations = []
         for entry in MODEL_CATALOG.values():
             package = entry.module_path
-            package_root = PROJECT_ROOT.joinpath(*package.split("."))
+            package_root = SOURCE_ROOT.joinpath(*package.split("."))
             for path in sorted(package_root.rglob("*.py")):
                 for line, imported in _imported_modules(path):
                     if not imported.startswith("models."):
@@ -221,7 +222,7 @@ if loaded:
     def test_obsolete_model_modules_are_removed(self):
         remaining = []
         for module in _REMOVED_MODEL_MODULES:
-            path = PROJECT_ROOT.joinpath(*module.split(".")).with_suffix(".py")
+            path = SOURCE_ROOT.joinpath(*module.split(".")).with_suffix(".py")
             if path.exists():
                 remaining.append(module)
         self.assertEqual(remaining, [])

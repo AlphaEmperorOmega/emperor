@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -10,12 +11,33 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = PROJECT_ROOT / "src"
+PRODUCTION_PACKAGES = ("emperor", "model_runtime", "models")
 PRODUCTION_SOURCE_ROOTS = tuple(
-    SOURCE_ROOT / package for package in ("emperor", "model_runtime", "models")
-)
+    SOURCE_ROOT / package for package in PRODUCTION_PACKAGES
+) + (PROJECT_ROOT / "apps" / "workbench" / "api" / "src" / "emperor_workbench",)
+DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def _dependency_names(requirements: list[str]) -> set[str]:
+    names: set[str] = set()
+    for requirement in requirements:
+        match = DEPENDENCY_NAME.match(requirement)
+        if match is None:
+            raise AssertionError(f"Invalid dependency requirement: {requirement!r}")
+        names.add(re.sub(r"[-_.]+", "-", match.group(0)).lower())
+    return names
 
 
 class DistributionOwnershipTests(unittest.TestCase):
+    def test_distribution_manifest_includes_test_contracts(self) -> None:
+        manifest = (PROJECT_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+
+        self.assertIn("recursive-include tests *.json *.py *.toml", manifest)
+        interface_manifest = (
+            PROJECT_ROOT / "tests" / "architecture" / "emperor_interfaces.toml"
+        )
+        self.assertTrue(interface_manifest.is_file())
+
     def test_executable_tests_are_external_to_production_source(self) -> None:
         leaked_tests = sorted(
             path.relative_to(PROJECT_ROOT).as_posix()
@@ -54,38 +76,66 @@ class DistributionOwnershipTests(unittest.TestCase):
         ) as project_file:
             workbench = tomllib.load(project_file)
 
-        root_requirements = tuple(project["project"]["dependencies"])
-        forbidden_roots = (
-            "fastapi",
-            "httpx",
-            "psutil",
-            "pydantic-settings",
-            "starlette",
-            "uvicorn",
-            "pywin32",
+        root_runtime = _dependency_names(project["project"]["dependencies"])
+        root_dev = _dependency_names(project["project"]["optional-dependencies"]["dev"])
+        self.assertEqual(
+            root_runtime,
+            {
+                "datasets",
+                "filelock",
+                "gymnasium",
+                "ipython",
+                "lightning",
+                "matplotlib",
+                "numpy",
+                "pillow",
+                "tensorboard",
+                "tokenizers",
+                "torch",
+                "torchmetrics",
+                "torchtext",
+                "torchvision",
+            },
         )
-        for dependency in forbidden_roots:
-            with self.subTest(dependency=dependency):
-                self.assertFalse(
-                    any(
-                        requirement.partition("[")[0]
-                        .partition(">=")[0]
-                        .partition(";")[0]
-                        .strip()
-                        == dependency
-                        for requirement in root_requirements
-                    )
-                )
+        self.assertEqual(
+            root_dev,
+            {
+                "build",
+                "coverage",
+                "mutmut",
+                "psutil",
+                "ruff",
+            },
+        )
 
-        workbench_requirements = "\n".join(
-            [
-                *workbench["project"]["dependencies"],
-                *workbench["project"]["optional-dependencies"]["dev"],
-            ]
+        workbench_runtime = _dependency_names(workbench["project"]["dependencies"])
+        workbench_dev = _dependency_names(
+            workbench["project"]["optional-dependencies"]["dev"]
         )
-        for dependency in forbidden_roots:
-            with self.subTest(workbench_dependency=dependency):
-                self.assertIn(dependency, workbench_requirements)
+        self.assertEqual(
+            workbench_runtime,
+            {
+                "emperor",
+                "fastapi",
+                "pydantic",
+                "pydantic-settings",
+                "pywin32",
+                "starlette",
+                "tensorboard",
+                "torch",
+                "typing-extensions",
+                "uvicorn",
+            },
+        )
+        self.assertEqual(
+            workbench_dev,
+            {
+                "httpx",
+                "psutil",
+                "pytest",
+                "ruff",
+            },
+        )
         self.assertEqual(
             workbench["project"]["scripts"]["emperor-workbench"],
             "emperor_workbench.cli:main",

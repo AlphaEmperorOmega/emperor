@@ -61,6 +61,8 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             or module.startswith("models.")
             or module == "workbench"
             or module.startswith("workbench.")
+            or module == "emperor_workbench"
+            or module.startswith("emperor_workbench.")
         ]
 
         self.assertEqual(forbidden, [])
@@ -73,6 +75,8 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             or module.startswith("models.")
             or module == "workbench"
             or module.startswith("workbench.")
+            or module == "emperor_workbench"
+            or module.startswith("emperor_workbench.")
         ]
 
         self.assertEqual(forbidden, [])

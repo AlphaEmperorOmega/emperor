@@ -6,16 +6,16 @@ from pathlib import Path
 
 from emperor.config import ModelConfig
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
-from emperor.experiments.tasks import ExperimentTask
-from models.catalog import MODEL_CATALOG
-
+from emperor.experiments import ExperimentTask
 from model_runtime.packages import PresetDefinition
+from models.catalog import MODEL_CATALOG
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELS_ROOT = PROJECT_ROOT / "models"
+SOURCE_ROOT = PROJECT_ROOT / "src"
+MODELS_ROOT = SOURCE_ROOT / "models"
 MODEL_PACKAGE_TESTS_ROOT = PROJECT_ROOT / "tests" / "model_packages"
 
 _STANDARD_PUBLIC_EXPORTS = ("Experiment", "ExperimentPreset")
@@ -221,12 +221,8 @@ class TestModelConventions(unittest.TestCase):
             bert_monitors_module = import_module(
                 f"models.bert.{backend}.monitor_options"
             )
-            gpt_monitors_module = import_module(
-                f"models.gpt.{backend}.monitor_options"
-            )
-            gpt_datasets_module = import_module(
-                f"models.gpt.{backend}.dataset_options"
-            )
+            gpt_monitors_module = import_module(f"models.gpt.{backend}.monitor_options")
+            gpt_datasets_module = import_module(f"models.gpt.{backend}.dataset_options")
             bert_search_module = import_module(f"models.bert.{backend}.search_space")
             gpt_search_module = import_module(f"models.gpt.{backend}.search_space")
 
@@ -311,7 +307,7 @@ class TestModelConventions(unittest.TestCase):
 
     def test_catalog_entrypoints_are_identity_adapters_for_shared_runner(self):
         for entry in MODEL_CATALOG.values():
-            package_root = PROJECT_ROOT.joinpath(*entry.module_path.split("."))
+            package_root = SOURCE_ROOT.joinpath(*entry.module_path.split("."))
             source = (package_root / "__main__.py").read_text()
 
             with self.subTest(package=entry.module_path):
@@ -343,7 +339,7 @@ class TestModelConventions(unittest.TestCase):
         ):
             module_name = f"{package}.runtime_options"
             module = import_module(module_name)
-            path = PROJECT_ROOT.joinpath(*module_name.split(".")).with_suffix(".py")
+            path = SOURCE_ROOT.joinpath(*module_name.split(".")).with_suffix(".py")
             tree = ast.parse(path.read_text(), filename=str(path))
             defined_names = [
                 node.name
@@ -369,7 +365,7 @@ class TestModelConventions(unittest.TestCase):
 
     def test_catalog_packages_have_one_external_test_module(self):
         for entry in MODEL_CATALOG.values():
-            package_root = PROJECT_ROOT.joinpath(*entry.module_path.split("."))
+            package_root = SOURCE_ROOT.joinpath(*entry.module_path.split("."))
             relative_package = entry.module_path.removeprefix("models.").split(".")
             external_test_root = MODEL_PACKAGE_TESTS_ROOT.joinpath(*relative_package)
 
@@ -459,7 +455,7 @@ class TestModelConventions(unittest.TestCase):
 
     def test_presets_keep_values_and_descriptions_together(self):
         for path in sorted(MODELS_ROOT.glob("**/presets.py")):
-            module_name = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts)
+            module_name = ".".join(path.relative_to(SOURCE_ROOT).with_suffix("").parts)
             module = import_module(module_name)
             preset_enum = module.ExperimentPreset
             presets = module.ExperimentPresets()
