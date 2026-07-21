@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
+import configparser
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -11,6 +14,8 @@ import tarfile
 import tempfile
 import venv
 import zipfile
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path, PurePosixPath
 from sysconfig import get_path
 
@@ -39,10 +44,464 @@ IGNORED_TREE_NAMES = (
     "build",
     "*.egg-info",
 )
+ROOT_RUNTIME_DEPENDENCIES = frozenset(
+    {
+        "datasets",
+        "filelock",
+        "gymnasium",
+        "ipython",
+        "lightning",
+        "matplotlib",
+        "numpy",
+        "pillow",
+        "tensorboard",
+        "tokenizers",
+        "torch",
+        "torchmetrics",
+        "torchtext",
+        "torchvision",
+    }
+)
+ROOT_DEV_DEPENDENCIES = frozenset(
+    {
+        "build",
+        "coverage",
+        "mutmut",
+        "psutil",
+        "ruff",
+    }
+)
+ROOT_RUNTIME_REQUIREMENTS = frozenset(
+    {
+        "Pillow",
+        "datasets",
+        "filelock>=3.18,<4",
+        "gymnasium",
+        "ipython",
+        "lightning",
+        "matplotlib",
+        "numpy",
+        "tensorboard",
+        "tokenizers",
+        "torch",
+        "torchmetrics",
+        "torchtext",
+        "torchvision",
+    }
+)
+ROOT_DEV_REQUIREMENTS = frozenset(
+    {
+        "build>=1.2,<2",
+        "coverage[toml]>=7.15,<8",
+        "mutmut>=3.6,<4",
+        "psutil>=7,<8",
+        "ruff>=0.8,<0.14",
+    }
+)
+WORKBENCH_RUNTIME_DEPENDENCIES = frozenset(
+    {
+        "emperor",
+        "fastapi",
+        "pydantic",
+        "pydantic-settings",
+        "pywin32",
+        "starlette",
+        "tensorboard",
+        "torch",
+        "typing-extensions",
+        "uvicorn",
+    }
+)
+WORKBENCH_DEV_DEPENDENCIES = frozenset(
+    {
+        "httpx",
+        "psutil",
+        "pytest",
+        "ruff",
+    }
+)
+WORKBENCH_RUNTIME_REQUIREMENTS = frozenset(
+    {
+        "emperor>=0.1,<0.2",
+        "fastapi>=0.139,<0.140",
+        "pydantic-settings",
+        "pydantic>=2.7,<3",
+        "pywin32>=311; sys_platform == 'win32'",
+        "starlette>=1.3,<1.4",
+        "tensorboard",
+        "torch",
+        "typing-extensions>=4.8,<5",
+        "uvicorn[standard]>=0.51,<0.52",
+    }
+)
+WORKBENCH_DEV_REQUIREMENTS = frozenset(
+    {
+        "httpx>=0.28,<0.29",
+        "psutil>=7,<8",
+        "pytest>=9,<10",
+        "ruff>=0.8,<0.14",
+    }
+)
+ROOT_IMPORT_DEPENDENCIES = {
+    "IPython": "ipython",
+    "PIL": "pillow",
+    "datasets": "datasets",
+    "filelock": "filelock",
+    "gymnasium": "gymnasium",
+    "lightning": "lightning",
+    "matplotlib": "matplotlib",
+    "numpy": "numpy",
+    "tokenizers": "tokenizers",
+    "torch": "torch",
+    "torchmetrics": "torchmetrics",
+    "torchtext": "torchtext",
+    "torchvision": "torchvision",
+}
+WORKBENCH_IMPORT_DEPENDENCIES = {
+    "emperor": "emperor",
+    "fastapi": "fastapi",
+    "model_runtime": "emperor",
+    "models": "emperor",
+    "ntsecuritycon": "pywin32",
+    "pydantic": "pydantic",
+    "pydantic_settings": "pydantic-settings",
+    "pywintypes": "pywin32",
+    "starlette": "starlette",
+    "tensorboard": "tensorboard",
+    "torch": "torch",
+    "typing_extensions": "typing-extensions",
+    "uvicorn": "uvicorn",
+    "win32api": "pywin32",
+    "win32con": "pywin32",
+    "win32event": "pywin32",
+    "win32file": "pywin32",
+    "win32job": "pywin32",
+    "win32process": "pywin32",
+    "win32security": "pywin32",
+}
+_DEPENDENCY_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+_EXTRA_MARKER = re.compile(r"\bextra\s*==\s*(['\"])(?P<extra>[^'\"]+)\1")
+FIRST_PARTY_IMPORT_NAMES = (
+    "emperor",
+    "emperor_workbench",
+    "model_runtime",
+    "models",
+)
+WORKBENCH_WORKER_MODULES = (
+    "emperor_workbench.inspection.worker",
+    "emperor_workbench.training_jobs.worker",
+    "emperor_workbench.training_jobs.cgroup_worker",
+)
+WORKBENCH_REQUIRED_WORKER_MEMBERS = frozenset(
+    f"{module_name.replace('.', '/')}.py" for module_name in WORKBENCH_WORKER_MODULES
+)
+WORKBENCH_REQUIRED_WHEEL_MEMBERS = frozenset(
+    {
+        "emperor_workbench/__init__.py",
+        "emperor_workbench/__main__.py",
+        "emperor_workbench/api/__init__.py",
+        "emperor_workbench/cli.py",
+        "emperor_workbench/inspection/__init__.py",
+        "emperor_workbench/training_jobs/__init__.py",
+        *WORKBENCH_REQUIRED_WORKER_MEMBERS,
+    }
+)
+WORKBENCH_REQUIRED_SDIST_MEMBERS = frozenset(
+    {
+        "MANIFEST.in",
+        "README.md",
+        "pyproject.toml",
+        "tests/__init__.py",
+        "tests/e2e/browser_performance_server.py",
+        "tests/e2e/contract_server.py",
+        "tests/fixtures/inspection_contract_v1.json",
+        "tests/support/http.py",
+        "tests/support/inspection.py",
+        "tests/support/model_packages.py",
+        "tests/support/training_jobs.py",
+        *(f"src/{member}" for member in WORKBENCH_REQUIRED_WHEEL_MEMBERS),
+    }
+)
 
 
 class VerificationError(RuntimeError):
     """Raised when an artifact or installed-behavior contract is violated."""
+
+
+def _canonical_dependency_name(requirement: str) -> str:
+    match = _DEPENDENCY_NAME.match(requirement)
+    if match is None:
+        raise VerificationError(f"Invalid Requires-Dist value: {requirement!r}")
+    return re.sub(r"[-_.]+", "-", match.group(0)).lower()
+
+
+def _normalize_marker(marker: str) -> str:
+    return re.sub(r"\s+", " ", marker.replace("'", '"')).strip()
+
+
+def _requirement_contract(
+    requirement: str,
+    *,
+    strip_extra_marker: bool,
+) -> str:
+    requirement_body, separator, marker = requirement.partition(";")
+    name_match = _DEPENDENCY_NAME.match(requirement_body)
+    if name_match is None:
+        raise VerificationError(f"Invalid dependency requirement: {requirement!r}")
+    name = _canonical_dependency_name(requirement_body)
+    remainder = requirement_body[name_match.end() :].strip()
+
+    extras: tuple[str, ...] = ()
+    if remainder.startswith("["):
+        extras_end = remainder.find("]")
+        if extras_end == -1:
+            raise VerificationError(f"Invalid dependency extras: {requirement!r}")
+        extras = tuple(
+            sorted(
+                extra.strip().lower()
+                for extra in remainder[1:extras_end].split(",")
+                if extra.strip()
+            )
+        )
+        remainder = remainder[extras_end + 1 :].strip()
+
+    specifiers = tuple(
+        sorted(specifier.strip() for specifier in remainder.split(",") if specifier)
+    )
+    normalized_marker = _normalize_marker(marker) if separator else ""
+    if strip_extra_marker and normalized_marker:
+        extra_match = _EXTRA_MARKER.search(normalized_marker)
+        if extra_match is None:
+            raise VerificationError(
+                f"Development dependency is missing its extra marker: {requirement!r}"
+            )
+        normalized_marker = (
+            normalized_marker[: extra_match.start()]
+            + normalized_marker[extra_match.end() :]
+        ).strip()
+        normalized_marker = re.sub(
+            r"^(?:and|or)\s+|\s+(?:and|or)$",
+            "",
+            normalized_marker,
+        ).strip()
+
+    return "|".join(
+        (
+            name,
+            f"extras={','.join(extras)}",
+            f"specifiers={','.join(specifiers)}",
+            f"marker={normalized_marker}",
+        )
+    )
+
+
+def _wheel_dependency_groups(
+    archive: zipfile.ZipFile,
+    *,
+    distribution_name: str,
+) -> tuple[
+    frozenset[str],
+    frozenset[str],
+    frozenset[str],
+    frozenset[str],
+]:
+    metadata_members = [
+        name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+    ]
+    if len(metadata_members) != 1:
+        raise VerificationError(
+            f"Expected one wheel METADATA file, found {metadata_members!r}."
+        )
+    metadata = BytesParser(policy=default).parsebytes(archive.read(metadata_members[0]))
+    actual_name = re.sub(
+        r"[-_.]+",
+        "-",
+        str(metadata.get("Name", "")).strip(),
+    ).lower()
+    expected_name = re.sub(r"[-_.]+", "-", distribution_name).lower()
+    if actual_name != expected_name:
+        raise VerificationError(
+            "Wheel METADATA distribution name differs from the expected "
+            f"distribution: expected={expected_name!r}, actual={actual_name!r}."
+        )
+
+    runtime_dependencies: set[str] = set()
+    dev_dependencies: set[str] = set()
+    runtime_requirements: set[str] = set()
+    dev_requirements: set[str] = set()
+    for requirement in metadata.get_all("Requires-Dist", []):
+        dependency_name = _canonical_dependency_name(requirement)
+        extra_match = _EXTRA_MARKER.search(requirement)
+        if extra_match is None:
+            runtime_dependencies.add(dependency_name)
+            runtime_requirements.add(requirement)
+            continue
+        extra = extra_match.group("extra")
+        if extra != "dev":
+            raise VerificationError(
+                f"Unexpected dependency extra {extra!r}: {requirement!r}"
+            )
+        dev_dependencies.add(dependency_name)
+        dev_requirements.add(requirement)
+    return (
+        frozenset(runtime_dependencies),
+        frozenset(dev_dependencies),
+        frozenset(runtime_requirements),
+        frozenset(dev_requirements),
+    )
+
+
+def _wheel_imported_dependencies(
+    archive: zipfile.ZipFile,
+    *,
+    package_prefixes: tuple[str, ...],
+    first_party_imports: frozenset[str],
+    import_dependencies: dict[str, str],
+) -> frozenset[str]:
+    imported_dependencies: set[str] = set()
+    unmapped_imports: set[str] = set()
+    for member_name in archive.namelist():
+        if not member_name.endswith(".py") or not member_name.startswith(
+            package_prefixes
+        ):
+            continue
+        source = archive.read(member_name).decode("utf-8")
+        tree = ast.parse(source, member_name)
+        imported_modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported_modules.update(
+                    alias.name.partition(".")[0] for alias in node.names
+                )
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.level == 0
+                and node.module is not None
+            ):
+                imported_modules.add(node.module.partition(".")[0])
+        for module_name in imported_modules:
+            if (
+                module_name in sys.stdlib_module_names
+                or module_name in first_party_imports
+            ):
+                continue
+            dependency_name = import_dependencies.get(module_name)
+            if dependency_name is None:
+                unmapped_imports.add(module_name)
+            else:
+                imported_dependencies.add(dependency_name)
+    if unmapped_imports:
+        raise VerificationError(
+            "Wheel source imports external modules without a declared "
+            f"distribution mapping: {sorted(unmapped_imports)}"
+        )
+    return frozenset(imported_dependencies)
+
+
+def _verify_direct_dependencies(
+    archive: zipfile.ZipFile,
+    *,
+    distribution_name: str,
+    expected_runtime: frozenset[str],
+    expected_dev: frozenset[str],
+    expected_runtime_requirements: frozenset[str],
+    expected_dev_requirements: frozenset[str],
+    package_prefixes: tuple[str, ...],
+    first_party_imports: frozenset[str],
+    import_dependencies: dict[str, str],
+) -> dict[str, list[str]]:
+    (
+        runtime_dependencies,
+        dev_dependencies,
+        runtime_requirements,
+        dev_requirements,
+    ) = _wheel_dependency_groups(archive, distribution_name=distribution_name)
+    if runtime_dependencies != expected_runtime:
+        raise VerificationError(
+            f"{distribution_name} runtime dependencies differ from the direct "
+            "dependency contract: "
+            f"missing={sorted(expected_runtime - runtime_dependencies)}, "
+            f"unexpected={sorted(runtime_dependencies - expected_runtime)}."
+        )
+    if dev_dependencies != expected_dev:
+        raise VerificationError(
+            f"{distribution_name} dev dependencies differ from the direct "
+            "dependency contract: "
+            f"missing={sorted(expected_dev - dev_dependencies)}, "
+            f"unexpected={sorted(dev_dependencies - expected_dev)}."
+        )
+    actual_runtime_contracts = {
+        _requirement_contract(requirement, strip_extra_marker=False)
+        for requirement in runtime_requirements
+    }
+    expected_runtime_contracts = {
+        _requirement_contract(requirement, strip_extra_marker=False)
+        for requirement in expected_runtime_requirements
+    }
+    actual_dev_contracts = {
+        _requirement_contract(requirement, strip_extra_marker=True)
+        for requirement in dev_requirements
+    }
+    expected_dev_contracts = {
+        _requirement_contract(requirement, strip_extra_marker=False)
+        for requirement in expected_dev_requirements
+    }
+    if actual_runtime_contracts != expected_runtime_contracts:
+        missing_runtime_contracts = sorted(
+            expected_runtime_contracts - actual_runtime_contracts
+        )
+        unexpected_runtime_contracts = sorted(
+            actual_runtime_contracts - expected_runtime_contracts
+        )
+        raise VerificationError(
+            f"{distribution_name} runtime requirement metadata differs from "
+            "the version/extras/marker contract: "
+            f"missing={missing_runtime_contracts}, "
+            f"unexpected={unexpected_runtime_contracts}."
+        )
+    if actual_dev_contracts != expected_dev_contracts:
+        raise VerificationError(
+            f"{distribution_name} dev requirement metadata differs from the "
+            "version/extras contract: "
+            f"missing={sorted(expected_dev_contracts - actual_dev_contracts)}, "
+            f"unexpected={sorted(actual_dev_contracts - expected_dev_contracts)}."
+        )
+
+    imported_dependencies = _wheel_imported_dependencies(
+        archive,
+        package_prefixes=package_prefixes,
+        first_party_imports=first_party_imports,
+        import_dependencies=import_dependencies,
+    )
+    missing_import_dependencies = imported_dependencies - runtime_dependencies
+    if missing_import_dependencies:
+        raise VerificationError(
+            f"{distribution_name} source imports undeclared direct dependencies: "
+            f"{sorted(missing_import_dependencies)}"
+        )
+    return {
+        "runtime_dependencies": sorted(runtime_dependencies),
+        "dev_dependencies": sorted(dev_dependencies),
+        "imported_dependencies": sorted(imported_dependencies),
+    }
+
+
+def _wheel_console_scripts(archive: zipfile.ZipFile) -> dict[str, str]:
+    members = [
+        name
+        for name in archive.namelist()
+        if name.endswith(".dist-info/entry_points.txt")
+    ]
+    if len(members) != 1:
+        raise VerificationError(
+            f"Expected one wheel entry_points.txt file, found {members!r}."
+        )
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str
+    parser.read_string(archive.read(members[0]).decode("utf-8"))
+    if not parser.has_section("console_scripts"):
+        raise VerificationError("Wheel has no console_scripts entry-point group.")
+    return dict(parser.items("console_scripts"))
 
 
 def _run(
@@ -116,9 +575,26 @@ print(build_sdist('artifacts'))
     return wheel, sdist
 
 
-def _verify_wheel(wheel: Path) -> dict[str, int]:
+def _verify_wheel(wheel: Path) -> dict[str, int | list[str]]:
     with zipfile.ZipFile(wheel) as archive:
         names = [name for name in archive.namelist() if not name.endswith("/")]
+        dependency_manifest = _verify_direct_dependencies(
+            archive,
+            distribution_name="emperor",
+            expected_runtime=ROOT_RUNTIME_DEPENDENCIES,
+            expected_dev=ROOT_DEV_DEPENDENCIES,
+            expected_runtime_requirements=ROOT_RUNTIME_REQUIREMENTS,
+            expected_dev_requirements=ROOT_DEV_REQUIREMENTS,
+            package_prefixes=("emperor/", "model_runtime/", "models/"),
+            first_party_imports=frozenset(
+                {
+                    "emperor",
+                    "model_runtime",
+                    "models",
+                }
+            ),
+            import_dependencies=ROOT_IMPORT_DEPENDENCIES,
+        )
 
     unexpected = sorted(
         name
@@ -150,7 +626,7 @@ def _verify_wheel(wheel: Path) -> dict[str, int]:
     }
     if any(counts[package] == 0 for package in ("emperor", "models", "model_runtime")):
         raise VerificationError(f"Installable packages missing from wheel: {counts}")
-    return counts
+    return {**counts, **dependency_manifest}
 
 
 def _strip_sdist_root(name: str) -> str:
@@ -208,9 +684,30 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
     }
 
 
-def _verify_workbench_wheel(wheel: Path) -> dict[str, int]:
+def _verify_workbench_wheel(wheel: Path) -> dict[str, int | list[str]]:
     with zipfile.ZipFile(wheel) as archive:
         names = [name for name in archive.namelist() if not name.endswith("/")]
+        console_scripts = _wheel_console_scripts(archive)
+        dependency_manifest = _verify_direct_dependencies(
+            archive,
+            distribution_name="emperor-workbench",
+            expected_runtime=WORKBENCH_RUNTIME_DEPENDENCIES,
+            expected_dev=WORKBENCH_DEV_DEPENDENCIES,
+            expected_runtime_requirements=WORKBENCH_RUNTIME_REQUIREMENTS,
+            expected_dev_requirements=WORKBENCH_DEV_REQUIREMENTS,
+            package_prefixes=("emperor_workbench/",),
+            first_party_imports=frozenset({"emperor_workbench"}),
+            import_dependencies=WORKBENCH_IMPORT_DEPENDENCIES,
+        )
+    expected_console_scripts = {
+        "emperor-workbench": "emperor_workbench.cli:main",
+    }
+    if console_scripts != expected_console_scripts:
+        raise VerificationError(
+            "Workbench console scripts differ from the canonical entry-point "
+            f"contract: expected={expected_console_scripts}, "
+            f"actual={console_scripts}."
+        )
 
     unexpected = sorted(
         name
@@ -222,26 +719,37 @@ def _verify_workbench_wheel(wheel: Path) -> dict[str, int]:
     )
     if unexpected:
         raise VerificationError(f"Unexpected Workbench wheel members: {unexpected}")
-    leaked_tests = sorted(
-        name for name in names if name.startswith("emperor_workbench/tests/")
+    executable_tests = sorted(
+        name
+        for name in names
+        if PurePosixPath(name).name.startswith("test") and name.endswith(".py")
     )
-    if leaked_tests:
-        raise VerificationError(f"Tests leaked into Workbench wheel: {leaked_tests}")
-    required = {
-        "emperor_workbench/__init__.py",
-        "emperor_workbench/__main__.py",
-        "emperor_workbench/api/__init__.py",
-        "emperor_workbench/cli.py",
-    }
-    missing = sorted(required.difference(names))
+    if executable_tests:
+        raise VerificationError(
+            f"Tests leaked into Workbench wheel: {executable_tests}"
+        )
+    missing = sorted(WORKBENCH_REQUIRED_WHEEL_MEMBERS.difference(names))
     if missing:
         raise VerificationError(f"Workbench wheel is missing: {missing}")
-    return {
+    forbidden = {"emperor_workbench/launch.py"}.intersection(names)
+    if forbidden:
+        raise VerificationError(
+            f"Legacy Workbench launcher leaked into wheel: {sorted(forbidden)}"
+        )
+    counts = {
         "emperor_workbench": sum(
             name.startswith("emperor_workbench/") for name in names
         ),
         "metadata": sum(".dist-info/" in name for name in names),
         "total": len(names),
+    }
+    return {
+        **counts,
+        **dependency_manifest,
+        "console_scripts": sorted(
+            f"{name}={target}" for name, target in console_scripts.items()
+        ),
+        "required_members": sorted(WORKBENCH_REQUIRED_WHEEL_MEMBERS),
     }
 
 
