@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from collections import Counter
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -20,7 +21,9 @@ from emperor_workbench.inspection import (
     InspectionFailure,
 )
 from tests.support.inspection import (
+    discover_models,
     inspect_model,
+    list_model_presets,
     serialize_graph,
 )
 from tests.unit.inspection._graph_support import (
@@ -311,6 +314,23 @@ class InspectionGraphTopologyTests(unittest.TestCase):
                 for type_name in linear_type_names
             )
         )
+
+    def test_graph_serializer_outputs_unique_node_and_edge_ids(self) -> None:
+        for model in discover_models():
+            with self.subTest(model=model):
+                preset = list_model_presets(model)[0]["name"]
+                result = inspect_model(model, preset)
+                node_counts = Counter(node["id"] for node in result["nodes"])
+                edge_counts = Counter(edge["id"] for edge in result["edges"])
+                self.assertEqual(
+                    [],
+                    [node_id for node_id, count in node_counts.items() if count > 1],
+                )
+                self.assertEqual(
+                    [],
+                    [edge_id for edge_id, count in edge_counts.items() if count > 1],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
