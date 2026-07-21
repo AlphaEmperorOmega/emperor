@@ -3,6 +3,7 @@ import importlib
 import unittest
 from pathlib import Path
 
+import emperor.layers as layers
 import emperor.transformer as transformer
 
 TRANSFORMER_EXPORTS = (
@@ -88,6 +89,18 @@ class TestTransformerInterface(unittest.TestCase):
             with self.subTest(config_type=config_type.__name__):
                 field_names = {field.name for field in dataclasses.fields(config_type)}
                 self.assertNotIn("causal_attention_mask_flag", field_names)
+
+    def test_mirrored_stack_is_public_layer_component(self):
+        self.assertIn("MirroredLayerStack", layers.__all__)
+        self.assertIn("MirroredLayerStackConfig", layers.__all__)
+        self.assertEqual(
+            layers.MirroredLayerStack.__module__,
+            "emperor.layers._mirrored",
+        )
+        self.assertEqual(
+            layers.MirroredLayerStackConfig.__module__,
+            "emperor.layers._config",
+        )
 
     def test_removed_modules_do_not_exist(self):
         package_root = Path(transformer.__file__).resolve().parent
