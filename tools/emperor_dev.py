@@ -570,11 +570,14 @@ def _torch_install_matches_profile(
 
 def _dependencies_available(python: Path) -> bool:
     modules = (
+        "emperor",
         "emperor_workbench",
         "fastapi",
         "filelock",
         "httpx",
         "lightning.pytorch",
+        "model_runtime",
+        "models",
         "psutil",
         "pydantic_settings",
         "ruff",

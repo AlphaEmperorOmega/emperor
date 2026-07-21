@@ -80,6 +80,20 @@ class PortableLauncherTests(unittest.TestCase):
 
         self.assertNotIn("PYTHONPATH", run.call_args.kwargs["env"])
 
+    def test_dependency_probe_requires_project_packages(self) -> None:
+        with patch.object(emperor_dev.subprocess, "run") as run:
+            run.return_value.returncode = 0
+
+            available = emperor_dev._dependencies_available(Path("python"))
+
+        self.assertTrue(available)
+        command = run.call_args.args[0]
+        self.assertTrue(
+            {"emperor", "emperor_workbench", "model_runtime", "models"}.issubset(
+                command
+            )
+        )
+
     def test_workbench_status_trusts_the_checkout_when_already_in_venv(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             environment = {
