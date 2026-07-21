@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from model_runtime.packages.identity import is_safe_model_segment, split_model_id
 from models.catalog import (
     catalog_entry,
     discover_model_identities_for_type,
@@ -15,8 +16,6 @@ from models.catalog import (
     model_type_exists,
     public_id_for_flat_name,
 )
-
-from model_runtime.packages.identity import is_safe_model_segment, split_model_id
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -370,6 +369,8 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
         self.assertEqual(completed.stderr, "")
         self.assertIn("--resume-checkpoint <path>", completed.stdout)
         self.assertIn("--datasets mnist --resume-checkpoint", completed.stdout)
+        self.assertIn("--print-model-shapes", completed.stdout)
+        self.assertIn("--print-model-tensor-shapes", completed.stdout)
 
     def test_list_model_types_prints_copyable_model_type_flags(self):
         completed = self.run_experiment("--list-model-types")
@@ -728,6 +729,68 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
         self.assertGreater(payload["parameterCount"], 0)
         self.assertTrue(payload["nodes"])
 
+    def test_print_model_shapes_annotates_the_existing_tree(self):
+        completed = self.run_experiment(
+            "--model-type",
+            "linears",
+            "--model",
+            "linear",
+            "--preset",
+            "baseline",
+            "--datasets",
+            "mnist",
+            "--print-model-shapes",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stderr, "")
+        self.assertIn(
+            "shape sample: dataset=Mnist, task=image-classification, "
+            "batch=1, mode=eval/no_grad",
+            completed.stdout,
+        )
+        self.assertIn(
+            "model: Model {in: X=float32[1,1,28,28] -> out: output=float32[1,10]}",
+            completed.stdout,
+        )
+        self.assertIn("input_model: Layer", completed.stdout)
+        self.assertIn(
+            "in: state.hidden=float32[1,784] -> out: output.hidden=float32[1,32]",
+            completed.stdout,
+        )
+        self.assertIn("loss_fn: CrossEntropyLoss {not called}", completed.stdout)
+
+    def test_print_model_tensor_shapes_adds_executed_method_locals(self):
+        completed = self.run_experiment(
+            "--model-type",
+            "linears",
+            "--model",
+            "linear",
+            "--preset",
+            "baseline",
+            "--datasets",
+            "mnist",
+            "--print-model-tensor-shapes",
+            "--config",
+            "--stack-num-layers",
+            "1",
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stderr, "")
+        self.assertIn("tensor variables (executed Python):", completed.stdout)
+        self.assertIn(
+            "model :: Model.forward (models/linears/linear/model.py:",
+            completed.stdout,
+        )
+        self.assertIn("X=float32[1,1,28,28]", completed.stdout)
+        self.assertIn("X=float32[1,784]", completed.stdout)
+        self.assertIn("LinearLayer.forward", completed.stdout)
+        self.assertNotIn(
+            "emperor/development/001_emperor/src/",
+            completed.stdout,
+        )
+
     def test_training_command_forwards_monitor_names_to_model_module(self):
         completed = self.run_model_command_with_python_stub(
             "--preset",
@@ -775,6 +838,61 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 "mnist",
                 "--resume-checkpoint",
                 "logs/source/checkpoints/last.ckpt",
+            ],
+        )
+
+    def test_legacy_model_command_translates_shape_inspection_flags(self):
+        cases = (
+            ("--print-model-shapes", "outputs"),
+            ("--print-model-tensor-shapes", "variables"),
+        )
+
+        for flag, detail in cases:
+            with self.subTest(flag=flag):
+                completed = self.run_model_command_with_python_stub(
+                    "--preset",
+                    "baseline",
+                    flag,
+                )
+
+                self.assertEqual(completed.returncode, 0)
+                self.assertEqual(completed.stderr, "")
+                self.assertEqual(
+                    completed.stdout.splitlines(),
+                    [
+                        "-m",
+                        "models.project_cli",
+                        "inspect",
+                        "--model-type",
+                        "linears",
+                        "--model",
+                        "linear",
+                        "--preset",
+                        "baseline",
+                        "--shape-trace",
+                        detail,
+                    ],
+                )
+
+    def test_legacy_model_command_defers_conflicting_inspection_flags(self):
+        completed = self.run_model_command_with_python_stub(
+            "--print-model",
+            "--print-model-shapes",
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "-m",
+                "models.project_cli",
+                "--model-type",
+                "linears",
+                "--model",
+                "linear",
+                "--print-model",
+                "--print-model-shapes",
             ],
         )
 
