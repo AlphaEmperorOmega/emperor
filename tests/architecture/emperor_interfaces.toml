@@ -1,0 +1,360 @@
+schema_version = 1
+migration_complete = false
+
+public_interfaces = [
+  "emperor.config",
+  "emperor.nn",
+  "emperor.monitoring",
+  "emperor.layers",
+  "emperor.attention",
+  "emperor.attention.monitoring",
+  "emperor.augmentations",
+  "emperor.augmentations.adaptive_parameters",
+  "emperor.augmentations.adaptive_parameters.monitoring",
+  "emperor.convs",
+  "emperor.datasets.image.classification",
+  "emperor.datasets.text.bert_pretraining",
+  "emperor.datasets.text.language_modeling",
+  "emperor.datasets.text.translation",
+  "emperor.embedding",
+  "emperor.embedding.absolute",
+  "emperor.embedding.relative",
+  "emperor.experiments",
+  "emperor.experiments.bert_pretraining",
+  "emperor.experiments.classifier",
+  "emperor.experiments.language_model",
+  "emperor.experiments.masked_language_model",
+  "emperor.experiments.sequence_classifier",
+  "emperor.experiments.translation",
+  "emperor.experts",
+  "emperor.halting",
+  "emperor.linears",
+  "emperor.memory",
+  "emperor.memory.monitoring",
+  "emperor.neuron",
+  "emperor.parametric",
+  "emperor.patch",
+  "emperor.sampler",
+  "emperor.transformer",
+]
+
+pending_interfaces = []
+
+legacy_import_count = 0
+legacy_import_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+allowed_legacy_modules = []
+
+legacy_import_scopes = [
+  { root = "src/model_runtime", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "src/models", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "apps/workbench/api/src", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "apps/workbench/api/tests", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "tests/contract", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "tests/integration", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "tests/model_packages", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "tests/support", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+  { root = "tools", count = 0, sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+]
+
+legacy_cross_owner_private_imports = [
+  { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._config._MixtureOfExpertsMapConfig" },
+  { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._config._MixtureOfExpertsReduceConfig" },
+  { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._layers.mixture.MixtureOfExperts" },
+]
+
+legacy_dependency_cycles = ["emperor.layers,emperor.memory"]
+
+[protected_interfaces."emperor.config"]
+exports = ["BaseOptions", "ConfigBase", "ModelConfig", "optional_field"]
+
+[protected_interfaces."emperor.nn"]
+exports = ["Module"]
+
+[protected_interfaces."emperor.monitoring"]
+exports = [
+  "MonitorOption",
+  "MonitorSettings",
+  "MonitorEmissionPolicy",
+  "MonitorTensorHistory",
+]
+
+[protected_interfaces."emperor.layers"]
+exports = [
+  "ActivationOptions",
+  "GateConfig",
+  "LastLayerBiasOptions",
+  "LayerConfig",
+  "LayerGateOptions",
+  "LayerNormPositionOptions",
+  "LayerStackConfig",
+  "MirroredLayerStackConfig",
+  "RecurrentLayerConfig",
+  "ResidualConfig",
+  "ResidualConnectionOptions",
+  "LayerState",
+  "ResidualConnection",
+  "Layer",
+  "LayerStack",
+  "MirroredLayerStack",
+  "RecurrentLayer",
+  "LayerControllerMonitorCallback",
+  "RecurrentLayerMonitorCallback",
+]
+
+[protected_interfaces."emperor.attention"]
+exports = [
+  "MultiHeadAttentionConfig",
+  "SelfAttentionConfig",
+  "SelfAttentionProjectionStrategy",
+  "IndependentAttentionConfig",
+  "MixtureOfAttentionHeadsConfig",
+  "AttentionLayerState",
+]
+
+[protected_interfaces."emperor.attention.monitoring"]
+exports = ["AttentionMonitorCallback"]
+
+[protected_interfaces."emperor.augmentations"]
+exports = ["adaptive_parameters"]
+
+[protected_interfaces."emperor.augmentations.adaptive_parameters"]
+exports = [
+  "AdaptiveParameterAugmentationConfig",
+  "AdaptiveLinearLayerConfig",
+  "DynamicWeightConfig",
+  "SingleModelDynamicWeightConfig",
+  "DualModelDynamicWeightConfig",
+  "LowRankDynamicWeightConfig",
+  "HypernetworkDynamicWeightConfig",
+  "LayeredWeightedBankDynamicWeightConfig",
+  "SoftWeightedBankDynamicWeightConfig",
+  "DynamicBiasConfig",
+  "AffineTransformDynamicBiasConfig",
+  "AdditiveDynamicBiasConfig",
+  "MultiplicativeDynamicBiasConfig",
+  "SigmoidGatedDynamicBiasConfig",
+  "TanhGatedDynamicBiasConfig",
+  "GeneratorDynamicBiasConfig",
+  "WeightedBankDynamicBiasConfig",
+  "DynamicDiagonalConfig",
+  "StandardDynamicDiagonalConfig",
+  "AntiDynamicDiagonalConfig",
+  "CombinedDynamicDiagonalConfig",
+  "AxisMaskConfig",
+  "WeightInformedScoreAxisMaskConfig",
+  "PerAxisScoreMaskConfig",
+  "TopSliceAxisMaskConfig",
+  "OuterProductMaskConfig",
+  "DiagonalAxisMaskConfig",
+  "BankExpansionFactorOptions",
+  "DynamicDepthOptions",
+  "MaskDimensionOptions",
+  "WeightDecayScheduleOptions",
+  "WeightNormalizationOptions",
+  "WeightNormalizationPositionOptions",
+]
+
+[protected_interfaces."emperor.augmentations.adaptive_parameters.monitoring"]
+exports = [
+  "AdaptiveParameterMonitorCallback",
+  "WeightBankUtilizationMonitorCallback",
+]
+
+[protected_interfaces."emperor.convs"]
+exports = ["Conv2dLayerConfig"]
+
+[protected_interfaces."emperor.datasets.image.classification"]
+exports = ["Mnist", "FashionMNIST", "Cifar10", "Cifar100"]
+
+[protected_interfaces."emperor.datasets.text.bert_pretraining"]
+exports = [
+  "BERT_PRETRAINING_TARGET_VOCAB_SIZE",
+  "PennTreebankBertPretraining",
+  "WikiText2BertPretraining",
+]
+
+[protected_interfaces."emperor.datasets.text.language_modeling"]
+exports = ["PennTreebank", "WikiText2"]
+
+[protected_interfaces."emperor.datasets.text.translation"]
+exports = ["Multi30kDeEn", "Multi30kEnDe"]
+
+[protected_interfaces."emperor.embedding"]
+exports = ["absolute", "relative"]
+
+[protected_interfaces."emperor.embedding.absolute"]
+exports = [
+  "AbsolutePositionalEmbeddingConfig",
+  "TextLearnedPositionalEmbeddingConfig",
+  "ImageLearnedPositionalEmbeddingConfig",
+  "TextSinusoidalPositionalEmbeddingConfig",
+  "ImageSinusoidalPositionalEmbeddingConfig",
+]
+
+[protected_interfaces."emperor.embedding.relative"]
+exports = [
+  "RelativePositionalEmbeddingConfig",
+  "DynamicPositionalBiasConfig",
+]
+
+[protected_interfaces."emperor.experiments"]
+exports = [
+  "ExperimentTask",
+  "experiment_task_label",
+  "experiment_task_name",
+  "resolve_experiment_task",
+]
+
+[protected_interfaces."emperor.experiments.bert_pretraining"]
+exports = ["BertPretrainingExperiment"]
+
+[protected_interfaces."emperor.experiments.classifier"]
+exports = ["ClassifierExperiment"]
+
+[protected_interfaces."emperor.experiments.language_model"]
+exports = ["LanguageModelExperiment"]
+
+[protected_interfaces."emperor.experiments.masked_language_model"]
+exports = ["MaskedLanguageModelExperiment"]
+
+[protected_interfaces."emperor.experiments.sequence_classifier"]
+exports = ["SequenceClassifierExperiment"]
+
+[protected_interfaces."emperor.experiments.translation"]
+exports = ["TranslationExperiment"]
+
+[protected_interfaces."emperor.experts"]
+exports = [
+  "MixtureOfExpertsConfig",
+  "MixtureOfExpertsLayerConfig",
+  "MixtureOfExpertsModelConfig",
+  "DroppedTokenOptions",
+  "ExpertWeightingPositionOptions",
+  "RoutingInitializationMode",
+  "MixtureOfExpertsLayerState",
+]
+
+[protected_interfaces."emperor.halting"]
+exports = [
+  "HaltingConfig",
+  "SoftHaltingConfig",
+  "StickBreakingConfig",
+  "HaltingHiddenStateModeOptions",
+  "HaltingInterface",
+  "HaltingBase",
+  "HaltingStateBase",
+  "SoftHalting",
+  "SoftHaltingState",
+  "StickBreaking",
+  "StickBreakingState",
+  "HaltingMonitorCallback",
+  "HaltingUsageTracker",
+  "HaltingUsageTrackerManager",
+]
+
+[protected_interfaces."emperor.linears"]
+exports = [
+  "LinearLayer",
+  "LinearAbstract",
+  "LinearLayerConfig",
+  "LinearOptions",
+  "LinearMonitorCallback",
+]
+
+[protected_interfaces."emperor.memory"]
+exports = [
+  "AttentionDynamicMemoryConfig",
+  "DynamicMemoryConfig",
+  "ElementWiseWeightedDynamicMemoryConfig",
+  "GatedResidualDynamicMemoryConfig",
+  "MemoryInterface",
+  "MemoryPositionOptions",
+  "WeightedDynamicMemoryConfig",
+]
+
+[protected_interfaces."emperor.memory.monitoring"]
+exports = ["MemoryMonitorCallback"]
+
+[protected_interfaces."emperor.neuron"]
+exports = [
+  "Axons",
+  "AxonsConfig",
+  "Neuron",
+  "NeuronCluster",
+  "NeuronClusterConfig",
+  "NeuronClusterMonitorCallback",
+  "NeuronClusterOptimizerSyncCallback",
+  "NeuronClusterTrace",
+  "NeuronClusterTraceStep",
+  "NeuronConfig",
+  "Nucleus",
+  "NucleusConfig",
+  "Terminal",
+  "TerminalConfig",
+  "TerminalConnectionShapeOptions",
+  "TerminalRangeOptions",
+  "TerminalZAxisOffsetOptions",
+]
+
+[protected_interfaces."emperor.parametric"]
+exports = [
+  "AdaptiveRouterOptions",
+  "ParametricLayerConfig",
+  "ParametricLayerHandlerConfig",
+  "ParametricLayer",
+  "ParametricLayerMonitorCallback",
+  "ParametricLayerHandler",
+  "ParametricLayerState",
+  "AdaptiveMixtureBase",
+  "AdaptiveMixtureConfig",
+  "ClipParameterOptions",
+  "VectorWeightsMixtureConfig",
+  "MatrixWeightsMixtureConfig",
+  "MatrixBiasMixtureConfig",
+  "GeneratorWeightsMixtureConfig",
+  "GeneratorBiasMixtureConfig",
+  "VectorWeightsMixture",
+  "MatrixWeightsMixture",
+  "MatrixBiasMixture",
+  "GeneratorWeightsMixture",
+  "GeneratorBiasMixture",
+  "VectorRouterConfig",
+  "VectorRouterModel",
+]
+
+[protected_interfaces."emperor.patch"]
+exports = [
+  "PatchConfig",
+  "LinearPatchEmbeddingConfig",
+  "ConvPatchEmbeddingConfig",
+  "PatchBase",
+  "PatchEmbeddingLinear",
+  "PatchEmbeddingConv",
+]
+
+[protected_interfaces."emperor.sampler"]
+exports = [
+  "RouterConfig",
+  "SamplerConfig",
+  "RouterModel",
+  "SamplerModel",
+  "SamplerMonitorCallback",
+]
+
+[protected_interfaces."emperor.transformer"]
+exports = [
+  "Transformer",
+  "TransformerConfig",
+  "TransformerEncoderLayer",
+  "TransformerEncoderBlockLayer",
+  "TransformerDecoderBlockLayer",
+  "TransformerDecoderLayerState",
+  "TransformerDecoderLayer",
+  "TransformerEncoderLayerConfig",
+  "TransformerEncoderBlockLayerConfig",
+  "TransformerDecoderBlockLayerConfig",
+  "TransformerDecoderLayerConfig",
+  "FeedForward",
+  "FeedForwardConfig",
+]
