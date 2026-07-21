@@ -8,24 +8,25 @@ from unittest.mock import patch
 
 import torch
 import torch.nn as nn
-from emperor.attention import (
-    IndependentAttention,
-    MixtureOfAttentionHeads,
-    SelfAttention,
-)
+
+from emperor.attention._variants.independent.layer import IndependentAttention
+from emperor.attention._variants.mixture.layer import MixtureOfAttentionHeads
+from emperor.attention._variants.self_attention.layer import SelfAttention
 from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,
 )
-from emperor.augmentations.adaptive_parameters.core.diagonal.variants.standard import (
+from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
     StandardDynamicDiagonal,
 )
-from emperor.base.layer import RecurrentLayer
-from emperor.base.layer.gate import LayerGate
-from emperor.base.options import ActivationOptions, LastLayerBiasOptions
-from emperor.experts.core.layers import MixtureOfExperts
-from emperor.halting.core.variants.stick_breaking import StickBreaking
-from emperor.linears import AdaptiveLinearLayer, LinearLayer
-from emperor.memory.core.variants.gated_residual import GatedResidualDynamicMemory
+from emperor.augmentations.adaptive_parameters._linear_adapter import (
+    AdaptiveLinearLayer,
+)
+from emperor.experts._layers.mixture import MixtureOfExperts
+from emperor.halting import StickBreaking
+from emperor.layers import ActivationOptions, LastLayerBiasOptions, RecurrentLayer
+from emperor.layers._composition.gate import LayerGate
+from emperor.linears import LinearLayer
+from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
 from emperor.transformer import (
     TransformerAttentionOptions,
     TransformerDecoderLayer,
@@ -870,7 +871,7 @@ class TestTransformerModelPackages(unittest.TestCase):
                     halting = (
                         encoder.halting_config
                         if recurrent
-                        else encoder.layer_config.halting_config
+                        else encoder.shared_halting_config
                     )
                     controller = halting.halting_gate_config
                     self.assertEqual(controller.output_dim, 2)
@@ -903,7 +904,7 @@ class TestTransformerModelPackages(unittest.TestCase):
                     feed_forward_stack,
                 )
                 for stack in (attention_stack, feed_forward_stack):
-                    controller = stack.layer_config.halting_config.halting_gate_config
+                    controller = stack.shared_halting_config.halting_gate_config
                     self.assertEqual(controller.output_dim, 2)
                     self.assertEqual(
                         controller.last_layer_bias_option,

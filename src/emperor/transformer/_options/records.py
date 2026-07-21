@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from emperor.halting import HaltingHiddenStateModeOptions
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    StickBreakingConfig,
+)
 from emperor.layers import (
     ActivationOptions,
     GateConfig,
@@ -26,10 +30,14 @@ class TransformerStackOptions:
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
     stack_gate_flag: bool = False
     stack_halting_flag: bool = False
+    halting_option: type[HaltingConfig] = StickBreakingConfig
+    halting_threshold: float | None = None
     memory_flag: bool = False
     recurrent_flag: bool = False
     recurrent_gate_flag: bool = False
     recurrent_halting_flag: bool = False
+    recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
+    recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
     stack_residual_connection_option: ResidualConnectionOptions | None = None
     recurrent_residual_connection_option: ResidualConnectionOptions | None = None
@@ -126,7 +134,8 @@ class LayerControllerOptions:
     gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID
     gate_stack_options: ControllerStackOptions = ControllerStackOptions()
     stack_halting_flag: bool = False
-    halting_threshold: float = 0.99
+    halting_option: type[HaltingConfig] = StickBreakingConfig
+    halting_threshold: float | None = None
     halting_dropout: float = 0.0
     halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
         HaltingHiddenStateModeOptions.RAW
@@ -169,7 +178,8 @@ class RecurrentControllerOptions:
     recurrent_gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID
     recurrent_gate_stack_options: ControllerStackOptions = ControllerStackOptions()
     recurrent_halting_flag: bool = False
-    recurrent_halting_threshold: float = 0.99
+    recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
+    recurrent_halting_threshold: float | None = None
     recurrent_halting_dropout: float = 0.0
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
         HaltingHiddenStateModeOptions.RAW

@@ -45,6 +45,7 @@ def _layer_controller_from_config(
             config, f"{prefix}_GATE_STACK"
         ),
         stack_halting_flag=getattr(config, f"{prefix}_HALTING_FLAG"),
+        halting_option=getattr(config, f"{prefix}_HALTING_OPTION"),
         halting_threshold=getattr(config, f"{prefix}_HALTING_THRESHOLD"),
         halting_dropout=getattr(config, f"{prefix}_HALTING_DROPOUT"),
         halting_hidden_state_mode=getattr(
@@ -92,6 +93,10 @@ def _recurrent_from_config(
             config, f"{prefix}_RECURRENT_GATE_STACK"
         ),
         recurrent_halting_flag=getattr(config, f"{prefix}_RECURRENT_HALTING_FLAG"),
+        recurrent_halting_option=getattr(
+            config,
+            f"{prefix}_RECURRENT_HALTING_OPTION",
+        ),
         recurrent_halting_threshold=getattr(
             config, f"{prefix}_RECURRENT_HALTING_THRESHOLD"
         ),

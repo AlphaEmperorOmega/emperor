@@ -53,6 +53,7 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             "gate_option": ("controller", "gate_option"),
             "gate_activation": ("controller", "gate_activation"),
             "halting_flag": ("controller", "stack_halting_flag"),
+            "halting_option": ("controller", "halting_option"),
             "halting_threshold": ("controller", "halting_threshold"),
             "halting_dropout": ("controller", "halting_dropout"),
             "halting_hidden_state_mode": (
@@ -85,6 +86,10 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             "recurrent_halting_flag": (
                 "recurrent",
                 "recurrent_halting_flag",
+            ),
+            "recurrent_halting_option": (
+                "recurrent",
+                "recurrent_halting_option",
             ),
             "recurrent_halting_threshold": (
                 "recurrent",

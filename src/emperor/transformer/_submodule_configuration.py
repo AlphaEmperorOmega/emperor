@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from emperor.halting import StickBreakingConfig
+from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
     LastLayerBiasOptions,
@@ -83,15 +83,15 @@ def _halting_config(
     path_options: TransformerAttentionOptions | TransformerFeedForwardOptions,
     *,
     recurrent: bool,
-) -> StickBreakingConfig | None:
+) -> HaltingConfig | None:
     stack = path_options.stack_options
     if recurrent:
         options = path_options.recurrent_controller_options
         if not options.recurrent_halting_flag:
             return None
-        return StickBreakingConfig(
+        return options.recurrent_halting_option(
             threshold=options.recurrent_halting_threshold,
-            halting_dropout=options.recurrent_halting_dropout,
+            dropout_probability=options.recurrent_halting_dropout,
             hidden_state_mode=options.recurrent_halting_hidden_state_mode,
             halting_gate_config=_controller_stack(
                 options.recurrent_halting_stack_options,
@@ -102,9 +102,9 @@ def _halting_config(
     options = path_options.layer_controller_options
     if not options.stack_halting_flag:
         return None
-    return StickBreakingConfig(
+    return options.halting_option(
         threshold=options.halting_threshold,
-        halting_dropout=options.halting_dropout,
+        dropout_probability=options.halting_dropout,
         hidden_state_mode=options.halting_hidden_state_mode,
         halting_gate_config=_controller_stack(
             options.halting_stack_options,
@@ -149,8 +149,10 @@ def configure_transformer_submodule(
     """Apply path controllers and optionally wrap a package-local primary backend."""
 
     control_stack.layer_config.gate_config = _gate_config(path_options, recurrent=False)
-    control_stack.layer_config.halting_config = _halting_config(
-        path_options, recurrent=False
+    control_stack.layer_config.halting_config = None
+    control_stack.shared_halting_config = _halting_config(
+        path_options,
+        recurrent=False,
     )
     control_stack.shared_gate_config = (
         path_options.layer_controller_options.shared_gate_config
