@@ -1025,7 +1025,7 @@ def verify(
         wheel_manifest = _verify_wheel(wheel)
         sdist_manifest = _verify_sdist(sdist)
         workbench_wheel: Path | None = None
-        workbench_wheel_manifest: dict[str, int] | None = None
+        workbench_wheel_manifest: dict[str, int | list[str]] | None = None
         workbench_sdist_manifest: dict[str, int] | None = None
         if include_workbench_smoke:
             workbench_wheel, workbench_sdist = _build_artifacts(
