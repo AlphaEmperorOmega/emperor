@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class AdaptiveBoundaryModelOptions:
     weight_option: type[DynamicWeightConfig] | None
-    weight_generator_depth: DynamicDepthOptions
+    generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
     weight_decay_rate: float
     weight_decay_warmup_batches: int
@@ -113,7 +113,7 @@ class BoundaryModelConfigFactory:
             return stack_options
         return MainLayerStackOptions(
             bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -154,7 +154,7 @@ class BoundaryModelConfigFactory:
             return boundary_options
         return AdaptiveBoundaryModelOptions(
             weight_option=config.INPUT_LAYER_WEIGHT_OPTION,
-            weight_generator_depth=config.INPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+            generator_depth=config.INPUT_LAYER_GENERATOR_DEPTH,
             weight_decay_schedule=config.INPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
             weight_decay_rate=config.INPUT_LAYER_WEIGHT_DECAY_RATE,
             weight_decay_warmup_batches=(
@@ -191,7 +191,7 @@ class BoundaryModelConfigFactory:
             return boundary_options
         return AdaptiveBoundaryModelOptions(
             weight_option=config.OUTPUT_LAYER_WEIGHT_OPTION,
-            weight_generator_depth=config.OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+            generator_depth=config.OUTPUT_LAYER_GENERATOR_DEPTH,
             weight_decay_schedule=config.OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
             weight_decay_rate=config.OUTPUT_LAYER_WEIGHT_DECAY_RATE,
             weight_decay_warmup_batches=(
@@ -267,7 +267,7 @@ class BoundaryModelConfigFactory:
         adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
             weight_config=build_weight_config(
                 weight_option=options.weight_option,
-                generator_depth=options.weight_generator_depth,
+                generator_depth=options.generator_depth,
                 decay_schedule=options.weight_decay_schedule,
                 decay_rate=options.weight_decay_rate,
                 decay_warmup_batches=options.weight_decay_warmup_batches,

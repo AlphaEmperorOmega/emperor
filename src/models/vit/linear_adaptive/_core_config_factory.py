@@ -90,7 +90,7 @@ class CoreConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             causal_attention_mask_flag=False,
         )
 
@@ -126,7 +126,7 @@ class CoreConfigFactory:
             return stack_options
         return MainLayerStackOptions(
             bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,

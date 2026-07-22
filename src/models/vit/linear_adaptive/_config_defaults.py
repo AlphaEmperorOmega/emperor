@@ -46,7 +46,7 @@ def vit_encoder_options(config: object) -> TransformerEncoderOptions:
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-        layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+        layer_norm_position=config.LAYER_NORM_POSITION,
         causal_attention_mask_flag=False,
     )
 
@@ -73,7 +73,7 @@ def vit_output_options(config: object) -> VitOutputOptions:
 def main_layer_stack_options(config: object) -> MainLayerStackOptions:
     return MainLayerStackOptions(
         bias_flag=config.STACK_BIAS_FLAG,
-        layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+        layer_norm_position=config.LAYER_NORM_POSITION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -128,6 +128,11 @@ def linears_controller_stack_source(
     )
 
 
+def _stack_control_flag_name(prefix: str, control: str) -> str:
+    scope = "" if prefix == control else f"{prefix.removesuffix(f'_{control}')}_"
+    return f"{scope}STACK_{control}_FLAG"
+
+
 def linears_layer_controller_options(
     config: object,
     *,
@@ -137,11 +142,13 @@ def linears_layer_controller_options(
     halting_stack_prefix: str,
 ) -> LayerControllerOptions:
     return LayerControllerOptions(
-        stack_gate_flag=getattr(config, f"{gate_prefix}_FLAG"),
+        stack_gate_flag=getattr(config, _stack_control_flag_name(gate_prefix, "GATE")),
         gate_option=getattr(config, f"{gate_prefix}_OPTION"),
         gate_activation=getattr(config, f"{gate_prefix}_ACTIVATION"),
         gate_stack_source=linears_controller_stack_source(config, gate_stack_prefix),
-        stack_halting_flag=getattr(config, f"{halting_prefix}_FLAG"),
+        stack_halting_flag=getattr(
+            config, _stack_control_flag_name(halting_prefix, "HALTING")
+        ),
         halting_option=getattr(
             config,
             f"{halting_prefix}_OPTION",
@@ -190,7 +197,9 @@ def linears_recurrent_controller_options(
         recurrent_layer_norm_position=getattr(
             config, f"{recurrent_prefix}_LAYER_NORM_POSITION"
         ),
-        recurrent_gate_flag=getattr(config, f"{recurrent_prefix}_GATE_FLAG"),
+        recurrent_stack_gate_flag=getattr(
+            config, f"{recurrent_prefix}_STACK_GATE_FLAG"
+        ),
         recurrent_gate_option=getattr(config, f"{recurrent_prefix}_GATE_OPTION"),
         recurrent_gate_activation=getattr(
             config, f"{recurrent_prefix}_GATE_ACTIVATION"
@@ -198,7 +207,9 @@ def linears_recurrent_controller_options(
         recurrent_gate_stack_source=linears_controller_stack_source(
             config, gate_stack_prefix
         ),
-        recurrent_halting_flag=getattr(config, f"{recurrent_prefix}_HALTING_FLAG"),
+        recurrent_stack_halting_flag=getattr(
+            config, f"{recurrent_prefix}_STACK_HALTING_FLAG"
+        ),
         recurrent_halting_option=getattr(
             config,
             f"{recurrent_prefix}_HALTING_OPTION",
@@ -258,7 +269,7 @@ def hidden_adaptive_weight_options(
     config: object, *, prefix: str = "", stack_prefix: str = "WEIGHT_GENERATOR_STACK"
 ) -> HiddenAdaptiveWeightOptions:
     return HiddenAdaptiveWeightOptions(
-        generator_depth=getattr(config, f"{prefix}WEIGHT_GENERATOR_DEPTH"),
+        generator_depth=getattr(config, f"{prefix}GENERATOR_DEPTH"),
         option_flag=getattr(config, f"{prefix}WEIGHT_OPTION_FLAG"),
         option=getattr(config, f"{prefix}WEIGHT_OPTION"),
         normalization_option=getattr(config, f"{prefix}WEIGHT_NORMALIZATION_OPTION"),

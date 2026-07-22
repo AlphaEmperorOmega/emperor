@@ -2,7 +2,6 @@
 
 import importlib
 import unittest
-from dataclasses import replace
 from pathlib import Path
 
 import torch
@@ -12,14 +11,12 @@ import models.vit.linear_adaptive.dataset_options as dataset_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.layers import LayerConfig
 from emperor.linears import LinearLayerConfig
-from models.catalog import catalog_entry
-from models.vit.linear_adaptive import _config_defaults as config_defaults
+from models.catalog import model_package
 from models.vit.linear_adaptive.config_builder import VitLinearAdaptiveConfigBuilder
 from models.vit.linear_adaptive.model import Model
 from models.vit.linear_adaptive.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 
 
@@ -37,19 +34,19 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
 
                 self.assertEqual(module.__name__, module_name)
 
-        self.assertEqual(Experiment()._public_model_id(), "vit/linear_adaptive")
-        self.assertIsNotNone(catalog_entry("vit/linear_adaptive"))
+        experiment = Experiment(model_package=model_package("vit/linear_adaptive"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "vit/linear_adaptive",
+        )
+        self.assertIsNotNone(model_package("vit/linear_adaptive"))
 
     def test_config_builder_uses_local_adaptive_defaults(self):
         local_hidden_dim = config.HIDDEN_DIM + 11
-        adaptive_generator_stack_options = replace(
-            self._default_builder_kwargs()["adaptive_generator_stack_options"],
-            hidden_dim=local_hidden_dim,
+        runtime = model_package("vit/linear_adaptive").bind_runtime_defaults(
+            {"adaptive_generator_stack_hidden_dim": local_hidden_dim}
         )
-
-        builder = VitLinearAdaptiveConfigBuilder(
-            adaptive_generator_stack_options=adaptive_generator_stack_options,
-        )
+        builder = VitLinearAdaptiveConfigBuilder(runtime=runtime)
 
         self.assertEqual(
             builder.adaptive_generator_stack_options.hidden_dim,
@@ -218,16 +215,8 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
             ExperimentPreset.LOW_RANK_WEIGHT,
             config_overrides={
                 **self._test_overrides(),
-                "feed_forward_stack_options": replace(
-                    self._default_builder_kwargs()["feed_forward_stack_options"],
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    self._default_builder_kwargs()[
-                        "feed_forward_layer_controller_options"
-                    ],
-                    stack_gate_flag=True,
-                ),
+                "ff_stack_hidden_dim": 17,
+                "ff_stack_gate_flag": True,
             },
         )
         feed_forward_stack_config = self._encoder_layer_config(
@@ -249,18 +238,8 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
             ExperimentPreset.LOW_RANK_WEIGHT,
             config_overrides={
                 **self._test_overrides(),
-                "attention_projection_stack_options": replace(
-                    self._default_builder_kwargs()[
-                        "attention_projection_stack_options"
-                    ],
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    self._default_builder_kwargs()[
-                        "attention_projection_layer_controller_options"
-                    ],
-                    stack_gate_flag=True,
-                ),
+                "attn_stack_hidden_dim": 17,
+                "attn_stack_gate_flag": True,
             },
         )
         projection_stack_config = self._encoder_layer_config(
@@ -287,7 +266,7 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
                 self.assertEqual(logits.shape, (2, cfg.output_dim))
 
     def _config(self, preset: ExperimentPreset, config_overrides: dict | None = None):
-        return ExperimentPresets().get_config(
+        return model_package("vit/linear_adaptive").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -301,59 +280,10 @@ class TestVitLinearAdaptiveModel(unittest.TestCase):
     def _test_overrides(self) -> dict:
         return {
             "batch_size": 2,
-            "encoder_options": replace(
-                self._default_builder_kwargs()["encoder_options"],
-                hidden_dim=16,
-                num_layers=1,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                self._default_builder_kwargs()["attention_options"],
-                num_heads=4,
-            ),
-        }
-
-    def _default_builder_kwargs(self) -> dict:
-        return {
-            "adaptive_generator_stack_options": (
-                config_defaults.adaptive_generator_stack_options(config)
-            ),
-            "feed_forward_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "FF_STACK",
-                    num_layers_key="FF_NUM_LAYERS",
-                    bias_key="FF_BIAS_FLAG",
-                )
-            ),
-            "feed_forward_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="FF_GATE",
-                    gate_stack_prefix="FF_GATE_STACK",
-                    halting_prefix="FF_HALTING",
-                    halting_stack_prefix="FF_HALTING_STACK",
-                )
-            ),
-            "attention_projection_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "ATTN_STACK",
-                    num_layers_key="ATTN_NUM_LAYERS",
-                    bias_key="ATTN_BIAS_FLAG",
-                )
-            ),
-            "attention_projection_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="ATTN_GATE",
-                    gate_stack_prefix="ATTN_GATE_STACK",
-                    halting_prefix="ATTN_HALTING",
-                    halting_stack_prefix="ATTN_HALTING_STACK",
-                )
-            ),
-            "encoder_options": config_defaults.vit_encoder_options(config),
-            "attention_options": config_defaults.vit_attention_options(config),
+            "hidden_dim": 16,
+            "stack_num_layers": 1,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 4,
         }
 
     def _fake_batch(self, cfg):

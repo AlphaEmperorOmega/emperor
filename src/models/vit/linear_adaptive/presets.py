@@ -1,7 +1,5 @@
 # ruff: noqa: E501
 
-from dataclasses import replace
-
 import models.vit.linear_adaptive.config as config
 import models.vit.linear_adaptive.dataset_options as dataset_options
 from emperor.augmentations.adaptive_parameters import (
@@ -40,12 +38,9 @@ from model_runtime.packages import (
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from models.vit.linear_adaptive._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat,
-)
-from models.vit.linear_adaptive._config_defaults import vit_patch_options
 from models.vit.linear_adaptive.config_builder import VitLinearAdaptiveConfigBuilder
 from models.vit.linear_adaptive.model import Model
+from models.vit.linear_adaptive.runtime_defaults import runtime_from_flat
 
 
 def default_patch_size_for_dataset(dataset: type) -> int:
@@ -787,7 +782,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
             }
         ),
         description="Default recurrent config with step-level gating enabled after each "
@@ -797,7 +792,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
             }
         ),
         description="Default recurrent config with recurrent halting enabled, allowing "
@@ -817,8 +812,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
             }
         ),
         description="Default recurrent config with both step-level gating and recurrent "
@@ -828,7 +823,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -839,7 +834,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -850,8 +845,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -892,25 +887,16 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         )
 
     def _dataset_config(self, dataset: type) -> dict:
-        dataset_config = super()._dataset_config(dataset)
-        patch_options = vit_patch_options(config)
-        dataset_patch_size = default_patch_size_for_dataset(dataset)
-        dataset_patch_options = replace(
-            patch_options,
-            patch_size=dataset_patch_size,
-            input_channels=dataset.num_channels,
-            image_height=dataset.default_height,
-        )
-
         return {
-            **dataset_config,
-            "patch_options": dataset_patch_options,
+            **super()._dataset_config(dataset),
+            "image_patch_size": default_patch_size_for_dataset(dataset),
+            "input_channels": dataset.num_channels,
+            "image_height": dataset.default_height,
             "output_dim": dataset.num_classes,
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = linear_adaptive_builder_kwargs_from_flat(kwargs, config)
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -919,7 +905,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(
