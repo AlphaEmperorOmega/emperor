@@ -32,6 +32,7 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
+from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,11 +202,11 @@ class ExpertsRecurrentControllerOptions:
     recurrent_flag: bool
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
-    recurrent_gate_flag: bool
+    recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
     recurrent_gate_stack_source: ExpertsSubmoduleStackSource
-    recurrent_halting_flag: bool
+    recurrent_stack_halting_flag: bool
     recurrent_halting_threshold: float
     recurrent_halting_dropout: float
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
@@ -365,11 +366,11 @@ class RecurrentControllerOptions:
     recurrent_flag: bool
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
-    recurrent_gate_flag: bool
+    recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
     recurrent_gate_stack_source: SubmoduleStackSource
-    recurrent_halting_flag: bool
+    recurrent_stack_halting_flag: bool
     recurrent_halting_threshold: float
     recurrent_halting_dropout: float
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
@@ -417,3 +418,8 @@ class GptEmbeddingOptions:
 class GptLmHeadOptions:
     weight_tying_flag: bool
     bias_flag: bool
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOptions(ResolvedRuntimeOptions):
+    pass

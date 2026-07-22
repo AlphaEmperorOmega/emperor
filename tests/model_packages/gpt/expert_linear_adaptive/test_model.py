@@ -18,19 +18,21 @@ from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.layers import ActivationOptions, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
-from models.catalog import MODEL_CATALOG, catalog_entry
-from models.gpt.expert_linear_adaptive import (
+from models.catalog import model_package
+from models.gpt.expert_linear_adaptive.config_builder import (
+    GptExpertLinearAdaptiveConfigBuilder,
+)
+from models.gpt.expert_linear_adaptive.experiment_config import ExperimentConfig
+from models.gpt.expert_linear_adaptive.model import Model
+from models.gpt.expert_linear_adaptive.presets import (
     Experiment,
-    ExperimentConfig,
     ExperimentPreset,
     ExperimentPresets,
-    GptExpertLinearAdaptiveConfigBuilder,
-    GptLmHeadOptions,
-    Model,
 )
 from models.gpt.expert_linear_adaptive.runtime_defaults import (
     expert_linear_adaptive_builder_kwargs_from_flat,
 )
+from models.gpt.expert_linear_adaptive.runtime_options import RuntimeOptions
 from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
@@ -47,7 +49,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
 
     def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
@@ -61,12 +63,15 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
 
     def config(self, **overrides):
-        return GptExpertLinearAdaptiveConfigBuilder(
-            input_dim=16,
-            output_dim=16,
-            sequence_length=6,
-            **overrides,
-        ).build()
+        runtime = model_package("gpt/expert_linear_adaptive").bind_runtime_defaults(
+            {
+                "input_dim": 16,
+                "output_dim": 16,
+                "sequence_length": 6,
+                **overrides,
+            }
+        )
+        return GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
@@ -74,12 +79,12 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNotNone(ExperimentConfig)
         self.assertIsNotNone(ExperimentPresets)
         self.assertEqual(
-            MODEL_CATALOG["gpt/expert_linear_adaptive"].module_path,
-            "models.gpt.expert_linear_adaptive",
+            model_package("gpt/expert_linear_adaptive").catalog_key,
+            "gpt/expert_linear_adaptive",
         )
 
     def test_presets_are_contiguous_buildable_and_always_causal(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/expert_linear_adaptive").presets
         self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
@@ -126,10 +131,8 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
 
     def test_lm_head_options_allow_untied_biased_projection(self):
         cfg = self.config(
-            lm_head_options=GptLmHeadOptions(
-                weight_tying_flag=False,
-                bias_flag=True,
-            )
+            lm_head_weight_tying_flag=False,
+            lm_head_bias_flag=True,
         )
         model = Model(cfg)
         self.assertIsNot(model.lm_head.weight, model.token_embedding.weight)
@@ -137,11 +140,11 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
 
     def test_tied_head_rejects_unequal_vocabularies(self):
         with self.assertRaises(ValueError):
-            GptExpertLinearAdaptiveConfigBuilder(
+            self.config(
                 input_dim=15,
                 output_dim=16,
                 sequence_length=4,
-            ).build()
+            )
 
     def test_future_tokens_do_not_change_earlier_logits(self):
         torch.manual_seed(7)
@@ -225,11 +228,14 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
                     importlib.import_module(module_name).__name__,
                     module_name,
                 )
+        experiment = Experiment(
+            model_package=model_package("gpt/expert_linear_adaptive")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "gpt/expert_linear_adaptive",
         )
-        self.assertIsNotNone(catalog_entry("gpt/expert_linear_adaptive"))
+        self.assertIsNotNone(model_package("gpt/expert_linear_adaptive"))
 
     def test_package_avoids_bert_and_gpt_sibling_construction_imports(self):
         package_dir = Path(config.__file__).resolve().parent
@@ -251,9 +257,10 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         parameters = inspect.signature(GptExpertLinearAdaptiveConfigBuilder).parameters
         self.assertNotIn("expert_attention_flag", parameters)
         self.assertNotIn("causal_attention_mask_flag", parameters)
-        self.assertIn("expert_attention_use_kv_expert_models_flag", parameters)
-        self.assertIn("lm_head_options", parameters)
-        self.assertIn("embedding_options", parameters)
+        self.assertEqual(tuple(parameters), ("runtime",))
+        model_package("gpt/expert_linear_adaptive").bind_runtime_defaults(
+            {"expert_attention_use_kv_expert_models_flag": False}
+        )
         self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
         self.assertFalse(hasattr(config, "CAUSAL_ATTENTION_MASK_FLAG"))
         with self.assertRaises(TypeError):
@@ -279,22 +286,12 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsInstance(expert_layer, AdaptiveLinearLayerConfig)
 
     def test_ff_controls_apply_to_outer_slot_and_preserve_adaptive_experts(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.LOW_RANK_EXPERT_WEIGHT,
             {
-                "feed_forward_stack_options": replace(
-                    defaults["feed_forward_stack_options"],
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    defaults["feed_forward_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    defaults["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "ff_stack_hidden_dim": 17,
+                "ff_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         mixture = self._decoder_layer_config(cfg).feed_forward_config.stack_config
@@ -308,27 +305,14 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNotNone(expert_layer.adaptive_augmentation_config.weight_config)
 
     def test_attention_controls_preserve_adaptive_expert_attention(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.BASELINE,
             {
-                "hidden_adaptive_weight_options": replace(
-                    defaults["hidden_adaptive_weight_options"],
-                    option_flag=True,
-                    option=config.LowRankDynamicWeightConfig,
-                ),
-                "attention_projection_stack_options": replace(
-                    defaults["attention_projection_stack_options"],
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    defaults["attention_projection_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    defaults["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "weight_option_flag": True,
+                "weight_option": config.LowRankDynamicWeightConfig,
+                "attn_stack_hidden_dim": 17,
+                "attn_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         attention = self._decoder_layer_config(cfg).self_attention_config
@@ -554,7 +538,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
                 overrides = self._small_flat_overrides()
                 overrides.pop("input_dim")
                 overrides.pop("output_dim")
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("gpt/expert_linear_adaptive").presets.get_config(
                     ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides=overrides,
@@ -584,7 +568,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         preset: ExperimentPreset,
         overrides: dict | None = None,
     ):
-        return ExperimentPresets().get_config(
+        return model_package("gpt/expert_linear_adaptive").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -601,7 +585,9 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
             config,
         )
         kwargs.update(overrides)
-        return GptExpertLinearAdaptiveConfigBuilder(**kwargs).build()
+        return GptExpertLinearAdaptiveConfigBuilder(
+            runtime=RuntimeOptions(kwargs)
+        ).build()
 
     def _small_flat_overrides(self) -> dict:
         return {

@@ -14,6 +14,7 @@ from models.gpt.expert_linear_adaptive._expert_control_config_factory import (
 )
 from models.gpt.expert_linear_adaptive.experiment_config import ExperimentConfig
 from models.gpt.expert_linear_adaptive.runtime_defaults import (
+    DEFAULT_RUNTIME,
     expert_linear_adaptive_builder_kwargs_from_flat,
 )
 from models.gpt.expert_linear_adaptive.runtime_options import (
@@ -32,6 +33,7 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
+    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
     TransformerFeedForwardOptions,
@@ -39,7 +41,7 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
 )
 
 
-class GptExpertLinearAdaptiveConfigBuilder(GptBackendConfigBuilder):
+class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilder):
     def __init__(
         self,
         *,
@@ -318,7 +320,7 @@ class GptExpertLinearAdaptiveConfigBuilder(GptBackendConfigBuilder):
             ),
         )
 
-    def _legacy_experts_stack_options(self) -> ExpertsStackOptions:
+    def _attention_experts_stack_options(self) -> ExpertsStackOptions:
         return ExpertsStackOptions(
             hidden_dim=self.hidden_dim,
             bias_flag=self.feed_forward_options.bias_flag,
@@ -339,7 +341,7 @@ class GptExpertLinearAdaptiveConfigBuilder(GptBackendConfigBuilder):
         stack_options = (
             self._feed_forward_experts_stack_options()
             if use_feed_forward_stack_options
-            else self._legacy_experts_stack_options()
+            else self._attention_experts_stack_options()
         )
         factory = ControlConfigFactory(
             ControlConfigDependencies(
@@ -386,3 +388,15 @@ class GptExpertLinearAdaptiveConfigBuilder(GptBackendConfigBuilder):
         if isinstance(model_config, MixtureOfExpertsModelConfig):
             return model_config
         return model_config.block_config
+
+
+class GptExpertLinearAdaptiveConfigBuilder(
+    _GptExpertLinearAdaptiveConfigBuilderImplementation
+):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.gpt.expert_linear_adaptive GptExpertLinearAdaptiveConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())
