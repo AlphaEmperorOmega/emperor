@@ -2,6 +2,7 @@ import argparse
 
 from emperor.config import BaseOptions
 from emperor.experiments import experiment_task_name
+from model_runtime.packages import ModelPackage
 from models.catalog import public_id_for_module
 from models.config_overrides import add_config_override_arguments
 from models.model_metadata import load_model_metadata_from_module_path
@@ -16,9 +17,12 @@ def preset_name_to_cli(name: str) -> str:
 
 
 def get_experiment_parser(
-    config_choices: list | None = None,
+    config_choices: list | ModelPackage | None = None,
     experiment_package: str | None = None,
 ) -> _ExperimentParser:
+    package = config_choices if isinstance(config_choices, ModelPackage) else None
+    if package is not None:
+        config_choices = package.preset_type.names()
     parser = _ExperimentParser(
         description="Run an experiment with a named configuration.",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -140,12 +144,20 @@ def get_experiment_parser(
     )
 
     parser.set_defaults(_config_override_dests={})
-    if experiment_package is not None:
-        metadata = load_model_metadata_from_module_path(experiment_package)
-        config_module = metadata.config_module
-        experiment_id = public_id_for_module(experiment_package)
-        if experiment_id is None:
-            experiment_id = experiment_package.removeprefix("models.").replace(".", "/")
+    if package is not None or experiment_package is not None:
+        if package is not None:
+            metadata = package.metadata
+            config_module = package.runtime_defaults
+            experiment_id = package.catalog_key
+        else:
+            assert experiment_package is not None
+            metadata = load_model_metadata_from_module_path(experiment_package)
+            config_module = metadata.config_module
+            experiment_id = public_id_for_module(experiment_package)
+            if experiment_id is None:
+                experiment_id = experiment_package.removeprefix("models.").replace(
+                    ".", "/"
+                )
         task_choices = [
             experiment_task_name(task) for task in metadata.experiment_tasks
         ]
@@ -168,8 +180,8 @@ def get_experiment_parser(
             _config_experiment=experiment_id,
             _config_override_dests=add_config_override_arguments(
                 parser,
-                config_module,
-                metadata.search_space_module,
+                package or config_module,
+                None if package is not None else metadata.search_space_module,
             ),
         )
 

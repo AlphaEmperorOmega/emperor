@@ -21,9 +21,9 @@ from model_runtime.runs import (
     plan_runs,
 )
 from models.catalog import model_package
+from models.experiment_cli_parser import get_experiment_parser
 from models.linears.linear_adaptive.presets import ExperimentPreset
 from models.package_cli import _search_spec, run_model_package_cli
-from models.parser import get_experiment_parser
 
 
 def _linears_linear():
@@ -42,7 +42,7 @@ def _linears_linear_adaptive():
 
 class PackageCliRunsTests(unittest.TestCase):
     def test_parser_accepts_checkpoint_path(self) -> None:
-        args = get_experiment_parser(["baseline"]).parse_args(
+        args = get_experiment_parser(_linears_linear_adaptive()).parse_args(
             ["--preset", "baseline", "--resume-checkpoint", "last.ckpt"]
         )
 
@@ -66,11 +66,7 @@ class PackageCliRunsTests(unittest.TestCase):
             ),
             patch("models.package_cli.execute_runs", return_value=()) as execute,
         ):
-            run_model_package_cli(
-                experiment_type=object,
-                preset_type=ExperimentPreset,
-                module_path="models.linears.linear_adaptive",
-            )
+            run_model_package_cli("linears/linear_adaptive")
 
         self.assertEqual(
             execute.call_args.kwargs["continuation"],
@@ -90,20 +86,16 @@ class PackageCliRunsTests(unittest.TestCase):
             search_keys=None,
             search_set=None,
         )
-        parser = SimpleNamespace(parse_args=lambda: args)
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
         with (
             patch("models.package_cli.get_experiment_parser", return_value=parser),
-            patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+            patch("models.package_cli.resolve_cli_selection") as resolve_mode,
             self.assertRaisesRegex(
                 InvalidCheckpointContinuation,
                 "exactly one explicitly selected --dataset",
             ),
         ):
-            run_model_package_cli(
-                experiment_type=object,
-                preset_type=ExperimentPreset,
-                module_path="models.linears.linear_adaptive",
-            )
+            run_model_package_cli("linears/linear_adaptive")
 
         resolve_mode.assert_not_called()
 
@@ -120,20 +112,16 @@ class PackageCliRunsTests(unittest.TestCase):
             search_keys=None,
             search_set=None,
         )
-        parser = SimpleNamespace(parse_args=lambda: args)
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
         with (
             patch("models.package_cli.get_experiment_parser", return_value=parser),
-            patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+            patch("models.package_cli.resolve_cli_selection") as resolve_mode,
             self.assertRaisesRegex(
                 InvalidCheckpointContinuation,
                 "exactly one explicitly selected --dataset",
             ),
         ):
-            run_model_package_cli(
-                experiment_type=object,
-                preset_type=ExperimentPreset,
-                module_path="models.linears.linear_adaptive",
-            )
+            run_model_package_cli("linears/linear_adaptive")
 
         resolve_mode.assert_not_called()
 
@@ -152,23 +140,19 @@ class PackageCliRunsTests(unittest.TestCase):
                     search_keys=None,
                     search_set=None,
                 )
-                parser = SimpleNamespace(parse_args=lambda args=args: args)
+                parser = SimpleNamespace(parse_args=lambda _argv=None, args=args: args)
                 with (
                     patch(
                         "models.package_cli.get_experiment_parser",
                         return_value=parser,
                     ),
-                    patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+                    patch("models.package_cli.resolve_cli_selection") as resolve_mode,
                     self.assertRaisesRegex(
                         InvalidCheckpointContinuation,
                         "exactly one --preset",
                     ),
                 ):
-                    run_model_package_cli(
-                        experiment_type=object,
-                        preset_type=ExperimentPreset,
-                        module_path="models.linears.linear_adaptive",
-                    )
+                    run_model_package_cli("linears/linear_adaptive")
 
                 resolve_mode.assert_not_called()
 
@@ -187,30 +171,26 @@ class PackageCliRunsTests(unittest.TestCase):
                     search_keys=None,
                     search_set=None,
                 )
-                parser = SimpleNamespace(parse_args=lambda args=args: args)
+                parser = SimpleNamespace(parse_args=lambda _argv=None, args=args: args)
                 with (
                     patch(
                         "models.package_cli.get_experiment_parser",
                         return_value=parser,
                     ),
-                    patch("models.package_cli.resolve_experiment_mode") as resolve_mode,
+                    patch("models.package_cli.resolve_cli_selection") as resolve_mode,
                     self.assertRaisesRegex(
                         InvalidCheckpointContinuation,
                         "does not support search flags",
                     ),
                 ):
-                    run_model_package_cli(
-                        experiment_type=object,
-                        preset_type=ExperimentPreset,
-                        module_path="models.linears.linear_adaptive",
-                    )
+                    run_model_package_cli("linears/linear_adaptive")
 
                 resolve_mode.assert_not_called()
 
     def test_invalid_log_folder_rejects_before_plan_materialization(self) -> None:
         args = SimpleNamespace(datasets=["mnist"], logdir="../invalid")
         mode = SimpleNamespace(
-            experiment_task=None,
+            experiment_task=_linears_linear_adaptive().default_experiment_task,
             preset=ExperimentPreset.BASELINE,
             selected_presets=None,
             search_mode=GridSearch(),
@@ -219,18 +199,14 @@ class PackageCliRunsTests(unittest.TestCase):
             search_overrides={},
             monitor_names=[],
         )
-        parser = SimpleNamespace(parse_args=lambda: args)
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
         with (
             patch("models.package_cli.get_experiment_parser", return_value=parser),
-            patch("models.package_cli.resolve_experiment_mode", return_value=mode),
+            patch("models.package_cli.resolve_cli_selection", return_value=mode),
             patch("models.package_cli.plan_runs") as planner,
             self.assertRaisesRegex(ValueError, "single relative folder"),
         ):
-            run_model_package_cli(
-                experiment_type=object,
-                preset_type=ExperimentPreset,
-                module_path="models.linears.linear_adaptive",
-            )
+            run_model_package_cli("linears/linear_adaptive")
 
         planner.assert_not_called()
 
@@ -368,7 +344,7 @@ class PackageCliRunsTests(unittest.TestCase):
     def test_package_cli_serializes_typed_fixed_class_override(self) -> None:
         args = SimpleNamespace(datasets=["mnist"], logdir=None)
         mode = SimpleNamespace(
-            experiment_task=None,
+            experiment_task=_linears_linear_adaptive().default_experiment_task,
             preset=ExperimentPreset.BASELINE,
             selected_presets=None,
             search_mode=None,
@@ -377,17 +353,13 @@ class PackageCliRunsTests(unittest.TestCase):
             search_overrides={},
             monitor_names=[],
         )
-        parser = SimpleNamespace(parse_args=lambda: args)
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
         with (
             patch("models.package_cli.get_experiment_parser", return_value=parser),
-            patch("models.package_cli.resolve_experiment_mode", return_value=mode),
+            patch("models.package_cli.resolve_cli_selection", return_value=mode),
             patch("models.package_cli.execute_runs", return_value=()) as execute,
         ):
-            run_model_package_cli(
-                experiment_type=object,
-                preset_type=ExperimentPreset,
-                module_path="models.linears.linear_adaptive",
-            )
+            run_model_package_cli("linears/linear_adaptive")
 
         execute.assert_called_once()
         _package, plan = execute.call_args.args

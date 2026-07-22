@@ -1,4 +1,5 @@
 import random
+from collections.abc import Sequence
 from pathlib import Path
 
 from model_runtime.packages import (
@@ -18,8 +19,12 @@ from model_runtime.runs import (
     plan_runs,
 )
 from models.catalog import model_package, model_package_for_module
+from models.cli_selection import resolve_cli_selection
+from models.experiment_cli_parser import get_experiment_parser
 from models.parser import (
-    get_experiment_parser,
+    get_experiment_parser as get_legacy_experiment_parser,
+)
+from models.parser import (
     resolve_dataset_names,
     resolve_experiment_mode,
 )
@@ -99,6 +104,7 @@ def _checkpoint_continuation(args) -> CheckpointContinuation | None:
 
 def run_model_package_cli(
     catalog_key: str | None = None,
+    argv: Sequence[str] | None = None,
     *,
     experiment_type: type | None = None,
     preset_type: type | None = None,
@@ -108,28 +114,36 @@ def run_model_package_cli(
         package = model_package(catalog_key)
         if package is None:
             raise ValueError(f"Unknown Model Package: {catalog_key!r}")
-        preset_type = package.preset_type
-        module_path = f"models.{package.model_type}.{package.model}"
-    if preset_type is None or module_path is None:
-        raise TypeError(
-            "run_model_package_cli requires a catalog key or the legacy package "
-            "types and module path."
+        parser = get_experiment_parser(package)
+        args = parser.parse_args(argv)
+        continuation = _checkpoint_continuation(args)
+        mode = resolve_cli_selection(
+            args,
+            package,
+            package.preset_type,
+            build_monitor_callbacks=False,
         )
-    parser = get_experiment_parser(preset_type.names(), module_path)
-    args = parser.parse_args()
-    continuation = _checkpoint_continuation(args)
-    mode = resolve_experiment_mode(
-        args,
-        preset_type,
-        build_monitor_callbacks=False,
-    )
+    else:
+        if preset_type is None or module_path is None:
+            raise TypeError(
+                "run_model_package_cli requires a catalog key or the legacy package "
+                "types and module path."
+            )
+        parser = get_legacy_experiment_parser(preset_type.names(), module_path)
+        args = parser.parse_args(argv)
+        continuation = _checkpoint_continuation(args)
+        mode = resolve_experiment_mode(
+            args,
+            preset_type,
+            build_monitor_callbacks=False,
+        )
+        package = model_package_for_module(module_path)
+        if package is None:
+            raise ValueError(f"Unknown Model Package module: {module_path}")
     artifacts = FilesystemRunArtifacts(
         root=Path("logs"),
         namespace=args.logdir,
     )
-    package = model_package_for_module(module_path)
-    if package is None:
-        raise ValueError(f"Unknown Model Package module: {module_path}")
     if catalog_key is not None:
         dataset_types = package.resolve_datasets(
             args.datasets,

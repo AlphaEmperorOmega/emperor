@@ -6,6 +6,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+from model_runtime.packages import ModelPackage
 from model_runtime.packages.configuration import (
     MODEL_PARAM_ALIASES as MODEL_PARAM_ALIASES,
 )
@@ -85,10 +86,15 @@ def iter_supported_config_keys(config_module: ModuleType) -> list[str]:
 
 
 def parse_search_set(
-    config_module: ModuleType,
+    config_module: ModuleType | ModelPackage,
     raw_value: str,
     search_space_module: ModuleType | None = None,
 ) -> tuple[str, list[Any]]:
+    package_mode = isinstance(config_module, ModelPackage)
+    if package_mode:
+        package = config_module
+        config_module = package.runtime_defaults
+        search_space_module = package.metadata.search_space
     if "=" not in raw_value:
         raise argparse.ArgumentTypeError(
             "--search-set values must use KEY=v1,v2 syntax"
@@ -101,7 +107,11 @@ def parse_search_set(
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    value_config_key = canonical_config_key_for_module(config_module, raw_key)
+    value_config_key = (
+        canonical_config_key(raw_key)
+        if package_mode
+        else canonical_config_key_for_module(config_module, raw_key)
+    )
     supported_keys = set(iter_supported_config_keys(config_module))
     search_config_key = search_key_to_config_key(value_config_key)
     if search_space_module is None:
@@ -131,9 +141,14 @@ def parse_search_set(
 
 def add_config_override_arguments(
     parser: argparse.ArgumentParser,
-    config_module: ModuleType,
+    config_module: ModuleType | ModelPackage,
     search_space_module: ModuleType | None = None,
 ) -> dict[str, str]:
+    package_mode = isinstance(config_module, ModelPackage)
+    if package_mode:
+        package = config_module
+        config_module = package.runtime_defaults
+        search_space_module = package.metadata.search_space
     dest_to_key = {}
     supported_keys = iter_supported_config_keys(config_module)
     supported_key_set = set(supported_keys)
@@ -155,7 +170,7 @@ def add_config_override_arguments(
             ).search_space_module
         except Exception:
             search_space_module = None
-    if search_space_module is not None:
+    if search_space_module is not None and not package_mode:
         supported_by_model_param = {
             config_key_to_model_param(key): key for key in supported_keys
         }
@@ -194,10 +209,14 @@ def add_config_override_arguments(
 
 def extract_config_overrides(
     args: argparse.Namespace,
-    config_module: ModuleType,
+    config_module: ModuleType | ModelPackage,
     dest_to_key: dict[str, str],
     search_space_module: ModuleType | None = None,
 ) -> tuple[dict[str, Any], dict[str, list[Any]]]:
+    package = config_module if isinstance(config_module, ModelPackage) else None
+    if package is not None:
+        config_module = package.runtime_defaults
+        search_space_module = package.metadata.search_space
     overrides = {}
     for dest, key in dest_to_key.items():
         value = getattr(args, dest, None)
@@ -211,7 +230,7 @@ def extract_config_overrides(
         search_space_module = getattr(args, "_search_space_module", None)
     for raw_search_set in getattr(args, "search_set", []) or []:
         key, values = parse_search_set(
-            config_module,
+            package or config_module,
             raw_search_set,
             search_space_module,
         )
