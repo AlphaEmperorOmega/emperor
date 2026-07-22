@@ -14,12 +14,12 @@ from torch import Tensor
 from torch.utils.data import DataLoader, TensorDataset
 
 from emperor.attention import (
+    AttentionMonitorCallback,
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention.monitoring import AttentionMonitorCallback
 from support.attention import build_attention_config
 
 

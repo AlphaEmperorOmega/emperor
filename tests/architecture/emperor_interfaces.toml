@@ -63,7 +63,10 @@ legacy_cross_owner_private_imports = [
   { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._layers.mixture.MixtureOfExperts" },
 ]
 
-legacy_dependency_cycles = ["emperor.layers,emperor.memory"]
+legacy_dependency_cycles = [
+  "emperor.augmentations.adaptive_parameters,emperor.augmentations.adaptive_parameters.monitoring",
+  "emperor.layers,emperor.memory",
+]
 
 [protected_interfaces."emperor.config"]
 exports = ["BaseOptions", "ConfigBase", "ModelConfig", "optional_field"]
@@ -109,7 +112,9 @@ exports = [
   "SelfAttentionProjectionStrategy",
   "IndependentAttentionConfig",
   "MixtureOfAttentionHeadsConfig",
+  "MixerAttentionConfig",
   "AttentionLayerState",
+  "AttentionMonitorCallback",
 ]
 
 [protected_interfaces."emperor.attention.monitoring"]
@@ -153,6 +158,8 @@ exports = [
   "WeightDecayScheduleOptions",
   "WeightNormalizationOptions",
   "WeightNormalizationPositionOptions",
+  "AdaptiveParameterMonitorCallback",
+  "WeightBankUtilizationMonitorCallback",
 ]
 
 [protected_interfaces."emperor.augmentations.adaptive_parameters.monitoring"]
@@ -269,6 +276,7 @@ exports = [
   "ElementWiseWeightedDynamicMemoryConfig",
   "GatedResidualDynamicMemoryConfig",
   "MemoryInterface",
+  "MemoryMonitorCallback",
   "MemoryPositionOptions",
   "WeightedDynamicMemoryConfig",
 ]

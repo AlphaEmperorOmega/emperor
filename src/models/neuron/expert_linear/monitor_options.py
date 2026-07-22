@@ -3,7 +3,7 @@ from emperor.layers import (
     RecurrentLayerMonitorCallback,
 )
 from emperor.linears import LinearMonitorCallback
-from emperor.memory.monitoring import MemoryMonitorCallback
+from emperor.memory import MemoryMonitorCallback
 from emperor.monitoring import MonitorOption
 from emperor.neuron import NeuronClusterMonitorCallback
 from emperor.sampler import SamplerMonitorCallback

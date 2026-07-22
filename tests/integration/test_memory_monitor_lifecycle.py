@@ -13,9 +13,9 @@ from emperor.memory import (
     AttentionDynamicMemoryConfig,
     ElementWiseWeightedDynamicMemoryConfig,
     GatedResidualDynamicMemoryConfig,
+    MemoryMonitorCallback,
     WeightedDynamicMemoryConfig,
 )
-from emperor.memory.monitoring import MemoryMonitorCallback
 from unit.test_memory import (
     make_memory_config,
     set_constant_output,

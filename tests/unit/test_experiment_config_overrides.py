@@ -12,10 +12,8 @@ import models.gpt.linear.config as gpt_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.vit.linear.config as vit_config
 from emperor.augmentations.adaptive_parameters import (
-    LowRankDynamicWeightConfig,
-)
-from emperor.augmentations.adaptive_parameters.monitoring import (
     AdaptiveParameterMonitorCallback,
+    LowRankDynamicWeightConfig,
 )
 from emperor.datasets.image.classification import Mnist
 from emperor.halting import HaltingMonitorCallback

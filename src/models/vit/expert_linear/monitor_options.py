@@ -1,4 +1,4 @@
-from emperor.attention.monitoring import AttentionMonitorCallback
+from emperor.attention import AttentionMonitorCallback
 from emperor.layers import LayerControllerMonitorCallback
 from emperor.monitoring import MonitorOption
 from emperor.sampler import SamplerMonitorCallback

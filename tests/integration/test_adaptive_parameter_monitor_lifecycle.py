@@ -15,13 +15,11 @@ from torch.utils.data import DataLoader, TensorDataset
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterMonitorCallback,
     BankExpansionFactorOptions,
+    WeightBankUtilizationMonitorCallback,
     WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,
-)
-from emperor.augmentations.adaptive_parameters.monitoring import (
-    AdaptiveParameterMonitorCallback,
-    WeightBankUtilizationMonitorCallback,
 )
 from emperor.layers import (
     ActivationOptions,

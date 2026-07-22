@@ -1,5 +1,5 @@
-from emperor.attention.monitoring import AttentionMonitorCallback
-from emperor.augmentations.adaptive_parameters.monitoring import (
+from emperor.attention import AttentionMonitorCallback
+from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterMonitorCallback,
     WeightBankUtilizationMonitorCallback,
 )
