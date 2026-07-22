@@ -47,7 +47,8 @@ REQUEST_BODY_ENDPOINT_CASES = (
     (
         "/inspect",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "overrides": {},
         },
@@ -100,7 +101,8 @@ REQUEST_BODY_ENDPOINT_CASES = (
     (
         "/training/jobs",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],
@@ -112,7 +114,8 @@ REQUEST_BODY_ENDPOINT_CASES = (
     (
         "/training/run-plan",
         {
-            "model": "linears/linear",
+            "modelType": "linears",
+            "model": "linear",
             "preset": "baseline",
             "presets": ["baseline"],
             "datasets": ["Mnist"],

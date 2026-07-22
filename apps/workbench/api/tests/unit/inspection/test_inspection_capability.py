@@ -26,6 +26,7 @@ from emperor_workbench.inspection import (
 )
 from emperor_workbench.inspection._subprocess import _DEFAULT_WORKER_COMMAND
 from emperor_workbench.inspection._worker_protocol import (
+    decode_worker_request,
     decode_worker_response,
     domain_failure_envelope,
     encode_worker_request,
@@ -255,6 +256,11 @@ class InspectionCapabilityTests(unittest.TestCase):
                 },
             },
         )
+
+        malformed_payload = dict(payload)
+        malformed_payload["model"] = "linears/linear"
+        with self.assertRaisesRegex(ValueError, "model identity"):
+            decode_worker_request(malformed_payload)
 
         result = InspectionService(InProcessInspectionExecutor()).inspect(
             selected,

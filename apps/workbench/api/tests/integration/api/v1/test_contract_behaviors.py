@@ -231,6 +231,26 @@ class ApiIntegrationContractTests(unittest.TestCase):
         self.assertEqual(dataset_by_name["Mnist"]["inputDim"], 784)
         self.assertEqual(dataset_by_name["Mnist"]["outputDim"], 10)
 
+    def test_retired_flat_model_routes_are_not_registered(self) -> None:
+        import httpx
+
+        from emperor_workbench.api import app
+
+        async def call_api() -> list[httpx.Response]:
+            async with _lifespan_client(app) as client:
+                return [
+                    await client.get(path)
+                    for path in (
+                        "/models/linear/presets",
+                        "/models/linear/datasets",
+                        "/models/linear/config-schema",
+                    )
+                ]
+
+        responses = asyncio.run(call_api())
+
+        self.assertTrue(all(response.status_code == 404 for response in responses))
+
     def test_api_health_and_inspect(self) -> None:
         import httpx
 

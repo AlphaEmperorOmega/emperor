@@ -169,7 +169,8 @@ def make_job(root: Path) -> TrainingJobRecord:
         planned_run_count=1,
         run_plan=RunPlanPersistenceCodec.decode(
             {
-                "model": "linears/linear",
+                "modelType": "linears",
+                "model": "linear",
                 "preset": "baseline",
                 "presets": ["baseline"],
                 "datasets": ["Mnist"],

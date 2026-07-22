@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from model_runtime.packages import model_key
+
 from emperor_workbench.failures import FailureKind
 from emperor_workbench.inspection._errors import InspectionFailure
 
@@ -81,6 +83,10 @@ def decode_worker_request(payload: object) -> InspectionWorkerRequest:
     experiment_task = payload.get("experimentTask")
     if not isinstance(model_type, str) or not isinstance(model, str):
         raise ValueError("Invalid Inspection worker model identity.")
+    try:
+        model_key(model_type, model)
+    except ValueError as exc:
+        raise ValueError("Invalid Inspection worker model identity.") from exc
     if not isinstance(preset, str) or not isinstance(overrides, Mapping):
         raise ValueError("Invalid Inspection worker request.")
     if dataset is not None and not isinstance(dataset, str):

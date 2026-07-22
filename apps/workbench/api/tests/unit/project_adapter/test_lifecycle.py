@@ -220,7 +220,7 @@ class ProjectAdapterLifecycleTests(unittest.TestCase):
         second.catalog.return_value = (
             ModelPackageReference(
                 "experts",
-                "mixture-of-experts",
+                "linear",
                 second,
             ),
         )

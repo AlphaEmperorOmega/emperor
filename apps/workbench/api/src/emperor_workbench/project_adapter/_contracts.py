@@ -42,9 +42,17 @@ class ModelPackageReference:
     model: str
     client: ProjectAdapterClient
 
+    def __post_init__(self) -> None:
+        try:
+            _identity = self.identity
+        except ValueError as exc:
+            raise ProjectAdapterProtocolFailure(
+                "The project Adapter Model Package identity is invalid."
+            ) from exc
+
     @property
     def catalog_key(self) -> str:
-        return f"{self.model_type}/{self.model}"
+        return self.identity.catalog_key
 
     @property
     def identity(self) -> ModelIdentity:

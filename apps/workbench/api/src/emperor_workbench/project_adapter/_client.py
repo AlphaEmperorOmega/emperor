@@ -23,6 +23,7 @@ from model_runtime.inspection import (
     ParsedOverrides,
     SearchSpace,
 )
+from model_runtime.packages import split_model_id
 from model_runtime.runs import PlanningBudget, RunPlan, RunRequest, SubmittedRun
 
 from emperor_workbench.failures import FailureKind
@@ -362,10 +363,14 @@ class ProjectAdapterClient:
         return references
 
     def package(self, model_id: str) -> ModelPackageReference:
-        if not isinstance(model_id, str) or len(model_id.split("/")) != 2:
+        identity = split_model_id(model_id)
+        if identity is None:
             raise ProjectAdapterFailure(f"Unknown model: {model_id}")
-        model_type, model = model_id.split("/", 1)
-        reference = ModelPackageReference(model_type, model, self)
+        reference = ModelPackageReference(
+            identity.model_type,
+            identity.model,
+            self,
+        )
         reference.metadata_payload()
         return reference
 

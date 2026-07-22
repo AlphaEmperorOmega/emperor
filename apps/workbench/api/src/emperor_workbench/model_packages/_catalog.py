@@ -7,7 +7,6 @@ from typing import Any
 from model_runtime.packages import model_key
 
 from emperor_workbench.model_packages._errors import ModelPackageFailure
-from emperor_workbench.model_packages._identity import flat_model_identity
 from emperor_workbench.model_packages._records import ModelPackageIdentity
 from emperor_workbench.model_packages._selection import SelectedModelPackage
 from emperor_workbench.project_adapter import (
@@ -59,24 +58,17 @@ class ModelPackageCatalog:
         payload: Mapping[str, Any],
     ) -> str | None:
         identity = ModelPackageIdentity.from_mapping(payload)
-        if identity is not None:
-            return identity.catalog_key
-        model = payload.get("model")
-        if not isinstance(model, str):
-            return None
-        identity = flat_model_identity(model, self.identities())
         return identity.catalog_key if identity is not None else None
 
     def identity_lookup(self) -> Mapping[str, str]:
         """Return one finite canonical lookup for accepted identity tokens."""
 
-        identities = self.identities()
-        lookup = {identity.catalog_key: identity.catalog_key for identity in identities}
-        for model in {identity.model for identity in identities}:
-            identity = flat_model_identity(model, identities)
-            if identity is not None:
-                lookup[model] = identity.catalog_key
-        return MappingProxyType(lookup)
+        return MappingProxyType(
+            {
+                identity.catalog_key: identity.catalog_key
+                for identity in self.identities()
+            }
+        )
 
 
 __all__ = ["ModelPackageCatalog"]

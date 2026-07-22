@@ -18,6 +18,29 @@ from ._support import _FakeOneShotProcess, _response
 
 
 class ProjectAdapterWireTests(unittest.TestCase):
+    def test_model_package_references_require_exact_identity_segments(self) -> None:
+        client = ProjectAdapterClient(("adapter",), persistent=False)
+        for model_type, model in (
+            ("linears", "linear/extra"),
+            ("linears", "linear-name"),
+            ("linears/path", "linear"),
+            (" linears", "linear"),
+        ):
+            with (
+                self.subTest(model_type=model_type, model=model),
+                self.assertRaisesRegex(ProjectAdapterFailure, "identity is invalid"),
+            ):
+                ModelPackageReference(model_type, model, client)
+
+        client.call = Mock()  # type: ignore[method-assign]
+        for model_id in ("linear", "linears/linear/extra", "linears/linear-name"):
+            with (
+                self.subTest(model_id=model_id),
+                self.assertRaisesRegex(ProjectAdapterFailure, "Unknown model"),
+            ):
+                client.package(model_id)
+        client.call.assert_not_called()
+
     def test_nonpersistent_call_validates_success_and_process_exit(self) -> None:
         process = _FakeOneShotProcess(_response({"answer": 42}))
         with patch(

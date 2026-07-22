@@ -195,20 +195,13 @@ class ModelPackageIdentity:
         payload: Mapping[str, Any],
     ) -> ModelPackageIdentity | None:
         model_type = payload.get("modelType")
-        if not isinstance(model_type, str):
-            model_type = payload.get("model_type")
         model = payload.get("model")
         if isinstance(model_type, str) and isinstance(model, str):
             try:
                 return cls(model_type, model)
             except ValueError:
                 return None
-        if not isinstance(model, str):
-            return None
-        identity = split_model_id(model)
-        if identity is None:
-            return None
-        return cls(identity.model_type, identity.model)
+        return None
 
 
 @dataclass(frozen=True, slots=True)
