@@ -729,7 +729,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
             }
         ),
         description="Default recurrent adaptive config with step-level gating "
@@ -739,7 +739,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
             }
         ),
         description="Default recurrent adaptive config with recurrent halting enabled, "
@@ -759,8 +759,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
             }
         ),
         description="Default recurrent adaptive config with both step-level gating and "
@@ -770,7 +770,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -781,7 +781,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -792,8 +792,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -843,7 +843,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

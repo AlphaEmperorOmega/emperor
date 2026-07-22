@@ -19,6 +19,7 @@ from emperor.layers import (
     RecurrentLayerConfig,
 )
 from model_runtime.packages import PresetDefinition
+from models.catalog import model_package
 from models.linears.linear_adaptive import (
     _adaptive_parameter_config_factory,
     _control_config_factory,
@@ -32,7 +33,6 @@ from models.linears.linear_adaptive.config_builder import (
 from models.linears.linear_adaptive.model import Model
 from models.linears.linear_adaptive.presets import (
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.linears.linear_adaptive.runtime_defaults import (
     DEFAULT_RUNTIME,
@@ -59,21 +59,23 @@ class TestRuntimeDefaults(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertIsNotNone(runtime_from_flat({key: value}))
 
-    def test_aliases_translate_and_conflicts_fail(self):
+    def test_canonical_key_translates_and_noncanonical_spellings_fail(self):
         runtime = runtime_from_flat(
-            {"stack_layer_norm_position": DEFAULT_RUNTIME.stack.layer_norm_position}
+            {"layer_norm_position": DEFAULT_RUNTIME.stack.layer_norm_position}
         )
         self.assertEqual(
             runtime.stack.layer_norm_position,
             DEFAULT_RUNTIME.stack.layer_norm_position,
         )
-        with self.assertRaisesRegex(ValueError, "conflicting aliases"):
-            runtime_from_flat(
-                {
-                    "layer_norm_position": DEFAULT_RUNTIME.stack.layer_norm_position,
-                    "stack_layer_norm_position": LayerNormPositionOptions.AFTER,
-                }
-            )
+        for retired_key in (
+            "stack_layer_norm_position",
+            "layer-norm-position",
+            "LAYER_NORM_POSITION",
+            " layer_norm_position",
+        ):
+            with self.subTest(retired_key=retired_key):
+                with self.assertRaisesRegex(ValueError, "unknown runtime key"):
+                    runtime_from_flat({retired_key: LayerNormPositionOptions.AFTER})
 
     def test_unknown_type_and_invalid_values_fail_atomically(self):
         with self.assertRaisesRegex(ValueError, "linear_adaptive.*unknown.*bogus"):
@@ -198,8 +200,8 @@ class TestConstruction(unittest.TestCase):
             {
                 "stack_gate_flag": True,
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "weight_option_flag": True,
                 "weight_option": DualModelDynamicWeightConfig,
             }
@@ -228,13 +230,13 @@ class TestConstruction(unittest.TestCase):
 
 class TestPresetsAndMetadata(unittest.TestCase):
     def test_every_preset_builds(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear_adaptive").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 self.assertEqual(len(presets.get_config(preset)), 1)
 
     def test_preset_identity_values_and_descriptions_are_stable(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear_adaptive").presets
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
             list(range(1, len(ExperimentPreset) + 1)),
@@ -266,7 +268,7 @@ class TestModelBehavior(unittest.TestCase):
         )
 
     def test_every_preset_forwards_one_batch(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear_adaptive").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -278,7 +280,7 @@ class TestModelBehavior(unittest.TestCase):
                 self.assertEqual(logits.shape, (2, dataset.num_classes))
 
     def test_baseline_forwards_every_declared_dataset(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear_adaptive").presets
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ]:
@@ -289,7 +291,7 @@ class TestModelBehavior(unittest.TestCase):
                 self.assertEqual(logits.shape, (2, dataset.num_classes))
 
     def test_every_preset_trains_for_one_smoke_epoch(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear_adaptive").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]

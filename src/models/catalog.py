@@ -15,6 +15,7 @@ from model_runtime.packages.identity import (
 )
 from models.experts.linear import MODEL_PACKAGE as EXPERTS_LINEAR
 from models.experts.linear_adaptive import MODEL_PACKAGE as EXPERTS_LINEAR_ADAPTIVE
+from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
 from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
 )
@@ -70,9 +71,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
         "models.linears.linear",
         checkpoint_metadata_module="models.linears.linear.checkpoint_metadata",
     ),
-    "linears/linear_adaptive": ModelPackage(
-        "linears", "linear_adaptive", "models.linears.linear_adaptive"
-    ),
+    "linears/linear_adaptive": LINEARS_LINEAR_ADAPTIVE,
     "experts/linear": EXPERTS_LINEAR,
     "experts/linear_adaptive": EXPERTS_LINEAR_ADAPTIVE,
     "parametric/parametric_vector": PARAMETRIC_VECTOR,

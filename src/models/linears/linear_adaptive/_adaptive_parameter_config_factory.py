@@ -154,7 +154,7 @@ class AdaptiveParameterConfigFactory:
         return AdaptiveParameterAugmentationConfig(
             weight_config=self._weight_config(
                 options.weight_option,
-                generator_depth=options.weight_generator_depth,
+                generator_depth=options.generator_depth,
                 decay_schedule=options.weight_decay_schedule,
                 decay_rate=options.weight_decay_rate,
                 decay_warmup_batches=options.weight_decay_warmup_batches,
