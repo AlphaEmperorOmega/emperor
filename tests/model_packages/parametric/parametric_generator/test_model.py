@@ -32,6 +32,7 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
 )
 from model_runtime.packages import GridSearch, RandomSearch
+from models.catalog import model_package
 from models.parametric.parametric_generator.config_builder import (
     ParametricGeneratorConfigBuilder,
 )
@@ -40,7 +41,6 @@ from models.parametric.parametric_generator.model import Model
 from models.parametric.parametric_generator.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.parametric.parametric_generator.runtime_options import (
     ParametricGeneratorStackOptions,
@@ -48,11 +48,25 @@ from models.parametric.parametric_generator.runtime_options import (
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
+    RuntimeOptions,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("parametric/parametric_generator").bind_runtime_defaults(
+        runtime_defaults
+    )
+    return ParametricGeneratorConfigBuilder(runtime=runtime).build()
+
+
+def _build_typed_config(**construction_values):
+    return ParametricGeneratorConfigBuilder(
+        runtime=RuntimeOptions(construction_values)
+    ).build()
 
 
 class TestParametricGeneratorModel(unittest.TestCase):
@@ -70,8 +84,11 @@ class TestParametricGeneratorModel(unittest.TestCase):
                 self.assertEqual(module.__name__, module_name)
 
     def test_experiment_public_model_id_remains_catalog_id(self):
+        experiment = Experiment(
+            model_package=model_package("parametric/parametric_generator")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "parametric/parametric_generator",
         )
 
@@ -82,12 +99,14 @@ class TestParametricGeneratorModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.parametric.parametric_generator.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
 
@@ -97,16 +116,15 @@ class TestParametricGeneratorModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(
-                dataset.__name__
-                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            (
+                dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
-                ]
+                ][0].__name__,
             ),
         )
 
     def test_modern_preset_contract_is_exposed(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_generator").presets
 
         self.assertEqual(
             {
@@ -124,7 +142,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         )
 
     def test_empty_overrides_generate_empty_locks(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_generator").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -132,11 +150,11 @@ class TestParametricGeneratorModel(unittest.TestCase):
                 self.assertEqual(presets.locked_fields(preset), {})
 
     def test_builder_returns_boundary_style_experiment_config(self):
-        cfg = ParametricGeneratorConfigBuilder(
+        cfg = _build_config(
             input_dim=8,
             hidden_dim=4,
             output_dim=3,
-        ).build()
+        )
 
         self.assertIsInstance(cfg.experiment_config, ExperimentConfig)
         self.assertIsNotNone(cfg.experiment_config.input_model_config)
@@ -191,7 +209,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
             dropout_probability=0.05,
         )
 
-        flat_cfg = ParametricGeneratorConfigBuilder(
+        flat_cfg = _build_config(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -231,8 +249,8 @@ class TestParametricGeneratorModel(unittest.TestCase):
             generator_stack_dropout_probability=(
                 generator_stack_options.dropout_probability
             ),
-        ).build()
-        grouped_cfg = ParametricGeneratorConfigBuilder(
+        )
+        grouped_cfg = _build_typed_config(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -242,16 +260,16 @@ class TestParametricGeneratorModel(unittest.TestCase):
             sampler_options=sampler_options,
             router_options=router_options,
             generator_stack_options=generator_stack_options,
-        ).build()
+        )
 
         self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_router_and_sampler_defaults_match_expected_structure(self):
-        cfg = ParametricGeneratorConfigBuilder(
+        cfg = _build_config(
             input_dim=8,
             hidden_dim=9,
             output_dim=3,
-        ).build()
+        )
         parametric_config = (
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -298,7 +316,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_preset_builds_current_parametric_config(self):
         hidden_dim = 5
-        cfg = ExperimentPresets()._preset(
+        cfg = model_package("parametric/parametric_generator").presets._preset(
             input_dim=8,
             hidden_dim=hidden_dim,
             output_dim=3,
@@ -339,7 +357,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         )
 
     def test_generator_weight_and_bias_configs_use_matching_moe_configs(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = model_package("parametric/parametric_generator").presets._preset(
             input_dim=8,
             hidden_dim=5,
             output_dim=3,
@@ -383,7 +401,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_forward_one_batch_per_dataset(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_generator").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -401,7 +419,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
                 self.assertEqual(auxiliary_loss.shape, torch.Size([]))
 
     def test_all_presets_train_one_epoch(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_generator").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -420,7 +438,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_config_search_space_builds_configs(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_generator").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -449,7 +467,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            ExperimentPresets().get_config(
+            model_package("parametric/parametric_generator").presets.get_config(
                 ExperimentPreset.CONFIG,
                 dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -461,7 +479,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         self.assertIn("Unknown", str(ctx.exception))
 
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_generator").presets.get_config(
             ExperimentPreset.PRESET,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -477,7 +495,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         )
 
     def test_config_search_sweeps_hidden_dim_axis(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_generator").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -493,7 +511,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         )
 
     def test_config_search_applies_generator_specific_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_generator").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -520,7 +538,9 @@ class TestParametricGeneratorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = model_package("parametric/parametric_generator").presets._preset(
+            input_dim=8, hidden_dim=4, output_dim=3
+        )
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])

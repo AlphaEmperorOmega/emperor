@@ -11,6 +11,7 @@ from models.parametric.parametric_generator.config_builder import (
     ParametricGeneratorConfigBuilder,
 )
 from models.parametric.parametric_generator.model import Model
+from models.parametric.parametric_generator.runtime_defaults import runtime_from_flat
 
 
 class ExperimentPreset(BaseOptions):
@@ -44,6 +45,9 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             default_preset=ExperimentPreset.PRESET,
         )
 
+    def _preset(self, **kwargs):
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
+
 
 class Experiment(ExperimentBase):
     def __init__(
@@ -51,7 +55,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

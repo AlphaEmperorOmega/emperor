@@ -17,7 +17,7 @@ from model_runtime.runs import (
     execute_runs,
     plan_runs,
 )
-from models.catalog import model_package_for_module
+from models.catalog import model_package, model_package_for_module
 from models.parser import (
     get_experiment_parser,
     resolve_dataset_names,
@@ -98,11 +98,23 @@ def _checkpoint_continuation(args) -> CheckpointContinuation | None:
 
 
 def run_model_package_cli(
+    catalog_key: str | None = None,
     *,
-    experiment_type: type,
-    preset_type: type,
-    module_path: str,
-) -> None:
+    experiment_type: type | None = None,
+    preset_type: type | None = None,
+    module_path: str | None = None,
+) -> int:
+    if catalog_key is not None:
+        package = model_package(catalog_key)
+        if package is None:
+            raise ValueError(f"Unknown Model Package: {catalog_key!r}")
+        preset_type = package.preset_type
+        module_path = f"models.{package.model_type}.{package.model}"
+    if preset_type is None or module_path is None:
+        raise TypeError(
+            "run_model_package_cli requires a catalog key or the legacy package "
+            "types and module path."
+        )
     parser = get_experiment_parser(preset_type.names(), module_path)
     args = parser.parse_args()
     continuation = _checkpoint_continuation(args)
@@ -118,10 +130,16 @@ def run_model_package_cli(
     package = model_package_for_module(module_path)
     if package is None:
         raise ValueError(f"Unknown Model Package module: {module_path}")
-    dataset_types = resolve_dataset_names(
-        package.dataset_options_for_task(mode.experiment_task),
-        args.datasets,
-    )
+    if catalog_key is not None:
+        dataset_types = package.resolve_datasets(
+            args.datasets,
+            mode.experiment_task,
+        )
+    else:
+        dataset_types = resolve_dataset_names(
+            package.dataset_options_for_task(mode.experiment_task),
+            args.datasets,
+        )
     plan = plan_runs(
         package,
         RunRequest(
@@ -147,6 +165,7 @@ def run_model_package_cli(
         monitors=tuple(mode.monitor_names),
         continuation=continuation,
     )
+    return 0
 
 
 __all__ = ["run_model_package_cli"]

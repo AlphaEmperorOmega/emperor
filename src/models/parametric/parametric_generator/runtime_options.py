@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from emperor.layers import ActivationOptions, ResidualConnectionOptions
 from emperor.parametric import ClipParameterOptions
+from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
 
 @dataclass(frozen=True)
@@ -49,19 +50,6 @@ class ParametricGeneratorStackOptions:
     dropout_probability: float
 
 
-# Preserve historical class paths for serialization compatibility.
-ParametricGeneratorStackOptions.__module__ = (
-    "models.parametric.parametric_generator._stack_config_factory"
-)
-ParametricMixtureOptions.__module__ = (
-    "models.parametric.parametric_generator._stack_config_factory"
-)
-ParametricRouterOptions.__module__ = (
-    "models.parametric.parametric_generator._stack_config_factory"
-)
-ParametricSamplerOptions.__module__ = (
-    "models.parametric.parametric_generator._stack_config_factory"
-)
-ParametricStackOptions.__module__ = (
-    "models.parametric.parametric_generator._stack_config_factory"
-)
+@dataclass(frozen=True, slots=True)
+class RuntimeOptions(ResolvedRuntimeOptions):
+    pass

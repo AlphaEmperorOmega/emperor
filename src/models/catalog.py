@@ -13,6 +13,9 @@ from model_runtime.packages.identity import (
     model_key,
     split_model_id,
 )
+from models.parametric.parametric_generator import (
+    MODEL_PACKAGE as PARAMETRIC_GENERATOR,
+)
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/linear": ModelPackage("bert", "linear", "models.bert.linear"),
@@ -78,11 +81,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "parametric/parametric_matrix": ModelPackage(
         "parametric", "parametric_matrix", "models.parametric.parametric_matrix"
     ),
-    "parametric/parametric_generator": ModelPackage(
-        "parametric",
-        "parametric_generator",
-        "models.parametric.parametric_generator",
-    ),
+    "parametric/parametric_generator": PARAMETRIC_GENERATOR,
     "neuron/linear": ModelPackage("neuron", "linear", "models.neuron.linear"),
     "neuron/linear_adaptive": ModelPackage(
         "neuron", "linear_adaptive", "models.neuron.linear_adaptive"
@@ -120,8 +119,16 @@ MODEL_ORDER: dict[str, int] = {
 
 EMPTY_CATEGORY_PACKAGES: set[str] = set()
 
+
+def _module_path_for_package(package: ModelPackage) -> str:
+    return package.module_path or (
+        f"models.{package.identity.model_type}.{package.identity.model}"
+    )
+
+
 _MODULE_TO_PUBLIC_ID = {
-    package.module_path: public_id for public_id, package in MODEL_CATALOG.items()
+    _module_path_for_package(package): public_id
+    for public_id, package in MODEL_CATALOG.items()
 }
 
 
@@ -232,7 +239,7 @@ def catalog_entry(model_id: str) -> ModelPackage | None:
 
 def module_path_for_model_id(model_id: str) -> str | None:
     package = model_package(model_id)
-    return package.module_path if package is not None else None
+    return _module_path_for_package(package) if package is not None else None
 
 
 def module_path_for_model_identity(model_type: str, model: str) -> str | None:
