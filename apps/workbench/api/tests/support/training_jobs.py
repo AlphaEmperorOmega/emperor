@@ -104,7 +104,6 @@ def run_plan_payload(plan: TrainingRunPlanView) -> dict[str, Any]:
                     for change in run.changes
                 ],
                 "overrides": run.overrides,
-                "command": run.command,
                 "commandArgv": run.command_argv,
                 "commands": {
                     "posix": run.commands.posix,

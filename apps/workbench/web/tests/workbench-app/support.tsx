@@ -1801,7 +1801,7 @@ function mockTrainingSearchCombinations(request: MockTrainingPlanRequest) {
   return combinations;
 }
 
-function mockTrainingCommand(input: {
+function mockTrainingCommandProjection(input: {
   modelType: string;
   model: string;
   preset: string;
@@ -1812,8 +1812,10 @@ function mockTrainingCommand(input: {
   overrides: Record<string, unknown>;
 }) {
   const parts = [
-    "source",
-    "experiment.sh",
+    "mise",
+    "run",
+    "experiment",
+    "--",
     "--model-type",
     input.modelType,
     "--model",
@@ -1838,7 +1840,11 @@ function mockTrainingCommand(input: {
       parts.push(`--${key.replaceAll("_", "-")}`, String(value ?? "None"));
     }
   }
-  return parts.join(" ");
+  const command = parts.join(" ");
+  return {
+    commandArgv: parts,
+    commands: { posix: command, powershell: command },
+  };
 }
 
 function mockTrainingRunPlan(
@@ -1871,7 +1877,7 @@ function mockTrainingRunPlan(
           dataset,
           changes: [...fixedChanges, ...combination.changes],
           overrides: rowOverrides,
-          command: mockTrainingCommand({
+          ...mockTrainingCommandProjection({
             modelType,
             model,
             preset: runPreset,
@@ -1914,7 +1920,7 @@ function mockTrainingRunPlan(
           source: "override",
         })),
         overrides: rowOverrides,
-        command: mockTrainingCommand({
+        ...mockTrainingCommandProjection({
           modelType,
           model,
           preset: snapshot.preset,
@@ -2049,7 +2055,7 @@ function mockAcceptedTrainingRunPlan(
         source: "override",
       })),
       overrides,
-      command: mockTrainingCommand({
+      ...mockTrainingCommandProjection({
         modelType: request.modelType ?? "linears",
         model: request.model ?? "linear",
         preset,

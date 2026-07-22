@@ -13,6 +13,7 @@ function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
   const index = overrides.index ?? 1;
   const preset = overrides.preset ?? "baseline";
   const dataset = overrides.dataset ?? "Mnist";
+  const command = `mise run experiment -- --model-type linears --model linear --preset ${preset} --datasets ${dataset}`;
 
   return {
     id: `run-${index}`,
@@ -24,7 +25,8 @@ function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
     dataset,
     changes: [],
     overrides: {},
-    command: `source experiment.sh --model-type linears --model linear --preset ${preset} --datasets ${dataset}`,
+    commandArgv: command.split(" "),
+    commands: { posix: command, powershell: command },
     totalEpochs: 30,
     currentEpoch: 0,
     metrics: {},
@@ -143,10 +145,14 @@ function renderCard(
 describe("TrainingRunPlanCard", () => {
   it("renders a draft run plan with counts and next run identity", () => {
     const command =
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist";
+      "mise run experiment -- --model-type linears --model linear --preset baseline --datasets Mnist";
     renderCard({
       plan: plan([
-        run({ index: 1, command }),
+        run({
+          index: 1,
+          commandArgv: command.split(" "),
+          commands: { posix: command, powershell: command },
+        }),
         run({ index: 2, dataset: "Cifar10" }),
       ]),
     });

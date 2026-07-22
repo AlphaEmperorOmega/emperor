@@ -112,7 +112,11 @@ class JsonApiSchemaTests(unittest.TestCase):
                     "dataset": "Mnist",
                     "changes": [],
                     "overrides": {},
-                    "command": "python train.py",
+                    "commandArgv": ["mise", "run", "experiment", "--"],
+                    "commands": {
+                        "posix": "mise run experiment --",
+                        "powershell": "mise run experiment --",
+                    },
                     "totalEpochs": 1,
                     "currentEpoch": 0,
                     "metrics": {"bad": object()},

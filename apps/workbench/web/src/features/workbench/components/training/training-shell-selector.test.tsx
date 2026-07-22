@@ -52,9 +52,18 @@ describe("TrainingShellSelector", () => {
     });
   });
 
-  it("uses the compatibility command when a shell projection is absent", () => {
-    expect(commandForShell({ command: "source experiment.sh" }, "powershell"))
-      .toBe("source experiment.sh");
+  it("uses the requested canonical shell projection", () => {
+    expect(
+      commandForShell(
+        {
+          commands: {
+            posix: "mise run experiment -- --posix",
+            powershell: "mise run experiment -- --powershell",
+          },
+        },
+        "powershell",
+      ),
+    ).toBe("mise run experiment -- --powershell");
   });
 
   it("uses a deterministic POSIX server snapshot", () => {

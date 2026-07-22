@@ -186,7 +186,11 @@ def make_job(root: Path) -> TrainingJobRecord:
                         "dataset": "Mnist",
                         "changes": [],
                         "overrides": {},
-                        "command": "train",
+                        "commandArgv": ["mise", "run", "experiment", "--"],
+                        "commands": {
+                            "posix": "mise run experiment --",
+                            "powershell": "mise run experiment --",
+                        },
                         "totalEpochs": 2,
                         "currentEpoch": 0,
                         "metrics": {},

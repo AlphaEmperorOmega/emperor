@@ -47,6 +47,11 @@ def training_job_record(job_id: str, root: Path) -> TrainingJobRecord:
                         "preset": "baseline",
                         "status": "Pending",
                         "currentEpoch": 0,
+                        "commandArgv": ["mise", "run", "experiment", "--"],
+                        "commands": {
+                            "posix": "mise run experiment --",
+                            "powershell": "mise run experiment --",
+                        },
                         "totalEpochs": 2,
                     }
                 ],

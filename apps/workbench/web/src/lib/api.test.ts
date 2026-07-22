@@ -466,8 +466,20 @@ const successfulTrainingRunFixture = {
     learning_rate: 0.01,
     use_bias: true,
   },
-  command:
-    "python experiment.py linear --preset baseline --dataset Mnist --learning-rate 0.01",
+  commandArgv: [
+    "mise",
+    "run",
+    "experiment",
+    "--",
+    "--model-type",
+    "linears",
+    "--model",
+    "linear",
+  ],
+  commands: {
+    posix: "mise run experiment -- --model-type linears --model linear",
+    powershell: "mise run experiment -- --model-type linears --model linear",
+  },
   totalEpochs: 10,
   currentEpoch: 3,
   metrics: {
@@ -4116,8 +4128,22 @@ describe("fetchTrainingRunPlan", () => {
           dataset: "Mnist",
           changes: [],
           overrides: {},
-          command:
-            "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist",
+          commandArgv: [
+            "mise",
+            "run",
+            "experiment",
+            "--",
+            "--model-type",
+            "linears",
+            "--model",
+            "linear",
+          ],
+          commands: {
+            posix:
+              "mise run experiment -- --model-type linears --model linear --preset baseline --datasets Mnist",
+            powershell:
+              "mise run experiment -- --model-type linears --model linear --preset baseline --datasets Mnist",
+          },
           totalEpochs: 30,
           currentEpoch: 0,
           metrics: {},

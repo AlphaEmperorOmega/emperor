@@ -2860,7 +2860,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.on).toHaveAttribute("aria-checked", "true");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag true",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag true",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -2872,7 +2872,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.off).toHaveAttribute("aria-checked", "true");
     commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag false",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag false",
     );
   });
 
@@ -3866,7 +3866,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(commandDialog).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: /full configuration/i })).toBeInTheDocument();
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline",
+      "mise run experiment -- --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -3881,7 +3881,7 @@ describe("WorkbenchApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset recurrent-gating-halting",
+      "mise run experiment -- --model-type linears --model linear --preset recurrent-gating-halting",
     );
     expect((commandField(commandDialog) as HTMLTextAreaElement).value).not.toContain("--config");
   });
@@ -3904,7 +3904,7 @@ describe("WorkbenchApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
     );
   });
 
@@ -3938,7 +3938,7 @@ describe("WorkbenchApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim abc",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim abc",
     );
   });
 
@@ -3951,7 +3951,7 @@ describe("WorkbenchApp Full Config", () => {
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
@@ -3959,7 +3959,7 @@ describe("WorkbenchApp Full Config", () => {
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline",
+      "mise run experiment -- --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -3996,7 +3996,7 @@ describe("WorkbenchApp Full Config", () => {
     );
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule 'cosine decay'",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --dropout-schedule 'cosine decay'",
     );
 
     await user.click(within(commandDialog).getByRole("button", { name: /close training command/i }));
@@ -4004,7 +4004,7 @@ describe("WorkbenchApp Full Config", () => {
     commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline",
+      "mise run experiment -- --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -4021,7 +4021,7 @@ describe("WorkbenchApp Full Config", () => {
     const dialog = await openFullConfig(user);
     await typeConfigFieldValue(user, dialog, /hidden dim/i, "128");
     const commandDialog = await openTrainingCommand(user, dialog);
-    const expectedCommand = "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128";
+    const expectedCommand = "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128";
 
     await user.click(within(commandDialog).getByRole("button", { name: /copy command/i }));
 

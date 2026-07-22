@@ -102,7 +102,6 @@ class TrainingRunResponse(ApiResponseModel):
     experimentTask: str = ""
     changes: list[TrainingRunChangeResponse] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
-    command: str
     commandArgv: list[str] = Field(default_factory=list)
     commands: TrainingCommandsResponse = Field(default_factory=TrainingCommandsResponse)
     totalEpochs: int

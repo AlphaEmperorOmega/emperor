@@ -41,21 +41,19 @@ export const trainingRunSchema = z.object({
   experimentTask: z.string().optional(),
   changes: z.array(trainingRunChangeSchema),
   overrides: configOverridesSchema,
-  command: z.string(),
-  commandArgv: z.array(z.string()).optional(),
+  commandArgv: z.array(z.string()),
   commands: z
     .object({
       posix: z.string(),
       powershell: z.string(),
-    })
-    .optional(),
+    }),
   totalEpochs: z.number(),
   currentEpoch: z.number(),
   metrics: jsonObjectSchema,
   logDir: z.string().nullable(),
   error: z.string().nullable(),
   errorTraceback: z.string().nullable().optional(),
-});
+}).strict();
 
 export const trainingRunPlanSummarySchema = z.object({
   totalRuns: z.number(),

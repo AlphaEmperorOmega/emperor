@@ -121,7 +121,11 @@ function runPlan({
       dataset: "Mnist",
       changes: [],
       overrides: {},
-      command: `run ${offset + 1}`,
+      commandArgv: ["run", String(offset + 1)],
+      commands: {
+        posix: `run ${offset + 1}`,
+        powershell: `run ${offset + 1}`,
+      },
       totalEpochs: 10,
       currentEpoch: 0,
       metrics: {},

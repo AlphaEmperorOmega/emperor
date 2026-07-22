@@ -465,10 +465,10 @@ class TrainingRunPlanTests(unittest.TestCase):
             [change["source"] for change in plan["runs"][0]["changes"]],
             ["override", "search"],
         )
-        self.assertIn("--datasets Mnist", plan["runs"][0]["command"])
-        self.assertIn("--hidden-dim 64", plan["runs"][0]["command"])
-        self.assertIn("--stack-num-layers 4", plan["runs"][0]["command"])
-        self.assertNotIn("--logdir", plan["runs"][0]["command"])
+        self.assertIn("--datasets Mnist", plan["runs"][0]["commands"]["posix"])
+        self.assertIn("--hidden-dim 64", plan["runs"][0]["commands"]["posix"])
+        self.assertIn("--stack-num-layers 4", plan["runs"][0]["commands"]["posix"])
+        self.assertNotIn("--logdir", plan["runs"][0]["commands"]["posix"])
 
     def test_training_run_plan_commands_include_selected_monitors(self) -> None:
         manager = TrainingJobServiceHarness(runner=FakeRunner())
@@ -485,8 +485,8 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            plan["runs"][0]["command"],
-            "source experiment.sh --model-type linears --model linear "
+            plan["runs"][0]["commands"]["posix"],
+            "mise run experiment -- --model-type linears --model linear "
             "--preset baseline --experiment-task image-classification "
             "--datasets Mnist --logdir monitor_plan "
             "--monitors linear --config --hidden-dim 128",
@@ -640,7 +640,6 @@ class TrainingRunPlanTests(unittest.TestCase):
                 "dataset",
                 "changes",
                 "overrides",
-                "command",
                 "commandArgv",
                 "commands",
                 "totalEpochs",
@@ -682,8 +681,8 @@ class TrainingRunPlanTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            plan["runs"][0]["command"],
-            "source experiment.sh --model-type linears --model linear "
+            plan["runs"][0]["commands"]["posix"],
+            "mise run experiment -- --model-type linears --model linear "
             "--preset baseline --experiment-task image-classification --datasets Mnist "
             "--logdir grid_plan --config --hidden-dim 64 "
             "--stack-num-layers 4 --stack-activation RELU",
@@ -701,8 +700,8 @@ class TrainingRunPlanTests(unittest.TestCase):
             " ".join(plan["runs"][0]["commandArgv"]),
         )
         self.assertEqual(
-            plan["runs"][-1]["command"],
-            "source experiment.sh --model-type linears --model linear "
+            plan["runs"][-1]["commands"]["posix"],
+            "mise run experiment -- --model-type linears --model linear "
             "--preset gating --experiment-task image-classification --datasets Cifar10 "
             "--logdir grid_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation GELU",
@@ -773,11 +772,11 @@ class TrainingRunPlanTests(unittest.TestCase):
                 self.assertTrue(
                     all(change["source"] == "search" for change in run["changes"])
                 )
-                self.assertIn("--hidden-dim 64", run["command"])
-                self.assertIn("--stack-activation RELU", run["command"])
+                self.assertIn("--hidden-dim 64", run["commands"]["posix"])
+                self.assertIn("--stack-activation RELU", run["commands"]["posix"])
                 self.assertIn(
                     f"--adaptive-generator-stack-num-layers {num_layers}",
-                    run["command"],
+                    run["commands"]["posix"],
                 )
 
     def test_training_job_accepts_random_search_sample_count(self) -> None:
@@ -839,7 +838,10 @@ class TrainingRunPlanTests(unittest.TestCase):
             )
         )
         self.assertTrue(
-            all("--logdir random_search" in run["command"] for run in plan["runs"])
+            all(
+                "--logdir random_search" in run["commands"]["posix"]
+                for run in plan["runs"]
+            )
         )
 
     def test_training_job_random_search_uses_seeded_materialized_run_plan(
@@ -975,15 +977,15 @@ class TrainingRunPlanTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            plan["runs"][0]["command"],
-            "source experiment.sh --model-type linears --model linear "
+            plan["runs"][0]["commands"]["posix"],
+            "mise run experiment -- --model-type linears --model linear "
             "--preset baseline --experiment-task image-classification --datasets Mnist "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
         )
         self.assertEqual(
-            plan["runs"][-1]["command"],
-            "source experiment.sh --model-type linears --model linear "
+            plan["runs"][-1]["commands"]["posix"],
+            "mise run experiment -- --model-type linears --model linear "
             "--preset gating --experiment-task image-classification --datasets Cifar10 "
             "--logdir random_plan --config --hidden-dim 128 "
             "--stack-num-layers 4 --stack-activation RELU",
@@ -1011,14 +1013,12 @@ class TrainingRunPlanTests(unittest.TestCase):
                 {
                     "id": "frontend-row-b",
                     "index": 99,
-                    "command": "stale --logdir draft_plan plain baseline",
                 }
             )
             plan["runs"][1].update(
                 {
                     "id": "frontend-row-a",
                     "index": 42,
-                    "command": "stale --logdir draft_plan gating",
                 }
             )
 
@@ -1055,14 +1055,14 @@ class TrainingRunPlanTests(unittest.TestCase):
             [None, None],
         )
         self.assertEqual(
-            [run["command"] for run in normalized_plan["runs"]],
+            [run["commands"]["posix"] for run in normalized_plan["runs"]],
             [
-                "source experiment.sh --model-type linears --model linear "
+                "mise run experiment -- --model-type linears --model linear "
                 "--preset baseline "
                 "--experiment-task image-classification --datasets Mnist "
                 "--logdir submitted_plan --monitors linear "
                 "--config --hidden-dim 128",
-                "source experiment.sh --model-type linears --model linear "
+                "mise run experiment -- --model-type linears --model linear "
                 "--preset gating --experiment-task image-classification "
                 "--datasets Mnist "
                 "--logdir submitted_plan --monitors linear "
@@ -1071,9 +1071,9 @@ class TrainingRunPlanTests(unittest.TestCase):
         )
         for run in normalized_plan["runs"]:
             with self.subTest(run=run["id"]):
-                self.assertNotIn("draft_plan", run["command"])
-                self.assertNotIn(str(run["snapshotId"]), run["command"])
-                self.assertNotIn(str(run["snapshotName"]), run["command"])
+                self.assertNotIn("draft_plan", run["commands"]["posix"])
+                self.assertNotIn(str(run["snapshotId"]), run["commands"]["posix"])
+                self.assertNotIn(str(run["snapshotName"]), run["commands"]["posix"])
         self.assertEqual(worker_payload["plannedRunCount"], 2)
         self.assertEqual(worker_payload["runPlan"], normalized_plan)
 
@@ -1100,7 +1100,6 @@ class TrainingRunPlanTests(unittest.TestCase):
                     "status": "Completed",
                     "changes": [],
                     "overrides": {"NUM_EPOCHS": 7},
-                    "command": "stale client command",
                     "totalEpochs": 999,
                     "currentEpoch": 999,
                     "metrics": {"client": 1},
@@ -1130,6 +1129,7 @@ class TrainingRunPlanTests(unittest.TestCase):
 
         accepted_plan = payload["runPlan"]
         accepted_row = accepted_plan["runs"][0]
+        self.assertNotIn("command", accepted_row)
         self.assertEqual(accepted_row["index"], 1)
         self.assertEqual(accepted_row["status"], "Pending")
         self.assertEqual(accepted_row["overrides"], {"NUM_EPOCHS": 7})
@@ -1144,7 +1144,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertIn("--num-epochs 7", accepted_row["command"])
+        self.assertIn("--num-epochs 7", accepted_row["commands"]["posix"])
         self.assertEqual(accepted_row["totalEpochs"], 7)
         self.assertEqual(accepted_row["currentEpoch"], 0)
         self.assertEqual(accepted_row["metrics"], {})

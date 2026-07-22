@@ -519,7 +519,6 @@ class RunPlanWorkerAcceptance:
                     or (field_name in raw_row) != (field_name in expected_row)
                 )
                 command_projection_fields = {
-                    "command",
                     "commandArgv",
                     "commands",
                 }

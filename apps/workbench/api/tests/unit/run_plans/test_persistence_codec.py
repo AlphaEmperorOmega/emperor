@@ -9,6 +9,31 @@ from tests.unit.training_jobs._support import make_record
 
 
 class RunPlanPersistenceCodecTests(unittest.TestCase):
+    def test_run_plan_codec_rejects_retired_command_field(self) -> None:
+        payload = RunPlanPersistenceCodec.encode(make_record().run_plan)
+        payload["runs"].append(
+            {
+                "id": "run-1",
+                "index": 1,
+                "status": "Pending",
+                "preset": "baseline",
+                "dataset": "Mnist",
+                "experimentTask": "classification",
+                "changes": [],
+                "overrides": {},
+                "commandArgv": ["mise", "run", "experiment", "--"],
+                "commands": {
+                    "posix": "mise run experiment --",
+                    "powershell": "mise run experiment --",
+                },
+                "command": "python retired.py",
+                "totalEpochs": 1,
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "command is retired"):
+            RunPlanPersistenceCodec.decode(payload)
+
     def test_run_plan_codec_rejects_malformed_values_without_coercion(self) -> None:
         payload = RunPlanPersistenceCodec.encode(make_record().run_plan)
         malformed_payloads = []

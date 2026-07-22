@@ -8,6 +8,7 @@ function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
   const index = overrides.index ?? 1;
   const preset = overrides.preset ?? "baseline";
   const dataset = overrides.dataset ?? "Mnist";
+  const command = `mise run experiment -- --model linear --preset ${preset} --datasets ${dataset}`;
 
   return {
     id: `run-${index}`,
@@ -19,7 +20,8 @@ function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
     dataset,
     changes: [],
     overrides: {},
-    command: `source experiment.sh --model linear --preset ${preset} --datasets ${dataset}`,
+    commandArgv: command.split(" "),
+    commands: { posix: command, powershell: command },
     totalEpochs: 30,
     currentEpoch: 0,
     metrics: {},

@@ -7,10 +7,18 @@ import {
 } from "@/features/workbench/components/training/training-compact-run-list";
 import type { TrainingRun, TrainingRunPlan } from "@/lib/api/training-jobs";
 
+function commandProjection(command: string) {
+  return {
+    commandArgv: command.trim() ? command.split(" ") : [],
+    commands: { posix: command, powershell: command },
+  };
+}
+
 function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
   const index = overrides.index ?? 1;
   const preset = overrides.preset ?? "baseline";
   const dataset = overrides.dataset ?? "Mnist";
+  const command = `mise run experiment -- --model linear --preset ${preset} --datasets ${dataset}`;
 
   return {
     id: `run-${index}`,
@@ -22,7 +30,8 @@ function run(overrides: Partial<TrainingRun> = {}): TrainingRun {
     dataset,
     changes: [],
     overrides: {},
-    command: `source experiment.sh --model linear --preset ${preset} --datasets ${dataset}`,
+    commandArgv: command.split(" "),
+    commands: { posix: command, powershell: command },
     totalEpochs: 30,
     currentEpoch: 0,
     metrics: {},
@@ -136,14 +145,14 @@ describe("TrainingCompactRunList", () => {
       configurable: true,
       value: { writeText },
     });
-    const trainingCommand = "source experiment.sh --model linear --preset baseline";
+    const trainingCommand = "mise run experiment -- --model linear --preset baseline";
     render(
       <TrainingCompactRunList
         plan={plan([
           run({
             index: 1,
             status: "Failed",
-            command: trainingCommand,
+            ...commandProjection(trainingCommand),
             error: "training failed",
             errorTraceback: "Traceback\nRuntimeError: training failed",
           }),
@@ -231,17 +240,17 @@ describe("TrainingCompactRunList", () => {
       value: { writeText },
     });
     const firstCommand =
-      "source experiment.sh --model linear --preset baseline --datasets Mnist";
+      "mise run experiment -- --model linear --preset baseline --datasets Mnist";
     const secondCommand =
-      "source experiment.sh --model linear --preset wide --datasets Cifar10";
+      "mise run experiment -- --model linear --preset wide --datasets Cifar10";
 
     render(
       <TrainingAllCommandsButton
         plan={plan([
-          run({ index: 1, command: firstCommand }),
-          run({ index: 2, command: "" }),
-          run({ index: 3, command: "   " }),
-          run({ index: 4, command: secondCommand }),
+          run({ index: 1, ...commandProjection(firstCommand) }),
+          run({ index: 2, ...commandProjection("") }),
+          run({ index: 3, ...commandProjection("   ") }),
+          run({ index: 4, ...commandProjection(secondCommand) }),
         ])}
       />,
     );
@@ -272,14 +281,15 @@ describe("TrainingCompactRunList", () => {
       value: { writeText },
     });
     const hiddenCommand =
-      "source experiment.sh --model linear --preset hidden --datasets HeldOut";
+      "mise run experiment -- --model linear --preset hidden --datasets HeldOut";
     const runs = Array.from({ length: 161 }, (_, index) =>
       run({
         index: index + 1,
-        command:
+        ...commandProjection(
           index === 160
             ? hiddenCommand
-            : `source experiment.sh --model linear --preset visible-${index + 1}`,
+            : `mise run experiment -- --model linear --preset visible-${index + 1}`,
+        ),
       }),
     );
 
@@ -310,8 +320,8 @@ describe("TrainingCompactRunList", () => {
     render(
       <TrainingAllCommandsButton
         plan={plan([
-          run({ index: 1, command: "" }),
-          run({ index: 2, command: undefined as unknown as string }),
+          run({ index: 1, ...commandProjection("") }),
+          run({ index: 2, ...commandProjection(" ") }),
         ])}
       />,
     );

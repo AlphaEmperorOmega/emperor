@@ -52,7 +52,7 @@ describe("buildTrainingCommand", () => {
         overrides: {},
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline",
+      "mise run experiment -- --model-type linears --model linear --preset baseline",
     );
   });
 
@@ -67,7 +67,7 @@ describe("buildTrainingCommand", () => {
         overrides: {},
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --presets baseline gating",
+      "mise run experiment -- --model-type linears --model linear --presets baseline gating",
     );
   });
 
@@ -86,7 +86,7 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear halting --config --hidden-dim 128",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --datasets Mnist --logdir monitor_run --monitors linear halting --config --hidden-dim 128",
     );
   });
 
@@ -103,7 +103,7 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --hidden-dim 128 --activation RELU",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128 --activation RELU",
     );
   });
 
@@ -119,7 +119,7 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --dropout-schedule None",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --dropout-schedule None",
     );
   });
 
@@ -157,7 +157,7 @@ describe("buildTrainingCommand", () => {
     });
 
     expect(command).toBe(
-      "source experiment.sh --model-type experts --model linear --preset baseline --config --router-stack-hidden-dim 64 --router-bias-flag false",
+      "mise run experiment -- --model-type experts --model linear --preset baseline --config --router-stack-hidden-dim 64 --router-bias-flag false",
     );
     expect(command).not.toContain("--router-stack-independent-flag");
   });
@@ -174,7 +174,7 @@ describe("buildTrainingCommand", () => {
         },
       }),
     ).toBe(
-      "source experiment.sh --model-type linears --model linear --preset baseline --config --run-name 'Bob'\"'\"'s config; rm -rf /'",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --run-name 'Bob'\"'\"'s config; rm -rf /'",
     );
   });
 });

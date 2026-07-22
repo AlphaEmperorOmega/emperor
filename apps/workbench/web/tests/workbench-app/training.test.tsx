@@ -572,7 +572,11 @@ describe("WorkbenchApp Training And Preview", () => {
             ? {
                 ...run,
                 id: "server-sentinel-run",
-                command: "server-sentinel-command --authoritative",
+                commandArgv: ["server-sentinel-command", "--authoritative"],
+                commands: {
+                  posix: "server-sentinel-command --authoritative",
+                  powershell: "server-sentinel-command --authoritative",
+                },
               }
             : run,
         ),
@@ -588,7 +592,7 @@ describe("WorkbenchApp Training And Preview", () => {
     await waitFor(() => {
       expect(current?.workspace.plan.display?.runs[0]).toMatchObject({
         id: "server-sentinel-run",
-        command: "server-sentinel-command --authoritative",
+        commands: { posix: "server-sentinel-command --authoritative" },
       });
     });
     act(() => {
@@ -696,7 +700,14 @@ describe("WorkbenchApp Training And Preview", () => {
             ...defaultPlan,
             runs: defaultPlan.runs.map((run, index) =>
               index === 0
-                ? { ...run, command: "current-plan --authoritative" }
+                ? {
+                    ...run,
+                    commandArgv: ["current-plan", "--authoritative"],
+                    commands: {
+                      posix: "current-plan --authoritative",
+                      powershell: "current-plan --authoritative",
+                    },
+                  }
                 : run,
             ),
           };
@@ -739,7 +750,7 @@ describe("WorkbenchApp Training And Preview", () => {
         logFolder: "current_plan",
       });
       expect(
-        current?.workspace.plan.display?.runs[0]?.command,
+        current?.workspace.plan.display?.runs[0]?.commands.posix,
       ).toBe("current-plan --authoritative");
     });
     expect(
@@ -754,7 +765,7 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(current?.workspace.plan.display).toMatchObject({
       logFolder: "current_plan",
     });
-    expect(current?.workspace.plan.display?.runs[0]?.command).toBe(
+    expect(current?.workspace.plan.display?.runs[0]?.commands.posix).toBe(
       "current-plan --authoritative",
     );
   });
@@ -773,7 +784,14 @@ describe("WorkbenchApp Training And Preview", () => {
             index === 0
               ? {
                   ...run,
-                  command: `random-plan-${randomPlanResponseCount} --authoritative`,
+                  commandArgv: [
+                    `random-plan-${randomPlanResponseCount}`,
+                    "--authoritative",
+                  ],
+                  commands: {
+                    posix: `random-plan-${randomPlanResponseCount} --authoritative`,
+                    powershell: `random-plan-${randomPlanResponseCount} --authoritative`,
+                  },
                 }
               : run,
           ),
@@ -803,21 +821,21 @@ describe("WorkbenchApp Training And Preview", () => {
     await waitFor(() => {
       expect(current?.workspace.plan.canResample).toBe(true);
       expect(
-        current?.workspace.plan.display?.runs[0]?.command,
+        current?.workspace.plan.display?.runs[0]?.commands.posix,
       ).toMatch(/^random-plan-\d+ --authoritative$/);
     });
     const originalCommand =
-      current?.workspace.plan.display?.runs[0]?.command;
+      current?.workspace.plan.display?.runs[0]?.commands.posix;
 
     act(() => {
       current?.workspace.actions.resamplePlan();
     });
     await waitFor(() => {
       expect(
-        current?.workspace.plan.display?.runs[0]?.command,
+        current?.workspace.plan.display?.runs[0]?.commands.posix,
       ).toMatch(/^random-plan-\d+ --authoritative$/);
       expect(
-        current?.workspace.plan.display?.runs[0]?.command,
+        current?.workspace.plan.display?.runs[0]?.commands.posix,
       ).not.toBe(originalCommand);
       expect(current?.workspace.plan.canStart).toBe(true);
     });
@@ -1650,7 +1668,7 @@ describe("WorkbenchApp Training And Preview", () => {
     expect(within(statusSidebar).getByText("Next run")).toBeInTheDocument();
     expect(
       within(statusSidebar).queryByTitle(
-        "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
+        "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
       ),
     ).not.toBeInTheDocument();
     expect(within(statusSidebar).queryByText("Preview runs")).not.toBeInTheDocument();
@@ -2208,7 +2226,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
   });
 
@@ -2391,7 +2409,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -2406,7 +2424,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192 --num-epochs 5",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192 --num-epochs 5",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -2428,8 +2446,8 @@ describe("WorkbenchApp Training And Preview", () => {
       [
         "(",
         "  set -e",
-        "  source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192",
-        "  source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192 --num-epochs 5",
+        "  mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192",
+        "  mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --logdir mixed_snapshots --config --hidden-dim 192 --num-epochs 5",
         ")",
       ].join("\n"),
     );
@@ -3587,7 +3605,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -3604,7 +3622,7 @@ describe("WorkbenchApp Training And Preview", () => {
         name: /^training commands$/i,
       }),
     ).toHaveValue(
-      "(\n  set -e\n  source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear\n)",
+      "(\n  set -e\n  mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear\n)",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -3632,7 +3650,7 @@ describe("WorkbenchApp Training And Preview", () => {
       name: /training command/i,
     });
     expect(commandField(commandDialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     await user.click(
       within(commandDialog).getByRole("button", {

@@ -52,7 +52,6 @@ class TrainingRunView:
     experiment_task: str
     changes: list[TrainingRunChangeView]
     overrides: dict[str, Any]
-    command: str
     total_epochs: int
     command_argv: list[str] = field(default_factory=list)
     commands: TrainingCommandsView = field(

@@ -85,7 +85,6 @@ def _run_to_payload(run: TrainingRunView) -> dict[str, Any]:
         "experimentTask": run.experiment_task,
         "changes": [_run_change_to_payload(change) for change in run.changes],
         "overrides": run.overrides,
-        "command": run.command,
         "commandArgv": run.command_argv,
         "commands": {
             "posix": run.commands.posix,

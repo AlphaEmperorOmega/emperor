@@ -9,6 +9,7 @@ from typing import Any
 
 from emperor_workbench.run_plans import (
     RunPlanProgressProjector,
+    TrainingCommandsView,
     TrainingRunPlanView,
     TrainingRunView,
 )
@@ -34,7 +35,11 @@ def _run(run_id: str, index: int, dataset: str) -> TrainingRunView:
         experiment_task="classification",
         changes=[],
         overrides={},
-        command="train",
+        command_argv=["mise", "run", "experiment", "--"],
+        commands=TrainingCommandsView(
+            posix="mise run experiment --",
+            powershell="mise run experiment --",
+        ),
         total_epochs=2,
     )
 

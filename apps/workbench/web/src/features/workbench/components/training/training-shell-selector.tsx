@@ -70,11 +70,8 @@ export function TrainingShellSelector({
 }
 
 export function commandForShell(
-  run: { command: string; commands?: { posix: string; powershell: string } },
+  run: { commands: { posix: string; powershell: string } },
   shell: TrainingShell,
 ) {
-  return (
-    run.commands?.[shell]?.trim() ||
-    (typeof run.command === "string" ? run.command : "")
-  );
+  return run.commands[shell].trim();
 }

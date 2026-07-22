@@ -327,7 +327,6 @@ class RouteAuthIntegrationTests(unittest.TestCase):
                     experiment_task=command.experiment_task or "",
                     changes=[],
                     overrides={},
-                    command="train",
                     command_argv=["train"],
                     commands=TrainingCommandsView(
                         posix="train",

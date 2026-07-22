@@ -173,7 +173,6 @@ def _validate_run_payload(payload: object, *, path: str) -> None:
             raise ValueError(f"{path}.{field} must be a non-empty string.")
     for field in (
         "experimentTask",
-        "command",
         "logDir",
         "error",
         "errorTraceback",
@@ -199,15 +198,20 @@ def _validate_run_payload(payload: object, *, path: str) -> None:
             _validate_run_change(change, path=f"{path}.changes[{index}]")
     if "overrides" in payload:
         _validate_config_mapping(payload["overrides"], path=f"{path}.overrides")
-    if "commandArgv" in payload:
-        _validate_string_list(payload["commandArgv"], path=f"{path}.commandArgv")
-    if "commands" in payload:
-        commands = payload["commands"]
-        if not isinstance(commands, Mapping):
-            raise ValueError(f"{path}.commands must be an object.")
-        for shell in ("posix", "powershell"):
-            if not isinstance(commands.get(shell), str):
-                raise ValueError(f"{path}.commands.{shell} must be a string.")
+    if "command" in payload:
+        raise ValueError(f"{path}.command is retired; use commandArgv and commands.")
+    _validate_string_list(
+        payload.get("commandArgv"),
+        path=f"{path}.commandArgv",
+        allow_empty=False,
+        nonempty_items=True,
+    )
+    commands = payload.get("commands")
+    if not isinstance(commands, Mapping):
+        raise ValueError(f"{path}.commands must be an object.")
+    for shell in ("posix", "powershell"):
+        if not isinstance(commands.get(shell), str) or not commands[shell]:
+            raise ValueError(f"{path}.commands.{shell} must be a non-empty string.")
     if "metrics" in payload:
         metrics = payload["metrics"]
         if not isinstance(metrics, Mapping):
@@ -357,7 +361,6 @@ def _run_from_payload(payload: Mapping[str, Any]) -> TrainingRunView:
     log_dir = payload.get("logDir")
     error = payload.get("error")
     error_traceback = payload.get("errorTraceback")
-    command = str(payload.get("command") or "")
     raw_commands = payload.get("commands")
     commands = raw_commands if isinstance(raw_commands, Mapping) else {}
     raw_command_argv = payload.get("commandArgv")
@@ -373,15 +376,14 @@ def _run_from_payload(payload: Mapping[str, Any]) -> TrainingRunView:
             for item in _mapping_items(payload.get("changes"))
         ],
         overrides=dict(payload.get("overrides") or {}),
-        command=command,
         command_argv=(
             [str(value) for value in raw_command_argv]
             if isinstance(raw_command_argv, list)
             else []
         ),
         commands=TrainingCommandsView(
-            posix=str(commands.get("posix") or command),
-            powershell=str(commands.get("powershell") or command),
+            posix=str(commands.get("posix") or ""),
+            powershell=str(commands.get("powershell") or ""),
         ),
         total_epochs=int(payload.get("totalEpochs") or 0),
         snapshot_id=str(snapshot_id) if snapshot_id is not None else None,
@@ -406,7 +408,6 @@ def _run_to_payload(run: TrainingRunView) -> dict[str, Any]:
         "experimentTask": run.experiment_task,
         "changes": [_run_change_to_payload(change) for change in run.changes],
         "overrides": run.overrides,
-        "command": run.command,
         "commandArgv": run.command_argv,
         "commands": {
             "posix": run.commands.posix,

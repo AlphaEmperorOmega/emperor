@@ -69,8 +69,10 @@ export function buildTrainingCommand({
     (candidate, index, all) => candidate && all.indexOf(candidate) === index,
   );
   const parts = [
-    "source",
-    "experiment.sh",
+    "mise",
+    "run",
+    "experiment",
+    "--",
     "--model-type",
     shellQuote(modelType),
     "--model",

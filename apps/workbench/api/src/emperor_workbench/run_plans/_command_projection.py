@@ -40,17 +40,6 @@ def render_powershell_command(argv: list[str]) -> str:
     return " ".join(quote(value) for value in argv)
 
 
-def _historical_shell_quote(value: str) -> str:
-    if value == "":
-        return "''"
-    safe = set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_@%+=:,./-"
-    )
-    if all(character in safe for character in value):
-        return value
-    return "'" + value.replace("'", "'\"'\"'") + "'"
-
-
 def _command_value(value: Any) -> str:
     serialized = serialize_config_value(value)
     if serialized is None:
@@ -74,7 +63,7 @@ def project_training_command(
     overrides: dict[str, Any],
     log_folder: str,
     monitors: list[str],
-) -> tuple[str, list[str], TrainingCommandsView]:
+) -> tuple[list[str], TrainingCommandsView]:
     fields, by_key = configuration_fields(
         model_packages,
         model=model,
@@ -119,15 +108,7 @@ def project_training_command(
         arguments.append("--config")
         arguments.extend(config_parts)
     canonical_argv = ["mise", "run", "experiment", "--", *arguments]
-    historical_command = " ".join(
-        [
-            "source",
-            "experiment.sh",
-            *(_historical_shell_quote(value) for value in arguments),
-        ]
-    )
     return (
-        historical_command,
         canonical_argv,
         TrainingCommandsView(
             posix=render_posix_command(canonical_argv),
@@ -216,7 +197,7 @@ def project_pending_run(
                 ),
             )
         )
-    command, command_argv, commands = project_training_command(
+    command_argv, commands = project_training_command(
         model_packages,
         model=model,
         preset=run.preset,
@@ -235,7 +216,6 @@ def project_pending_run(
         dataset=run.dataset,
         changes=changes,
         overrides=overrides,
-        command=command,
         command_argv=command_argv,
         commands=commands,
         total_epochs=run_total_epochs(package, run),

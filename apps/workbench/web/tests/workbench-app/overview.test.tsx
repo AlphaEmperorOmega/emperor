@@ -1419,7 +1419,7 @@ describe("WorkbenchApp Overview", () => {
 
     let dialog = await screen.findByRole("dialog", { name: /training command/i });
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     const overlayRoot = dialog.parentElement;
     const workspaceContent = document.getElementById("workbench-workspace-content");
@@ -1452,7 +1452,7 @@ describe("WorkbenchApp Overview", () => {
 
     await waitFor(() => {
       expect(commandField(dialog)).toHaveValue(
-        "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear sampler",
+        "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --monitors linear sampler",
       );
     });
     expect(monitorToggle).toHaveAttribute("aria-pressed", "true");
@@ -1466,7 +1466,7 @@ describe("WorkbenchApp Overview", () => {
     expect(within(dialog).getByRole("button", { name: /include all monitors/i }))
       .toHaveAttribute("aria-pressed", "false");
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist",
     );
     await user.click(
       within(dialog).getByRole("button", { name: /close training command/i }),
@@ -1529,7 +1529,7 @@ describe("WorkbenchApp Overview", () => {
       name: /training command/i,
     });
     expect(commandField(dialog)).toHaveValue(
-      "source experiment.sh --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --config --hidden-dim 128 --stack-num-layers 7",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --experiment-task image-classification --datasets Mnist --config --hidden-dim 128 --stack-num-layers 7",
     );
   });
 

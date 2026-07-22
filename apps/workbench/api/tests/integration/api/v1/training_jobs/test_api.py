@@ -82,7 +82,6 @@ EXPECTED_TRAINING_RUN_RESPONSE_FIELDS = (
     "experimentTask",
     "changes",
     "overrides",
-    "command",
     "commandArgv",
     "commands",
     "totalEpochs",
@@ -273,7 +272,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
         self.assertEqual(accepted.status_code, 200, accepted.text)
         self.assertIn(
             "--monitors linear",
-            accepted.json()["runs"][0]["command"],
+            accepted.json()["runs"][0]["commands"]["posix"],
         )
         self.assertEqual(rejected.status_code, 400)
         self.assertIn("Unknown monitor option", rejected.text)
