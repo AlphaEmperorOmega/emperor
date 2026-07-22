@@ -385,7 +385,7 @@ class LogArchiveImportApiTests(unittest.TestCase):
                 "batch_size: 4\n",
             )
 
-    def test_whole_archive_top_level_logs_wrapper_is_stripped(self) -> None:
+    def test_top_level_logs_wrapper_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             archive = zip_with_info(
@@ -408,15 +408,11 @@ class LogArchiveImportApiTests(unittest.TestCase):
 
             response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue(
-                (
-                    logs_root / "linear_adaptive_long_test/version_0/result.json"
-                ).is_file()
-            )
-            self.assertFalse((logs_root / "logs").exists())
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("top-level logs/ wrapper", response.json()["detail"])
+            self.assertFalse(logs_root.exists())
 
-    def test_whole_archive_logs_wrapper_without_directory_is_stripped(
+    def test_top_level_logs_wrapper_without_directory_is_rejected(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -430,12 +426,11 @@ class LogArchiveImportApiTests(unittest.TestCase):
 
             response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue((logs_root / "linear/version_0/result.json").is_file())
-            self.assertTrue((logs_root / "linear/version_0/hparams.yaml").is_file())
-            self.assertFalse((logs_root / "logs").exists())
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("top-level logs/ wrapper", response.json()["detail"])
+            self.assertFalse(logs_root.exists())
 
-    def test_partial_logs_prefix_preserves_logs_experiment(self) -> None:
+    def test_mixed_archive_with_logs_prefix_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             archive = zip_bytes(
@@ -447,11 +442,9 @@ class LogArchiveImportApiTests(unittest.TestCase):
 
             response = asyncio.run(post_archive(logs_root=logs_root, archive=archive))
 
-            self.assertEqual(response.status_code, 200)
-            self.assertTrue((logs_root / "logs/version_0/result.json").is_file())
-            self.assertTrue(
-                (logs_root / "other_experiment/version_0/result.json").is_file()
-            )
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("top-level logs/ wrapper", response.json()["detail"])
+            self.assertFalse(logs_root.exists())
 
     def test_path_traversal_entries_are_rejected_before_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

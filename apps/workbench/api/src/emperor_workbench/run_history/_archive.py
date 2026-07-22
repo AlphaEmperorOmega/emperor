@@ -73,7 +73,6 @@ def _archive_relative_parts(
     name: str,
     *,
     is_dir: bool,
-    strip_top_level_logs: bool = False,
 ) -> tuple[str, ...] | None:
     if "\x00" in name:
         raise RunHistoryFailure(f"Unsafe archive path contains a null byte: {name!r}")
@@ -88,13 +87,16 @@ def _archive_relative_parts(
     parts = tuple(part for part in path.parts if part not in {"", "."})
     if any(part == ".." for part in parts):
         raise RunHistoryFailure(f"Unsafe archive path contains traversal: {name}")
-    if strip_top_level_logs and parts and parts[0] == "logs":
-        parts = parts[1:]
     if not parts:
         if is_dir:
             return None
         raise RunHistoryFailure(
             f"Unsafe archive path resolves to the logs root: {name}"
+        )
+    if parts[0] == "logs":
+        raise RunHistoryFailure(
+            "Log archives must be rooted directly at experiment paths; "
+            "a top-level logs/ wrapper is not supported."
         )
     return parts
 
@@ -161,24 +163,6 @@ def _validate_zip_info(info: zipfile.ZipInfo) -> None:
         raise _zip_error()
 
 
-def _has_top_level_logs_wrapper(infos: list[zipfile.ZipInfo]) -> bool:
-    saw_wrapped_file = False
-
-    for info in infos:
-        relative_parts = _archive_relative_parts(
-            info.filename,
-            is_dir=info.is_dir(),
-        )
-        if relative_parts is None:
-            continue
-        if relative_parts[0] != "logs":
-            return False
-        if not info.is_dir() and len(relative_parts) > 1:
-            saw_wrapped_file = True
-
-    return saw_wrapped_file
-
-
 def _validate_archive_budgets(
     infos: list[zipfile.ZipInfo],
     *,
@@ -223,14 +207,11 @@ def _plan_import(
         max_member_count=max_member_count,
         max_path_bytes=max_path_bytes,
     )
-    strip_top_level_logs = _has_top_level_logs_wrapper(infos)
-
     for info in infos:
         _validate_zip_info(info)
         relative_parts = _archive_relative_parts(
             info.filename,
             is_dir=info.is_dir(),
-            strip_top_level_logs=strip_top_level_logs,
         )
         if relative_parts is None or info.is_dir():
             continue
@@ -293,7 +274,6 @@ def _archive_experiments(
         max_member_count=max_member_count,
         max_path_bytes=max_path_bytes,
     )
-    strip_top_level_logs = _has_top_level_logs_wrapper(infos)
     experiments: set[str] = set()
     total_size = 0
     for info in infos:
@@ -301,7 +281,6 @@ def _archive_experiments(
         relative_parts = _archive_relative_parts(
             info.filename,
             is_dir=info.is_dir(),
-            strip_top_level_logs=strip_top_level_logs,
         )
         if relative_parts is None or info.is_dir():
             continue
