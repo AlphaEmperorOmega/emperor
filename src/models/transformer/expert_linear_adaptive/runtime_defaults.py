@@ -5,6 +5,8 @@ from dataclasses import dataclass, fields, replace
 from types import ModuleType
 from typing import Any, Final
 
+from model_runtime.packages.runtime_values import validate_runtime_default_values
+
 from . import config
 from .runtime_options import (
     AdaptiveParameterOptions,
@@ -59,13 +61,13 @@ def _layer_controller_from_config(
     prefix: str,
 ) -> LayerControllerOptions:
     return LayerControllerOptions(
-        stack_gate_flag=getattr(config_module, f"{prefix}_GATE_FLAG"),
+        stack_gate_flag=getattr(config_module, f"{prefix}_STACK_GATE_FLAG"),
         gate_option=getattr(config_module, f"{prefix}_GATE_OPTION"),
         gate_activation=getattr(config_module, f"{prefix}_GATE_ACTIVATION"),
         gate_stack_options=_controller_stack_from_config(
             config_module, f"{prefix}_GATE_STACK"
         ),
-        stack_halting_flag=getattr(config_module, f"{prefix}_HALTING_FLAG"),
+        stack_halting_flag=getattr(config_module, f"{prefix}_STACK_HALTING_FLAG"),
         halting_option=getattr(config_module, f"{prefix}_HALTING_OPTION"),
         halting_threshold=getattr(config_module, f"{prefix}_HALTING_THRESHOLD"),
         halting_dropout=getattr(config_module, f"{prefix}_HALTING_DROPOUT"),
@@ -110,7 +112,9 @@ def _recurrent_from_config(
         recurrent_layer_norm_position=getattr(
             config_module, f"{prefix}_RECURRENT_LAYER_NORM_POSITION"
         ),
-        recurrent_gate_flag=getattr(config_module, f"{prefix}_RECURRENT_GATE_FLAG"),
+        recurrent_stack_gate_flag=getattr(
+            config_module, f"{prefix}_RECURRENT_STACK_GATE_FLAG"
+        ),
         recurrent_gate_option=getattr(config_module, f"{prefix}_RECURRENT_GATE_OPTION"),
         recurrent_gate_activation=getattr(
             config_module, f"{prefix}_RECURRENT_GATE_ACTIVATION"
@@ -118,8 +122,8 @@ def _recurrent_from_config(
         recurrent_gate_stack_options=_controller_stack_from_config(
             config_module, f"{prefix}_RECURRENT_GATE_STACK"
         ),
-        recurrent_halting_flag=getattr(
-            config_module, f"{prefix}_RECURRENT_HALTING_FLAG"
+        recurrent_stack_halting_flag=getattr(
+            config_module, f"{prefix}_RECURRENT_STACK_HALTING_FLAG"
         ),
         recurrent_halting_option=getattr(
             config_module, f"{prefix}_RECURRENT_HALTING_OPTION"
@@ -227,10 +231,10 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             mapping[f"stack_{field_name}"] = ("stack", field_name)
     mapping.update(
         {
-            "gate_flag": ("controller", "stack_gate_flag"),
+            "stack_gate_flag": ("controller", "stack_gate_flag"),
             "gate_option": ("controller", "gate_option"),
             "gate_activation": ("controller", "gate_activation"),
-            "halting_flag": ("controller", "stack_halting_flag"),
+            "stack_halting_flag": ("controller", "stack_halting_flag"),
             "halting_option": ("controller", "halting_option"),
             "halting_threshold": ("controller", "halting_threshold"),
             "halting_dropout": ("controller", "halting_dropout"),
@@ -258,9 +262,9 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
                 "recurrent",
                 "recurrent_layer_norm_position",
             ),
-            "recurrent_gate_flag": (
+            "recurrent_stack_gate_flag": (
                 "recurrent",
-                "recurrent_gate_flag",
+                "recurrent_stack_gate_flag",
             ),
             "recurrent_gate_option": (
                 "recurrent",
@@ -270,9 +274,9 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
                 "recurrent",
                 "recurrent_gate_activation",
             ),
-            "recurrent_halting_flag": (
+            "recurrent_stack_halting_flag": (
                 "recurrent",
-                "recurrent_halting_flag",
+                "recurrent_stack_halting_flag",
             ),
             "recurrent_halting_option": (
                 "recurrent",
@@ -390,6 +394,20 @@ def _pop_updates(
     return updates
 
 
+def _pop_scoped_feed_forward_updates(
+    values: MutableMapping[str, Any], prefix: str
+) -> dict[str, Any]:
+    updates = {}
+    for field_name, suffix in (
+        ("hidden_dim", "stack_hidden_dim"),
+        ("num_layers", "num_layers"),
+    ):
+        key = f"{prefix}{field_name}"
+        if key in values:
+            updates[suffix] = values.pop(key)
+    return updates
+
+
 def resolve_transformer_path_options(
     values: MutableMapping[str, Any],
     defaults: TransformerPathOptions,
@@ -449,12 +467,12 @@ def resolve_transformer_path_options(
     )
     encoder_feed_forward = _apply_path_updates(
         encoder_feed_forward,
-        _pop_updates(values, "encoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        _pop_scoped_feed_forward_updates(values, "encoder_feed_forward_"),
         attention=False,
     )
     decoder_feed_forward = _apply_path_updates(
         decoder_feed_forward,
-        _pop_updates(values, "decoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        _pop_scoped_feed_forward_updates(values, "decoder_feed_forward_"),
         attention=False,
     )
     return TransformerPathOptions(
@@ -485,8 +503,8 @@ def runtime_from_config() -> RuntimeOptions:
         stack_halting_flag=config.STACK_HALTING_FLAG,
         memory_flag=config.MEMORY_FLAG,
         recurrent_flag=config.RECURRENT_FLAG,
-        recurrent_gate_flag=config.RECURRENT_GATE_FLAG,
-        recurrent_halting_flag=config.RECURRENT_HALTING_FLAG,
+        recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
+        recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
         recurrent_residual_connection_option=(
@@ -496,18 +514,21 @@ def runtime_from_config() -> RuntimeOptions:
     attention = attention_options_from_config(config)
     feed_forward = feed_forward_options_from_config(config)
     experts = ExpertOptions(
-        num_experts=config.EXPERT_NUM_EXPERTS,
-        top_k=config.EXPERT_TOP_K,
-        normalize_probabilities_flag=config.EXPERT_NORMALIZE_PROBABILITIES_FLAG,
-        switch_loss_weight=config.EXPERT_SWITCH_LOSS_WEIGHT,
-        capacity_factor=config.EXPERT_CAPACITY_FACTOR,
+        num_experts=config.NUM_EXPERTS,
+        top_k=config.TOP_K,
+        normalize_probabilities_flag=config.NORMALIZE_PROBABILITIES_FLAG,
+        switch_loss_weight=config.SWITCH_LOSS_WEIGHT,
+        capacity_factor=config.CAPACITY_FACTOR,
     )
-    adaptive = AdaptiveParameterOptions(
-        weight_option=config.WEIGHT_OPTION,
-        bias_option=config.BIAS_OPTION,
-        diagonal_option=config.DIAGONAL_OPTION,
-        row_mask_option=config.ROW_MASK_OPTION,
-    )
+
+    def adaptive_options(prefix: str) -> AdaptiveParameterOptions:
+        return AdaptiveParameterOptions(
+            weight_option=getattr(config, f"{prefix}_WEIGHT_OPTION"),
+            bias_option=getattr(config, f"{prefix}_BIAS_OPTION"),
+            diagonal_option=getattr(config, f"{prefix}_DIAGONAL_OPTION"),
+            row_mask_option=getattr(config, f"{prefix}_ROW_MASK_OPTION"),
+        )
+
     return RuntimeOptions(
         batch_size=config.BATCH_SIZE,
         learning_rate=config.LEARNING_RATE,
@@ -544,10 +565,12 @@ def runtime_from_config() -> RuntimeOptions:
         ),
         attention_expert_options=experts,
         feed_forward_expert_options=experts,
-        attention_projection_adaptive_options=adaptive,
-        attention_expert_adaptive_options=adaptive,
-        router_adaptive_options=adaptive,
-        feed_forward_adaptive_options=adaptive,
+        attention_projection_adaptive_options=adaptive_options(
+            "ATTENTION_PROJECTION_ADAPTIVE"
+        ),
+        attention_expert_adaptive_options=adaptive_options("ATTENTION_EXPERT_ADAPTIVE"),
+        router_adaptive_options=adaptive_options("ROUTER_ADAPTIVE"),
+        feed_forward_adaptive_options=adaptive_options("FEED_FORWARD_ADAPTIVE"),
     )
 
 
@@ -562,36 +585,23 @@ _PATH_FIELDS = {
 }
 _EXPERT_FIELDS = {item.name for item in fields(ExpertOptions)}
 _ADAPTIVE_FIELDS = {item.name for item in fields(AdaptiveParameterOptions)}
-_EXPERT_ALIASES = {
-    "num_experts": "num_experts",
-    "top_k": "top_k",
-    "normalize_probabilities_flag": "normalize_probabilities_flag",
-    "switch_loss_weight": "switch_loss_weight",
-    "capacity_factor": "capacity_factor",
-    "expert_num_experts": "num_experts",
-    "expert_top_k": "top_k",
-    "expert_normalize_probabilities_flag": "normalize_probabilities_flag",
-    "expert_switch_loss_weight": "switch_loss_weight",
-    "expert_capacity_factor": "capacity_factor",
-}
 
 
 def runtime_from_flat(
     values: dict[str, Any] | None = None,
     base: RuntimeOptions | None = None,
 ) -> RuntimeOptions:
-    values = dict(values or {})
+    values = validate_runtime_default_values(
+        values,
+        package="models.transformer.expert_linear_adaptive",
+        config_module=config,
+    )
     runtime = DEFAULT_RUNTIME if base is None else base
-    scalar_aliases = {
-        "input_dim": "vocab_size",
-        "output_dim": "vocab_size",
-        "hidden_dim": "model_dim",
-    }
     scalar_updates: dict[str, Any] = {}
     model_dim_changed = False
     dropout_changed = False
     for key in list(values):
-        target = scalar_aliases.get(key, key)
+        target = key
         if target == "sequence_length":
             length = values.pop(key)
             scalar_updates.update(
@@ -643,9 +653,7 @@ def runtime_from_flat(
         ),
     )
     expert_broadcast = {
-        field_name: values.pop(key)
-        for key, field_name in _EXPERT_ALIASES.items()
-        if key in values
+        key: values.pop(key) for key in list(values) if key in _EXPERT_FIELDS
     }
     attention_experts = replace(
         values.pop("attention_expert_options", runtime.attention_expert_options),
@@ -669,29 +677,17 @@ def runtime_from_flat(
         else:
             feed_forward_experts = replace(current, **updates)
 
-    adaptive_broadcast = {
-        key: values.pop(key) for key in list(values) if key in _ADAPTIVE_FIELDS
-    }
     adaptive_groups = {
-        "attention_projection_adaptive_": values.pop(
-            "attention_projection_adaptive_options",
-            runtime.attention_projection_adaptive_options,
+        "attention_projection_adaptive_": (
+            runtime.attention_projection_adaptive_options
         ),
-        "attention_expert_adaptive_": values.pop(
-            "attention_expert_adaptive_options",
-            runtime.attention_expert_adaptive_options,
-        ),
-        "router_adaptive_": values.pop(
-            "router_adaptive_options", runtime.router_adaptive_options
-        ),
-        "feed_forward_adaptive_": values.pop(
-            "feed_forward_adaptive_options",
-            runtime.feed_forward_adaptive_options,
-        ),
+        "attention_expert_adaptive_": runtime.attention_expert_adaptive_options,
+        "router_adaptive_": runtime.router_adaptive_options,
+        "feed_forward_adaptive_": runtime.feed_forward_adaptive_options,
     }
     resolved_adaptive = {}
     for prefix, current in adaptive_groups.items():
-        updates = dict(adaptive_broadcast)
+        updates = {}
         for field_name in _ADAPTIVE_FIELDS:
             key = f"{prefix}{field_name}"
             if key in values:

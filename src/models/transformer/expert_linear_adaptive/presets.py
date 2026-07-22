@@ -35,24 +35,7 @@ from model_runtime.runs import ExperimentBase
 from . import config, dataset_options
 from .config_builder import TransformerExpertLinearAdaptiveConfigBuilder
 from .model import Model
-
-
-def expand_transformer_path_locks(locks: dict) -> dict:
-    expanded = dict(locks)
-    for key, value in tuple(locks.items()):
-        if key.startswith("attn_"):
-            suffix = key[len("attn_") :]
-            for prefix in (
-                "encoder_attn_",
-                "decoder_self_attn_",
-                "decoder_cross_attn_",
-            ):
-                expanded[f"{prefix}{suffix}"] = value
-        elif key.startswith("ff_"):
-            suffix = key[len("ff_") :]
-            expanded[f"encoder_ff_{suffix}"] = value
-            expanded[f"decoder_ff_{suffix}"] = value
-    return expanded
+from .runtime_defaults import runtime_from_flat
 
 
 class ExperimentPreset(BaseOptions):
@@ -110,8 +93,14 @@ class ExperimentPreset(BaseOptions):
 
 _COMMON_OVERRIDES = {
     "BASELINE": {},
-    "PRE_NORM": {"layer_norm_position": LayerNormPositionOptions.BEFORE},
-    "POST_NORM": {"layer_norm_position": LayerNormPositionOptions.AFTER},
+    "PRE_NORM": {
+        "encoder_layer_norm_position": LayerNormPositionOptions.BEFORE,
+        "decoder_layer_norm_position": LayerNormPositionOptions.BEFORE,
+    },
+    "POST_NORM": {
+        "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+        "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+    },
     "LEARNED_POSITIONAL": {
         "positional_embedding_option": TextLearnedPositionalEmbeddingConfig
     },
@@ -136,32 +125,32 @@ _COMMON_OVERRIDES = {
     "RECURRENT": {"recurrent_flag": True},
     "RECURRENT_GATING": {
         "recurrent_flag": True,
-        "recurrent_gate_flag": True,
+        "recurrent_stack_gate_flag": True,
     },
     "RECURRENT_HALTING": {
         "recurrent_flag": True,
-        "recurrent_halting_flag": True,
+        "recurrent_stack_halting_flag": True,
     },
     "RECURRENT_MEMORY": {"recurrent_flag": True, "memory_flag": True},
     "RECURRENT_GATING_HALTING": {
         "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-        "recurrent_halting_flag": True,
+        "recurrent_stack_gate_flag": True,
+        "recurrent_stack_halting_flag": True,
     },
     "RECURRENT_GATING_MEMORY": {
         "recurrent_flag": True,
-        "recurrent_gate_flag": True,
+        "recurrent_stack_gate_flag": True,
         "memory_flag": True,
     },
     "RECURRENT_HALTING_MEMORY": {
         "recurrent_flag": True,
-        "recurrent_halting_flag": True,
+        "recurrent_stack_halting_flag": True,
         "memory_flag": True,
     },
     "RECURRENT_GATING_HALTING_MEMORY": {
         "recurrent_flag": True,
-        "recurrent_gate_flag": True,
-        "recurrent_halting_flag": True,
+        "recurrent_stack_gate_flag": True,
+        "recurrent_stack_halting_flag": True,
         "memory_flag": True,
     },
     "RESIDUAL": {
@@ -169,7 +158,8 @@ _COMMON_OVERRIDES = {
     },
     "RESIDUAL_POST_NORM": {
         "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-        "layer_norm_position": LayerNormPositionOptions.AFTER,
+        "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+        "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
     },
     "RESIDUAL_GATING": {
         "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
@@ -189,7 +179,8 @@ _COMMON_OVERRIDES = {
     },
     "RECURRENT_POST_NORM": {
         "recurrent_flag": True,
-        "layer_norm_position": LayerNormPositionOptions.AFTER,
+        "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+        "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
     },
 }
 
@@ -216,30 +207,71 @@ _ADAPTIVE_OVERRIDES = {
             SoftWeightedBankDynamicWeightConfig
         )
     },
-    "AFFINE_TRANSFORM_BIAS": {"bias_option": AffineTransformDynamicBiasConfig},
-    "ADDITIVE_BIAS": {"bias_option": AdditiveDynamicBiasConfig},
-    "GENERATOR_BIAS": {"bias_option": GeneratorDynamicBiasConfig},
-    "MULTIPLICATIVE_BIAS": {"bias_option": MultiplicativeDynamicBiasConfig},
-    "SIGMOID_GATED_BIAS": {"bias_option": SigmoidGatedDynamicBiasConfig},
-    "TANH_GATED_BIAS": {"bias_option": TanhGatedDynamicBiasConfig},
-    "WEIGHTED_BANK_BIAS": {"bias_option": WeightedBankDynamicBiasConfig},
-    "STANDARD_DIAGONAL": {"diagonal_option": StandardDynamicDiagonalConfig},
-    "ANTI_DIAGONAL": {"diagonal_option": AntiDynamicDiagonalConfig},
-    "COMBINED_DIAGONAL": {"diagonal_option": CombinedDynamicDiagonalConfig},
-    "DIAGONAL_AXIS_MASK": {"row_mask_option": DiagonalAxisMaskConfig},
-    "OUTER_PRODUCT_MASK": {"row_mask_option": OuterProductMaskConfig},
-    "PER_AXIS_SCORE_MASK": {"row_mask_option": PerAxisScoreMaskConfig},
-    "TOP_SLICE_AXIS_MASK": {"row_mask_option": TopSliceAxisMaskConfig},
-    "WEIGHT_INFORMED_SCORE_MASK": {
-        "row_mask_option": WeightInformedScoreAxisMaskConfig
-    },
 }
+
+
+def _all_adaptive_roles(field: str, value: type) -> dict[str, type]:
+    return {
+        f"attention_projection_adaptive_{field}": value,
+        f"attention_expert_adaptive_{field}": value,
+        f"router_adaptive_{field}": value,
+        f"feed_forward_adaptive_{field}": value,
+    }
+
+
+_ADAPTIVE_OVERRIDES.update(
+    {
+        "AFFINE_TRANSFORM_BIAS": _all_adaptive_roles(
+            "bias_option", AffineTransformDynamicBiasConfig
+        ),
+        "ADDITIVE_BIAS": _all_adaptive_roles("bias_option", AdditiveDynamicBiasConfig),
+        "GENERATOR_BIAS": _all_adaptive_roles(
+            "bias_option", GeneratorDynamicBiasConfig
+        ),
+        "MULTIPLICATIVE_BIAS": _all_adaptive_roles(
+            "bias_option", MultiplicativeDynamicBiasConfig
+        ),
+        "SIGMOID_GATED_BIAS": _all_adaptive_roles(
+            "bias_option", SigmoidGatedDynamicBiasConfig
+        ),
+        "TANH_GATED_BIAS": _all_adaptive_roles(
+            "bias_option", TanhGatedDynamicBiasConfig
+        ),
+        "WEIGHTED_BANK_BIAS": _all_adaptive_roles(
+            "bias_option", WeightedBankDynamicBiasConfig
+        ),
+        "STANDARD_DIAGONAL": _all_adaptive_roles(
+            "diagonal_option", StandardDynamicDiagonalConfig
+        ),
+        "ANTI_DIAGONAL": _all_adaptive_roles(
+            "diagonal_option", AntiDynamicDiagonalConfig
+        ),
+        "COMBINED_DIAGONAL": _all_adaptive_roles(
+            "diagonal_option", CombinedDynamicDiagonalConfig
+        ),
+        "DIAGONAL_AXIS_MASK": _all_adaptive_roles(
+            "row_mask_option", DiagonalAxisMaskConfig
+        ),
+        "OUTER_PRODUCT_MASK": _all_adaptive_roles(
+            "row_mask_option", OuterProductMaskConfig
+        ),
+        "PER_AXIS_SCORE_MASK": _all_adaptive_roles(
+            "row_mask_option", PerAxisScoreMaskConfig
+        ),
+        "TOP_SLICE_AXIS_MASK": _all_adaptive_roles(
+            "row_mask_option", TopSliceAxisMaskConfig
+        ),
+        "WEIGHT_INFORMED_SCORE_MASK": _all_adaptive_roles(
+            "row_mask_option", WeightInformedScoreAxisMaskConfig
+        ),
+    }
+)
 
 _EXPERT_OVERRIDES = {
     "TOP1_SWITCH_AUX": {
-        "expert_top_k": 1,
-        "expert_normalize_probabilities_flag": False,
-        "expert_switch_loss_weight": 0.1,
+        "top_k": 1,
+        "normalize_probabilities_flag": False,
+        "switch_loss_weight": 0.1,
     },
     "LOW_RANK_EXPERT_WEIGHT": {
         "attention_expert_adaptive_weight_option": LowRankDynamicWeightConfig,
@@ -279,101 +311,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        return self._builder_type(**kwargs).build()
-
-    def locks_for_preset(self, model_config_preset):
-        locks = super().locks_for_preset(model_config_preset)
-        scopes = {
-            "layer_norm_position": (
-                "encoder_layer_norm_position",
-                "decoder_layer_norm_position",
-            ),
-            "stack_gate_flag": (
-                "encoder_stack_gate_flag",
-                "decoder_stack_gate_flag",
-            ),
-            "stack_halting_flag": (
-                "encoder_stack_halting_flag",
-                "decoder_stack_halting_flag",
-            ),
-            "memory_flag": ("encoder_memory_flag", "decoder_memory_flag"),
-            "recurrent_flag": (
-                "encoder_recurrent_flag",
-                "decoder_recurrent_flag",
-            ),
-            "recurrent_gate_flag": (
-                "encoder_recurrent_gate_flag",
-                "decoder_recurrent_gate_flag",
-            ),
-            "recurrent_halting_flag": (
-                "encoder_recurrent_halting_flag",
-                "decoder_recurrent_halting_flag",
-            ),
-            "stack_residual_connection_option": (
-                "encoder_stack_residual_connection_option",
-                "decoder_stack_residual_connection_option",
-            ),
-            "recurrent_residual_connection_option": (
-                "encoder_recurrent_residual_connection_option",
-                "decoder_recurrent_residual_connection_option",
-            ),
-            "attn_bias_flag": (
-                "encoder_attn_bias_flag",
-                "decoder_self_attn_bias_flag",
-                "decoder_cross_attn_bias_flag",
-            ),
-            "attn_add_key_value_bias_flag": (
-                "encoder_attn_add_key_value_bias_flag",
-                "decoder_self_attn_add_key_value_bias_flag",
-                "decoder_cross_attn_add_key_value_bias_flag",
-            ),
-            "attn_zero_attention_flag": (
-                "encoder_attn_zero_attention_flag",
-                "decoder_self_attn_zero_attention_flag",
-                "decoder_cross_attn_zero_attention_flag",
-            ),
-            "expert_top_k": (
-                "attention_expert_top_k",
-                "feed_forward_expert_top_k",
-            ),
-            "expert_normalize_probabilities_flag": (
-                "attention_expert_normalize_probabilities_flag",
-                "feed_forward_expert_normalize_probabilities_flag",
-            ),
-            "expert_switch_loss_weight": (
-                "attention_expert_switch_loss_weight",
-                "feed_forward_expert_switch_loss_weight",
-            ),
-            "weight_option": (
-                "attention_projection_adaptive_weight_option",
-                "attention_expert_adaptive_weight_option",
-                "router_adaptive_weight_option",
-                "feed_forward_adaptive_weight_option",
-            ),
-            "bias_option": (
-                "attention_projection_adaptive_bias_option",
-                "attention_expert_adaptive_bias_option",
-                "router_adaptive_bias_option",
-                "feed_forward_adaptive_bias_option",
-            ),
-            "diagonal_option": (
-                "attention_projection_adaptive_diagonal_option",
-                "attention_expert_adaptive_diagonal_option",
-                "router_adaptive_diagonal_option",
-                "feed_forward_adaptive_diagonal_option",
-            ),
-            "row_mask_option": (
-                "attention_projection_adaptive_row_mask_option",
-                "attention_expert_adaptive_row_mask_option",
-                "router_adaptive_row_mask_option",
-                "feed_forward_adaptive_row_mask_option",
-            ),
-        }
-        for field, scoped_fields in scopes.items():
-            if field in locks:
-                for scoped_field in scoped_fields:
-                    locks[scoped_field] = locks[field]
-        return expand_transformer_path_locks(locks)
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -382,7 +320,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

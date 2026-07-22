@@ -35,8 +35,8 @@ class TransformerStackOptions:
     halting_threshold: float | None = None
     memory_flag: bool = False
     recurrent_flag: bool = False
-    recurrent_gate_flag: bool = False
-    recurrent_halting_flag: bool = False
+    recurrent_stack_gate_flag: bool = False
+    recurrent_stack_halting_flag: bool = False
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
@@ -150,11 +150,11 @@ class RecurrentControllerOptions:
     recurrent_layer_norm_position: LayerNormPositionOptions = (
         LayerNormPositionOptions.DISABLED
     )
-    recurrent_gate_flag: bool = False
+    recurrent_stack_gate_flag: bool = False
     recurrent_gate_option: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
     recurrent_gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID
     recurrent_gate_stack_options: ControllerStackOptions = ControllerStackOptions()
-    recurrent_halting_flag: bool = False
+    recurrent_stack_halting_flag: bool = False
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_halting_dropout: float = 0.0
