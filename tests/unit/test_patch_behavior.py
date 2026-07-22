@@ -126,8 +126,9 @@ class PatchConfigurationBehaviorTests(unittest.TestCase):
                 config.num_input_channels,
                 config.patch_size,
                 config.dropout_probability,
+                config.class_token_flag,
             ),
-            (None, None, None, None),
+            (None, None, None, None, None),
         )
         self.assertEqual(config.get_custom_parameters(), {})
         with self.assertRaises(NotImplementedError) as error:
@@ -468,6 +469,62 @@ class ConvPatchEmbeddingBehaviorTests(unittest.TestCase):
 
 
 class PatchTrainingAndStateBehaviorTests(unittest.TestCase):
+    def test_class_token_opt_out_is_parameter_free_and_preserves_patch_gradients(
+        self,
+    ) -> None:
+        cases = (
+            (
+                PatchEmbeddingLinear,
+                linear_config(class_token_flag=False),
+            ),
+            (
+                PatchEmbeddingConv,
+                conv_config(
+                    class_token_flag=False,
+                    conv_stack_config=conv_stack_config(stride=2),
+                ),
+            ),
+        )
+        inputs = torch.arange(32, dtype=torch.float32).reshape(2, 1, 4, 4)
+
+        for module_type, config in cases:
+            with self.subTest(module_type=module_type.__name__):
+                model = module_type(config)
+                values = inputs.clone().requires_grad_()
+
+                output = model(values)
+                output.square().mean().backward()
+
+                self.assertEqual(output.shape, (2, 4, 2))
+                self.assertFalse(hasattr(model, "class_token"))
+                self.assertNotIn("class_token", model.state_dict())
+                self.assertIsNotNone(values.grad)
+                self.assertGreater(values.grad.abs().sum().item(), 0.0)
+                for name, parameter in model.named_parameters():
+                    self.assertIsNotNone(parameter.grad, name)
+                    self.assertTrue(torch.isfinite(parameter.grad).all(), name)
+                    self.assertGreater(parameter.grad.abs().sum().item(), 0.0, name)
+
+                restored = module_type(config)
+                incompatible = restored.load_state_dict(
+                    model.state_dict(),
+                    strict=True,
+                )
+                self.assertEqual(incompatible.missing_keys, [])
+                self.assertEqual(incompatible.unexpected_keys, [])
+
+    def test_omitted_and_none_class_token_flags_keep_legacy_behavior(self) -> None:
+        omitted = PatchEmbeddingLinear(linear_config())
+        explicit_none = PatchEmbeddingLinear(linear_config(class_token_flag=None))
+        explicit_none.load_state_dict(omitted.state_dict(), strict=True)
+        inputs = torch.randn(2, 1, 4, 4)
+
+        self.assertTrue(omitted.class_token_flag)
+        self.assertTrue(explicit_none.class_token_flag)
+        self.assertIn("class_token", omitted.state_dict())
+        self.assertEqual(omitted(inputs).shape, (2, 5, 2))
+        torch.testing.assert_close(explicit_none(inputs), omitted(inputs))
+
     def test_dropout_zero_is_a_noop_and_one_is_train_only_for_both_variants(
         self,
     ) -> None:

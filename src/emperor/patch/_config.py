@@ -21,6 +21,10 @@ class PatchConfig(ConfigBase):
     dropout_probability: float | None = optional_field(
         "Dropout probability applied to the patch embeddings."
     )
+    class_token_flag: bool | None = optional_field(
+        "Whether to create and prepend a learnable class token. None preserves the "
+        "legacy enabled behavior."
+    )
 
 
 @dataclass

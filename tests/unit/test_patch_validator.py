@@ -152,6 +152,40 @@ class PatchValidatorBehaviorTests(unittest.TestCase):
                     f"received {probability}",
                 )
 
+    def test_class_token_flag_accepts_bool_or_none_and_rejects_other_values(
+        self,
+    ) -> None:
+        for flag in (True, False, None):
+            with self.subTest(flag=flag):
+                model = PatchBase(
+                    PatchConfig(
+                        embedding_dim=4,
+                        num_input_channels=1,
+                        patch_size=2,
+                        dropout_probability=0.0,
+                        class_token_flag=flag,
+                    )
+                )
+                self.assertEqual(model.class_token_flag, flag is not False)
+
+        for value in (0, 1, "false"):
+            with self.subTest(value=value):
+                with self.assertRaises(TypeError) as error:
+                    PatchBase(
+                        PatchConfig(
+                            embedding_dim=4,
+                            num_input_channels=1,
+                            patch_size=2,
+                            dropout_probability=0.0,
+                            class_token_flag=value,
+                        )
+                    )
+                self.assertEqual(
+                    str(error.exception),
+                    "class_token_flag must be bool or None for PatchConfig, got "
+                    f"{type(value).__name__}",
+                )
+
     def test_linear_stride_must_be_positive_at_construction(self) -> None:
         for stride in (0, -1):
             with self.subTest(stride=stride):

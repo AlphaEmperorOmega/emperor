@@ -30,7 +30,9 @@ class PatchBase(Module):
         self.num_input_channels = self.cfg.num_input_channels
         self.VALIDATOR.validate(self)
 
-        self.class_token = self._create_class_token()
+        self.class_token_flag = self.cfg.class_token_flag is not False
+        if self.class_token_flag:
+            self.class_token = self._create_class_token()
         self.dropout = nn.Dropout(self.dropout_probability)
 
     def _create_class_token(self, shape: tuple | None = None) -> Parameter:
@@ -42,6 +44,8 @@ class PatchBase(Module):
         return class_token
 
     def _concatenate_class_token(self, X: Tensor) -> Tensor:
+        if not self.class_token_flag:
+            return X
         batch_size = X.size(0)
         expanded_class_tokens = self.class_token.expand(batch_size, -1, -1)
         patches_with_class_token = torch.cat([expanded_class_tokens, X], dim=1)

@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 
 class PatchValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"override_config"}
+    OPTIONAL_FIELDS = {"override_config", "class_token_flag"}
 
     @classmethod
     def validate(cls, model: "PatchBase") -> None:
@@ -31,12 +31,21 @@ class PatchValidator(ValidatorBase):
                 f"received {model.cfg.padding}"
             )
         cls._validate_dropout_probability(model.dropout_probability)
+        cls._validate_class_token_flag(model.cfg.class_token_flag)
 
     @staticmethod
     def _validate_dropout_probability(value: float) -> None:
         if not 0.0 <= value <= 1.0:
             raise ValueError(
                 f"dropout_probability must be in [0.0, 1.0], received {value}"
+            )
+
+    @staticmethod
+    def _validate_class_token_flag(value: bool | None) -> None:
+        if value is not None and not isinstance(value, bool):
+            raise TypeError(
+                "class_token_flag must be bool or None for PatchConfig, got "
+                f"{type(value).__name__}"
             )
 
     @staticmethod
