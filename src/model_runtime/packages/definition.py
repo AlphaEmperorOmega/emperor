@@ -28,7 +28,7 @@ from model_runtime.packages.metadata import ModelMetadata
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-    from model_runtime.runs.artifacts import FilesystemRunArtifacts
+    from model_runtime.runs.artifacts import RunArtifacts
 
 
 class _PackageAdapter(Protocol):
@@ -60,7 +60,7 @@ class _PackageAdapter(Protocol):
         *,
         experiment_task: ExperimentTask,
         model_package: ModelPackage,
-        run_artifacts: FilesystemRunArtifacts,
+        run_artifacts: RunArtifacts,
     ) -> Any: ...
 
 
@@ -222,7 +222,7 @@ class ModelPackage:
         preset: Any,
         *,
         experiment_task: ExperimentTask,
-        run_artifacts: FilesystemRunArtifacts,
+        run_artifacts: RunArtifacts,
     ) -> Any:
         return self._adapter.build_experiment(
             preset,
