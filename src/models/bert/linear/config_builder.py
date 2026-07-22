@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from models.bert.linear._boundary_config_factory import (
     BoundaryConfigDependencies,
@@ -17,10 +17,7 @@ from models.bert.linear._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.bert.linear.experiment_config import ExperimentConfig
-from models.bert.linear.runtime_defaults import (
-    DEFAULT_RUNTIME,
-    runtime_with_builder_options,
-)
+from models.bert.linear.runtime_defaults import DEFAULT_RUNTIME
 from models.bert.linear.runtime_options import RuntimeOptions
 
 if TYPE_CHECKING:
@@ -32,11 +29,10 @@ class BertLinearConfigBuilder:
         self,
         *,
         runtime: RuntimeOptions = DEFAULT_RUNTIME,
-        **legacy_options: Any,
     ) -> None:
         if not isinstance(runtime, RuntimeOptions):
             raise TypeError("runtime must be a RuntimeOptions value")
-        self.runtime = runtime_with_builder_options(runtime, legacy_options)
+        self.runtime = runtime
         batch_size = self.runtime.batch_size
         learning_rate = self.runtime.learning_rate
         input_dim = self.runtime.input_dim

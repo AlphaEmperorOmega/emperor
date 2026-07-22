@@ -41,7 +41,7 @@ def runtime_from_config(config_module: ModuleType = config) -> RuntimeOptions:
     )
 
 
-def runtime_with_builder_options(
+def _runtime_with_fields(
     runtime: RuntimeOptions,
     builder_options: dict[str, Any],
 ) -> RuntimeOptions:
@@ -59,7 +59,7 @@ def runtime_from_flat(
     flat_kwargs: dict[str, Any] | None = None,
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
-    return runtime_with_builder_options(
+    return _runtime_with_fields(
         runtime_from_config(config_module),
         linear_builder_kwargs_from_flat(flat_kwargs or {}, config_module),
     )
@@ -72,5 +72,4 @@ __all__ = [
     "DEFAULT_RUNTIME",
     "runtime_from_config",
     "runtime_from_flat",
-    "runtime_with_builder_options",
 ]

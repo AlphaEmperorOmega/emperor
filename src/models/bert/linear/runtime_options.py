@@ -159,11 +159,11 @@ class RecurrentControllerOptions:
     recurrent_flag: bool
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
-    recurrent_gate_flag: bool
+    recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
     recurrent_gate_stack_source: SubmoduleStackSource
-    recurrent_halting_flag: bool
+    recurrent_stack_halting_flag: bool
     recurrent_halting_threshold: float
     recurrent_halting_dropout: float
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
@@ -262,26 +262,3 @@ __all__ = [
     "TransformerPositionalEmbeddingOptions",
     "resolve_controller_stack_options",
 ]
-
-# Preserve historical class paths for serialization compatibility.
-SubmoduleStackSource.__module__ = "models.bert.linear._controller_stack"
-SubmoduleStackOptions.__module__ = "models.bert.linear._controller_stack"
-BertEmbeddingOptions.__module__ = "models.bert.linear._builder_options"
-BertMlmHeadOptions.__module__ = "models.bert.linear._builder_options"
-BertNspHeadOptions.__module__ = "models.bert.linear._builder_options"
-MainLayerStackOptions.__module__ = "models.bert.linear._linear_builder_options"
-LayerControllerOptions.__module__ = "models.bert.linear._linear_builder_options"
-DynamicMemoryOptions.__module__ = "models.bert.linear._linear_builder_options"
-RecurrentControllerOptions.__module__ = "models.bert.linear._linear_builder_options"
-TransformerEncoderOptions.__module__ = "models.bert.linear._transformer_builder_options"
-TransformerPositionalEmbeddingOptions.__module__ = (
-    "models.bert.linear._transformer_builder_options"
-)
-TransformerAttentionOptions.__module__ = (
-    "models.bert.linear._transformer_builder_options"
-)
-TransformerFeedForwardOptions.__module__ = (
-    "models.bert.linear._transformer_builder_options"
-)
-VitPatchOptions.__module__ = "models.bert.linear._transformer_builder_options"
-VitOutputOptions.__module__ = "models.bert.linear._transformer_builder_options"

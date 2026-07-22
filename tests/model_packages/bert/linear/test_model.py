@@ -31,7 +31,12 @@ from emperor.transformer import (
     TransformerEncoderBlockLayer,
     TransformerEncoderLayer,
 )
-from model_runtime.packages import GridSearch, PresetLock, RandomSearch
+from model_runtime.packages import (
+    GridSearch,
+    PresetLock,
+    RandomSearch,
+    iter_supported_config_keys,
+)
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.bert.linear.config_builder import (
     BertLinearConfigBuilder,
@@ -42,7 +47,7 @@ from models.bert.linear.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
-from models.bert.linear.runtime_defaults import runtime_from_flat
+from models.bert.linear.runtime_defaults import runtime_from_config, runtime_from_flat
 from models.bert.linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
@@ -53,8 +58,10 @@ from models.bert.linear.runtime_options import (
     TransformerFeedForwardOptions,
     TransformerPositionalEmbeddingOptions,
 )
-from models.config_overrides import iter_supported_config_keys, print_config_options
-from models.parser import get_experiment_parser, resolve_experiment_mode
+from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.config_overrides import print_config_options
+from models.experiment_cli_parser import get_experiment_parser
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
@@ -63,6 +70,16 @@ from models.training_test_utils import (
 
 def _default_builder_kwargs() -> dict:
     return linear_builder_kwargs_from_flat({}, config)
+
+
+def _build_typed_config(**overrides):
+    return BertLinearConfigBuilder(
+        runtime=replace(runtime_from_config(), **overrides)
+    ).build()
+
+
+def _presets() -> ExperimentPresets:
+    return model_package("bert/linear").presets
 
 
 def _embedding_options() -> BertEmbeddingOptions:
@@ -96,7 +113,7 @@ def _nsp_head_options() -> BertNspHeadOptions:
 class TestBertLinearModel(unittest.TestCase):
     def test_runtime_defaults_describe_a_conventional_bert_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.AFTER,
         )
         self.assertEqual(config.FF_NUM_LAYERS, 1)
@@ -129,12 +146,13 @@ class TestBertLinearModel(unittest.TestCase):
                 self.assertEqual(module.__name__, module_name)
 
     def test_experiment_public_model_id_remains_catalog_id(self):
+        experiment = Experiment(model_package=model_package("bert/linear"))
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "bert/linear",
         )
 
-    def test_option_group_build_matches_flat_kwargs(self):
+    def test_flat_runtime_defaults_bind_to_typed_runtime_options(self):
         embedding_options = BertEmbeddingOptions(
             token_type_vocab_size=4,
             layer_norm_flag=False,
@@ -223,33 +241,24 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(builder_kwargs["nsp_head_options"], nsp_head_options)
         self.assertNotIn("embedding_dropout_probability", builder_kwargs)
 
-        flat_cfg = BertLinearConfigBuilder(**builder_kwargs).build()
-        grouped_cfg = BertLinearConfigBuilder(
-            batch_size=2,
-            learning_rate=0.02,
-            input_dim=32,
-            output_dim=32,
-            sequence_length=8,
-            embedding_options=embedding_options,
-            encoder_options=encoder_options,
-            positional_embedding_options=positional_embedding_options,
-            attention_options=attention_options,
-            feed_forward_options=feed_forward_options,
-            mlm_head_options=mlm_head_options,
-            nsp_head_options=nsp_head_options,
-        ).build()
+        flat_runtime = runtime_from_flat(flat_kwargs, config)
+        typed_runtime = replace(runtime_from_config(), **builder_kwargs)
+        self.assertEqual(flat_runtime, typed_runtime)
 
-        self.assertEqual(flat_cfg, grouped_cfg)
+        flat_cfg = BertLinearConfigBuilder(runtime=flat_runtime).build()
+        typed_cfg = BertLinearConfigBuilder(runtime=typed_runtime).build()
+
+        self.assertEqual(flat_cfg, typed_cfg)
         self.assertEqual(
-            grouped_cfg.experiment_config.boundary_config.embedding_options,
+            typed_cfg.experiment_config.boundary_config.embedding_options,
             embedding_options,
         )
         self.assertEqual(
-            grouped_cfg.experiment_config.boundary_config.mlm_head_options,
+            typed_cfg.experiment_config.boundary_config.mlm_head_options,
             mlm_head_options,
         )
         self.assertEqual(
-            grouped_cfg.experiment_config.boundary_config.nsp_head_options,
+            typed_cfg.experiment_config.boundary_config.nsp_head_options,
             nsp_head_options,
         )
 
@@ -278,17 +287,20 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(
             BertLinearConfigBuilder(runtime=runtime).build(),
             BertLinearConfigBuilder(
-                **linear_builder_kwargs_from_flat(flat_options, config)
+                runtime=replace(
+                    runtime_from_config(),
+                    **linear_builder_kwargs_from_flat(flat_options, config),
+                )
             ).build(),
         )
 
     def test_bert_defaults_build_conventional_encoder_profile(self):
         self.assertEqual(config.STACK_NUM_LAYERS, 5)
         self.assertIs(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.AFTER,
         )
-        self.assertIs(config.LAYER_NORM_POSITION, config.STACK_LAYER_NORM_POSITION)
+        self.assertIs(config.LAYER_NORM_POSITION, config.LAYER_NORM_POSITION)
         self.assertTrue(config.ATTN_BIAS_FLAG)
         self.assertEqual(config.FF_STACK_HIDDEN_DIM, config.HIDDEN_DIM * 4)
         self.assertEqual(config.SUBMODULE_STACK_BIAS_FLAG, config.STACK_BIAS_FLAG)
@@ -335,7 +347,9 @@ class TestBertLinearModel(unittest.TestCase):
             bias_flag=False,
         )
 
-        cfg = BertLinearConfigBuilder(**builder_kwargs).build()
+        cfg = BertLinearConfigBuilder(
+            runtime=replace(runtime_from_config(), **builder_kwargs)
+        ).build()
         encoder_stack = self._encoder_stack_config(cfg)
 
         self.assertEqual(
@@ -356,18 +370,18 @@ class TestBertLinearModel(unittest.TestCase):
             stack_gate_flag=True,
         )
 
-        inherited_cfg = BertLinearConfigBuilder(
+        inherited_cfg = _build_typed_config(
             stack_options=stack_options,
             layer_controller_options=layer_controller_options,
-        ).build()
-        explicit_cfg = BertLinearConfigBuilder(
+        )
+        explicit_cfg = _build_typed_config(
             stack_options=stack_options,
             submodule_stack_options=replace(
                 defaults["submodule_stack_options"],
                 bias_flag=True,
             ),
             layer_controller_options=layer_controller_options,
-        ).build()
+        )
         flat_cfg = self._baseline_config(
             {
                 "stack_bias_flag": False,
@@ -420,7 +434,9 @@ class TestBertLinearModel(unittest.TestCase):
             }
         )
 
-        cfg = BertLinearConfigBuilder(**builder_kwargs).build()
+        cfg = BertLinearConfigBuilder(
+            runtime=replace(runtime_from_config(), **builder_kwargs)
+        ).build()
         stack = self._encoder_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.shared_halting_config.halting_gate_config
@@ -475,11 +491,11 @@ class TestBertLinearModel(unittest.TestCase):
     def test_attention_projection_controls_attach_to_projection_stack(self):
         cfg = self._baseline_config(
             {
-                "attn_gate_flag": True,
+                "attn_stack_gate_flag": True,
                 "attn_gate_stack_independent_flag": True,
                 "attn_gate_stack_hidden_dim": 12,
                 "attn_gate_stack_num_layers": 3,
-                "attn_halting_flag": True,
+                "attn_stack_halting_flag": True,
                 "attn_memory_flag": True,
             }
         )
@@ -543,7 +559,9 @@ class TestBertLinearModel(unittest.TestCase):
             }
         )
 
-        cfg = BertLinearConfigBuilder(**builder_kwargs).build()
+        cfg = BertLinearConfigBuilder(
+            runtime=replace(runtime_from_config(), **builder_kwargs)
+        ).build()
         stack = self._attention_projection_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.layer_config.halting_config.halting_gate_config
@@ -626,11 +644,11 @@ class TestBertLinearModel(unittest.TestCase):
     def test_feed_forward_controls_attach_to_feed_forward_stack(self):
         cfg = self._baseline_config(
             {
-                "ff_gate_flag": True,
+                "ff_stack_gate_flag": True,
                 "ff_gate_stack_independent_flag": True,
                 "ff_gate_stack_hidden_dim": 12,
                 "ff_gate_stack_num_layers": 3,
-                "ff_halting_flag": True,
+                "ff_stack_halting_flag": True,
                 "ff_memory_flag": True,
             }
         )
@@ -692,7 +710,9 @@ class TestBertLinearModel(unittest.TestCase):
             }
         )
 
-        cfg = BertLinearConfigBuilder(**builder_kwargs).build()
+        cfg = BertLinearConfigBuilder(
+            runtime=replace(runtime_from_config(), **builder_kwargs)
+        ).build()
         stack = self._feed_forward_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.layer_config.halting_config.halting_gate_config
@@ -800,12 +820,14 @@ class TestBertLinearModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.bert.linear.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
 
@@ -815,11 +837,10 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(
-                dataset.__name__
-                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            (
+                dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
-                ]
+                ][0].__name__,
             ),
         )
         self.assertEqual(execute_runs.call_args.kwargs["monitors"], ())
@@ -844,10 +865,8 @@ class TestBertLinearModel(unittest.TestCase):
             <= supported_keys
         )
 
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.bert.linear",
-        )
+        package = model_package("bert/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -876,8 +895,8 @@ class TestBertLinearModel(unittest.TestCase):
                 "3",
             ]
         )
-        mode = resolve_experiment_mode(args, ExperimentPreset)
-        cfg = ExperimentPresets().get_config(
+        mode = resolve_cli_selection(args, package, ExperimentPreset)
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides=mode.config_overrides,
@@ -902,7 +921,7 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertNotIn("--nsp-head-options", listing)
 
     def test_modern_preset_contract_is_exposed(self):
-        presets = ExperimentPresets()
+        presets = _presets()
 
         expected_overrides = {
             ExperimentPreset.BASELINE: {},
@@ -953,11 +972,11 @@ class TestBertLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RECURRENT_GATING: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
             },
             ExperimentPreset.RECURRENT_HALTING: {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
             },
             ExperimentPreset.RECURRENT_MEMORY: {
                 "recurrent_flag": True,
@@ -965,23 +984,23 @@ class TestBertLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RECURRENT_GATING_HALTING: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
             },
             ExperimentPreset.RECURRENT_GATING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_HALTING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RESIDUAL: {
@@ -1114,7 +1133,7 @@ class TestBertLinearModel(unittest.TestCase):
                 self.assertNotIn(name, config.CONFIG_OVERRIDE_SKIP_KEYS)
 
     def test_preset_locks_are_exposed_with_reasons(self):
-        presets = ExperimentPresets()
+        presets = _presets()
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -1132,7 +1151,7 @@ class TestBertLinearModel(unittest.TestCase):
 
     def test_all_presets_forward_one_batch(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = _presets()
 
         for dataset in self._default_datasets():
             for preset in ExperimentPreset:
@@ -1156,7 +1175,7 @@ class TestBertLinearModel(unittest.TestCase):
 
     def test_baseline_forwards_all_datasets(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = _presets()
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -1181,7 +1200,7 @@ class TestBertLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = _presets()
 
         for dataset in self._default_datasets():
             for preset in ExperimentPreset:
@@ -1211,7 +1230,7 @@ class TestBertLinearModel(unittest.TestCase):
         }
 
     def _baseline_config(self, overrides: dict, batch_size: int = 2):
-        return ExperimentPresets().get_config(
+        return _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -1251,7 +1270,7 @@ class TestBertLinearModel(unittest.TestCase):
         mlm_head_options: BertMlmHeadOptions | None = None,
         nsp_head_options: BertNspHeadOptions | None = None,
     ):
-        return BertLinearConfigBuilder(
+        return _build_typed_config(
             batch_size=2,
             input_dim=input_dim,
             output_dim=output_dim,
@@ -1266,7 +1285,7 @@ class TestBertLinearModel(unittest.TestCase):
             attention_options=replace(_attention_options(), num_heads=4),
             mlm_head_options=mlm_head_options,
             nsp_head_options=nsp_head_options,
-        ).build()
+        )
 
     def _fake_bert_inputs(
         self, cfg, batch_size: int
@@ -1284,7 +1303,7 @@ class TestBertLinearModel(unittest.TestCase):
         return input_ids, attention_mask, token_type_ids
 
     def test_preset_accepts_search_flags(self):
-        configs = ExperimentPresets().get_config(
+        configs = _presets().get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             RandomSearch(num_samples=2),
@@ -1296,7 +1315,7 @@ class TestBertLinearModel(unittest.TestCase):
         for search_key in ("bogus_axis", "encoder_options", "embedding_options"):
             with self.subTest(search_key=search_key):
                 with self.assertRaises(ValueError) as ctx:
-                    ExperimentPresets().get_config(
+                    _presets().get_config(
                         ExperimentPreset.BASELINE,
                         self._default_dataset(),
                         RandomSearch(num_samples=2),
@@ -1316,13 +1335,13 @@ class TestBertLinearModel(unittest.TestCase):
             ],
         )
         self.assertIs(
-            search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION,
+            search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
             search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
         )
         self.assertEqual(search_space.SEARCH_SPACE_ATTN_NUM_HEADS, [1, 2, 4])
 
     def test_search_applies_encoder_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = _presets().get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             GridSearch(),
@@ -1349,10 +1368,6 @@ class TestBertLinearModel(unittest.TestCase):
                 search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
                 lambda cfg: self._encoder_layer_config(cfg).layer_norm_position,
             ),
-            "stack_layer_norm_position": (
-                search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION,
-                lambda cfg: self._encoder_layer_config(cfg).layer_norm_position,
-            ),
             "attn_num_heads": (
                 search_space.SEARCH_SPACE_ATTN_NUM_HEADS,
                 lambda cfg: self._attention_config(cfg).num_heads,
@@ -1361,7 +1376,7 @@ class TestBertLinearModel(unittest.TestCase):
 
         for search_key, (expected_values, accessor) in cases.items():
             with self.subTest(search_key=search_key):
-                configs = ExperimentPresets().get_config(
+                configs = _presets().get_config(
                     ExperimentPreset.BASELINE,
                     self._default_dataset(),
                     GridSearch(),
@@ -1374,7 +1389,7 @@ class TestBertLinearModel(unittest.TestCase):
                 )
 
     def test_unlocked_overrides_update_flat_and_nested_config(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -1419,7 +1434,7 @@ class TestBertLinearModel(unittest.TestCase):
             _nsp_head_options(),
             output_dim=3,
         )
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides={
@@ -1452,7 +1467,7 @@ class TestBertLinearModel(unittest.TestCase):
         )
 
     def test_flat_overrides_update_grouped_override_bases(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides={
@@ -1483,7 +1498,7 @@ class TestBertLinearModel(unittest.TestCase):
         )
 
     def test_locked_preset_rejects_conflicting_overrides(self):
-        presets = ExperimentPresets()
+        presets = _presets()
 
         with self.assertRaises(ValueError):
             presets.get_config(
@@ -1519,7 +1534,7 @@ class TestBertLinearModel(unittest.TestCase):
             )
 
     def test_presets_wire_config(self):
-        presets = ExperimentPresets()
+        presets = _presets()
 
         cfg = presets.get_config(ExperimentPreset.BASELINE)[0]
         self.assertIsInstance(
@@ -1613,7 +1628,7 @@ class TestBertLinearModel(unittest.TestCase):
         )
 
     def test_model_uses_bert_pretraining_base_class_and_heads(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -1807,29 +1822,27 @@ class TestBertLinearModel(unittest.TestCase):
 
     def test_boundary_dimensions_must_be_positive(self):
         cases = {
-            "input_dim": lambda: BertLinearConfigBuilder(input_dim=0).build(),
-            "hidden_dim": lambda: BertLinearConfigBuilder(
+            "input_dim": lambda: _build_typed_config(input_dim=0),
+            "hidden_dim": lambda: _build_typed_config(
                 encoder_options=replace(_encoder_options(), hidden_dim=0)
-            ).build(),
-            "output_dim": lambda: BertLinearConfigBuilder(
+            ),
+            "output_dim": lambda: _build_typed_config(
                 output_dim=0,
                 mlm_head_options=replace(
                     _mlm_head_options(),
                     decoder_weight_tying_flag=False,
                 ),
-            ).build(),
-            "sequence_length": lambda: BertLinearConfigBuilder(
-                sequence_length=0
-            ).build(),
-            "token_type_vocab_size": lambda: BertLinearConfigBuilder(
+            ),
+            "sequence_length": lambda: _build_typed_config(sequence_length=0),
+            "token_type_vocab_size": lambda: _build_typed_config(
                 embedding_options=replace(
                     _embedding_options(),
                     token_type_vocab_size=0,
                 )
-            ).build(),
-            "nsp_output_dim": lambda: BertLinearConfigBuilder(
+            ),
+            "nsp_output_dim": lambda: _build_typed_config(
                 nsp_head_options=replace(_nsp_head_options(), output_dim=0)
-            ).build(),
+            ),
         }
 
         for field, build in cases.items():
@@ -1841,16 +1854,16 @@ class TestBertLinearModel(unittest.TestCase):
         for probability in (-0.01, 1.01):
             with self.subTest(probability=probability):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
-                    BertLinearConfigBuilder(
+                    _build_typed_config(
                         embedding_options=replace(
                             _embedding_options(),
                             dropout_probability=probability,
                         )
-                    ).build()
+                    )
 
     def test_model_step_accepts_canonical_bert_pretraining_batch(self):
         batch_size = 2
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -2030,7 +2043,7 @@ class TestBertLinearModel(unittest.TestCase):
 
     def test_forward_converts_attention_mask_to_encoder_key_padding_mask(self):
         batch_size = 2
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -2069,7 +2082,7 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertIsNone(spy.attention_mask)
 
     def test_encoder_built_from_block_layers(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -2158,14 +2171,16 @@ class TestBertLinearModel(unittest.TestCase):
                 recurrent_key: replace(
                     recurrent_controller_options,
                     recurrent_flag=True,
-                    recurrent_gate_flag=True,
+                    recurrent_stack_gate_flag=True,
                     recurrent_gate_stack_source=recurrent_gate_stack_source,
-                    recurrent_halting_flag=True,
+                    recurrent_stack_halting_flag=True,
                     recurrent_halting_stack_source=(recurrent_halting_stack_source),
                 ),
             }
         )
-        return BertLinearConfigBuilder(**builder_kwargs).build()
+        return BertLinearConfigBuilder(
+            runtime=replace(runtime_from_config(), **builder_kwargs)
+        ).build()
 
     def _recurrent_controller_dimensions(
         self,

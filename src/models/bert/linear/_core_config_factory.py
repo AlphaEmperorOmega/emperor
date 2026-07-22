@@ -407,7 +407,7 @@ class CoreConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             causal_attention_mask_flag=config.CAUSAL_ATTENTION_MASK_FLAG,
         )
 
@@ -443,7 +443,7 @@ class CoreConfigFactory:
             return options
         return MainLayerStackOptions(
             bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -528,13 +528,13 @@ class CoreConfigFactory:
             return options
         config_prefix = f"{prefix}_" if prefix else ""
         return LayerControllerOptions(
-            stack_gate_flag=getattr(config, f"{config_prefix}GATE_FLAG"),
+            stack_gate_flag=getattr(config, f"{config_prefix}STACK_GATE_FLAG"),
             gate_option=getattr(config, f"{config_prefix}GATE_OPTION"),
             gate_activation=getattr(config, f"{config_prefix}GATE_ACTIVATION"),
             gate_stack_source=self.__controller_stack_source(
                 f"{config_prefix}GATE_STACK"
             ),
-            stack_halting_flag=getattr(config, f"{config_prefix}HALTING_FLAG"),
+            stack_halting_flag=getattr(config, f"{config_prefix}STACK_HALTING_FLAG"),
             halting_threshold=getattr(
                 config,
                 f"{config_prefix}HALTING_THRESHOLD",
@@ -594,7 +594,7 @@ class CoreConfigFactory:
                 config,
                 f"{prefix}_LAYER_NORM_POSITION",
             ),
-            recurrent_gate_flag=getattr(config, f"{prefix}_GATE_FLAG"),
+            recurrent_stack_gate_flag=getattr(config, f"{prefix}_STACK_GATE_FLAG"),
             recurrent_gate_option=getattr(config, f"{prefix}_GATE_OPTION"),
             recurrent_gate_activation=getattr(
                 config,
@@ -603,7 +603,9 @@ class CoreConfigFactory:
             recurrent_gate_stack_source=self.__controller_stack_source(
                 f"{prefix}_GATE_STACK"
             ),
-            recurrent_halting_flag=getattr(config, f"{prefix}_HALTING_FLAG"),
+            recurrent_stack_halting_flag=getattr(
+                config, f"{prefix}_STACK_HALTING_FLAG"
+            ),
             recurrent_halting_threshold=getattr(
                 config,
                 f"{prefix}_HALTING_THRESHOLD",

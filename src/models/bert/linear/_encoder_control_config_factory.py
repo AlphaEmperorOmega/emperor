@@ -46,7 +46,7 @@ class GateConfigFactory:
         )
 
     def build_recurrent_gate_config(self) -> GateConfig | None:
-        if not self.recurrent_controller_options.recurrent_gate_flag:
+        if not self.recurrent_controller_options.recurrent_stack_gate_flag:
             return None
         resolved_gate_stack_defaults = self.__recurrent_gate_stack_defaults()
         recurrent_gate_stack_source = (
@@ -152,7 +152,7 @@ class HaltingConfigFactory:
         )
 
     def build_recurrent_halting_config(self) -> HaltingConfig | None:
-        if not self.recurrent_controller_options.recurrent_halting_flag:
+        if not self.recurrent_controller_options.recurrent_stack_halting_flag:
             return None
         resolved_halting_stack_defaults = self.__recurrent_halting_stack_defaults()
         recurrent_halting_stack_source = (
