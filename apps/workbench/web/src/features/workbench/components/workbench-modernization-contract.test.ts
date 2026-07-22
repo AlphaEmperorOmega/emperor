@@ -124,7 +124,7 @@ describe("Next 16 workspace modernization contract", () => {
     );
   });
 
-  it("keeps deleted compatibility Modules absent and imports graph diagrams directly", () => {
+  it("keeps retired Modules absent and imports graph diagrams directly", () => {
     for (const relativePath of removedProductionModules) {
       expect(existsSync(resolve(process.cwd(), relativePath))).toBe(false);
     }

@@ -89,7 +89,7 @@ describe("query key factories", () => {
     );
   });
 
-  it("keeps legacy log query constants on the base family keys", () => {
+  it("keeps log query constants on the base family keys", () => {
     expect(LOG_RUNS_QUERY_KEY).toEqual(["log-runs"]);
     expect(LOG_EXPERIMENTS_QUERY_KEY).toEqual(["log-experiments"]);
     expect(LOG_TAGS_QUERY_KEY).toEqual(["log-tags"]);

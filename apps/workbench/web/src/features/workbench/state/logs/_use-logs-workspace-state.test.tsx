@@ -259,7 +259,7 @@ describe("Logs workspace state", () => {
         return combinedTags.promise;
       }
       return Promise.resolve({
-        runs: runIds.map((runId) => logRunTags(runId, ["legacy/weight"])),
+        runs: runIds.map((runId) => logRunTags(runId, ["custom/weight"])),
       });
     });
     const { result } = renderLogsWorkspaceState();
@@ -272,13 +272,13 @@ describe("Logs workspace state", () => {
     });
     await waitFor(() =>
       expect(result.current.browser.filters.tags.options.map(({ value }) => value))
-        .toEqual(["legacy/weight"]),
+        .toEqual(["custom/weight"]),
     );
     await waitFor(() =>
       expect(result.current.charts.visibleRunIds).toEqual(["a-cifar"]),
     );
     act(() => {
-      result.current.browser.actions.toggleFilter("tags", "legacy/weight");
+      result.current.browser.actions.toggleFilter("tags", "custom/weight");
       result.current.browser.actions.toggleFilter("experiments", "exp_b");
     });
 
@@ -289,13 +289,13 @@ describe("Logs workspace state", () => {
       ),
     );
     expect(result.current.browser.filters.tags.selectedValues).toEqual([
-      "legacy/weight",
+      "custom/weight",
     ]);
 
     act(() => {
       combinedTags.resolve({
         runs: [
-          logRunTags("a-cifar", ["legacy/weight"]),
+          logRunTags("a-cifar", ["custom/weight"]),
           logRunTags("b-cifar", ["validation/accuracy_epoch"]),
         ],
       });
@@ -362,7 +362,7 @@ describe("Logs workspace state", () => {
             runId,
             runId === "b-cifar"
               ? ["custom/first", "custom/second"]
-              : ["legacy/weight"],
+              : ["custom/weight"],
           ),
         ),
       }),
@@ -377,14 +377,14 @@ describe("Logs workspace state", () => {
     });
     await waitFor(() =>
       expect(result.current.browser.filters.tags.options.map(({ value }) => value))
-        .toEqual(["legacy/weight"]),
+        .toEqual(["custom/weight"]),
     );
     act(() => {
-      result.current.browser.actions.toggleFilter("tags", "legacy/weight");
+      result.current.browser.actions.toggleFilter("tags", "custom/weight");
     });
     await waitFor(() =>
       expect(result.current.browser.filters.tags.selectedValues).toEqual([
-        "legacy/weight",
+        "custom/weight",
       ]),
     );
     act(() => {
