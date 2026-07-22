@@ -255,9 +255,9 @@ class InspectorSchemaTests(unittest.TestCase):
             "stack_num_layers",
             "submodule_stack_hidden_dim",
             "ff_num_layers",
-            "ff_gate_flag",
+            "ff_stack_gate_flag",
             "attn_num_layers",
-            "attn_gate_flag",
+            "attn_stack_gate_flag",
             "adaptive_generator_stack_hidden_dim",
             "weight_option",
             "expert_top_k",
@@ -324,9 +324,9 @@ class InspectorSchemaTests(unittest.TestCase):
             "stack_num_layers",
             "submodule_stack_hidden_dim",
             "attn_num_layers",
-            "attn_gate_flag",
+            "attn_stack_gate_flag",
             "ff_num_layers",
-            "ff_gate_flag",
+            "ff_stack_gate_flag",
             "adaptive_generator_stack_hidden_dim",
             "weight_option",
         }
@@ -394,7 +394,7 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertEqual(linear_fields["stack_num_layers"]["default"], 5)
         self.assertEqual(linear_fields["stack_num_layers"]["choices"], [])
         self.assertEqual(linear_fields["learning_rate"]["type"], "float")
-        self.assertEqual(linear_fields["gate_flag"]["type"], "bool")
+        self.assertEqual(linear_fields["stack_gate_flag"]["type"], "bool")
         self.assertEqual(linear_fields["stack_activation"]["type"], "enum")
         self.assertIn("GELU", linear_fields["stack_activation"]["choices"])
         self.assertEqual(linear_fields["memory_flag"]["type"], "bool")
@@ -620,18 +620,20 @@ class InspectorSchemaTests(unittest.TestCase):
             "ff_bias_flag": "Feed-Forward Stack Options",
             "ff_stack_hidden_dim": "Feed-Forward Stack Options",
             "ff_stack_activation": "Feed-Forward Stack Options",
-            "ff_gate_flag": "Feed-Forward Gate Options",
+            "ff_stack_gate_flag": "Feed-Forward Gate Options",
             "ff_gate_stack_hidden_dim": "Feed-Forward Gate Stack Options",
-            "ff_halting_flag": "Feed-Forward Halting Options",
+            "ff_stack_halting_flag": "Feed-Forward Halting Options",
             "ff_halting_stack_hidden_dim": "Feed-Forward Halting Stack Options",
             "ff_memory_flag": "Feed-Forward Memory Options",
             "ff_memory_stack_hidden_dim": "Feed-Forward Memory Stack Options",
             "ff_recurrent_flag": "Feed-Forward Recurrent Layer Options",
-            "ff_recurrent_gate_flag": "Feed-Forward Recurrent Gate Options",
+            "ff_recurrent_stack_gate_flag": "Feed-Forward Recurrent Gate Options",
             "ff_recurrent_gate_stack_hidden_dim": (
                 "Feed-Forward Recurrent Gate Stack Options"
             ),
-            "ff_recurrent_halting_flag": ("Feed-Forward Recurrent Halting Options"),
+            "ff_recurrent_stack_halting_flag": (
+                "Feed-Forward Recurrent Halting Options"
+            ),
             "ff_recurrent_halting_stack_hidden_dim": (
                 "Feed-Forward Recurrent Halting Stack Options"
             ),
@@ -653,8 +655,11 @@ class InspectorSchemaTests(unittest.TestCase):
                     self.assertEqual(fields[field_key]["section"], section)
                 self.assertNotIn("ff_stack_num_layers", fields)
                 self.assertNotIn("ff_stack_bias_flag", fields)
-                self.assertEqual(fields["ff_gate_flag"]["flag"], "--ff-gate-flag")
-                self.assertFalse(fields["ff_gate_flag"]["default"])
+                self.assertEqual(
+                    fields["ff_stack_gate_flag"]["flag"],
+                    "--ff-stack-gate-flag",
+                )
+                self.assertFalse(fields["ff_stack_gate_flag"]["default"])
                 self.assertFalse(fields["ff_memory_flag"]["default"])
                 self.assertFalse(fields["ff_recurrent_flag"]["default"])
                 self.assertFalse(fields["ff_gate_stack_independent_flag"]["default"])
@@ -687,9 +692,9 @@ class InspectorSchemaTests(unittest.TestCase):
             "attn_bias_flag": "Attention Projection Stack Options",
             "attn_stack_hidden_dim": "Attention Projection Stack Options",
             "attn_stack_activation": "Attention Projection Stack Options",
-            "attn_gate_flag": "Attention Projection Gate Options",
+            "attn_stack_gate_flag": "Attention Projection Gate Options",
             "attn_gate_stack_hidden_dim": ("Attention Projection Gate Stack Options"),
-            "attn_halting_flag": "Attention Projection Halting Options",
+            "attn_stack_halting_flag": "Attention Projection Halting Options",
             "attn_halting_stack_hidden_dim": (
                 "Attention Projection Halting Stack Options"
             ),
@@ -698,11 +703,13 @@ class InspectorSchemaTests(unittest.TestCase):
                 "Attention Projection Memory Stack Options"
             ),
             "attn_recurrent_flag": ("Attention Projection Recurrent Layer Options"),
-            "attn_recurrent_gate_flag": ("Attention Projection Recurrent Gate Options"),
+            "attn_recurrent_stack_gate_flag": (
+                "Attention Projection Recurrent Gate Options"
+            ),
             "attn_recurrent_gate_stack_hidden_dim": (
                 "Attention Projection Recurrent Gate Stack Options"
             ),
-            "attn_recurrent_halting_flag": (
+            "attn_recurrent_stack_halting_flag": (
                 "Attention Projection Recurrent Halting Options"
             ),
             "attn_recurrent_halting_stack_hidden_dim": (
@@ -727,10 +734,10 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertNotIn("attn_stack_num_layers", fields)
                 self.assertNotIn("attn_stack_bias_flag", fields)
                 self.assertEqual(
-                    fields["attn_gate_flag"]["flag"],
-                    "--attn-gate-flag",
+                    fields["attn_stack_gate_flag"]["flag"],
+                    "--attn-stack-gate-flag",
                 )
-                self.assertFalse(fields["attn_gate_flag"]["default"])
+                self.assertFalse(fields["attn_stack_gate_flag"]["default"])
                 self.assertFalse(fields["attn_memory_flag"]["default"])
                 self.assertFalse(fields["attn_recurrent_flag"]["default"])
                 self.assertFalse(fields["attn_gate_stack_independent_flag"]["default"])
@@ -1027,18 +1034,18 @@ class InspectorSchemaTests(unittest.TestCase):
     ) -> None:
         fields = _fields_by_key(config_schema("experts/linear_adaptive"))
         expected_sections = {
-            "router_gate_flag": "Router Gate Options",
+            "router_stack_gate_flag": "Router Gate Options",
             "router_gate_stack_hidden_dim": "Router Gate Stack Options",
-            "router_halting_flag": "Router Halting Options",
+            "router_stack_halting_flag": "Router Halting Options",
             "router_halting_stack_hidden_dim": "Router Halting Stack Options",
             "router_memory_flag": "Router Memory Options",
             "router_memory_stack_hidden_dim": "Router Memory Stack Options",
             "router_recurrent_flag": "Router Recurrent Layer Options",
-            "router_recurrent_gate_flag": "Router Recurrent Gate Options",
+            "router_recurrent_stack_gate_flag": "Router Recurrent Gate Options",
             "router_recurrent_gate_stack_hidden_dim": (
                 "Router Recurrent Gate Stack Options"
             ),
-            "router_recurrent_halting_flag": "Router Recurrent Halting Options",
+            "router_recurrent_stack_halting_flag": "Router Recurrent Halting Options",
             "router_recurrent_halting_stack_hidden_dim": (
                 "Router Recurrent Halting Stack Options"
             ),
@@ -1049,15 +1056,15 @@ class InspectorSchemaTests(unittest.TestCase):
                 self.assertIn(field_key, fields)
                 self.assertEqual(fields[field_key]["section"], section)
 
-        self.assertFalse(fields["router_gate_flag"]["default"])
+        self.assertFalse(fields["router_stack_gate_flag"]["default"])
         self.assertFalse(fields["router_memory_flag"]["default"])
         self.assertFalse(fields["router_recurrent_flag"]["default"])
         self.assertFalse(fields["router_gate_stack_independent_flag"]["default"])
         self.assertIsNone(fields["router_gate_stack_hidden_dim"]["default"])
         self.assertTrue(fields["router_gate_stack_hidden_dim"]["nullable"])
         self.assertEqual(
-            fields["router_gate_flag"]["flag"],
-            "--router-gate-flag",
+            fields["router_stack_gate_flag"]["flag"],
+            "--router-stack-gate-flag",
         )
         self.assertEqual(
             fields["router_memory_flag"]["flag"],
@@ -1162,7 +1169,7 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_experts_schemas_expose_expert_internal_controller_sections(self) -> None:
         expected = {
-            "expert_gate_flag": {
+            "expert_stack_gate_flag": {
                 "section": "Expert Gate Options",
                 "type": "bool",
                 "default": False,
@@ -1186,7 +1193,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 "default": None,
                 "nullable": True,
             },
-            "expert_halting_flag": {
+            "expert_stack_halting_flag": {
                 "section": "Expert Halting Options",
                 "type": "bool",
                 "default": False,
@@ -1234,7 +1241,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 "default": "DISABLED",
                 "nullable": False,
             },
-            "expert_recurrent_gate_flag": {
+            "expert_recurrent_stack_gate_flag": {
                 "section": "Expert Recurrent Gate Options",
                 "type": "bool",
                 "default": False,
@@ -1246,7 +1253,7 @@ class InspectorSchemaTests(unittest.TestCase):
                 "default": None,
                 "nullable": True,
             },
-            "expert_recurrent_halting_flag": {
+            "expert_recurrent_stack_halting_flag": {
                 "section": "Expert Recurrent Halting Options",
                 "type": "bool",
                 "default": False,
@@ -1736,11 +1743,11 @@ class InspectorSchemaTests(unittest.TestCase):
         baseline_fields = _fields_by_key(config_schema("linears/linear", "baseline"))
         gating_fields = _fields_by_key(config_schema("linears/linear", "gating"))
 
-        self.assertFalse(baseline_fields["gate_flag"]["locked"])
-        self.assertTrue(gating_fields["gate_flag"]["locked"])
-        self.assertEqual(gating_fields["gate_flag"]["lockedValue"], True)
+        self.assertFalse(baseline_fields["stack_gate_flag"]["locked"])
+        self.assertTrue(gating_fields["stack_gate_flag"]["locked"])
+        self.assertEqual(gating_fields["stack_gate_flag"]["lockedValue"], True)
         self.assertEqual(
-            gating_fields["gate_flag"]["lockedReason"],
+            gating_fields["stack_gate_flag"]["lockedReason"],
             (
                 "Locked by the GATING preset because this preset locks "
                 "`stack_gate_flag`."

@@ -100,7 +100,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_locked_preset_override_is_rejected_for_inspect(self) -> None:
         with self.assertRaises(InspectionFailure) as context:
-            inspect_model("linears/linear", "gating", {"gate_flag": "false"})
+            inspect_model("linears/linear", "gating", {"stack_gate_flag": "false"})
 
         self.assertIn("locked fields", str(context.exception))
         self.assertIn("stack_gate_flag", str(context.exception))
@@ -136,7 +136,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_config_override_aliases_match_builder_parameter_names(self) -> None:
         result = inspect_model(
-            "linears/linear_adaptive", "baseline", {"gate_flag": "true"}
+            "linears/linear_adaptive", "baseline", {"stack_gate_flag": "true"}
         )
         self.assertTrue(
             any(node["details"].get("gate") is True for node in result["nodes"])

@@ -110,7 +110,7 @@ class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
 
     def test_worker_revalidates_locked_row_overrides(self) -> None:
         payload = worker_payload(preset="gating", presets=["gating"])
-        payload["runPlan"]["runs"][0]["overrides"]["gate_flag"] = "false"
+        payload["runPlan"]["runs"][0]["overrides"]["stack_gate_flag"] = "false"
         package = project_adapter_client().package("linears/linear")
 
         with self.assertRaisesRegex(ValueError, "locked fields"):

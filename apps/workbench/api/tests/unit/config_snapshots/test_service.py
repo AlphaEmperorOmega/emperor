@@ -208,7 +208,7 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
                 model="linears/linear",
                 preset="gating",
                 name="disable locked gate",
-                overrides={"gate_flag": "false"},
+                overrides={"stack_gate_flag": "false"},
             )
 
         self.assertEqual(self.store.list("linears/linear"), [])

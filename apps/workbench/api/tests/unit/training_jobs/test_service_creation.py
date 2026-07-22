@@ -469,7 +469,7 @@ class TrainingJobCreationTests(unittest.TestCase):
                 preset="baseline",
                 presets=["baseline", "gating"],
                 datasets=["Mnist"],
-                overrides={"gate_flag": "false"},
+                overrides={"stack_gate_flag": "false"},
                 log_folder="test_model",
             )
 

@@ -134,7 +134,7 @@ class InspectionContractFreezeTests(unittest.TestCase):
             "locked-override": lambda: inspect_model(
                 "linears/linear",
                 "gating",
-                overrides={"GATE_FLAG": "false"},
+                overrides={"STACK_GATE_FLAG": "false"},
             ),
             "incompatible-dataset": lambda: inspect_model(
                 "linears/linear",
@@ -218,7 +218,7 @@ class InspectionContractFreezeTests(unittest.TestCase):
                 "--datasets",
                 "Mnist",
                 "--config",
-                "--gate-flag",
+                "--stack-gate-flag",
                 "false",
             ),
             "pre-inspection-malformed-override": (

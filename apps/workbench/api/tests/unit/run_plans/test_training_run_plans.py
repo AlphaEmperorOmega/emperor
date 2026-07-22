@@ -1278,7 +1278,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                     log_folder="",
                 )
             )
-            plan["runs"][0]["overrides"]["gate_flag"] = "false"
+            plan["runs"][0]["overrides"]["stack_gate_flag"] = "false"
 
             with self.assertRaises(TrainingJobFailure) as context:
                 manager.create_job_payload(
