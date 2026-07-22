@@ -259,7 +259,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "attn_stack_gate_flag",
             "adaptive_generator_stack_hidden_dim",
             "weight_option",
-            "expert_top_k",
+            "top_k",
             "router_noisy_topk_flag",
         }
         public_fields = {
@@ -795,9 +795,7 @@ class InspectorSchemaTests(unittest.TestCase):
                     }.issubset(axes)
                 )
                 if "expert" in backend:
-                    self.assertTrue(
-                        {"expert_num_experts", "expert_top_k"}.issubset(axes)
-                    )
+                    self.assertTrue({"num_experts", "top_k"}.issubset(axes))
                 if "adaptive" in backend:
                     self.assertTrue(
                         {
@@ -1076,49 +1074,49 @@ class InspectorSchemaTests(unittest.TestCase):
 
     def test_experts_schemas_use_mixture_and_expert_stack_section_labels(self) -> None:
         expected = {
-            "expert_top_k": {
+            "top_k": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "int",
                 "default": 3,
                 "nullable": False,
             },
-            "expert_num_experts": {
+            "num_experts": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "int",
                 "default": 12,
                 "nullable": False,
             },
-            "expert_capacity_factor": {
+            "capacity_factor": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "float",
                 "default": 0.0,
                 "nullable": False,
             },
-            "expert_dropped_token_behavior": {
+            "dropped_token_behavior": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "enum",
                 "default": "ZEROS",
                 "nullable": False,
             },
-            "expert_compute_expert_mixture_flag": {
+            "compute_expert_mixture_flag": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "bool",
                 "default": True,
                 "nullable": False,
             },
-            "expert_weighted_parameters_flag": {
+            "weighted_parameters_flag": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "bool",
                 "default": True,
                 "nullable": False,
             },
-            "expert_weighting_position_option": {
+            "weighting_position_option": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "enum",
                 "default": "AFTER_EXPERTS",
                 "nullable": False,
             },
-            "expert_routing_initialization_mode": {
+            "routing_initialization_mode": {
                 "section": "Mixture Of Experts Model Options",
                 "type": "enum",
                 "default": "LAYER",

@@ -7,8 +7,6 @@ from emperor.layers import ResidualConfig
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from torch import nn
-
 import models.experts.linear.config as experts_linear_config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
@@ -28,6 +26,8 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
+from torch import nn
+
 from tests.support.inspection import (
     inspect_model,
     serialize_graph,
@@ -445,11 +445,11 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             with self.subTest(node=node["id"]):
                 self.assertEqual(
                     node["details"]["topK"],
-                    experts_linear_config.EXPERT_TOP_K,
+                    experts_linear_config.TOP_K,
                 )
                 self.assertEqual(
                     node["details"]["numExperts"],
-                    experts_linear_config.EXPERT_NUM_EXPERTS,
+                    experts_linear_config.NUM_EXPERTS,
                 )
                 self.assertEqual(node["details"]["routingMode"], "LAYER")
 
