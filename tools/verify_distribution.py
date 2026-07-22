@@ -955,8 +955,11 @@ import emperor
 import model_runtime
 import models
 from model_runtime.inspection import InspectionRequest, inspect_model
-from models.catalog import discover_model_packages, model_package
-from models.catalog import discover_model_identity_payloads as legacy_identities
+from models.catalog import (
+    discover_model_identity_payloads,
+    discover_model_packages,
+    model_package,
+)
 
 identities = [package.to_identity_payload() for package in discover_model_packages()]
 package = model_package('linears/linear')
@@ -972,7 +975,7 @@ print(json.dumps({
     'model_runtime_path': model_runtime.__file__,
     'identities': identities,
     'inspection_nodes': len(inspection.nodes),
-    'legacy_matches': legacy_identities() == identities,
+    'catalog_matches': discover_model_identity_payloads() == identities,
     'model_class': f'{type(model).__module__}.{type(model).__qualname__}',
     'models_path': models.__file__,
     'version': version('emperor'),
