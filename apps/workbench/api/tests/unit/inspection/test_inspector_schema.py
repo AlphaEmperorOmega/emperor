@@ -2,7 +2,6 @@ from __future__ import annotations
 
 # ruff: noqa: I001
 
-import argparse
 import importlib
 import os
 import sys
@@ -20,7 +19,7 @@ from model_runtime.packages.configuration_metadata import (
     configuration_field_metadata,
 )
 from models.catalog import discover_model_ids
-from models.config_overrides import parse_config_value
+from model_runtime.packages import ConfigValueError, parse_config_value
 
 from tests.support.inspection import (
     config_schema,
@@ -1731,7 +1730,7 @@ class InspectorSchemaTests(unittest.TestCase):
             parse_config_value(linear_config, "GATE_OPTION", "ADDITION"),
             LayerGateOptions.ADDITION,
         )
-        with self.assertRaises(argparse.ArgumentTypeError):
+        with self.assertRaises(ConfigValueError):
             parse_config_value(linear_config, "GATE_OPTION", "INTERPOLATION")
         self.assertIs(
             parse_config_value(linear_config, "GATE_ACTIVATION", "TANH"),
