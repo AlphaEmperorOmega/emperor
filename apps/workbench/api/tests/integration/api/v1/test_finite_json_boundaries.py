@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 
 import httpx
-from model_runtime.runs.artifacts import write_run_result
+from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.progress import JsonlRunProgress
 
 from emperor_workbench.api import create_app
@@ -66,7 +66,10 @@ class FiniteJsonBoundaryTests(unittest.TestCase):
             root = Path(tmp)
             result_path = root / "run" / "result.json"
             with self.assertRaises(ValueError):
-                write_run_result(result_path.parent, {"metrics": {"loss": math.nan}})
+                FilesystemRunArtifacts(root=root).write_result(
+                    result_path.parent,
+                    {"metrics": {"loss": math.nan}},
+                )
             self.assertFalse(result_path.exists())
 
             progress_path = root / "job" / "progress.jsonl"

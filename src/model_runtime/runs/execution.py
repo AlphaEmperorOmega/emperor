@@ -10,7 +10,7 @@ from model_runtime.inspection import InspectionError, parse_overrides
 from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.packages import ModelPackage, dataset_name
-from model_runtime.runs.artifacts import FilesystemRunArtifacts
+from model_runtime.runs.artifacts import RunArtifacts
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
     load_checkpoint_continuation,
@@ -143,7 +143,7 @@ def execute_runs(
     package: ModelPackage,
     plan: RunPlan,
     *,
-    artifacts: FilesystemRunArtifacts,
+    artifacts: RunArtifacts,
     progress: RunProgress | None = None,
     progress_step_interval: int = 1,
     monitors: Sequence[str] = (),
@@ -171,11 +171,8 @@ def execute_runs(
         experiment_task=experiment_task,
         run_artifacts=artifacts,
     )
-    best_results = experiment.load_best_results(artifacts.namespace)
-
     training_runs = experiment.materialize_training_runs(
         materialized_runs,
-        artifacts.namespace,
     )
     if len(training_runs) != len(plan.runs):
         raise _invalid_plan(
@@ -202,9 +199,7 @@ def execute_runs(
     for semantic_run, training_run in zip(plan.runs, training_runs, strict=True):
         payload, log_dir = experiment.execute_training_run(
             training_run,
-            log_folder=artifacts.namespace,
             callbacks=callbacks,
-            best_results=best_results,
             progress=selected_progress,
             progress_step_interval=progress_step_interval,
             ckpt_path=checkpoint_path,

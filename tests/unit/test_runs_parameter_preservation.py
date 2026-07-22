@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -9,6 +10,7 @@ from emperor.config import BaseOptions
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelIdentity, ModelMetadata, ModelPackage
 from model_runtime.runs import execution, experiment
+from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.experiment import ExperimentBase
 from model_runtime.runs.records import RunParameter, RunPlan, RunSpec
 
@@ -148,17 +150,6 @@ class _ParameterExperiment(ExperimentBase):
             "seed": None,
         }
 
-    def _write_training_result(self, _log_dir: str, _result: dict) -> None:
-        pass
-
-    def _update_best_results(
-        self,
-        _result: dict,
-        _top5: dict,
-        _log_folder: str | None = None,
-    ) -> None:
-        pass
-
 
 class RunsParameterPreservationTests(unittest.TestCase):
     def test_materialized_run_retains_requested_parameter_names(self) -> None:
@@ -204,40 +195,42 @@ class RunsParameterPreservationTests(unittest.TestCase):
 
     def test_requested_parameters_drive_artifacts_and_progress(self) -> None:
         package = _parameter_model_package()
-        runtime = _ParameterExperiment(
-            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
-            model_package=package,
-        )
-        training_run = runtime.materialize_training_runs(
-            [
-                {
-                    "id": "run-0001",
-                    "preset": _Preset.BASELINE,
-                    "dataset_type": SyntheticDataset,
-                    "parameters": {"NUM_EPOCHS": 3},
-                    "config_overrides": {"num_epochs": 3},
-                }
-            ],
-            "runs",
-        )[0]
-        progress = _Progress()
-
-        with (
-            patch.object(experiment, "Trainer", _Trainer),
-            patch.object(experiment, "TensorBoardLogger", _Logger),
-        ):
-            result, log_dir = runtime.execute_training_run(
-                training_run,
-                log_folder="runs",
-                callbacks=[],
-                best_results={},
-                progress=progress,
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime = _ParameterExperiment(
+                experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+                model_package=package,
+                run_artifacts=FilesystemRunArtifacts(
+                    root=Path(tmp),
+                    namespace="runs",
+                ),
             )
+            training_run = runtime.materialize_training_runs(
+                [
+                    {
+                        "id": "run-0001",
+                        "preset": _Preset.BASELINE,
+                        "dataset_type": SyntheticDataset,
+                        "parameters": {"NUM_EPOCHS": 3},
+                        "config_overrides": {"num_epochs": 3},
+                    }
+                ]
+            )[0]
+            progress = _Progress()
 
-        self.assertEqual(training_run.parameters, {"NUM_EPOCHS": 3})
-        self.assertEqual(result["params"], {"NUM_EPOCHS": 3})
-        self.assertEqual(progress.events[0]["params"], {"NUM_EPOCHS": 3})
-        self.assertNotIn("/default_", log_dir)
+            with (
+                patch.object(experiment, "Trainer", _Trainer),
+                patch.object(experiment, "TensorBoardLogger", _Logger),
+            ):
+                result, log_dir = runtime.execute_training_run(
+                    training_run,
+                    callbacks=[],
+                    progress=progress,
+                )
+
+            self.assertEqual(training_run.parameters, {"NUM_EPOCHS": 3})
+            self.assertEqual(result["params"], {"NUM_EPOCHS": 3})
+            self.assertEqual(progress.events[0]["params"], {"NUM_EPOCHS": 3})
+            self.assertNotIn("/default_", log_dir)
 
 
 if __name__ == "__main__":

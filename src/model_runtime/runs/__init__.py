@@ -4,7 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from model_runtime.runs.artifacts import FilesystemRunArtifacts
+    from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
     from model_runtime.runs.checkpoints import CheckpointContinuation
     from model_runtime.runs.errors import (
         InvalidCheckpointContinuation,
@@ -51,6 +51,7 @@ __all__ = [
     "RandomSource",
     "RunParameter",
     "RunPlan",
+    "RunArtifacts",
     "RunProgress",
     "RunRequest",
     "RunResult",
@@ -76,7 +77,7 @@ _ERROR_EXPORTS = {
     "RunsError",
 }
 _CHECKPOINT_EXPORTS = {"CheckpointContinuation"}
-_ARTIFACT_EXPORTS = {"FilesystemRunArtifacts"}
+_ARTIFACT_EXPORTS = {"FilesystemRunArtifacts", "RunArtifacts"}
 _PROGRESS_EXPORTS = {"JsonlRunProgress", "RunProgress"}
 _JSON_VALUE_EXPORTS = {
     "NonFiniteJsonValue",

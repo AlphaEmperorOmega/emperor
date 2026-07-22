@@ -10,6 +10,7 @@ SOURCE_ROOT = PROJECT_ROOT / "src"
 EMPEROR_ROOT = SOURCE_ROOT / "emperor"
 MODEL_RUNTIME_ROOT = SOURCE_ROOT / "model_runtime"
 INSPECTION_ROOT = MODEL_RUNTIME_ROOT / "inspection"
+RUNS_ROOT = MODEL_RUNTIME_ROOT / "runs"
 PROJECT_CLI_ROOT = SOURCE_ROOT / "models" / "project_cli"
 PUBLIC_RUNTIME_PACKAGES = ("packages", "inspection", "runs", "cli")
 
@@ -30,6 +31,34 @@ def _imports_under(root: Path) -> list[tuple[Path, str]]:
 
 
 class ModelRuntimeBoundaryTests(unittest.TestCase):
+    def test_run_artifacts_own_lifecycle_without_experiment_forwarders(self) -> None:
+        self.assertFalse((RUNS_ROOT / "locking.py").exists())
+        experiment_path = RUNS_ROOT / "experiment.py"
+        tree = ast.parse(
+            experiment_path.read_text(encoding="utf-8"),
+            experiment_path.as_posix(),
+        )
+        experiment = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "ExperimentBase"
+        )
+        methods = {
+            node.name for node in experiment.body if isinstance(node, ast.FunctionDef)
+        }
+        artifact_forwarders = {
+            "load_best_results",
+            "_load_best_results",
+            "_write_training_result",
+            "_update_best_results",
+            "_result_ranking_score",
+            "_best_results_path",
+            "_build_log_path",
+            "_artifact_store",
+        }
+
+        self.assertTrue(methods.isdisjoint(artifact_forwarders))
+
     def test_inspection_modules_do_not_import_each_others_private_names(
         self,
     ) -> None:

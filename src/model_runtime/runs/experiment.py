@@ -16,13 +16,7 @@ from emperor.experiments import (
 )
 from model_runtime.packages import ModelPackage
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
-from model_runtime.runs.artifacts import (
-    FilesystemRunArtifacts,
-    result_metrics_payload,
-    result_ranking_score,
-    validate_artifact_namespace,
-    write_run_result,
-)
+from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
 from model_runtime.runs.progress import (
     ContextualRunProgress,
     RunProgress,
@@ -30,14 +24,6 @@ from model_runtime.runs.progress import (
     contextual_run_progress,
 )
 from model_runtime.task_behavior import experiment_task_behavior
-
-
-def _validate_log_folder(log_folder: str | None) -> str | None:
-    return validate_artifact_namespace(log_folder)
-
-
-def _result_metrics_payload(metrics: dict) -> dict:
-    return result_metrics_payload(metrics)
 
 
 @dataclass
@@ -61,12 +47,14 @@ class ExperimentBase:
         experiment_task: ExperimentTask | str | None = None,
         *,
         model_package: ModelPackage,
-        run_artifacts: FilesystemRunArtifacts | None = None,
+        run_artifacts: RunArtifacts | None = None,
     ) -> None:
         if not isinstance(model_package, ModelPackage):
             raise TypeError("Runs require an explicit ModelPackage.")
         self.model_package = model_package
-        self.run_artifacts = run_artifacts
+        self.run_artifacts = (
+            run_artifacts if run_artifacts is not None else FilesystemRunArtifacts()
+        )
         self.preset = preset
         self.num_epochs = self._num_epochs()
         self.experiment_task = self._resolve_experiment_task(experiment_task)
@@ -243,15 +231,9 @@ class ExperimentBase:
                 trainer_args[clean_key] = value
         return trainer_args
 
-    def load_best_results(self, log_folder: str | None = None) -> dict:
-        """Load ranking state through the configured Run Artifact store."""
-
-        return self._load_best_results(log_folder)
-
     def materialize_training_runs(
         self,
         materialized_runs: list[dict],
-        log_folder: str | None,
     ) -> list[TrainingRun]:
         """Materialize an accepted semantic Run Plan for execution."""
 
@@ -293,9 +275,7 @@ class ExperimentBase:
         self,
         training_run: TrainingRun,
         *,
-        log_folder: str | None,
         callbacks: list[Callback],
-        best_results: dict,
         progress: RunProgress | None = None,
         progress_step_interval: int = 1,
         ckpt_path: Path | None = None,
@@ -306,9 +286,7 @@ class ExperimentBase:
 
         return self._execute_training_run(
             training_run,
-            log_folder=log_folder,
             callbacks=callbacks,
-            best_results=best_results,
             progress=progress,
             progress_step_interval=progress_step_interval,
             ckpt_path=ckpt_path,
@@ -320,9 +298,7 @@ class ExperimentBase:
         self,
         training_run: TrainingRun,
         *,
-        log_folder: str | None,
         callbacks: list[Callback],
-        best_results: dict,
         progress: RunProgress | None = None,
         progress_step_interval: int = 1,
         ckpt_path: Path | None = None,
@@ -343,14 +319,13 @@ class ExperimentBase:
             model = self.model_package.build_model(training_run.config)
             if model_validator is not None:
                 model_validator(model)
-            artifact_store = self._artifact_store(log_folder)
             logger = TensorBoardLogger(
-                save_dir=str(artifact_store.root),
-                name=self._build_log_path(
-                    training_run.preset,
-                    training_run.dataset_type,
+                save_dir=str(self.run_artifacts.root),
+                name=self.run_artifacts.run_name(
+                    self.model_package.identity,
+                    training_run.preset.name,
+                    training_run.dataset_type.__name__,
                     training_run.parameters,
-                    log_folder,
                 ),
             )
             if run_progress is not None:
@@ -391,8 +366,12 @@ class ExperimentBase:
                 trainer,
                 resumed_from=resumed_from,
             )
-            self._write_training_result(logger.log_dir, result)
-            self._update_best_results(result, best_results, log_folder)
+            self.run_artifacts.write_result(logger.log_dir, result)
+            self.run_artifacts.update_best_results(
+                self.model_package.identity,
+                self.experiment_task,
+                result,
+            )
             self._emit_dataset_completed(
                 result,
                 run_progress,
@@ -508,72 +487,15 @@ class ExperimentBase:
             "preset": self._preset_cli_name(training_run.preset),
             "presetKey": training_run.preset.name,
             "params": training_run.parameters,
-            **_result_metrics_payload(trainer.callback_metrics),
+            **self.run_artifacts.result_metrics_payload(trainer.callback_metrics),
             **({"resumedFrom": dict(resumed_from)} if resumed_from is not None else {}),
         }
-
-    def _write_training_result(self, log_dir: str, result: dict) -> None:
-        write_run_result(log_dir, result)
 
     def _preset_cli_name(self, preset: BaseOptions) -> str:
         cli_name = getattr(type(preset), "cli_name", None)
         if callable(cli_name):
             return cli_name(preset.name)
         return preset.name.lower().replace("_", "-")
-
-    def _load_best_results(self, log_folder: str | None = None) -> dict:
-        return self._artifact_store(log_folder).read_best_results(
-            self._model_identity()
-        )
-
-    def _update_best_results(
-        self, result: dict, top5: dict, log_folder: str | None = None
-    ) -> None:
-        self._artifact_store(log_folder).update_best_results(
-            self._model_identity(),
-            self.experiment_task,
-            result,
-            top5,
-        )
-
-    def _result_ranking_score(self, result: dict) -> tuple[float, float]:
-        return result_ranking_score(self.experiment_task, result)
-
-    def _best_results_path(self, log_folder: str | None = None) -> Path:
-        return self._artifact_store(log_folder).best_results_path(
-            self._model_identity()
-        )
-
-    def _build_log_path(
-        self,
-        preset: BaseOptions,
-        dataset_type: type,
-        parameters: Mapping[str, object],
-        log_folder: str | None = None,
-    ) -> str:
-        return self._artifact_store(log_folder).run_name(
-            self._model_identity(),
-            preset.name,
-            dataset_type.__name__,
-            parameters,
-        )
-
-    def _artifact_store(
-        self,
-        log_folder: str | None = None,
-    ) -> FilesystemRunArtifacts:
-        if self.run_artifacts is not None:
-            if self.run_artifacts.namespace == log_folder:
-                return self.run_artifacts
-            return FilesystemRunArtifacts(
-                root=self.run_artifacts.root,
-                namespace=log_folder,
-                clock=self.run_artifacts.clock,
-            )
-        return FilesystemRunArtifacts(root=Path("logs"), namespace=log_folder)
-
-    def _model_identity(self):
-        return self.model_package.identity
 
 
 __all__ = ["ExperimentBase"]

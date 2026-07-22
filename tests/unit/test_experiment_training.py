@@ -20,7 +20,7 @@ from model_runtime.packages import (
 )
 from model_runtime.runs import ExperimentBase, JsonlRunProgress
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
-from model_runtime.runs.experiment import _result_metrics_payload
+from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
 
 
@@ -241,7 +241,6 @@ class TestExperimentTraining(unittest.TestCase):
         parameters=None,
         callbacks=None,
         progress=None,
-        log_folder=None,
         run_id="run-0001",
         run_index=1,
         run_total=1,
@@ -257,14 +256,11 @@ class TestExperimentTraining(unittest.TestCase):
                     "parameters": parameters or {},
                     "config_overrides": config_overrides or {},
                 }
-            ],
-            log_folder,
+            ]
         )[0]
         return experiment.execute_training_run(
             training_run,
-            log_folder=log_folder,
             callbacks=callbacks or [],
-            best_results=experiment.load_best_results(log_folder),
             progress=progress,
         )
 
@@ -380,72 +376,12 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
 
     def test_run_execution_rejects_path_like_log_folder(self):
-        experiment = FakeExperiment(
-            FakeOption.BASELINE, model_package=self.model_package
-        )
-
         with self.assertRaises(ValueError):
-            self._execute_run(experiment, log_folder="../escape")
-
-    def test_update_best_results_merges_existing_summary_before_writing(self):
-        experiment = FakeExperiment(
-            FakeOption.BASELINE, model_package=self.model_package
-        )
-        summary_path = (
-            Path("logs")
-            / "unit_results"
-            / experiment.model_package.catalog_key
-            / "best_results.json"
-        )
-        summary_path.parent.mkdir(parents=True)
-        existing = {
-            "FakeDatasetA": [
-                {
-                    "dataset": "FakeDatasetA",
-                    "params": {"hidden_dim": 32},
-                    "metrics": {"validation_accuracy": 0.8},
-                    "rank": 1,
-                }
-            ],
-            "FakeDatasetB": [
-                {
-                    "dataset": "FakeDatasetB",
-                    "params": {"hidden_dim": 64},
-                    "metrics": {"validation_accuracy": 0.7},
-                    "rank": 1,
-                }
-            ],
-        }
-        summary_path.write_text(json.dumps(existing), encoding="utf-8")
-        top5 = {}
-        result = {
-            "dataset": "FakeDatasetA",
-            "params": {"hidden_dim": 128},
-            "metrics": {"validation_accuracy": 0.9},
-        }
-
-        experiment._update_best_results(result, top5, "unit_results")
-
-        written = json.loads(summary_path.read_text(encoding="utf-8"))
-        self.assertEqual(written["FakeDatasetA"][0]["params"], {"hidden_dim": 128})
-        self.assertEqual(written["FakeDatasetA"][0]["rank"], 1)
-        self.assertEqual(written["FakeDatasetA"][1]["params"], {"hidden_dim": 32})
-        self.assertEqual(written["FakeDatasetA"][1]["rank"], 2)
-        self.assertEqual(written["FakeDatasetB"], existing["FakeDatasetB"])
-        self.assertEqual(top5, written)
-
-    def test_causal_language_model_results_rank_lowest_validation_loss_first(self):
-        experiment = FakeExperiment(
-            FakeOption.BASELINE, model_package=self.model_package
-        )
-        experiment.experiment_task = ExperimentTask.CAUSAL_LANGUAGE_MODELING
-        low_loss = {"metrics": {"validation/loss": 0.25}}
-        high_loss = {"metrics": {"validation/loss": 0.75}}
-
-        self.assertGreater(
-            experiment._result_ranking_score(low_loss),
-            experiment._result_ranking_score(high_loss),
-        )
+            FakeExperiment(
+                FakeOption.BASELINE,
+                model_package=self.model_package,
+                run_artifacts=FilesystemRunArtifacts(namespace="../escape"),
+            )
 
     def test_causal_language_model_dataset_receives_configured_sequence_length(self):
         experiment = FakeExperiment(
@@ -545,7 +481,7 @@ class TestExperimentTraining(unittest.TestCase):
             self.assertEqual(event["metricsDroppedCount"], 3)
 
     def test_result_metrics_filter_high_cardinality_metrics(self):
-        payload = _result_metrics_payload(
+        payload = FilesystemRunArtifacts().result_metrics_payload(
             {
                 "validation_accuracy": FakeMetric(0.75),
                 "train/confusion_matrix/0/0": FakeMetric(12),

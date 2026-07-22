@@ -42,11 +42,7 @@ class _Experiment:
         pass
 
     @staticmethod
-    def load_best_results(_namespace: str) -> dict:
-        return {}
-
-    @staticmethod
-    def materialize_training_runs(_runs, _namespace: str) -> list[SimpleNamespace]:
+    def materialize_training_runs(_runs) -> list[SimpleNamespace]:
         return [SimpleNamespace(num_epochs=3)]
 
     @classmethod
