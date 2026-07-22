@@ -25,6 +25,7 @@ class RunHistoryExperimentDeletionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -36,6 +37,7 @@ class RunHistoryExperimentDeletionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Cifar10",
@@ -47,6 +49,7 @@ class RunHistoryExperimentDeletionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model_2",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -117,12 +120,26 @@ class RunHistoryExperimentDeletionTests(unittest.TestCase):
             logs_root = root / "logs"
             write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
             )
             outside_experiment = root / "outside_experiment"
             write_tensorboard_run(
                 outside_experiment,
-                ["linear", "BASELINE", "Mnist", "bbb_20260601_020304", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "bbb_20260601_020304",
+                    "version_0",
+                ],
             )
             logs_root.joinpath("linked").symlink_to(
                 outside_experiment,
@@ -145,7 +162,7 @@ class RunHistoryExperimentDeletionTests(unittest.TestCase):
             with self.assertRaisesRegex(RunHistoryFailure, "symlink"):
                 service.delete_experiment("linked")
 
-            self.assertTrue(logs_root.joinpath("linear").exists())
+            self.assertTrue(logs_root.joinpath("linears").exists())
             self.assertTrue(outside_experiment.exists())
 
 

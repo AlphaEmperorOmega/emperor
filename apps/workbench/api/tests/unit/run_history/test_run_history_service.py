@@ -47,6 +47,7 @@ class RunHistoryServiceContractTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -128,6 +129,7 @@ class RunHistoryServiceContractTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",

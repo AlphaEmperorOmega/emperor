@@ -144,6 +144,7 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -204,6 +205,7 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
             logs_root = root / "logs"
             run_dir = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -257,7 +259,7 @@ class RunHistorySecurityAndFreshnessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             relative_run = Path(
-                "cache_exp/linear/BASELINE/Mnist/run_20260711_060708/version_0"
+                "cache_exp/linears/linear/BASELINE/Mnist/run_20260711_060708/version_0"
             )
             run_dir = logs_root / relative_run
             run_dir.mkdir(parents=True)

@@ -387,11 +387,14 @@ class LogRunScanner:
                 return None
             if timestamp is not None and not isinstance(timestamp, str):
                 return None
+            model = str(entry["model"])
+            if self._model_identity_resolver(model) != model:
+                return None
             return LogRun(
                 id=str(entry["id"]),
                 group=group,
                 experiment=str(entry["experiment"]),
-                model=str(entry["model"]),
+                model=model,
                 preset=str(entry["preset"]),
                 dataset=str(entry["dataset"]),
                 run_name=str(entry["runName"]),

@@ -135,7 +135,14 @@ class RunHistoryArtifactTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             run_dir = write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
                 metrics={"test/accuracy": 0.9},
             )
             (run_dir / "result.json").write_text(
@@ -170,6 +177,7 @@ class RunHistoryArtifactTests(unittest.TestCase):
             malformed_run = write_tensorboard_run(
                 logs_root,
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -190,9 +198,11 @@ class RunHistoryArtifactTests(unittest.TestCase):
             scanner = log_run_scanner(logs_root=logs_root)
             query = LogRunQueryService(scanner=scanner)
             runs_by_path = {run.relative_path: run for run in scanner.list_runs()}
-            run = runs_by_path["linear/BASELINE/Mnist/aaa_20260601_010203/version_0"]
+            run = runs_by_path[
+                "linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+            ]
             malformed = runs_by_path[
-                "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
+                "linears/linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
             ]
 
             checkpoints = query.checkpoints_for_runs([run.id])
@@ -220,7 +230,7 @@ class RunHistoryArtifactTests(unittest.TestCase):
         )
         self.assertTrue(
             checkpoints[0].relative_path.endswith(
-                "linear/BASELINE/Mnist/aaa_20260601_010203/version_0/"
+                "linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0/"
                 "checkpoints/epoch=0-step=1.ckpt"
             )
         )

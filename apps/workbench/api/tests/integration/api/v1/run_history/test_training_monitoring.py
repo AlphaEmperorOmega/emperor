@@ -521,6 +521,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             log_dir = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -608,6 +609,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             first_dir = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "baseline",
                 "Mnist",
@@ -616,6 +618,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             )
             second_dir = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "gating",
                 "Mnist",

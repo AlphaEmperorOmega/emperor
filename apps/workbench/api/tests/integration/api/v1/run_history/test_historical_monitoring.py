@@ -15,6 +15,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
     def write_historical_run(self, logs_root: Path) -> tuple[str, Path]:
         run_dir = logs_root.joinpath(
             "test_model",
+            "linears",
             "linear",
             "baseline",
             "Mnist",

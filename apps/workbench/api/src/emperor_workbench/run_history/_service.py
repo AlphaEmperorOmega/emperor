@@ -80,12 +80,7 @@ def _selected_values(values: list[str] | None) -> set[str]:
 
 
 def _matches_model_filter(run_model: str, selected_models: set[str]) -> bool:
-    if not selected_models or run_model in selected_models:
-        return True
-    run_model_leaf = run_model.rsplit("/", 1)[-1]
-    return any(
-        "/" not in model and model == run_model_leaf for model in selected_models
-    )
+    return not selected_models or run_model in selected_models
 
 
 def _delete_filters_from_fields(

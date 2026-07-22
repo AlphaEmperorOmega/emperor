@@ -32,6 +32,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -43,6 +44,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Cifar10",
@@ -54,6 +56,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "GATING",
                     "Mnist",
@@ -65,6 +68,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "other_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -120,6 +124,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
             self.assertFalse(
                 logs_root.joinpath(
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Cifar10",
@@ -134,6 +139,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -145,6 +151,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -174,6 +181,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                     logs_root,
                     [
                         experiment,
+                        "linears",
                         "linear",
                         "BASELINE",
                         "Mnist",
@@ -203,6 +211,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                     logs_root,
                     [
                         "test_model",
+                        "linears",
                         "linear",
                         "BASELINE",
                         "Mnist",
@@ -243,6 +252,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -252,6 +262,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
             )
             sibling_dir = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Cifar10",
@@ -271,6 +282,7 @@ class RunHistoryFilteredDeletionExecutionTests(unittest.TestCase):
             self.assertFalse(
                 logs_root.joinpath(
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",

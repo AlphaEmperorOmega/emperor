@@ -44,7 +44,14 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             default_run = write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
                 metrics={"test/accuracy": 0.9},
             )
             categorized_run = write_tensorboard_run(
@@ -63,6 +70,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear_adaptive",
                     "DUAL_MODEL_WEIGHT",
                     "Cifar10",
@@ -78,6 +86,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 [
                     "workbench-training",
                     "job-123",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "FashionMNIST",
@@ -87,6 +96,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 metrics={"validation/accuracy": 0.8},
             )
             no_event_run = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -97,6 +107,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
             malformed_result_run = write_tensorboard_run(
                 logs_root,
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -112,6 +123,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
             outside_run = write_tensorboard_run(
                 Path(tmp) / "outside",
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -121,6 +133,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 metrics={"test/accuracy": 1.0},
             )
             escaped_run_parent = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -143,7 +156,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
         ]
 
         self.assertIsNone(default_summary.group)
-        self.assertEqual(default_summary.experiment, "linear")
+        self.assertEqual(default_summary.experiment, "linears")
         self.assertEqual(default_summary.model, "linears/linear")
         self.assertEqual(default_summary.preset, "BASELINE")
         self.assertEqual(default_summary.dataset, "Mnist")
@@ -183,7 +196,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
         self.assertGreater(malformed_result_summary.event_file_count, 0)
         self.assertEqual(malformed_result_summary.metrics, {})
         self.assertNotIn(
-            "linear/BASELINE/Mnist/escaped_20260601_070809/version_99",
+            "linears/linear/BASELINE/Mnist/escaped_20260601_070809/version_99",
             by_path,
         )
 
@@ -191,6 +204,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             run_dir = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -268,6 +282,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -280,6 +295,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 [
                     "workbench-training",
                     "job-123",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -322,7 +338,7 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
                 offset=0,
                 model=["linears/linear"],
             )
-            legacy = service.list_runs(
+            flat_identity = service.list_runs(
                 limit=10,
                 offset=0,
                 model=["linear"],
@@ -330,7 +346,25 @@ class RunHistoryCatalogListingTests(unittest.TestCase):
 
         self.assertEqual(qualified.total, 1)
         self.assertEqual(qualified.runs[0].model, "linears/linear")
-        self.assertEqual(legacy.total, 2)
+        self.assertEqual(flat_identity.total, 0)
+
+    def test_scanner_rejects_flat_legacy_model_layout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            logs_root = Path(tmp) / "logs"
+            write_tensorboard_run(
+                logs_root,
+                [
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "legacy_20260601_010203",
+                    "version_0",
+                ],
+            )
+
+            runs = log_run_scanner(logs_root=logs_root).list_runs()
+
+        self.assertEqual(runs, [])
 
 
 if __name__ == "__main__":

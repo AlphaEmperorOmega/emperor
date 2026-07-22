@@ -61,6 +61,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -78,6 +79,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
             outside_marker.write_text("outside", encoding="utf-8")
             run_parent = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -88,6 +90,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
             symlink_version.symlink_to(outside_version, target_is_directory=True)
             escaped_version = root.joinpath(
                 "outside",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -104,7 +107,9 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
 
             self.assertEqual(
                 result.deleted_relative_paths,
-                ("test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0",),
+                (
+                    "test_model/linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0",
+                ),
             )
             self.assertFalse(run_dir.exists())
 
@@ -155,6 +160,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                     logs_root,
                     [
                         "test_model",
+                        "linears",
                         "linear",
                         "BASELINE",
                         "Mnist",
@@ -167,6 +173,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "GATING",
                     "Mnist",
@@ -198,6 +205,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             base_parts = [
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -261,6 +269,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             relative_parts = [
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -297,6 +306,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -353,6 +363,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -388,6 +399,7 @@ class RunHistoryFilteredDeletionPlanningTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",

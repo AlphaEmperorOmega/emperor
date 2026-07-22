@@ -69,6 +69,7 @@ class LogExperimentMutationApiTests(unittest.TestCase):
             logs_root,
             [
                 "shared_experiment",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",

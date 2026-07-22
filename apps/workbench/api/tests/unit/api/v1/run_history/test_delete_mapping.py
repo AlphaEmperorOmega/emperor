@@ -59,7 +59,7 @@ class LogRunDeleteHttpMappingTests(unittest.TestCase):
             run_name="aaa_20260601_010203",
             version="version_0",
             relative_path=(
-                "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+                "test_model/linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
             ),
         )
         blocker = ActiveLogRunDeleteBlocker(
@@ -98,7 +98,8 @@ class LogRunDeleteHttpMappingTests(unittest.TestCase):
                     "runName": "aaa_20260601_010203",
                     "version": "version_0",
                     "relativePath": (
-                        "test_model/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+                        "test_model/linears/linear/BASELINE/Mnist/"
+                        "aaa_20260601_010203/version_0"
                     ),
                 }
             ],
@@ -155,7 +156,7 @@ class LogRunDeleteHttpMappingTests(unittest.TestCase):
                 run_name=f"run_{index:06d}_20260601_010203",
                 version="version_0",
                 relative_path=(
-                    "test_model/linear/BASELINE/Mnist/"
+                    "test_model/linears/linear/BASELINE/Mnist/"
                     f"run_{index:06d}_20260601_010203/version_0"
                 ),
             )

@@ -31,6 +31,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -42,6 +43,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model_2",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Cifar10",
@@ -180,6 +182,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                         logs_root,
                         [
                             "test_model",
+                            "linears",
                             "linear",
                             "BASELINE",
                             "Mnist",
@@ -289,6 +292,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -386,6 +390,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -527,6 +532,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -602,6 +608,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -693,6 +700,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -743,6 +751,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                     logs_root,
                     [
                         experiment,
+                        "linears",
                         "linear",
                         "BASELINE",
                         "Mnist",
@@ -808,7 +817,14 @@ class RunHistoryHttpTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
                 scalars={
                     "train/loss": [(1, 0.5), (2, 0.25)],
                     "validation/accuracy": [(2, 0.75)],
@@ -819,6 +835,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model_2",
+                    "linears",
                     "linear_adaptive",
                     "DUAL_MODEL_WEIGHT",
                     "Cifar10",
@@ -830,6 +847,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 checkpoint=False,
             )
             no_event_run = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -840,6 +858,7 @@ class RunHistoryHttpTests(unittest.TestCase):
             malformed_result_run = write_tensorboard_run(
                 logs_root,
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -873,7 +892,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                         run["id"]
                         for run in runs_response.json()["runs"]
                         if run["relativePath"]
-                        == "linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+                        == "linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
                     )
                     tags_response = await client.post(
                         "/logs/tags",
@@ -891,7 +910,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                         "/logs/scalars",
                         json={
                             "runIds": [
-                                "linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+                                "linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
                             ],
                             "tags": ["train/loss"],
                         },
@@ -915,18 +934,20 @@ class RunHistoryHttpTests(unittest.TestCase):
         self.assertEqual(runs_response.status_code, 200)
         runs_payload = runs_response.json()["runs"]
         by_path = {run["relativePath"]: run for run in runs_payload}
-        run_payload = by_path["linear/BASELINE/Mnist/aaa_20260601_010203/version_0"]
+        run_payload = by_path[
+            "linears/linear/BASELINE/Mnist/aaa_20260601_010203/version_0"
+        ]
         incomplete_payload = by_path[
-            "test_model_2/linear_adaptive/DUAL_MODEL_WEIGHT/Cifar10/"
+            "test_model_2/linears/linear_adaptive/DUAL_MODEL_WEIGHT/Cifar10/"
             "bbb_20260601_020304/version_0"
         ]
         no_event_payload = by_path[
-            "linear/BASELINE/Mnist/no_events_20260601_040506/version_0"
+            "linears/linear/BASELINE/Mnist/no_events_20260601_040506/version_0"
         ]
         malformed_result_payload = by_path[
-            "linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
+            "linears/linear/BASELINE/Mnist/malformed_20260601_050607/version_0"
         ]
-        self.assertEqual(run_payload["experiment"], "linear")
+        self.assertEqual(run_payload["experiment"], "linears")
         self.assertEqual(run_payload["dataset"], "Mnist")
         self.assertTrue(run_payload["hasResult"])
         self.assertGreater(run_payload["eventFileCount"], 0)
@@ -967,6 +988,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -978,6 +1000,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Cifar10",
@@ -989,6 +1012,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                 logs_root,
                 [
                     "test_model",
+                    "linears",
                     "linear",
                     "GATING",
                     "Mnist",
@@ -998,6 +1022,7 @@ class RunHistoryHttpTests(unittest.TestCase):
             )
             no_event_run = logs_root.joinpath(
                 "test_model",
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",
@@ -1018,7 +1043,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                     scoped_response = await client.get(
                         "/logs/runs",
                         params=[
-                            ("model", "linear"),
+                            ("model", "linears/linear"),
                             ("preset", "BASELINE"),
                             ("dataset", "Mnist"),
                             ("hasEventFiles", "true"),
@@ -1028,7 +1053,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                     no_event_response = await client.get(
                         "/logs/runs",
                         params={
-                            "model": "linear",
+                            "model": "linears/linear",
                             "preset": "BASELINE",
                             "dataset": "Mnist",
                             "hasEventFiles": "false",
@@ -1062,6 +1087,7 @@ class RunHistoryHttpTests(unittest.TestCase):
             write_tensorboard_run(
                 logs_root,
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -1073,6 +1099,7 @@ class RunHistoryHttpTests(unittest.TestCase):
             write_tensorboard_run(
                 logs_root,
                 [
+                    "linears",
                     "linear",
                     "BASELINE",
                     "Mnist",
@@ -1141,7 +1168,14 @@ class RunHistoryHttpTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
                 scalars={"train/loss": [(1, 0.5), (2, 0.25), (3, 0.125)]},
             )
 

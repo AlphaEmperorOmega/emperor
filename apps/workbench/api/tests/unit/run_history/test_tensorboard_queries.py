@@ -25,6 +25,7 @@ def write_fake_event_run(
     payload: bytes,
 ) -> Path:
     run_dir = logs_root.joinpath(
+        "linears",
         "linear",
         "BASELINE",
         "Mnist",
@@ -44,6 +45,7 @@ class RunHistoryTensorBoardQueryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             run_dir = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Cifar10",

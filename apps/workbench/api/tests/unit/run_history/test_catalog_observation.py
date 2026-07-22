@@ -32,11 +32,25 @@ class RunHistoryCatalogObservationTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
             )
             write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "bbb_20260601_020304", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "bbb_20260601_020304",
+                    "version_0",
+                ],
             )
             scanner = log_run_scanner(logs_root=logs_root, cache_ttl_seconds=60)
 
@@ -57,7 +71,14 @@ class RunHistoryCatalogObservationTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             run_dir = write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
             )
             scanner = log_run_scanner(logs_root=logs_root, cache_ttl_seconds=0)
 
@@ -81,7 +102,14 @@ class RunHistoryCatalogObservationTests(unittest.TestCase):
             logs_root = Path(tmp) / "logs"
             run_dir = write_tensorboard_run(
                 logs_root,
-                ["linear", "BASELINE", "Mnist", "aaa_20260601_010203", "version_0"],
+                [
+                    "linears",
+                    "linear",
+                    "BASELINE",
+                    "Mnist",
+                    "aaa_20260601_010203",
+                    "version_0",
+                ],
             )
             run_dir.joinpath("result.json").write_text(
                 json.dumps(
@@ -233,6 +261,7 @@ class RunHistoryCatalogObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             run_dir = logs_root.joinpath(
+                "linears",
                 "linear",
                 "BASELINE",
                 "Mnist",

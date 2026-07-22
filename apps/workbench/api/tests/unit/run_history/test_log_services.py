@@ -45,6 +45,7 @@ def _write_run(
 ) -> Path:
     parts = [
         experiment,
+        "linears",
         "linear",
         preset,
         dataset,
@@ -87,7 +88,7 @@ class RunHistoryServiceListResponseTests(unittest.TestCase):
             result = _service(logs_root).list_runs(
                 limit=1,
                 offset=0,
-                model=["linear"],
+                model=["linears/linear"],
                 preset=["BASELINE"],
                 dataset=["Mnist"],
                 has_event_files=True,

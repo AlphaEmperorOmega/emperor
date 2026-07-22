@@ -117,7 +117,8 @@ class LogArchiveImportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             logs_root = Path(tmp) / "logs"
             relative_run = Path(
-                "partial_exp/linear/BASELINE/Mnist/run_20260711_040506/version_0"
+                "partial_exp/linears/linear/BASELINE/Mnist/"
+                "run_20260711_040506/version_0"
             )
             run_dir = logs_root / relative_run
             run_dir.mkdir(parents=True)
@@ -241,7 +242,7 @@ class LogArchiveImportTests(unittest.TestCase):
                 zip_bytes(
                     {
                         (
-                            "legacy-name/linear/BASELINE/Mnist/"
+                            "legacy-name/linears/linear/BASELINE/Mnist/"
                             "run_20260711_070809/version_0/result.json"
                         ): "{}"
                     }
