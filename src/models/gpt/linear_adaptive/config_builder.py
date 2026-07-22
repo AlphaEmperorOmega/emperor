@@ -20,6 +20,7 @@ from models.gpt.linear_adaptive._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.gpt.linear_adaptive.experiment_config import ExperimentConfig
+from models.gpt.linear_adaptive.runtime_defaults import DEFAULT_RUNTIME
 from models.gpt.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     DynamicMemoryOptions,
@@ -32,6 +33,7 @@ from models.gpt.linear_adaptive.runtime_options import (
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
+    RuntimeOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
@@ -43,7 +45,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class GptLinearAdaptiveConfigBuilder:
+class _GptLinearAdaptiveConfigBuilderImplementation:
     def __init__(
         self,
         *,
@@ -411,3 +413,13 @@ class GptLinearAdaptiveConfigBuilder:
             decoder_options=self.decoder_options,
             adaptive_augmentation_config=adaptive_augmentation_config,
         )
+
+
+class GptLinearAdaptiveConfigBuilder(_GptLinearAdaptiveConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.gpt.linear_adaptive GptLinearAdaptiveConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())

@@ -37,13 +37,11 @@ from model_runtime.packages import (
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from models.gpt.linear_adaptive._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat,
-)
 from models.gpt.linear_adaptive.config_builder import (
     GptLinearAdaptiveConfigBuilder,
 )
 from models.gpt.linear_adaptive.model import Model
+from models.gpt.linear_adaptive.runtime_defaults import runtime_from_flat
 
 
 class ExperimentPreset(BaseOptions):
@@ -241,13 +239,13 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RECURRENT_GATING: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
-            {"recurrent_flag": True, "recurrent_gate_flag": True}
+            {"recurrent_flag": True, "recurrent_stack_gate_flag": True}
         ),
         description="Default recurrent token decoder with step-level gating enabled.",
     ),
     ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
-            {"recurrent_flag": True, "recurrent_halting_flag": True}
+            {"recurrent_flag": True, "recurrent_stack_halting_flag": True}
         ),
         description="Default recurrent token decoder with recurrent halting enabled.",
     ),
@@ -262,8 +260,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
             }
         ),
         description="Default recurrent token decoder with step-level gating and "
@@ -273,7 +271,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -284,7 +282,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -295,8 +293,8 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         ),
@@ -805,9 +803,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        return self._builder_type(
-            **linear_adaptive_builder_kwargs_from_flat(kwargs, config)
-        ).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -816,7 +812,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

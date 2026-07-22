@@ -14,20 +14,20 @@ from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import ActivationOptions, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
-from models.catalog import MODEL_CATALOG, catalog_entry
-from models.gpt.linear_adaptive import (
-    Experiment,
-    ExperimentConfig,
-    ExperimentPreset,
-    ExperimentPresets,
-    GptLinearAdaptiveConfigBuilder,
-    GptLmHeadOptions,
-    Model,
-)
+from models.catalog import model_package
 from models.gpt.linear_adaptive import _config_defaults as config_defaults
 from models.gpt.linear_adaptive._builder_adapter import (
     linear_adaptive_builder_kwargs_from_flat,
 )
+from models.gpt.linear_adaptive.config_builder import GptLinearAdaptiveConfigBuilder
+from models.gpt.linear_adaptive.experiment_config import ExperimentConfig
+from models.gpt.linear_adaptive.model import Model
+from models.gpt.linear_adaptive.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+)
+from models.gpt.linear_adaptive.runtime_options import RuntimeOptions
 from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
@@ -39,7 +39,7 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
 
     def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
@@ -53,12 +53,15 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
 
     def config(self, **overrides):
-        return GptLinearAdaptiveConfigBuilder(
-            input_dim=16,
-            output_dim=16,
-            sequence_length=6,
-            **overrides,
-        ).build()
+        runtime = model_package("gpt/linear_adaptive").bind_runtime_defaults(
+            {
+                "input_dim": 16,
+                "output_dim": 16,
+                "sequence_length": 6,
+                **overrides,
+            }
+        )
+        return GptLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
@@ -66,12 +69,12 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNotNone(ExperimentConfig)
         self.assertIsNotNone(ExperimentPresets)
         self.assertEqual(
-            MODEL_CATALOG["gpt/linear_adaptive"].module_path,
-            "models.gpt.linear_adaptive",
+            model_package("gpt/linear_adaptive").catalog_key,
+            "gpt/linear_adaptive",
         )
 
     def test_presets_are_contiguous_buildable_and_always_causal(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear_adaptive").presets
         self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
@@ -114,10 +117,8 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
 
     def test_lm_head_options_allow_untied_biased_projection(self):
         cfg = self.config(
-            lm_head_options=GptLmHeadOptions(
-                weight_tying_flag=False,
-                bias_flag=True,
-            )
+            lm_head_weight_tying_flag=False,
+            lm_head_bias_flag=True,
         )
         model = Model(cfg)
         self.assertIsNot(model.lm_head.weight, model.token_embedding.weight)
@@ -125,11 +126,11 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
 
     def test_tied_head_rejects_unequal_vocabularies(self):
         with self.assertRaises(ValueError):
-            GptLinearAdaptiveConfigBuilder(
+            self.config(
                 input_dim=15,
                 output_dim=16,
                 sequence_length=4,
-            ).build()
+            )
 
     def test_future_tokens_do_not_change_earlier_logits(self):
         torch.manual_seed(7)
@@ -233,8 +234,12 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                     importlib.import_module(module_name).__name__,
                     module_name,
                 )
-        self.assertEqual(Experiment()._public_model_id(), "gpt/linear_adaptive")
-        self.assertIsNotNone(catalog_entry("gpt/linear_adaptive"))
+        experiment = Experiment(model_package=model_package("gpt/linear_adaptive"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "gpt/linear_adaptive",
+        )
+        self.assertIsNotNone(model_package("gpt/linear_adaptive"))
 
     def test_package_avoids_bert_and_gpt_sibling_construction_imports(self):
         package_dir = Path(config.__file__).resolve().parent
@@ -252,32 +257,21 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                 with self.subTest(path=path.name, import_path=import_path):
                     self.assertNotIn(import_path, source)
 
-    def test_builder_has_explicit_keyword_only_gpt_interface(self):
+    def test_builder_accepts_only_typed_runtime_options(self):
         parameters = inspect.signature(
             GptLinearAdaptiveConfigBuilder.__init__
         ).parameters
-        self.assertNotIn("runtime", parameters)
+        self.assertEqual(tuple(parameters), ("self", "runtime"))
         self.assertFalse(
             any(
                 parameter.kind is inspect.Parameter.VAR_KEYWORD
                 for parameter in parameters.values()
             )
         )
-        for name, parameter in parameters.items():
-            if name != "self":
-                with self.subTest(name=name):
-                    self.assertIs(parameter.kind, inspect.Parameter.KEYWORD_ONLY)
-        for name in (
-            "sequence_length",
-            "embedding_options",
-            "lm_head_options",
-            "decoder_options",
-            "attention_projection_layer_controller_options",
-            "feed_forward_recurrent_controller_options",
-            "attention_hidden_adaptive_weight_options",
-            "feed_forward_hidden_adaptive_mask_options",
-        ):
-            self.assertIn(name, parameters)
+        self.assertIs(
+            parameters["runtime"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
         for removed_name in (
             "encoder_options",
             "causal_attention_mask_flag",
@@ -290,21 +284,25 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
     def test_removed_legacy_runtime_modules_stay_removed(self):
         package_dir = Path(config.__file__).resolve().parent
         removed_modules = (
-            "runtime_defaults",
             "_adaptive_builder_options",
             "_builder_options",
             "_controller_stack",
             "_linear_builder_options",
             "_transformer_builder_options",
         )
-        self.assertFalse(hasattr(runtime_options, "RuntimeOptions"))
+        self.assertIs(runtime_options.RuntimeOptions, RuntimeOptions)
+        self.assertEqual(
+            RuntimeOptions.__module__,
+            "models.gpt.linear_adaptive.runtime_options",
+        )
+        self.assertTrue((package_dir / "runtime_defaults.py").is_file())
         for module_name in removed_modules:
             with self.subTest(module_name=module_name):
                 self.assertFalse((package_dir / f"{module_name}.py").exists())
                 with self.assertRaises(ModuleNotFoundError):
                     importlib.import_module(f"models.gpt.linear_adaptive.{module_name}")
 
-    def test_flat_adapter_matches_explicit_grouped_configuration(self):
+    def test_flat_runtime_defaults_bind_to_typed_runtime_options(self):
         flat_options = {
             **self._small_overrides(),
             "weight_option": config.LowRankDynamicWeightConfig,
@@ -344,30 +342,24 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
             option_flag=True,
             option=config.LowRankDynamicWeightConfig,
         )
-        adapted = GptLinearAdaptiveConfigBuilder(
-            **linear_adaptive_builder_kwargs_from_flat(flat_options, config)
-        ).build()
-        grouped = GptLinearAdaptiveConfigBuilder(
-            batch_size=flat_options["batch_size"],
-            input_dim=flat_options["input_dim"],
-            output_dim=flat_options["output_dim"],
-            sequence_length=flat_options["sequence_length"],
-            decoder_options=decoder_options,
-            attention_options=attention_options,
-            layer_controller_options=layer_options,
-            recurrent_controller_options=recurrent_options,
-            hidden_adaptive_weight_options=weight_options,
-        ).build()
-        self.assertEqual(adapted, grouped)
+        adapted = linear_adaptive_builder_kwargs_from_flat(flat_options, config)
+        self.assertEqual(adapted["decoder_options"], decoder_options)
+        self.assertEqual(adapted["attention_options"], attention_options)
+        self.assertEqual(adapted["layer_controller_options"], layer_options)
+        self.assertEqual(adapted["recurrent_controller_options"], recurrent_options)
+        self.assertEqual(adapted["hidden_adaptive_weight_options"], weight_options)
 
-    def test_unknown_flat_option_reaches_builder_type_error(self):
-        kwargs = linear_adaptive_builder_kwargs_from_flat(
-            {"unknown_option": 7},
-            config,
+        runtime = model_package("gpt/linear_adaptive").bind_runtime_defaults(
+            flat_options
         )
-        self.assertEqual(kwargs["unknown_option"], 7)
-        with self.assertRaisesRegex(TypeError, "unknown_option"):
-            GptLinearAdaptiveConfigBuilder(**kwargs)
+        self.assertEqual(runtime, RuntimeOptions(adapted))
+        GptLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_unknown_runtime_default_is_rejected_at_package_boundary(self):
+        with self.assertRaisesRegex(ValueError, "unknown_option"):
+            model_package("gpt/linear_adaptive").bind_runtime_defaults(
+                {"unknown_option": 7}
+            )
 
     def test_low_rank_preset_adapts_projection_and_feed_forward_layers(self):
         cfg = self._preset_config(ExperimentPreset.LOW_RANK_WEIGHT)
@@ -482,26 +474,13 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNotNone(model.lm_head.bias)
 
     def test_stack_controls_preserve_adaptive_backend_layers(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.LOW_RANK_WEIGHT,
             {
-                "feed_forward_stack_options": replace(
-                    defaults["feed_forward_stack_options"],
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    defaults["feed_forward_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "attention_projection_stack_options": replace(
-                    defaults["attention_projection_stack_options"],
-                    hidden_dim=19,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    defaults["attention_projection_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
+                "ff_stack_hidden_dim": 17,
+                "ff_stack_gate_flag": True,
+                "attn_stack_hidden_dim": 19,
+                "attn_stack_gate_flag": True,
             },
         )
         layer = self._decoder_layer_config(cfg)
@@ -545,7 +524,7 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                 overrides = self._small_overrides()
                 overrides.pop("input_dim")
                 overrides.pop("output_dim")
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("gpt/linear_adaptive").presets.get_config(
                     ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides=overrides,
@@ -566,33 +545,29 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         )
 
     def test_dimension_and_embedding_dropout_validation_matrix(self):
-        untied = GptLmHeadOptions(weight_tying_flag=False, bias_flag=False)
         cases = {
             "input_dim": {"input_dim": 0},
-            "output_dim": {"output_dim": 0, "lm_head_options": untied},
+            "output_dim": {
+                "output_dim": 0,
+                "lm_head_weight_tying_flag": False,
+            },
             "sequence_length": {"sequence_length": 0},
         }
         for field, overrides in cases.items():
             with self.subTest(field=field):
                 with self.assertRaisesRegex(ValueError, field):
-                    GptLinearAdaptiveConfigBuilder(**overrides).build()
-        defaults = config_defaults.gpt_embedding_options(config)
+                    self.config(**overrides)
         for probability in (-0.01, 1.01):
             with self.subTest(probability=probability):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
-                    GptLinearAdaptiveConfigBuilder(
-                        embedding_options=replace(
-                            defaults,
-                            dropout_probability=probability,
-                        )
-                    ).build()
+                    self.config(embedding_dropout_probability=probability)
 
     def _preset_config(
         self,
         preset: ExperimentPreset,
         overrides: dict | None = None,
     ):
-        return ExperimentPresets().get_config(
+        return model_package("gpt/linear_adaptive").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK

@@ -24,6 +24,7 @@ from models.gpt.expert_linear import MODEL_PACKAGE as GPT_EXPERT_LINEAR
 from models.gpt.expert_linear_adaptive import (
     MODEL_PACKAGE as GPT_EXPERT_LINEAR_ADAPTIVE,
 )
+from models.gpt.linear_adaptive import MODEL_PACKAGE as GPT_LINEAR_ADAPTIVE
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
 from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
@@ -45,9 +46,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/expert_linear": BERT_EXPERT_LINEAR,
     "bert/expert_linear_adaptive": BERT_EXPERT_LINEAR_ADAPTIVE,
     "gpt/linear": ModelPackage("gpt", "linear", "models.gpt.linear"),
-    "gpt/linear_adaptive": ModelPackage(
-        "gpt", "linear_adaptive", "models.gpt.linear_adaptive"
-    ),
+    "gpt/linear_adaptive": GPT_LINEAR_ADAPTIVE,
     "gpt/expert_linear": GPT_EXPERT_LINEAR,
     "gpt/expert_linear_adaptive": GPT_EXPERT_LINEAR_ADAPTIVE,
     "vit/linear": ModelPackage("vit", "linear", "models.vit.linear"),
