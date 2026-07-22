@@ -711,8 +711,8 @@ function expertsMixtureSchemaResponse() {
         choices: [true, false],
       }),
       configFixtureField({
-        key: "expert_top_k",
-        configKey: "EXPERT_TOP_K",
+        key: "top_k",
+        configKey: "TOP_K",
         flag: "--expert-top-k",
         label: "expert top k",
         section: "Mixture Of Experts Model Options",
@@ -720,8 +720,8 @@ function expertsMixtureSchemaResponse() {
         default: 2,
       }),
       configFixtureField({
-        key: "expert_num_experts",
-        configKey: "EXPERT_NUM_EXPERTS",
+        key: "num_experts",
+        configKey: "NUM_EXPERTS",
         flag: "--expert-num-experts",
         label: "expert num experts",
         section: "Mixture Of Experts Model Options",
@@ -729,8 +729,8 @@ function expertsMixtureSchemaResponse() {
         default: 4,
       }),
       configFixtureField({
-        key: "expert_compute_expert_mixture_flag",
-        configKey: "EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG",
+        key: "compute_expert_mixture_flag",
+        configKey: "COMPUTE_EXPERT_MIXTURE_FLAG",
         flag: "--expert-compute-expert-mixture-flag",
         label: "expert compute expert mixture flag",
         section: "Mixture Of Experts Model Options",

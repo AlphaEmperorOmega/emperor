@@ -1476,26 +1476,26 @@ describe("config section controls", () => {
   it("nests expert stack options under mixture of experts model options", () => {
     const mixtureFields = [
       field({
-        key: "expert_top_k",
+        key: "top_k",
         type: "int",
         default: 2,
         section: "Mixture Of Experts Model Options",
       }),
       field({
-        key: "expert_num_experts",
+        key: "num_experts",
         type: "int",
         default: 4,
         section: "Mixture Of Experts Model Options",
       }),
       field({
-        key: "expert_compute_expert_mixture_flag",
+        key: "compute_expert_mixture_flag",
         type: "bool",
         default: true,
         choices: [true, false],
         section: "Mixture Of Experts Model Options",
       }),
       field({
-        key: "expert_weighted_parameters_flag",
+        key: "weighted_parameters_flag",
         type: "bool",
         default: true,
         choices: [true, false],
@@ -1616,7 +1616,7 @@ describe("config section controls", () => {
             section: "Mixture Of Experts Model Options",
           }),
           field({
-            key: "expert_top_k",
+            key: "top_k",
             type: "int",
             default: 2,
             section: "Mixture Of Experts Model Options",
@@ -1635,7 +1635,7 @@ describe("config section controls", () => {
     });
 
     expect(mixtureSection.fields.map((item) => item.key)).toEqual([
-      "expert_top_k",
+      "top_k",
     ]);
     expect(attentionModeSection?.controlFieldKey).toBe("expert_attention_flag");
     expect(attentionModeSection?.fields.map((item) => item.key)).toEqual([
@@ -1662,7 +1662,7 @@ describe("config section controls", () => {
         title: "Mixture Of Experts Model Options",
         fields: [
           field({
-            key: "expert_top_k",
+            key: "top_k",
             type: "int",
             default: 2,
             section: "Mixture Of Experts Model Options",
@@ -1847,7 +1847,7 @@ describe("config section controls", () => {
         title: "Mixture Of Experts Model Options",
         fields: [
           field({
-            key: "expert_top_k",
+            key: "top_k",
             type: "int",
             default: 2,
             section: "Mixture Of Experts Model Options",
@@ -1901,7 +1901,7 @@ describe("config section controls", () => {
         title: "Mixture Of Experts Model Options",
         fields: [
           field({
-            key: "expert_top_k",
+            key: "top_k",
             type: "int",
             default: 2,
             section: "Mixture Of Experts Model Options",
@@ -2380,7 +2380,7 @@ describe("config section controls", () => {
         title: "Mixture Of Experts Model Options",
         fields: [
           field({
-            key: "expert_top_k",
+            key: "top_k",
             type: "int",
             default: 2,
             section: "Mixture Of Experts Model Options",
