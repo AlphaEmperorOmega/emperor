@@ -927,7 +927,7 @@ describe("WorkbenchApp Overview", () => {
       schemaResponse: {
         ...schemaResponse,
         fields: schemaResponse.fields.map((field) =>
-          field.key === "gate_flag"
+          field.key === "stack_gate_flag"
             ? {
                 ...field,
                 locked: true,

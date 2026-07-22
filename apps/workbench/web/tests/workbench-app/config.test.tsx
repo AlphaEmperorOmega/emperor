@@ -383,9 +383,9 @@ function nestedControlledSchemaResponse() {
     fields: [
       ...schemaResponse.fields,
       configFixtureField({
-        key: "halting_flag",
-        configKey: "HALTING_FLAG",
-        flag: "--halting-flag",
+        key: "stack_halting_flag",
+        configKey: "STACK_HALTING_FLAG",
+        flag: "--stack-halting-flag",
         label: "halting flag",
         section: "Halting Options",
         type: "bool",
@@ -527,9 +527,9 @@ function nestedControlledSchemaResponse() {
         choices: [],
       }),
       configFixtureField({
-        key: "recurrent_gate_flag",
-        configKey: "RECURRENT_GATE_FLAG",
-        flag: "--recurrent-gate-flag",
+        key: "recurrent_stack_gate_flag",
+        configKey: "RECURRENT_STACK_GATE_FLAG",
+        flag: "--recurrent-stack-gate-flag",
         label: "recurrent gate flag",
         section: "Recurrent Gate Options",
         type: "bool",
@@ -544,9 +544,9 @@ function nestedControlledSchemaResponse() {
         nullable: false,
       }),
       configFixtureField({
-        key: "recurrent_halting_flag",
-        configKey: "RECURRENT_HALTING_FLAG",
-        flag: "--recurrent-halting-flag",
+        key: "recurrent_stack_halting_flag",
+        configKey: "RECURRENT_STACK_HALTING_FLAG",
+        flag: "--recurrent-stack-halting-flag",
         label: "recurrent halting flag",
         section: "Recurrent Halting Options",
         type: "bool",
@@ -660,7 +660,7 @@ function expertsSamplerRouterControllerSchemaResponse() {
     fields: [
       ...response.fields,
       configFixtureField({
-        key: "router_gate_flag",
+        key: "router_stack_gate_flag",
         section: "Router Gate Options",
         type: "bool",
         default: false,
@@ -783,7 +783,7 @@ function expertsMixtureControllerSchemaResponse() {
     fields: [
       ...response.fields,
       configFixtureField({
-        key: "expert_gate_flag",
+        key: "expert_stack_gate_flag",
         section: "Expert Gate Options",
         type: "bool",
         default: false,
@@ -858,9 +858,9 @@ function gateOptionSchemaResponse() {
         nullable: false,
       }),
       configFixtureField({
-        key: "recurrent_gate_flag",
-        configKey: "RECURRENT_GATE_FLAG",
-        flag: "--recurrent-gate-flag",
+        key: "recurrent_stack_gate_flag",
+        configKey: "RECURRENT_STACK_GATE_FLAG",
+        flag: "--recurrent-stack-gate-flag",
         label: "recurrent gate flag",
         section: "Recurrent Gate Options",
         type: "bool",
@@ -1498,7 +1498,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gateSwitch.parentElement).not.toHaveTextContent(/gate flag\s*Off/i);
     expectHeaderControlBeforeMetric(gateSection, "Enabled", "1 field");
     expect(within(dialog).queryByText("--hidden-dim")).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("--stack-gate-flag")).not.toBeInTheDocument();
   });
 
   it("shows backend field descriptions from the full config label help button", async () => {
@@ -1654,9 +1654,9 @@ describe("WorkbenchApp Full Config", () => {
             nullable: false,
           }),
           configFixtureField({
-            key: "halting_flag",
-            configKey: "HALTING_FLAG",
-            flag: "--halting-flag",
+            key: "stack_halting_flag",
+            configKey: "STACK_HALTING_FLAG",
+            flag: "--stack-halting-flag",
             label: "halting flag",
             section: "Halting Options",
             type: "bool",
@@ -2860,7 +2860,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.on).toHaveAttribute("aria-checked", "true");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "mise run experiment -- --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag true",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-pipeline-flag true",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -2872,7 +2872,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.off).toHaveAttribute("aria-checked", "true");
     commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "mise run experiment -- --model-type linears --model linear --preset baseline --config --gate-flag true --gate-stack-apply-output-pipeline-flag false",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-pipeline-flag false",
     );
   });
 
@@ -3116,14 +3116,14 @@ describe("WorkbenchApp Full Config", () => {
       name: /search config fields/i,
     });
 
-    await user.type(search, "--gate-flag");
+    await user.type(search, "--stack-gate-flag");
 
     expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
     expect(within(dialog).queryByLabelText(/hidden dim/i)).not.toBeInTheDocument();
-    expect(within(dialog).queryByText("--gate-flag")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("--stack-gate-flag")).not.toBeInTheDocument();
 
     await user.clear(search);
-    await user.type(search, "gate_flag");
+    await user.type(search, "stack_gate_flag");
 
     expect(within(dialog).getByRole("switch", { name: /enabled/i })).toBeInTheDocument();
     expect(
@@ -3904,7 +3904,7 @@ describe("WorkbenchApp Full Config", () => {
     const commandDialog = await openTrainingCommand(user, dialog);
 
     expect(commandField(commandDialog)).toHaveValue(
-      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --gate-flag true",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --hidden-dim 128 --stack-activation RELU --stack-gate-flag true",
     );
   });
 

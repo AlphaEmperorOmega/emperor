@@ -877,9 +877,9 @@ const schemaResponse = {
       choices: [],
     },
     {
-      key: "gate_flag",
-      configKey: "GATE_FLAG",
-      flag: "--gate-flag",
+      key: "stack_gate_flag",
+      configKey: "STACK_GATE_FLAG",
+      flag: "--stack-gate-flag",
       label: "gate flag",
       section: "Gate Options",
       sectionPath: ["Gate Options"],

@@ -176,7 +176,7 @@ describe("target selection", () => {
           sectionPath: ["Recurrent Layer Options"],
         }),
         field({
-          key: "recurrent_gate_flag",
+          key: "recurrent_stack_gate_flag",
           section: "Recurrent Gate Options",
           sectionPath: ["Recurrent Layer Options", "Recurrent Gate Options"],
         }),
@@ -207,7 +207,7 @@ describe("target selection", () => {
     expect(configSectionsFields(state.configSections).map((item) => item.key))
       .toEqual([
         "recurrent_flag",
-        "recurrent_gate_flag",
+        "recurrent_stack_gate_flag",
         "recurrent_gate_stack_hidden_dim",
       ]);
   });

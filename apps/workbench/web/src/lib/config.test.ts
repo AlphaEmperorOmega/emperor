@@ -422,14 +422,14 @@ describe("config field value normalization", () => {
 
   it("matches bool defaults against equivalent string input", () => {
     const boolField = field({
-      key: "gate_flag",
+      key: "stack_gate_flag",
       type: "bool",
       default: false,
     });
 
     expect(normalizeConfigFieldValue(boolField, "false")).toBe("false");
     expect(
-      runtimeDefaultsEditor.edit([boolField], {}, "gate_flag", "false"),
+      runtimeDefaultsEditor.edit([boolField], {}, "stack_gate_flag", "false"),
     ).toEqual({});
   });
 
@@ -802,7 +802,7 @@ describe("config section controls", () => {
         title: "Feed-Forward Gate Options",
         fields: [
           field({
-            key: "ff_gate_flag",
+            key: "ff_stack_gate_flag",
             label: "ff gate flag",
             type: "bool",
             default: false,
@@ -848,7 +848,7 @@ describe("config section controls", () => {
         title: "Feed-Forward Recurrent Gate Options",
         fields: [
           field({
-            key: "ff_recurrent_gate_flag",
+            key: "ff_recurrent_stack_gate_flag",
             label: "ff recurrent gate flag",
             type: "bool",
             default: false,
@@ -896,7 +896,7 @@ describe("config section controls", () => {
       "Feed-Forward Gate Options",
       "Feed-Forward Recurrent Layer Options",
     ]);
-    expect(gateSection?.controlFieldKey).toBe("ff_gate_flag");
+    expect(gateSection?.controlFieldKey).toBe("ff_stack_gate_flag");
     expect(gateSection?.children?.[0]?.title).toBe(
       "Feed-Forward Gate Stack Options",
     );
@@ -915,12 +915,12 @@ describe("config section controls", () => {
     ).toContain("ff recurrent flag");
     expect(
       disabledConfigFieldReasons(sections, {
-        ff_gate_flag: "true",
+        ff_stack_gate_flag: "true",
       }).get("ff_gate_stack_hidden_dim"),
     ).toContain("ff gate stack independent flag");
     expect(
       disabledConfigFieldReasons(sections, {
-        ff_gate_flag: "true",
+        ff_stack_gate_flag: "true",
         ff_gate_stack_independent_flag: "true",
       }).has("ff_gate_stack_hidden_dim"),
     ).toBe(false);
@@ -942,7 +942,7 @@ describe("config section controls", () => {
         title: "Attention Projection Gate Options",
         fields: [
           field({
-            key: "attn_gate_flag",
+            key: "attn_stack_gate_flag",
             label: "attn gate flag",
             type: "bool",
             default: false,
@@ -988,7 +988,7 @@ describe("config section controls", () => {
         title: "Attention Projection Recurrent Gate Options",
         fields: [
           field({
-            key: "attn_recurrent_gate_flag",
+            key: "attn_recurrent_stack_gate_flag",
             label: "attn recurrent gate flag",
             type: "bool",
             default: false,
@@ -1036,7 +1036,7 @@ describe("config section controls", () => {
       "Attention Projection Gate Options",
       "Attention Projection Recurrent Layer Options",
     ]);
-    expect(gateSection?.controlFieldKey).toBe("attn_gate_flag");
+    expect(gateSection?.controlFieldKey).toBe("attn_stack_gate_flag");
     expect(gateSection?.children?.[0]?.title).toBe(
       "Attention Projection Gate Stack Options",
     );
@@ -1055,12 +1055,12 @@ describe("config section controls", () => {
     ).toContain("attn recurrent flag");
     expect(
       disabledConfigFieldReasons(sections, {
-        attn_gate_flag: "true",
+        attn_stack_gate_flag: "true",
       }).get("attn_gate_stack_hidden_dim"),
     ).toContain("attn gate stack independent flag");
     expect(
       disabledConfigFieldReasons(sections, {
-        attn_gate_flag: "true",
+        attn_stack_gate_flag: "true",
         attn_gate_stack_independent_flag: "true",
       }).has("attn_gate_stack_hidden_dim"),
     ).toBe(false);
@@ -1097,7 +1097,7 @@ describe("config section controls", () => {
         title: "Recurrent Gate Options",
         fields: [
           field({
-            key: "recurrent_gate_flag",
+            key: "recurrent_stack_gate_flag",
             type: "bool",
             default: false,
             section: "Recurrent Gate Options",
@@ -1316,7 +1316,7 @@ describe("config section controls", () => {
         title: "Router Gate Options",
         fields: [
           field({
-            key: "router_gate_flag",
+            key: "router_stack_gate_flag",
             label: "router gate flag",
             type: "bool",
             default: false,
@@ -1373,7 +1373,7 @@ describe("config section controls", () => {
         title: "Router Recurrent Gate Options",
         fields: [
           field({
-            key: "router_recurrent_gate_flag",
+            key: "router_recurrent_stack_gate_flag",
             type: "bool",
             default: false,
             choices: [true, false],
@@ -1450,7 +1450,7 @@ describe("config section controls", () => {
     );
 
     const gateEnabled = disabledConfigFieldReasons(sections, {
-      router_gate_flag: "true",
+      router_stack_gate_flag: "true",
     });
     expect(gateEnabled.has("router_gate_stack_independent_flag")).toBe(false);
     expect(gateEnabled.get("router_gate_stack_hidden_dim")).toContain(
@@ -1458,7 +1458,7 @@ describe("config section controls", () => {
     );
 
     const customGateStack = disabledConfigFieldReasons(sections, {
-      router_gate_flag: "true",
+      router_stack_gate_flag: "true",
       router_gate_stack_independent_flag: "true",
     });
     expect(customGateStack.has("router_gate_stack_hidden_dim")).toBe(false);
@@ -1684,7 +1684,7 @@ describe("config section controls", () => {
         title: "Expert Gate Options",
         fields: [
           field({
-            key: "expert_gate_flag",
+            key: "expert_stack_gate_flag",
             label: "expert gate flag",
             type: "bool",
             default: false,
@@ -1758,7 +1758,7 @@ describe("config section controls", () => {
         title: "Expert Recurrent Gate Options",
         fields: [
           field({
-            key: "expert_recurrent_gate_flag",
+            key: "expert_recurrent_stack_gate_flag",
             type: "bool",
             default: false,
             choices: [true, false],
@@ -1827,7 +1827,7 @@ describe("config section controls", () => {
     );
 
     const gateEnabled = disabledConfigFieldReasons(sections, {
-      expert_gate_flag: "true",
+      expert_stack_gate_flag: "true",
     });
     expect(gateEnabled.has("expert_gate_stack_independent_flag")).toBe(false);
     expect(gateEnabled.get("expert_gate_stack_hidden_dim")).toContain(
@@ -1835,7 +1835,7 @@ describe("config section controls", () => {
     );
 
     const customGateStack = disabledConfigFieldReasons(sections, {
-      expert_gate_flag: "true",
+      expert_stack_gate_flag: "true",
       expert_gate_stack_independent_flag: "true",
     });
     expect(customGateStack.has("expert_gate_stack_hidden_dim")).toBe(false);
@@ -1933,7 +1933,7 @@ describe("config section controls", () => {
         title: "Expert Recurrent Gate Options",
         fields: [
           field({
-            key: "expert_recurrent_gate_flag",
+            key: "expert_recurrent_stack_gate_flag",
             type: "bool",
             default: false,
             choices: [true, false],
@@ -1981,7 +1981,7 @@ describe("config section controls", () => {
         title: "Gate Options",
         fields: [
           field({
-            key: "gate_flag",
+            key: "stack_gate_flag",
             type: "bool",
             default: true,
             section: "Gate Options",
@@ -2051,7 +2051,7 @@ describe("config section controls", () => {
         title: "Gate Options",
         fields: [
           field({
-            key: "gate_flag",
+            key: "stack_gate_flag",
             type: "bool",
             default: true,
             section: "Gate Options",

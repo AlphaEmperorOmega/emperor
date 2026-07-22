@@ -46,7 +46,7 @@ function schemaSections(): ConfigSection[] {
     default: 2,
   });
   const gateFlag = field({
-    key: "gate_flag",
+    key: "stack_gate_flag",
     label: "Gate Flag",
     section: "Gate Options",
     sectionPath: ["Gate Options"],
@@ -152,7 +152,7 @@ describe("Runtime Defaults schema presentation", () => {
     const gate = presentation.sections[2]!;
     expect(gate.isDisabled).toBe(true);
     expect(gate.controlField).toMatchObject({
-      key: "gate_flag",
+      key: "stack_gate_flag",
       label: "Enabled",
       isEnabledValue: false,
       disabledReason: undefined,
@@ -200,7 +200,7 @@ describe("Runtime Defaults schema presentation", () => {
     expect(presentation.sections).toHaveLength(1);
 
     const gate = presentation.sections[0]!;
-    expect(gate.fields.map((item) => item.key)).toEqual(["gate_flag"]);
+    expect(gate.fields.map((item) => item.key)).toEqual(["stack_gate_flag"]);
     expect(gate.children[0]?.fields.map((item) => item.key)).toEqual([
       "gate_stack_independent_flag",
       "gate_stack_depth",
@@ -231,7 +231,7 @@ describe("Runtime Defaults schema presentation", () => {
     const presentation = presentRuntimeDefaultsSchema({
       sections: schemaSections(),
       overrides: {
-        gate_flag: "true",
+        stack_gate_flag: "true",
         gate_stack_independent_flag: "false",
       },
       search: { query: "" },

@@ -25,7 +25,7 @@ describe("training command generation", () => {
     const sections: ConfigSection[] = [
       {
         title: "Router Gate Options",
-        fields: [field("router_gate_flag")],
+        fields: [field("router_stack_gate_flag")],
       },
       {
         title: "Router Memory Options",
@@ -43,14 +43,14 @@ describe("training command generation", () => {
       preset: "baseline",
       sections,
       overrides: {
-        router_gate_flag: "true",
+        router_stack_gate_flag: "true",
         router_memory_flag: "true",
         router_recurrent_flag: "true",
       },
     });
 
     expect(command).toContain("--config");
-    expect(command).toContain("--router-gate-flag true");
+    expect(command).toContain("--router-stack-gate-flag true");
     expect(command).toContain("--router-memory-flag true");
     expect(command).toContain("--router-recurrent-flag true");
   });
