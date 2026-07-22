@@ -17,7 +17,6 @@ from emperor.neuron._distributed_gradients import (
 from emperor.neuron._optimizer_checkpoint import (
     LegacyOptimizerAppendPolicy,
     NeuronOptimizerCheckpointReconciler,
-    NeuronOptimizerLoadTransaction,
 )
 from emperor.neuron._optimizer_layout import (
     OPTIMIZER_LAYOUT_CHECKPOINT_KEY,
@@ -32,6 +31,7 @@ from emperor.neuron._optimizer_scheduler import (
     preflight_scheduler_group_removal,
     remove_scheduler_groups,
 )
+from emperor.neuron._optimizer_transaction import NeuronOptimizerLoadTransaction
 
 if TYPE_CHECKING:
     from lightning import LightningModule, Trainer

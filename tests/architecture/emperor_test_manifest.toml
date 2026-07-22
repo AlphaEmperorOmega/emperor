@@ -607,6 +607,7 @@ modules = [
   "src/emperor/neuron/_optimizer_layout.py",
   "src/emperor/neuron/_optimizer_scheduler.py",
   "src/emperor/neuron/_optimizer_sync.py",
+  "src/emperor/neuron/_optimizer_transaction.py",
   "src/emperor/neuron/_options.py",
   "src/emperor/neuron/_parts.py",
   "src/emperor/neuron/_terminal_topology.py",
