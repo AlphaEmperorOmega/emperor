@@ -8,6 +8,7 @@ from torch import nn
 from emperor.layers import LayerState
 from emperor.memory import (
     GatedResidualDynamicMemoryConfig,
+    MemoryMonitorCallback,
     WeightedDynamicMemoryConfig,
 )
 from emperor.memory._base import DynamicMemoryAbstract
@@ -15,7 +16,6 @@ from emperor.memory._monitoring import (
     _MemoryDiagnostics,
     _MemoryObservation,
 )
-from emperor.memory.monitoring import MemoryMonitorCallback
 from support.monitor import orchestration_calls
 from unit.test_memory import make_memory_config
 

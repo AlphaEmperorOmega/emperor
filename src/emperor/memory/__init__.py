@@ -9,6 +9,7 @@ from emperor.memory._config import (
     WeightedDynamicMemoryConfig,
 )
 from emperor.memory._interface import MemoryInterface
+from emperor.memory._monitoring import MemoryMonitorCallback
 
 __all__ = (
     "AttentionDynamicMemoryConfig",
@@ -16,6 +17,7 @@ __all__ = (
     "ElementWiseWeightedDynamicMemoryConfig",
     "GatedResidualDynamicMemoryConfig",
     "MemoryInterface",
+    "MemoryMonitorCallback",
     "MemoryPositionOptions",
     "WeightedDynamicMemoryConfig",
 )

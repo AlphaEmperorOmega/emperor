@@ -29,6 +29,7 @@ EXPECTED_EXPORTS = (
     "ElementWiseWeightedDynamicMemoryConfig",
     "GatedResidualDynamicMemoryConfig",
     "MemoryInterface",
+    "MemoryMonitorCallback",
     "MemoryPositionOptions",
     "WeightedDynamicMemoryConfig",
 )
@@ -39,6 +40,7 @@ EXPECTED_OWNERS = {
     "ElementWiseWeightedDynamicMemoryConfig": "emperor.memory._config",
     "GatedResidualDynamicMemoryConfig": "emperor.memory._config",
     "MemoryInterface": "emperor.memory._interface",
+    "MemoryMonitorCallback": "emperor.memory._monitoring",
     "MemoryPositionOptions": "emperor.memory._config",
     "WeightedDynamicMemoryConfig": "emperor.memory._config",
 }
@@ -105,7 +107,7 @@ class TestMemoryPublicInterface(unittest.TestCase):
         ):
             self.assertIsNone(memory.missing_memory_export)
 
-    def test_root_interface_eagerly_exports_only_lightweight_configuration(self):
+    def test_root_interface_eagerly_exports_configuration_protocol_and_callback(self):
         completed = subprocess.run(
             [
                 sys.executable,
@@ -184,17 +186,15 @@ print(json.dumps({
             result["expected_eager_modules"],
             dict.fromkeys(result["expected_eager_modules"], True),
         )
-        self.assertEqual(
-            result["heavy_modules"],
-            dict.fromkeys(result["heavy_modules"], False),
-        )
-        self.assertEqual(
-            result["private_exports"],
-            dict.fromkeys(result["private_exports"], False),
-        )
+        expected_heavy_modules = dict.fromkeys(result["heavy_modules"], False)
+        expected_heavy_modules["emperor.memory._monitoring"] = True
+        self.assertEqual(result["heavy_modules"], expected_heavy_modules)
+        expected_private_exports = dict.fromkeys(result["private_exports"], False)
+        expected_private_exports["MemoryMonitorCallback"] = True
+        self.assertEqual(result["private_exports"], expected_private_exports)
         self.assertEqual(
             result["runtime_loaded"],
-            {"emperor.layers": False, "lightning": False, "torch": False},
+            {"emperor.layers": False, "lightning": True, "torch": True},
         )
         self.assertEqual(
             result["shortcut_attributes"],
@@ -210,7 +210,7 @@ print(json.dumps({
             monitoring.MemoryMonitorCallback.__module__,
             "emperor.memory._monitoring",
         )
-        self.assertFalse(hasattr(memory, "MemoryMonitorCallback"))
+        self.assertIs(memory.MemoryMonitorCallback, monitoring.MemoryMonitorCallback)
 
     def test_removed_implementations_cannot_be_imported_from_the_root_interface(self):
         removed_names = (
@@ -218,7 +218,6 @@ print(json.dumps({
             "DynamicMemoryAbstract",
             "ElementWiseWeightedDynamicMemory",
             "GatedResidualDynamicMemory",
-            "MemoryMonitorCallback",
             "WeightedDynamicMemory",
         )
 
