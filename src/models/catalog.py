@@ -25,6 +25,7 @@ from models.gpt.expert_linear_adaptive import (
     MODEL_PACKAGE as GPT_EXPERT_LINEAR_ADAPTIVE,
 )
 from models.gpt.linear_adaptive import MODEL_PACKAGE as GPT_LINEAR_ADAPTIVE
+from models.linears.linear import MODEL_PACKAGE as LINEARS_LINEAR
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
 from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
@@ -62,12 +63,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "transformer/linear_adaptive": TRANSFORMER_LINEAR_ADAPTIVE,
     "transformer/expert_linear": TRANSFORMER_EXPERT_LINEAR,
     "transformer/expert_linear_adaptive": TRANSFORMER_EXPERT_LINEAR_ADAPTIVE,
-    "linears/linear": ModelPackage(
-        "linears",
-        "linear",
-        "models.linears.linear",
-        checkpoint_metadata_module="models.linears.linear.checkpoint_metadata",
-    ),
+    "linears/linear": LINEARS_LINEAR,
     "linears/linear_adaptive": LINEARS_LINEAR_ADAPTIVE,
     "experts/linear": EXPERTS_LINEAR,
     "experts/linear_adaptive": EXPERTS_LINEAR_ADAPTIVE,

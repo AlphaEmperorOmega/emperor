@@ -32,11 +32,15 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
-from model_runtime.packages import GridSearch, PresetDefinition
-from models.config_overrides import (
+from model_runtime.packages import (
+    GridSearch,
+    PresetDefinition,
     config_key_to_model_param,
     iter_supported_config_keys,
 )
+from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.experiment_cli_parser import get_experiment_parser
 from models.linears.linear._projection_config_factory import ProjectionConfigFactory
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
@@ -44,7 +48,6 @@ from models.linears.linear.presets import (
     _PRESET_DEFINITIONS,
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.linears.linear.runtime_defaults import DEFAULT_RUNTIME, runtime_from_flat
 from models.linears.linear.runtime_options import (
@@ -56,7 +59,6 @@ from models.linears.linear.runtime_options import (
     RecurrenceOptions,
     RuntimeOptions,
 )
-from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
@@ -151,12 +153,12 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
                 runtime = runtime_from_flat({flat_key: getattr(config, key)})
                 LinearConfigBuilder(runtime=runtime).build()
 
-    def test_aliases_target_the_canonical_runtime_fields(self):
+    def test_canonical_runtime_fields_bind_to_typed_options(self):
         runtime = runtime_from_flat(
             {
-                "gate_flag": True,
-                "halting_flag": True,
-                "stack_layer_norm_position": LayerNormPositionOptions.AFTER,
+                "stack_gate_flag": True,
+                "stack_halting_flag": True,
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
             }
         )
 
@@ -167,31 +169,16 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             LayerNormPositionOptions.AFTER,
         )
 
-    def test_equal_alias_values_are_accepted(self):
-        runtime = runtime_from_flat(
-            {
-                "layer_norm_position": LayerNormPositionOptions.AFTER,
-                "stack_layer_norm_position": LayerNormPositionOptions.AFTER,
-            }
-        )
-
-        self.assertIs(
-            runtime.stack.layer_norm_position,
-            LayerNormPositionOptions.AFTER,
-        )
-
-    def test_conflicting_aliases_are_rejected(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "models.linears.linear.*conflicting aliases.*layer_norm_position.*"
+    def test_noncanonical_runtime_key_spellings_are_rejected(self):
+        for retired_key in (
             "stack_layer_norm_position",
+            "layer-norm-position",
+            "LAYER_NORM_POSITION",
+            " layer_norm_position",
         ):
-            runtime_from_flat(
-                {
-                    "layer_norm_position": LayerNormPositionOptions.BEFORE,
-                    "stack_layer_norm_position": LayerNormPositionOptions.AFTER,
-                }
-            )
+            with self.subTest(retired_key=retired_key):
+                with self.assertRaisesRegex(ValueError, "unknown runtime override"):
+                    runtime_from_flat({retired_key: LayerNormPositionOptions.AFTER})
 
     def test_unknown_key_names_package_invalid_key_and_accepted_keys(self):
         with self.assertRaises(ValueError) as raised:
@@ -258,7 +245,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
     def test_enabled_gates_require_a_concrete_option(self):
         for flag, option in (
             ("stack_gate_flag", "gate_option"),
-            ("recurrent_gate_flag", "recurrent_gate_option"),
+            ("recurrent_stack_gate_flag", "recurrent_gate_option"),
         ):
             with self.subTest(flag=flag):
                 with self.assertRaisesRegex(ValueError, option):
@@ -575,10 +562,10 @@ class TestLinearConstruction(unittest.TestCase):
                 "recurrent_flag": True,
                 "recurrent_max_steps": 3,
                 "recurrent_layer_norm_position": LayerNormPositionOptions.AFTER,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "recurrent_gate_stack_independent_flag": True,
                 "recurrent_gate_stack_hidden_dim": 64,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "recurrent_halting_threshold": 0.65,
                 "recurrent_halting_stack_independent_flag": True,
                 "recurrent_halting_stack_hidden_dim": 72,
@@ -676,7 +663,11 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                     module_name,
                 )
 
-        self.assertEqual(Experiment()._public_model_id(), "linears/linear")
+        experiment = Experiment(model_package=model_package("linears/linear"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "linears/linear",
+        )
 
     def test_preset_enum_values_and_definitions_remain_stable(self):
         self.assertTrue(issubclass(ExperimentPreset, BaseOptions))
@@ -686,7 +677,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         )
         self.assertEqual(set(_PRESET_DEFINITIONS), set(ExperimentPreset))
 
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 definition = presets.definition_for_preset(preset)
@@ -703,7 +694,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 self.assertTrue(definition.description)
 
     def test_every_preset_builds_with_its_declared_values(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 cfg = presets.get_config(preset)[0]
@@ -723,8 +714,8 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         for preset, (gate, halting, memory) in expected.items():
             with self.subTest(preset=preset.name):
                 stack = (
-                    ExperimentPresets()
-                    .get_config(preset)[0]
+                    model_package("linears/linear")
+                    .presets.get_config(preset)[0]
                     .experiment_config.model_config
                 )
                 self.assertEqual(stack.layer_config.gate_config is not None, gate)
@@ -735,7 +726,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         cases = {
             ExperimentPreset.RESIDUAL: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.POST_NORM: (
                 None,
@@ -747,22 +738,22 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
             ),
             ExperimentPreset.RESIDUAL_GATING: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.RESIDUAL_HALTING: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.RESIDUAL_MEMORY: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
             ),
         }
         for preset, (residual, norm) in cases.items():
             with self.subTest(preset=preset.name):
                 layer = (
-                    ExperimentPresets()
-                    .get_config(preset)[0]
+                    model_package("linears/linear")
+                    .presets.get_config(preset)[0]
                     .experiment_config.model_config.layer_config
                 )
                 actual_residual = (
@@ -789,8 +780,8 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         for preset, (gate, halting, memory) in expected.items():
             with self.subTest(preset=preset.name):
                 recurrent = (
-                    ExperimentPresets()
-                    .get_config(preset)[0]
+                    model_package("linears/linear")
+                    .presets.get_config(preset)[0]
                     .experiment_config.model_config
                 )
                 self.assertIsInstance(recurrent, RecurrentLayerConfig)
@@ -802,7 +793,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 )
 
     def test_preset_locks_keep_values_and_reasons_together(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 locks = presets.locks_for_preset(preset)
@@ -818,7 +809,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                     self.assertIn(f"`{field}`", lock.reason)
 
     def test_locked_and_unlocked_overrides_keep_existing_behavior(self):
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
         with self.assertRaisesRegex(ValueError, "stack_gate_flag"):
             presets.get_config(
                 ExperimentPreset.GATING,
@@ -840,10 +831,10 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         self.assertEqual(search_space.SEARCH_SPACE_STACK_NUM_LAYERS, [2, 4, 8, 16, 32])
         self.assertIs(
             search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
-            search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION,
+            search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
         )
 
-        configs = ExperimentPresets().get_config(
+        configs = model_package("linears/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             search_mode=GridSearch(),
             search_keys=["hidden_dim"],
@@ -853,7 +844,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
             set(search_space.SEARCH_SPACE_HIDDEN_DIM),
         )
         with self.assertRaisesRegex(ValueError, "Unknown --search-keys"):
-            ExperimentPresets().get_config(
+            model_package("linears/linear").presets.get_config(
                 ExperimentPreset.BASELINE,
                 search_mode=GridSearch(),
                 search_keys=["not_an_axis"],
@@ -887,11 +878,9 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 self.assertTrue(option.kinds)
                 self.assertIsNotNone(option.build_callback())
 
-    def test_cli_aliases_resolve_to_canonical_overrides(self):
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.linears.linear",
-        )
+    def test_cli_exposes_only_canonical_runtime_override_flags(self):
+        package = model_package("linears/linear")
+        parser = get_experiment_parser(package)
         cases = (
             ("--hidden-dim", "64", "hidden_dim", 64),
             (
@@ -900,20 +889,18 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 "layer_norm_position",
                 LayerNormPositionOptions.AFTER,
             ),
-            (
-                "--stack-layer-norm-position",
-                "AFTER",
-                "layer_norm_position",
-                LayerNormPositionOptions.AFTER,
-            ),
         )
         for flag, value, key, expected in cases:
             with self.subTest(flag=flag):
                 args = parser.parse_args(["--preset", "baseline", flag, value])
-                mode = resolve_experiment_mode(args, ExperimentPreset)
+                mode = resolve_cli_selection(args, package, ExperimentPreset)
                 self.assertEqual(mode.config_overrides[key], expected)
 
-        for removed_flag in ("--stack-hidden-dim", "--bias-flag"):
+        for removed_flag in (
+            "--stack-layer-norm-position",
+            "--stack-hidden-dim",
+            "--bias-flag",
+        ):
             with self.subTest(removed_flag=removed_flag):
                 with contextlib.redirect_stderr(io.StringIO()):
                     with self.assertRaises(SystemExit):
@@ -926,9 +913,11 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module("models.linears.linear.__main__", run_name="__main__")
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
         self.assertEqual(package.catalog_key, "linears/linear")
@@ -959,7 +948,7 @@ class TestLinearModelBehavior(unittest.TestCase):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -970,7 +959,7 @@ class TestLinearModelBehavior(unittest.TestCase):
 
     def test_baseline_forwards_all_declared_datasets(self):
         batch_size = 4
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -1033,8 +1022,8 @@ class TestLinearModelBehavior(unittest.TestCase):
                 "output_dim": 4,
                 "stack_num_layers": 2,
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             }
         )
@@ -1048,7 +1037,7 @@ class TestLinearModelBehavior(unittest.TestCase):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
-        presets = ExperimentPresets()
+        presets = model_package("linears/linear").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
