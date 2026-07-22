@@ -529,7 +529,7 @@ class TrainingRunPlanTests(unittest.TestCase):
                 overrides={},
                 search={
                     "mode": "grid",
-                    "values": {"stack_layer_norm_position": ["AFTER"]},
+                    "values": {"layer_norm_position": ["AFTER"]},
                 },
                 log_folder="",
             )

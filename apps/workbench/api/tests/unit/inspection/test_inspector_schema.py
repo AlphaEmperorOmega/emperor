@@ -381,7 +381,7 @@ class InspectorSchemaTests(unittest.TestCase):
             linear_fields["hidden_dim"]["default"],
             linear_config.HIDDEN_DIM,
         )
-        self.assertEqual(linear_fields["stack_layer_norm_position"]["type"], "enum")
+        self.assertEqual(linear_fields["layer_norm_position"]["type"], "enum")
         self.assertEqual(linear_fields["stack_bias_flag"]["type"], "bool")
         adaptive_fields = _fields_by_key(config_schema("linears/linear_adaptive"))
         self.assertEqual(adaptive_fields["stack_bias_flag"]["type"], "bool")
@@ -1815,15 +1815,15 @@ class InspectorSchemaTests(unittest.TestCase):
     def test_search_space_schema_marks_preset_owned_axes_locked(self) -> None:
         axes = _axes_by_key(search_space_schema("linears/linear", "post-norm"))
 
-        self.assertTrue(axes["stack_layer_norm_position"]["locked"])
-        self.assertEqual(axes["stack_layer_norm_position"]["lockedValue"], "AFTER")
+        self.assertTrue(axes["layer_norm_position"]["locked"])
+        self.assertEqual(axes["layer_norm_position"]["lockedValue"], "AFTER")
         self.assertEqual(
-            axes["stack_layer_norm_position"]["lockedByPresets"],
+            axes["layer_norm_position"]["lockedByPresets"],
             ["POST_NORM"],
         )
-        self.assertEqual(len(axes["stack_layer_norm_position"]["lockReasons"]), 1)
+        self.assertEqual(len(axes["layer_norm_position"]["lockReasons"]), 1)
         self.assertEqual(
-            axes["stack_layer_norm_position"]["lockedReason"],
+            axes["layer_norm_position"]["lockedReason"],
             (
                 "Locked by the POST_NORM preset because this preset locks "
                 "`layer_norm_position`."

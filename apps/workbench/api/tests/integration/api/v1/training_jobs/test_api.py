@@ -392,7 +392,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                         0.4,
                                         0.5,
                                     ],
-                                    "stack_layer_norm_position": [
+                                    "layer_norm_position": [
                                         "DISABLED",
                                         "DEFAULT",
                                         "BEFORE",
@@ -486,7 +486,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                         0.4,
                                         0.5,
                                     ],
-                                    "stack_layer_norm_position": [
+                                    "layer_norm_position": [
                                         "DISABLED",
                                         "DEFAULT",
                                         "BEFORE",
@@ -544,7 +544,7 @@ class TrainingApiLifecycleTests(unittest.TestCase):
                                         0.4,
                                         0.5,
                                     ],
-                                    "stack_layer_norm_position": [
+                                    "layer_norm_position": [
                                         "DISABLED",
                                         "DEFAULT",
                                         "BEFORE",

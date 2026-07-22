@@ -417,7 +417,7 @@ class TrainingJobCreationTests(unittest.TestCase):
                 overrides={},
                 search={
                     "mode": "grid",
-                    "values": {"stack_layer_norm_position": ["BEFORE", "AFTER"]},
+                    "values": {"layer_norm_position": ["BEFORE", "AFTER"]},
                 },
                 log_folder="locked_search",
             )
