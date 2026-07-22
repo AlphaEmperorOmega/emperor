@@ -23,9 +23,9 @@ from models.bert.linear_adaptive.model import Model
 from models.bert.linear_adaptive.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
-from models.catalog import catalog_entry
+from models.bert.linear_adaptive.runtime_options import RuntimeOptions
+from models.catalog import model_package
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
@@ -35,7 +35,7 @@ from models.training_test_utils import (
 class TestBertLinearAdaptiveModel(unittest.TestCase):
     def test_runtime_defaults_describe_a_conventional_bert_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.AFTER,
         )
         self.assertEqual(config.FF_NUM_LAYERS, 1)
@@ -125,11 +125,15 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
 
                 self.assertEqual(module.__name__, module_name)
 
-        self.assertEqual(Experiment()._public_model_id(), "bert/linear_adaptive")
-        self.assertIsNotNone(catalog_entry("bert/linear_adaptive"))
+        experiment = Experiment(model_package=model_package("bert/linear_adaptive"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "bert/linear_adaptive",
+        )
+        self.assertIsNotNone(model_package("bert/linear_adaptive"))
 
         package = importlib.import_module("models.bert.linear_adaptive")
-        self.assertEqual(package.__all__, ["Experiment", "ExperimentPreset"])
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
         self.assertFalse(hasattr(package, "BertLinearAdaptiveConfigBuilder"))
         self.assertFalse(hasattr(package, "ExperimentConfig"))
         self.assertFalse(hasattr(package, "Model"))
@@ -161,8 +165,12 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             hidden_dim=local_hidden_dim,
         )
 
+        builder_kwargs = self._default_builder_kwargs()
+        builder_kwargs["adaptive_generator_stack_options"] = (
+            adaptive_generator_stack_options
+        )
         builder = BertLinearAdaptiveConfigBuilder(
-            adaptive_generator_stack_options=adaptive_generator_stack_options,
+            runtime=RuntimeOptions(builder_kwargs),
         )
 
         self.assertEqual(
@@ -170,41 +178,28 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             local_hidden_dim,
         )
 
-    def test_config_builder_has_an_explicit_keyword_only_interface(self):
+    def test_config_builder_accepts_only_typed_runtime_options(self):
         parameters = inspect.signature(
             BertLinearAdaptiveConfigBuilder.__init__
         ).parameters
 
-        self.assertNotIn("runtime", parameters)
+        self.assertEqual(tuple(parameters), ("self", "runtime"))
         self.assertFalse(
             any(
                 parameter.kind is inspect.Parameter.VAR_KEYWORD
                 for parameter in parameters.values()
             )
         )
-        for name, parameter in parameters.items():
-            if name != "self":
-                with self.subTest(name=name):
-                    self.assertIs(
-                        parameter.kind,
-                        inspect.Parameter.KEYWORD_ONLY,
-                    )
-        for name in (
-            "sequence_length",
-            "embedding_options",
-            "mlm_head_options",
-            "nsp_head_options",
-            "attention_projection_layer_controller_options",
-            "feed_forward_recurrent_controller_options",
-            "attention_hidden_adaptive_weight_options",
-            "feed_forward_hidden_adaptive_mask_options",
-        ):
-            self.assertIn(name, parameters)
+        self.assertIs(
+            parameters["runtime"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        with self.assertRaises(TypeError):
+            BertLinearAdaptiveConfigBuilder(sequence_length=8)
 
     def test_legacy_runtime_modules_and_types_are_removed(self):
         package_dir = Path(config.__file__).resolve().parent
         removed_modules = (
-            "runtime_defaults",
             "_adaptive_builder_options",
             "_builder_options",
             "_controller_stack",
@@ -212,9 +207,12 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             "_transformer_builder_options",
         )
 
-        self.assertFalse(hasattr(runtime_options, "RuntimeOptions"))
-        self.assertFalse(hasattr(runtime_options, "VitPatchOptions"))
-        self.assertFalse(hasattr(runtime_options, "VitOutputOptions"))
+        self.assertIs(runtime_options.RuntimeOptions, RuntimeOptions)
+        self.assertEqual(
+            RuntimeOptions.__module__,
+            "models.bert.linear_adaptive.runtime_options",
+        )
+        self.assertTrue((package_dir / "runtime_defaults.py").is_file())
         for module_name in removed_modules:
             with self.subTest(module_name=module_name):
                 self.assertFalse((package_dir / f"{module_name}.py").exists())
@@ -223,7 +221,7 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
                         f"models.bert.linear_adaptive.{module_name}"
                     )
 
-    def test_flat_adapter_matches_explicit_grouped_builder_configuration(self):
+    def test_flat_adapter_matches_explicit_typed_runtime_configuration(self):
         flat_options = {
             **self._test_overrides(),
             "weight_option": config.LowRankDynamicWeightConfig,
@@ -264,30 +262,30 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             option=config.LowRankDynamicWeightConfig,
         )
 
+        adapted = linear_adaptive_builder_kwargs_from_flat(flat_options, config)
+        self.assertEqual(adapted["encoder_options"], encoder_options)
+        self.assertEqual(adapted["attention_options"], attention_options)
         self.assertEqual(
-            BertLinearAdaptiveConfigBuilder(
-                **linear_adaptive_builder_kwargs_from_flat(flat_options, config)
-            ).build(),
-            BertLinearAdaptiveConfigBuilder(
-                batch_size=flat_options["batch_size"],
-                sequence_length=flat_options["sequence_length"],
-                encoder_options=encoder_options,
-                attention_options=attention_options,
-                layer_controller_options=layer_controller_options,
-                recurrent_controller_options=recurrent_controller_options,
-                hidden_adaptive_weight_options=weight_options,
-            ).build(),
+            adapted["recurrent_controller_options"],
+            recurrent_controller_options,
+        )
+        self.assertEqual(adapted["layer_controller_options"], layer_controller_options)
+        self.assertEqual(adapted["hidden_adaptive_weight_options"], weight_options)
+
+        runtime = model_package("bert/linear_adaptive").bind_runtime_defaults(
+            flat_options
+        )
+        self.assertEqual(runtime, RuntimeOptions(adapted))
+        self.assertIsInstance(
+            BertLinearAdaptiveConfigBuilder(runtime=runtime).build().hidden_dim,
+            int,
         )
 
-    def test_unknown_flat_option_reaches_builder_type_error(self):
-        builder_kwargs = linear_adaptive_builder_kwargs_from_flat(
-            {"unknown_option": 7},
-            config,
-        )
-
-        self.assertEqual(builder_kwargs["unknown_option"], 7)
-        with self.assertRaisesRegex(TypeError, "unknown_option"):
-            BertLinearAdaptiveConfigBuilder(**builder_kwargs)
+    def test_unknown_runtime_default_is_rejected_at_package_boundary(self):
+        with self.assertRaisesRegex(ValueError, "unknown_option"):
+            model_package("bert/linear_adaptive").bind_runtime_defaults(
+                {"unknown_option": 7}
+            )
 
     def test_low_rank_preset_uses_adaptive_projection_and_feed_forward_layers(self):
         cfg = self._config(ExperimentPreset.LOW_RANK_WEIGHT)
@@ -433,27 +431,14 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsInstance(model.nsp_head, nn.Linear)
 
     def test_stack_controls_keep_adaptive_backend_layers(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._config(
             ExperimentPreset.LOW_RANK_WEIGHT,
             {
                 **self._test_overrides(),
-                "feed_forward_stack_options": replace(
-                    defaults["feed_forward_stack_options"],
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    defaults["feed_forward_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "attention_projection_stack_options": replace(
-                    defaults["attention_projection_stack_options"],
-                    hidden_dim=19,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    defaults["attention_projection_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
+                "ff_stack_hidden_dim": 17,
+                "ff_stack_gate_flag": True,
+                "attn_stack_hidden_dim": 19,
+                "attn_stack_gate_flag": True,
             },
         )
         encoder_layer_config = self._encoder_layer_config(cfg)
@@ -534,7 +519,7 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
         preset: ExperimentPreset,
         config_overrides: dict | None = None,
     ):
-        return ExperimentPresets().get_config(
+        return model_package("bert/linear_adaptive").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK

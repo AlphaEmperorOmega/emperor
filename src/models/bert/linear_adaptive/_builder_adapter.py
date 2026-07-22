@@ -307,7 +307,7 @@ def _adaptive_builder_kwargs(
         provided=kwargs.get("adaptive_generator_stack_options"),
     )
     hidden_adaptive_weight_options = _private_helper_value(
-        _hidden_adaptive_weight_options_with_aliases_from_kwargs,
+        _hidden_adaptive_weight_options_from_kwargs,
         kwargs,
         consumed,
         config_module,
@@ -392,7 +392,7 @@ def _role_adaptive_builder_kwargs(
             flat_prefix=f"{flat_prefix}adaptive_generator_stack",
         ),
         f"{builder_prefix}_hidden_adaptive_weight_options": _private_helper_value(
-            _hidden_adaptive_weight_options_with_aliases_from_kwargs,
+            _hidden_adaptive_weight_options_from_kwargs,
             kwargs,
             consumed,
             config_module,
@@ -565,29 +565,6 @@ def _merge_role_config_overrides(
     return replace(base, **updates) if updates else base
 
 
-def _hidden_adaptive_weight_options_with_aliases_from_kwargs(
-    kwargs: dict[str, Any],
-    config_module: ModuleType,
-    *,
-    provided: Any,
-    flat_prefix: str = "",
-    config_prefix: str = "",
-    stack_prefix: str = "weight_generator_stack",
-) -> Any:
-    expected_depth_key = f"{flat_prefix}generator_depth"
-    public_depth_key = f"{flat_prefix}weight_generator_depth"
-    if public_depth_key in kwargs and expected_depth_key not in kwargs:
-        kwargs[expected_depth_key] = kwargs.pop(public_depth_key)
-    return _hidden_adaptive_weight_options_from_kwargs(
-        kwargs,
-        config_module,
-        provided=provided,
-        flat_prefix=flat_prefix,
-        config_prefix=config_prefix,
-        stack_prefix=stack_prefix,
-    )
-
-
 def _embedding_options_from_kwargs(options, kwargs: dict[str, Any]):
     return replace(
         options,
@@ -613,7 +590,6 @@ def _encoder_options_from_kwargs(options, kwargs: dict[str, Any]):
                 "stack_activation": "activation",
                 "stack_dropout_probability": "dropout_probability",
                 "layer_norm_position": "layer_norm_position",
-                "stack_layer_norm_position": "layer_norm_position",
                 "causal_attention_mask_flag": "causal_attention_mask_flag",
             },
         ),
@@ -700,7 +676,6 @@ def _main_stack_options_from_kwargs(
             kwargs,
             {
                 "stack_bias_flag": "bias_flag",
-                "stack_layer_norm_position": "layer_norm_position",
                 "layer_norm_position": "layer_norm_position",
                 "stack_num_layers": "num_layers",
                 "stack_activation": "activation",
@@ -742,10 +717,10 @@ def _layer_controller_options_from_kwargs(
     prefix = f"{flat_prefix}_" if flat_prefix else ""
     if flat_prefix:
         flag_map = {
-            f"{prefix}gate_flag": "stack_gate_flag",
+            f"{prefix}stack_gate_flag": "stack_gate_flag",
             f"{prefix}gate_option": "gate_option",
             f"{prefix}gate_activation": "gate_activation",
-            f"{prefix}halting_flag": "stack_halting_flag",
+            f"{prefix}stack_halting_flag": "stack_halting_flag",
             f"{prefix}halting_option": "halting_option",
             f"{prefix}halting_threshold": "halting_threshold",
             f"{prefix}halting_dropout": "halting_dropout",
@@ -754,11 +729,9 @@ def _layer_controller_options_from_kwargs(
     else:
         flag_map = {
             "stack_gate_flag": "stack_gate_flag",
-            "gate_flag": "stack_gate_flag",
             "gate_option": "gate_option",
             "gate_activation": "gate_activation",
             "stack_halting_flag": "stack_halting_flag",
-            "halting_flag": "stack_halting_flag",
             "halting_option": "halting_option",
             "halting_threshold": "halting_threshold",
             "halting_dropout": "halting_dropout",
@@ -823,10 +796,10 @@ def _recurrent_controller_options_from_kwargs(
             f"{prefix}flag": "recurrent_flag",
             f"{prefix}max_steps": "recurrent_max_steps",
             f"{prefix}layer_norm_position": "recurrent_layer_norm_position",
-            f"{prefix}gate_flag": "recurrent_gate_flag",
+            f"{prefix}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{prefix}gate_option": "recurrent_gate_option",
             f"{prefix}gate_activation": "recurrent_gate_activation",
-            f"{prefix}halting_flag": "recurrent_halting_flag",
+            f"{prefix}stack_halting_flag": "recurrent_stack_halting_flag",
             f"{prefix}halting_option": "recurrent_halting_option",
             f"{prefix}halting_threshold": "recurrent_halting_threshold",
             f"{prefix}halting_dropout": "recurrent_halting_dropout",
@@ -1095,7 +1068,6 @@ def _factory_relevant_keys(
             "stack_activation",
             "stack_dropout_probability",
             "layer_norm_position",
-            "stack_layer_norm_position",
             "causal_attention_mask_flag",
         },
         _positional_embedding_options_from_kwargs: {
@@ -1125,7 +1097,6 @@ def _factory_relevant_keys(
         },
         _main_stack_options_from_kwargs: {
             "stack_bias_flag",
-            "stack_layer_norm_position",
             "layer_norm_position",
             "stack_num_layers",
             "stack_activation",
@@ -1144,10 +1115,10 @@ def _factory_relevant_keys(
         flat_prefix = factory_kwargs["flat_prefix"]
         if flat_prefix:
             base = {
-                f"{flat_prefix}_gate_flag",
+                f"{flat_prefix}_stack_gate_flag",
                 f"{flat_prefix}_gate_option",
                 f"{flat_prefix}_gate_activation",
-                f"{flat_prefix}_halting_flag",
+                f"{flat_prefix}_stack_halting_flag",
                 f"{flat_prefix}_halting_option",
                 f"{flat_prefix}_halting_threshold",
                 f"{flat_prefix}_halting_dropout",
@@ -1156,11 +1127,9 @@ def _factory_relevant_keys(
         else:
             base = {
                 "stack_gate_flag",
-                "gate_flag",
                 "gate_option",
                 "gate_activation",
                 "stack_halting_flag",
-                "halting_flag",
                 "halting_option",
                 "halting_threshold",
                 "halting_dropout",
@@ -1188,10 +1157,10 @@ def _factory_relevant_keys(
                 f"{flat_prefix}_flag",
                 f"{flat_prefix}_max_steps",
                 f"{flat_prefix}_layer_norm_position",
-                f"{flat_prefix}_gate_flag",
+                f"{flat_prefix}_stack_gate_flag",
                 f"{flat_prefix}_gate_option",
                 f"{flat_prefix}_gate_activation",
-                f"{flat_prefix}_halting_flag",
+                f"{flat_prefix}_stack_halting_flag",
                 f"{flat_prefix}_halting_option",
                 f"{flat_prefix}_halting_threshold",
                 f"{flat_prefix}_halting_dropout",

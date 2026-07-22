@@ -17,6 +17,7 @@ from models.bert.expert_linear import MODEL_PACKAGE as BERT_EXPERT_LINEAR
 from models.bert.expert_linear_adaptive import (
     MODEL_PACKAGE as BERT_EXPERT_LINEAR_ADAPTIVE,
 )
+from models.bert.linear_adaptive import MODEL_PACKAGE as BERT_LINEAR_ADAPTIVE
 from models.experts.linear import MODEL_PACKAGE as EXPERTS_LINEAR
 from models.experts.linear_adaptive import MODEL_PACKAGE as EXPERTS_LINEAR_ADAPTIVE
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
@@ -36,9 +37,7 @@ from models.transformer.linear_adaptive import (
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/linear": ModelPackage("bert", "linear", "models.bert.linear"),
-    "bert/linear_adaptive": ModelPackage(
-        "bert", "linear_adaptive", "models.bert.linear_adaptive"
-    ),
+    "bert/linear_adaptive": BERT_LINEAR_ADAPTIVE,
     "bert/expert_linear": BERT_EXPERT_LINEAR,
     "bert/expert_linear_adaptive": BERT_EXPERT_LINEAR_ADAPTIVE,
     "gpt/linear": ModelPackage("gpt", "linear", "models.gpt.linear"),

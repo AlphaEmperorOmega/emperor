@@ -32,7 +32,7 @@ class GateConfigFactory:
         )
 
     def build_recurrent_gate_config(self) -> GateConfig | None:
-        if not self.recurrent_controller_options.recurrent_gate_flag:
+        if not self.recurrent_controller_options.recurrent_stack_gate_flag:
             return None
         options = resolve_controller_stack_options(
             self.recurrent_controller_options.recurrent_gate_stack_source,

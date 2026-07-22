@@ -114,8 +114,7 @@ POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG: bool = False
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.0
-STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.AFTER
-LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.AFTER
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -146,9 +145,7 @@ NSP_HEAD_BIAS_FLAG: bool = True
 #########################################################################
 # Layer Stack Submodule Options
 SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
-SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
-    STACK_LAYER_NORM_POSITION
-)
+SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
@@ -182,7 +179,7 @@ ADAPTIVE_GENERATOR_STACK_BIAS_FLAG: bool = True
 # If `WEIGHT_OPTION_FLAG` is False, the weight-specific parameters below are ignored.
 WEIGHT_OPTION_FLAG: bool = False
 WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
-WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
+GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_THREE
 WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
 WEIGHT_DECAY_RATE: float = 0.0
 WEIGHT_DECAY_WARMUP_BATCHES: int = 0
@@ -281,7 +278,7 @@ MASK_GENERATOR_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 # Gate Options
-GATE_FLAG: bool = False
+STACK_GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 ## Gate Stack Options
@@ -298,7 +295,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 
 #########################################################################
 # Halting Options
-HALTING_FLAG: bool = False
+STACK_HALTING_FLAG: bool = False
 HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.999
 HALTING_DROPOUT: float = 0.0
@@ -350,7 +347,7 @@ RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 ## Recurrent Gate Options
-RECURRENT_GATE_FLAG: bool = False
+RECURRENT_STACK_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 ### Recurrent Gate Stack Options
@@ -366,7 +363,7 @@ RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ## Recurrent Halting Options
-RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_STACK_HALTING_FLAG: bool = False
 RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -411,7 +408,7 @@ ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 ### Attention Projection Adaptive Weight Options
 ATTN_WEIGHT_OPTION_FLAG: bool = WEIGHT_OPTION_FLAG
 ATTN_WEIGHT_OPTION: type[DynamicWeightConfig] | None = WEIGHT_OPTION
-ATTN_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
+ATTN_GENERATOR_DEPTH: DynamicDepthOptions = GENERATOR_DEPTH
 ATTN_WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WEIGHT_DECAY_SCHEDULE
 ATTN_WEIGHT_DECAY_RATE: float = WEIGHT_DECAY_RATE
 ATTN_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
@@ -550,7 +547,7 @@ ATTN_MASK_GENERATOR_STACK_BIAS_FLAG: bool | None = MASK_GENERATOR_STACK_BIAS_FLA
 
 #########################################################################
 ### Attention Projection Gate Options
-ATTN_GATE_FLAG: bool = False
+ATTN_STACK_GATE_FLAG: bool = False
 ATTN_GATE_OPTION: LayerGateOptions | None = GATE_OPTION
 ATTN_GATE_ACTIVATION: ActivationOptions | None = GATE_ACTIVATION
 #### Attention Projection Gate Stack Options
@@ -569,7 +566,7 @@ ATTN_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 
 #########################################################################
 ### Attention Projection Halting Options
-ATTN_HALTING_FLAG: bool = False
+ATTN_STACK_HALTING_FLAG: bool = False
 ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 ATTN_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -625,7 +622,7 @@ ATTN_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 
 #########################################################################
 #### Attention Projection Recurrent Gate Options
-ATTN_RECURRENT_GATE_FLAG: bool = False
+ATTN_RECURRENT_STACK_GATE_FLAG: bool = False
 ATTN_RECURRENT_GATE_OPTION: LayerGateOptions | None = RECURRENT_GATE_OPTION
 ATTN_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = RECURRENT_GATE_ACTIVATION
 ##### Attention Projection Recurrent Gate Stack Options
@@ -644,7 +641,7 @@ ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 #### Attention Projection Recurrent Halting Options
-ATTN_RECURRENT_HALTING_FLAG: bool = False
+ATTN_RECURRENT_STACK_HALTING_FLAG: bool = False
 ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 ATTN_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
@@ -684,7 +681,7 @@ FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 ## Feed-Forward Adaptive Weight Options
 FF_WEIGHT_OPTION_FLAG: bool = WEIGHT_OPTION_FLAG
 FF_WEIGHT_OPTION: type[DynamicWeightConfig] | None = WEIGHT_OPTION
-FF_WEIGHT_GENERATOR_DEPTH: DynamicDepthOptions = WEIGHT_GENERATOR_DEPTH
+FF_GENERATOR_DEPTH: DynamicDepthOptions = GENERATOR_DEPTH
 FF_WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WEIGHT_DECAY_SCHEDULE
 FF_WEIGHT_DECAY_RATE: float = WEIGHT_DECAY_RATE
 FF_WEIGHT_DECAY_WARMUP_BATCHES: int = WEIGHT_DECAY_WARMUP_BATCHES
@@ -815,7 +812,7 @@ FF_MASK_GENERATOR_STACK_BIAS_FLAG: bool | None = MASK_GENERATOR_STACK_BIAS_FLAG
 
 #########################################################################
 ## Feed-Forward Gate Options
-FF_GATE_FLAG: bool = False
+FF_STACK_GATE_FLAG: bool = False
 FF_GATE_OPTION: LayerGateOptions | None = GATE_OPTION
 FF_GATE_ACTIVATION: ActivationOptions | None = GATE_ACTIVATION
 ### Feed-Forward Gate Stack Options
@@ -834,7 +831,7 @@ FF_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 
 #########################################################################
 ## Feed-Forward Halting Options
-FF_HALTING_FLAG: bool = False
+FF_STACK_HALTING_FLAG: bool = False
 FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 FF_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -888,7 +885,7 @@ FF_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 
 #########################################################################
 ### Feed-Forward Recurrent Gate Options
-FF_RECURRENT_GATE_FLAG: bool = False
+FF_RECURRENT_STACK_GATE_FLAG: bool = False
 FF_RECURRENT_GATE_OPTION: LayerGateOptions | None = RECURRENT_GATE_OPTION
 FF_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = RECURRENT_GATE_ACTIVATION
 #### Feed-Forward Recurrent Gate Stack Options
@@ -907,7 +904,7 @@ FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 ### Feed-Forward Recurrent Halting Options
-FF_RECURRENT_HALTING_FLAG: bool = False
+FF_RECURRENT_STACK_HALTING_FLAG: bool = False
 FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 FF_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT

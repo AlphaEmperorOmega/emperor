@@ -20,6 +20,7 @@ from models.bert.linear_adaptive._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.bert.linear_adaptive.experiment_config import ExperimentConfig
+from models.bert.linear_adaptive.runtime_defaults import DEFAULT_RUNTIME
 from models.bert.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     BertEmbeddingOptions,
@@ -33,6 +34,7 @@ from models.bert.linear_adaptive.runtime_options import (
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
+    RuntimeOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
@@ -44,7 +46,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class BertLinearAdaptiveConfigBuilder:
+class _BertLinearAdaptiveConfigBuilderImplementation:
     def __init__(
         self,
         *,
@@ -415,3 +417,13 @@ class BertLinearAdaptiveConfigBuilder:
             encoder_options=self.encoder_options,
             adaptive_augmentation_config=adaptive_augmentation_config,
         )
+
+
+class BertLinearAdaptiveConfigBuilder(_BertLinearAdaptiveConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.bert.linear_adaptive BertLinearAdaptiveConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())
