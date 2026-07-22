@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import RLock
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from emperor.experiments import (
     ExperimentTask,
@@ -13,7 +12,6 @@ from emperor.experiments import (
     experiment_task_name,
     resolve_experiment_task,
 )
-from emperor.monitoring import MonitorOption
 from model_runtime.packages.configuration_metadata import (
     configuration_field_metadata,
 )
@@ -22,18 +20,49 @@ from model_runtime.packages.datasets import (
     dataset_name,
     normalize_dataset_name,
 )
-from model_runtime.packages.identity import ModelIdentity, model_key
+from model_runtime.packages.identity import ModelIdentity
 from model_runtime.packages.inspection_limits import (
     DEFAULT_INSPECTION_CONSTRUCTION_LIMITS,
     InspectionConstructionLimits,
 )
-from model_runtime.packages.metadata import (
-    ModelMetadata,
-    load_model_metadata_from_module_path,
-)
+from model_runtime.packages.metadata import ModelMetadata
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from model_runtime.runs.artifacts import FilesystemRunArtifacts
+
+
+class _PackageAdapter(Protocol):
+    """Package-local lazy operations consumed by :class:`ModelPackage`."""
+
+    def load_metadata(self) -> ModelMetadata: ...
+
+    def load_runtime_options_type(self) -> type: ...
+
+    def bind_runtime_defaults(self, values: Mapping[str, object] | None) -> Any: ...
+
+    def load_preset_type(self) -> type: ...
+
+    def load_presets(self) -> Any: ...
+
+    def build_configurations(
+        self,
+        presets: Any,
+        preset: Any,
+        dataset: type | None,
+        **kwargs: Any,
+    ) -> list[ModelConfig]: ...
+
+    def build_model(self, configuration: ModelConfig) -> Any: ...
+
+    def build_experiment(
+        self,
+        preset: Any,
+        *,
+        experiment_task: ExperimentTask,
+        model_package: ModelPackage,
+        run_artifacts: FilesystemRunArtifacts,
+    ) -> Any: ...
 
 
 _INITIALIZATION_MISSING = object()
@@ -43,45 +72,71 @@ _InitializationValue = TypeVar("_InitializationValue")
 
 @dataclass(frozen=True, init=False)
 class ModelPackage:
-    """Catalog-owned Interface for one isolated Model Package.
+    """Canonical Interface for one isolated Model Package.
 
-    ``module_path`` is the temporary legacy adapter seam. All configuration and
-    model construction remains implemented inside that concrete package.
+    Identity is data, while every implementation operation belongs to the
+    selected package's lightweight adapter. Importing the catalog therefore
+    never imports a concrete model, Runtime Defaults module, or training stack.
     """
 
-    model_type: str
-    model: str
-    module_path: str
-    checkpoint_metadata_module: ClassVar[str | None] = None
-    inspection_construction_limits: ClassVar[InspectionConstructionLimits] = (
+    identity: ModelIdentity
+    _adapter: _PackageAdapter | None = field(repr=False, compare=False)
+    module_path: str | None = field(default=None, repr=False, compare=False)
+    checkpoint_metadata_module: str | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
+    inspection_construction_limits: InspectionConstructionLimits = (
         DEFAULT_INSPECTION_CONSTRUCTION_LIMITS
     )
 
     def __init__(
         self,
-        model_type: str,
-        model: str,
-        module_path: str,
+        identity_or_model_type: ModelIdentity | str,
+        adapter_or_model: _PackageAdapter | str,
+        module_path: str | None = None,
         checkpoint_metadata_module: str | None = None,
         inspection_construction_limits: InspectionConstructionLimits = (
             DEFAULT_INSPECTION_CONSTRUCTION_LIMITS
         ),
     ) -> None:
-        object.__setattr__(self, "model_type", model_type)
-        object.__setattr__(self, "model", model)
+        if isinstance(identity_or_model_type, ModelIdentity):
+            if isinstance(adapter_or_model, str) or module_path is not None:
+                raise TypeError(
+                    "Adapter-backed ModelPackage construction requires an adapter."
+                )
+            identity = identity_or_model_type
+            adapter: _PackageAdapter | None = adapter_or_model
+        else:
+            if not isinstance(adapter_or_model, str) or module_path is None:
+                raise TypeError(
+                    "Module-backed ModelPackage construction requires model and "
+                    "module_path strings."
+                )
+            identity = ModelIdentity(identity_or_model_type, adapter_or_model)
+            adapter = None
+
+        if not isinstance(
+            inspection_construction_limits,
+            InspectionConstructionLimits,
+        ):
+            raise TypeError(
+                "ModelPackage inspection limits must be InspectionConstructionLimits."
+            )
+        object.__setattr__(self, "identity", identity)
+        object.__setattr__(self, "_adapter", adapter)
         object.__setattr__(self, "module_path", module_path)
-        if checkpoint_metadata_module is not None:
-            object.__setattr__(
-                self,
-                "checkpoint_metadata_module",
-                checkpoint_metadata_module,
-            )
-        if inspection_construction_limits != DEFAULT_INSPECTION_CONSTRUCTION_LIMITS:
-            object.__setattr__(
-                self,
-                "inspection_construction_limits",
-                inspection_construction_limits,
-            )
+        object.__setattr__(
+            self,
+            "checkpoint_metadata_module",
+            checkpoint_metadata_module,
+        )
+        object.__setattr__(
+            self,
+            "inspection_construction_limits",
+            inspection_construction_limits,
+        )
 
     def _initialize_once(
         self,
@@ -99,12 +154,16 @@ class ModelPackage:
             return cast(_InitializationValue, value)
 
     @property
-    def identity(self) -> ModelIdentity:
-        return ModelIdentity(self.model_type, self.model)
+    def catalog_key(self) -> str:
+        return self.identity.catalog_key
 
     @property
-    def catalog_key(self) -> str:
-        return model_key(self.model_type, self.model)
+    def model_type(self) -> str:
+        return self.identity.model_type
+
+    @property
+    def model(self) -> str:
+        return self.identity.model
 
     @property
     def public_id(self) -> str:
@@ -115,17 +174,58 @@ class ModelPackage:
 
     @property
     def metadata(self) -> ModelMetadata:
-        return self._initialize_once(
-            "_metadata",
-            lambda: load_model_metadata_from_module_path(
+        def load_metadata() -> ModelMetadata:
+            if self._adapter is not None:
+                return self._adapter.load_metadata()
+            from model_runtime.packages.metadata import (
+                load_model_metadata_from_module_path,
+            )
+
+            assert self.module_path is not None
+            return load_model_metadata_from_module_path(
                 self.module_path,
                 model_name=self.catalog_key,
-            ),
-        )
+            )
+
+        return self._initialize_once("_metadata", load_metadata)
 
     @property
-    def runtime_defaults(self) -> ModuleType:
-        return self.metadata.config_module
+    def runtime_defaults(self):
+        return self.metadata.runtime_defaults
+
+    @property
+    def runtime_options_type(self) -> type:
+        def load_runtime_options_type() -> type:
+            if self._adapter is not None:
+                return self._adapter.load_runtime_options_type()
+            assert self.module_path is not None
+            module = importlib.import_module(f"{self.module_path}.runtime_options")
+            return module.RuntimeOptions
+
+        return self._initialize_once(
+            "_runtime_options_type",
+            load_runtime_options_type,
+        )
+
+    def bind_runtime_defaults(
+        self,
+        values: Mapping[str, object] | None = None,
+    ) -> Any:
+        if values is not None and not isinstance(values, Mapping):
+            raise TypeError("Runtime Defaults values must be a mapping.")
+        if self._adapter is None:
+            assert self.module_path is not None
+            module = importlib.import_module(f"{self.module_path}.runtime_defaults")
+            runtime = module.runtime_from_flat(values)
+        else:
+            runtime = self._adapter.bind_runtime_defaults(values)
+        if type(runtime) is not self.runtime_options_type:
+            raise TypeError(
+                f"Model Package '{self.catalog_key}' returned "
+                f"{type(runtime).__name__}, expected "
+                f"{self.runtime_options_type.__name__}."
+            )
+        return runtime
 
     @property
     def default_experiment_task(self) -> ExperimentTask:
@@ -144,37 +244,77 @@ class ModelPackage:
         return self.metadata.search_space_items
 
     @property
-    def presets_module(self) -> ModuleType:
+    def preset_type(self) -> type:
+        def load_preset_type() -> type:
+            if self._adapter is not None:
+                return self._adapter.load_preset_type()
+            return self.presets_module.ExperimentPreset
+
+        return self._initialize_once("_preset_type", load_preset_type)
+
+    @property
+    def presets_module(self):
+        if self.module_path is None:
+            raise AttributeError("Adapter-backed Model Packages have no presets module.")
         return self._initialize_once(
             "_presets_module",
             lambda: importlib.import_module(f"{self.module_path}.presets"),
         )
 
     @property
-    def model_module(self) -> ModuleType:
+    def model_module(self):
+        if self.module_path is None:
+            raise AttributeError("Adapter-backed Model Packages have no model module.")
         return self._initialize_once(
             "_model_module",
             lambda: importlib.import_module(f"{self.module_path}.model"),
         )
 
+    @property
+    def experiment_type(self) -> type:
+        return self.presets_module.Experiment
+
+    @property
+    def model_class(self) -> type:
+        return self.model_module.Model
+
+    @property
+    def presets(self) -> Any:
+        def load_presets() -> Any:
+            presets = (
+                self._adapter.load_presets()
+                if self._adapter is not None
+                else self.presets_module.ExperimentPresets()
+            )
+            bind = getattr(presets, "bind_model_package", None)
+            if callable(bind):
+                bind(self)
+            return presets
+
+        return self._initialize_once("_presets", load_presets)
+
     def checkpoint_config_overrides(
         self,
         tensor_shapes: Mapping[str, tuple[int, ...]],
     ) -> dict[str, Any]:
-        """Interpret package-local checkpoint shapes when explicitly declared."""
+        """Interpret package-owned checkpoint shapes when supported."""
 
-        module_path = self.checkpoint_metadata_module
-        if module_path is None:
+        if self._adapter is None:
+            if self.checkpoint_metadata_module is None:
+                return {}
+            module = self._initialize_once(
+                "_checkpoint_metadata",
+                lambda: importlib.import_module(self.checkpoint_metadata_module or ""),
+            )
+            interpreter = getattr(module, "checkpoint_config_overrides", None)
+        else:
+            interpreter = getattr(self._adapter, "checkpoint_config_overrides", None)
+        if interpreter is None:
             return {}
-        module = self._initialize_once(
-            "_checkpoint_metadata",
-            lambda: importlib.import_module(module_path),
-        )
-        interpreter = getattr(module, "checkpoint_config_overrides", None)
         if not callable(interpreter):
             raise ValueError(
-                f"Model package '{self.catalog_key}' checkpoint metadata does not "
-                "define checkpoint_config_overrides()."
+                f"Model package '{self.catalog_key}' has an invalid checkpoint "
+                "interpreter."
             )
         overrides = interpreter(tensor_shapes)
         if not isinstance(overrides, Mapping) or any(
@@ -186,43 +326,53 @@ class ModelPackage:
             )
         return dict(overrides)
 
-    @property
-    def preset_type(self) -> type:
-        return self.presets_module.ExperimentPreset
-
-    @property
-    def presets(self) -> Any:
-        return self._initialize_once(
-            "_presets",
-            lambda: self.presets_module.ExperimentPresets(),
-        )
-
-    @property
-    def experiment_type(self) -> type:
-        return self.presets_module.Experiment
-
-    @property
-    def model_class(self) -> type:
-        return self.model_module.Model
-
     def build_configurations(
         self,
-        preset=None,
+        preset: Any = None,
         dataset: type | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> list[ModelConfig]:
         selected_preset = preset or next(iter(self.preset_type))
+        if self._adapter is not None:
+            return self._adapter.build_configurations(
+                self.presets,
+                selected_preset,
+                dataset,
+                **kwargs,
+            )
         if dataset is None:
             return self.presets.get_config(selected_preset, **kwargs)
         return self.presets.get_config(selected_preset, dataset, **kwargs)
 
-    def build_model(self, config: ModelConfig):
-        return self.model_class(config)
+    def build_model(self, configuration: ModelConfig) -> Any:
+        if self._adapter is not None:
+            return self._adapter.build_model(configuration)
+        return self.model_class(configuration)
+
+    def build_experiment(
+        self,
+        preset: Any,
+        *,
+        experiment_task: ExperimentTask,
+        run_artifacts: FilesystemRunArtifacts,
+    ) -> Any:
+        if self._adapter is not None:
+            return self._adapter.build_experiment(
+                preset,
+                experiment_task=experiment_task,
+                model_package=self,
+                run_artifacts=run_artifacts,
+            )
+        return self.experiment_type(
+            preset,
+            experiment_task=experiment_task,
+            model_package=self,
+            run_artifacts=run_artifacts,
+        )
 
     def resolve_preset(self, preset_name: str):
-        preset_type = self.preset_type
         try:
-            return preset_type.get_member(preset_name)
+            return self.preset_type.get_member(preset_name)
         except ValueError as exc:
             raise ValueError(
                 f"Unknown preset '{preset_name}' for model '{self.catalog_key}'."
@@ -338,7 +488,9 @@ class ModelPackage:
                 unique.append(dataset)
         return unique
 
-    def monitor_options(self) -> list[MonitorOption]:
+    def monitor_options(self):
+        from emperor.monitoring import MonitorOption
+
         options = list(self.monitor_metadata or [])
         invalid = [
             type(option).__name__
@@ -359,14 +511,11 @@ class ModelPackage:
             )
         return options
 
-    def resolve_monitors(
-        self,
-        monitor_names: list[str] | None,
-    ) -> list[MonitorOption]:
+    def resolve_monitors(self, monitor_names: list[str] | None):
         if not monitor_names:
             return []
         options_by_name = {option.name: option for option in self.monitor_options()}
-        selected: list[MonitorOption] = []
+        selected = []
         seen: set[str] = set()
         unknown: list[str] = []
         for name in monitor_names:
@@ -392,7 +541,7 @@ class ModelPackage:
         include_search_space: bool = False,
     ) -> dict[str, dict[str, Any]]:
         module = (
-            self.metadata.search_space_module
+            self.metadata.search_space
             if include_search_space
             else self.runtime_defaults
         )
@@ -406,13 +555,6 @@ ModelCatalogEntry = ModelPackage
 
 
 def model_package_from_module_path(module_path: str) -> ModelPackage | None:
-    """Derive the conventional package identity without importing a catalog.
-
-    This is a source-compatibility fallback for direct construction of concrete
-    Experiment classes. Project composition and Run execution pass the canonical
-    catalog-owned :class:`ModelPackage` explicitly.
-    """
-
     parts = module_path.split(".")
     if len(parts) < 3 or parts[0] != "models":
         return None

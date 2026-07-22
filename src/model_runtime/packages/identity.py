@@ -13,6 +13,9 @@ class ModelIdentity:
     model_type: str
     model: str
 
+    def __post_init__(self) -> None:
+        model_key(self.model_type, self.model)
+
     @property
     def catalog_key(self) -> str:
         return model_key(self.model_type, self.model)

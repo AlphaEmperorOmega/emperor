@@ -11,16 +11,18 @@ from emperor.experiments import (
     experiment_task_name,
     resolve_experiment_task,
 )
+from model_runtime.packages.identity import ModelIdentity
 
 
 def _coerce_dataset_options_by_task(
-    dataset_options_module: ModuleType,
+    identity: ModelIdentity,
+    dataset_options: ModuleType,
 ) -> dict[ExperimentTask, list[type]]:
-    raw_options = getattr(dataset_options_module, "DATASET_OPTIONS_BY_TASK", None)
+    raw_options = getattr(dataset_options, "DATASET_OPTIONS_BY_TASK", None)
     if not isinstance(raw_options, dict) or not raw_options:
         raise ValueError(
-            f"Model dataset options '{dataset_options_module.__name__}' must define "
-            "non-empty DATASET_OPTIONS_BY_TASK."
+            f"Model Package '{identity.catalog_key}' must define non-empty "
+            "DATASET_OPTIONS_BY_TASK."
         )
 
     options_by_task: dict[ExperimentTask, list[type]] = {}
@@ -28,58 +30,80 @@ def _coerce_dataset_options_by_task(
         task = resolve_experiment_task(raw_task)
         if task is None:
             raise ValueError(
-                f"Model dataset options '{dataset_options_module.__name__}' has "
-                f"invalid experiment task {raw_task!r}."
+                f"Model Package '{identity.catalog_key}' has invalid Experiment "
+                f"Task {raw_task!r}."
             )
         if not isinstance(raw_datasets, list) or not raw_datasets:
             raise ValueError(
-                f"Model dataset options '{dataset_options_module.__name__}' must "
-                f"define a non-empty dataset list for {experiment_task_name(task)}."
+                f"Model Package '{identity.catalog_key}' must define a non-empty "
+                f"dataset list for {experiment_task_name(task)}."
             )
         options_by_task[task] = list(raw_datasets)
     return options_by_task
 
 
 def _coerce_default_experiment_task(
-    dataset_options_module: ModuleType,
+    identity: ModelIdentity,
+    dataset_options: ModuleType,
     options_by_task: dict[ExperimentTask, list[type]],
 ) -> ExperimentTask:
     default_task = resolve_experiment_task(
-        getattr(dataset_options_module, "DEFAULT_EXPERIMENT_TASK", None)
+        getattr(dataset_options, "DEFAULT_EXPERIMENT_TASK", None)
     )
     if default_task is None:
         raise ValueError(
-            f"Model dataset options '{dataset_options_module.__name__}' must define "
+            f"Model Package '{identity.catalog_key}' must define "
             "DEFAULT_EXPERIMENT_TASK."
         )
     if default_task not in options_by_task:
         raise ValueError(
-            f"Model dataset options '{dataset_options_module.__name__}' default "
-            f"experiment task {experiment_task_name(default_task)!r} is not present "
-            "in DATASET_OPTIONS_BY_TASK."
+            f"Model Package '{identity.catalog_key}' default Experiment Task "
+            f"{experiment_task_name(default_task)!r} is not present in "
+            "DATASET_OPTIONS_BY_TASK."
         )
     return default_task
 
 
 @dataclass(frozen=True)
 class ModelMetadata:
-    """Descriptive Model Metadata loaded through a Model Package."""
+    """Descriptive metadata supplied by one package-local adapter."""
 
-    model_name: str
-    module_path: str
-    config_module: ModuleType
-    dataset_options_module: ModuleType
-    monitor_options_module: ModuleType
-    search_space_module: ModuleType
+    identity: ModelIdentity
+    runtime_defaults: ModuleType
+    dataset_options: ModuleType
+    monitor_options_source: ModuleType
+    search_space: ModuleType
+    module_path: str | None = None
+
+    @property
+    def model_name(self) -> str:
+        return self.identity.catalog_key
+
+    @property
+    def config_module(self) -> ModuleType:
+        return self.runtime_defaults
+
+    @property
+    def dataset_options_module(self) -> ModuleType:
+        return self.dataset_options
+
+    @property
+    def monitor_options_module(self) -> ModuleType:
+        return self.monitor_options_source
+
+    @property
+    def search_space_module(self) -> ModuleType:
+        return self.search_space
 
     @property
     def dataset_options_by_task(self) -> dict[ExperimentTask, list[type]]:
-        return _coerce_dataset_options_by_task(self.dataset_options_module)
+        return _coerce_dataset_options_by_task(self.identity, self.dataset_options)
 
     @property
     def default_experiment_task(self) -> ExperimentTask:
         return _coerce_default_experiment_task(
-            self.dataset_options_module,
+            self.identity,
+            self.dataset_options,
             self.dataset_options_by_task,
         )
 
@@ -98,7 +122,7 @@ class ModelMetadata:
             else resolve_experiment_task(task)
         )
         if resolved_task is None:
-            raise ValueError(f"Invalid experiment task: {task!r}")
+            raise ValueError(f"Invalid Experiment Task: {task!r}")
         try:
             return list(options_by_task[resolved_task])
         except KeyError as exc:
@@ -106,8 +130,8 @@ class ModelMetadata:
                 experiment_task_name(candidate) for candidate in options_by_task
             )
             raise ValueError(
-                f"Unknown experiment task {task!r} for model '{self.model_name}'. "
-                f"Valid tasks: {valid}."
+                f"Unknown Experiment Task {task!r} for Model Package "
+                f"'{self.identity.catalog_key}'. Valid tasks: {valid}."
             ) from exc
 
     def dataset_groups(self) -> list[dict[str, Any]]:
@@ -122,13 +146,13 @@ class ModelMetadata:
 
     @property
     def monitor_options(self) -> list[Any]:
-        return list(getattr(self.monitor_options_module, "MONITOR_OPTIONS", []) or [])
+        return list(getattr(self.monitor_options_source, "MONITOR_OPTIONS", []) or [])
 
     @property
     def search_space_items(self) -> dict[str, list[Any]]:
         return {
             key: value
-            for key, value in vars(self.search_space_module).items()
+            for key, value in vars(self.search_space).items()
             if key.startswith("SEARCH_SPACE_") and isinstance(value, list)
         }
 
@@ -138,17 +162,20 @@ def load_model_metadata_from_module_path(
     *,
     model_name: str | None = None,
 ) -> ModelMetadata:
+    identity_name = model_name or module_path.removeprefix("models.").replace(".", "/")
+    segments = identity_name.split("/")
+    if len(segments) != 2:
+        raise ValueError(f"Invalid model identity: {identity_name!r}")
+    identity = ModelIdentity(segments[0], segments[1])
     return ModelMetadata(
-        model_name=model_name or module_path.removeprefix("models.").replace(".", "/"),
-        module_path=module_path,
-        config_module=importlib.import_module(f"{module_path}.config"),
-        dataset_options_module=importlib.import_module(
-            f"{module_path}.dataset_options"
-        ),
-        monitor_options_module=importlib.import_module(
+        identity=identity,
+        runtime_defaults=importlib.import_module(f"{module_path}.config"),
+        dataset_options=importlib.import_module(f"{module_path}.dataset_options"),
+        monitor_options_source=importlib.import_module(
             f"{module_path}.monitor_options"
         ),
-        search_space_module=importlib.import_module(f"{module_path}.search_space"),
+        search_space=importlib.import_module(f"{module_path}.search_space"),
+        module_path=module_path,
     )
 
 
@@ -156,9 +183,7 @@ def load_model_metadata_for_config_module(config_module: ModuleType) -> ModelMet
     module_name = config_module.__name__
     if not module_name.endswith(".config"):
         raise ValueError(f"Expected a config module, got {module_name!r}")
-    return load_model_metadata_from_module_path(
-        module_name[: -len(".config")],
-    )
+    return load_model_metadata_from_module_path(module_name[: -len(".config")])
 
 
 __all__ = [
