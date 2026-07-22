@@ -124,7 +124,10 @@ focused_tests = [
   "tests/unit/test_patch_validator.py",
   "tests/unit/test_transformer_patch.py",
 ]
-integration_tests = ["tests/model_packages/vit/linear/test_model.py"]
+integration_tests = [
+  "tests/model_packages/vit/linear/test_model.py",
+  "tests/model_packages/mlp_mixer/linear/test_model.py",
+]
 mutation_scope = ["src/emperor/patch/*"]
 environment = ["cpu", "float32", "float64", "non-contiguous-tensors"]
 coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/patch-coverage.toml"
@@ -443,7 +446,7 @@ modules = [
 ]
 
 [families.attention]
-status = "complete"
+status = "partial"
 focused_tests = [
   "tests/unit/test_attention*.py",
   "tests/unit/test_*attention_validator_adapter.py",
@@ -451,11 +454,19 @@ focused_tests = [
   "tests/integration/test_attention_monitor_lifecycle.py",
   "tests/model_packages/test_attention_layout_contract.py",
   "tests/model_packages/test_attention_real_model_integration.py",
+  "tests/model_packages/mlp_mixer/linear/test_model.py",
+  "tests/model_packages/mlp_mixer/linear_adaptive/test_model.py",
+  "tests/model_packages/mlp_mixer/expert_linear/test_model.py",
+  "tests/model_packages/mlp_mixer/expert_linear_adaptive/test_model.py",
 ]
 integration_tests = [
   "tests/integration/test_attention_monitor_lifecycle.py",
   "tests/model_packages/test_attention_layout_contract.py",
   "tests/model_packages/test_attention_real_model_integration.py",
+  "tests/model_packages/mlp_mixer/linear/test_model.py",
+  "tests/model_packages/mlp_mixer/linear_adaptive/test_model.py",
+  "tests/model_packages/mlp_mixer/expert_linear/test_model.py",
+  "tests/model_packages/mlp_mixer/expert_linear_adaptive/test_model.py",
 ]
 mutation_scope = ["src/emperor/attention/*"]
 environment = [
@@ -508,6 +519,10 @@ modules = [
   "src/emperor/attention/_variants/mixture/reshaping.py",
   "src/emperor/attention/_variants/mixture/validation.py",
   "src/emperor/attention/_variants/mixture/zero_attention.py",
+  "src/emperor/attention/_variants/mixer/__init__.py",
+  "src/emperor/attention/_variants/mixer/config.py",
+  "src/emperor/attention/_variants/mixer/layer.py",
+  "src/emperor/attention/_variants/mixer/validation.py",
   "src/emperor/attention/_variants/self_attention/__init__.py",
   "src/emperor/attention/_variants/self_attention/config.py",
   "src/emperor/attention/_variants/self_attention/layer.py",
