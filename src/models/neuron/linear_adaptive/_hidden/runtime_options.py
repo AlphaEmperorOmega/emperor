@@ -135,7 +135,7 @@ class AdaptiveMaskOptions:
 @dataclass(frozen=True, slots=True)
 class AdaptiveProjectionOptions:
     weight_option: type[DynamicWeightConfig] | None
-    weight_generator_depth: DynamicDepthOptions
+    generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
     weight_decay_rate: float
     weight_decay_warmup_batches: int

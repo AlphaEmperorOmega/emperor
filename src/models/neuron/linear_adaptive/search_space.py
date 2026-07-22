@@ -10,7 +10,7 @@ SEARCH_SPACE_STACK_NUM_LAYERS: list = [2, 4, 8, 16, 32]
 
 SEARCH_SPACE_STACK_DROPOUT_PROBABILITY: list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
-SEARCH_SPACE_STACK_LAYER_NORM_POSITION: list = [
+SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.DISABLED,
     LayerNormPositionOptions.DEFAULT,
     LayerNormPositionOptions.BEFORE,
@@ -35,7 +35,7 @@ SEARCH_SPACE_WEIGHT_OPTION: list = [
     SoftWeightedBankDynamicWeightConfig,
 ]
 
-SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH: list = [
+SEARCH_SPACE_GENERATOR_DEPTH: list = [
     DynamicDepthOptions.DEPTH_OF_ONE,
     DynamicDepthOptions.DEPTH_OF_TWO,
     DynamicDepthOptions.DEPTH_OF_FOUR,

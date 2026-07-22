@@ -45,18 +45,10 @@ _RUNTIME_PREFIXES = (
     "INPUT_LAYER_",
     "OUTPUT_LAYER_",
 )
-_EXTRA_RUNTIME_CONSTANTS = {"ROW_MASK_OPTION"}
-_ALIASES = {
-    "gate_flag": "stack_gate_flag",
-    "halting_flag": "stack_halting_flag",
-    "stack_layer_norm_position": "layer_norm_position",
-    "weight_generator_depth": "generator_depth",
-}
-_CANONICAL_CONSTANT_KEYS = {
-    "GATE_FLAG": "stack_gate_flag",
-    "HALTING_FLAG": "stack_halting_flag",
-    "STACK_LAYER_NORM_POSITION": "layer_norm_position",
-    "WEIGHT_GENERATOR_DEPTH": "generator_depth",
+_EXTRA_RUNTIME_CONSTANTS = {
+    "GENERATOR_DEPTH",
+    "LAYER_NORM_POSITION",
+    "ROW_MASK_OPTION",
 }
 
 
@@ -74,7 +66,7 @@ def _flat_defaults() -> tuple[dict[str, object], dict[str, str]]:
     for name, value in vars(config).items():
         if not name.isupper() or not _is_runtime_constant(name):
             continue
-        key = _CANONICAL_CONSTANT_KEYS.get(name, name.lower())
+        key = name.lower()
         values[key] = value
         constants[key] = name
     values["shared_gate_config"] = None
@@ -83,7 +75,7 @@ def _flat_defaults() -> tuple[dict[str, object], dict[str, str]]:
 
 _FLAT_DEFAULTS, _CONSTANT_BY_KEY = _flat_defaults()
 _CONFIG_TYPES = get_type_hints(config)
-_ACCEPTED_KEYS = frozenset(_FLAT_DEFAULTS) | frozenset(_ALIASES)
+_ACCEPTED_KEYS = frozenset(_FLAT_DEFAULTS)
 
 
 def _expected_type(key: str):
@@ -135,11 +127,11 @@ def _normalize_overrides(overrides: Mapping[str, object]) -> dict[str, object]:
                 f"{_PACKAGE}: unknown runtime key {supplied_key!r}; "
                 f"accepted keys: {accepted}"
             )
-        key = _ALIASES.get(raw_key, raw_key)
-        if key in normalized and sources[key] != raw_key:
+        key = raw_key
+        if key in normalized:
             raise ValueError(
-                f"{_PACKAGE}: conflicting aliases {sources[key]!r} and "
-                f"{raw_key!r} target {key!r}"
+                f"{_PACKAGE}: conflicting normalized runtime keys "
+                f"{sources[key]!r} and {supplied_key!r}"
             )
         expected = _expected_type(key)
         if not _matches_type(value, expected):
@@ -148,7 +140,7 @@ def _normalize_overrides(overrides: Mapping[str, object]) -> dict[str, object]:
                 f"{type(value).__name__}; expected {_type_name(expected)}"
             )
         normalized[key] = value
-        sources[key] = raw_key
+        sources[key] = supplied_key
     return normalized
 
 
@@ -323,7 +315,7 @@ def _projection(
 
     return AdaptiveProjectionOptions(
         weight_option=value("weight_option"),  # type: ignore[arg-type]
-        weight_generator_depth=value("weight_generator_depth"),  # type: ignore[arg-type]
+        generator_depth=value("generator_depth"),  # type: ignore[arg-type]
         weight_decay_schedule=value("weight_decay_schedule"),  # type: ignore[arg-type]
         weight_decay_rate=value("weight_decay_rate"),  # type: ignore[arg-type]
         weight_decay_warmup_batches=value("weight_decay_warmup_batches"),  # type: ignore[arg-type]
@@ -417,13 +409,13 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
             max_steps=values["recurrent_max_steps"],  # type: ignore[arg-type]
             layer_norm_position=values["recurrent_layer_norm_position"],  # type: ignore[arg-type]
             gate=GateOptions(
-                enabled=values["recurrent_gate_flag"],  # type: ignore[arg-type]
+                enabled=values["recurrent_stack_gate_flag"],  # type: ignore[arg-type]
                 option=values["recurrent_gate_option"],  # type: ignore[arg-type]
                 activation=values["recurrent_gate_activation"],  # type: ignore[arg-type]
                 stack=recurrent_gate_stack,
             ),
             halting=HaltingOptions(
-                enabled=values["recurrent_halting_flag"],  # type: ignore[arg-type]
+                enabled=values["recurrent_stack_halting_flag"],  # type: ignore[arg-type]
                 threshold=values["recurrent_halting_threshold"],  # type: ignore[arg-type]
                 dropout_probability=values["recurrent_halting_dropout"],  # type: ignore[arg-type]
                 hidden_state_mode=values["recurrent_halting_hidden_state_mode"],  # type: ignore[arg-type]
