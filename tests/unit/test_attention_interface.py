@@ -33,6 +33,7 @@ EXPECTED_EXPORTS = (
     "MixtureOfAttentionHeadsConfig",
     "MixerAttentionConfig",
     "AttentionLayerState",
+    "AttentionMonitorCallback",
 )
 
 EXPECTED_OWNERS = {
@@ -45,6 +46,7 @@ EXPECTED_OWNERS = {
     "MixtureOfAttentionHeadsConfig": "emperor.attention._variants.mixture.config",
     "MixerAttentionConfig": "emperor.attention._variants.mixer.config",
     "AttentionLayerState": "emperor.attention._state",
+    "AttentionMonitorCallback": "emperor.attention._monitoring.callback",
 }
 
 BASE_CONFIG_FIELDS = (
@@ -335,7 +337,7 @@ def _clone_inputs_preserving_aliases(
 
 
 class TestAttentionPublicInterface(unittest.TestCase):
-    def test_root_interface_eagerly_exports_only_lightweight_records(self):
+    def test_root_interface_eagerly_exports_public_records_and_callbacks(self):
         completed = subprocess.run(
             [
                 sys.executable,
@@ -446,17 +448,16 @@ print(json.dumps({
             result["expected_eager_modules"],
             dict.fromkeys(result["expected_eager_modules"], True),
         )
-        self.assertEqual(
-            result["heavy_modules"],
-            dict.fromkeys(result["heavy_modules"], False),
+        self.assertTrue(result["heavy_modules"]["emperor.attention._runtime"])
+        self.assertTrue(
+            result["heavy_modules"]["emperor.attention._monitoring.callback"]
         )
-        self.assertEqual(
-            result["private_exports"],
-            dict.fromkeys(result["private_exports"], False),
-        )
+        expected_private_exports = dict.fromkeys(result["private_exports"], False)
+        expected_private_exports["AttentionMonitorCallback"] = True
+        self.assertEqual(result["private_exports"], expected_private_exports)
         self.assertEqual(
             result["runtime_loaded"],
-            {"emperor.experts": False, "lightning": False, "torch": False},
+            {"emperor.experts": False, "lightning": True, "torch": True},
         )
         self.assertEqual(
             result["shortcut_attributes"],
@@ -475,7 +476,10 @@ print(json.dumps({
             monitoring.AttentionMonitorCallback.__module__,
             "emperor.attention._monitoring.callback",
         )
-        self.assertFalse(hasattr(attention, "AttentionMonitorCallback"))
+        self.assertIs(
+            attention.AttentionMonitorCallback,
+            monitoring.AttentionMonitorCallback,
+        )
 
     def test_config_state_runtime_and_enum_schemas_are_preserved(self):
         self.assertEqual(

@@ -20,6 +20,7 @@ EXPECTED_EXPORTS = (
     "MixtureOfAttentionHeadsConfig",
     "MixerAttentionConfig",
     "AttentionLayerState",
+    "AttentionMonitorCallback",
 )
 
 
@@ -89,7 +90,6 @@ class TestAttentionExports(unittest.TestCase):
 
         for name in (
             "AttentionMasks",
-            "AttentionMonitorCallback",
             "AttentionRuntimeLayout",
             "IndependentAttention",
             "MixtureOfAttentionHeads",

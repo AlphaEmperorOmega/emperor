@@ -4,12 +4,12 @@ from dataclasses import dataclass
 import torch
 
 from emperor.attention import (
+    AttentionMonitorCallback,
     IndependentAttentionConfig,
     MixerAttentionConfig,
 )
 from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._variants.mixer.layer import MixerAttention
-from emperor.attention.monitoring import AttentionMonitorCallback
 from emperor.config import ConfigBase, optional_field
 from emperor.layers import (
     ActivationOptions,

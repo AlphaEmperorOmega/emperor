@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import torch
 
 from emperor.attention import (
+    AttentionMonitorCallback,
     IndependentAttentionConfig,
     SelfAttentionConfig,
 )
@@ -23,7 +24,6 @@ from emperor.attention._runtime import QKV
 from emperor.attention._variants.mixture.monitoring import (
     _MixtureOfAttentionHeadsMonitorAdapter,
 )
-from emperor.attention.monitoring import AttentionMonitorCallback
 from support.attention import build_attention_config
 from support.monitor import (
     CaptureLightningModule,
