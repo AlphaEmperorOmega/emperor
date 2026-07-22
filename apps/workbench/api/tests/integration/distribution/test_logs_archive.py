@@ -1,26 +1,19 @@
 from __future__ import annotations
 
-import os
-import subprocess
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 
-from tests.support import REPOSITORY_ROOT
-
-REPO_ROOT = REPOSITORY_ROOT
-SCRIPT_PATH = REPO_ROOT / "download_logs.sh"
+from models.project_cli.logs_archive import archive_logs
 
 
 def create_minimal_project(root: Path) -> None:
-    (root / "experiment.sh").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
     (root / "pyproject.toml").write_text("[project]\nname = 'test'\n", encoding="utf-8")
     (root / "src" / "models").mkdir(parents=True)
 
 
-@unittest.skipUnless(os.name == "posix", "download_logs.sh is a Unix wrapper")
-class DownloadLogsScriptTests(unittest.TestCase):
+class LogsArchiveTests(unittest.TestCase):
     def test_selected_log_folder_archive_preserves_folder_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -30,13 +23,11 @@ class DownloadLogsScriptTests(unittest.TestCase):
             event_file.write_text("events", encoding="utf-8")
             output = root / "selected.zip"
 
-            subprocess.run(
-                ["bash", str(SCRIPT_PATH), "my_experiment", str(output)],
-                cwd=root,
-                check=True,
-                capture_output=True,
-                text=True,
+            result = archive_logs(
+                ["my_experiment", str(output)],
+                repository_root=root,
             )
+            self.assertEqual(result, 0)
 
             with zipfile.ZipFile(output) as archive:
                 names = set(archive.namelist())
@@ -52,13 +43,11 @@ class DownloadLogsScriptTests(unittest.TestCase):
             event_file.write_text("events", encoding="utf-8")
             output = root / "all.zip"
 
-            subprocess.run(
-                ["bash", str(SCRIPT_PATH), "logs", str(output)],
-                cwd=root,
-                check=True,
-                capture_output=True,
-                text=True,
+            result = archive_logs(
+                ["logs", str(output)],
+                repository_root=root,
             )
+            self.assertEqual(result, 0)
 
             with zipfile.ZipFile(output) as archive:
                 names = set(archive.namelist())
