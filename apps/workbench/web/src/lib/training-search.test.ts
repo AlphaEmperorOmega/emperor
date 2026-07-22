@@ -22,9 +22,9 @@ const axes: SearchAxis[] = [
     locked: false,
   },
   {
-    key: "stack_layer_norm_position",
-    configKey: "STACK_LAYER_NORM_POSITION",
-    searchKey: "SEARCH_SPACE_STACK_LAYER_NORM_POSITION",
+    key: "layer_norm_position",
+    configKey: "LAYER_NORM_POSITION",
+    searchKey: "SEARCH_SPACE_LAYER_NORM_POSITION",
     label: "stack layer norm position",
     section: "Layer Stack Options",
     type: "enum",
@@ -59,7 +59,7 @@ describe("training search lock handling", () => {
       mode: "grid",
       selectedValues: {
         hidden_dim: [64],
-        stack_layer_norm_position: ["BEFORE", "AFTER"],
+        layer_norm_position: ["BEFORE", "AFTER"],
       },
       randomSamples: 10,
     };
@@ -82,7 +82,7 @@ describe("training search lock handling", () => {
       mode: "grid",
       selectedValues: {
         hidden_dim: [64],
-        stack_layer_norm_position: ["BEFORE", "AFTER"],
+        layer_norm_position: ["BEFORE", "AFTER"],
       },
       randomSamples: 10,
     };
@@ -113,7 +113,7 @@ describe("training search lock handling", () => {
     const search: TrainingSearchState = {
       mode: "grid",
       selectedValues: {
-        stack_layer_norm_position: ["BEFORE"],
+        layer_norm_position: ["BEFORE"],
       },
       randomSamples: 10,
     };

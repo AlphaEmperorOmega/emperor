@@ -96,9 +96,9 @@ function modelCatalogCalls(
 }
 
 const layerNormSearchAxis = {
-  key: "stack_layer_norm_position",
-  configKey: "STACK_LAYER_NORM_POSITION",
-  searchKey: "SEARCH_SPACE_STACK_LAYER_NORM_POSITION",
+  key: "layer_norm_position",
+  configKey: "LAYER_NORM_POSITION",
+  searchKey: "SEARCH_SPACE_LAYER_NORM_POSITION",
   label: "stack layer norm position",
   section: "Layer Stack Options",
   type: "enum",
@@ -3435,7 +3435,7 @@ describe("WorkbenchApp Training And Preview", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
+      within(details).getByLabelText(/^search axis layer_norm_position$/i),
     ).toBeDisabled();
     expect(
       within(details).getByText(/Locked value: AFTER by POST_NORM/i),
@@ -3471,7 +3471,7 @@ describe("WorkbenchApp Training And Preview", () => {
           (trainingBodies[0] as { search?: { values?: Record<string, unknown[]> } })
             .search?.values ?? {},
         ),
-      ).not.toContain("stack_layer_norm_position");
+      ).not.toContain("layer_norm_position");
     });
   });
 
@@ -3488,7 +3488,7 @@ describe("WorkbenchApp Training And Preview", () => {
     await user.click(within(details).getByRole("radio", { name: /^grid$/i }));
     await user.click(within(details).getByLabelText(/^search axis hidden_dim$/i));
     await user.click(
-      within(details).getByLabelText(/^search axis stack_layer_norm_position$/i),
+      within(details).getByLabelText(/^search axis layer_norm_position$/i),
     );
 
     expect(screen.getByRole("button", { name: /start training/i })).toBeEnabled();
@@ -3514,7 +3514,7 @@ describe("WorkbenchApp Training And Preview", () => {
         search: {
           mode: "grid",
           values: {
-            stack_layer_norm_position: ["BEFORE", "AFTER"],
+            layer_norm_position: ["BEFORE", "AFTER"],
           },
         },
       });

@@ -329,7 +329,7 @@ const canonicalStackFixtureFields = [
     choices: ["DISABLED", "RELU", "GELU", "SIGMOID", "TANH"],
   }),
   configFixtureField({
-    key: "stack_layer_norm_position",
+    key: "layer_norm_position",
     section: "Layer Stack Options",
     type: "enum",
     default: "BEFORE",
@@ -362,8 +362,10 @@ function stackFixtureField(
       choices: [],
     });
   }
+  const canonicalKey =
+    suffix === "layer_norm_position" ? suffix : `stack_${suffix}`;
   const canonical = canonicalStackFixtureFields.find(
-    (field) => field.key === `stack_${suffix}`,
+    (field) => field.key === canonicalKey,
   );
 
   if (!canonical) {
