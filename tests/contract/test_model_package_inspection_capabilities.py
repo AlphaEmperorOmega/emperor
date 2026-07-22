@@ -102,7 +102,9 @@ class ModelPackageInspectionCapabilityTests(unittest.TestCase):
             ),
             128,
         )
-        self.assertEqual(config_key_to_model_param("GATE_FLAG"), "stack_gate_flag")
+        self.assertEqual(
+            config_key_to_model_param("STACK_GATE_FLAG"), "stack_gate_flag"
+        )
 
     def test_selected_package_supplies_ordered_configuration_field_metadata(
         self,

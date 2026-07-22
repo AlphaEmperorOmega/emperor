@@ -287,7 +287,7 @@ def configuration_schema(
 ) -> ConfigurationSchema:
     try:
         config_module = package.runtime_defaults
-        search_space_module = package.metadata.search_space_module
+        search_space_module = package.metadata.search_space
     except Exception as exc:
         raise _model_package_failure(package.catalog_key, exc) from exc
     locks = preset_locks(package, preset)
@@ -388,7 +388,7 @@ def search_space_schema(
     lock_details_by_param = _preset_lock_details(package, preset, presets)
     try:
         config_module = package.runtime_defaults
-        search_space_module = package.metadata.search_space_module
+        search_space_module = package.metadata.search_space
         metadata = package.configuration_field_metadata(include_search_space=True)
     except ValueError as exc:
         raise InspectionError(str(exc)) from exc

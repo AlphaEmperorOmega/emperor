@@ -31,11 +31,7 @@ def _instantiate_inspection_model(
 ):
     preset, configuration = _build_configuration(package, request)
     try:
-        model_type = package.model_class
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
-    try:
-        model = model_type(configuration)
+        model = package.build_model(configuration)
     except Exception as exc:
         raise InspectionError(
             f"Failed to instantiate model '{package.catalog_key}' preset "
