@@ -1334,7 +1334,7 @@ def _run_runtime_subcommand(arguments: list[str]) -> int:
         return _run_venv(["-m", "models.project_cli", *arguments[1:]])
     if command == "test":
         return _run_venv(["-m", "models.project_cli", "test", *arguments[1:]])
-    if command == "logs-archive":
+    if command == "logs:archive":
         return _run_venv(["-m", "models.project_cli", "logs:archive", *arguments[1:]])
     if command == "python":
         forwarded = arguments[1:]
@@ -1345,7 +1345,7 @@ def _run_runtime_subcommand(arguments: list[str]) -> int:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    delegated_commands = {"experiment", "test", "logs-archive", "python"}
+    delegated_commands = {"experiment", "test", "logs:archive", "python"}
     if argv and argv[0] in delegated_commands:
         return argparse.Namespace(command=argv[0], arguments=argv[1:])
 

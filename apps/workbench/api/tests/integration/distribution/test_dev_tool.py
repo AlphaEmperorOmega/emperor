@@ -154,7 +154,7 @@ class PortableLauncherTests(unittest.TestCase):
         self.assertEqual(completed.stdout.count("stopped"), 2)
 
     def test_runtime_subcommands_forward_help_instead_of_consuming_it(self) -> None:
-        for command in ("experiment", "test", "logs-archive", "python"):
+        for command in ("experiment", "test", "logs:archive", "python"):
             with self.subTest(command=command):
                 parsed = emperor_dev.parse_args([command, "--help"])
                 self.assertEqual(parsed.command, command)
