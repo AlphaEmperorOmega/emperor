@@ -95,6 +95,7 @@ class TransformerValidator(ValidatorBase):
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
         cls._validate_layer_norm_position(model.layer_norm_position)
+        cls._validate_encoder_attention_config(model.cfg.attention_config)
 
     @classmethod
     def validate_decoder_layer(cls, model: "TransformerDecoderLayer") -> None:
@@ -102,6 +103,72 @@ class TransformerValidator(ValidatorBase):
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
         cls._validate_layer_norm_position(model.layer_norm_position)
+        cls._validate_decoder_self_attention_config(model.cfg.self_attention_config)
+        cls._validate_decoder_cross_attention_config(model.cfg.cross_attention_config)
+
+    @staticmethod
+    def _validate_encoder_attention_config(attention_config) -> None:
+        from emperor.attention import (
+            MixerAttentionConfig,
+            MixtureOfAttentionHeadsConfig,
+            SelfAttentionConfig,
+        )
+
+        if not isinstance(
+            attention_config,
+            (
+                SelfAttentionConfig,
+                MixtureOfAttentionHeadsConfig,
+                MixerAttentionConfig,
+            ),
+        ):
+            raise TypeError(
+                "attention_config must be a SelfAttentionConfig, "
+                "MixtureOfAttentionHeadsConfig, or MixerAttentionConfig, got "
+                f"{type(attention_config).__name__}."
+            )
+
+    @staticmethod
+    def _validate_decoder_self_attention_config(attention_config) -> None:
+        from emperor.attention import (
+            MixerAttentionConfig,
+            MixtureOfAttentionHeadsConfig,
+            SelfAttentionConfig,
+        )
+
+        if not isinstance(
+            attention_config,
+            (
+                SelfAttentionConfig,
+                MixtureOfAttentionHeadsConfig,
+                MixerAttentionConfig,
+            ),
+        ):
+            raise TypeError(
+                "self_attention_config must be a SelfAttentionConfig, "
+                "MixtureOfAttentionHeadsConfig, or MixerAttentionConfig, got "
+                f"{type(attention_config).__name__}."
+            )
+
+    @staticmethod
+    def _validate_decoder_cross_attention_config(attention_config) -> None:
+        from emperor.attention import (
+            IndependentAttentionConfig,
+            MixtureOfAttentionHeadsConfig,
+        )
+
+        if attention_config is None:
+            return
+        if not isinstance(
+            attention_config,
+            (IndependentAttentionConfig, MixtureOfAttentionHeadsConfig),
+        ):
+            raise TypeError(
+                "cross_attention_config must be an IndependentAttentionConfig, "
+                "MixtureOfAttentionHeadsConfig, or None; MixerAttentionConfig "
+                "is self-processing only. Got "
+                f"{type(attention_config).__name__}."
+            )
 
     @staticmethod
     def _validate_layer_norm_position(layer_norm_position) -> None:

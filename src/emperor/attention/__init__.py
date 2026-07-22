@@ -5,6 +5,7 @@ from emperor.attention._state import AttentionLayerState
 from emperor.attention._variants.independent.config import (
     IndependentAttentionConfig,
 )
+from emperor.attention._variants.mixer.config import MixerAttentionConfig
 from emperor.attention._variants.mixture.config import (
     MixtureOfAttentionHeadsConfig,
 )
@@ -19,5 +20,6 @@ __all__ = (
     "SelfAttentionProjectionStrategy",
     "IndependentAttentionConfig",
     "MixtureOfAttentionHeadsConfig",
+    "MixerAttentionConfig",
     "AttentionLayerState",
 )

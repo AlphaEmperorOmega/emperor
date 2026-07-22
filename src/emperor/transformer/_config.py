@@ -7,6 +7,7 @@ from emperor.layers import LayerConfig
 if TYPE_CHECKING:
     from emperor.attention import (
         IndependentAttentionConfig,
+        MixerAttentionConfig,
         MixtureOfAttentionHeadsConfig,
         SelfAttentionConfig,
     )
@@ -18,7 +19,9 @@ if TYPE_CHECKING:
     )
     from emperor.transformer._feed_forward import FeedForwardConfig
 
-    DecoderSelfAttentionConfig = SelfAttentionConfig | MixtureOfAttentionHeadsConfig
+    DecoderSelfAttentionConfig = (
+        SelfAttentionConfig | MixtureOfAttentionHeadsConfig | MixerAttentionConfig
+    )
     DecoderCrossAttentionConfig = (
         IndependentAttentionConfig | MixtureOfAttentionHeadsConfig
     )
@@ -38,8 +41,8 @@ class TransformerEncoderLayerConfig(ConfigBase):
     residual_config: "ResidualConfig | None" = optional_field(
         "Optional residual connection config applied to every encoder sub-block join."
     )
-    attention_config: "SelfAttentionConfig | MixtureOfAttentionHeadsConfig | None" = (
-        optional_field("Supported attention configuration for the encoder sub-block.")
+    attention_config: "SelfAttentionConfig | MixtureOfAttentionHeadsConfig | MixerAttentionConfig | None" = optional_field(  # noqa: E501
+        "Supported self-processing configuration for the encoder attention sub-block."
     )
     feed_forward_config: "FeedForwardConfig | None" = optional_field(
         "Feed-forward configuration for the encoder sub-block."

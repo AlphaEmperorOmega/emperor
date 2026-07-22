@@ -13,6 +13,7 @@ import torch
 from emperor.attention import (
     AttentionLayerState,
     IndependentAttentionConfig,
+    MixerAttentionConfig,
     MixtureOfAttentionHeadsConfig,
     MultiHeadAttentionConfig,
     SelfAttentionConfig,
@@ -30,6 +31,7 @@ EXPECTED_EXPORTS = (
     "SelfAttentionProjectionStrategy",
     "IndependentAttentionConfig",
     "MixtureOfAttentionHeadsConfig",
+    "MixerAttentionConfig",
     "AttentionLayerState",
 )
 
@@ -41,6 +43,7 @@ EXPECTED_OWNERS = {
     ),
     "IndependentAttentionConfig": ("emperor.attention._variants.independent.config"),
     "MixtureOfAttentionHeadsConfig": "emperor.attention._variants.mixture.config",
+    "MixerAttentionConfig": "emperor.attention._variants.mixer.config",
     "AttentionLayerState": "emperor.attention._state",
 }
 
@@ -349,6 +352,7 @@ expected_eager_modules = (
     "emperor.attention._variants.independent.config",
     "emperor.attention._variants.self_attention.config",
     "emperor.attention._variants.mixture.config",
+    "emperor.attention._variants.mixer.config",
 )
 heavy_modules = (
     "emperor.attention._base",
@@ -380,6 +384,8 @@ heavy_modules = (
     "emperor.attention._variants.mixture.reshaping",
     "emperor.attention._variants.mixture.validation",
     "emperor.attention._variants.mixture.zero_attention",
+    "emperor.attention._variants.mixer.layer",
+    "emperor.attention._variants.mixer.validation",
 )
 runtime_loaded = {
     "emperor.experts": "emperor.experts" in sys.modules,
@@ -405,6 +411,7 @@ print(json.dumps({
             "IndependentAttention",
             "IndependentProcessor",
             "MixtureOfAttentionHeads",
+            "MixerAttention",
             "MultiHeadAttentionAbstract",
             "MultiHeadAttentionValidator",
             "QKV",
@@ -486,6 +493,16 @@ print(json.dumps({
         self.assertEqual(
             tuple(field.name for field in fields(MixtureOfAttentionHeadsConfig)),
             (*BASE_CONFIG_FIELDS, "experts_config", "use_kv_expert_models_flag"),
+        )
+        self.assertEqual(
+            tuple(field.name for field in fields(MixerAttentionConfig)),
+            (
+                "embedding_dim",
+                "sequence_length",
+                "batch_first_flag",
+                "causal_attention_mask_flag",
+                "mixing_model_config",
+            ),
         )
         self.assertEqual(
             tuple(field.name for field in fields(AttentionLayerState)),

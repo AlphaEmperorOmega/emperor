@@ -18,6 +18,7 @@ EXPECTED_EXPORTS = (
     "SelfAttentionProjectionStrategy",
     "IndependentAttentionConfig",
     "MixtureOfAttentionHeadsConfig",
+    "MixerAttentionConfig",
     "AttentionLayerState",
 )
 
@@ -92,6 +93,7 @@ class TestAttentionExports(unittest.TestCase):
             "AttentionRuntimeLayout",
             "IndependentAttention",
             "MixtureOfAttentionHeads",
+            "MixerAttention",
             "MultiHeadAttentionAbstract",
             "QKV",
             "SelfAttention",
@@ -106,6 +108,7 @@ class TestAttentionExports(unittest.TestCase):
             "emperor.attention._variants",
             "emperor.attention._variants.independent",
             "emperor.attention._variants.mixture",
+            "emperor.attention._variants.mixer",
             "emperor.attention._variants.self_attention",
         ):
             with self.subTest(module=module_name):

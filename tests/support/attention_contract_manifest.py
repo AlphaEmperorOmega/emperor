@@ -358,6 +358,34 @@ ATTENTION_CONTRACT_MANIFEST = {
             "tests.unit.test_attention_mixture_of_attention_heads",
         ),
     ),
+    "emperor.attention._variants.mixer": module_contract(
+        ("private namespace",),
+        "tests.unit.test_attention_model_mixer",
+    ),
+    "emperor.attention._variants.mixer.config": module_contract(
+        ("mixer-attention configuration", "build dispatch"),
+        "tests.unit.test_attention_model_mixer",
+        MixerAttentionConfig=class_contract(
+            ("exact dimensions", "explicit layout", "nested model selection"),
+            "tests.unit.test_attention_model_mixer",
+        ),
+    ),
+    "emperor.attention._variants.mixer.layer": module_contract(
+        ("token-axis model mixing", "attention-shaped forward contract"),
+        "tests.unit.test_attention_model_mixer",
+        MixerAttention=class_contract(
+            ("self processing", "layout restoration", "auxiliary loss"),
+            "tests.unit.test_attention_model_mixer",
+        ),
+    ),
+    "emperor.attention._variants.mixer.validation": module_contract(
+        ("mixer-attention configuration and runtime validation",),
+        "tests.unit.test_attention_model_mixer",
+        MixerAttentionValidator=class_contract(
+            ("fixed shape", "unsupported inputs", "nested output contract"),
+            "tests.unit.test_attention_model_mixer",
+        ),
+    ),
 }
 
 
