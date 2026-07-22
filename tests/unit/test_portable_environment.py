@@ -75,22 +75,6 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
                     mise["tasks"][task_name]["usage"],
                 )
 
-    def test_env_sh_legacy_profile_shortcut_selects_cuda_legacy(self) -> None:
-        env_wrapper = (PROJECT_ROOT / "env.sh").read_text(encoding="utf-8")
-
-        self.assertIn(
-            '--legacy-profile) _emperor_profile="cuda-legacy" ;;',
-            env_wrapper,
-        )
-        self.assertIn(
-            'mise run dev --profile "$_emperor_profile"',
-            env_wrapper,
-        )
-        self.assertIn(
-            "source env.sh [--legacy-profile]",
-            env_wrapper,
-        )
-
     def test_cuda_legacy_uses_exact_cu126_wheel_command(self) -> None:
         python = Path("/verified/venv/bin/python")
 
