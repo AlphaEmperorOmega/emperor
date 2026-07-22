@@ -9,7 +9,6 @@ from lightning.pytorch.callbacks import EarlyStopping
 import models.bert.linear.config as bert_config
 import models.experts.linear.config as expert_linear_config
 import models.gpt.linear.config as gpt_config
-import models.linears.linear.config as linears_linear_config
 import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.vit.linear.config as vit_config
 from emperor.augmentations.adaptive_parameters import (
@@ -22,37 +21,44 @@ from emperor.datasets.image.classification import Mnist
 from emperor.halting import HaltingMonitorCallback
 from emperor.layers import ActivationOptions, LayerGateOptions
 from emperor.linears import LinearMonitorCallback
-from model_runtime.packages import GridSearch
-from models.config_overrides import iter_supported_config_keys, print_config_options
-from models.experts.linear import (
+from model_runtime.packages import GridSearch, iter_supported_config_keys
+from models.catalog import model_package
+from models.cli_selection import (
+    CliSelection,
+    resolve_cli_selection,
+    resolve_monitor_callbacks,
+)
+from models.config_overrides import print_config_options
+from models.experiment_cli_parser import get_experiment_parser
+from models.experts.linear.presets import (
     ExperimentPreset as ExpertLinearExperimentPreset,
 )
-from models.linears.linear import ExperimentPreset as LinearExperimentPreset
+from models.linears.linear.presets import (
+    ExperimentPreset as LinearExperimentPreset,
+)
 from models.linears.linear.presets import (
     ExperimentPresets as LinearExperimentPresets,
 )
-from models.linears.linear_adaptive import ExperimentPreset
-from models.linears.linear_adaptive.presets import Experiment, ExperimentPresets
-from models.parametric.parametric_vector import (
-    ExperimentPreset as ParametricVectorExperimentPreset,
+from models.linears.linear_adaptive.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
 )
-from models.parser import (
-    ExperimentMode,
-    get_experiment_parser,
-    resolve_experiment_mode,
-    resolve_monitor_callbacks,
+from models.parametric.parametric_vector.presets import (
+    ExperimentPreset as ParametricVectorExperimentPreset,
 )
 
 
 class ExperimentConfigOverrideTestCase:
     def make_parser(self):
-        return get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.linears.linear_adaptive",
-        )
+        return get_experiment_parser(model_package("linears/linear_adaptive"))
 
     def resolve_args(self, args):
-        return resolve_experiment_mode(args, ExperimentPreset)
+        return resolve_cli_selection(
+            args,
+            model_package("linears/linear_adaptive"),
+            ExperimentPreset,
+        )
 
 
 class TestExperimentConfigOverrideParsing(
@@ -67,7 +73,7 @@ class TestExperimentConfigOverrideParsing(
 
         mode = self.resolve_args(args)
 
-        self.assertIsInstance(mode, ExperimentMode)
+        self.assertIsInstance(mode, CliSelection)
         self.assertIs(mode.preset, ExperimentPreset.SINGLE_MODEL_WEIGHT)
         self.assertIsNone(mode.selected_presets)
         self.assertIsNone(mode.search_mode)
@@ -104,7 +110,7 @@ class TestExperimentConfigOverrideParsing(
         self.assertIsNone(mode.selected_presets)
         self.assertIsNone(mode.search_mode)
 
-    def test_experiment_mode_fields_document_help_metadata(self):
+    def test_cli_selection_fields_document_help_metadata(self):
         expected_names = [
             "experiment_task",
             "preset",
@@ -117,7 +123,7 @@ class TestExperimentConfigOverrideParsing(
             "monitor_callbacks",
         ]
 
-        mode_fields = fields(ExperimentMode)
+        mode_fields = fields(CliSelection)
 
         self.assertEqual(
             [mode_field.name for mode_field in mode_fields],
@@ -128,7 +134,7 @@ class TestExperimentConfigOverrideParsing(
                 self.assertIsInstance(mode_field.metadata["help"], str)
                 self.assertTrue(mode_field.metadata["help"])
 
-    def test_experiment_mode_does_not_support_tuple_unpacking(self):
+    def test_cli_selection_does_not_support_tuple_unpacking(self):
         args = self.make_parser().parse_args(["--preset", "single-model-weight"])
         mode = self.resolve_args(args)
 
@@ -383,10 +389,8 @@ class TestExperimentConfigOverrideParsing(
                 )
 
     def test_controller_stack_flags_parse_to_builder_params(self):
-        parser = get_experiment_parser(
-            ExpertLinearExperimentPreset.names(),
-            "models.experts.linear",
-        )
+        package = model_package("experts/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -406,7 +410,7 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        mode = resolve_experiment_mode(args, ExpertLinearExperimentPreset)
+        mode = resolve_cli_selection(args, package, ExpertLinearExperimentPreset)
 
         self.assertEqual(mode.config_overrides["gate_stack_hidden_dim"], 32)
         self.assertIs(
@@ -422,10 +426,8 @@ class TestExperimentConfigOverrideParsing(
         self.assertFalse(mode.config_overrides["halting_stack_bias_flag"])
 
     def test_router_stack_flags_parse_without_independent_flag(self):
-        parser = get_experiment_parser(
-            ExpertLinearExperimentPreset.names(),
-            "models.experts.linear",
-        )
+        package = model_package("experts/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -439,17 +441,14 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        mode = resolve_experiment_mode(args, ExpertLinearExperimentPreset)
+        mode = resolve_cli_selection(args, package, ExpertLinearExperimentPreset)
 
         self.assertEqual(mode.config_overrides["router_stack_hidden_dim"], 40)
         self.assertEqual(mode.config_overrides["router_stack_num_layers"], 3)
         self.assertFalse(mode.config_overrides["router_bias_flag"])
 
     def test_router_stack_independent_flag_is_rejected(self):
-        parser = get_experiment_parser(
-            ExpertLinearExperimentPreset.names(),
-            "models.experts.linear",
-        )
+        parser = get_experiment_parser(model_package("experts/linear"))
 
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
@@ -463,10 +462,7 @@ class TestExperimentConfigOverrideParsing(
                 )
 
     def test_legacy_controller_stack_flags_are_rejected(self):
-        parser = get_experiment_parser(
-            ExpertLinearExperimentPreset.names(),
-            "models.experts.linear",
-        )
+        parser = get_experiment_parser(model_package("experts/linear"))
         removed_flags = [
             "--gate-" + "hidden-dim",
             "--gate-" + "layer-norm-position",
@@ -491,7 +487,7 @@ class TestExperimentConfigOverrideParsing(
 
     def test_monitor_resolver_builds_callbacks_for_valid_names(self):
         callbacks = resolve_monitor_callbacks(
-            linears_linear_config,
+            model_package("linears/linear"),
             ["linear", "halting"],
         )
 
@@ -505,7 +501,7 @@ class TestExperimentConfigOverrideParsing(
 
     def test_monitor_resolver_deduplicates_repeated_names(self):
         callbacks = resolve_monitor_callbacks(
-            linears_linear_config,
+            model_package("linears/linear"),
             ["linear", "linear", "halting", "linear"],
         )
 
@@ -521,21 +517,20 @@ class TestExperimentConfigOverrideParsing(
         with self.assertRaisesRegex(
             ValueError,
             (
-                r"Unknown --monitors: \['does-not-exist'\]\. "
+                r"Unknown --monitors for model 'linears/linear': "
+                r"does-not-exist\. "
                 r"Valid monitors: halting, layer-controller, linear, memory, "
                 r"recurrent-layer"
             ),
         ):
             resolve_monitor_callbacks(
-                linears_linear_config,
+                model_package("linears/linear"),
                 ["linear", "does-not-exist"],
             )
 
-    def test_cli_monitor_names_are_deduplicated_on_experiment_mode(self):
-        parser = get_experiment_parser(
-            LinearExperimentPreset.names(),
-            "models.linears.linear",
-        )
+    def test_cli_monitor_names_are_deduplicated_on_cli_selection(self):
+        package = model_package("linears/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -547,7 +542,7 @@ class TestExperimentConfigOverrideParsing(
             ]
         )
 
-        mode = resolve_experiment_mode(args, LinearExperimentPreset)
+        mode = resolve_cli_selection(args, package, LinearExperimentPreset)
 
         self.assertEqual(mode.monitor_names, ["linear", "halting"])
         self.assertEqual(
@@ -559,16 +554,15 @@ class TestExperimentConfigOverrideParsing(
         )
 
     def test_runs_cli_can_defer_monitor_callback_construction(self):
-        parser = get_experiment_parser(
-            LinearExperimentPreset.names(),
-            "models.linears.linear",
-        )
+        package = model_package("linears/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             ["--preset", "baseline", "--monitors", "linear", "halting"]
         )
 
-        mode = resolve_experiment_mode(
+        mode = resolve_cli_selection(
             args,
+            package,
             LinearExperimentPreset,
             build_monitor_callbacks=False,
         )
@@ -653,28 +647,26 @@ class TestExperimentConfigOverrideParsing(
             self.resolve_args(args)
 
     def test_explicit_no_search_presets_blocks_preset_search(self):
-        parser = get_experiment_parser(
-            ParametricVectorExperimentPreset.names(),
-            "models.parametric.parametric_vector",
-        )
+        package = model_package("parametric/parametric_vector")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(["--preset", "preset", "--grid-search"])
 
         with self.assertRaises(ValueError):
-            resolve_experiment_mode(
+            resolve_cli_selection(
                 args,
+                package,
                 ParametricVectorExperimentPreset,
                 no_search_presets=["PRESET"],
             )
 
     def test_preset_search_is_allowed_by_default(self):
-        parser = get_experiment_parser(
-            ParametricVectorExperimentPreset.names(),
-            "models.parametric.parametric_vector",
-        )
+        package = model_package("parametric/parametric_vector")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(["--preset", "preset", "--grid-search"])
 
-        mode = resolve_experiment_mode(
+        mode = resolve_cli_selection(
             args,
+            package,
             ParametricVectorExperimentPreset,
         )
 
@@ -718,10 +710,7 @@ class TestExperimentConfigOverrideParsing(
                 "adaptive_" + "submodule_stack_hidden_dim=21,22",
             ),
             (
-                get_experiment_parser(
-                    ExpertLinearExperimentPreset.names(),
-                    "models.experts.linear",
-                ),
+                get_experiment_parser(model_package("experts/linear")),
                 ExpertLinearExperimentPreset,
                 "baseline",
                 "gate_" + "hidden_dim=32,64",
@@ -740,7 +729,12 @@ class TestExperimentConfigOverrideParsing(
                     ]
                 )
                 with self.assertRaises(argparse.ArgumentTypeError):
-                    resolve_experiment_mode(args, preset_enum)
+                    package = (
+                        model_package("linears/linear_adaptive")
+                        if preset_enum is ExperimentPreset
+                        else model_package("experts/linear")
+                    )
+                    resolve_cli_selection(args, package, preset_enum)
 
     def test_fixed_override_and_search_axis_conflict_raises(self):
         args = self.make_parser().parse_args(
@@ -764,10 +758,10 @@ class TestExperimentConfigOverrideParsing(
         vit_keys = set(iter_supported_config_keys(vit_config))
         removed_bias_constant = "BIAS" + "_FLAG"
 
-        self.assertIn("GATE_FLAG", bert_keys)
+        self.assertIn("STACK_GATE_FLAG", bert_keys)
         self.assertNotIn("GATE_HIDDEN_DIM", bert_keys)
         self.assertIn("GATE_STACK_HIDDEN_DIM", bert_keys)
-        self.assertIn("HALTING_FLAG", bert_keys)
+        self.assertIn("STACK_HALTING_FLAG", bert_keys)
         self.assertNotIn("HALTING_HIDDEN_DIM", bert_keys)
         self.assertIn("HALTING_STACK_HIDDEN_DIM", bert_keys)
         self.assertIn("MEMORY_FLAG", bert_keys)
@@ -901,7 +895,10 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
         self.assertFalse(stack_config.layer_config.layer_model_config.bias_flag)
 
     def test_trainer_overrides_disable_early_stopping_without_static_monitors(self):
-        experiment = Experiment(ExperimentPreset.SINGLE_MODEL_WEIGHT)
+        experiment = Experiment(
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
+            model_package=model_package("linears/linear_adaptive"),
+        )
 
         trainer_config = experiment._load_trainer_config(
             {
@@ -928,7 +925,10 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
         self.assertIsNotNone(cfg.experiment_config)
 
     def test_runtime_config_reads_defaults_and_overrides(self):
-        experiment = Experiment(ExperimentPreset.SINGLE_MODEL_WEIGHT)
+        experiment = Experiment(
+            ExperimentPreset.SINGLE_MODEL_WEIGHT,
+            model_package=model_package("linears/linear_adaptive"),
+        )
 
         defaults = experiment._load_runtime_config({})
         overrides = experiment._load_runtime_config(

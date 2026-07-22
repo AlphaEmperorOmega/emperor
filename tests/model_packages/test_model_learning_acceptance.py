@@ -2,16 +2,9 @@ import unittest
 
 import torch
 
-import models.bert.linear.config as bert_config
-import models.gpt.linear.config as gpt_config
-from models.bert.linear._builder_adapter import (
-    linear_builder_kwargs_from_flat as bert_builder_kwargs,
-)
 from models.bert.linear.config_builder import BertLinearConfigBuilder
 from models.bert.linear.model import Model as BertModel
-from models.gpt.linear._builder_adapter import (
-    linear_builder_kwargs_from_flat as gpt_builder_kwargs,
-)
+from models.catalog import model_package
 from models.gpt.linear.config_builder import GptLinearConfigBuilder
 from models.gpt.linear.model import Model as GptModel
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
@@ -47,9 +40,8 @@ class TestModelLearningAcceptance(unittest.TestCase):
             "ff_num_layers": 1,
             "ff_stack_hidden_dim": 16,
         }
-        config = BertLinearConfigBuilder(
-            **bert_builder_kwargs(flat_options, bert_config)
-        ).build()
+        runtime = model_package("bert/linear").bind_runtime_defaults(flat_options)
+        config = BertLinearConfigBuilder(runtime=runtime).build()
         model = BertModel(config)
         input_ids = torch.tensor([[1, 6, 3], [1, 6, 2]])
         labels = torch.tensor([[-100, 2, -100], [-100, 3, -100]])
@@ -81,9 +73,8 @@ class TestModelLearningAcceptance(unittest.TestCase):
             "ff_num_layers": 1,
             "ff_stack_hidden_dim": 16,
         }
-        config = GptLinearConfigBuilder(
-            **gpt_builder_kwargs(flat_options, gpt_config)
-        ).build()
+        runtime = model_package("gpt/linear").bind_runtime_defaults(flat_options)
+        config = GptLinearConfigBuilder(runtime=runtime).build()
         model = GptModel(config)
         batch = (
             torch.tensor([[1, 2, 3], [1, 3, 2]]),
@@ -96,19 +87,22 @@ class TestModelLearningAcceptance(unittest.TestCase):
 
     def test_transformer_overfits_a_fixed_copy_batch(self):
         torch.manual_seed(107)
-        config = TransformerLinearConfigBuilder(
-            batch_size=2,
-            vocab_size=8,
-            model_dim=8,
-            source_sequence_length=4,
-            target_sequence_length=4,
-            encoder_num_layers=1,
-            decoder_num_layers=1,
-            attn_num_heads=2,
-            ff_num_layers=1,
-            ff_stack_hidden_dim=16,
-            dropout_probability=0.0,
-        ).build()
+        runtime = model_package("transformer/linear").bind_runtime_defaults(
+            {
+                "batch_size": 2,
+                "vocab_size": 8,
+                "model_dim": 8,
+                "source_sequence_length": 4,
+                "target_sequence_length": 4,
+                "encoder_num_layers": 1,
+                "decoder_num_layers": 1,
+                "attn_num_heads": 2,
+                "ff_num_layers": 1,
+                "ff_stack_hidden_dim": 16,
+                "dropout_probability": 0.0,
+            }
+        )
+        config = TransformerLinearConfigBuilder(runtime=runtime).build()
         model = TransformerModel(config)
         copy_sequences = torch.tensor([[2, 4, 3], [2, 5, 3]])
         batch = (copy_sequences, copy_sequences.clone())

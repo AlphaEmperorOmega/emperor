@@ -1,11 +1,11 @@
+from __future__ import annotations
+
 import argparse
 
 from emperor.config import BaseOptions
 from emperor.experiments import experiment_task_name
 from model_runtime.packages import ModelPackage
-from models.catalog import public_id_for_module
 from models.config_overrides import add_config_override_arguments
-from models.model_metadata import load_model_metadata_from_module_path
 
 
 class _ExperimentParser(argparse.ArgumentParser):
@@ -17,74 +17,61 @@ def preset_name_to_cli(name: str) -> str:
 
 
 def get_experiment_parser(
-    config_choices: list | ModelPackage | None = None,
-    experiment_package: str | None = None,
+    package: ModelPackage,
+    config_choices: list | None = None,
 ) -> _ExperimentParser:
-    package = config_choices if isinstance(config_choices, ModelPackage) else None
-    if package is not None:
-        config_choices = package.preset_type.names()
+    if not isinstance(package, ModelPackage):
+        raise TypeError("Experiment parsing requires a selected ModelPackage.")
     parser = _ExperimentParser(
         description="Run an experiment with a named configuration.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
-    choices_text = ""
-    cli_config_choices = None
-    if config_choices:
-        cli_config_choices = [preset_name_to_cli(choice) for choice in config_choices]
-        choices_text = "\nAvailable presets:\n" + "\n".join(
-            f"  {choice}" for choice in cli_config_choices
-        )
+    choices = config_choices or package.preset_type.names()
+    cli_config_choices = [preset_name_to_cli(choice) for choice in choices]
+    choices_text = "\nAvailable presets:\n" + "\n".join(
+        f"  {choice}" for choice in cli_config_choices
+    )
 
     preset_group = parser.add_mutually_exclusive_group(required=True)
-
     preset_group.add_argument(
         "--preset",
-        dest="preset",
         type=str,
         help="Name of the experiment preset to run." + choices_text,
         choices=cli_config_choices,
         metavar="PRESET_NAME",
     )
-
     preset_group.add_argument(
         "--presets",
-        dest="presets",
         nargs="+",
         type=str,
         help="Names of experiment presets to run sequentially." + choices_text,
         choices=cli_config_choices,
         metavar="PRESET_NAME",
     )
-
     preset_group.add_argument(
         "--all-presets",
-        dest="all_presets",
         action="store_true",
         help="Run all experiment presets sequentially.",
     )
-
     preset_group.add_argument(
         "--list-config",
         action="store_true",
-        help="Print overridable config flags and defaults, then exit.",
+        help="Print overridable Runtime Defaults flags, then exit.",
     )
 
     search_group = parser.add_mutually_exclusive_group()
-
     search_group.add_argument(
         "--grid-search",
         action="store_true",
         help="Run grid search over all combinations in the search space.",
     )
-
     search_group.add_argument(
         "--random-search",
         type=int,
         metavar="N",
         help="Run random search with N sampled combinations from the search space.",
     )
-
     parser.add_argument(
         "--search-keys",
         nargs="+",
@@ -92,43 +79,31 @@ def get_experiment_parser(
         default=None,
         metavar="KEY",
         help=(
-            "Restrict sweep to named SEARCH_SPACE_* axes "
-            "(e.g. HIDDEN_DIM STACK_NUM_LAYERS).\n"
+            "Restrict sweep to named SEARCH_SPACE_* axes.\n"
             "Requires --grid-search or --random-search."
         ),
     )
-
     parser.add_argument(
         "--logdir",
         type=str,
         default=None,
-        help=(
-            "Custom folder name for storing experiment logs. If not provided, "
-            "the model file name is used.\n"
-            "Use the same folder across models to compare them in TensorBoard."
-        ),
+        help="Optional experiment namespace inside logs/.",
     )
-
     parser.add_argument(
         "--datasets",
         "--dataset",
         nargs="+",
         default=None,
         metavar="DATASET",
-        help=(
-            "Restrict training to one or more lowercase dataset names, "
-            "e.g. mnist cifar10."
-        ),
+        help="Restrict training to one or more catalogued dataset names.",
     )
-
     parser.add_argument(
         "--resume-checkpoint",
         type=str,
         default=None,
         metavar="PATH",
-        help="Resume one training Run from a trusted Lightning checkpoint.",
+        help="Resume one Run from a trusted current-format checkpoint.",
     )
-
     parser.add_argument(
         "--monitors",
         nargs="+",
@@ -136,53 +111,30 @@ def get_experiment_parser(
         metavar="MONITOR",
         help="Enable one or more monitor callbacks for this training run.",
     )
-
     parser.add_argument(
         "--config",
         action="store_true",
-        help="Group config override flags, e.g. --config --num-epochs 30.",
+        help="Group Runtime Defaults override flags.",
     )
 
-    parser.set_defaults(_config_override_dests={})
-    if package is not None or experiment_package is not None:
-        if package is not None:
-            metadata = package.metadata
-            config_module = package.runtime_defaults
-            experiment_id = package.catalog_key
-        else:
-            assert experiment_package is not None
-            metadata = load_model_metadata_from_module_path(experiment_package)
-            config_module = metadata.config_module
-            experiment_id = public_id_for_module(experiment_package)
-            if experiment_id is None:
-                experiment_id = experiment_package.removeprefix("models.").replace(
-                    ".", "/"
-                )
-        task_choices = [
-            experiment_task_name(task) for task in metadata.experiment_tasks
-        ]
-        parser.add_argument(
-            "--experiment-task",
-            type=str,
-            default=None,
-            choices=task_choices,
-            metavar="TASK",
-            help=(
-                "Experiment task to run. Defaults to the model package default "
-                f"task. Available tasks: {', '.join(task_choices)}."
-            ),
-        )
-        parser.set_defaults(
-            _config_module=config_module,
-            _model_metadata=metadata,
-            _search_space_module=metadata.search_space_module,
-            _monitor_options_module=metadata.monitor_options_module,
-            _config_experiment=experiment_id,
-            _config_override_dests=add_config_override_arguments(
-                parser,
-                package or config_module,
-                None if package is not None else metadata.search_space_module,
-            ),
-        )
-
+    metadata = package.metadata
+    task_choices = [experiment_task_name(task) for task in metadata.experiment_tasks]
+    parser.add_argument(
+        "--experiment-task",
+        type=str,
+        default=None,
+        choices=task_choices,
+        metavar="TASK",
+        help=(
+            "Experiment Task to run. Defaults to the Model Package default. "
+            f"Available tasks: {', '.join(task_choices)}."
+        ),
+    )
+    parser.set_defaults(
+        _model_package=package,
+        _config_override_dests=add_config_override_arguments(parser, package),
+    )
     return parser
+
+
+__all__ = ["_ExperimentParser", "get_experiment_parser", "preset_name_to_cli"]

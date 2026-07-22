@@ -4,16 +4,9 @@ import unittest
 import torch
 import torch.nn.functional as F
 
-import models.bert.linear.config as bert_config
-import models.gpt.linear.config as gpt_config
-from models.bert.linear._builder_adapter import (
-    linear_builder_kwargs_from_flat as bert_builder_kwargs,
-)
 from models.bert.linear.config_builder import BertLinearConfigBuilder
 from models.bert.linear.model import Model as BertModel
-from models.gpt.linear._builder_adapter import (
-    linear_builder_kwargs_from_flat as gpt_builder_kwargs,
-)
+from models.catalog import model_package
 from models.gpt.linear.config_builder import GptLinearConfigBuilder
 from models.gpt.linear.model import Model as GptModel
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
@@ -180,9 +173,8 @@ class TestReferenceModelComputation(unittest.TestCase):
             "ff_num_layers": 1,
             "ff_stack_hidden_dim": 8,
         }
-        config = BertLinearConfigBuilder(
-            **bert_builder_kwargs(flat_options, bert_config)
-        ).build()
+        runtime = model_package("bert/linear").bind_runtime_defaults(flat_options)
+        config = BertLinearConfigBuilder(runtime=runtime).build()
         model = BertModel(config).eval()
         parameters = dict(model.named_parameters())
         input_ids = torch.tensor([[1, 2, 3]])
@@ -295,9 +287,8 @@ class TestReferenceModelComputation(unittest.TestCase):
             "ff_num_layers": 1,
             "ff_stack_hidden_dim": 8,
         }
-        config = GptLinearConfigBuilder(
-            **gpt_builder_kwargs(flat_options, gpt_config)
-        ).build()
+        runtime = model_package("gpt/linear").bind_runtime_defaults(flat_options)
+        config = GptLinearConfigBuilder(runtime=runtime).build()
         model = GptModel(config).eval()
         parameters = dict(model.named_parameters())
         input_ids = torch.tensor([[1, 2, 3]])
@@ -361,19 +352,22 @@ class TestReferenceModelComputation(unittest.TestCase):
     def test_transformer_matches_explicit_encoder_decoder_reference(self):
         torch.manual_seed(47)
         hidden_dim = 4
-        config = TransformerLinearConfigBuilder(
-            batch_size=1,
-            vocab_size=8,
-            model_dim=hidden_dim,
-            source_sequence_length=3,
-            target_sequence_length=3,
-            encoder_num_layers=1,
-            decoder_num_layers=1,
-            attn_num_heads=1,
-            ff_num_layers=1,
-            ff_stack_hidden_dim=8,
-            dropout_probability=0.0,
-        ).build()
+        runtime = model_package("transformer/linear").bind_runtime_defaults(
+            {
+                "batch_size": 1,
+                "vocab_size": 8,
+                "model_dim": hidden_dim,
+                "source_sequence_length": 3,
+                "target_sequence_length": 3,
+                "encoder_num_layers": 1,
+                "decoder_num_layers": 1,
+                "attn_num_heads": 1,
+                "ff_num_layers": 1,
+                "ff_stack_hidden_dim": 8,
+                "dropout_probability": 0.0,
+            }
+        )
+        config = TransformerLinearConfigBuilder(runtime=runtime).build()
         model = TransformerModel(config).eval()
         parameters = dict(model.named_parameters())
         source_ids = torch.tensor([[1, 2, 3]])

@@ -18,16 +18,9 @@ from model_runtime.runs import (
     execute_runs,
     plan_runs,
 )
-from models.catalog import model_package, model_package_for_module
+from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.experiment_cli_parser import get_experiment_parser
-from models.parser import (
-    get_experiment_parser as get_legacy_experiment_parser,
-)
-from models.parser import (
-    resolve_dataset_names,
-    resolve_experiment_mode,
-)
 
 
 def _selected_preset_names(package, mode) -> tuple[str, ...]:
@@ -103,80 +96,48 @@ def _checkpoint_continuation(args) -> CheckpointContinuation | None:
 
 
 def run_model_package_cli(
-    catalog_key: str | None = None,
+    catalog_key: str,
     argv: Sequence[str] | None = None,
-    *,
-    experiment_type: type | None = None,
-    preset_type: type | None = None,
-    module_path: str | None = None,
 ) -> int:
-    if catalog_key is not None:
-        package = model_package(catalog_key)
-        if package is None:
-            raise ValueError(f"Unknown Model Package: {catalog_key!r}")
-        parser = get_experiment_parser(package)
-        args = parser.parse_args(argv)
-        continuation = _checkpoint_continuation(args)
-        mode = resolve_cli_selection(
-            args,
-            package,
-            package.preset_type,
-            build_monitor_callbacks=False,
-        )
-    else:
-        if preset_type is None or module_path is None:
-            raise TypeError(
-                "run_model_package_cli requires a catalog key or the legacy package "
-                "types and module path."
-            )
-        parser = get_legacy_experiment_parser(preset_type.names(), module_path)
-        args = parser.parse_args(argv)
-        continuation = _checkpoint_continuation(args)
-        mode = resolve_experiment_mode(
-            args,
-            preset_type,
-            build_monitor_callbacks=False,
-        )
-        package = model_package_for_module(module_path)
-        if package is None:
-            raise ValueError(f"Unknown Model Package module: {module_path}")
+    package = model_package(catalog_key)
+    if package is None:
+        raise ValueError(f"Unknown Model Package: {catalog_key!r}")
+    parser = get_experiment_parser(package)
+    args = parser.parse_args(argv)
+    continuation = _checkpoint_continuation(args)
+    selection = resolve_cli_selection(
+        args,
+        package,
+        package.preset_type,
+        build_monitor_callbacks=False,
+    )
     artifacts = FilesystemRunArtifacts(
         root=Path("logs"),
         namespace=args.logdir,
     )
-    if catalog_key is not None:
-        dataset_types = package.resolve_datasets(
-            args.datasets,
-            mode.experiment_task,
-        )
-    else:
-        dataset_types = resolve_dataset_names(
-            package.dataset_options_for_task(mode.experiment_task),
-            args.datasets,
-        )
+    dataset_types = package.resolve_datasets(
+        args.datasets,
+        selection.experiment_task,
+    )
     plan = plan_runs(
         package,
         RunRequest(
-            presets=_selected_preset_names(package, mode),
+            presets=_selected_preset_names(package, selection),
             datasets=tuple(dataset_name(dataset) for dataset in dataset_types),
-            experiment_task=(
-                package.task_name(mode.experiment_task)
-                if mode.experiment_task is not None
-                else None
-            ),
+            experiment_task=(package.task_name(selection.experiment_task)),
             overrides={
                 key: serialize_config_value(value)
-                for key, value in mode.config_overrides.items()
+                for key, value in selection.config_overrides.items()
             },
-            search=_search_spec(mode),
+            search=_search_spec(selection),
         ),
-        random_source=random if mode.search_mode is not None else None,
+        random_source=random if selection.search_mode is not None else None,
     )
     execute_runs(
         package,
         plan,
         artifacts=artifacts,
-        monitors=tuple(mode.monitor_names),
+        monitors=tuple(selection.monitor_names),
         continuation=continuation,
     )
     return 0

@@ -7,21 +7,6 @@ from typing import Any, Union, cast, get_args, get_origin
 
 from emperor.config import ConfigBase
 
-MODEL_PARAM_ALIASES = {
-    "expert_capacity_factor": "capacity_factor",
-    "expert_compute_expert_mixture_flag": "compute_expert_mixture_flag",
-    "expert_dropped_token_behavior": "dropped_token_behavior",
-    "expert_num_experts": "num_experts",
-    "expert_routing_initialization_mode": "routing_initialization_mode",
-    "expert_top_k": "top_k",
-    "expert_weighted_parameters_flag": "weighted_parameters_flag",
-    "expert_weighting_position_option": "weighting_position_option",
-    "gate_flag": "stack_gate_flag",
-    "halting_flag": "stack_halting_flag",
-    "stack_layer_norm_position": "layer_norm_position",
-    "weight_generator_depth": "generator_depth",
-}
-
 SKIP_CONFIG_KEYS = {
     "CONFIG_SCHEMA_SKIP_KEYS",
     "CONFIG_OVERRIDE_SKIP_KEYS",
@@ -48,8 +33,7 @@ def config_key_to_param(key: str) -> str:
 
 
 def config_key_to_model_param(key: str) -> str:
-    param = config_key_to_param(key)
-    return MODEL_PARAM_ALIASES.get(param, param)
+    return config_key_to_param(key)
 
 
 def search_key_to_config_key(key: str) -> str:
@@ -61,11 +45,6 @@ def canonical_config_key(key: str) -> str:
     if stripped_key.isupper():
         return stripped_key
     return normalize_key(key).upper()
-
-
-def canonical_config_key_for_module(config_module: ModuleType, key: str) -> str:
-    del config_module
-    return canonical_config_key(key)
 
 
 def _is_supported_constant(value: Any) -> bool:
@@ -231,11 +210,9 @@ def serialize_config_value(value: Any) -> bool | int | float | str | None:
 
 __all__ = [
     "ConfigValueError",
-    "MODEL_PARAM_ALIASES",
     "SKIP_CONFIG_KEYS",
     "abstract_config_class_error",
     "canonical_config_key",
-    "canonical_config_key_for_module",
     "config_key_to_flag",
     "config_key_to_model_param",
     "config_key_to_param",

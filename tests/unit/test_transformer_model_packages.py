@@ -28,10 +28,9 @@ from emperor.layers._composition.gate import LayerGate
 from emperor.linears import LinearLayer
 from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
 from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
-from models.config_overrides import (
-    iter_supported_config_keys,
-    print_config_options,
-)
+from model_runtime.packages import iter_supported_config_keys
+from models.catalog import model_package
+from models.config_overrides import print_config_options
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,
 )
@@ -51,6 +50,21 @@ from models.transformer.linear_adaptive.model import Model as LinearAdaptiveMode
 
 
 class TestTransformerModelPackages(unittest.TestCase):
+    def package_key(self, builder_type):
+        return {
+            TransformerLinearConfigBuilder: "transformer/linear",
+            TransformerLinearAdaptiveConfigBuilder: "transformer/linear_adaptive",
+            TransformerExpertLinearConfigBuilder: "transformer/expert_linear",
+            TransformerExpertLinearAdaptiveConfigBuilder: (
+                "transformer/expert_linear_adaptive"
+            ),
+        }[builder_type]
+
+    def runtime(self, builder_type, **runtime_defaults):
+        return model_package(self.package_key(builder_type)).bind_runtime_defaults(
+            runtime_defaults
+        )
+
     def test_runtime_defaults_use_a_two_projection_feed_forward_block(self):
         for package in (
             "linear",
@@ -115,30 +129,38 @@ class TestTransformerModelPackages(unittest.TestCase):
             dropout_probability=0.0,
         )
         if "Expert" in builder_type.__name__:
-            builder_options.update(expert_num_experts=4, expert_top_k=2)
+            builder_options.update(num_experts=4, top_k=2)
         if adaptive:
-            builder_options["diagonal_option"] = StandardDynamicDiagonalConfig
+            adaptive_role = (
+                "attention_projection_adaptive"
+                if "Expert" in builder_type.__name__
+                else "projection_adaptive"
+            )
+            builder_options[f"{adaptive_role}_diagonal_option"] = (
+                StandardDynamicDiagonalConfig
+            )
         builder_options.update(options)
-        return builder_type(**builder_options).build()
+        runtime = self.runtime(builder_type, **builder_options)
+        return builder_type(runtime=runtime).build()
 
     def controller_options(self):
         options = dict(
             attn_num_layers=2,
-            attn_gate_flag=True,
-            attn_halting_flag=True,
+            attn_stack_gate_flag=True,
+            attn_stack_halting_flag=True,
             attn_memory_flag=True,
             attn_recurrent_flag=True,
             attn_recurrent_max_steps=2,
-            attn_recurrent_gate_flag=True,
-            attn_recurrent_halting_flag=True,
+            attn_recurrent_stack_gate_flag=True,
+            attn_recurrent_stack_halting_flag=True,
             ff_stack_hidden_dim=16,
-            ff_gate_flag=True,
-            ff_halting_flag=True,
+            ff_stack_gate_flag=True,
+            ff_stack_halting_flag=True,
             ff_memory_flag=True,
             ff_recurrent_flag=True,
             ff_recurrent_max_steps=2,
-            ff_recurrent_gate_flag=True,
-            ff_recurrent_halting_flag=True,
+            ff_recurrent_stack_gate_flag=True,
+            ff_recurrent_stack_halting_flag=True,
         )
         controller_stacks = (
             "attn_gate_stack",
@@ -247,7 +269,7 @@ class TestTransformerModelPackages(unittest.TestCase):
         self.assertEqual(len(set(attention_types)), 4)
         self.assertEqual(len(set(feed_forward_types)), 4)
 
-    def test_all_config_path_keys_map_in_unscoped_and_scoped_forms(self):
+    def test_only_declared_transformer_path_fields_are_accepted(self):
         for package in (
             "linear",
             "linear_adaptive",
@@ -265,25 +287,35 @@ class TestTransformerModelPackages(unittest.TestCase):
             ]
             for key in path_keys:
                 value = getattr(config, key)
-                with self.subTest(package=package, key=key, scope="broadcast"):
+                with self.subTest(package=package, key=key):
                     runtime_defaults.runtime_from_flat({key.lower(): value})
-                if key.startswith("ATTN_"):
-                    suffix = key.removeprefix("ATTN_").lower()
-                    prefixes = (
-                        "encoder_attn_",
-                        "decoder_self_attn_",
-                        "decoder_cross_attn_",
+
+            declared_scoped_keys = (
+                "ENCODER_ATTN_NUM_HEADS",
+                "DECODER_SELF_ATTN_NUM_HEADS",
+                "DECODER_CROSS_ATTN_NUM_HEADS",
+                "ENCODER_FEED_FORWARD_HIDDEN_DIM",
+                "DECODER_FEED_FORWARD_HIDDEN_DIM",
+                "ENCODER_FEED_FORWARD_NUM_LAYERS",
+                "DECODER_FEED_FORWARD_NUM_LAYERS",
+            )
+            for key in declared_scoped_keys:
+                with self.subTest(package=package, key=key):
+                    runtime_defaults.runtime_from_flat(
+                        {key.lower(): getattr(config, key)}
                     )
-                else:
-                    suffix = key.removeprefix("FF_").lower()
-                    prefixes = ("encoder_ff_", "decoder_ff_")
-                for prefix in prefixes:
-                    with self.subTest(
-                        package=package,
-                        key=key,
-                        scope=prefix,
-                    ):
-                        runtime_defaults.runtime_from_flat({f"{prefix}{suffix}": value})
+
+            for retired_alias in (
+                "encoder_attn_bias_flag",
+                "decoder_self_attn_zero_attention_flag",
+                "decoder_cross_attn_stack_gate_flag",
+                "encoder_ff_stack_hidden_dim",
+                "decoder_ff_num_layers",
+                "layer_norm_position",
+            ):
+                with self.subTest(package=package, retired_alias=retired_alias):
+                    with self.assertRaisesRegex(ValueError, "unknown Runtime Defaults"):
+                        runtime_defaults.runtime_from_flat({retired_alias: True})
 
     def test_presets_search_metadata_and_cli_use_shared_path_options(self):
         for package in (
@@ -302,16 +334,20 @@ class TestTransformerModelPackages(unittest.TestCase):
             attention_bias_locks = presets.locks_for_preset(
                 presets_module.ExperimentPreset.ATTENTION_BIAS
             )
-            for prefix in (
-                "encoder_attn_",
-                "decoder_self_attn_",
-                "decoder_cross_attn_",
-            ):
-                self.assertIn(f"{prefix}bias_flag", attention_bias_locks)
-                self.assertIn(
-                    f"{prefix}add_key_value_bias_flag",
-                    attention_bias_locks,
-                )
+            self.assertEqual(
+                set(attention_bias_locks),
+                {"attn_bias_flag", "attn_add_key_value_bias_flag"},
+            )
+            pre_norm_locks = presets.locks_for_preset(
+                presets_module.ExperimentPreset.PRE_NORM
+            )
+            self.assertEqual(
+                set(pre_norm_locks),
+                {
+                    "encoder_layer_norm_position",
+                    "decoder_layer_norm_position",
+                },
+            )
 
             search_keys = {
                 key
@@ -350,17 +386,18 @@ class TestTransformerModelPackages(unittest.TestCase):
     def test_path_broadcast_scoped_precedence_and_canonical_errors(self):
         for builder_type, *_ in self.package_cases():
             with self.subTest(package=builder_type.__name__):
-                runtime = builder_type(
+                runtime = self.runtime(
+                    builder_type,
                     attn_num_heads=8,
                     attn_stack_hidden_dim=24,
-                    attn_gate_flag=True,
+                    attn_stack_gate_flag=True,
                     attn_gate_stack_independent_flag=True,
                     attn_gate_stack_hidden_dim=20,
                     ff_stack_hidden_dim=48,
                     ff_recurrent_flag=True,
                     encoder_attn_num_heads=2,
-                    decoder_ff_stack_hidden_dim=40,
-                ).runtime
+                    decoder_feed_forward_hidden_dim=40,
+                )
                 self.assertEqual(runtime.encoder_attention_options.num_heads, 2)
                 self.assertEqual(
                     runtime.decoder_self_attention_options.num_heads,
@@ -393,10 +430,11 @@ class TestTransformerModelPackages(unittest.TestCase):
                     runtime.encoder_feed_forward_options.recurrent_controller_options.recurrent_flag
                 )
 
-                inherited_globals = builder_type(
+                inherited_globals = self.runtime(
+                    builder_type,
                     model_dim=20,
                     dropout_probability=0.25,
-                ).runtime
+                )
                 for attention in (
                     inherited_globals.encoder_attention_options,
                     inherited_globals.decoder_self_attention_options,
@@ -412,11 +450,12 @@ class TestTransformerModelPackages(unittest.TestCase):
                         0.25,
                     )
 
-                canonical = builder_type(
+                canonical = self.runtime(
+                    builder_type,
                     ff_stack_hidden_dim=36,
-                    encoder_ff_stack_hidden_dim=28,
+                    encoder_feed_forward_hidden_dim=28,
                     attn_bias_flag=False,
-                ).runtime
+                )
                 self.assertEqual(
                     canonical.encoder_feed_forward_options.stack_options.hidden_dim,
                     28,
@@ -434,10 +473,10 @@ class TestTransformerModelPackages(unittest.TestCase):
                     "feed_forward_num_layers",
                     "attn_projection_bias_flag",
                 ):
-                    with self.assertRaises(TypeError):
-                        builder_type(**{legacy_name: 32})
-                with self.assertRaises(TypeError):
-                    builder_type(not_a_transformer_option=True)
+                    with self.assertRaises(ValueError):
+                        self.runtime(builder_type, **{legacy_name: 32})
+                with self.assertRaises(ValueError):
+                    self.runtime(builder_type, not_a_transformer_option=True)
 
     def test_all_path_controllers_build_forward_and_receive_gradients(self):
         for (
@@ -523,8 +562,8 @@ class TestTransformerModelPackages(unittest.TestCase):
                     encoder_attn_num_heads=2,
                     decoder_self_attn_num_heads=4,
                     decoder_cross_attn_num_heads=1,
-                    encoder_ff_stack_hidden_dim=24,
-                    decoder_ff_stack_hidden_dim=40,
+                    encoder_feed_forward_hidden_dim=24,
+                    decoder_feed_forward_hidden_dim=40,
                 )
                 config = self.preset(builder_type, **options)
                 experiment_config = config.experiment_config
@@ -957,7 +996,7 @@ class TestTransformerModelPackages(unittest.TestCase):
                         decoder_num_layers=2,
                         stack_halting_flag=not recurrent,
                         recurrent_flag=recurrent,
-                        recurrent_halting_flag=recurrent,
+                        recurrent_stack_halting_flag=recurrent,
                     )
                     encoder = cfg.experiment_config.encoder_config
                     halting = (
@@ -977,8 +1016,8 @@ class TestTransformerModelPackages(unittest.TestCase):
             with self.subTest(package=builder_type.__name__):
                 cfg = self.preset(
                     builder_type,
-                    attn_halting_flag=True,
-                    ff_halting_flag=True,
+                    attn_stack_halting_flag=True,
+                    ff_stack_halting_flag=True,
                 )
                 encoder = cfg.experiment_config.encoder_config
                 encoder = getattr(encoder, "block_config", encoder)

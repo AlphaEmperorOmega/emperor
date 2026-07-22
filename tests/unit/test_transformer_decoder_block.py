@@ -4,6 +4,7 @@ import torch
 
 from emperor.layers import LayerState
 from emperor.transformer import TransformerDecoderLayerState
+from models.catalog import model_package
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,
 )
@@ -25,13 +26,21 @@ class TestTransformerDecoderBlock(unittest.TestCase):
         )
         if builder_type is TransformerExpertLinearConfigBuilder:
             builder_options.update(
-                expert_num_experts=4,
-                expert_top_k=1,
-                expert_normalize_probabilities_flag=False,
-                expert_switch_loss_weight=0.1,
+                num_experts=4,
+                top_k=1,
+                normalize_probabilities_flag=False,
+                switch_loss_weight=0.1,
             )
         builder_options.update(options)
-        model_config = builder_type(**builder_options).build()
+        package_key = (
+            "transformer/expert_linear"
+            if builder_type is TransformerExpertLinearConfigBuilder
+            else "transformer/linear"
+        )
+        package = model_package(package_key)
+        assert package is not None
+        runtime = package.bind_runtime_defaults(builder_options)
+        model_config = builder_type(runtime=runtime).build()
         return model_config.experiment_config.decoder_config.build()
 
     def state(self):
@@ -67,16 +76,16 @@ class TestTransformerDecoderBlock(unittest.TestCase):
     def controller_cases(self):
         return (
             ("plain", {}),
-            ("gated", {"decoder_stack_gate_flag": True}),
-            ("halted", {"decoder_stack_halting_flag": True}),
-            ("memory", {"decoder_memory_flag": True}),
-            ("recurrent", {"decoder_recurrent_flag": True}),
+            ("gated", {"stack_gate_flag": True}),
+            ("halted", {"stack_halting_flag": True}),
+            ("memory", {"memory_flag": True}),
+            ("recurrent", {"recurrent_flag": True}),
             (
                 "recurrent-controlled",
                 {
-                    "decoder_recurrent_flag": True,
-                    "decoder_recurrent_gate_flag": True,
-                    "decoder_recurrent_halting_flag": True,
+                    "recurrent_flag": True,
+                    "recurrent_stack_gate_flag": True,
+                    "recurrent_stack_halting_flag": True,
                 },
             ),
         )

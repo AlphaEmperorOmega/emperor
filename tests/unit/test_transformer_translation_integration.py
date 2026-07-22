@@ -53,7 +53,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
             dropout_probability=0.0,
         )
         if "Expert" in builder_type.__name__:
-            options.update(expert_num_experts=4, expert_top_k=2)
+            options.update(num_experts=4, top_k=2)
         return model_type(builder_type(**options).build())
 
     def corpus_nll(self, model, dataloader):

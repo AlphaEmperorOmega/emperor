@@ -60,7 +60,7 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
     ) -> None:
         self.assertEqual(
             set(CHECKPOINT_REPRESENTATIVES),
-            {package.model_type for package in discover_model_packages()},
+            {package.identity.model_type for package in discover_model_packages()},
         )
 
         for family, model_id in CHECKPOINT_REPRESENTATIVES.items():

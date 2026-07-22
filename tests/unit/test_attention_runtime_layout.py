@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import torch
 
+from models.catalog import model_package
 from models.transformer.expert_linear.config_builder import (
     TransformerExpertLinearConfigBuilder,
 )
@@ -37,8 +38,17 @@ class TestAttentionRuntimeLayout(unittest.TestCase):
             dropout_probability=0.0,
         )
         if "Expert" in builder_type.__name__:
-            options.update(expert_num_experts=4, expert_top_k=2)
-        return builder_type(**options).build()
+            options.update(num_experts=4, top_k=2)
+        package_key = {
+            TransformerLinearConfigBuilder: "transformer/linear",
+            TransformerLinearAdaptiveConfigBuilder: "transformer/linear_adaptive",
+            TransformerExpertLinearConfigBuilder: "transformer/expert_linear",
+            TransformerExpertLinearAdaptiveConfigBuilder: (
+                "transformer/expert_linear_adaptive"
+            ),
+        }[builder_type]
+        runtime = model_package(package_key).bind_runtime_defaults(options)
+        return builder_type(runtime=runtime).build()
 
     def attention_configs(self, builder_type):
         experiment_config = self.preset(builder_type).experiment_config

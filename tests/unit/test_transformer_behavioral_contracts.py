@@ -205,23 +205,34 @@ class TestTransformerModelPackageOwnership(unittest.TestCase):
                     "feed_forward_num_layers",
                     "attn_projection_bias_flag",
                 ):
-                    with self.assertRaises(TypeError):
+                    with self.assertRaisesRegex(ValueError, "unknown Runtime Defaults"):
                         defaults.runtime_from_flat({legacy_name: 1})
 
-    def test_runtime_translation_and_lock_expansion_live_in_each_package(self):
+    def test_runtime_translation_and_exact_preset_locks_live_in_each_package(self):
         for package_name in MODEL_PACKAGES:
             _options, defaults, presets = self.package_modules(package_name)
             runtime = defaults.runtime_from_config()
-            expanded = presets.expand_transformer_path_locks(
-                {"attn_bias_flag": True, "ff_num_layers": 3}
+            package_presets = presets.ExperimentPresets()
+            attention_bias_locks = package_presets.locks_for_preset(
+                presets.ExperimentPreset.ATTENTION_BIAS
+            )
+            pre_norm_locks = package_presets.locks_for_preset(
+                presets.ExperimentPreset.PRE_NORM
             )
             with self.subTest(package_name=package_name):
                 self.assertEqual(runtime.encoder_options.num_layers, 3)
-                self.assertTrue(expanded["encoder_attn_bias_flag"])
-                self.assertTrue(expanded["decoder_self_attn_bias_flag"])
-                self.assertTrue(expanded["decoder_cross_attn_bias_flag"])
-                self.assertEqual(expanded["encoder_ff_num_layers"], 3)
-                self.assertEqual(expanded["decoder_ff_num_layers"], 3)
+                self.assertEqual(
+                    set(attention_bias_locks),
+                    {"attn_bias_flag", "attn_add_key_value_bias_flag"},
+                )
+                self.assertEqual(
+                    set(pre_norm_locks),
+                    {
+                        "encoder_layer_norm_position",
+                        "decoder_layer_norm_position",
+                    },
+                )
+                self.assertFalse(hasattr(presets, "expand_transformer_path_locks"))
 
     def test_package_construction_does_not_import_emperor_runtime_machinery(self):
         project_root = Path(__file__).resolve().parents[2]

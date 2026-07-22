@@ -8,8 +8,8 @@ import models.vit.linear.config as vit_config
 from models.bert.linear.config_builder import BertLinearConfigBuilder
 from models.bert.linear.model import Model as BertModel
 from models.bert.linear.runtime_defaults import runtime_from_flat as bert_runtime
-from models.gpt.linear import GptLinearConfigBuilder
-from models.gpt.linear import Model as GptModel
+from models.gpt.linear.config_builder import GptLinearConfigBuilder
+from models.gpt.linear.model import Model as GptModel
 from models.gpt.linear.runtime_defaults import runtime_from_flat as gpt_runtime
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear.model import Model as VitModel
