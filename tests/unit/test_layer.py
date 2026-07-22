@@ -135,7 +135,9 @@ class TestLayer(unittest.TestCase):
         for name in expected_exports:
             with self.subTest(name=name):
                 self.assertTrue(hasattr(layer_package, name))
-        self.assertFalse(hasattr(layer_package, "LayerGate"))
+        for retired_export in ("LayerGate", "RecurrentLayerValidator"):
+            with self.subTest(retired_export=retired_export):
+                self.assertFalse(hasattr(layer_package, retired_export))
 
     def test_gate_config_is_public_and_builds_the_private_implementation(self):
         from emperor.layers import (
