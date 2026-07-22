@@ -5,8 +5,7 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
-from emperor.neuron import NeuronClusterMonitorCallback
-from emperor.neuron._cluster.model import NeuronCluster
+from emperor.neuron import NeuronCluster, NeuronClusterMonitorCallback
 
 
 def _cluster_stub() -> NeuronCluster:

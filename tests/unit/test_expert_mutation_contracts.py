@@ -6,6 +6,7 @@ from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerState,
     RoutingInitializationMode,
 )
 from emperor.experts._layers.map import MixtureOfExpertsMap
@@ -13,7 +14,6 @@ from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.experts._layers.reduce import MixtureOfExpertsReduce
 from emperor.experts._routing.capacity import ExpertCapacityHandler
 from emperor.experts._routing.weighting import ExpertWeightingHandler
-from emperor.experts._state import MixtureOfExpertsLayerState
 from emperor.experts._validation.mixture import MixtureOfExpertsValidator
 from emperor.experts._validation.model import MixtureOfExpertsModelValidator
 from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig

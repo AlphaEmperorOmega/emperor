@@ -4,7 +4,7 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
-from emperor.neuron._cluster.model import NeuronCluster
+from emperor.neuron import NeuronCluster
 from emperor.neuron._cluster.plasticity import _NeuronClusterPlasticityMixin
 
 _SYNC_BATCH_COUNTERS = (

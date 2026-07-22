@@ -8,8 +8,7 @@ from torch import Tensor
 from torch.nn import Linear, Parameter, ReLU, Sequential
 
 from emperor.config import ConfigBase, optional_field
-from emperor.linears import LinearLayerConfig
-from emperor.linears._layer import LinearLayer
+from emperor.linears import LinearLayer, LinearLayerConfig
 from emperor.nn import Module
 
 

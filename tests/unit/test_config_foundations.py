@@ -6,8 +6,7 @@ from dataclasses import dataclass, field, fields
 import torch
 
 from emperor.config import BaseOptions, ConfigBase, ModelConfig, optional_field
-from emperor.linears import LinearLayerConfig
-from emperor.linears._layer import LinearLayer
+from emperor.linears import LinearLayer, LinearLayerConfig
 
 
 @dataclass

@@ -6,9 +6,9 @@ from emperor.config import ConfigBase
 from emperor.layers import (
     LayerNormPositionOptions,
     LayerState,
+    RecurrentLayer,
     RecurrentLayerConfig,
 )
-from emperor.layers._recurrent import RecurrentLayer
 from emperor.layers._validation import RecurrentLayerValidator
 
 

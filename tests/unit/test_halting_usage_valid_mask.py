@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import torch
 
-from emperor.halting._monitoring.tracking import HaltingUsageTracker
+from emperor.halting import HaltingUsageTracker
 
 
 def state(
