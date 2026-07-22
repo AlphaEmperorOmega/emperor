@@ -4,6 +4,8 @@ import inspect
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
+from functools import lru_cache
+from importlib.metadata import packages_distributions
 from pathlib import Path
 from types import FrameType
 from typing import Literal
@@ -13,12 +15,12 @@ from torch import Tensor, nn
 
 from emperor.experiments import ExperimentTask
 from model_runtime.inspection.errors import InspectionError
+from model_runtime.inspection.materialization import (
+    MaterializedConfiguration,
+    materialize_inspection,
+)
 from model_runtime.inspection.model_graph import inspect_model_graph
 from model_runtime.inspection.records import InspectionRequest, InspectionResult
-from model_runtime.inspection.service import (
-    _inspection_result,
-    _instantiate_inspection_model,
-)
 from model_runtime.packages import ModelPackage
 
 ShapeTraceDetail = Literal["outputs", "variables"]
@@ -220,23 +222,54 @@ def _bound_input_shapes(
     return tuple(_local_tensor_shapes(values).values())
 
 
-def _source_path(filename: str) -> str:
-    path = Path(filename)
-    parts = path.parts
-    for package_name in ("models", "emperor"):
-        matching_indices = [
-            index for index, part in enumerate(parts) if part == package_name
-        ]
-        if not matching_indices:
-            continue
-        package_index = matching_indices[-1]
-        return Path(*parts[package_index:]).as_posix()
-    return path.name
+@lru_cache(maxsize=1)
+def _package_distributions() -> Mapping[str, tuple[str, ...]]:
+    return {
+        package_name: tuple(distributions)
+        for package_name, distributions in packages_distributions().items()
+    }
+
+
+def _trace_module_names(model: nn.Module) -> frozenset[str]:
+    registered_module_names = {
+        type(module).__module__
+        for module in model.modules()
+        if isinstance(type(module).__module__, str)
+    }
+    model_package_name = type(model).__module__.partition(".")[0]
+    runtime_package_name = __package__.partition(".")[0]
+    distributions = _package_distributions()
+    owned_distributions = {
+        *distributions.get(model_package_name, ()),
+        *distributions.get(runtime_package_name, ()),
+    }
+    return frozenset(
+        module_name
+        for module_name in registered_module_names
+        if module_name.partition(".")[0] == model_package_name
+        or bool(
+            owned_distributions
+            & set(distributions.get(module_name.partition(".")[0], ()))
+        )
+    )
+
+
+def _source_path(module_name: str, filename: str) -> str:
+    source_path = Path(filename)
+    module_path = Path(*module_name.split("."))
+    if source_path.name == "__init__.py":
+        return (module_path / source_path.name).as_posix()
+    return module_path.with_suffix(source_path.suffix or ".py").as_posix()
 
 
 class _TensorVariableTracer:
-    def __init__(self, module_paths: Mapping[int, str]) -> None:
+    def __init__(
+        self,
+        module_paths: Mapping[int, str],
+        trace_module_names: frozenset[str],
+    ) -> None:
         self._module_paths = module_paths
+        self._trace_module_names = trace_module_names
         self._frames: dict[int, _FrameTrace] = {}
         self._methods: list[_MutableMethodTrace] = []
         self._next_method_id = 1
@@ -247,16 +280,10 @@ class _TensorVariableTracer:
         self._next_order += 1
         return order
 
-    @staticmethod
-    def _is_relevant(frame: FrameType) -> bool:
+    def _is_relevant(self, frame: FrameType) -> bool:
         module_name = str(frame.f_globals.get("__name__", ""))
         filename = frame.f_code.co_filename
-        return not filename.startswith("<") and (
-            module_name == "models"
-            or module_name.startswith("models.")
-            or module_name == "emperor"
-            or module_name.startswith("emperor.")
-        )
+        return not filename.startswith("<") and module_name in self._trace_module_names
 
     def _parent_id(self, frame: FrameType) -> int | None:
         parent = frame.f_back
@@ -287,7 +314,10 @@ class _TensorVariableTracer:
             order=self._order(),
             qualified_name=frame.f_code.co_qualname,
             module_path=self._module_path(frame.f_locals),
-            source_path=_source_path(frame.f_code.co_filename),
+            source_path=_source_path(
+                str(frame.f_globals.get("__name__", "")),
+                frame.f_code.co_filename,
+            ),
             first_line=frame.f_code.co_firstlineno,
             inputs=inputs,
         )
@@ -413,15 +443,12 @@ def _token_batch(length: int, vocabulary_size: int, token_id: int = 1) -> Tensor
 
 
 def _sample_inputs(
-    package: ModelPackage,
-    request: InspectionRequest,
-    configuration: object,
+    materialized: MaterializedConfiguration,
 ) -> tuple[str, str, tuple[Tensor, ...]]:
-    try:
-        task = package.resolve_experiment_task(request.experiment_task)
-        dataset = package.resolve_dataset(request.dataset, task)
-    except ValueError as exc:
-        raise InspectionError(str(exc)) from exc
+    package = materialized.package
+    task = materialized.experiment_task
+    dataset = materialized.dataset
+    configuration = materialized.configuration
 
     if task == ExperimentTask.IMAGE_CLASSIFICATION:
         channels = _positive_integer(
@@ -492,17 +519,16 @@ def inspect_model_shapes(
 
     with torch.random.fork_rng(devices=[]):
         torch.manual_seed(0)
-        preset, configuration, model = _instantiate_inspection_model(package, request)
+        materialized = materialize_inspection(package, request)
+        model = materialized.model
         graph = inspect_model_graph(model)
-        result = _inspection_result(package, preset, graph)
-        dataset_name, task_name, inputs = _sample_inputs(
-            package,
-            request,
-            configuration,
-        )
+        result = materialized.result(graph)
+        dataset_name, task_name, inputs = _sample_inputs(materialized.prepared)
         calls, module_paths, handles = _trace_module_calls(model, graph)
         variable_tracer = (
-            _TensorVariableTracer(module_paths) if detail == "variables" else None
+            _TensorVariableTracer(module_paths, _trace_module_names(model))
+            if detail == "variables"
+            else None
         )
         previous_trace = sys.gettrace()
         model.eval()

@@ -3,15 +3,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
     resolve_experiment_task,
 )
-from emperor.monitoring import MonitorOption
 from model_runtime.packages.identity import ModelIdentity
+
+if TYPE_CHECKING:
+    from emperor.monitoring import MonitorOption
 
 
 def _coerce_dataset_options_by_task(
@@ -101,6 +103,8 @@ class ModelMetadata:
     )
 
     def __post_init__(self) -> None:
+        from emperor.monitoring import MonitorOption
+
         options_by_task = _coerce_dataset_options_by_task(
             self.identity,
             self.dataset_options,

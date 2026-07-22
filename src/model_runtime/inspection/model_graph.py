@@ -5,7 +5,7 @@ from collections.abc import Iterator
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from inspect import cleandoc
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from torch.nn.parameter import is_lazy
 
@@ -15,10 +15,9 @@ from model_runtime.inspection.records import (
     GraphConfigurationField,
     GraphEdge,
     GraphNode,
+    GraphRole,
     ModelGraph,
 )
-
-GraphRole = Literal["architecture", "internal", "runtime"]
 
 
 class _GraphModule(Protocol):
@@ -779,7 +778,6 @@ def inspect_model_graph(module: _GraphModule) -> ModelGraph:
 
 __all__ = [
     "ARCHITECTURE_ROLE",
-    "GraphRole",
     "INTERNAL_ROLE",
     "ROOT_NODE_ID",
     "ROOT_NODE_PATH",

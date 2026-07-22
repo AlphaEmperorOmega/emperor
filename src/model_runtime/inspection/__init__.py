@@ -5,18 +5,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from model_runtime.inspection.errors import InspectionError
     from model_runtime.inspection.field_descriptions import config_field_description
-    from model_runtime.inspection.model_graph import (
-        ARCHITECTURE_ROLE,
-        INTERNAL_ROLE,
-        ROOT_NODE_ID,
-        ROOT_NODE_PATH,
-        RUNTIME_ROLE,
-        graph_role,
-        inspect_model_graph,
-        module_details,
-        parameter_count,
-        parameter_size_bytes,
-    )
     from model_runtime.inspection.overrides import (
         canonicalize_overrides,
         parse_overrides,
@@ -58,7 +46,6 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
-    "ARCHITECTURE_ROLE",
     "ConfigurationField",
     "ConfigurationSchema",
     "GraphConfiguration",
@@ -66,7 +53,6 @@ __all__ = [
     "GraphEdge",
     "GraphNode",
     "GraphRole",
-    "INTERNAL_ROLE",
     "InspectionError",
     "InspectionRequest",
     "InspectionResult",
@@ -76,9 +62,6 @@ __all__ = [
     "ModuleShapeCall",
     "ModuleShapeTrace",
     "ParsedOverrides",
-    "ROOT_NODE_ID",
-    "ROOT_NODE_PATH",
-    "RUNTIME_ROLE",
     "SearchAxis",
     "SearchSpace",
     "ShapeTraceDetail",
@@ -87,13 +70,8 @@ __all__ = [
     "canonicalize_overrides",
     "configuration_schema",
     "config_field_description",
-    "graph_role",
-    "inspect_model_graph",
     "inspect_model_shapes",
     "inspect_model",
-    "module_details",
-    "parameter_count",
-    "parameter_size_bytes",
     "parse_overrides",
     "preset_locks",
     "reject_locked_overrides",
@@ -141,21 +119,6 @@ def __getattr__(name: str) -> Any:
         from model_runtime.inspection import shape_trace
 
         return getattr(shape_trace, name)
-    if name in {
-        "ARCHITECTURE_ROLE",
-        "INTERNAL_ROLE",
-        "ROOT_NODE_ID",
-        "ROOT_NODE_PATH",
-        "RUNTIME_ROLE",
-        "graph_role",
-        "inspect_model_graph",
-        "module_details",
-        "parameter_count",
-        "parameter_size_bytes",
-    }:
-        from model_runtime.inspection import model_graph
-
-        return getattr(model_graph, name)
     if name == "inspect_model":
         from model_runtime.inspection.service import inspect_model
 

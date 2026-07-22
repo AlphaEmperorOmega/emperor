@@ -20,8 +20,8 @@ from model_runtime.inspection import (
     InspectionRequest,
     InspectionResult,
     inspect_model,
-    inspect_model_graph,
 )
+from model_runtime.inspection.model_graph import inspect_model_graph
 from model_runtime.packages import ModelIdentity, ModelPackage
 from models.catalog import model_package
 

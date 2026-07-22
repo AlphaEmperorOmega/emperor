@@ -8,6 +8,11 @@ import torch
 
 from emperor.experiments import ExperimentTask
 from model_runtime.inspection import InspectionRequest, shape_trace
+from model_runtime.inspection.materialization import (
+    MaterializedConfiguration,
+    MaterializedInspection,
+)
+from model_runtime.inspection.records import ParsedOverrides
 from model_runtime.packages import ModelIdentity, ModelPackage
 
 
@@ -51,7 +56,7 @@ class _UnusedPackageAdapter:
 
 
 def _trace_fixture_model():
-    fixture_module = ModuleType("models.shape_trace_fixture")
+    fixture_module = ModuleType("acme_networks.shape_trace_fixture")
     source = """
 from torch import nn
 
@@ -74,7 +79,7 @@ class TraceModel(nn.Module):
         return logits
 """
     exec(
-        compile(source, "/virtual/models/shape_trace_fixture.py", "exec"),
+        compile(source, "/virtual/acme_networks/shape_trace_fixture.py", "exec"),
         fixture_module.__dict__,
     )
     return fixture_module.TraceModel()
@@ -121,9 +126,12 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
         for task, dataset, configuration, expected_shapes in cases:
             with self.subTest(task=task):
                 _dataset_name, task_name, inputs = shape_trace._sample_inputs(
-                    _SamplePackage(task, dataset),
-                    InspectionRequest(preset="baseline"),
-                    configuration,
+                    SimpleNamespace(
+                        package=_SamplePackage(task, dataset),
+                        experiment_task=task,
+                        dataset=dataset,
+                        configuration=configuration,
+                    )
                 )
 
                 self.assertEqual(task_name, task.name.lower())
@@ -140,12 +148,21 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
         model = _trace_fixture_model()
         sample_input = torch.zeros((1, 4))
         request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
 
         with (
             patch.object(
                 shape_trace,
-                "_instantiate_inspection_model",
-                return_value=("baseline", SimpleNamespace(), model),
+                "materialize_inspection",
+                return_value=MaterializedInspection(prepared=prepared, model=model),
             ),
             patch.object(
                 shape_trace,
@@ -178,7 +195,7 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
         self.assertEqual(model_forward.module_path, "model")
         self.assertEqual(
             model_forward.source_path,
-            "models/shape_trace_fixture.py",
+            "acme_networks/shape_trace_fixture.py",
         )
         same_shape_assignments = [
             tensor

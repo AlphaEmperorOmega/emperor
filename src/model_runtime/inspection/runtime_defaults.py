@@ -6,7 +6,7 @@ from functools import lru_cache
 from types import MappingProxyType, ModuleType, NoneType
 from typing import Any, get_args
 
-from model_runtime.inspection.errors import InspectionError, _model_package_failure
+from model_runtime.inspection.errors import InspectionError, model_package_failure
 from model_runtime.packages import (
     InspectionConstructionLimits,
     ModelPackage,
@@ -109,7 +109,7 @@ class RuntimeDefaultsSpec:
         except ValueError as exc:
             raise InspectionError(str(exc)) from exc
         except Exception as exc:
-            raise _model_package_failure(self.package.catalog_key, exc) from exc
+            raise model_package_failure(self.package.catalog_key, exc) from exc
         return preset, self.locks_for_preset(preset, label=preset_name)
 
     def locks_for_preset(
@@ -122,7 +122,7 @@ class RuntimeDefaultsSpec:
         try:
             locks = self.package.preset_locks(preset)
         except Exception as exc:
-            raise _model_package_failure(self.package.catalog_key, exc) from exc
+            raise model_package_failure(self.package.catalog_key, exc) from exc
 
         canonical: dict[str, Any] = {}
         source_fields: dict[str, str] = {}
@@ -191,7 +191,7 @@ def _cached_runtime_defaults_spec(
     except ValueError as exc:
         raise InspectionError(str(exc)) from exc
     except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
+        raise model_package_failure(package.catalog_key, exc) from exc
 
     return RuntimeDefaultsSpec(
         package=package,
