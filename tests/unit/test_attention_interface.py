@@ -505,7 +505,6 @@ print(json.dumps({
                 "embedding_dim",
                 "sequence_length",
                 "batch_first_flag",
-                "causal_attention_mask_flag",
                 "mixing_model_config",
             ),
         )

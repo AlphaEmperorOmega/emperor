@@ -22,15 +22,7 @@ class MixerAttentionValidator(ValidatorBase):
             embedding_dim=model.embedding_dim,
             sequence_length=model.sequence_length,
         )
-        cls._validate_non_causal(model.causal_attention_mask_flag)
         cls._validate_mixing_model_config(model.mixing_model_config)
-
-    @staticmethod
-    def _validate_non_causal(causal_attention_mask_flag: bool) -> None:
-        if causal_attention_mask_flag:
-            raise ValueError(
-                "causal_attention_mask_flag must be False for MixerAttention."
-            )
 
     @staticmethod
     def _validate_mixing_model_config(mixing_model_config: object) -> None:

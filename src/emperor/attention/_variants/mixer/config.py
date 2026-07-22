@@ -22,9 +22,6 @@ class MixerAttentionConfig(ConfigBase):
         "Explicit input layout. True selects [batch, sequence, embedding]; "
         "False selects [sequence, batch, embedding]."
     )
-    causal_attention_mask_flag: bool | None = optional_field(
-        "Whether causal processing is requested. MixerAttention requires False."
-    )
     mixing_model_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None" = (  # noqa: E501
         optional_field(
             "Model configuration built with sequence_length as both its input and "

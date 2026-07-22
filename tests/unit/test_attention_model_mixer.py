@@ -1,5 +1,5 @@
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import torch
 
@@ -92,7 +92,6 @@ def _mixer_config(
     embedding_dim: int = 4,
     sequence_length: int = 3,
     batch_first_flag: bool = True,
-    causal_attention_mask_flag: bool = False,
     mixing_model_config: (
         LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None
     ) = None,
@@ -103,7 +102,6 @@ def _mixer_config(
         embedding_dim=embedding_dim,
         sequence_length=sequence_length,
         batch_first_flag=batch_first_flag,
-        causal_attention_mask_flag=causal_attention_mask_flag,
         mixing_model_config=mixing_model_config,
     )
 
@@ -296,6 +294,12 @@ class _MonitorHost(torch.nn.Module):
 
 
 class TestMixerAttention(unittest.TestCase):
+    def test_config_has_no_causal_attention_flag(self):
+        self.assertNotIn(
+            "causal_attention_mask_flag",
+            {field.name for field in fields(MixerAttentionConfig)},
+        )
+
     def test_config_builds_registered_attention_variant_and_exact_inner_dims(self):
         config = _mixer_config(sequence_length=3)
 
@@ -552,7 +556,6 @@ class TestMixerAttention(unittest.TestCase):
                     embedding_dim=0,
                     sequence_length=3,
                     batch_first_flag=True,
-                    causal_attention_mask_flag=False,
                     mixing_model_config=_linear_stack(3, 3),
                 ),
                 ValueError,
@@ -563,7 +566,6 @@ class TestMixerAttention(unittest.TestCase):
                     embedding_dim=2,
                     sequence_length=0,
                     batch_first_flag=True,
-                    causal_attention_mask_flag=False,
                     mixing_model_config=_linear_stack(3, 3),
                 ),
                 ValueError,
@@ -574,23 +576,16 @@ class TestMixerAttention(unittest.TestCase):
                     embedding_dim=2,
                     sequence_length=3,
                     batch_first_flag=None,
-                    causal_attention_mask_flag=False,
                     mixing_model_config=_linear_stack(3, 3),
                 ),
                 ValueError,
                 "batch_first_flag is required",
             ),
             (
-                _mixer_config(causal_attention_mask_flag=True),
-                ValueError,
-                "causal_attention_mask_flag must be False",
-            ),
-            (
                 MixerAttentionConfig(
                     embedding_dim=2,
                     sequence_length=3,
                     batch_first_flag=True,
-                    causal_attention_mask_flag=False,
                     mixing_model_config=LinearLayerConfig(
                         input_dim=3,
                         output_dim=3,

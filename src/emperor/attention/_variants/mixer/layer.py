@@ -36,7 +36,6 @@ class MixerAttention(MultiHeadAttentionAbstract):
         self.embedding_dim: int = self.cfg.embedding_dim
         self.sequence_length: int = self.cfg.sequence_length
         self.batch_first_flag: bool = self.cfg.batch_first_flag
-        self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
         self.mixing_model_config: (
             LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig
         ) = self.cfg.mixing_model_config
