@@ -1,5 +1,4 @@
 import {
-  _default,
   boolean,
   enum as enumSchema,
   int,
@@ -19,33 +18,24 @@ const positiveIntegerSchema = int().check(positive());
 const capabilitiesSchema = object({
   authMode: enumSchema(["none", "bearer"]),
   trainingEnabled: boolean(),
-  trainingCancellationCapability: _default(
-    enumSchema([
-      "strict-cgroup",
-      "process-group",
-      "windows-job-object",
-      "unsupported",
-    ]),
+  trainingCancellationCapability: enumSchema([
+    "strict-cgroup",
+    "process-group",
+    "windows-job-object",
     "unsupported",
-  ),
-  trainingResourceLimitsEnforced: _default(boolean(), false),
+  ]),
+  trainingResourceLimitsEnforced: boolean(),
   logDeletionEnabled: boolean(),
-  configSnapshotsEnabled: _default(boolean(), true),
+  configSnapshotsEnabled: boolean(),
   historicalLogsEnabled: boolean(),
   liveMonitorDataEnabled: boolean(),
   historicalMonitorDataEnabled: boolean(),
-  uploadsEnabled: _default(boolean(), false),
-  maxUploadSize: _default(
-    nullable(int().check(nonnegative())),
-    null,
-  ),
-  maxActiveTrainingJobs: _default(positiveIntegerSchema, 2),
-  trainingJobMemoryLimitBytes: _default(
-    positiveIntegerSchema,
-    16 * 1024 ** 3,
-  ),
-  trainingJobCpuLimit: _default(positiveIntegerSchema, 8),
-  trainingJobProcessLimit: _default(positiveIntegerSchema, 512),
+  uploadsEnabled: boolean(),
+  maxUploadSize: nullable(int().check(nonnegative())),
+  maxActiveTrainingJobs: positiveIntegerSchema,
+  trainingJobMemoryLimitBytes: positiveIntegerSchema,
+  trainingJobCpuLimit: positiveIntegerSchema,
+  trainingJobProcessLimit: positiveIntegerSchema,
 });
 
 export type Capabilities = output<typeof capabilitiesSchema>;

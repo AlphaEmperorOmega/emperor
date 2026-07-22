@@ -359,38 +359,20 @@ CAPABILITIES_FIELDS = (
 CAPABILITIES_REQUIRED_FIELDS = (
     "authMode",
     "trainingEnabled",
+    "trainingCancellationCapability",
+    "trainingResourceLimitsEnforced",
     "logDeletionEnabled",
+    "configSnapshotsEnabled",
     "historicalLogsEnabled",
     "liveMonitorDataEnabled",
     "historicalMonitorDataEnabled",
+    "uploadsEnabled",
+    "maxUploadSize",
+    "maxActiveTrainingJobs",
+    "trainingJobMemoryLimitBytes",
+    "trainingJobCpuLimit",
+    "trainingJobProcessLimit",
 )
-CAPABILITIES_FRONTEND_DEFAULT_FIELDS = {
-    "configSnapshotsEnabled": (
-        "capabilitiesSchema defaults config-snapshot support on when omitted."
-    ),
-    "uploadsEnabled": "capabilitiesSchema defaults upload support off when omitted.",
-    "maxUploadSize": "capabilitiesSchema defaults upload size to null when omitted.",
-    "maxActiveTrainingJobs": (
-        "capabilitiesSchema defaults the active Training Job limit for older APIs."
-    ),
-    "trainingJobMemoryLimitBytes": (
-        "capabilitiesSchema defaults the Training Job memory limit for older APIs."
-    ),
-    "trainingJobCpuLimit": (
-        "capabilitiesSchema defaults the Training Job CPU limit for older APIs."
-    ),
-    "trainingJobProcessLimit": (
-        "capabilitiesSchema defaults the Training Job process limit for older APIs."
-    ),
-    "trainingCancellationCapability": (
-        "capabilitiesSchema defaults strict cancellation support to unsupported "
-        "when omitted."
-    ),
-    "trainingResourceLimitsEnforced": (
-        "capabilitiesSchema defaults strict resource-limit enforcement off for "
-        "older APIs."
-    ),
-}
 
 CONFIG_FIELD_FIELDS = (
     "key",
@@ -830,7 +812,6 @@ SCHEMA_PARITY_CASES = (
         "capabilitiesSchema",
         CAPABILITIES_FIELDS,
         CAPABILITIES_REQUIRED_FIELDS,
-        intentional_frontend_default_fields=CAPABILITIES_FRONTEND_DEFAULT_FIELDS,
     ),
     SchemaParityCase(schemas.ModelsResponse, "modelsSchema", ("models",), ("models",)),
     SchemaParityCase(

@@ -20,6 +20,7 @@ const capabilities = {
   authMode: "bearer",
   trainingEnabled: true,
   trainingCancellationCapability: "unsupported",
+  trainingResourceLimitsEnforced: false,
   logDeletionEnabled: true,
   configSnapshotsEnabled: true,
   historicalLogsEnabled: true,
@@ -27,6 +28,10 @@ const capabilities = {
   historicalMonitorDataEnabled: true,
   uploadsEnabled: true,
   maxUploadSize: null,
+  maxActiveTrainingJobs: 2,
+  trainingJobMemoryLimitBytes: 16 * 1024 ** 3,
+  trainingJobCpuLimit: 8,
+  trainingJobProcessLimit: 512,
 };
 
 function jsonResponse(body: unknown, status = 200) {

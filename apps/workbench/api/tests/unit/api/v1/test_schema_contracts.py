@@ -197,16 +197,10 @@ class ApiSchemaContractTests(unittest.TestCase):
                             backend_schema.model_fields[field_name].is_required()
                         )
 
-    def test_capabilities_schema_defaults_additive_fields(
-        self,
-    ) -> None:
-        capabilities = schemas.CapabilitiesResponse(
-            authMode="none",
-            trainingEnabled=False,
-            logDeletionEnabled=False,
-        )
-
-        self.assertEqual(capabilities.trainingCancellationCapability, "unsupported")
-        self.assertFalse(capabilities.trainingResourceLimitsEnforced)
-        self.assertEqual(capabilities.uploadsEnabled, False)
-        self.assertIsNone(capabilities.maxUploadSize)
+    def test_capabilities_schema_rejects_incomplete_payloads(self) -> None:
+        with self.assertRaises(ValueError):
+            schemas.CapabilitiesResponse(
+                authMode="none",
+                trainingEnabled=False,
+                logDeletionEnabled=False,
+            )

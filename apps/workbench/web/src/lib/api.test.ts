@@ -1901,8 +1901,8 @@ describe("URL and query construction", () => {
     expect(result).toEqual(capabilitiesResponse);
   });
 
-  it("defaults additive capabilities from older payloads", async () => {
-    const legacyCapabilities = {
+  it("rejects incomplete capability payloads", async () => {
+    const incompleteCapabilities = {
       authMode: "none",
       trainingEnabled: true,
       logDeletionEnabled: true,
@@ -1910,15 +1910,11 @@ describe("URL and query construction", () => {
       liveMonitorDataEnabled: true,
       historicalMonitorDataEnabled: true,
     };
-    stubFetch(fakeResponse({ json: () => Promise.resolve(legacyCapabilities) }));
+    stubFetch(fakeResponse({ json: () => Promise.resolve(incompleteCapabilities) }));
 
-    const result = await fetchCapabilities();
-
-    expect(result).toEqual({
-      ...capabilitiesResponse,
-      trainingCancellationCapability: "unsupported",
-      trainingResourceLimitsEnforced: false,
-    });
+    await expect(fetchCapabilities()).rejects.toThrow(
+      "trainingCancellationCapability",
+    );
   });
 
   it("encodes the preset query for fetchConfigSchema", async () => {

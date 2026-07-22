@@ -26,19 +26,19 @@ class CapabilitiesResponse(ApiResponseModel):
         "process-group",
         "windows-job-object",
         "unsupported",
-    ] = "unsupported"
-    trainingResourceLimitsEnforced: bool = False
+    ]
+    trainingResourceLimitsEnforced: bool
     logDeletionEnabled: bool
-    configSnapshotsEnabled: bool = True
-    historicalLogsEnabled: bool = True
-    liveMonitorDataEnabled: bool = True
-    historicalMonitorDataEnabled: bool = True
-    uploadsEnabled: bool = False
-    maxUploadSize: int | None = Field(default=None, ge=0)
-    maxActiveTrainingJobs: int = Field(default=2, ge=1)
-    trainingJobMemoryLimitBytes: int = Field(default=16 * 1024**3, ge=1)
-    trainingJobCpuLimit: int = Field(default=8, ge=1)
-    trainingJobProcessLimit: int = Field(default=512, ge=1)
+    configSnapshotsEnabled: bool
+    historicalLogsEnabled: bool
+    liveMonitorDataEnabled: bool
+    historicalMonitorDataEnabled: bool
+    uploadsEnabled: bool
+    maxUploadSize: Annotated[int | None, Field(ge=0)]
+    maxActiveTrainingJobs: Annotated[int, Field(ge=1)]
+    trainingJobMemoryLimitBytes: Annotated[int, Field(ge=1)]
+    trainingJobCpuLimit: Annotated[int, Field(ge=1)]
+    trainingJobProcessLimit: Annotated[int, Field(ge=1)]
 
 
 router = APIRouter(tags=["capabilities"])
@@ -74,6 +74,9 @@ async def capabilities(
         in {"strict-cgroup", "windows-job-object"},
         logDeletionEnabled=local_mutations_enabled,
         configSnapshotsEnabled=local_mutations_enabled,
+        historicalLogsEnabled=True,
+        liveMonitorDataEnabled=True,
+        historicalMonitorDataEnabled=True,
         uploadsEnabled=log_imports_enabled,
         maxUploadSize=settings.effective_max_upload_size,
         maxActiveTrainingJobs=settings.max_active_training_jobs,
