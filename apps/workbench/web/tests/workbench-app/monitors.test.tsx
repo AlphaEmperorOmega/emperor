@@ -136,7 +136,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await user.click(
       await screen.findByRole(
         "button",
-        { name: /select and expand main_model\.0/i },
+        { name: /select and expand main_model\.layers\.0/i },
         { timeout: 5000 },
       ),
     );
@@ -155,7 +155,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await waitFor(() => {
       expect(monitorDataRequests[0]).toEqual({
         jobId: "job-1",
-        nodePath: "main_model.0.model",
+        nodePath: "main_model.layers.0.model",
         preset: "baseline",
         dataset: "Mnist",
       });
@@ -171,7 +171,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await user.click(visualSummaries);
     expect(
       screen.getByAltText(
-        "Monitor image for main_model.0.model/heatmap/usage_fraction at step 2",
+        "Monitor image for main_model.layers.0.model/heatmap/usage_fraction at step 2",
       ),
     ).toBeInTheDocument();
   });
@@ -184,7 +184,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "semantic_monitor_charts");
@@ -200,7 +200,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await waitFor(() => {
       expect(monitorDataRequests[0]).toEqual({
         jobId: "job-1",
-        nodePath: "main_model.0.model",
+        nodePath: "main_model.layers.0.model",
         preset: "baseline",
         dataset: "Mnist",
       });
@@ -328,7 +328,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       .toBeInTheDocument();
     expect(
       within(visualSection as HTMLElement).getByAltText(
-        "Monitor image for main_model.0.model/heatmap/usage_fraction at step 2",
+        "Monitor image for main_model.layers.0.model/heatmap/usage_fraction at step 2",
       ),
     ).toBeInTheDocument();
   });
@@ -342,7 +342,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "monitor_compare");
@@ -358,15 +358,15 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await selectSearchableDropdownOption(
       user,
       within(dialog).getByLabelText(/^compare$/i),
-      "main_model.1.model",
-      "main_model.1.model",
+      "main_model.layers.1.model",
+      "main_model.layers.1.model",
     );
 
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
-          { jobId: "job-1", nodePath: "main_model.0.model", preset: "baseline", dataset: "Mnist" },
-          { jobId: "job-1", nodePath: "main_model.1.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.0.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.1.model", preset: "baseline", dataset: "Mnist" },
         ]),
       );
     });
@@ -406,17 +406,17 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       .not.toBeInTheDocument();
     expect(
       within(weightsSection as HTMLElement).getByText(
-        "main_model.0.model/weights/l2_norm",
+        "main_model.layers.0.model/weights/l2_norm",
       ),
     ).toBeInTheDocument();
     expect(
       within(weightsSection as HTMLElement).getByText(
-        "main_model.1.model/weights/l2_norm",
+        "main_model.layers.1.model/weights/l2_norm",
       ),
     ).toBeInTheDocument();
     expect(
       within(weightsSection as HTMLElement).queryByText(
-        "main_model.0.model/weights/grad_norm",
+        "main_model.layers.0.model/weights/grad_norm",
       ),
     ).not.toBeInTheDocument();
 
@@ -429,17 +429,17 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       .not.toBeInTheDocument();
     expect(
       within(weightGradientsSection as HTMLElement).getByText(
-        "main_model.0.model/weights/grad_norm",
+        "main_model.layers.0.model/weights/grad_norm",
       ),
     ).toBeInTheDocument();
     expect(
       within(weightGradientsSection as HTMLElement).getByText(
-        "main_model.1.model/weights/grad_norm",
+        "main_model.layers.1.model/weights/grad_norm",
       ),
     ).toBeInTheDocument();
     expect(
       within(weightGradientsSection as HTMLElement).queryByText(
-        "main_model.0.model/weights/l2_norm",
+        "main_model.layers.0.model/weights/l2_norm",
       ),
     ).not.toBeInTheDocument();
 
@@ -451,14 +451,14 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     expect(within(biasSection as HTMLElement).queryByText(/^Gradients$/))
       .not.toBeInTheDocument();
     expect(
-      within(biasSection as HTMLElement).getByText("main_model.0.model/bias/mean"),
+      within(biasSection as HTMLElement).getByText("main_model.layers.0.model/bias/mean"),
     ).toBeInTheDocument();
     expect(
-      within(biasSection as HTMLElement).getByText("main_model.1.model/bias/mean"),
+      within(biasSection as HTMLElement).getByText("main_model.layers.1.model/bias/mean"),
     ).toBeInTheDocument();
     expect(
       within(biasSection as HTMLElement).queryByText(
-        "main_model.0.model/bias/grad_mean",
+        "main_model.layers.0.model/bias/grad_mean",
       ),
     ).not.toBeInTheDocument();
 
@@ -471,17 +471,17 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       .not.toBeInTheDocument();
     expect(
       within(biasGradientsSection as HTMLElement).getByText(
-        "main_model.0.model/bias/grad_mean",
+        "main_model.layers.0.model/bias/grad_mean",
       ),
     ).toBeInTheDocument();
     expect(
       within(biasGradientsSection as HTMLElement).getByText(
-        "main_model.1.model/bias/grad_mean",
+        "main_model.layers.1.model/bias/grad_mean",
       ),
     ).toBeInTheDocument();
     expect(
       within(biasGradientsSection as HTMLElement).queryByText(
-        "main_model.0.model/bias/mean",
+        "main_model.layers.0.model/bias/mean",
       ),
     ).not.toBeInTheDocument();
   });
@@ -495,7 +495,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "monitor_scope_select");
@@ -538,7 +538,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
-          { jobId: "job-1", nodePath: "main_model.0.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.0.model", preset: "baseline", dataset: "Mnist" },
           { jobId: "job-1", nodePath: "input_model.model", preset: "baseline", dataset: "Mnist" },
         ]),
       );
@@ -588,7 +588,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: /^open monitor charts for main_model\.0$/i,
+        name: /^open monitor charts for main_model\.layers\.0$/i,
       }),
     );
 
@@ -597,14 +597,14 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await selectSearchableDropdownOption(
       user,
       within(dialog).getByLabelText(/^compare$/i),
-      "main_model.1.model",
-      "main_model.1.model",
+      "main_model.layers.1.model",
+      "main_model.layers.1.model",
     );
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
-          { jobId: "job-1", nodePath: "main_model.0.model", preset: "baseline", dataset: "Mnist" },
-          { jobId: "job-1", nodePath: "main_model.1.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.0.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.1.model", preset: "baseline", dataset: "Mnist" },
         ]),
       );
     });
@@ -676,7 +676,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     });
     expect(
       screen.queryByRole("button", {
-        name: /^open monitor charts for main_model\.0$/i,
+        name: /^open monitor charts for main_model\.layers\.0$/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -691,10 +691,10 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectHistoricalMonitorGroup(user);
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await user.click(
-      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
+      await screen.findByRole("button", { name: /^select main_model\.layers\.0\.model$/i }),
     );
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled();
@@ -704,11 +704,11 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     const dialog = await screen.findByRole("dialog", { name: /monitor charts/i });
     await waitFor(() => {
       expect(logRunMonitorDataRequests).toEqual([
-        { runId: "historical-06", nodePath: "main_model.0.model" },
-        { runId: "historical-05", nodePath: "main_model.0.model" },
-        { runId: "historical-04", nodePath: "main_model.0.model" },
-        { runId: "historical-03", nodePath: "main_model.0.model" },
-        { runId: "historical-02", nodePath: "main_model.0.model" },
+        { runId: "historical-06", nodePath: "main_model.layers.0.model" },
+        { runId: "historical-05", nodePath: "main_model.layers.0.model" },
+        { runId: "historical-04", nodePath: "main_model.layers.0.model" },
+        { runId: "historical-03", nodePath: "main_model.layers.0.model" },
+        { runId: "historical-02", nodePath: "main_model.layers.0.model" },
       ]);
     });
     expect(within(dialog).getByText("historical group")).toBeInTheDocument();
@@ -747,7 +747,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
         {
           scalarTags:
             index === 500
-              ? ["main_model.0.model/weights/mean"]
+              ? ["main_model.layers.0.model/weights/mean"]
               : [],
           histogramTags: [],
           imageTags: [],
@@ -776,12 +776,12 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
     await user.click(
       await screen.findByRole("button", {
-        name: /^select main_model\.0\.model$/i,
+        name: /^select main_model\.layers\.0\.model$/i,
       }),
     );
     await waitFor(
@@ -799,7 +799,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
       expect(logRunMonitorDataRequests).toEqual([
         {
           runId: "deep-history-0501",
-          nodePath: "main_model.0.model",
+          nodePath: "main_model.layers.0.model",
         },
       ]);
     });
@@ -818,16 +818,16 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
           logDir: `logs/${runId}`,
           nodes: [
             {
-              nodePath: "main_model.0.model",
+              nodePath: "main_model.layers.0.model",
               weights: {
                 status: "updated",
-                metric: "main_model.0.model/weights/relative_delta_norm",
+                metric: "main_model.layers.0.model/weights/relative_delta_norm",
                 lastStep: 12,
                 observedPoints: 2,
               },
               bias: {
                 status: "unchanged",
-                metric: "main_model.0.model/bias/delta_norm",
+                metric: "main_model.layers.0.model/bias/delta_norm",
                 lastStep: 12,
                 observedPoints: 1,
               },
@@ -842,7 +842,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await selectHistoricalMonitorGroup(user);
     await user.click(
       await screen.findByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
 
@@ -874,16 +874,16 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
           logDir: `logs/${runId}`,
           nodes: [
             {
-              nodePath: "main_model.0.model",
+              nodePath: "main_model.layers.0.model",
               weights: {
                 status: "updated",
-                metric: "main_model.0.model/weights/relative_delta_norm",
+                metric: "main_model.layers.0.model/weights/relative_delta_norm",
                 lastStep: 12,
                 observedPoints: 2,
               },
               bias: {
                 status: "unchanged",
-                metric: "main_model.0.model/bias/delta_norm",
+                metric: "main_model.layers.0.model/bias/delta_norm",
                 lastStep: 12,
                 observedPoints: 1,
               },
@@ -909,7 +909,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     expect(within(minimapDialog).getByRole("heading", {
       name: /parameter activity/i,
     })).toBeInTheDocument();
-    expect(within(minimapDialog).queryByText("main_model.0.model"))
+    expect(within(minimapDialog).queryByText("main_model.layers.0.model"))
       .not.toBeInTheDocument();
 
     await user.click(within(minimapDialog).getByRole("button", {
@@ -917,7 +917,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     }));
 
     const parameterNode = await within(minimapDialog).findByTestId(
-      "parameter-activity-minimap-node-main_model.0.model",
+      "parameter-activity-minimap-node-main_model.layers.0.model",
     );
     expect(within(parameterNode).getByLabelText(/weights updated/i))
       .toHaveTextContent("W");
@@ -926,7 +926,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await user.click(
       within(parameterNode).getByRole("button", {
-        name: /open monitor charts for main_model\.0\.model/i,
+        name: /open monitor charts for main_model\.layers\.0\.model/i,
       }),
     );
     const monitorDialog = await screen.findByRole("dialog", {
@@ -1033,16 +1033,16 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
           logDir: `logs/${runId}`,
           nodes: [
             {
-              nodePath: "main_model.0.model",
+              nodePath: "main_model.layers.0.model",
               weights: {
                 status: weightsStatus,
-                metric: "main_model.0.model/weights/relative_delta_norm",
+                metric: "main_model.layers.0.model/weights/relative_delta_norm",
                 lastStep: 12,
                 observedPoints: 2,
               },
               bias: {
                 status: biasStatus,
-                metric: "main_model.0.model/bias/delta_norm",
+                metric: "main_model.layers.0.model/bias/delta_norm",
                 lastStep: 12,
                 observedPoints: 1,
               },
@@ -1129,7 +1129,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     });
     await user.click(
       await screen.findByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
 
@@ -1153,7 +1153,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await selectDatasetAndPreset();
     await user.click(
       await screen.findByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
 
@@ -1238,10 +1238,10 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectHistoricalMonitorGroup(user);
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await user.click(
-      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
+      await screen.findByRole("button", { name: /^select main_model\.layers\.0\.model$/i }),
     );
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled();
@@ -1260,7 +1260,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     ).toBeInTheDocument();
 
     for (const delayed of delayedRuns.values()) {
-      delayed.resolve(defaultLogRunMonitorPayload("main_model.0.model"));
+      delayed.resolve(defaultLogRunMonitorPayload("main_model.layers.0.model"));
     }
 
     await waitFor(() => {
@@ -1281,7 +1281,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
 
     await selectHistoricalMonitorGroup(user);
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /^monitor charts$/i })).toBeEnabled();
@@ -1291,17 +1291,17 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await selectSearchableDropdownOption(
       user,
       within(dialog).getByLabelText(/^compare$/i),
-      "main_model.1.model",
-      "main_model.1.model",
+      "main_model.layers.1.model",
+      "main_model.layers.1.model",
     );
 
     await waitFor(() => {
       expect(logRunMonitorDataRequests).toEqual(
         expect.arrayContaining([
-          { runId: "historical-02", nodePath: "main_model.0.model" },
-          { runId: "historical-01", nodePath: "main_model.0.model" },
-          { runId: "historical-02", nodePath: "main_model.1.model" },
-          { runId: "historical-01", nodePath: "main_model.1.model" },
+          { runId: "historical-02", nodePath: "main_model.layers.0.model" },
+          { runId: "historical-01", nodePath: "main_model.layers.0.model" },
+          { runId: "historical-02", nodePath: "main_model.layers.1.model" },
+          { runId: "historical-01", nodePath: "main_model.layers.1.model" },
         ]),
       );
     });
@@ -1319,7 +1319,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await selectTrainingMonitorOption(user, /Linear layers/i);
     await selectNewTrainingLogFolder(user, "active_precedence");
@@ -1334,7 +1334,7 @@ describe("WorkbenchApp Monitor Charts And Errors", () => {
     await waitFor(() => {
       expect(monitorDataRequests).toEqual(
         expect.arrayContaining([
-          { jobId: "job-1", nodePath: "main_model.0.model", preset: "baseline", dataset: "Mnist" },
+          { jobId: "job-1", nodePath: "main_model.layers.0.model", preset: "baseline", dataset: "Mnist" },
         ]),
       );
     });

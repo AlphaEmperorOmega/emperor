@@ -55,7 +55,7 @@ function option(
 function layerTags(runId: string): LogRunTags {
   return {
     runId,
-    scalarTags: ["main_model.0.model/weights/mean"],
+    scalarTags: ["main_model.layers.0.model/weights/mean"],
     histogramTags: [],
     imageTags: [],
     textTags: [],
@@ -111,12 +111,12 @@ function node(
 
 function monitorGraph(): InspectResponse {
   const root = node("root", "main_model", "LayerStack");
-  const layer0 = node("layer-0", "main_model.0", "Layer");
-  const linear0 = node("linear-0", "main_model.0.model", "LinearLayer", {
+  const layer0 = node("layer-0", "main_model.layers.0", "Layer");
+  const linear0 = node("linear-0", "main_model.layers.0.model", "LinearLayer", {
     details: { weightShape: "2 x 2", biasShape: "2" },
   });
-  const layer1 = node("layer-1", "main_model.1", "Layer");
-  const linear1 = node("linear-1", "main_model.1.model", "LinearLayer", {
+  const layer1 = node("layer-1", "main_model.layers.1", "Layer");
+  const linear1 = node("linear-1", "main_model.layers.1.model", "LinearLayer", {
     details: { weightShape: "2 x 2", biasShape: "2" },
   });
 
@@ -216,16 +216,16 @@ function parameterStatus(
     nodes:
       overrides.nodes ?? [
         {
-          nodePath: "main_model.0.model",
+          nodePath: "main_model.layers.0.model",
           weights: {
             status: "updated",
-            metric: "main_model.0.model/weights/relative_delta_norm",
+            metric: "main_model.layers.0.model/weights/relative_delta_norm",
             lastStep: 12,
             observedPoints: 2,
           },
           bias: {
             status: "unchanged",
-            metric: "main_model.0.model/bias/delta_norm",
+            metric: "main_model.layers.0.model/bias/delta_norm",
             lastStep: 12,
             observedPoints: 1,
           },
@@ -591,7 +591,7 @@ describe("workbench state selectors", () => {
     const logRunTags: LogRunTags[] = [
       {
         runId: "new-mnist",
-        scalarTags: ["main_model.0.model/weights/mean"],
+        scalarTags: ["main_model.layers.0.model/weights/mean"],
         histogramTags: [],
         imageTags: [],
         textTags: [],
@@ -621,7 +621,7 @@ describe("workbench state selectors", () => {
     ]);
   });
 
-  it("matches legacy monitor tag paths to modern graph node paths", () => {
+  it("rejects retired monitor tag paths for canonical graph nodes", () => {
     const graph = modernMonitorGraph();
     const layer0 = graph.nodes.find((item) => item.id === "layer-0");
 
@@ -632,12 +632,20 @@ describe("workbench state selectors", () => {
       selectedHistoricalExperiment: "exp_a",
       selectedHistoricalDataset: "Mnist",
       selectedHistoricalPreset: "baseline",
-      logRunTags: [layerTags("new-mnist")],
+      logRunTags: [
+        {
+          runId: "new-mnist",
+          scalarTags: ["main_model.0.model/weights/mean"],
+          histogramTags: [],
+          imageTags: [],
+          textTags: [],
+        },
+      ],
       filteredHistoricalRunIds: ["new-mnist"],
     });
 
-    expect(state.selectedMonitorNode?.path).toBe("main_model.layers.0.model");
-    expect(state.selectedLogRunHasMonitorTags).toBe(true);
+    expect(state.selectedMonitorNode).toBeUndefined();
+    expect(state.selectedLogRunHasMonitorTags).toBe(false);
   });
 
   it("prefers active linear jobs over historical monitor groups", () => {
@@ -735,12 +743,12 @@ describe("workbench state selectors", () => {
       status: parameterStatus({ sourceId: activeJob.id }),
     });
 
-    const activity = activityByPath?.get("main_model.0.model");
+    const activity = activityByPath?.get("main_model.layers.0.model");
     expect(activity?.weights.status).toBe("updated");
     expect(activity?.weights.source).toBe("active-job");
     expect(activity?.weights.sourceLabel).toBe("active job job-1");
     expect(activity?.weights.metric).toBe(
-      "main_model.0.model/weights/relative_delta_norm",
+      "main_model.layers.0.model/weights/relative_delta_norm",
     );
     expect(activity?.bias?.status).toBe("unchanged");
   });
@@ -767,10 +775,10 @@ describe("workbench state selectors", () => {
             sourceId: "run-static",
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "unchanged",
-                  metric: "main_model.0.model/weights/delta_norm",
+                  metric: "main_model.layers.0.model/weights/delta_norm",
                   lastStep: 10,
                   observedPoints: 1,
                 },
@@ -787,7 +795,7 @@ describe("workbench state selectors", () => {
       },
     });
 
-    const activity = activityByPath?.get("main_model.0.model");
+    const activity = activityByPath?.get("main_model.layers.0.model");
     expect(activity?.weights.status).toBe("mixed");
     expect(activity?.weights.source).toBe("historical");
     expect(activity?.weights.updatedRuns).toBe(1);
@@ -818,10 +826,10 @@ describe("workbench state selectors", () => {
             sourceId: historicalRun.id,
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "updated",
-                  metric: "main_model.0.model/weights/delta_norm",
+                  metric: "main_model.layers.0.model/weights/delta_norm",
                   lastStep: 10,
                   observedPoints: 2,
                 },
@@ -838,7 +846,7 @@ describe("workbench state selectors", () => {
       },
     });
 
-    const activity = activityByPath?.get("main_model.0.model");
+    const activity = activityByPath?.get("main_model.layers.0.model");
     expect(activity?.weights.status).toBe("updated");
     expect(activity?.bias?.status).toBe("missing");
     expect(activity?.bias?.missingRuns).toBe(2);
@@ -848,7 +856,7 @@ describe("workbench state selectors", () => {
     expect(activity?.bias?.totalRuns).toBe(2);
   });
 
-  it("maps legacy historical parameter status paths to modern graph nodes", () => {
+  it("rejects retired historical parameter-status paths", () => {
     const graph = modernMonitorGraph();
     const historicalRuns = [run({ id: "run-updated" })];
     const source = deriveMonitorSource({
@@ -859,18 +867,32 @@ describe("workbench state selectors", () => {
       selectedHistoricalPreset: "baseline",
     }).graphMonitorSource;
 
-    const activityByPath = deriveParameterActivityByNodePath({
-      graph,
-      source,
-      status: {
-        runs: [parameterStatus({ sourceId: "run-updated" })],
-      },
-    });
+    const status = {
+      runs: [
+        parameterStatus({
+          sourceId: "run-updated",
+          nodes: [
+            {
+              nodePath: "main_model.0.model",
+              weights: {
+                status: "updated",
+                metric: "main_model.0.model/weights/delta_norm",
+                lastStep: 12,
+                observedPoints: 2,
+              },
+              bias: {
+                status: "unchanged",
+                metric: "main_model.0.model/bias/delta_norm",
+                lastStep: 12,
+                observedPoints: 1,
+              },
+            },
+          ],
+        }),
+      ],
+    } satisfies { runs: ParameterStatus[] };
 
-    const activity = activityByPath?.get("main_model.layers.0.model");
-    expect(activity?.targetPath).toBe("main_model.layers.0.model");
-    expect(activity?.weights.status).toBe("updated");
-    expect(activity?.bias?.status).toBe("unchanged");
+    expect(deriveParameterStatusPathMismatch({ graph, source, status })).toBe(true);
   });
 
   it("detects parameter status paths that cannot attach to the inspected graph", () => {
@@ -940,7 +962,7 @@ describe("workbench state selectors", () => {
       status: parameterStatus({ sourceId: activeJob.id }),
     });
 
-    const activity = activityByPath?.get("main_model.0.model");
+    const activity = activityByPath?.get("main_model.layers.0.model");
     expect(activity?.weights.status).toBe("updated");
     expect(activity?.bias).toBeUndefined();
   });

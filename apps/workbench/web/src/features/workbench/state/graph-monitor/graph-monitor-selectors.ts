@@ -2,7 +2,7 @@ import type { GraphNode, InspectResponse } from "@/lib/api/inspection";
 import type { LogParameterStatusResponse, ParameterChannelStatus, ParameterStatus } from "@/lib/api/monitor-data";
 import type { LogRun, LogRunTags } from "@/lib/api/logs";
 import { anyLogRunTagsMatchParameterNodePath } from "@/lib/historical-monitor-runs";
-import { monitorPathAliases, monitorPathsMatch } from "@/lib/monitor-paths";
+import { monitorPathsMatch } from "@/lib/monitor-paths";
 import {
   buildMonitorComparisonCandidateGroups,
   createMonitorTargetResolver,
@@ -180,13 +180,7 @@ function statusNodeByPath(status: ParameterStatus | undefined) {
   const nodesByPath = new Map((status?.nodes ?? []).map((node) => [node.nodePath, node]));
   return {
     get(nodePath: string) {
-      for (const alias of monitorPathAliases(nodePath)) {
-        const node = nodesByPath.get(alias);
-        if (node) {
-          return node;
-        }
-      }
-      return undefined;
+      return nodesByPath.get(nodePath);
     },
   };
 }

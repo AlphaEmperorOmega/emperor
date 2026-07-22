@@ -125,7 +125,7 @@ function createDeferred<T>() {
 }
 
 function renderMonitorModalState({
-  node = graphNode("main_model.0"),
+  node = graphNode("main_model.layers.0"),
   source,
   comparisonCandidateGroups = emptyMonitorComparisonCandidateGroups,
 }: {
@@ -166,8 +166,8 @@ describe("useMonitorChartsModalState", () => {
     const { result } = renderMonitorModalState({
       source,
       comparisonCandidateGroups: {
-        "same-stack": [graphNode("main_model.1")],
-        "all-layers": [graphNode("main_model.1"), graphNode("main_model.2")],
+        "same-stack": [graphNode("main_model.layers.1")],
+        "all-layers": [graphNode("main_model.layers.1"), graphNode("main_model.layers.2")],
       },
     });
 
@@ -175,26 +175,26 @@ describe("useMonitorChartsModalState", () => {
     expect(result.current.preset).toBe("wide");
     expect(result.current.comparisonScope).toBe("same-stack");
     expect(result.current.comparisonCandidates.map((node) => node.path)).toEqual([
-      "main_model.1",
+      "main_model.layers.1",
     ]);
 
     await waitFor(() =>
       expect(apiMocks.fetchMonitorData).toHaveBeenCalledWith({
         jobId: "job-1",
-        nodePath: "main_model.0",
+        nodePath: "main_model.layers.0",
         preset: "wide",
         dataset: "FashionMnist",
       }, expect.any(Object)),
     );
 
     act(() => {
-      result.current.setComparisonPath("main_model.1");
+      result.current.setComparisonPath("main_model.layers.1");
     });
 
     await waitFor(() =>
       expect(apiMocks.fetchMonitorData).toHaveBeenCalledWith({
         jobId: "job-1",
-        nodePath: "main_model.1",
+        nodePath: "main_model.layers.1",
         preset: "wide",
         dataset: "FashionMnist",
       }, expect.any(Object)),
@@ -206,19 +206,19 @@ describe("useMonitorChartsModalState", () => {
     const { result } = renderMonitorModalState({
       source,
       comparisonCandidateGroups: {
-        "same-stack": [graphNode("main_model.1")],
-        "all-layers": [graphNode("main_model.2")],
+        "same-stack": [graphNode("main_model.layers.1")],
+        "all-layers": [graphNode("main_model.layers.2")],
       },
     });
 
     act(() => {
-      result.current.setComparisonPath("main_model.1");
+      result.current.setComparisonPath("main_model.layers.1");
       result.current.setComparisonScope("all-layers");
     });
 
     await waitFor(() => expect(result.current.comparisonPath).toBe(""));
     expect(result.current.comparisonCandidates.map((node) => node.path)).toEqual([
-      "main_model.2",
+      "main_model.layers.2",
     ]);
   });
 
@@ -241,12 +241,12 @@ describe("useMonitorChartsModalState", () => {
     await waitFor(() =>
       expect(apiMocks.fetchLogRunMonitorData).toHaveBeenCalledWith({
         runId: "run-1",
-        nodePath: "main_model.0",
+        nodePath: "main_model.layers.0",
       }, expect.any(Object)),
     );
     expect(apiMocks.fetchLogRunMonitorData).toHaveBeenCalledWith({
       runId: "run-2",
-      nodePath: "main_model.0",
+      nodePath: "main_model.layers.0",
     }, expect.any(Object));
   });
 
@@ -283,7 +283,7 @@ describe("useMonitorChartsModalState", () => {
       isLoading: true,
     });
 
-    delayedRun.resolve(monitorData("main_model.0"));
+    delayedRun.resolve(monitorData("main_model.layers.0"));
 
     await waitFor(() => {
       expect(result.current.query.historicalData).toHaveLength(3);
@@ -299,7 +299,7 @@ describe("useMonitorChartsModalState", () => {
     const runs = [logRun({ id: "run-1" }), logRun({ id: "run-2" })];
     const comparisonRun = createDeferred<MonitorData>();
     apiMocks.fetchLogRunMonitorData.mockImplementation(({ nodePath }) => {
-      if (nodePath === "main_model.1") {
+      if (nodePath === "main_model.layers.1") {
         return comparisonRun.promise;
       }
       return Promise.resolve(monitorData(nodePath));
@@ -314,8 +314,8 @@ describe("useMonitorChartsModalState", () => {
     const { result } = renderMonitorModalState({
       source,
       comparisonCandidateGroups: {
-        "same-stack": [graphNode("main_model.1")],
-        "all-layers": [graphNode("main_model.1")],
+        "same-stack": [graphNode("main_model.layers.1")],
+        "all-layers": [graphNode("main_model.layers.1")],
       },
     });
 
@@ -324,7 +324,7 @@ describe("useMonitorChartsModalState", () => {
     });
 
     act(() => {
-      result.current.setComparisonPath("main_model.1");
+      result.current.setComparisonPath("main_model.layers.1");
     });
 
     await waitFor(() => {

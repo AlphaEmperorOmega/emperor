@@ -3943,7 +3943,7 @@ describe("WorkbenchApp Training And Preview", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     const initialRequestCount = inspectBodies.length;
     const dialog = await openFullConfig(user);
     const updatePreviewButton = within(dialog).getByRole("button", {
@@ -4014,18 +4014,18 @@ describe("WorkbenchApp Training And Preview", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     const dialog = await openFullConfig(user);
     await user.click(within(dialog).getByRole("button", { name: /update preview/i }));
 
     await waitFor(() => {
-      expect(screen.queryByText("main_model.0")).not.toBeInTheDocument();
+      expect(screen.queryByText("main_model.layers.0")).not.toBeInTheDocument();
     });
     expect(screen.getByText("building")).toBeInTheDocument();
 
     nextPreview.resolve(inspectResponse);
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
   });
 
 });

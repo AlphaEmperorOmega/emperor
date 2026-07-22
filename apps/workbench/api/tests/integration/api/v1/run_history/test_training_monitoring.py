@@ -75,14 +75,14 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             data = manager.get_monitor_data(
                 payload["id"],
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 dataset="Mnist",
             )
 
         self.assert_empty_live_monitor_payload(
             data,
             job_id=payload["id"],
-            node_path="main_model.0.model",
+            node_path="main_model.layers.0.model",
             dataset="Mnist",
             preset=None,
         )
@@ -106,7 +106,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             with self.assertRaises(TrainingJobFailure) as caught:
                 manager.get_monitor_data(
                     payload["id"],
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Cifar10",
                 )
 
@@ -135,7 +135,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             with self.assertRaises(TrainingJobFailure) as caught:
                 manager.get_monitor_data(
                     payload["id"],
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Mnist",
                     preset="gating",
                 )
@@ -185,7 +185,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             data = manager.get_monitor_data(
                 payload["id"],
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 dataset="Mnist",
                 preset="gating",
             )
@@ -193,7 +193,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self.assert_empty_live_monitor_payload(
             data,
             job_id=payload["id"],
-            node_path="main_model.0.model",
+            node_path="main_model.layers.0.model",
             dataset="Mnist",
             preset="gating",
         )
@@ -248,7 +248,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     ):
                         manager.get_monitor_data(
                             payload["id"],
-                            node_path="main_model.0.model",
+                            node_path="main_model.layers.0.model",
                             dataset="Mnist",
                             preset="baseline",
                         )
@@ -258,15 +258,15 @@ class TrainingMonitorDataTests(unittest.TestCase):
             root = Path(tmp) / "jobs"
             log_dir = Path(tmp) / "logs" / "test_model" / "run"
             writer = SummaryWriter(log_dir=str(log_dir))
-            writer.add_scalar("main_model.0.model/output/mean", 0.12, 100)
-            writer.add_scalar("main_model.1.model/output/mean", 0.99, 100)
+            writer.add_scalar("main_model.layers.0.model/output/mean", 0.12, 100)
+            writer.add_scalar("main_model.layers.1.model/output/mean", 0.99, 100)
             writer.add_histogram(
-                "main_model.0.model/histogram/usage_fraction",
+                "main_model.layers.0.model/histogram/usage_fraction",
                 torch.tensor([0.05, 0.15, 0.2]),
                 100,
             )
             writer.add_image(
-                "main_model.0.model/heatmap/usage_fraction",
+                "main_model.layers.0.model/heatmap/usage_fraction",
                 torch.ones(1, 2, 2),
                 100,
                 dataformats="CHW",
@@ -299,7 +299,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             data = manager.get_monitor_data(
                 payload["id"],
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 dataset="Mnist",
             )
             unmatched = manager.get_monitor_data(
@@ -309,10 +309,10 @@ class TrainingMonitorDataTests(unittest.TestCase):
             )
 
         self.assertEqual(data["jobId"], payload["id"])
-        self.assertEqual(data["nodePath"], "main_model.0.model")
+        self.assertEqual(data["nodePath"], "main_model.layers.0.model")
         self.assertEqual(data["dataset"], "Mnist")
         self.assertEqual(
-            data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean"
+            data["scalarSeries"][0]["tag"], "main_model.layers.0.model/output/mean"
         )
         self.assertEqual(data["scalarSeries"][0]["label"], "output/mean")
         self.assertEqual(data["scalarSeries"][0]["points"][0]["step"], 100)
@@ -331,11 +331,13 @@ class TrainingMonitorDataTests(unittest.TestCase):
             baseline_dir = Path(tmp) / "logs" / "test_model" / "baseline"
             gating_dir = Path(tmp) / "logs" / "test_model" / "gating"
             baseline_writer = SummaryWriter(log_dir=str(baseline_dir))
-            baseline_writer.add_scalar("main_model.0.model/output/mean", 0.12, 100)
+            baseline_writer.add_scalar(
+                "main_model.layers.0.model/output/mean", 0.12, 100
+            )
             baseline_writer.flush()
             baseline_writer.close()
             gating_writer = SummaryWriter(log_dir=str(gating_dir))
-            gating_writer.add_scalar("main_model.0.model/output/mean", 0.88, 100)
+            gating_writer.add_scalar("main_model.layers.0.model/output/mean", 0.88, 100)
             gating_writer.flush()
             gating_writer.close()
 
@@ -376,7 +378,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             data = manager.get_monitor_data(
                 payload["id"],
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 preset="gating",
                 dataset="Mnist",
             )
@@ -407,7 +409,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
 
             baseline_writer = SummaryWriter(log_dir=str(baseline_dir))
             baseline_writer.add_scalar(
-                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
                 0.0,
                 10,
             )
@@ -415,7 +417,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             baseline_writer.close()
             gating_writer = SummaryWriter(log_dir=str(gating_dir))
             gating_writer.add_scalar(
-                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
                 1e-6,
                 20,
             )
@@ -529,15 +531,15 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 "version_0",
             )
             writer = SummaryWriter(log_dir=str(log_dir))
-            writer.add_scalar("main_model.0.model/output/mean", 0.12, 100)
-            writer.add_scalar("main_model.1.model/output/mean", 0.99, 100)
+            writer.add_scalar("main_model.layers.0.model/output/mean", 0.12, 100)
+            writer.add_scalar("main_model.layers.1.model/output/mean", 0.99, 100)
             writer.add_histogram(
-                "main_model.0.model/histogram/usage_fraction",
+                "main_model.layers.0.model/histogram/usage_fraction",
                 torch.tensor([0.05, 0.15, 0.2]),
                 100,
             )
             writer.add_image(
-                "main_model.0.model/heatmap/usage_fraction",
+                "main_model.layers.0.model/heatmap/usage_fraction",
                 torch.ones(1, 2, 2),
                 100,
                 dataformats="CHW",
@@ -554,7 +556,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                 async with lifespan_client(app) as client:
                     data_response = await client.get(
                         f"/logs/runs/{run_id}/monitor-data",
-                        params={"nodePath": "main_model.0.model"},
+                        params={"nodePath": "main_model.layers.0.model"},
                     )
                     unmatched_response = await client.get(
                         f"/logs/runs/{run_id}/monitor-data",
@@ -562,7 +564,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
                     )
                     unknown_response = await client.get(
                         "/logs/runs/not-a-run/monitor-data",
-                        params={"nodePath": "main_model.0.model"},
+                        params={"nodePath": "main_model.layers.0.model"},
                     )
                     return data_response, unmatched_response, unknown_response
 
@@ -573,10 +575,10 @@ class TrainingMonitorDataTests(unittest.TestCase):
         self.assertEqual(data_response.status_code, 200)
         data = data_response.json()
         self.assertEqual(data["jobId"], run_id)
-        self.assertEqual(data["nodePath"], "main_model.0.model")
+        self.assertEqual(data["nodePath"], "main_model.layers.0.model")
         self.assertEqual(data["dataset"], "Mnist")
         self.assertEqual(
-            data["scalarSeries"][0]["tag"], "main_model.0.model/output/mean"
+            data["scalarSeries"][0]["tag"], "main_model.layers.0.model/output/mean"
         )
         self.assertEqual(data["scalarSeries"][0]["label"], "output/mean")
         self.assertEqual(data["scalarSeries"][0]["points"][0]["step"], 100)
@@ -627,12 +629,12 @@ class TrainingMonitorDataTests(unittest.TestCase):
             )
             first_writer = SummaryWriter(log_dir=str(first_dir))
             first_writer.add_scalar(
-                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
                 0.0,
                 10,
             )
             first_writer.add_scalar(
-                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
                 0.0,
                 11,
             )
@@ -640,7 +642,7 @@ class TrainingMonitorDataTests(unittest.TestCase):
             first_writer.close()
             second_writer = SummaryWriter(log_dir=str(second_dir))
             second_writer.add_scalar(
-                "main_model.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
                 1e-6,
                 20,
             )

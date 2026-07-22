@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import re
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -40,17 +39,6 @@ ABSOLUTE_DELTA_EPSILON = 1e-9
 PARAMETER_CHANNELS = ("weights", "bias")
 DELTA_METRICS = ("relative_delta_norm", "delta_norm")
 VALUE_FALLBACK_METRICS = ("l2_norm", "mean", "var")
-
-
-def monitor_path_aliases(node_path: str | None) -> list[str]:
-    if not node_path:
-        return []
-    aliases = {node_path}
-    aliases.add(re.sub(r"(^|\.)layers\.(\d+)(?=\.|$)", r"\1\2", node_path))
-    match = re.match(r"^main_model\.(\d+)(.*)$", node_path)
-    if match:
-        aliases.add(f"main_model.layers.{match.group(1)}{match.group(2)}")
-    return list(aliases)
 
 
 def parse_parameter_monitor_tag(tag: str) -> tuple[str, str, str] | None:
@@ -222,7 +210,7 @@ class TensorBoardMonitorReader:
         if isinstance(cached, MonitorData):
             return cached
 
-        prefixes = [f"{alias}/" for alias in monitor_path_aliases(node_path)]
+        prefix = f"{node_path}/"
         scalar_series: list[ScalarSeries] = []
         histograms: list[Histogram] = []
         images: list[ImageSummary] = []
@@ -235,13 +223,13 @@ class TensorBoardMonitorReader:
             except Exception:
                 continue
             scalar_series.extend(
-                self._read_scalars(accumulator, tags.get("scalars", []), prefixes)
+                self._read_scalars(accumulator, tags.get("scalars", []), prefix)
             )
             histograms.extend(
-                self._read_histograms(accumulator, tags.get("histograms", []), prefixes)
+                self._read_histograms(accumulator, tags.get("histograms", []), prefix)
             )
             images.extend(
-                self._read_images(accumulator, tags.get("images", []), prefixes)
+                self._read_images(accumulator, tags.get("images", []), prefix)
             )
 
         response = replace(
@@ -256,24 +244,18 @@ class TensorBoardMonitorReader:
     def _matching_tags(
         self,
         tags: list[str],
-        prefixes: list[str],
+        prefix: str,
     ) -> list[tuple[str, str]]:
-        matches: dict[str, str] = {}
-        for tag in sorted(tags):
-            for prefix in prefixes:
-                if tag.startswith(prefix):
-                    matches.setdefault(tag, prefix)
-                    break
-        return [(tag, matches[tag]) for tag in sorted(matches)]
+        return [(tag, prefix) for tag in sorted(tags) if tag.startswith(prefix)]
 
     def _label(self, tag: str, prefix: str) -> str:
         return tag[len(prefix) :]
 
     def _read_scalars(
-        self, accumulator, tags: list[str], prefixes: list[str]
+        self, accumulator, tags: list[str], prefix: str
     ) -> list[ScalarSeries]:
         series: list[ScalarSeries] = []
-        for tag, prefix in self._matching_tags(tags, prefixes):
+        for tag, matched_prefix in self._matching_tags(tags, prefix):
             try:
                 points = scalar_points(accumulator, tag, self.scalar_point_limit)
             except Exception:
@@ -281,7 +263,7 @@ class TensorBoardMonitorReader:
             series.append(
                 ScalarSeries(
                     tag=tag,
-                    label=self._label(tag, prefix),
+                    label=self._label(tag, matched_prefix),
                     points=points,
                 )
             )
@@ -291,10 +273,10 @@ class TensorBoardMonitorReader:
         self,
         accumulator,
         tags: list[str],
-        prefixes: list[str],
+        prefix: str,
     ) -> list[Histogram]:
         histograms: list[Histogram] = []
-        for tag, _prefix in self._matching_tags(tags, prefixes):
+        for tag, _prefix in self._matching_tags(tags, prefix):
             try:
                 events = accumulator.Histograms(tag)
             except Exception:
@@ -336,10 +318,10 @@ class TensorBoardMonitorReader:
         return tuple(buckets)
 
     def _read_images(
-        self, accumulator, tags: list[str], prefixes: list[str]
+        self, accumulator, tags: list[str], prefix: str
     ) -> list[ImageSummary]:
         images: list[ImageSummary] = []
-        for tag, _prefix in self._matching_tags(tags, prefixes):
+        for tag, _prefix in self._matching_tags(tags, prefix):
             try:
                 events = accumulator.Images(tag)
             except Exception:

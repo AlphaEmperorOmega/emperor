@@ -36,12 +36,12 @@ function renderGraphNode(
       <GraphNode
         selected={false}
         data={{
-          nodeId: "main_model.0",
+          nodeId: "main_model.layers.0",
           label: "Layer",
           typeName: "Layer",
           description: undefined,
-          subtitle: "main_model.0",
-          path: "main_model.0",
+          subtitle: "main_model.layers.0",
+          path: "main_model.layers.0",
           graphRole: "architecture",
           parameterCount: 0,
           parameterSizeBytes: 0,
@@ -69,7 +69,7 @@ describe("GraphNodeView", () => {
   it("keeps explicit bottom padding around the card contents", () => {
     renderGraphNode();
 
-    const card = screen.getByTestId("graph-node-card-main_model.0");
+    const card = screen.getByTestId("graph-node-card-main_model.layers.0");
     expect(card).toHaveClass(
       "nodrag",
       "nopan",
@@ -89,15 +89,15 @@ describe("GraphNodeView", () => {
       height: 164,
     });
 
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.layers.0");
     const title = within(titleRow).getByText("Layer");
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
-    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.layers.0");
 
     expect(title).toHaveClass("min-w-0", "flex-1", "truncate");
     expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
     expect(within(titleRow).queryByTitle("12,500 parameters")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-node-badges-main_model.layers.0")).not.toBeInTheDocument();
     const params = within(footerStats).getByTitle("12,500 parameters");
     const children = within(footerStats).getByText("2 children");
     expect(params).toHaveTextContent("12.5K params");
@@ -109,7 +109,7 @@ describe("GraphNodeView", () => {
       marginTop: `${graphCardGeometry.actionBar.marginBlockStart}px`,
     });
     expect(actionBar).not.toHaveClass("mt-auto", "h-10", "items-end");
-    expect(screen.getByText("main_model.0")).toHaveStyle({
+    expect(screen.getByText("main_model.layers.0")).toHaveStyle({
       height: `${graphCardGeometry.subtitle.height}px`,
       lineHeight: `${graphCardGeometry.subtitle.height}px`,
       marginTop: `${graphCardGeometry.subtitle.marginBlockStart}px`,
@@ -157,12 +157,12 @@ describe("GraphNodeView", () => {
       height: 164,
     });
 
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
-    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.layers.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.layers.0");
 
     expect(within(titleRow).getByText("Layer")).toBeInTheDocument();
     expect(within(titleRow).queryByTitle("12,500 parameters")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-node-badges-main_model.layers.0")).not.toBeInTheDocument();
     expect(footerStats).toHaveClass("overflow-hidden");
     expect(within(footerStats).getByTitle("12,500 parameters")).toHaveClass(
       "h-6",
@@ -174,7 +174,7 @@ describe("GraphNodeView", () => {
       "h-6",
       "whitespace-nowrap",
     );
-    expect(screen.getByText("main_model.0")).toHaveStyle({
+    expect(screen.getByText("main_model.layers.0")).toHaveStyle({
       height: `${graphCardGeometry.subtitle.height}px`,
       lineHeight: `${graphCardGeometry.subtitle.height}px`,
       marginTop: `${graphCardGeometry.subtitle.marginBlockStart}px`,
@@ -218,9 +218,9 @@ describe("GraphNodeView", () => {
       height: 164,
     });
 
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.layers.0");
     const title = within(titleRow).getByText(longLabel);
-    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.layers.0");
     const params = within(footerStats).getByTitle("1,234,567 parameters");
     const children = within(footerStats).getByText("12 children");
 
@@ -228,14 +228,14 @@ describe("GraphNodeView", () => {
     expect(params).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(children).toHaveClass("shrink-0", "whitespace-nowrap");
     expect(within(titleRow).queryByTitle("1,234,567 parameters")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("graph-node-badges-main_model.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("graph-node-badges-main_model.layers.0")).not.toBeInTheDocument();
   });
 
   it("activates the node from card body clicks", () => {
     const onActivateNode = vi.fn();
     renderGraphNode({ onActivateNode });
 
-    fireEvent.click(screen.getByRole("button", { name: /select and expand main_model\.0/i }));
+    fireEvent.click(screen.getByRole("button", { name: /select and expand main_model\.layers\.0/i }));
 
     expect(onActivateNode).toHaveBeenCalledTimes(1);
   });
@@ -257,23 +257,23 @@ describe("GraphNodeView", () => {
       { isViewportMoving: true },
     );
 
-    const shell = screen.getByTestId("graph-node-moving-main_model.0");
+    const shell = screen.getByTestId("graph-node-moving-main_model.layers.0");
     expect(shell).toHaveTextContent("Layer");
     expect(shell).toHaveTextContent("12.5K params");
-    expect(screen.queryByTestId("graph-node-title-row-main_model.0"))
+    expect(screen.queryByTestId("graph-node-title-row-main_model.layers.0"))
       .not.toBeInTheDocument();
-    expect(screen.queryByTestId("child-summaries-main_model.0"))
+    expect(screen.queryByTestId("child-summaries-main_model.layers.0"))
       .not.toBeInTheDocument();
-    expect(screen.queryByTestId("parameter-shapes-main_model.0"))
+    expect(screen.queryByTestId("parameter-shapes-main_model.layers.0"))
       .not.toBeInTheDocument();
-    expect(screen.queryByTestId("graph-node-action-bar-main_model.0"))
+    expect(screen.queryByTestId("graph-node-action-bar-main_model.layers.0"))
       .not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /config options for main_model\.0/i }))
+    expect(screen.queryByRole("button", { name: /config options for main_model\.layers\.0/i }))
       .not.toBeInTheDocument();
 
     fireEvent.click(
       within(shell).getByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
 
@@ -306,7 +306,7 @@ describe("GraphNodeView", () => {
     const onToggleExpansion = vi.fn();
     renderGraphNode({ onActivateNode, onToggleExpansion });
 
-    fireEvent.click(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }));
 
     expect(onToggleExpansion).toHaveBeenCalledTimes(1);
     expect(onActivateNode).not.toHaveBeenCalled();
@@ -319,7 +319,7 @@ describe("GraphNodeView", () => {
       canOpenMonitor: true,
       onOpenMonitor: vi.fn(),
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "active-job",
@@ -329,7 +329,7 @@ describe("GraphNodeView", () => {
       },
     });
 
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.layers.0");
 
     expect(within(titleRow).getByText("Layer")).toBeInTheDocument();
     expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
@@ -343,12 +343,12 @@ describe("GraphNodeView", () => {
       canOpenMonitor: true,
       onOpenMonitor: vi.fn(),
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "active-job",
           sourceLabel: "active job job-1",
-          metric: "main_model.0.model/weights/relative_delta_norm",
+          metric: "main_model.layers.0.model/weights/relative_delta_norm",
           lastStep: 8,
           observedPoints: 2,
         },
@@ -361,20 +361,20 @@ describe("GraphNodeView", () => {
       },
     });
 
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
     const detailsButton = within(actionBar).getByRole("button", {
-      name: /^details for main_model\.0$/i,
+      name: /^details for main_model\.layers\.0$/i,
     });
     const expandButton = within(actionBar).getByRole("button", {
-      name: /^expand tree main_model\.0$/i,
+      name: /^expand tree main_model\.layers\.0$/i,
     });
     const monitorButton = within(actionBar).getByRole("button", {
-      name: /^open monitor charts for main_model\.0$/i,
+      name: /^open monitor charts for main_model\.layers\.0$/i,
     });
     const infoButton = within(actionBar).getByRole("button", {
-      name: /^open component info for main_model\.0$/i,
+      name: /^open component info for main_model\.layers\.0$/i,
     });
-    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.0");
+    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.layers.0");
 
     expect(detailsButton.compareDocumentPosition(expandButton) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
@@ -395,7 +395,7 @@ describe("GraphNodeView", () => {
       typeName: "LinearLayer",
       label: "LinearLayer",
       description: "Applies a learned linear projection.",
-      path: "main_model.0.model",
+      path: "main_model.layers.0.model",
       graphRole: "architecture",
       config: {
         typeName: "LinearLayerConfig",
@@ -414,13 +414,13 @@ describe("GraphNodeView", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: /^open component info for main_model\.0\.model$/i,
+        name: /^open component info for main_model\.layers\.0\.model$/i,
       }),
     );
 
     const dialog = screen.getByRole("dialog", { name: "Component Info" });
     expect(within(dialog).getByText("LinearLayer")).toBeInTheDocument();
-    expect(within(dialog).getAllByText("main_model.0.model").length).toBeGreaterThan(0);
+    expect(within(dialog).getAllByText("main_model.layers.0.model").length).toBeGreaterThan(0);
     expect(
       within(dialog).getByText("Applies a learned linear projection."),
     ).toBeInTheDocument();
@@ -470,12 +470,12 @@ describe("GraphNodeView", () => {
   it("does not render node-level parameter activity in the action bar", () => {
     renderGraphNode({
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "historical",
           sourceLabel: "2 historical runs",
-          metric: "main_model.0.model/weights/relative_delta_norm",
+          metric: "main_model.layers.0.model/weights/relative_delta_norm",
           lastStep: 8,
           observedPoints: 3,
           updatedRuns: 2,
@@ -488,7 +488,7 @@ describe("GraphNodeView", () => {
           status: "mixed",
           source: "historical",
           sourceLabel: "2 historical runs",
-          metric: "main_model.0.model/bias/delta_norm",
+          metric: "main_model.layers.0.model/bias/delta_norm",
           lastStep: 7,
           observedPoints: 2,
           updatedRuns: 1,
@@ -500,7 +500,7 @@ describe("GraphNodeView", () => {
       },
     });
 
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
     expect(within(actionBar).queryByTestId("graph-parameter-indicators"))
       .not.toBeInTheDocument();
     expect(screen.queryByLabelText(/Weights parameter activity:/i))
@@ -523,7 +523,7 @@ describe("GraphNodeView", () => {
           dims: "128 -> 64",
           kind: "child",
           parameterActivity: {
-            targetPath: "main_model.0.model",
+            targetPath: "main_model.layers.0.model",
             weights: {
               status: "updated",
               source: "historical",
@@ -541,16 +541,16 @@ describe("GraphNodeView", () => {
       ],
     });
 
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
-    const row = screen.getByTestId("child-summary-main_model.0-0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
+    const row = screen.getByTestId("child-summary-main_model.layers.0-0");
     const indicators = within(row).getByTestId("graph-parameter-indicators");
     const monitorButton = within(row).getByRole("button", {
-      name: /^open monitor charts for main_model\.0$/i,
+      name: /^open monitor charts for main_model\.layers\.0$/i,
     });
 
     expect(
       within(actionBar).queryByRole("button", {
-        name: /^open monitor charts for main_model\.0$/i,
+        name: /^open monitor charts for main_model\.layers\.0$/i,
       }),
     ).not.toBeInTheDocument();
     expect(
@@ -591,7 +591,7 @@ describe("GraphNodeView", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: /^open monitor charts for main_model\.0$/i }),
+      screen.getByRole("button", { name: /^open monitor charts for main_model\.layers\.0$/i }),
     );
 
     expect(onOpenMonitor).toHaveBeenCalledTimes(1);
@@ -606,17 +606,17 @@ describe("GraphNodeView", () => {
     });
 
     expect(
-      screen.queryByRole("button", { name: /^open monitor charts for main_model\.0$/i }),
+      screen.queryByRole("button", { name: /^open monitor charts for main_model\.layers\.0$/i }),
     ).not.toBeInTheDocument();
   });
 
   it("advertises collapse on the expanded card body", () => {
     renderGraphNode({ isExpanded: true });
 
-    expect(screen.getByRole("button", { name: /select and collapse main_model\.0/i }))
+    expect(screen.getByRole("button", { name: /select and collapse main_model\.layers\.0/i }))
       .toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.queryByRole("button", { name: /select and expand main_model\.0/i }),
+      screen.queryByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -676,7 +676,7 @@ describe("GraphNodeView", () => {
       height: 162,
     });
 
-    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const shapes = screen.getByTestId("parameter-shapes-main_model.layers.0");
     expect(shapes).toHaveClass("grid-cols-2");
     const weights = within(shapes).getByLabelText("W shape 128 x 128");
     const bias = within(shapes).getByLabelText("B shape 128");
@@ -710,7 +710,7 @@ describe("GraphNodeView", () => {
         biasShape: "10",
       },
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "active-job",
@@ -727,7 +727,7 @@ describe("GraphNodeView", () => {
       height: 162,
     });
 
-    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const shapes = screen.getByTestId("parameter-shapes-main_model.layers.0");
     const weights = within(shapes).getByLabelText(
       "W shape 256 x 10, weights activity updated",
     );
@@ -755,7 +755,7 @@ describe("GraphNodeView", () => {
         weightShape: "32 x 32",
       },
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "unchanged",
           source: "active-job",
@@ -766,7 +766,7 @@ describe("GraphNodeView", () => {
       height: 162,
     });
 
-    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const shapes = screen.getByTestId("parameter-shapes-main_model.layers.0");
     const weights = within(shapes).getByLabelText(
       "W shape 32 x 32, weights activity unchanged",
     );
@@ -783,8 +783,8 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       label: "LinearLayer",
       typeName: "LinearLayer",
-      path: "main_model.0.model",
-      subtitle: "main_model.0.model",
+      path: "main_model.layers.0.model",
+      subtitle: "main_model.layers.0.model",
       details: {
         weightShape: "10 x 256",
         biasShape: "10",
@@ -802,13 +802,13 @@ describe("GraphNodeView", () => {
       height: 156,
     });
 
-    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const shapes = screen.getByTestId("parameter-shapes-main_model.layers.0");
     const dims = within(shapes.parentElement ?? shapes).getByTitle(
       "input/output: 256 -> 10",
     );
     const weights = within(shapes).getByLabelText("W shape 10 x 256");
     const bias = within(shapes).getByLabelText("B shape 10");
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
 
     expect(shapes).toHaveClass(
       "grid",
@@ -830,7 +830,7 @@ describe("GraphNodeView", () => {
     expect(
       dims.compareDocumentPosition(bias) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(screen.queryByTestId("child-summaries-main_model.0"))
+    expect(screen.queryByTestId("child-summaries-main_model.layers.0"))
       .not.toBeInTheDocument();
     expect(
       (shapes.parentElement ?? shapes).compareDocumentPosition(actionBar) &
@@ -842,8 +842,8 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       label: "LinearLayer",
       typeName: "LinearLayer",
-      path: "main_model.0.gate_model.model.layers.0.model",
-      subtitle: "main_model.0.gate_model.model.layers.0.model",
+      path: "main_model.layers.0.gate_model.model.layers.0.model",
+      subtitle: "main_model.layers.0.gate_model.model.layers.0.model",
       details: {
         dims: "32 -> 32",
         inputDim: 32,
@@ -864,7 +864,7 @@ describe("GraphNodeView", () => {
       height: 156,
     });
 
-    const shapes = screen.getByTestId("parameter-shapes-main_model.0");
+    const shapes = screen.getByTestId("parameter-shapes-main_model.layers.0");
 
     expect(within(shapes).getByTitle("input/output: 32 -> 32"))
       .toHaveTextContent("32 -> 32");
@@ -886,9 +886,9 @@ describe("GraphNodeView", () => {
       height: 200,
     });
 
-    expect(screen.getByTestId("parameter-shapes-main_model.0")).toBeInTheDocument();
+    expect(screen.getByTestId("parameter-shapes-main_model.layers.0")).toBeInTheDocument();
     expect(screen.getByLabelText("LinearLayer 128 -> 64")).toBeInTheDocument();
-    expect(screen.queryByTestId("parameter-shape-dims-main_model.0"))
+    expect(screen.queryByTestId("parameter-shape-dims-main_model.layers.0"))
       .not.toBeInTheDocument();
   });
 
@@ -932,15 +932,15 @@ describe("GraphNodeView", () => {
     });
 
     const detailsButton = screen.getByRole("button", {
-      name: /config options for main_model\.0/i,
+      name: /config options for main_model\.layers\.0/i,
     });
     const details = document.getElementById(
       detailsButton.getAttribute("aria-controls") ?? "",
     );
 
-    expect(screen.getByTestId("parameter-shapes-main_model.0")).toBeInTheDocument();
+    expect(screen.getByTestId("parameter-shapes-main_model.layers.0")).toBeInTheDocument();
     expect(detailsButton).toHaveAttribute("aria-expanded", "true");
-    expect(detailsButton).toHaveAttribute("title", "Config options for main_model.0");
+    expect(detailsButton).toHaveAttribute("title", "Config options for main_model.layers.0");
     expect(detailsButton).toHaveClass(
       "h-touch",
       "w-touch",
@@ -975,12 +975,12 @@ describe("GraphNodeView", () => {
     });
 
     const detailsButton = screen.getByRole("button", {
-      name: /details for main_model\.0/i,
+      name: /details for main_model\.layers\.0/i,
     });
     const detailsId = detailsButton.getAttribute("aria-controls");
 
     expect(detailsButton).toHaveAttribute("aria-expanded", "false");
-    expect(detailsId).toBe("graph-node-details-main_model-0");
+    expect(detailsId).toBe("graph-node-details-main_model-layers-0");
     expect(document.getElementById(detailsId ?? "")).toBeNull();
     expect(detailsButton.querySelector("svg")).toBeInTheDocument();
 
@@ -1021,11 +1021,11 @@ describe("GraphNodeView", () => {
     });
 
     const summaries = screen.getByText("LinearLayer").parentElement?.parentElement;
-    const detailsButton = screen.getByRole("button", { name: /details for main_model\.0/i });
+    const detailsButton = screen.getByRole("button", { name: /details for main_model\.layers\.0/i });
     const details = document.getElementById(
       detailsButton.getAttribute("aria-controls") ?? "",
     );
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
 
     expect(summaries).not.toHaveClass("flex-1");
     expect(details).not.toBeNull();
@@ -1067,8 +1067,8 @@ describe("GraphNodeView", () => {
       height: 264,
     });
 
-    const diagram = screen.getByTestId("stack-diagram-main_model.0");
-    const detailsButton = screen.getByRole("button", { name: /details for main_model\.0/i });
+    const diagram = screen.getByTestId("stack-diagram-main_model.layers.0");
+    const detailsButton = screen.getByRole("button", { name: /details for main_model\.layers\.0/i });
     const layer0 = within(diagram).getByTitle("Layer 0 · LinearLayer · 128 -> 128");
     const layer1 = within(diagram).getByTitle("Layer 1 · LinearLayer · 128 -> 128");
     const layer2 = within(diagram).getByTitle("Layer 2 · LinearLayer · 128 -> 128");
@@ -1093,7 +1093,7 @@ describe("GraphNodeView", () => {
     expect(layer1.compareDocumentPosition(layer2) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
     expect(within(diagram).queryByText("LinearLayer")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("child-summaries-main_model.layers.0")).not.toBeInTheDocument();
     expect(
       diagram.compareDocumentPosition(detailsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
@@ -1119,7 +1119,7 @@ describe("GraphNodeView", () => {
       height: 250,
     });
 
-    const diagram = screen.getByTestId("stack-diagram-main_model.0");
+    const diagram = screen.getByTestId("stack-diagram-main_model.layers.0");
     const layer0 = within(diagram).getByTitle(
       "Layer 0 · MixtureOfExpertsLayerWithVeryLongName · 128 -> 128",
     );
@@ -1172,7 +1172,7 @@ describe("GraphNodeView", () => {
     });
 
     const connector = container
-      .querySelector('[data-testid="stack-diagram-main_model.0"]')
+      .querySelector('[data-testid="stack-diagram-main_model.layers.0"]')
       ?.querySelector("svg");
     expect(connector).toBeNull();
     expect(screen.getByTitle("5 more layers")).toHaveTextContent("…");
@@ -1202,13 +1202,13 @@ describe("GraphNodeView", () => {
       height: 202,
     });
 
-    expect(screen.getByRole("button", { name: /select and expand main_model\.0/i }))
+    expect(screen.getByRole("button", { name: /select and expand main_model\.layers\.0/i }))
       .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }))
+    expect(screen.getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }))
       .toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
     expect(onActivateNode).toHaveBeenCalledTimes(1);
@@ -1483,7 +1483,7 @@ describe("GraphNodeView", () => {
       childSummaries: [{ label: "LinearLayer", kind: "child" }],
       expertDiagram: {
         samplerLabel: "Sampler",
-        samplerTitle: "main_model.0.sampler",
+        samplerTitle: "main_model.layers.0.sampler",
         totalExperts: 3,
         hasOverflow: false,
         cells: [
@@ -1495,7 +1495,7 @@ describe("GraphNodeView", () => {
       height: 194,
     });
 
-    const diagram = screen.getByTestId("expert-diagram-main_model.0");
+    const diagram = screen.getByTestId("expert-diagram-main_model.layers.0");
     const expert0 = within(diagram).getByTitle("Expert 0");
     expect(expert0).toHaveClass(
       "h-8",
@@ -1505,15 +1505,15 @@ describe("GraphNodeView", () => {
     );
     expect(within(expert0).getByText("E0")).toHaveClass("truncate");
     expect(expert0).toHaveTextContent("E0");
-    expect(within(diagram).getByTitle("main_model.0.sampler")).toHaveClass(
+    expect(within(diagram).getByTitle("main_model.layers.0.sampler")).toHaveClass(
       "h-8",
       "rounded-control-md",
       "px-2",
       "type-label",
     );
-    expect(Number.parseFloat(within(diagram).getByTitle("main_model.0.sampler").style.width))
+    expect(Number.parseFloat(within(diagram).getByTitle("main_model.layers.0.sampler").style.width))
       .toBe(EXPERT_DIAGRAM_SAMPLER_WIDTH);
-    expect(within(diagram).getByTitle("main_model.0.sampler")).toHaveTextContent("Sampler");
+    expect(within(diagram).getByTitle("main_model.layers.0.sampler")).toHaveTextContent("Sampler");
     expect(within(diagram).queryByText("LinearLayer")).not.toBeInTheDocument();
   });
 
@@ -1538,7 +1538,7 @@ describe("GraphNodeView", () => {
     });
 
     const connector = container
-      .querySelector('[data-testid="expert-diagram-main_model.0"]')
+      .querySelector('[data-testid="expert-diagram-main_model.layers.0"]')
       ?.querySelector("svg");
     expect(connector).toHaveClass("pointer-events-none");
     expect(connector?.querySelectorAll("path")).toHaveLength(7);
@@ -1550,7 +1550,7 @@ describe("GraphNodeView", () => {
       onActivateNode,
       expertDiagram: {
         samplerLabel: "Sampler",
-        samplerTitle: "main_model.0.sampler",
+        samplerTitle: "main_model.layers.0.sampler",
         totalExperts: 1,
         hasOverflow: false,
         cells: [{ label: "E0", title: "Expert 0", kind: "expert", expertIndex: 0 }],
@@ -1558,13 +1558,13 @@ describe("GraphNodeView", () => {
       height: 194,
     });
 
-    expect(screen.getByRole("button", { name: /select and expand main_model\.0/i }))
+    expect(screen.getByRole("button", { name: /select and expand main_model\.layers\.0/i }))
       .toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^expand tree main_model\.0$/i }))
+    expect(screen.getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }))
       .toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
     expect(onActivateNode).toHaveBeenCalledTimes(1);
@@ -1605,11 +1605,11 @@ describe("GraphNodeView", () => {
       height: graphCardGeometry.simpleHeight,
     });
 
-    const card = screen.getByTestId("graph-node-card-main_model.0");
-    const titleRow = screen.getByTestId("graph-node-title-row-main_model.0");
-    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.0");
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
-    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.0");
+    const card = screen.getByTestId("graph-node-card-main_model.layers.0");
+    const titleRow = screen.getByTestId("graph-node-title-row-main_model.layers.0");
+    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.layers.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
+    const footerStats = within(actionBar).getByTestId("graph-node-footer-stats-main_model.layers.0");
 
     expect(within(card).getByText("Layer")).toBeInTheDocument();
     expect(within(titleRow).queryByRole("button")).not.toBeInTheDocument();
@@ -1619,17 +1619,17 @@ describe("GraphNodeView", () => {
     );
     expect(within(footerStats).getByTitle("33,024 parameters")).toHaveTextContent("33K params");
     expect(within(footerStats).getByText("2 children")).toBeInTheDocument();
-    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.0$/i }))
+    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }))
       .toBeInTheDocument();
-    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.0$/i }))
+    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.layers\.0$/i }))
       .toBeInTheDocument();
-    expect(within(card).queryByText("main_model.0")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("parameter-shapes-main_model.0")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("stack-diagram-main_model.0")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /config options for main_model\.0/i }))
+    expect(within(card).queryByText("main_model.layers.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("parameter-shapes-main_model.layers.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("stack-diagram-main_model.layers.0")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("child-summaries-main_model.layers.0")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /config options for main_model\.layers\.0/i }))
       .not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /details for main_model\.0/i }))
+    expect(screen.queryByRole("button", { name: /details for main_model\.layers\.0/i }))
       .not.toBeInTheDocument();
     expect(screen.queryByText("dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("activation")).not.toBeInTheDocument();
@@ -1692,7 +1692,7 @@ describe("GraphNodeView", () => {
         fields: [{ key: "dropout", value: 0.2 }],
       },
       parameterActivity: {
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "active-job",
@@ -1703,21 +1703,21 @@ describe("GraphNodeView", () => {
       height: graphCardGeometry.simpleHeight,
     });
 
-    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.0");
+    const actionBar = screen.getByTestId("graph-node-action-bar-main_model.layers.0");
 
-    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.0$/i }))
+    expect(within(actionBar).getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }))
       .toBeInTheDocument();
-    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.0$/i }))
+    expect(within(actionBar).getByRole("button", { name: /^open component info for main_model\.layers\.0$/i }))
       .toBeInTheDocument();
-    expect(within(actionBar).getByTestId("graph-node-footer-stats-main_model.0"))
+    expect(within(actionBar).getByTestId("graph-node-footer-stats-main_model.layers.0"))
       .toHaveTextContent("1 child");
     expect(within(actionBar).queryByTestId("graph-parameter-indicators"))
       .not.toBeInTheDocument();
-    expect(within(actionBar).getByRole("button", { name: /^open monitor charts for main_model\.0$/i }))
+    expect(within(actionBar).getByRole("button", { name: /^open monitor charts for main_model\.layers\.0$/i }))
       .toBeInTheDocument();
-    expect(within(actionBar).queryByRole("button", { name: /details for main_model\.0/i }))
+    expect(within(actionBar).queryByRole("button", { name: /details for main_model\.layers\.0/i }))
       .not.toBeInTheDocument();
-    expect(within(actionBar).queryByRole("button", { name: /config options for main_model\.0/i }))
+    expect(within(actionBar).queryByRole("button", { name: /config options for main_model\.layers\.0/i }))
       .not.toBeInTheDocument();
   });
 
@@ -1734,10 +1734,10 @@ describe("GraphNodeView", () => {
       height: graphCardGeometry.simpleHeight,
     });
 
-    const card = screen.getByTestId("graph-node-card-main_model.0");
+    const card = screen.getByTestId("graph-node-card-main_model.layers.0");
     const title = within(card).getByText(longLabel);
-    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.0");
-    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.0");
+    const metrics = screen.getByTestId("graph-node-simple-metrics-main_model.layers.0");
+    const footerStats = screen.getByTestId("graph-node-footer-stats-main_model.layers.0");
     const params = within(footerStats).getByTitle("1,234,567 parameters");
     const dims = within(metrics).getByTitle("input/output: 256 -> 512");
 
@@ -1773,11 +1773,11 @@ describe("SelectedNodeDetails", () => {
 
   it("uses config fields instead of raw preview details", () => {
     const node: GraphNode = {
-      id: "main_model.0.model",
+      id: "main_model.layers.0.model",
       label: "LinearLayer",
       typeName: "LinearLayer",
       description: "Applies a learned linear projection.",
-      path: "main_model.0.model",
+      path: "main_model.layers.0.model",
       graphRole: "architecture",
       parameterCount: 512,
       parameterSizeBytes: 2048,
@@ -1814,10 +1814,10 @@ describe("SelectedNodeDetails", () => {
 
   it("displays layer and recurrent gate option details", () => {
     const node: GraphNode = {
-      id: "main_model.0",
+      id: "main_model.layers.0",
       label: "RecurrentLayer",
       typeName: "RecurrentLayer",
-      path: "main_model.0",
+      path: "main_model.layers.0",
       graphRole: "architecture",
       parameterCount: 0,
       parameterSizeBytes: 0,

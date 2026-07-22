@@ -866,7 +866,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       .toBeInTheDocument();
 
     await clickLogOption(user, "Scalar Tags", "test/accuracy");
-    await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
+    await clickLogOption(user, "Scalar Tags", "main_model.layers.0.model/weights/mean");
 
     const bestRunSection = screen
       .getByRole("heading", { name: "Best Run by Selected Metric" })
@@ -1381,11 +1381,11 @@ describe("WorkbenchApp Logs Workspace", () => {
     await expectLogFilterSelection(user, "Scalar Tags", "train/loss_epoch", true);
     expect(logScalarRequests).toHaveLength(3);
 
-    await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
+    await clickLogOption(user, "Scalar Tags", "main_model.layers.0.model/weights/mean");
     await expectLogFilterSelection(
       user,
       "Scalar Tags",
-      "main_model.0.model/weights/mean",
+      "main_model.layers.0.model/weights/mean",
       true,
     );
     const otherToggle = await screen.findByRole("button", {
@@ -1400,7 +1400,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     });
     expect(
       await screen.findByRole("img", {
-        name: /main_model\.0\.model\/weights\/mean scalar chart/i,
+        name: /main_model\.layers\.0\.model\/weights\/mean scalar chart/i,
       }),
     )
       .toBeInTheDocument();
@@ -1409,7 +1409,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     });
     expect(logScalarRequests[3]).toMatchObject({
       runIds: ["log-mnist"],
-      tags: ["main_model.0.model/weights/mean"],
+      tags: ["main_model.layers.0.model/weights/mean"],
     });
 
     await user.click(logMetricGroupToggle("Other"));
@@ -1419,7 +1419,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     });
     expect(
       screen.queryByRole("img", {
-        name: /main_model\.0\.model\/weights\/mean scalar chart/i,
+        name: /main_model\.layers\.0\.model\/weights\/mean scalar chart/i,
       }),
     )
       .not.toBeInTheDocument();
@@ -1962,7 +1962,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     const otherTag = await findLogOption(
       user,
       "Scalar Tags",
-      "main_model.0.model/weights/mean",
+      "main_model.layers.0.model/weights/mean",
     );
     expectLogOptionSelected(otherTag, false);
     await user.click(otherTag);
@@ -1976,7 +1976,7 @@ describe("WorkbenchApp Logs Workspace", () => {
     });
     expect(
       await screen.findByRole("img", {
-        name: /main_model\.0\.model\/weights\/mean scalar chart/i,
+        name: /main_model\.layers\.0\.model\/weights\/mean scalar chart/i,
       }),
     ).toBeInTheDocument();
   });
@@ -2389,11 +2389,11 @@ describe("WorkbenchApp Logs Workspace", () => {
       await screen.findByRole("table", { name: /test\/accuracy test leaderboard/i }),
     ).toBeInTheDocument();
 
-    await clickLogOption(user, "Scalar Tags", "main_model.0.model/weights/mean");
+    await clickLogOption(user, "Scalar Tags", "main_model.layers.0.model/weights/mean");
     await user.click(logMetricGroupToggle("Other"));
     expect(
       await screen.findByRole("img", {
-        name: /main_model\.0\.model\/weights\/mean scalar chart/i,
+        name: /main_model\.layers\.0\.model\/weights\/mean scalar chart/i,
       }),
     ).toBeInTheDocument();
 
@@ -2414,7 +2414,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       ).toBe(true);
       expect(
         logScalarRequests.some((request) =>
-          request.tags.includes("main_model.0.model/weights/mean"),
+          request.tags.includes("main_model.layers.0.model/weights/mean"),
         ),
       ).toBe(true);
     });
@@ -3392,7 +3392,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       metrics: { "test/accuracy": 0.88 + index / 100 },
     }));
     const runs = [priorRun, ...kaggleRuns];
-    const monitorTag = "main_model.0.model/weights/mean";
+    const monitorTag = "main_model.layers.0.model/weights/mean";
     const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs },
       logExperimentsResponse: {

@@ -566,9 +566,9 @@ describe("nodeTitle / nodeSubtitle", () => {
   });
 
   it("falls back to typeName for numeric or non-semantic segments", () => {
-    const indexed = node("x", { typeName: "Sequential", path: "main_model.0" });
+    const indexed = node("x", { typeName: "Sequential", path: "main_model.layers.0" });
     expect(nodeTitle(indexed)).toBe("Sequential");
-    expect(nodeSubtitle(indexed)).toBe("main_model.0");
+    expect(nodeSubtitle(indexed)).toBe("main_model.layers.0");
   });
 });
 
@@ -576,9 +576,9 @@ describe("structureNodeLabel", () => {
   it("uses the final path segment with the node type", () => {
     expect(
       structureNodeLabel(
-        node("main_model.0.model", {
+        node("main_model.layers.0.model", {
           typeName: "LinearLayer",
-          path: "main_model.0.model",
+          path: "main_model.layers.0.model",
         }),
       ),
     ).toBe("model: LinearLayer");
@@ -606,26 +606,26 @@ describe("resolveLinearMonitorTarget", () => {
   const g = graph(
     [
       node("model", { typeName: "Model", path: "model" }),
-      node("main_model.0", { typeName: "Layer", path: "main_model.0" }),
-      node("main_model.0.model", {
+      node("main_model.layers.0", { typeName: "Layer", path: "main_model.layers.0" }),
+      node("main_model.layers.0.model", {
         typeName: "LinearLayer",
-        path: "main_model.0.model",
+        path: "main_model.layers.0.model",
       }),
-      node("main_model.0.processor", {
+      node("main_model.layers.0.processor", {
         typeName: "Processor",
-        path: "main_model.0.processor",
+        path: "main_model.layers.0.processor",
         graphRole: "internal",
       }),
-      node("main_model.0.processor.projection", {
+      node("main_model.layers.0.processor.projection", {
         typeName: "LinearLayer",
-        path: "main_model.0.processor.projection",
+        path: "main_model.layers.0.processor.projection",
       }),
-      node("main_model.1", {
+      node("main_model.layers.1", {
         typeName: "AdaptiveLinearLayer",
-        path: "main_model.1",
+        path: "main_model.layers.1",
       }),
-      node("main_model.2", { typeName: "Layer", path: "main_model.2" }),
-      node("main_model.2.model", { typeName: "Sequential", path: "main_model.2.model" }),
+      node("main_model.layers.2", { typeName: "Layer", path: "main_model.layers.2" }),
+      node("main_model.layers.2.model", { typeName: "Sequential", path: "main_model.layers.2.model" }),
       node("runtime_linear", {
         typeName: "LinearLayer",
         path: "runtime_linear",
@@ -633,28 +633,28 @@ describe("resolveLinearMonitorTarget", () => {
       }),
     ],
     [
-      ["model", "main_model.0"],
-      ["main_model.0", "main_model.0.model"],
-      ["main_model.0", "main_model.0.processor"],
-      ["main_model.0.processor", "main_model.0.processor.projection"],
-      ["model", "main_model.1"],
-      ["model", "main_model.2"],
-      ["main_model.2", "main_model.2.model"],
+      ["model", "main_model.layers.0"],
+      ["main_model.layers.0", "main_model.layers.0.model"],
+      ["main_model.layers.0", "main_model.layers.0.processor"],
+      ["main_model.layers.0.processor", "main_model.layers.0.processor.projection"],
+      ["model", "main_model.layers.1"],
+      ["model", "main_model.layers.2"],
+      ["main_model.layers.2", "main_model.layers.2.model"],
       ["model", "runtime_linear"],
     ],
   );
   const byId = new Map(g.nodes.map((graphNode) => [graphNode.id, graphNode]));
 
   it("resolves a Layer wrapper to its direct linear .model child", () => {
-    expect(resolveLinearMonitorTarget(g, byId.get("main_model.0"))?.path)
-      .toBe("main_model.0.model");
+    expect(resolveLinearMonitorTarget(g, byId.get("main_model.layers.0"))?.path)
+      .toBe("main_model.layers.0.model");
   });
 
   it("resolves direct LinearLayer and AdaptiveLinearLayer nodes to themselves", () => {
-    expect(resolveLinearMonitorTarget(g, byId.get("main_model.0.model"))?.path)
-      .toBe("main_model.0.model");
-    expect(resolveLinearMonitorTarget(g, byId.get("main_model.1"))?.path)
-      .toBe("main_model.1");
+    expect(resolveLinearMonitorTarget(g, byId.get("main_model.layers.0.model"))?.path)
+      .toBe("main_model.layers.0.model");
+    expect(resolveLinearMonitorTarget(g, byId.get("main_model.layers.1"))?.path)
+      .toBe("main_model.layers.1");
   });
 
   it("rejects non-linear, root, runtime, and nested projection nodes", () => {
@@ -664,9 +664,9 @@ describe("resolveLinearMonitorTarget", () => {
     );
 
     expect(resolveLinearMonitorTarget(g, byId.get("model"))).toBeUndefined();
-    expect(resolveLinearMonitorTarget(g, byId.get("main_model.2"))).toBeUndefined();
+    expect(resolveLinearMonitorTarget(g, byId.get("main_model.layers.2"))).toBeUndefined();
     expect(resolveLinearMonitorTarget(g, byId.get("runtime_linear"))).toBeUndefined();
-    expect(resolveLinearMonitorTarget(g, byId.get("main_model.0.processor"))).toBeUndefined();
+    expect(resolveLinearMonitorTarget(g, byId.get("main_model.layers.0.processor"))).toBeUndefined();
     expect(resolveLinearMonitorTarget(rootLinearGraph, rootLinearGraph.nodes[0]))
       .toBeUndefined();
   });
@@ -688,25 +688,25 @@ describe("resolveMonitorTarget", () => {
         typeName: "RecurrentLayer",
         path: "recurrent.0",
       }),
-      node("main_model.0", { typeName: "Layer", path: "main_model.0" }),
-      node("main_model.0.model", {
+      node("main_model.layers.0", { typeName: "Layer", path: "main_model.layers.0" }),
+      node("main_model.layers.0.model", {
         typeName: "ParametricLayer",
-        path: "main_model.0.model",
+        path: "main_model.layers.0.model",
       }),
-      node("main_model.1", { typeName: "Layer", path: "main_model.1" }),
-      node("main_model.1.model", {
+      node("main_model.layers.1", { typeName: "Layer", path: "main_model.layers.1" }),
+      node("main_model.layers.1.model", {
         typeName: "LinearLayer",
-        path: "main_model.1.model",
+        path: "main_model.layers.1.model",
       }),
     ],
     [
       ["model", "attention.0"],
       ["model", "attention.1"],
       ["model", "recurrent.0"],
-      ["model", "main_model.0"],
-      ["main_model.0", "main_model.0.model"],
-      ["model", "main_model.1"],
-      ["main_model.1", "main_model.1.model"],
+      ["model", "main_model.layers.0"],
+      ["main_model.layers.0", "main_model.layers.0.model"],
+      ["model", "main_model.layers.1"],
+      ["main_model.layers.1", "main_model.layers.1.model"],
     ],
   );
   const byId = new Map(g.nodes.map((graphNode) => [graphNode.id, graphNode]));
@@ -720,9 +720,9 @@ describe("resolveMonitorTarget", () => {
       monitorName: "recurrent-layer",
       node: byId.get("recurrent.0"),
     });
-    expect(resolveMonitorTarget(g, byId.get("main_model.0"))).toMatchObject({
+    expect(resolveMonitorTarget(g, byId.get("main_model.layers.0"))).toMatchObject({
       monitorName: "parametric",
-      node: byId.get("main_model.0.model"),
+      node: byId.get("main_model.layers.0.model"),
     });
   });
 
@@ -736,13 +736,13 @@ describe("resolveMonitorTarget", () => {
       (target) => target.monitorName === "layer-controller",
     );
 
-    expect(linearOnlyResolver(byId.get("main_model.1"))).toMatchObject({
+    expect(linearOnlyResolver(byId.get("main_model.layers.1"))).toMatchObject({
       monitorName: "linear",
-      node: byId.get("main_model.1.model"),
+      node: byId.get("main_model.layers.1.model"),
     });
-    expect(controllerOnlyResolver(byId.get("main_model.1"))).toMatchObject({
+    expect(controllerOnlyResolver(byId.get("main_model.layers.1"))).toMatchObject({
       monitorName: "layer-controller",
-      node: byId.get("main_model.1"),
+      node: byId.get("main_model.layers.1"),
     });
   });
 
@@ -764,40 +764,40 @@ describe("buildLinearMonitorComparisonCandidates", () => {
     const g = graph(
       [
         node("model", { typeName: "Model", path: "model" }),
-        node("main_model.0", { typeName: "Layer", path: "main_model.0" }),
-        node("main_model.0.model", {
+        node("main_model.layers.0", { typeName: "Layer", path: "main_model.layers.0" }),
+        node("main_model.layers.0.model", {
           typeName: "LinearLayer",
-          path: "main_model.0.model",
+          path: "main_model.layers.0.model",
         }),
-        node("main_model.1", { typeName: "Layer", path: "main_model.1" }),
-        node("main_model.1.model", {
+        node("main_model.layers.1", { typeName: "Layer", path: "main_model.layers.1" }),
+        node("main_model.layers.1.model", {
           typeName: "LinearLayer",
-          path: "main_model.1.model",
+          path: "main_model.layers.1.model",
         }),
-        node("main_model.2", { typeName: "Layer", path: "main_model.2" }),
-        node("main_model.2.model", { typeName: "Sequential", path: "main_model.2.model" }),
+        node("main_model.layers.2", { typeName: "Layer", path: "main_model.layers.2" }),
+        node("main_model.layers.2.model", { typeName: "Sequential", path: "main_model.layers.2.model" }),
         node("main_model.helper", {
           typeName: "LinearLayer",
           path: "main_model.helper",
         }),
       ],
       [
-        ["model", "main_model.0"],
-        ["main_model.0", "main_model.0.model"],
-        ["model", "main_model.1"],
-        ["main_model.1", "main_model.1.model"],
-        ["model", "main_model.2"],
-        ["main_model.2", "main_model.2.model"],
+        ["model", "main_model.layers.0"],
+        ["main_model.layers.0", "main_model.layers.0.model"],
+        ["model", "main_model.layers.1"],
+        ["main_model.layers.1", "main_model.layers.1.model"],
+        ["model", "main_model.layers.2"],
+        ["main_model.layers.2", "main_model.layers.2.model"],
         ["model", "main_model.helper"],
       ],
     );
     const byId = new Map(g.nodes.map((graphNode) => [graphNode.id, graphNode]));
 
     expect(
-      buildLinearMonitorComparisonCandidates(g, byId.get("main_model.0.model")).map(
+      buildLinearMonitorComparisonCandidates(g, byId.get("main_model.layers.0.model")).map(
         (candidate) => candidate.path,
       ),
-    ).toEqual(["main_model.1.model"]);
+    ).toEqual(["main_model.layers.1.model"]);
   });
 
   it("finds direct linear numeric siblings in index order", () => {
@@ -882,15 +882,15 @@ describe("buildLinearMonitorComparisonCandidateGroups", () => {
         path: "input_model.processor.projection",
       }),
       node("main_model", { typeName: "Sequential", path: "main_model" }),
-      node("main_model.0", { typeName: "Layer", path: "main_model.0" }),
-      node("main_model.0.model", {
+      node("main_model.layers.0", { typeName: "Layer", path: "main_model.layers.0" }),
+      node("main_model.layers.0.model", {
         typeName: "LinearLayer",
-        path: "main_model.0.model",
+        path: "main_model.layers.0.model",
       }),
-      node("main_model.1", { typeName: "Layer", path: "main_model.1" }),
-      node("main_model.1.model", {
+      node("main_model.layers.1", { typeName: "Layer", path: "main_model.layers.1" }),
+      node("main_model.layers.1.model", {
         typeName: "AdaptiveLinearLayer",
-        path: "main_model.1.model",
+        path: "main_model.layers.1.model",
       }),
       node("output_model", { typeName: "Layer", path: "output_model" }),
       node("output_model.model", {
@@ -919,10 +919,10 @@ describe("buildLinearMonitorComparisonCandidateGroups", () => {
       ["input_model", "input_model.processor"],
       ["input_model.processor", "input_model.processor.projection"],
       ["model", "main_model"],
-      ["main_model", "main_model.0"],
-      ["main_model.0", "main_model.0.model"],
-      ["main_model", "main_model.1"],
-      ["main_model.1", "main_model.1.model"],
+      ["main_model", "main_model.layers.0"],
+      ["main_model.layers.0", "main_model.layers.0.model"],
+      ["main_model", "main_model.layers.1"],
+      ["main_model.layers.1", "main_model.layers.1.model"],
       ["model", "output_model"],
       ["output_model", "output_model.model"],
       ["model", "runtime_linear"],
@@ -935,23 +935,23 @@ describe("buildLinearMonitorComparisonCandidateGroups", () => {
   it("keeps same-stack scope limited to numeric sibling layers", () => {
     const groups = buildLinearMonitorComparisonCandidateGroups(
       g,
-      byId.get("main_model.0.model"),
+      byId.get("main_model.layers.0.model"),
     );
 
     expect(groups["same-stack"].map((candidate) => candidate.path)).toEqual([
-      "main_model.1.model",
+      "main_model.layers.1.model",
     ]);
   });
 
   it("lists all resolved linear layer targets in graph order", () => {
     const groups = buildLinearMonitorComparisonCandidateGroups(
       g,
-      byId.get("main_model.0.model"),
+      byId.get("main_model.layers.0.model"),
     );
 
     expect(groups["all-layers"].map((candidate) => candidate.path)).toEqual([
       "input_model.model",
-      "main_model.1.model",
+      "main_model.layers.1.model",
       "output_model.model",
     ]);
   });
@@ -964,8 +964,8 @@ describe("buildLinearMonitorComparisonCandidateGroups", () => {
     const allLayerPaths = groups["all-layers"].map((candidate) => candidate.path);
 
     expect(allLayerPaths).toEqual([
-      "main_model.0.model",
-      "main_model.1.model",
+      "main_model.layers.0.model",
+      "main_model.layers.1.model",
       "output_model.model",
     ]);
     expect(allLayerPaths).not.toContain("input_model.model");
@@ -1043,24 +1043,24 @@ describe("buildChildSummaries", () => {
     const g = graph(
       [
         node("a"),
-        node("main_model.0", {
+        node("main_model.layers.0", {
           typeName: "Layer",
-          path: "main_model.0",
+          path: "main_model.layers.0",
           details: { dims: "128 -> 128" },
         }),
-        node("main_model.1", {
+        node("main_model.layers.1", {
           typeName: "Layer",
-          path: "main_model.1",
+          path: "main_model.layers.1",
           details: { dims: "128 -> 10" },
         }),
-        node("main_model.0.model", { typeName: "LinearLayer", path: "main_model.0.model" }),
-        node("main_model.1.model", { typeName: "LinearLayer", path: "main_model.1.model" }),
+        node("main_model.layers.0.model", { typeName: "LinearLayer", path: "main_model.layers.0.model" }),
+        node("main_model.layers.1.model", { typeName: "LinearLayer", path: "main_model.layers.1.model" }),
       ],
       [
-        ["a", "main_model.0"],
-        ["a", "main_model.1"],
-        ["main_model.0", "main_model.0.model"],
-        ["main_model.1", "main_model.1.model"],
+        ["a", "main_model.layers.0"],
+        ["a", "main_model.layers.1"],
+        ["main_model.layers.0", "main_model.layers.0.model"],
+        ["main_model.layers.1", "main_model.layers.1.model"],
       ],
     );
     const summaries = buildChildSummaries(g, buildGraphNavigation(g));
@@ -1071,7 +1071,7 @@ describe("buildChildSummaries", () => {
         dims: "128 -> 128",
         kind: "child",
         stackKind: "layer",
-        sourceNodeId: "main_model.0",
+        sourceNodeId: "main_model.layers.0",
       },
       {
         label: "Layer 1",
@@ -1079,7 +1079,7 @@ describe("buildChildSummaries", () => {
         dims: "128 -> 10",
         kind: "child",
         stackKind: "layer",
-        sourceNodeId: "main_model.1",
+        sourceNodeId: "main_model.layers.1",
       },
     ]);
   });
@@ -1087,34 +1087,34 @@ describe("buildChildSummaries", () => {
   it("uses the parent Layer dims on its primary inner-model summary", () => {
     const g = graph(
       [
-        node("main_model.0", {
+        node("main_model.layers.0", {
           typeName: "Layer",
-          path: "main_model.0",
+          path: "main_model.layers.0",
           details: { dims: "512 -> 10" },
         }),
-        node("main_model.0.model", {
+        node("main_model.layers.0.model", {
           typeName: "LinearLayer",
-          path: "main_model.0.model",
+          path: "main_model.layers.0.model",
         }),
-        node("main_model.0.gate_model", {
+        node("main_model.layers.0.gate_model", {
           typeName: "Sequential",
-          path: "main_model.0.gate_model",
+          path: "main_model.layers.0.gate_model",
         }),
       ],
       [
-        ["main_model.0", "main_model.0.model"],
-        ["main_model.0", "main_model.0.gate_model"],
+        ["main_model.layers.0", "main_model.layers.0.model"],
+        ["main_model.layers.0", "main_model.layers.0.gate_model"],
       ],
     );
 
-    expect(buildChildSummaries(g, buildGraphNavigation(g)).get("main_model.0")).toEqual([
+    expect(buildChildSummaries(g, buildGraphNavigation(g)).get("main_model.layers.0")).toEqual([
       {
         label: "LinearLayer",
         dims: "512 -> 10",
         kind: "child",
-        sourceNodeId: "main_model.0.model",
+        sourceNodeId: "main_model.layers.0.model",
       },
-      { label: "Gate", kind: "child", sourceNodeId: "main_model.0.gate_model" },
+      { label: "Gate", kind: "child", sourceNodeId: "main_model.layers.0.gate_model" },
     ]);
   });
 
@@ -1197,19 +1197,19 @@ describe("buildChildSummaries", () => {
   it("collapses long layer stacks with an ellipsis and total layer count", () => {
     const layerCount = 9;
     const layerNodes = Array.from({ length: layerCount }, (_, index) => [
-      node(`main_model.${index}`, {
+      node(`main_model.layers.${index}`, {
         typeName: "Layer",
-        path: `main_model.${index}`,
+        path: `main_model.layers.${index}`,
         details: { dims: `${index + 1} -> ${index + 2}` },
       }),
-      node(`main_model.${index}.model`, {
+      node(`main_model.layers.${index}.model`, {
         typeName: "LinearLayer",
-        path: `main_model.${index}.model`,
+        path: `main_model.layers.${index}.model`,
       }),
     ]).flat();
     const layerEdges = Array.from({ length: layerCount }, (_, index) => [
-      ["model", `main_model.${index}`] as [string, string],
-      [`main_model.${index}`, `main_model.${index}.model`] as [string, string],
+      ["model", `main_model.layers.${index}`] as [string, string],
+      [`main_model.layers.${index}`, `main_model.layers.${index}.model`] as [string, string],
     ]).flat();
     const g = graph([node("model"), ...layerNodes], layerEdges);
 
@@ -1220,7 +1220,7 @@ describe("buildChildSummaries", () => {
         dims: "1 -> 2",
         kind: "child",
         stackKind: "layer",
-        sourceNodeId: "main_model.0",
+        sourceNodeId: "main_model.layers.0",
       },
       {
         label: "Layer 1",
@@ -1228,7 +1228,7 @@ describe("buildChildSummaries", () => {
         dims: "2 -> 3",
         kind: "child",
         stackKind: "layer",
-        sourceNodeId: "main_model.1",
+        sourceNodeId: "main_model.layers.1",
       },
       {
         label: "…",
@@ -1241,7 +1241,7 @@ describe("buildChildSummaries", () => {
         dims: "9 -> 10",
         kind: "child",
         stackKind: "layer",
-        sourceNodeId: "main_model.8",
+        sourceNodeId: "main_model.layers.8",
       },
     ]);
   });
@@ -1604,20 +1604,20 @@ describe("buildStackDiagrams", () => {
             ],
           },
         }),
-        node("main_model.0", {
+        node("main_model.layers.0", {
           typeName: "Layer",
-          path: "main_model.0",
+          path: "main_model.layers.0",
           details: { inputDim: 999, outputDim: 999 },
         }),
-        node("main_model.1", {
+        node("main_model.layers.1", {
           typeName: "Layer",
-          path: "main_model.1",
+          path: "main_model.layers.1",
           details: { inputDim: 999, outputDim: 999 },
         }),
       ],
       [
-        ["main_model", "main_model.0"],
-        ["main_model", "main_model.1"],
+        ["main_model", "main_model.layers.0"],
+        ["main_model", "main_model.layers.1"],
       ],
     );
 
@@ -1633,20 +1633,20 @@ describe("buildStackDiagrams", () => {
           typeName: "Sequential",
           path: "main_model",
         }),
-        node("main_model.0", {
+        node("main_model.layers.0", {
           typeName: "Layer",
-          path: "main_model.0",
+          path: "main_model.layers.0",
           details: { inputDim: 128, outputDim: 256 },
         }),
-        node("main_model.1", {
+        node("main_model.layers.1", {
           typeName: "Layer",
-          path: "main_model.1",
+          path: "main_model.layers.1",
           details: { inputDim: 256, outputDim: 10 },
         }),
       ],
       [
-        ["main_model", "main_model.0"],
-        ["main_model", "main_model.1"],
+        ["main_model", "main_model.layers.0"],
+        ["main_model", "main_model.layers.1"],
       ],
     );
 
@@ -1663,19 +1663,19 @@ describe("buildStackDiagrams", () => {
           path: "main_model",
           details: { numLayers: 1 },
         }),
-        node("main_model.0", {
+        node("main_model.layers.0", {
           typeName: "Layer",
-          path: "main_model.0",
+          path: "main_model.layers.0",
         }),
-        node("main_model.0.model", {
+        node("main_model.layers.0.model", {
           typeName: "LinearLayer",
-          path: "main_model.0.model",
+          path: "main_model.layers.0.model",
           details: { inputDim: 64, outputDim: 32 },
         }),
       ],
       [
-        ["main_model", "main_model.0"],
-        ["main_model.0", "main_model.0.model"],
+        ["main_model", "main_model.layers.0"],
+        ["main_model.layers.0", "main_model.layers.0.model"],
       ],
     );
 

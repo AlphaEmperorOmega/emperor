@@ -1110,7 +1110,7 @@ describe("WorkbenchApp Full Config", () => {
     renderWorkbench();
 
     expect(
-      await screen.findByText("main_model.0", undefined, { timeout: 5000 }),
+      await screen.findByText("main_model.layers.0", undefined, { timeout: 5000 }),
     ).toBeInTheDocument();
     expect(
       await screen.findByRole(

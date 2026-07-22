@@ -1094,7 +1094,7 @@ class RunHistoryHttpTests(unittest.TestCase):
                     "layer_20260601_010203",
                     "version_0",
                 ],
-                scalars={"main_model.0.model/weights/mean": [(1, 0.5)]},
+                scalars={"main_model.layers.0.model/weights/mean": [(1, 0.5)]},
             )
             write_tensorboard_run(
                 logs_root,

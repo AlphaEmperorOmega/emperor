@@ -86,7 +86,7 @@ describe("log diagnostics", () => {
       .toBe(true);
     expect(isDefaultDiagnosticScalarTag(rateTag)).toBe(true);
     expect(isDefaultDiagnosticScalarTag(countTag)).toBe(false);
-    expect(isDefaultDiagnosticScalarTag("main_model.0.model/weights/mean")).toBe(false);
+    expect(isDefaultDiagnosticScalarTag("main_model.layers.0.model/weights/mean")).toBe(false);
   });
 
   it("builds stable confusion heatmaps only from selected rate tags", () => {

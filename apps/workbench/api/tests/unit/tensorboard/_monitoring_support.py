@@ -9,9 +9,9 @@ class TagsFailureAccumulator:
 class ReadFailureAccumulator:
     def Tags(self):
         return {
-            "scalars": ["main_model.0.model/output/mean"],
-            "histograms": ["main_model.0.model/histogram/usage_fraction"],
-            "images": ["main_model.0.model/heatmap/usage_fraction"],
+            "scalars": ["main_model.layers.0.model/output/mean"],
+            "histograms": ["main_model.layers.0.model/histogram/usage_fraction"],
+            "images": ["main_model.layers.0.model/heatmap/usage_fraction"],
         }
 
     def Scalars(self, tag):
@@ -43,11 +43,11 @@ class NoMatchingMonitorAccumulator:
 class ParameterStatusAccumulator:
     def Tags(self):
         return {
-            "scalars": ["main_model.0.model/weights/relative_delta_norm"],
+            "scalars": ["main_model.layers.0.model/weights/relative_delta_norm"],
         }
 
     def Scalars(self, tag):
-        if tag != "main_model.0.model/weights/relative_delta_norm":
+        if tag != "main_model.layers.0.model/weights/relative_delta_norm":
             raise KeyError(tag)
         return [FakeScalarEvent(1, 0.0), FakeScalarEvent(2, 0.5)]
 
@@ -56,13 +56,13 @@ class LargeParameterStatusAccumulator:
     def Tags(self):
         return {
             "scalars": [
-                "main_model.0.model/weights/relative_delta_norm",
-                "main_model.0.model/bias/l2_norm",
+                "main_model.layers.0.model/weights/relative_delta_norm",
+                "main_model.layers.0.model/bias/l2_norm",
             ],
         }
 
     def Scalars(self, tag):
-        if tag == "main_model.0.model/weights/relative_delta_norm":
+        if tag == "main_model.layers.0.model/weights/relative_delta_norm":
             return [
                 FakeScalarEvent(1, 0.75),
                 FakeScalarEvent(2, 0.0),
@@ -70,7 +70,7 @@ class LargeParameterStatusAccumulator:
                 FakeScalarEvent(4, 0.0),
                 FakeScalarEvent(5, 0.0),
             ]
-        if tag == "main_model.0.model/bias/l2_norm":
+        if tag == "main_model.layers.0.model/bias/l2_norm":
             return [
                 FakeScalarEvent(1, 1.0),
                 FakeScalarEvent(2, 2.0),

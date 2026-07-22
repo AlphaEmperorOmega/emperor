@@ -67,7 +67,7 @@ describe("useGraphViewState selection", () => {
     });
     const layer = node("layer", {
       typeName: "Layer",
-      path: "main_model.0",
+      path: "main_model.layers.0",
       config: {
         typeName: "LayerConfig",
         fields: [
@@ -78,7 +78,7 @@ describe("useGraphViewState selection", () => {
     });
     const linear = node("linear", {
       typeName: "LinearLayer",
-      path: "main_model.0.model",
+      path: "main_model.layers.0.model",
       details: {
         dims: "32 -> 32",
         weightShape: "32 x 32",
@@ -97,7 +97,7 @@ describe("useGraphViewState selection", () => {
       ],
     };
     const activity = {
-      targetPath: "main_model.0.model",
+      targetPath: "main_model.layers.0.model",
       weights: {
         status: "updated" as const,
         source: "historical" as const,
@@ -114,7 +114,7 @@ describe("useGraphViewState selection", () => {
             ? linear
             : undefined,
         parameterActivityByNodePath: new Map([
-          ["main_model.0.model", activity],
+          ["main_model.layers.0.model", activity],
         ]),
       }),
     );

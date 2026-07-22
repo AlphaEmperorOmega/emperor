@@ -38,7 +38,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
             async with lifespan_client(app) as client:
                 return await client.get(
                     f"/logs/runs/{run_id}/monitor-data",
-                    params={"nodePath": "main_model.0.model"},
+                    params={"nodePath": "main_model.layers.0.model"},
                 )
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -50,7 +50,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
                 "read",
                 return_value=MonitorData(
                     job_id=run_id,
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     preset=None,
                     dataset="Mnist",
                     log_dir=str(run_dir),
@@ -66,7 +66,7 @@ class HistoricalMonitorDataFailureTests(unittest.TestCase):
             response.json(),
             {
                 "jobId": run_id,
-                "nodePath": "main_model.0.model",
+                "nodePath": "main_model.layers.0.model",
                 "preset": None,
                 "dataset": "Mnist",
                 "logDir": str(run_dir),

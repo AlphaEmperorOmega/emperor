@@ -40,14 +40,20 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             self.write_scalars(
                 log_dir,
                 {
-                    "main_model.0.model/weights/relative_delta_norm": [
+                    "main_model.layers.0.model/weights/relative_delta_norm": [
                         (2, 0.0),
                         (3, 1e-6),
                     ],
-                    "main_model.0.model/bias/delta_norm": [(2, 0.0), (3, 0.0)],
-                    "main_model.1.model/weights/delta_norm": [(2, 0.0), (3, 0.0)],
-                    "main_model.2.model/weights/l2_norm": [(1, 4.0)],
-                    "main_model.3.model/weights/delta_norm": [(2, 0.0), (3, 0.25)],
+                    "main_model.layers.0.model/bias/delta_norm": [(2, 0.0), (3, 0.0)],
+                    "main_model.layers.1.model/weights/delta_norm": [
+                        (2, 0.0),
+                        (3, 0.0),
+                    ],
+                    "main_model.layers.2.model/weights/l2_norm": [(1, 4.0)],
+                    "main_model.layers.3.model/weights/delta_norm": [
+                        (2, 0.0),
+                        (3, 0.25),
+                    ],
                 },
             )
 
@@ -62,22 +68,22 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
         self.assertEqual(data.source_id, "run-1")
         self.assertEqual(data.preset, "baseline")
         self.assertEqual(data.dataset, "Mnist")
-        self.assertEqual(nodes["main_model.0.model"].weights.status, "updated")
+        self.assertEqual(nodes["main_model.layers.0.model"].weights.status, "updated")
         self.assertEqual(
-            nodes["main_model.0.model"].weights.metric,
-            "main_model.0.model/weights/relative_delta_norm",
+            nodes["main_model.layers.0.model"].weights.metric,
+            "main_model.layers.0.model/weights/relative_delta_norm",
         )
-        self.assertEqual(nodes["main_model.0.model"].weights.last_step, 3)
-        self.assertEqual(nodes["main_model.0.model"].weights.observed_points, 2)
-        self.assertEqual(nodes["main_model.0.model"].bias.status, "unchanged")
-        self.assertEqual(nodes["main_model.0.model"].bias.observed_points, 2)
-        self.assertEqual(nodes["main_model.1.model"].weights.status, "unchanged")
-        self.assertEqual(nodes["main_model.1.model"].bias.status, "missing")
-        self.assertEqual(nodes["main_model.2.model"].weights.status, "unknown")
-        self.assertEqual(nodes["main_model.3.model"].weights.status, "updated")
+        self.assertEqual(nodes["main_model.layers.0.model"].weights.last_step, 3)
+        self.assertEqual(nodes["main_model.layers.0.model"].weights.observed_points, 2)
+        self.assertEqual(nodes["main_model.layers.0.model"].bias.status, "unchanged")
+        self.assertEqual(nodes["main_model.layers.0.model"].bias.observed_points, 2)
+        self.assertEqual(nodes["main_model.layers.1.model"].weights.status, "unchanged")
+        self.assertEqual(nodes["main_model.layers.1.model"].bias.status, "missing")
+        self.assertEqual(nodes["main_model.layers.2.model"].weights.status, "unknown")
+        self.assertEqual(nodes["main_model.layers.3.model"].weights.status, "updated")
         self.assertEqual(
-            nodes["main_model.3.model"].weights.metric,
-            "main_model.3.model/weights/delta_norm",
+            nodes["main_model.layers.3.model"].weights.metric,
+            "main_model.layers.3.model/weights/delta_norm",
         )
 
     def test_single_zero_delta_point_is_unknown(self) -> None:
@@ -86,7 +92,7 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             self.write_scalars(
                 log_dir,
                 {
-                    "main_model.0.model/weights/delta_norm": [(2, 0.0)],
+                    "main_model.layers.0.model/weights/delta_norm": [(2, 0.0)],
                 },
             )
 
@@ -98,9 +104,11 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             )
 
         node = data.nodes[0]
-        self.assertEqual(node.node_path, "main_model.0.model")
+        self.assertEqual(node.node_path, "main_model.layers.0.model")
         self.assertEqual(node.weights.status, "unknown")
-        self.assertEqual(node.weights.metric, "main_model.0.model/weights/delta_norm")
+        self.assertEqual(
+            node.weights.metric, "main_model.layers.0.model/weights/delta_norm"
+        )
         self.assertEqual(node.weights.last_step, 2)
         self.assertEqual(node.weights.observed_points, 1)
         self.assertEqual(node.bias.status, "missing")
@@ -111,8 +119,8 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             self.write_scalars(
                 log_dir,
                 {
-                    "main_model.0.model/weights/l2_norm": [(1, 4.0), (2, 4.25)],
-                    "main_model.0.model/bias/mean": [(1, 0.5), (2, 0.5)],
+                    "main_model.layers.0.model/weights/l2_norm": [(1, 4.0), (2, 4.25)],
+                    "main_model.layers.0.model/bias/mean": [(1, 0.5), (2, 0.5)],
                 },
             )
 
@@ -124,11 +132,13 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
             )
 
         node = data.nodes[0]
-        self.assertEqual(node.node_path, "main_model.0.model")
+        self.assertEqual(node.node_path, "main_model.layers.0.model")
         self.assertEqual(node.weights.status, "updated")
-        self.assertEqual(node.weights.metric, "main_model.0.model/weights/l2_norm")
+        self.assertEqual(
+            node.weights.metric, "main_model.layers.0.model/weights/l2_norm"
+        )
         self.assertEqual(node.bias.status, "unchanged")
-        self.assertEqual(node.bias.metric, "main_model.0.model/bias/mean")
+        self.assertEqual(node.bias.metric, "main_model.layers.0.model/bias/mean")
 
     def test_missing_or_nonexistent_log_dir_returns_empty_status_payload(self) -> None:
         reader = TensorBoardParameterStatusReader()
@@ -242,7 +252,7 @@ class TensorBoardParameterStatusReaderTests(unittest.TestCase):
         self.assertEqual(first, changed)
         self.assertEqual(load.call_count, 2)
         node = first.nodes[0]
-        self.assertEqual(node.node_path, "main_model.0.model")
+        self.assertEqual(node.node_path, "main_model.layers.0.model")
         self.assertEqual(node.weights.status, "updated")
 
     def test_parameter_status_uses_custom_scalar_size_guidance(self) -> None:

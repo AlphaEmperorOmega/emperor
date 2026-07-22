@@ -34,7 +34,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
         ):
             return TensorBoardMonitorReader().read(
                 job_id="job-1",
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 dataset="Mnist",
                 log_dir=str(log_dir),
             )
@@ -48,7 +48,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             data,
             MonitorData(
                 job_id="job-1",
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 preset=None,
                 dataset="Mnist",
                 log_dir=str(log_dir) if log_dir is not None else None,
@@ -63,7 +63,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
 
         missing_data = reader.read(
             job_id="job-1",
-            node_path="main_model.0.model",
+            node_path="main_model.layers.0.model",
             dataset="Mnist",
             log_dir=None,
         )
@@ -73,7 +73,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             nonexistent_log_dir = Path(tmp) / "missing-run"
             nonexistent_data = reader.read(
                 job_id="job-1",
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 dataset="Mnist",
                 log_dir=str(nonexistent_log_dir),
             )
@@ -99,7 +99,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             ) as load:
                 data = reader.read(
                     job_id="job-1",
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Mnist",
                     log_dir=str(log_dir),
                 )
@@ -108,7 +108,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             data,
             MonitorData(
                 job_id="job-1",
-                node_path="main_model.0.model",
+                node_path="main_model.layers.0.model",
                 preset=None,
                 dataset="Mnist",
                 log_dir=str(log_dir),
@@ -141,7 +141,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
 
         self.assert_empty_monitor_payload(data, log_dir)
 
-    def test_monitor_reader_matches_legacy_layer_path_aliases(self) -> None:
+    def test_monitor_reader_rejects_retired_layer_path_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             log_dir = Path(tmp)
             writer = SummaryWriter(log_dir=str(log_dir))
@@ -157,10 +157,7 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             )
 
         self.assertEqual(data.node_path, "main_model.layers.0.model")
-        self.assertEqual(
-            [(series.tag, series.label) for series in data.scalar_series],
-            [("main_model.0.model/weights/mean", "weights/mean")],
-        )
+        self.assertEqual(data.scalar_series, ())
 
     def test_negative_monitor_results_are_cached_until_event_files_change(
         self,
@@ -177,20 +174,20 @@ class TensorBoardMonitorReaderFailureTests(unittest.TestCase):
             ) as load:
                 first = reader.read(
                     job_id="job-1",
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Mnist",
                     log_dir=str(log_dir),
                 )
                 second = reader.read(
                     job_id="job-1",
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Mnist",
                     log_dir=str(log_dir),
                 )
                 event_file.write_text("first-second", encoding="utf-8")
                 changed = reader.read(
                     job_id="job-1",
-                    node_path="main_model.0.model",
+                    node_path="main_model.layers.0.model",
                     dataset="Mnist",
                     log_dir=str(log_dir),
                 )

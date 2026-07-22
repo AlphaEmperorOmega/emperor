@@ -57,32 +57,11 @@ export function isParameterMonitorTag(tag: string) {
   return parseParameterMonitorTag(tag) !== undefined;
 }
 
-export function monitorPathAliases(nodePath: string | undefined): string[] {
-  if (!nodePath) {
-    return [];
-  }
-
-  const aliases = new Set([nodePath]);
-  const layerless = nodePath.replace(/(^|\.)layers\.(\d+)(?=\.|$)/g, "$1$2");
-  aliases.add(layerless);
-
-  const legacyMainModel = /^main_model\.(\d+)(.*)$/.exec(nodePath);
-  if (legacyMainModel) {
-    aliases.add(`main_model.layers.${legacyMainModel[1]}${legacyMainModel[2]}`);
-  }
-
-  return [...aliases];
-}
-
 export function monitorPathsMatch(
   left: string | undefined,
   right: string | undefined,
 ) {
-  if (!left || !right) {
-    return false;
-  }
-  const leftAliases = new Set(monitorPathAliases(left));
-  return monitorPathAliases(right).some((alias) => leftAliases.has(alias));
+  return Boolean(left && right && left === right);
 }
 
 export function tagMatchesNodePath(tag: string, nodePath: string | undefined) {

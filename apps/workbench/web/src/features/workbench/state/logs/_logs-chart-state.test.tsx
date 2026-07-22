@@ -512,7 +512,7 @@ describe("logs chart view model", () => {
         "validation/confusion_matrix/true_class_3/predicted_class_5/count",
       ),
     ).toBe(false);
-    expect(isDefaultScalarTag("main_model.0.model/weights/mean")).toBe(false);
+    expect(isDefaultScalarTag("main_model.layers.0.model/weights/mean")).toBe(false);
   });
 
   it("limits accordion plot selectors to compact train and validation metrics", () => {

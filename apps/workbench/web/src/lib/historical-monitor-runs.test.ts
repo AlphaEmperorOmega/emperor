@@ -242,18 +242,18 @@ describe("historical monitor run helpers", () => {
           {
             runId: "run-b",
             scalarTags: [],
-            histogramTags: ["main_model.0.model/histogram/usage_fraction"],
+            histogramTags: ["main_model.layers.0.model/histogram/usage_fraction"],
             imageTags: [],
             textTags: [],
           },
         ],
         ["run-a", "run-b"],
-        "main_model.0.model",
+        "main_model.layers.0.model",
       ),
     ).toBe(true);
   });
 
-  it("matches parameter monitor tags through legacy layer path aliases", () => {
+  it("rejects retired parameter-monitor path aliases", () => {
     expect(
       anyLogRunTagsMatchParameterNodePath(
         [
@@ -268,13 +268,13 @@ describe("historical monitor run helpers", () => {
         ["run-a"],
         "main_model.layers.0.model",
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("detects strict parameter monitor data by tag shape", () => {
     expect(
       logRunHasLayerMonitorData({
-        scalarTags: ["main_model.0.model/weights/mean"],
+        scalarTags: ["main_model.layers.0.model/weights/mean"],
         histogramTags: [],
         imageTags: [],
       }),
@@ -292,7 +292,7 @@ describe("historical monitor run helpers", () => {
     expect(
       logRunHasLayerMonitorData({
         scalarTags: [],
-        histogramTags: ["main_model.0.model/histogram/usage"],
+        histogramTags: ["main_model.layers.0.model/histogram/usage"],
         imageTags: [],
       }),
     ).toBe(false);
@@ -330,7 +330,7 @@ describe("historical monitor run helpers", () => {
     const tags = [
       {
         runId: "layer-run",
-        scalarTags: ["main_model.0.model/weights/mean"],
+        scalarTags: ["main_model.layers.0.model/weights/mean"],
         histogramTags: [],
         imageTags: [],
         textTags: [],

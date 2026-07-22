@@ -19,7 +19,8 @@ function run(overrides: Partial<LogRun> & Pick<LogRun, "id">): LogRun {
     runName: overrides.runName ?? `${overrides.id}_20260601_010203`,
     timestamp: overrides.timestamp ?? "2026-06-01 01:02:03",
     version: overrides.version ?? "version_0",
-    relativePath: overrides.relativePath ?? "exp_a/linear/baseline/Mnist/run/version_0",
+    relativePath:
+      overrides.relativePath ?? "exp_a/linears/linear/baseline/Mnist/run/version_0",
     hasResult: overrides.hasResult ?? false,
     eventFileCount: overrides.eventFileCount ?? 1,
     checkpointCount: overrides.checkpointCount ?? 0,
@@ -50,12 +51,17 @@ function node(
 function graph({ withBias = true }: { withBias?: boolean } = {}): InspectResponse {
   const root = node("root", "main_model", "LayerStack");
   const layers = Array.from({ length: 4 }, (_, index) => {
-    const wrapper = node(`layer-${index}`, `main_model.${index}`, "Layer");
-    const linear = node(`linear-${index}`, `main_model.${index}.model`, "LinearLayer", {
-      details: withBias
-        ? { weightShape: "2 x 2", biasShape: "2" }
-        : { weightShape: "2 x 2" },
-    });
+    const wrapper = node(`layer-${index}`, `main_model.layers.${index}`, "Layer");
+    const linear = node(
+      `linear-${index}`,
+      `main_model.layers.${index}.model`,
+      "LinearLayer",
+      {
+        details: withBias
+          ? { weightShape: "2 x 2", biasShape: "2" }
+          : { weightShape: "2 x 2" },
+      },
+    );
     return { wrapper, linear };
   });
 
@@ -110,16 +116,16 @@ function parameterStatus(
     nodes:
       overrides.nodes ??
       Array.from({ length: 4 }, (_, index) => ({
-        nodePath: `main_model.${index}.model`,
+        nodePath: `main_model.layers.${index}.model`,
         weights: {
           status: "updated" as const,
-          metric: `main_model.${index}.model/weights/relative_delta_norm`,
+          metric: `main_model.layers.${index}.model/weights/relative_delta_norm`,
           lastStep: 12,
           observedPoints: 2,
         },
         bias: {
           status: "updated" as const,
-          metric: `main_model.${index}.model/bias/relative_delta_norm`,
+          metric: `main_model.layers.${index}.model/bias/relative_delta_norm`,
           lastStep: 12,
           observedPoints: 2,
         },
@@ -153,16 +159,16 @@ describe("parameter summaries", () => {
           parameterStatus("run-1", {
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "unchanged",
-                  metric: "main_model.0.model/weights/delta_norm",
+                  metric: "main_model.layers.0.model/weights/delta_norm",
                   lastStep: 10,
                   observedPoints: 2,
                 },
                 bias: {
                   status: "updated",
-                  metric: "main_model.0.model/bias/delta_norm",
+                  metric: "main_model.layers.0.model/bias/delta_norm",
                   lastStep: 10,
                   observedPoints: 2,
                 },
@@ -188,16 +194,16 @@ describe("parameter summaries", () => {
           parameterStatus("run-static", {
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "unchanged",
-                  metric: "main_model.0.model/weights/delta_norm",
+                  metric: "main_model.layers.0.model/weights/delta_norm",
                   lastStep: 10,
                   observedPoints: 2,
                 },
                 bias: {
                   status: "updated",
-                  metric: "main_model.0.model/bias/delta_norm",
+                  metric: "main_model.layers.0.model/bias/delta_norm",
                   lastStep: 10,
                   observedPoints: 2,
                 },
@@ -222,7 +228,7 @@ describe("parameter summaries", () => {
           parameterStatus("run-1", {
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "missing",
                   metric: null,
@@ -262,15 +268,38 @@ describe("parameter summaries", () => {
     expect(summary.counts.updated).toBe(4);
   });
 
-  it("summarizes legacy status paths against modern graph paths", () => {
+  it("rejects retired status paths for canonical graph paths", () => {
     const summary = summarizeHistoricalParameterStatus({
       graph: modernGraph(),
-      status: { runs: [parameterStatus("run-1")] },
+      status: {
+        runs: [
+          parameterStatus("run-1", {
+            nodes: [
+              {
+                nodePath: "main_model.0.model",
+                weights: {
+                  status: "updated",
+                  metric: "main_model.0.model/weights/relative_delta_norm",
+                  lastStep: 12,
+                  observedPoints: 2,
+                },
+                bias: {
+                  status: "updated",
+                  metric: "main_model.0.model/bias/relative_delta_norm",
+                  lastStep: 12,
+                  observedPoints: 2,
+                },
+              },
+            ],
+          }),
+        ],
+      },
       runs: [run({ id: "run-1" })],
     });
 
     expect(summary.total).toBe(2);
-    expect(summary.counts.updated).toBe(2);
-    expect(summary.severity).toBe("success");
+    expect(summary.counts.updated).toBe(0);
+    expect(summary.counts.notTracked).toBe(2);
+    expect(summary.severity).toBe("not-tracked");
   });
 });

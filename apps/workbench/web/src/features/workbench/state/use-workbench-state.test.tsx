@@ -467,8 +467,8 @@ function graphNode(
 
 function monitorGraph(): InspectResponse {
   const root = graphNode("root", "main_model", "LayerStack");
-  const wrapper = graphNode("layer-0", "main_model.0", "Layer");
-  const linear = graphNode("linear-0", "main_model.0.model", "LinearLayer");
+  const wrapper = graphNode("layer-0", "main_model.layers.0", "Layer");
+  const linear = graphNode("linear-0", "main_model.layers.0.model", "LinearLayer");
 
   return {
     modelType: "linears",
@@ -493,10 +493,10 @@ function experimentMonitorGraph(
   suffix: string,
 ): InspectResponse {
   const root = graphNode(`${suffix}-root`, "main_model", "LayerStack");
-  const wrapper = graphNode(`${suffix}-layer`, "main_model.0", "Layer");
+  const wrapper = graphNode(`${suffix}-layer`, "main_model.layers.0", "Layer");
   const linear = graphNode(
     `${suffix}-linear`,
-    "main_model.0.model",
+    "main_model.layers.0.model",
     "LinearLayer",
     {
       details: { weightShape: [10, 10], biasShape: [10] },
@@ -523,8 +523,8 @@ function parameterLogTags(runIds: string[]) {
     runs: runIds.map((runId) => ({
       runId,
       scalarTags: [
-        "main_model.0.model/weights/mean",
-        "main_model.0.model/bias/mean",
+        "main_model.layers.0.model/weights/mean",
+        "main_model.layers.0.model/bias/mean",
       ],
       histogramTags: [],
       imageTags: [],
@@ -561,16 +561,16 @@ function parameterStatus(runIds: string[]) {
       logDir: `logs/${runId}`,
       nodes: [
         {
-          nodePath: "main_model.0.model",
+          nodePath: "main_model.layers.0.model",
           weights: {
             status: "updated" as const,
-            metric: "main_model.0.model/weights/relative_delta_norm",
+            metric: "main_model.layers.0.model/weights/relative_delta_norm",
             lastStep: 12,
             observedPoints: 2,
           },
           bias: {
             status: "updated" as const,
-            metric: "main_model.0.model/bias/delta_norm",
+            metric: "main_model.layers.0.model/bias/delta_norm",
             lastStep: 12,
             observedPoints: 2,
           },
@@ -1058,7 +1058,7 @@ beforeEach(() => {
       Promise.resolve({
         runs: input.runIds.map((runId) => ({
           runId,
-          scalarTags: ["main_model.0.model/weights/mean"],
+          scalarTags: ["main_model.layers.0.model/weights/mean"],
           histogramTags: [],
           imageTags: [],
           textTags: [],
@@ -2243,16 +2243,16 @@ describe("useWorkbenchState", () => {
             logDir: `logs/${runId}`,
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: runId === "baseline-new" ? "updated" : "unchanged",
-                  metric: "main_model.0.model/weights/relative_delta_norm",
+                  metric: "main_model.layers.0.model/weights/relative_delta_norm",
                   lastStep: 12,
                   observedPoints: 2,
                 },
                 bias: {
                   status: "unchanged",
-                  metric: "main_model.0.model/bias/delta_norm",
+                  metric: "main_model.layers.0.model/bias/delta_norm",
                   lastStep: 12,
                   observedPoints: 1,
                 },
@@ -2348,7 +2348,7 @@ describe("useWorkbenchState", () => {
         (node) => node.id === "layer-0",
       );
       expect(layerNode?.data.parameterActivity).toMatchObject({
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "mixed",
           source: "historical",
@@ -2452,16 +2452,16 @@ describe("useWorkbenchState", () => {
             logDir: `logs/${runId}`,
             nodes: [
               {
-                nodePath: "main_model.0.model",
+                nodePath: "main_model.layers.0.model",
                 weights: {
                   status: "updated",
-                  metric: "main_model.0.model/weights/relative_delta_norm",
+                  metric: "main_model.layers.0.model/weights/relative_delta_norm",
                   lastStep: 12,
                   observedPoints: 2,
                 },
                 bias: {
                   status: "unchanged",
-                  metric: "main_model.0.model/bias/delta_norm",
+                  metric: "main_model.layers.0.model/bias/delta_norm",
                   lastStep: 12,
                   observedPoints: 1,
                 },
@@ -2522,7 +2522,7 @@ describe("useWorkbenchState", () => {
         (node) => node.id === "layer-0",
       );
       expect(layerNode?.data.parameterActivity).toMatchObject({
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "historical",
@@ -2692,16 +2692,16 @@ describe("useWorkbenchState", () => {
           logDir: `logs/${runId}`,
           nodes: [
             {
-              nodePath: "main_model.0.model",
+              nodePath: "main_model.layers.0.model",
               weights: {
                 status: weightsStatus,
-                metric: "main_model.0.model/weights/test_delta_norm",
+                metric: "main_model.layers.0.model/weights/test_delta_norm",
                 lastStep: 12,
                 observedPoints: 2,
               },
               bias: {
                 status: biasStatus,
-                metric: "main_model.0.model/bias/test_delta_norm",
+                metric: "main_model.layers.0.model/bias/test_delta_norm",
                 lastStep: 12,
                 observedPoints: 2,
               },
@@ -2815,11 +2815,11 @@ describe("useWorkbenchState", () => {
       expect(layerNode?.data.parameterActivity).toMatchObject({
         weights: {
           status: "updated",
-          metric: "main_model.0.model/weights/test_delta_norm",
+          metric: "main_model.layers.0.model/weights/test_delta_norm",
         },
         bias: {
           status: "unchanged",
-          metric: "main_model.0.model/bias/test_delta_norm",
+          metric: "main_model.layers.0.model/bias/test_delta_norm",
         },
       });
     });
@@ -3484,7 +3484,7 @@ describe("useWorkbenchState", () => {
       );
       expect(layerNode?.data.canOpenMonitor).toBe(true);
       expect(layerNode?.data.parameterActivity).toMatchObject({
-        targetPath: "main_model.0.model",
+        targetPath: "main_model.layers.0.model",
         weights: {
           status: "updated",
           source: "historical",

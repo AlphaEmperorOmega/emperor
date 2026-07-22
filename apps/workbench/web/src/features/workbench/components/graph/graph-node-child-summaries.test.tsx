@@ -5,12 +5,12 @@ import { type GraphParameterActivity } from "@/lib/graph";
 import { graphCardGeometry } from "@/lib/graph/constants";
 
 const activity: GraphParameterActivity = {
-  targetPath: "main_model.0.model",
+  targetPath: "main_model.layers.0.model",
   weights: {
     status: "updated",
     source: "historical",
     sourceLabel: "2 historical runs",
-    metric: "main_model.0.model/weights/relative_delta_norm",
+    metric: "main_model.layers.0.model/weights/relative_delta_norm",
     lastStep: 8,
     observedPoints: 3,
     updatedRuns: 2,
@@ -23,7 +23,7 @@ const activity: GraphParameterActivity = {
     status: "mixed",
     source: "historical",
     sourceLabel: "2 historical runs",
-    metric: "main_model.0.model/bias/delta_norm",
+    metric: "main_model.layers.0.model/bias/delta_norm",
     lastStep: 7,
     observedPoints: 2,
     updatedRuns: 1,
@@ -71,7 +71,7 @@ describe("GraphNodeChildSummaries", () => {
     render(
       <div onClick={onParentClick}>
         <GraphNodeChildSummaries
-          nodeId="main_model.0"
+          nodeId="main_model.layers.0"
           summaries={[
             {
               label: "LinearLayer",
@@ -84,7 +84,7 @@ describe("GraphNodeChildSummaries", () => {
           monitorButton={
             <button
               type="button"
-              aria-label="Open monitor charts for main_model.0"
+              aria-label="Open monitor charts for main_model.layers.0"
               onClick={(event) => {
                 event.stopPropagation();
                 onOpenMonitor();
@@ -97,13 +97,13 @@ describe("GraphNodeChildSummaries", () => {
       </div>,
     );
 
-    const row = screen.getByTestId("child-summary-main_model.0-0");
+    const row = screen.getByTestId("child-summary-main_model.layers.0-0");
     const dims = within(row).getByText("128 -> 64");
     const indicators = within(row).getByRole("button", {
       name: /Parameter activity: weights updated, bias mixed/i,
     });
     const monitorButton = within(row).getByRole("button", {
-      name: /open monitor charts for main_model\.0/i,
+      name: /open monitor charts for main_model\.layers\.0/i,
     });
     const weightsIndicator = within(indicators).getByTestId(
       "graph-parameter-indicator-weights",
@@ -178,7 +178,7 @@ describe("GraphNodeChildSummaries", () => {
     expect(popup).toHaveTextContent(
       "1 updated / 1 unchanged / 0 missing / 0 unknown",
     );
-    expect(popup).not.toHaveTextContent("main_model.0.model/bias/delta_norm");
+    expect(popup).not.toHaveTextContent("main_model.layers.0.model/bias/delta_norm");
     expect(onParentClick).not.toHaveBeenCalled();
 
     fireEvent.click(monitorButton);
@@ -212,7 +212,7 @@ describe("GraphNodeChildSummaries", () => {
   it("keeps summaries without activity visual-only", () => {
     render(
       <GraphNodeChildSummaries
-        nodeId="main_model.0"
+        nodeId="main_model.layers.0"
         summaries={[
           { label: "LinearLayer", dims: "128 -> 64", kind: "child" },
           { label: "Gate", kind: "mechanism" },
@@ -235,7 +235,7 @@ describe("GraphNodeChildSummaries", () => {
   it("renders mechanism rows with the same neutral styling as child rows", () => {
     render(
       <GraphNodeChildSummaries
-        nodeId="main_model.0"
+        nodeId="main_model.layers.0"
         summaries={[
           { label: "LinearLayer", dims: "128 -> 64", kind: "child" },
           { label: "Gate", kind: "mechanism" },
@@ -244,9 +244,9 @@ describe("GraphNodeChildSummaries", () => {
       />,
     );
 
-    const linearLayerRow = screen.getByTestId("child-summary-main_model.0-0");
-    const gateRow = screen.getByTestId("child-summary-main_model.0-1");
-    const haltingRow = screen.getByTestId("child-summary-main_model.0-2");
+    const linearLayerRow = screen.getByTestId("child-summary-main_model.layers.0-0");
+    const gateRow = screen.getByTestId("child-summary-main_model.layers.0-1");
+    const haltingRow = screen.getByTestId("child-summary-main_model.layers.0-2");
 
     expect(linearLayerRow).toHaveTextContent("LinearLayer");
     expect(gateRow).toHaveTextContent("Gate");

@@ -71,12 +71,12 @@ describe("GraphPreviewPanel", () => {
     const root = node("root", { typeName: "Model", path: "main_model" });
     const layer = node("layer", {
       typeName: "Layer",
-      path: "main_model.0",
+      path: "main_model.layers.0",
       details: { dims: "128 -> 64" },
     });
     const linear = node("linear", {
       typeName: "LinearLayer",
-      path: "main_model.0.model",
+      path: "main_model.layers.0.model",
     });
     const graph: InspectResponse = {
       modelType: "linears",
@@ -91,7 +91,7 @@ describe("GraphPreviewPanel", () => {
       ],
     };
     const activity: GraphParameterActivity = {
-      targetPath: "main_model.0.model",
+      targetPath: "main_model.layers.0.model",
       weights: {
         status: "updated",
         source: "historical",
@@ -258,11 +258,11 @@ describe("GraphPreviewPanel", () => {
     });
     const branch = node("minimap-branch", {
       typeName: "Layer",
-      path: "main_model.0",
+      path: "main_model.layers.0",
     });
     const linear = node("minimap-linear", {
       typeName: "LinearLayer",
-      path: "main_model.0.model",
+      path: "main_model.layers.0.model",
     });
     const graph: InspectResponse = {
       modelType: "linears",
@@ -338,7 +338,7 @@ describe("GraphPreviewPanel", () => {
     });
 
     const collapseBranchButton = branchNode.querySelector<HTMLButtonElement>(
-      'button[aria-label="Collapse main_model.0"]',
+      'button[aria-label="Collapse main_model.layers.0"]',
     );
     expect(collapseBranchButton).toBeInstanceOf(HTMLButtonElement);
     fireEvent.click(collapseBranchButton as HTMLButtonElement);
@@ -347,7 +347,7 @@ describe("GraphPreviewPanel", () => {
     ).not.toBeInTheDocument();
 
     const expandBranchButton = branchNode.querySelector<HTMLButtonElement>(
-      'button[aria-label="Expand main_model.0"]',
+      'button[aria-label="Expand main_model.layers.0"]',
     );
     expect(expandBranchButton).toBeInstanceOf(HTMLButtonElement);
     fireEvent.click(expandBranchButton as HTMLButtonElement);
@@ -356,12 +356,12 @@ describe("GraphPreviewPanel", () => {
     );
 
     const monitorButton = expandedLinearNode.querySelector<HTMLButtonElement>(
-      'button[aria-label="Open monitor charts for main_model.0.model"]',
+      'button[aria-label="Open monitor charts for main_model.layers.0.model"]',
     );
     expect(monitorButton).toBeInstanceOf(HTMLButtonElement);
     fireEvent.click(monitorButton as HTMLButtonElement);
     expect(await screen.findByRole("dialog", {
       name: /monitor charts/i,
-    })).toHaveTextContent("main_model.0.model");
+    })).toHaveTextContent("main_model.layers.0.model");
   });
 });

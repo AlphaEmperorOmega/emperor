@@ -45,7 +45,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     setupGraphScenario();
     renderWorkbench();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     expect(screen.getByTestId("flow")).toHaveAttribute(
       "data-only-render-visible-elements",
       "true",
@@ -54,8 +54,8 @@ describe("WorkbenchApp Graph Workspace", () => {
       "data-has-move-handlers",
       "true",
     );
-    expect(screen.getByTestId("edge-model-main_model.0")).toBeInTheDocument();
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(screen.getByTestId("edge-model-main_model.layers.0")).toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
@@ -100,16 +100,16 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(modelNode).getByTitle("263,168 bytes of parameter tensors"))
       .toHaveTextContent("0.25 MB");
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     expect(within(layerNode).getByTitle("33,024 parameters")).toHaveTextContent("33K");
     expect(within(layerNode).queryByTitle(/bytes of parameter tensors/i))
       .not.toBeInTheDocument();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
-    const gateNode = await screen.findByTestId("node-main_model.0.gate_model");
+    const gateNode = await screen.findByTestId("node-main_model.layers.0.gate_model");
     expect(within(gateNode).queryByTitle(/parameters/)).not.toBeInTheDocument();
   });
 
@@ -171,7 +171,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     setupGraphScenario();
     renderWorkbench();
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     const matchingSummaries = within(layerNode).getAllByLabelText("LinearLayer 128 -> 128");
     const summary = matchingSummaries[0];
     expect(matchingSummaries).toHaveLength(2);
@@ -186,18 +186,18 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    const parentNode = await screen.findByTestId("node-main_model.0");
-    expect(within(parentNode).queryByTestId("parameter-shapes-main_model.0")).not.toBeInTheDocument();
+    const parentNode = await screen.findByTestId("node-main_model.layers.0");
+    expect(within(parentNode).queryByTestId("parameter-shapes-main_model.layers.0")).not.toBeInTheDocument();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
-    const ownerNode = await screen.findByTestId("node-main_model.0.model");
-    const shapes = within(ownerNode).getByTestId("parameter-shapes-main_model.0.model");
+    const ownerNode = await screen.findByTestId("node-main_model.layers.0.model");
+    const shapes = within(ownerNode).getByTestId("parameter-shapes-main_model.layers.0.model");
     expect(within(shapes).getByLabelText("W shape 128 x 128")).toBeInTheDocument();
     expect(within(shapes).getByLabelText("B shape 128")).toBeInTheDocument();
-    expect(within(screen.getByTestId("node-main_model.0")).queryByText("128 x 128")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("node-main_model.layers.0")).queryByText("128 x 128")).not.toBeInTheDocument();
   });
 
   it("renders repeated layer children as separate graph card pills", async () => {
@@ -229,8 +229,8 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
-    const summaries = within(layerNode).getByTestId("child-summaries-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
+    const summaries = within(layerNode).getByTestId("child-summaries-main_model.layers.0");
     expect(within(summaries).getAllByText("LinearLayer")).toHaveLength(2);
     expect(within(layerNode).getByText("Gate")).toBeInTheDocument();
     expect(within(layerNode).queryByText("Dropout")).not.toBeInTheDocument();
@@ -238,7 +238,7 @@ describe("WorkbenchApp Graph Workspace", () => {
 
     await user.click(screen.getByRole("radio", { name: /full/i }));
 
-    const fullLayerNode = screen.getByTestId("node-main_model.0");
+    const fullLayerNode = screen.getByTestId("node-main_model.layers.0");
     expect(within(fullLayerNode).getByText("Dropout")).toBeInTheDocument();
     expect(within(fullLayerNode).getByText("LayerNorm")).toBeInTheDocument();
     expect(within(fullLayerNode).getByText("SelfAttentionProcessor")).toBeInTheDocument();
@@ -250,44 +250,44 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
-    const expandedLayerNode = await screen.findByTestId("node-main_model.0");
+    const expandedLayerNode = await screen.findByTestId("node-main_model.layers.0");
     await user.click(
-      within(expandedLayerNode).getByRole("button", { name: /details for main_model\.0/i }),
+      within(expandedLayerNode).getByRole("button", { name: /details for main_model\.layers\.0/i }),
     );
-    expect(within(screen.getByTestId("node-main_model.0")).getByText("activation"))
+    expect(within(screen.getByTestId("node-main_model.layers.0")).getByText("activation"))
       .toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /simple/i }));
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     expect(within(layerNode).getByText("Layer")).toBeInTheDocument();
     expect(
-      within(layerNode).getByRole("button", { name: /^collapse tree main_model\.0$/i }),
+      within(layerNode).getByRole("button", { name: /^collapse tree main_model\.layers\.0$/i }),
     ).toBeInTheDocument();
-    expect(within(layerNode).queryByText("main_model.0")).not.toBeInTheDocument();
+    expect(within(layerNode).queryByText("main_model.layers.0")).not.toBeInTheDocument();
     expect(within(layerNode).getByTitle("33,024 parameters")).toHaveTextContent("33K params");
     expect(within(layerNode).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
       "128 -> 128",
     );
     expect(within(layerNode).getByText("3 children")).toBeInTheDocument();
-    expect(within(layerNode).queryByTestId("child-summaries-main_model.0")).not.toBeInTheDocument();
-    expect(within(layerNode).queryByTestId("parameter-shapes-main_model.0")).not.toBeInTheDocument();
+    expect(within(layerNode).queryByTestId("child-summaries-main_model.layers.0")).not.toBeInTheDocument();
+    expect(within(layerNode).queryByTestId("parameter-shapes-main_model.layers.0")).not.toBeInTheDocument();
     expect(
-      within(layerNode).queryByRole("button", { name: /details for main_model\.0/i }),
+      within(layerNode).queryByRole("button", { name: /details for main_model\.layers\.0/i }),
     ).not.toBeInTheDocument();
     expect(within(layerNode).queryByText("activation")).not.toBeInTheDocument();
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /basic/i }));
 
-    const basicLayerNode = screen.getByTestId("node-main_model.0");
-    expect(within(basicLayerNode).getByRole("button", { name: /details for main_model\.0/i }))
+    const basicLayerNode = screen.getByTestId("node-main_model.layers.0");
+    expect(within(basicLayerNode).getByRole("button", { name: /details for main_model\.layers\.0/i }))
       .toBeInTheDocument();
     expect(within(basicLayerNode).getByText("activation")).toBeInTheDocument();
-    expect(within(basicLayerNode).getByTestId("child-summaries-main_model.0"))
+    expect(within(basicLayerNode).getByTestId("child-summaries-main_model.layers.0"))
       .toBeInTheDocument();
   });
 
@@ -318,15 +318,15 @@ describe("WorkbenchApp Graph Workspace", () => {
 
     await user.click(await screen.findByRole("radio", { name: /simple/i }));
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     await user.click(
-      within(layerNode).getByRole("button", { name: /^expand tree main_model\.0$/i }),
+      within(layerNode).getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }),
     );
 
-    const modelNode = await screen.findByTestId("node-main_model.0.model");
-    const projectedNode = await screen.findByTestId("node-main_model.0.processor.projection");
+    const modelNode = await screen.findByTestId("node-main_model.layers.0.model");
+    const projectedNode = await screen.findByTestId("node-main_model.layers.0.processor.projection");
     expect(within(modelNode).getByText("LinearLayer")).toBeInTheDocument();
-    expect(within(modelNode).queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(within(modelNode).queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
     expect(within(modelNode).getByTitle("16,512 parameters")).toHaveTextContent("16.5K params");
     expect(within(modelNode).getByTitle("input/output: 128 -> 128")).toHaveTextContent(
       "128 -> 128",
@@ -335,9 +335,9 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(within(projectedNode).getByTitle("16,512 parameters")).toHaveTextContent(
       "16.5K params",
     );
-    expect(screen.queryByTestId("node-main_model.0.processor")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.dropout_module")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.layer_norm_module")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.processor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.layer_norm_module")).not.toBeInTheDocument();
   });
 
   it("renders enabled gate and halting metadata as child summary rows", async () => {
@@ -377,24 +377,24 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     const layerCard = await screen.findByRole("button", {
-      name: /select and expand main_model\.0/i,
+      name: /select and expand main_model\.layers\.0/i,
     });
     await user.click(layerCard);
     expect(layerCard).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
-    expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
-    expect(screen.getByTestId("edge-main_model.0-main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
+    expect(screen.getByTestId("edge-main_model.layers.0-main_model.layers.0.model")).toBeInTheDocument();
     expect(await screen.findByText("Sequential")).toBeInTheDocument();
-    expect(screen.getByText("Gate Model · main_model.0.gate_model")).toBeInTheDocument();
-    expect(await screen.findByText("main_model.0.processor.projection")).toBeInTheDocument();
+    expect(screen.getByText("Gate Model · main_model.layers.0.gate_model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.processor.projection")).toBeInTheDocument();
     expect(
-      screen.getByTestId("edge-main_model.0-main_model.0.processor.projection"),
+      screen.getByTestId("edge-main_model.layers.0-main_model.layers.0.processor.projection"),
     ).toBeInTheDocument();
     expect(screen.queryByText("SelfAttentionProcessor")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /collapse all/i }));
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
-    expect(screen.queryByText("main_model.0.processor.projection")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.processor.projection")).not.toBeInTheDocument();
   });
 
   it("opens the structure tree and reveals a clicked graph path", async () => {
@@ -402,41 +402,41 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByTestId("node-main_model.0")).toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.model")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0")).toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.model")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^open graph structure$/i }));
 
     let structurePanel = await screen.findByTestId("graph-structure-panel");
     expect(
       within(structurePanel).getByRole("button", {
-        name: /^reveal main_model\.0 in graph$/i,
+        name: /^reveal main_model\.layers\.0 in graph$/i,
       }),
     ).toBeInTheDocument();
 
     await user.click(
       within(structurePanel).getByRole("button", {
-        name: /^expand structure main_model\.0$/i,
+        name: /^expand structure main_model\.layers\.0$/i,
       }),
     );
     await user.click(
       within(structurePanel).getByRole("button", {
-        name: /^reveal main_model\.0\.model in graph$/i,
+        name: /^reveal main_model\.layers\.0\.model in graph$/i,
       }),
     );
 
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
     const detailsHeading = await screen.findByRole("heading", { name: /node details/i });
     const detailsPanel = detailsHeading.closest('[data-workbench-region="details"]');
     if (!(detailsPanel instanceof HTMLElement)) {
       throw new Error("Expected Node Details heading to render inside the sidebar");
     }
-    expect(within(detailsPanel).getAllByText("main_model.0.model").length).toBeGreaterThan(0);
+    expect(within(detailsPanel).getAllByText("main_model.layers.0.model").length).toBeGreaterThan(0);
     expect(within(detailsPanel).getByText("16,512")).toBeInTheDocument();
     structurePanel = await screen.findByTestId("graph-structure-panel");
     expect(
       within(structurePanel).getByRole("button", {
-        name: /^reveal main_model\.0\.model in graph$/i,
+        name: /^reveal main_model\.layers\.0\.model in graph$/i,
       }),
     ).toHaveAttribute("aria-current", "true");
   });
@@ -447,17 +447,17 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: /select and collapse main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and collapse main_model\.layers\.0/i }),
     ).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(screen.getByRole("button", { name: /select and collapse main_model\.0/i }));
+    await user.click(screen.getByRole("button", { name: /select and collapse main_model\.layers\.0/i }));
 
-    expect(screen.queryByTestId("node-main_model.0.model")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /select and expand main_model\.0/i }))
+    expect(screen.queryByTestId("node-main_model.layers.0.model")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select and expand main_model\.layers\.0/i }))
       .toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
   });
@@ -468,11 +468,11 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     const rootCard = await screen.findByRole("button", { name: /^select model$/i });
-    expect(await screen.findByTestId("node-main_model.0")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0")).toBeInTheDocument();
 
     await user.click(rootCard);
 
-    expect(screen.getByTestId("node-main_model.0")).toBeInTheDocument();
+    expect(screen.getByTestId("node-main_model.layers.0")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /select and collapse model/i }),
     ).not.toBeInTheDocument();
@@ -484,15 +484,15 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
     await user.click(
-      await screen.findByRole("button", { name: /^select main_model\.0\.model$/i }),
+      await screen.findByRole("button", { name: /^select main_model\.layers\.0\.model$/i }),
     );
 
-    expect(screen.getByTestId("node-main_model.0.model")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /select and collapse main_model\.0/i }))
+    expect(screen.getByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select and collapse main_model\.layers\.0/i }))
       .toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("16,512")).toBeInTheDocument();
   });
@@ -503,13 +503,13 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /select and expand main_model\.1/i }));
+    await user.click(screen.getByRole("button", { name: /select and expand main_model\.layers\.1/i }));
 
-    expect(await screen.findByTestId("node-main_model.1.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.1.model")).toBeInTheDocument();
   });
 
   it("expands and collapses the current-mode subtree from the chevron", async () => {
@@ -520,36 +520,36 @@ describe("WorkbenchApp Graph Workspace", () => {
     await user.click(screen.getByRole("radio", { name: /full/i }));
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     await user.click(
-      within(layerNode).getByRole("button", { name: /^expand tree main_model\.0$/i }),
+      within(layerNode).getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }),
     );
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.0.processor")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.processor")).toBeInTheDocument();
     expect(
-      await screen.findByTestId("node-main_model.0.processor.projection"),
+      await screen.findByTestId("node-main_model.layers.0.processor.projection"),
     ).toBeInTheDocument();
 
-    const expandedLayerNode = screen.getByTestId("node-main_model.0");
+    const expandedLayerNode = screen.getByTestId("node-main_model.layers.0");
     await user.click(
-      within(expandedLayerNode).getByRole("button", { name: /^collapse tree main_model\.0$/i }),
+      within(expandedLayerNode).getByRole("button", { name: /^collapse tree main_model\.layers\.0$/i }),
     );
-    expect(screen.queryByTestId("node-main_model.0.model")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.processor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.processor")).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("node-main_model.0.processor.projection"),
+      screen.queryByTestId("node-main_model.layers.0.processor.projection"),
     ).not.toBeInTheDocument();
 
-    const collapsedLayerNode = screen.getByTestId("node-main_model.0");
+    const collapsedLayerNode = screen.getByTestId("node-main_model.layers.0");
     await user.click(
       within(collapsedLayerNode).getByRole("button", {
-        name: /select and expand main_model\.0/i,
+        name: /select and expand main_model\.layers\.0/i,
       }),
     );
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.0.processor")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.processor")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("node-main_model.0.processor.projection"),
+      screen.queryByTestId("node-main_model.layers.0.processor.projection"),
     ).not.toBeInTheDocument();
   });
 
@@ -558,18 +558,18 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     await user.click(
-      within(layerNode).getByRole("button", { name: /^expand tree main_model\.0$/i }),
+      within(layerNode).getByRole("button", { name: /^expand tree main_model\.layers\.0$/i }),
     );
 
-    expect(await screen.findByTestId("node-main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.model")).toBeInTheDocument();
     expect(
-      await screen.findByTestId("node-main_model.0.processor.projection"),
+      await screen.findByTestId("node-main_model.layers.0.processor.projection"),
     ).toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.processor")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.dropout_module")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.0.layer_norm_module")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.processor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.layer_norm_module")).not.toBeInTheDocument();
     expect(screen.queryByText("BEFORE")).not.toBeInTheDocument();
   });
 
@@ -579,14 +579,14 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
     const directChildY = Number(
-      screen.getByTestId("node-main_model.0.model").getAttribute("data-y"),
+      screen.getByTestId("node-main_model.layers.0.model").getAttribute("data-y"),
     );
     const projectedChildY = Number(
-      screen.getByTestId("node-main_model.0.processor.projection").getAttribute("data-y"),
+      screen.getByTestId("node-main_model.layers.0.processor.projection").getAttribute("data-y"),
     );
 
     expect(Math.abs(projectedChildY - directChildY)).toBeGreaterThanOrEqual(148);
@@ -597,16 +597,16 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    const layerNode = screen.getByTestId("node-main_model.0");
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
+    const layerNode = screen.getByTestId("node-main_model.layers.0");
     await user.click(
-      within(layerNode).getByRole("button", { name: /details for main_model\.0/i }),
+      within(layerNode).getByRole("button", { name: /details for main_model\.layers\.0/i }),
     );
 
     expect(within(layerNode).queryByText("dims")).not.toBeInTheDocument();
     expect(within(layerNode).getByText("activation")).toBeInTheDocument();
     expect(within(layerNode).getByText("dropout")).toBeInTheDocument();
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
   });
 
   it("relayouts graph cards when details change card height", async () => {
@@ -615,18 +615,18 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
-    const layerNode = screen.getByTestId("node-main_model.0");
+    const layerNode = screen.getByTestId("node-main_model.layers.0");
     const initialHeight = Number(layerNode.getAttribute("data-height"));
     const initialY = Number(layerNode.getAttribute("data-y"));
 
     await user.click(
-      within(layerNode).getByRole("button", { name: /details for main_model\.0/i }),
+      within(layerNode).getByRole("button", { name: /details for main_model\.layers\.0/i }),
     );
 
-    const expandedLayerNode = screen.getByTestId("node-main_model.0");
+    const expandedLayerNode = screen.getByTestId("node-main_model.layers.0");
     expect(Number(expandedLayerNode.getAttribute("data-height"))).toBeGreaterThan(initialHeight);
     expect(Number(expandedLayerNode.getAttribute("data-y"))).not.toBe(initialY);
   });
@@ -636,20 +636,20 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    const layerNode = await screen.findByTestId("node-main_model.0");
+    const layerNode = await screen.findByTestId("node-main_model.layers.0");
     await user.click(
-      within(layerNode).getByRole("button", { name: /details for main_model\.0/i }),
+      within(layerNode).getByRole("button", { name: /details for main_model\.layers\.0/i }),
     );
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
-    expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /collapse all/i }));
 
-    const visibleLayerNode = screen.getByTestId("node-main_model.0");
+    const visibleLayerNode = screen.getByTestId("node-main_model.layers.0");
     expect(within(visibleLayerNode).getByText("activation")).toBeInTheDocument();
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
   });
 
   it("can switch between opened and entire graph scopes", async () => {
@@ -657,21 +657,21 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /entire/i }));
-    expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
-    expect(await screen.findByText("main_model.0.processor.projection")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.processor.projection")).toBeInTheDocument();
     expect(
-      screen.getByTestId("edge-main_model.0-main_model.0.processor.projection"),
+      screen.getByTestId("edge-main_model.layers.0-main_model.layers.0.processor.projection"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /opened/i }));
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
   });
 
   it("selects cards in entire scope without changing opened-scope expansion", async () => {
@@ -679,14 +679,14 @@ describe("WorkbenchApp Graph Workspace", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: /entire/i }));
 
-    await user.click(await screen.findByRole("button", { name: /^select main_model\.0$/i }));
+    await user.click(await screen.findByRole("button", { name: /^select main_model\.layers\.0$/i }));
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /opened/i }));
-    expect(screen.queryByText("main_model.0.model")).not.toBeInTheDocument();
+    expect(screen.queryByText("main_model.layers.0.model")).not.toBeInTheDocument();
   });
 
   it("switches between basic and full graph detail", async () => {
@@ -695,18 +695,18 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
-    expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.0.layer_norm_module")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.0.processor")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.layer_norm_module")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.processor")).toBeInTheDocument();
     expect(
-      screen.queryByTestId("node-main_model.0.processor.projection"),
+      screen.queryByTestId("node-main_model.layers.0.processor.projection"),
     ).not.toBeInTheDocument();
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
 
@@ -723,17 +723,17 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(await screen.findByRole("radio", { name: /entire/i }));
-    expect(await screen.findByText("main_model.0.model")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
     expect(screen.queryByText("Dropout")).not.toBeInTheDocument();
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.0.layer_norm_module")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.layer_norm_module")).toBeInTheDocument();
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
     expect(await screen.findByTestId("node-metrics")).toBeInTheDocument();
-    expect(await screen.findByText("main_model.0.processor.projection")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0.processor.projection")).toBeInTheDocument();
   });
 
   it("collapse all keeps the selected graph detail mode", async () => {
@@ -742,19 +742,19 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.0.dropout_module")).toBeInTheDocument();
+    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /collapse all/i }));
     expect(screen.getByRole("radio", { name: /full/i })).toHaveAttribute(
       "aria-checked",
       "true",
     );
-    expect(screen.queryByTestId("node-main_model.0.dropout_module")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("node-main_model.0")).getByText("Dropout"),
+      within(screen.getByTestId("node-main_model.layers.0")).getByText("Dropout"),
     ).toBeInTheDocument();
   });
 
@@ -1082,7 +1082,7 @@ describe("WorkbenchApp Graph Workspace", () => {
     const user = userEvent.setup();
 
     await user.click(
-      await screen.findByRole("button", { name: /select and expand main_model\.0/i }),
+      await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     expect(screen.getByText("dims: 128 -> 128")).toBeInTheDocument();
     expect(screen.getByText("33,024")).toBeInTheDocument();

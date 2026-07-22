@@ -995,7 +995,7 @@ describe("WorkbenchApp Overview", () => {
     const { inspectBodies } = setupOverviewScenario();
     renderWorkbench();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     expect(inspectBodies[0]).toEqual({
       modelType: "linears",
       model: "linear",
@@ -1561,7 +1561,7 @@ describe("WorkbenchApp Overview", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     const initialInspectRequestCount = inspectBodies.length;
     const featuresButton = screen.getByRole("button", { name: /^features$/i });
 
@@ -1594,7 +1594,7 @@ describe("WorkbenchApp Overview", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     const trainingDetails = await expandedTrainingDetails(user);
     await setTrainingMultiSelectOption(
       user,
@@ -1623,7 +1623,7 @@ describe("WorkbenchApp Overview", () => {
     renderWorkbench();
     const user = userEvent.setup();
 
-    expect(await screen.findByText("main_model.0")).toBeInTheDocument();
+    expect(await screen.findByText("main_model.layers.0")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /datasets\s+\d+\s*\/\s*\d+/i }),
     ).not.toBeInTheDocument();
@@ -1770,8 +1770,8 @@ describe("WorkbenchApp Overview", () => {
         ],
       },
       logTagsByRun: {
-        "linear-run": ["main_model.0.model/weights/mean"],
-        "bert-run": ["main_model.0.model/weights/mean"],
+        "linear-run": ["main_model.layers.0.model/weights/mean"],
+        "bert-run": ["main_model.layers.0.model/weights/mean"],
       },
     });
     renderWorkbench();

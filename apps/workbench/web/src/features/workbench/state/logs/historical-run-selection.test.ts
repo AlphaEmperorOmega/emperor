@@ -105,7 +105,7 @@ describe("deriveDatasetSelectionState", () => {
         }),
       ],
       modelRunTags: [
-        tags("eligible", ["main_model.0.model/weights/mean"]),
+        tags("eligible", ["main_model.layers.0.model/weights/mean"]),
         tags("ineligible", ["train/loss"]),
       ],
       selectedModelType: "linears",
@@ -160,9 +160,9 @@ describe("deriveDatasetSelectionState", () => {
         }),
       ],
       modelRunTags: [
-        tags("eligible-new", ["main_model.0.model/weights/mean"]),
+        tags("eligible-new", ["main_model.layers.0.model/weights/mean"]),
         tags("ineligible", ["train/loss"]),
-        tags("eligible-old", ["main_model.0.model/bias/mean"]),
+        tags("eligible-old", ["main_model.layers.0.model/bias/mean"]),
       ],
       selectedModelType: "linears",
       selectedModel: "linear",

@@ -99,13 +99,13 @@ def _events() -> list[dict[str, Any]]:
         },
         {
             "type": "cluster_initialized",
-            "node": "main_model.0",
+            "node": "main_model.layers.0",
             "count": 2,
             "capacity": [2, 3, 4],
         },
         {
             "type": "neuron_added",
-            "node": "main_model.0",
+            "node": "main_model.layers.0",
             "count": 3,
             "coord": [1, 2, 3],
             "step": 4,
@@ -113,7 +113,7 @@ def _events() -> list[dict[str, Any]]:
         },
         {
             "type": "neurons_added",
-            "node": "main_model.0",
+            "node": "main_model.layers.0",
             "count": 5,
             "coordinates": [[2, 3, 4], ["invalid", 0, 0]],
             "coordinateCount": 2,

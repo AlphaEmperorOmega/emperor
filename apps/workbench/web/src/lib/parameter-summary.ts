@@ -5,7 +5,6 @@ import {
   createLinearMonitorTargetResolver,
   type LinearMonitorTargetResolver,
 } from "@/lib/graph/monitor-targets";
-import { monitorPathAliases } from "@/lib/monitor-paths";
 
 export type ExpectedParameterChannelName = "weights" | "bias";
 
@@ -86,13 +85,7 @@ function statusNodeByPath(status: LogParameterStatusResponse["runs"][number]) {
   const nodesByPath = new Map((status.nodes ?? []).map((node) => [node.nodePath, node]));
   return {
     get(nodePath: string) {
-      for (const alias of monitorPathAliases(nodePath)) {
-        const node = nodesByPath.get(alias);
-        if (node) {
-          return node;
-        }
-      }
-      return undefined;
+      return nodesByPath.get(nodePath);
     },
   };
 }
