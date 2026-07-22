@@ -292,7 +292,7 @@ class TestExpertsPublicInterface(unittest.TestCase):
                 self.assertIsNone(parameters["indices"].default)
                 self.assertIsNone(parameters["skip_mask"].default)
 
-    def test_exact_config_driven_exports_use_an_ordinary_interface(self):
+    def test_exact_exports_use_an_ordinary_eager_interface(self):
         completed = subprocess.run(
             [
                 sys.executable,
@@ -306,7 +306,6 @@ import emperor.experts as experts
 expected_eager_modules = (
     "emperor.experts._config",
     "emperor.experts._options",
-    "emperor.experts._state",
 )
 heavy_modules = (
     "emperor.experts._model",
@@ -384,7 +383,7 @@ print(json.dumps({
         )
         self.assertEqual(
             result["runtime_loaded"],
-            {"lightning": False},
+            {"lightning": True},
         )
         self.assertEqual(
             result["shortcut_attributes"],

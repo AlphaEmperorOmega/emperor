@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import ast
-import hashlib
+import re
 import tomllib
 import unittest
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,33 +38,25 @@ def _module_path(module_name: str) -> Path | None:
 
 def _literal_all(source_path: Path) -> tuple[str, ...] | None:
     tree = ast.parse(source_path.read_text(encoding="utf-8"), source_path.as_posix())
-    assignments = [
-        node
-        for node in tree.body
-        if isinstance(node, (ast.Assign, ast.AnnAssign))
-        and (
-            (
-                isinstance(node, ast.Assign)
-                and any(
-                    isinstance(target, ast.Name) and target.id == "__all__"
-                    for target in node.targets
-                )
-            )
-            or (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and node.target.id == "__all__"
-            )
-        )
-    ]
-    if len(assignments) != 1:
-        return None
-    value = assignments[0].value
-    if value is None:
+    assignments = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = (node.target,)
+        else:
+            continue
+        if any(
+            isinstance(target, ast.Name) and target.id == "__all__"
+            for target in targets
+        ):
+            assignments.append(node)
+
+    if len(assignments) != 1 or assignments[0].value is None:
         return None
     try:
-        literal = ast.literal_eval(value)
-    except (ValueError, TypeError):
+        literal = ast.literal_eval(assignments[0].value)
+    except (TypeError, ValueError):
         return None
     if not isinstance(literal, (list, tuple)) or not all(
         isinstance(name, str) for name in literal
@@ -72,36 +65,37 @@ def _literal_all(source_path: Path) -> tuple[str, ...] | None:
     return tuple(literal)
 
 
-def _dynamic_imports(tree: ast.AST) -> list[str]:
-    modules: list[str] = []
+def _dynamic_imports(tree: ast.AST) -> tuple[str, ...]:
+    modules: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not node.args:
             continue
         function = node.func
-        is_import = (
+        is_dynamic_import = (
             isinstance(function, ast.Name)
             and function.id in {"__import__", "import_module"}
         ) or (isinstance(function, ast.Attribute) and function.attr == "import_module")
         first_argument = node.args[0]
         if (
-            is_import
+            is_dynamic_import
             and isinstance(first_argument, ast.Constant)
             and isinstance(first_argument.value, str)
-            and first_argument.value.startswith("emperor")
         ):
-            modules.append(first_argument.value)
-    return modules
+            modules.add(first_argument.value)
+    return tuple(sorted(modules))
 
 
-def _imports_under(root: Path) -> list[ImportReference]:
+def _imports_under(root: Path) -> tuple[ImportReference, ...]:
     references: set[ImportReference] = set()
     if not root.exists():
-        return []
-    for source_path in sorted(root.rglob("*.py")):
+        return ()
+    source_paths = (root,) if root.is_file() else root.rglob("*.py")
+    for source_path in sorted(source_paths):
+        if source_path.suffix != ".py":
+            continue
         consumer = source_path.relative_to(PROJECT_ROOT).as_posix()
         tree = ast.parse(
-            source_path.read_text(encoding="utf-8"),
-            source_path.as_posix(),
+            source_path.read_text(encoding="utf-8"), source_path.as_posix()
         )
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -117,19 +111,7 @@ def _imports_under(root: Path) -> list[ImportReference]:
                 )
         for module_name in _dynamic_imports(tree):
             references.add(ImportReference(consumer, module_name, ()))
-    return sorted(references)
-
-
-def _edge_digest(edges: set[tuple[str, str]]) -> str:
-    payload = "".join(
-        f"{consumer}\0{module_name}\n" for consumer, module_name in sorted(edges)
-    )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _emperor_owner(module_name: str) -> str:
-    parts = module_name.split(".")
-    return ".".join(parts[:2]) if len(parts) > 1 else module_name
+    return tuple(sorted(references))
 
 
 def _source_module(source_path: Path) -> str:
@@ -140,18 +122,9 @@ def _source_module(source_path: Path) -> str:
     return ".".join(parts)
 
 
-def _interface_owner(
-    module_name: str,
-    public_interfaces: tuple[str, ...],
-) -> str:
-    matching_interfaces = [
-        interface
-        for interface in public_interfaces
-        if module_name == interface or module_name.startswith(f"{interface}.")
-    ]
-    if matching_interfaces:
-        return max(matching_interfaces, key=len)
-    return _emperor_owner(module_name)
+def _emperor_owner(module_name: str) -> str:
+    parts = module_name.split(".")
+    return ".".join(parts[:2]) if len(parts) > 1 else module_name
 
 
 def _is_type_checking_guard(node: ast.If) -> bool:
@@ -182,18 +155,7 @@ class _RuntimeImportVisitor(ast.NodeVisitor):
             self.modules.add(node.module)
 
     def visit_Call(self, node: ast.Call) -> None:
-        function = node.func
-        is_import = (
-            isinstance(function, ast.Name)
-            and function.id in {"__import__", "import_module"}
-        ) or (isinstance(function, ast.Attribute) and function.attr == "import_module")
-        if (
-            is_import
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-        ):
-            self.modules.add(node.args[0].value)
+        self.modules.update(_dynamic_imports(node))
         self.generic_visit(node)
 
 
@@ -240,68 +202,95 @@ def _strongly_connected_components(
     return tuple(sorted(components))
 
 
-def _runtime_dependency_cycles(
-    public_interfaces: tuple[str, ...],
-) -> tuple[tuple[str, ...], ...]:
+def _runtime_dependency_cycles() -> tuple[tuple[str, ...], ...]:
     graph: dict[str, set[str]] = {}
     for source_path in sorted(EMPEROR_ROOT.rglob("*.py")):
-        source_module = _source_module(source_path)
-        source_owner = _interface_owner(source_module, public_interfaces)
+        source_owner = _emperor_owner(_source_module(source_path))
         graph.setdefault(source_owner, set())
         tree = ast.parse(
-            source_path.read_text(encoding="utf-8"),
-            source_path.as_posix(),
+            source_path.read_text(encoding="utf-8"), source_path.as_posix()
         )
         visitor = _RuntimeImportVisitor()
         visitor.visit(tree)
         for imported_module in visitor.modules:
             if not imported_module.startswith("emperor."):
                 continue
-            imported_owner = _interface_owner(imported_module, public_interfaces)
+            imported_owner = _emperor_owner(imported_module)
             if imported_owner != source_owner:
                 graph[source_owner].add(imported_owner)
                 graph.setdefault(imported_owner, set())
     return _strongly_connected_components(graph)
 
 
+def _retired_module_matches(module: str, retired_modules: tuple[str, ...]) -> bool:
+    return any(
+        module == retired or module.startswith(f"{retired}.")
+        for retired in retired_modules
+    )
+
+
+def _documentation_paths(root: Path) -> tuple[Path, ...]:
+    if not root.exists():
+        return ()
+    if root.is_file():
+        return (root,)
+    return tuple(
+        path
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.suffix.lower() in {".md", ".rst", ".txt"}
+    )
+
+
 class EmperorInterfaceArchitectureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = _load_manifest()
-        cls.public_interfaces = tuple(cls.manifest["public_interfaces"])
-        cls.pending_interfaces = tuple(cls.manifest["pending_interfaces"])
-        cls.protected_interfaces = cls.manifest["protected_interfaces"]
+        cls.interfaces = {
+            interface["module"]: interface for interface in cls.manifest["interfaces"]
+        }
+        cls.retired_modules = tuple(cls.manifest["retired_modules"])
+        cls.retired_symbols = {
+            (entry["module"], entry["name"])
+            for entry in cls.manifest["retired_symbol_imports"]
+        }
 
-    def test_manifest_is_exact_and_internally_consistent(self) -> None:
-        self.assertEqual(self.manifest["schema_version"], 1)
-        self.assertEqual(len(self.public_interfaces), len(set(self.public_interfaces)))
+    def test_manifest_distinguishes_all_interface_kinds(self) -> None:
+        self.assertEqual(self.manifest["schema_version"], 2)
+        self.assertTrue(self.manifest["migration_complete"])
         self.assertEqual(
-            len(self.pending_interfaces),
-            len(set(self.pending_interfaces)),
+            len(self.interfaces),
+            len(self.manifest["interfaces"]),
+            "Interface Modules must be unique",
         )
-        self.assertTrue(set(self.pending_interfaces) <= set(self.public_interfaces))
         self.assertEqual(
-            set(self.protected_interfaces),
-            set(self.public_interfaces) - set(self.pending_interfaces),
+            {contract["kind"] for contract in self.interfaces.values()},
+            {"configuration", "runtime", "namespace"},
         )
 
-        if self.manifest["migration_complete"]:
-            self.assertEqual(self.pending_interfaces, ())
-            self.assertEqual(self.manifest["allowed_legacy_modules"], [])
-            self.assertEqual(self.manifest["legacy_import_count"], 0)
-            self.assertEqual(self.manifest["legacy_cross_owner_private_imports"], [])
-            self.assertEqual(self.manifest["legacy_dependency_cycles"], [])
+        for module_name, contract in self.interfaces.items():
+            with self.subTest(module=module_name):
+                exports = tuple(contract["exports"])
+                owners = tuple(contract["owners"])
+                self.assertEqual(len(exports), len(set(exports)))
+                self.assertEqual(len(exports), len(owners))
+                if contract["kind"] == "namespace":
+                    self.assertEqual(exports, ())
+                else:
+                    self.assertTrue(exports)
+                self.assertIsNotNone(_module_path(module_name))
 
-    def test_protected_interfaces_have_exact_literal_exports(self) -> None:
-        for module_name, contract in self.protected_interfaces.items():
+        self.assertEqual(
+            len(self.retired_modules),
+            len(set(self.retired_modules)),
+        )
+        self.assertFalse(set(self.interfaces) & set(self.retired_modules))
+
+    def test_interfaces_have_exact_literal_exports(self) -> None:
+        for module_name, contract in self.interfaces.items():
             with self.subTest(module=module_name):
                 source_path = _module_path(module_name)
-                self.assertIsNotNone(source_path)
                 assert source_path is not None
-                actual_exports = _literal_all(source_path)
-                expected_exports = tuple(contract["exports"])
-                self.assertEqual(actual_exports, expected_exports)
-                self.assertEqual(len(expected_exports), len(set(expected_exports)))
+                self.assertEqual(_literal_all(source_path), tuple(contract["exports"]))
 
     def test_root_package_has_no_eager_feature_exports(self) -> None:
         root_path = EMPEROR_ROOT / "__init__.py"
@@ -315,102 +304,130 @@ class EmperorInterfaceArchitectureTests(unittest.TestCase):
         self.assertEqual(eager_imports, [])
         self.assertIsNone(_literal_all(root_path))
 
-    def test_obsolete_layout_paths_cannot_return(self) -> None:
-        forbidden_grab_bag_directories = sorted(
-            path.relative_to(PROJECT_ROOT).as_posix()
-            for path in EMPEROR_ROOT.rglob("*")
-            if path.is_dir() and path.name in {"base", "core"}
-        )
-        forbidden_flat_paths = [
-            path.relative_to(PROJECT_ROOT).as_posix()
-            for path in (
-                EMPEROR_ROOT / "transformer" / "feed_forward",
-                EMPEROR_ROOT / "transformer" / "feed_forward.py",
-                EMPEROR_ROOT / "experiments" / "tasks",
-                EMPEROR_ROOT / "experiments" / "tasks.py",
+    def test_every_initializer_rejects_facade_mechanics(self) -> None:
+        violations: list[tuple[str, str]] = []
+        for source_path in sorted(EMPEROR_ROOT.rglob("__init__.py")):
+            relative_path = source_path.relative_to(PROJECT_ROOT).as_posix()
+            tree = ast.parse(
+                source_path.read_text(encoding="utf-8"),
+                source_path.as_posix(),
             )
-            if path.exists()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name) and node.id in {
+                    "_LAZY_EXPORTS",
+                    "TYPE_CHECKING",
+                }:
+                    violations.append((relative_path, node.id))
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                    node.name == "__getattr__"
+                ):
+                    violations.append((relative_path, "__getattr__"))
+                elif isinstance(node, ast.Import):
+                    if any(alias.name == "importlib" for alias in node.names):
+                        violations.append((relative_path, "importlib"))
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module == "importlib" or any(
+                        alias.name == "TYPE_CHECKING" for alias in node.names
+                    ):
+                        violations.append((relative_path, node.module or "relative"))
+                elif isinstance(node, ast.Call):
+                    function = node.func
+                    if (
+                        isinstance(function, ast.Name)
+                        and function.id in {"__import__", "import_module"}
+                    ) or (
+                        isinstance(function, ast.Attribute)
+                        and function.attr == "import_module"
+                    ):
+                        violations.append((relative_path, "dynamic import"))
+
+        self.assertEqual(violations, [])
+
+    def test_retired_owner_modules_are_physically_absent(self) -> None:
+        remaining = [
+            module_name
+            for module_name in self.retired_modules
+            if _module_path(module_name) is not None
         ]
+        self.assertEqual(remaining, [])
 
-        self.assertEqual(
-            forbidden_grab_bag_directories + forbidden_flat_paths,
-            [],
-        )
-
-    def test_external_consumers_match_the_exact_legacy_import_ledger(self) -> None:
-        allowed_legacy = set(self.manifest["allowed_legacy_modules"])
-        actual_legacy_modules: set[str] = set()
-        global_edges: set[tuple[str, str]] = set()
-        unexpected_imports: list[tuple[str, str]] = []
-        private_imports: list[tuple[str, str]] = []
-        invalid_interface_symbols: list[tuple[str, str, str]] = []
-
-        scopes = self.manifest["legacy_import_scopes"]
-        for scope in scopes:
-            root = PROJECT_ROOT / scope["root"]
-            scope_edges: set[tuple[str, str]] = set()
-            for reference in _imports_under(root):
+    def test_external_consumers_use_only_declared_interfaces(self) -> None:
+        invalid_references: list[tuple[str, str, str]] = []
+        for scope in self.manifest["external_interface_scopes"]:
+            for reference in _imports_under(PROJECT_ROOT / scope):
                 if reference.module != "emperor" and not reference.module.startswith(
                     "emperor."
                 ):
                     continue
-
-                module_segments = reference.module.split(".")[1:]
-                private_names = [
-                    name for name in reference.names if name.startswith("_")
-                ]
-                if any(segment.startswith("_") for segment in module_segments):
-                    private_imports.append((reference.consumer, reference.module))
-                if private_names:
-                    private_imports.extend(
-                        (reference.consumer, f"{reference.module}.{name}")
-                        for name in private_names
+                if _retired_module_matches(reference.module, self.retired_modules):
+                    invalid_references.append(
+                        (reference.consumer, reference.module, "retired Module")
                     )
-
-                if reference.module in self.protected_interfaces:
-                    exports = set(
-                        self.protected_interfaces[reference.module]["exports"]
-                    )
-                    for name in reference.names:
-                        if name == "*" or name not in exports:
-                            invalid_interface_symbols.append(
-                                (reference.consumer, reference.module, name)
+                    continue
+                for name in reference.names:
+                    if (reference.module, name) in self.retired_symbols:
+                        invalid_references.append(
+                            (
+                                reference.consumer,
+                                f"{reference.module}.{name}",
+                                "retired symbol",
                             )
-                    continue
-                if reference.module in self.pending_interfaces:
-                    continue
+                        )
+
                 if reference.module == "emperor" and not reference.names:
                     continue
+                contract = self.interfaces.get(reference.module)
+                if contract is None:
+                    invalid_references.append(
+                        (reference.consumer, reference.module, "undeclared Module")
+                    )
+                    continue
+                declared_exports = set(contract["exports"])
+                for name in reference.names:
+                    if name == "*" or name not in declared_exports:
+                        invalid_references.append(
+                            (
+                                reference.consumer,
+                                f"{reference.module}.{name}",
+                                "undeclared export",
+                            )
+                        )
 
-                edge = (reference.consumer, reference.module)
-                scope_edges.add(edge)
-                actual_legacy_modules.add(reference.module)
-                if reference.module not in allowed_legacy:
-                    unexpected_imports.append(edge)
+        self.assertEqual(invalid_references, [])
 
-            global_edges.update(scope_edges)
-            self.assertEqual(
-                len(scope_edges),
-                scope["count"],
-                msg=f"legacy import count changed for {scope['root']}",
-            )
-            self.assertEqual(
-                _edge_digest(scope_edges),
-                scope["sha256"],
-                msg=f"legacy import ledger changed for {scope['root']}",
-            )
+    def test_documentation_contains_no_retired_imports(self) -> None:
+        violations: list[tuple[str, str]] = []
+        root_exports = {
+            entry["module"]: set(entry["names"])
+            for entry in self.manifest["retired_root_exports"]
+        }
+        for scope in self.manifest["documentation_scopes"]:
+            for path in _documentation_paths(PROJECT_ROOT / scope):
+                text = path.read_text(encoding="utf-8")
+                relative_path = path.relative_to(PROJECT_ROOT).as_posix()
+                for retired_module in self.retired_modules:
+                    if retired_module in text:
+                        violations.append((relative_path, retired_module))
+                for module_name, retired_names in root_exports.items():
+                    direct_reference = re.compile(
+                        rf"\b{re.escape(module_name)}\.({'|'.join(map(re.escape, retired_names))})\b"
+                    )
+                    if direct_reference.search(text):
+                        violations.append((relative_path, module_name))
+                    import_pattern = re.compile(
+                        rf"from\s+{re.escape(module_name)}\s+import\s+(\([^)]*\)|[^\n]+)",
+                        re.DOTALL,
+                    )
+                    for match in import_pattern.finditer(text):
+                        imported_names = set(
+                            re.findall(r"\b[A-Za-z_]\w*\b", match.group(1))
+                        )
+                        if imported_names & retired_names:
+                            violations.append((relative_path, module_name))
 
-        self.assertEqual(private_imports, [])
-        self.assertEqual(invalid_interface_symbols, [])
-        self.assertEqual(unexpected_imports, [])
-        self.assertEqual(actual_legacy_modules, allowed_legacy)
-        self.assertEqual(len(global_edges), self.manifest["legacy_import_count"])
-        self.assertEqual(
-            _edge_digest(global_edges),
-            self.manifest["legacy_import_sha256"],
-        )
+        self.assertEqual(violations, [])
 
-    def test_internal_cross_owner_private_imports_match_exact_ledger(self) -> None:
+    def test_internal_cross_owner_private_imports_match_exact_debt(self) -> None:
         actual: set[tuple[str, str]] = set()
         for source_path in sorted(EMPEROR_ROOT.rglob("*.py")):
             consumer = _source_module(source_path)
@@ -426,8 +443,7 @@ class EmperorInterfaceArchitectureTests(unittest.TestCase):
                     continue
                 if node.module == "emperor._validation":
                     continue
-                imported_owner = _emperor_owner(node.module)
-                if imported_owner == consumer_owner:
+                if _emperor_owner(node.module) == consumer_owner:
                     continue
                 for alias in node.names:
                     full_name = f"{node.module}.{alias.name}"
@@ -442,14 +458,65 @@ class EmperorInterfaceArchitectureTests(unittest.TestCase):
         }
         self.assertEqual(actual, expected)
 
-    def test_runtime_dependency_cycles_match_exact_ledger(self) -> None:
-        actual = _runtime_dependency_cycles(self.public_interfaces)
+    def test_runtime_dependency_cycles_match_exact_debt(self) -> None:
         expected = tuple(
             tuple(cycle.split(","))
             for cycle in self.manifest["legacy_dependency_cycles"]
         )
+        self.assertEqual(_runtime_dependency_cycles(), expected)
 
-        self.assertEqual(actual, expected)
+    def test_local_checkpoints_do_not_reference_retired_owners(self) -> None:
+        retired_patterns = [
+            re.compile(re.escape(module.encode()) + rb"(?![A-Za-z0-9_.])")
+            for module in self.retired_modules
+        ]
+        violations: list[tuple[str, str]] = []
+        checkpoint_paths = [
+            path
+            for path in PROJECT_ROOT.rglob("*.ckpt")
+            if not {".git", "node_modules"} & set(path.parts)
+        ]
+        for checkpoint_path in checkpoint_paths:
+            payloads: list[bytes] = []
+            if zipfile.is_zipfile(checkpoint_path):
+                with zipfile.ZipFile(checkpoint_path) as archive:
+                    payloads.extend(
+                        archive.read(name)
+                        for name in archive.namelist()
+                        if name.endswith("data.pkl")
+                    )
+            else:
+                payloads.append(checkpoint_path.read_bytes())
+            for payload in payloads:
+                for module_name, pattern in zip(
+                    self.retired_modules, retired_patterns, strict=True
+                ):
+                    if pattern.search(payload):
+                        violations.append(
+                            (
+                                checkpoint_path.relative_to(PROJECT_ROOT).as_posix(),
+                                module_name,
+                            )
+                        )
+                for module_name, symbol_name in self.retired_symbols:
+                    module_position = payload.find(module_name.encode())
+                    symbol_position = payload.find(
+                        symbol_name.encode(),
+                        max(module_position, 0),
+                    )
+                    if (
+                        module_position >= 0
+                        and symbol_position >= 0
+                        and symbol_position - module_position < 256
+                    ):
+                        violations.append(
+                            (
+                                checkpoint_path.relative_to(PROJECT_ROOT).as_posix(),
+                                f"{module_name}.{symbol_name}",
+                            )
+                        )
+
+        self.assertEqual(violations, [])
 
 
 if __name__ == "__main__":

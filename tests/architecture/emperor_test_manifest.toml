@@ -359,6 +359,7 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_masks/variants/top_slice.py",
   "src/emperor/augmentations/adaptive_parameters/_masks/validation.py",
   "src/emperor/augmentations/adaptive_parameters/_masks/variants/weight_informed.py",
+  "src/emperor/augmentations/adaptive_parameters/monitoring/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_monitoring/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_monitoring/adaptive_parameters.py",
   "src/emperor/augmentations/adaptive_parameters/_monitoring/weight_banks.py",
@@ -376,7 +377,6 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_weights/variants/single_model.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/variants/soft_weighted_bank.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/validation.py",
-  "src/emperor/augmentations/adaptive_parameters/monitoring/__init__.py",
 ]
 
 [families.experts]
@@ -487,6 +487,7 @@ modules = [
   "src/emperor/attention/__init__.py",
   "src/emperor/attention/_base.py",
   "src/emperor/attention/_config.py",
+  "src/emperor/attention/monitoring/__init__.py",
   "src/emperor/attention/_monitoring/__init__.py",
   "src/emperor/attention/_monitoring/callback.py",
   "src/emperor/attention/_monitoring/diagnostics.py",
@@ -529,7 +530,6 @@ modules = [
   "src/emperor/attention/_variants/self_attention/processing.py",
   "src/emperor/attention/_variants/self_attention/projection.py",
   "src/emperor/attention/_variants/self_attention/validation.py",
-  "src/emperor/attention/monitoring/__init__.py",
 ]
 
 [families.transformer]

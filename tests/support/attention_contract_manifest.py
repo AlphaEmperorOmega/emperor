@@ -24,6 +24,10 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("monitoring exports",),
         EXPORT_TEST,
     ),
+    "emperor.attention._monitoring": module_contract(
+        ("private monitoring exports",),
+        EXPORT_TEST,
+    ),
     "emperor.attention._config": module_contract(
         ("configuration schema", "build dispatch", "runtime maxima documentation"),
         "tests.unit.test_attention",
@@ -75,9 +79,6 @@ ATTENTION_CONTRACT_MANIFEST = {
             ("configuration", "runtime tensor", "selected source validation"),
             "tests.unit.test_attention_correctness_regressions",
         ),
-    ),
-    "emperor.attention._monitoring": module_contract(
-        ("private namespace",), EXPORT_TEST
     ),
     "emperor.attention._monitoring.callback": module_contract(
         ("instrumentation lifecycle", "logging fallbacks", "bounded history"),

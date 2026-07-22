@@ -1020,13 +1020,25 @@ import sys
 
 import emperor.embedding as embedding
 
+root_eager_modules = sorted(
+    name for name in sys.modules if name.startswith("emperor.embedding.")
+)
+root_has_children = {
+    "absolute": hasattr(embedding, "absolute"),
+    "relative": hasattr(embedding, "relative"),
+}
+import emperor.embedding.absolute as absolute
+import emperor.embedding.relative as relative
+
 eager_modules = sorted(
     name for name in sys.modules if name.startswith("emperor.embedding.")
 )
 print(json.dumps({
     "root_all": embedding.__all__,
-    "absolute_all": embedding.absolute.__all__,
-    "relative_all": embedding.relative.__all__,
+    "root_eager_modules": root_eager_modules,
+    "root_has_children": root_has_children,
+    "absolute_all": absolute.__all__,
+    "relative_all": relative.__all__,
     "eager_modules": eager_modules,
     "heavy_modules": {
         name: name in sys.modules
@@ -1041,19 +1053,19 @@ print(json.dumps({
     },
     "private_exports": {
         "AbsolutePositionalEmbeddingBase": hasattr(
-            embedding.absolute, "AbsolutePositionalEmbeddingBase"
+            absolute, "AbsolutePositionalEmbeddingBase"
         ),
         "LearnedPositionalEmbedding": hasattr(
-            embedding.absolute, "LearnedPositionalEmbedding"
+            absolute, "LearnedPositionalEmbedding"
         ),
         "AbsolutePositionalEmbeddingValidator": hasattr(
-            embedding.absolute, "AbsolutePositionalEmbeddingValidator"
+            absolute, "AbsolutePositionalEmbeddingValidator"
         ),
         "DynamicPositionalBias": hasattr(
-            embedding.relative, "DynamicPositionalBias"
+            relative, "DynamicPositionalBias"
         ),
         "RelativePositionalEmbeddingValidator": hasattr(
-            embedding.relative, "RelativePositionalEmbeddingValidator"
+            relative, "RelativePositionalEmbeddingValidator"
         ),
     },
     "runtime_loaded": {
@@ -1062,10 +1074,10 @@ print(json.dumps({
     },
     "shortcut_attributes": {
         "root___getattr__": hasattr(embedding, "__getattr__"),
-        "absolute___getattr__": hasattr(embedding.absolute, "__getattr__"),
-        "relative___getattr__": hasattr(embedding.relative, "__getattr__"),
-        "absolute__LAZY_EXPORTS": hasattr(embedding.absolute, "_LAZY_EXPORTS"),
-        "relative__LAZY_EXPORTS": hasattr(embedding.relative, "_LAZY_EXPORTS"),
+        "absolute___getattr__": hasattr(absolute, "__getattr__"),
+        "relative___getattr__": hasattr(relative, "__getattr__"),
+        "absolute__LAZY_EXPORTS": hasattr(absolute, "_LAZY_EXPORTS"),
+        "relative__LAZY_EXPORTS": hasattr(relative, "_LAZY_EXPORTS"),
     },
 }))
 """
@@ -1081,6 +1093,16 @@ print(json.dumps({
             json.loads(completed.stdout),
             {
                 "root_all": ["absolute", "relative"],
+                "root_eager_modules": [
+                    "emperor.embedding.absolute",
+                    "emperor.embedding.absolute._config",
+                    "emperor.embedding.relative",
+                    "emperor.embedding.relative._config",
+                ],
+                "root_has_children": {
+                    "absolute": True,
+                    "relative": True,
+                },
                 "absolute_all": [
                     "AbsolutePositionalEmbeddingConfig",
                     "TextLearnedPositionalEmbeddingConfig",

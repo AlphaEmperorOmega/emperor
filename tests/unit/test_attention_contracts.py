@@ -85,6 +85,12 @@ class TestAttentionExports(unittest.TestCase):
         defining_module = importlib.import_module(exported.__module__)
         self.assertIs(exported, defining_module.AttentionMonitorCallback)
 
+    def test_state_has_an_explicit_natural_owner(self):
+        state_module = importlib.import_module("emperor.attention._state")
+
+        self.assertFalse(hasattr(state_module, "__all__"))
+        self.assertIs(state_module.AttentionLayerState, AttentionLayerState)
+
     def test_runtime_implementation_remains_intentionally_private(self):
         module = importlib.import_module("emperor.attention")
 
@@ -103,7 +109,6 @@ class TestAttentionExports(unittest.TestCase):
 
     def test_private_namespace_packages_have_no_interface(self):
         for module_name in (
-            "emperor.attention._monitoring",
             "emperor.attention._ops",
             "emperor.attention._variants",
             "emperor.attention._variants.independent",

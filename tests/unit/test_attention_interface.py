@@ -351,7 +351,6 @@ import emperor.attention as attention
 
 expected_eager_modules = (
     "emperor.attention._config",
-    "emperor.attention._state",
     "emperor.attention._variants.independent.config",
     "emperor.attention._variants.self_attention.config",
     "emperor.attention._variants.mixture.config",

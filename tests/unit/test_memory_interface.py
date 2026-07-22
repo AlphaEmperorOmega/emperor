@@ -120,7 +120,6 @@ import emperor.memory as memory
 
 expected_eager_modules = (
     "emperor.memory._config",
-    "emperor.memory._interface",
 )
 heavy_modules = (
     "emperor.memory._base",
