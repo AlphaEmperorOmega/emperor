@@ -1,54 +1,24 @@
 import type { ConfigValue } from "@/lib/api/schemas";
 import type { ModelIdentity } from "@/lib/api/model-catalog";
 
-const DEFAULT_MODEL_TYPE = "models";
-type ModelLike = string | ModelIdentity;
-
-function isModelIdentity(value: ModelLike): value is ModelIdentity {
-  return typeof value === "object" && value !== null;
-}
-
 function modelTypeLabel(value: string) {
   const normalized = value.replace(/[_-]+/g, " ").trim().toLowerCase();
   return normalized ? normalized[0].toUpperCase() + normalized.slice(1) : value;
 }
 
-export function modelTypeForId(modelId: ModelLike) {
-  if (isModelIdentity(modelId)) {
-    return modelId.modelType || DEFAULT_MODEL_TYPE;
-  }
-  const trimmed = modelId.trim();
-  const separatorIndex = trimmed.indexOf("/");
-  if (separatorIndex <= 0) {
-    return DEFAULT_MODEL_TYPE;
-  }
-  return trimmed.slice(0, separatorIndex).trim() || DEFAULT_MODEL_TYPE;
+export function modelTypeForId(identity: ModelIdentity) {
+  return identity.modelType;
 }
 
-export function modelNameForId(modelId: ModelLike) {
-  if (isModelIdentity(modelId)) {
-    return modelId.model;
-  }
-  const trimmed = modelId.trim();
-  const separatorIndex = trimmed.indexOf("/");
-  if (separatorIndex < 0 || separatorIndex === trimmed.length - 1) {
-    return trimmed;
-  }
-  return trimmed.slice(separatorIndex + 1).trim() || trimmed;
+export function modelNameForId(identity: ModelIdentity) {
+  return identity.model;
 }
 
-export function modelIdentityKey(identity: ModelLike) {
-  return `${modelTypeForId(identity)}/${modelNameForId(identity)}`;
+export function modelIdentityKey(identity: ModelIdentity) {
+  return `${identity.modelType}/${identity.model}`;
 }
 
-export function modelIdentityFromLegacyId(modelId: string): ModelIdentity {
-  return {
-    modelType: modelTypeForId(modelId),
-    model: modelNameForId(modelId),
-  };
-}
-
-export function modelTypeOptions(models: readonly ModelLike[]) {
+export function modelTypeOptions(models: readonly ModelIdentity[]) {
   const seen = new Set<string>();
   return models.reduce<Array<{ value: string; label: string }>>((options, model) => {
     const value = modelTypeForId(model);
@@ -60,7 +30,7 @@ export function modelTypeOptions(models: readonly ModelLike[]) {
   }, []);
 }
 
-export function modelsForType<T extends ModelLike>(
+export function modelsForType<T extends ModelIdentity>(
   models: readonly T[],
   selectedType: string,
 ) {

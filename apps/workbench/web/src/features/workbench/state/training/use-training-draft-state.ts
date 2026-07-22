@@ -8,7 +8,6 @@ import {
 } from "@/features/workbench/state/runtime-defaults/runtime-defaults";
 import {
   modelNameForId,
-  modelTypeForId,
   modelTypeOptions as createModelTypeOptions,
   modelsForType,
   normalizePrimarySelection,
@@ -251,12 +250,8 @@ export function useTrainingDraftState({
 
   const selectModel = useCallback(
     (model: string, modelType = selectedModelType) => {
-      const nextModel = modelNameForId(model);
-      const nextModelType = model.includes("/")
-        ? modelTypeForId(model)
-        : modelType;
-      setSelectedModelType(nextModel ? nextModelType : "");
-      setSelectedModel(nextModel);
+      setSelectedModelType(model ? modelType : "");
+      setSelectedModel(model);
       resetSelectionsForModel();
     },
     [resetSelectionsForModel, selectedModelType],

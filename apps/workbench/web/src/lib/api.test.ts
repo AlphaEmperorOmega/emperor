@@ -844,6 +844,19 @@ describe("successful API fixtures", () => {
     ]);
   });
 
+  it("rejects model catalogs with non-canonical identity segments", async () => {
+    stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            models: [{ modelType: "linears", model: "linears/linear" }],
+          }),
+      }),
+    );
+
+    await expect(fetchModels()).rejects.toThrow("models.0.model");
+  });
+
   it("accepts a presets response fixture", async () => {
     const result = await validateSuccessfulFixture(successfulPresetResponse, () =>
       fetchPresets(linearIdentity),

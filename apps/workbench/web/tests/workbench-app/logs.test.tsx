@@ -3517,13 +3517,13 @@ describe("WorkbenchApp Logs Workspace", () => {
     const expAMnistRun = {
       ...expACifarRun,
       id: "exp-a-mnist-wide",
-      model: "wide-linear",
+      model: "wide_linear",
       preset: "WIDE_ONLY",
       dataset: "Mnist",
       runName: "exp_a_mnist_wide_20260601_020304",
       timestamp: "2026-06-01 02:03:04",
       relativePath:
-        "exp_a/wide-linear/WIDE_ONLY/Mnist/exp_a_mnist_wide_20260601_020304/version_0",
+        "exp_a/wide_linear/WIDE_ONLY/Mnist/exp_a_mnist_wide_20260601_020304/version_0",
       metrics: { "test/accuracy": 0.84 },
     };
     const expBCifarRun = {
@@ -3618,7 +3618,7 @@ describe("WorkbenchApp Logs Workspace", () => {
       name: /linear · linears/i,
     })).toBeInTheDocument();
     expect(within(modelOptions).queryByRole("option", {
-      name: /wide-linear · linears/i,
+      name: /wide_linear · linears/i,
     })).not.toBeInTheDocument();
     expect(within(modelOptions).queryByRole("option", {
       name: /conv · linears/i,
@@ -3657,12 +3657,12 @@ describe("WorkbenchApp Logs Workspace", () => {
       group: "exp_b",
       experiment: "exp_b",
       dataset: "Cifar10",
-      model: "wide-linear",
+      model: "wide_linear",
       preset: "WIDE_ONLY",
       runName: "exp_b_cifar_20260601_020304",
       timestamp: "2026-06-01 02:03:04",
       relativePath:
-        "exp_b/wide-linear/WIDE_ONLY/Cifar10/exp_b_cifar_20260601_020304/version_0",
+        "exp_b/wide_linear/WIDE_ONLY/Cifar10/exp_b_cifar_20260601_020304/version_0",
     };
     const { logScalarRequests, logTagRequests } = setupLogsScenario({
       logRunsResponse: { runs: [mnistRun, cifarRun] },

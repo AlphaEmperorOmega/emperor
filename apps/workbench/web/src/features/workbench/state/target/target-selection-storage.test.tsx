@@ -79,4 +79,21 @@ describe("persisted target selection store", () => {
 
     expect(getPersistedTargetSelectionSnapshot()).toEqual(selection);
   });
+
+  it("rejects flat and malformed persisted Model Package identities", () => {
+    const invalidSelections = [
+      { ...selection, selectedModelType: "", selectedModel: "linears/linear" },
+      { ...selection, selectedModel: "linears/linear" },
+      { ...selection, selectedModelType: "../linears" },
+      { ...selection, selectedModel: "linear-adaptive" },
+    ];
+
+    for (const invalidSelection of invalidSelections) {
+      window.localStorage.setItem(
+        TARGET_SELECTION_STORAGE_KEY,
+        JSON.stringify(invalidSelection),
+      );
+      expect(getPersistedTargetSelectionSnapshot()).toBeNull();
+    }
+  });
 });

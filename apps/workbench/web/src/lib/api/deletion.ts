@@ -5,7 +5,10 @@ import {
   type MutationRequestOptions,
 } from "@/lib/api/client";
 import { type ModelIdentity } from "@/lib/api/model-catalog";
-import { modelIdentitySchema } from "@/lib/api/model-identity-schema";
+import {
+  modelIdentitySchema,
+  modelIdentitySegmentSchema,
+} from "@/lib/api/model-identity-schema";
 import { responseCompletenessSchema } from "@/lib/api/schemas";
 
 export const logExperimentDeleteSchema = z.object({
@@ -18,8 +21,8 @@ export const logExperimentDeleteSchema = z.object({
 export const logRunDeleteCandidateSchema = z.object({
   id: z.string(),
   experiment: z.string(),
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   dataset: z.string(),
   runName: z.string(),

@@ -14,9 +14,7 @@ import {
 import { validateConfigSnapshotName } from "@/lib/config-snapshots";
 import { resolveRunPresetName } from "@/lib/historical-monitor-runs";
 import {
-  modelNameForId,
   modelsForType,
-  modelTypeForId,
   modelTypeOptions,
   normalizeSelection,
   selectionValuesEqual,
@@ -517,10 +515,8 @@ export function useModelPackageInspectionState({
   ]);
   const selectModel = useCallback(
     (model: string, modelType = selectedModelType) => {
-      const nextModel = modelNameForId(model);
-      const nextModelType = model.includes("/")
-        ? modelTypeForId(model)
-        : modelType;
+      const nextModel = model;
+      const nextModelType = modelType;
       if (
         !nextModel ||
         !catalogModels.some(

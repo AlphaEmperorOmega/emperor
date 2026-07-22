@@ -2862,33 +2862,19 @@ function installFetchMock(options: FetchScenarioOptions = {}) {
         preset: "baseline",
       });
     }
-    if (endsWithAny(["/models/linear/presets", "/models/linears/linear/presets"])) {
+    if (url.endsWith("/models/linears/linear/presets")) {
       return jsonResponse(options.presetsResponse ?? presetsResponse);
     }
-    if (
-      endsWithAny(["/models/linear/datasets", "/models/linears/linear/datasets"])
-    ) {
+    if (url.endsWith("/models/linears/linear/datasets")) {
       return jsonResponse(options.datasetsResponse ?? datasetsResponse);
     }
-    if (
-      endsWithAny(["/models/linear/monitors", "/models/linears/linear/monitors"])
-    ) {
+    if (url.endsWith("/models/linears/linear/monitors")) {
       return jsonResponse(monitorsResponse);
     }
-    if (
-      includesAny([
-        "/models/linear/config-schema",
-        "/models/linears/linear/config-schema",
-      ])
-    ) {
+    if (url.includes("/models/linears/linear/config-schema")) {
       return jsonResponse(options.schemaResponse ?? schemaResponse);
     }
-    if (
-      includesAny([
-        "/models/linear/search-space",
-        "/models/linears/linear/search-space",
-      ])
-    ) {
+    if (url.includes("/models/linears/linear/search-space")) {
       const searchPayload = options.searchSpaceResponseFactory
         ? options.searchSpaceResponseFactory(url)
         : options.searchSpaceResponse;

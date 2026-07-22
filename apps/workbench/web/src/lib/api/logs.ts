@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
 import { type ModelIdentity } from "@/lib/api/model-catalog";
+import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
 import {
   eventMetadataSchema,
   imageDataUrlSchema,
@@ -25,8 +26,8 @@ type ApiRequestOptions = {
 const logRunFields = {
   id: z.string(),
   group: z.string().nullable(),
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   experimentTask: z.string().nullable().optional(),
   dataset: z.string(),
@@ -52,8 +53,8 @@ const logRunFacetValueSchema = z.object({
   count: z.number(),
 });
 const logRunModelFacetSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   count: z.number(),
 });
 const logRunExperimentFacetsSchema = z.object({

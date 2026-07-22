@@ -1,8 +1,12 @@
 import { z } from "zod";
 
-import { type ModelIdentity } from "@/lib/api/model-catalog";
+export const modelIdentitySegmentSchema = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
 
-export const modelIdentitySchema: z.ZodType<ModelIdentity> = z.object({
-  modelType: z.string(),
-  model: z.string(),
+export const modelIdentitySchema = z.object({
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
 });
+
+export type ModelIdentity = z.infer<typeof modelIdentitySchema>;

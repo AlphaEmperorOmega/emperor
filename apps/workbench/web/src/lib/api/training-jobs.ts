@@ -11,6 +11,7 @@ import {
   type ConfigOverrides,
   type ConfigValue,
 } from "@/lib/api/schemas";
+import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
 
 type ApiRequestOptions = {
   signal?: AbortSignal;
@@ -74,8 +75,8 @@ export const configSnapshotRevisionSchema = z.object({
 });
 
 export const trainingRunPlanSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   presets: z.array(z.string()),
   experimentTask: z.string().optional(),
@@ -158,8 +159,8 @@ const trainingJobStartedEventSchema = trainingProgressEventBaseSchema.extend({
 const trainingWorkerStartedEventSchema = trainingProgressEventBaseSchema.extend({
   type: z.literal("started"),
   status: z.literal("running").nullable().optional(),
-  modelType: z.string().nullable().optional(),
-  model: z.string().nullable().optional(),
+  modelType: modelIdentitySegmentSchema.nullable().optional(),
+  model: modelIdentitySegmentSchema.nullable().optional(),
   presets: z.array(z.string()).nullable().optional(),
   datasets: z.array(z.string()).nullable().optional(),
   monitors: z.array(z.string()).nullable().optional(),
@@ -283,8 +284,8 @@ export const trainingClusterGrowthSchema = z.object({
 export const trainingJobSchema = z.object({
   id: z.string(),
   status: trainingJobStatusSchema,
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   presets: z.array(z.string()).optional(),
   experimentTask: z.string().optional(),

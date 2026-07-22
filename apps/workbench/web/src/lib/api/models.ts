@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
 import { type ModelIdentity } from "@/lib/api/model-catalog";
+import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
 import { configValueSchema } from "@/lib/api/schemas";
 
 export const presetSchema = z.object({
@@ -65,29 +66,29 @@ export const searchAxisSchema = z.object({
 });
 
 const presetsSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   presets: z.array(presetSchema),
 });
 const datasetsSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   defaultExperimentTask: z.string(),
   datasetGroups: z.array(datasetGroupSchema),
 });
 const monitorsSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   monitors: z.array(monitorOptionSchema),
 });
 const configSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   fields: z.array(configFieldSchema),
 });
 const searchSpaceSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string().nullable().optional(),
   axes: z.array(searchAxisSchema),
 });

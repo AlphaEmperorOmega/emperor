@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
 import {
   jsonObjectSchema,
   jsonValueSchema,
@@ -38,8 +39,8 @@ export const graphEdgeSchema = z.object({
 });
 
 export const inspectResponseSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   parameterCount: z.number(),
   parameterSizeBytes: z.number().default(0),

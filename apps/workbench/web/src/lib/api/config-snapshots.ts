@@ -5,11 +5,12 @@ import {
   type MutationRequestOptions,
 } from "@/lib/api/client";
 import { type ModelIdentity } from "@/lib/api/model-catalog";
+import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
 
 export const configSnapshotSchema = z.object({
   id: z.string(),
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   preset: z.string(),
   name: z.string(),
   overrides: z.record(z.string(), z.string()),
@@ -18,8 +19,8 @@ export const configSnapshotSchema = z.object({
 });
 
 export const configSnapshotsSchema = z.object({
-  modelType: z.string(),
-  model: z.string(),
+  modelType: modelIdentitySegmentSchema,
+  model: modelIdentitySegmentSchema,
   snapshots: z.array(configSnapshotSchema),
 });
 

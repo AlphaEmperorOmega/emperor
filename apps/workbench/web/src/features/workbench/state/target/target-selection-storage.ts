@@ -31,15 +31,8 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function splitLegacyModelId(modelId: string) {
-  const separatorIndex = modelId.indexOf("/");
-  if (separatorIndex <= 0 || separatorIndex === modelId.length - 1) {
-    return { modelType: "models", model: modelId };
-  }
-  return {
-    modelType: modelId.slice(0, separatorIndex).trim() || "models",
-    model: modelId.slice(separatorIndex + 1).trim() || modelId,
-  };
+function isModelIdentitySegment(value: string) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
 function parseTargetSelection(
@@ -50,11 +43,8 @@ function parseTargetSelection(
   }
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
-    const rawModel = stringValue(parsed.selectedModel).trim();
-    const explicitModelType = stringValue(parsed.selectedModelType).trim();
-    const legacyIdentity = splitLegacyModelId(rawModel);
-    const selectedModelType = explicitModelType || legacyIdentity.modelType;
-    const selectedModel = explicitModelType ? rawModel : legacyIdentity.model;
+    const selectedModelType = stringValue(parsed.selectedModelType).trim();
+    const selectedModel = stringValue(parsed.selectedModel).trim();
     const selectedPreset = stringValue(parsed.selectedPreset).trim();
     const selectedTargetMode =
       parsed.selectedTargetMode === "snapshot" ? "snapshot" : "preset";
@@ -62,7 +52,11 @@ function parseTargetSelection(
       selectedTargetMode === "snapshot"
         ? stringValue(parsed.selectedSnapshotId).trim()
         : "";
-    if (!selectedModelType || !selectedModel || !selectedPreset) {
+    if (
+      !isModelIdentitySegment(selectedModelType) ||
+      !isModelIdentitySegment(selectedModel) ||
+      !selectedPreset
+    ) {
       return null;
     }
     return Object.freeze({

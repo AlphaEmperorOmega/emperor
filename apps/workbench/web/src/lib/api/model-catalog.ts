@@ -1,20 +1,14 @@
-import {
-  array,
-  object,
-  string,
-  type output,
-} from "zod/v4-mini";
+import { z } from "zod";
 
 import { requestJson } from "@/lib/api/client";
+import {
+  modelIdentitySchema,
+  type ModelIdentity,
+} from "@/lib/api/model-identity-schema";
 
-const modelIdentitySchema = object({
-  modelType: string(),
-  model: string(),
-});
+const modelsSchema = z.object({ models: z.array(modelIdentitySchema) });
 
-const modelsSchema = object({ models: array(modelIdentitySchema) });
-
-export type ModelIdentity = output<typeof modelIdentitySchema>;
+export type { ModelIdentity };
 
 type ApiRequestOptions = {
   signal?: AbortSignal;
