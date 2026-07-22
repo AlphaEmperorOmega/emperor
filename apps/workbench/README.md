@@ -320,11 +320,6 @@ organization namespace, not a public `/v1` URL prefix. Do not add `/v1` routes
 without updating the frontend contract and backend API contract tests in the
 same change.
 
-The obsolete `emperor_workbench.routes.*` compatibility shims were removed after
-a repository import audit. The private v1 router aggregator imports each
-capability package under `emperor_workbench.api.v1` and includes the `router`
-exported by that package Interface; there is no separate `routers` namespace.
-
 ## Setup
 
 ```text
@@ -346,20 +341,6 @@ By default, the backend uses port `9999` and the frontend uses port `9000`.
 Running setup or `dev` again is safe: setup hashes its inputs and service reuse
 requires every persisted identity field plus a healthy HTTP response.
 
-The structure migration deliberately leaves ignored data under the former
-`workbench/.runtime/` and `workbench/snapshots/` paths untouched. Stop any old
-services before switching paths. To continue using that data in place, set
-`WORKBENCH_RUNTIME_ROOT`, `WORKBENCH_API_STATE_ROOT`, and
-`WORKBENCH_API_SNAPSHOTS_ROOT` to those legacy paths; otherwise the launcher
-starts with the new `.runtime/workbench/` location. Override these variables
-only when you intentionally want a different local state or snapshot library.
-
-```bash
-export WORKBENCH_RUNTIME_ROOT="$PWD/workbench/.runtime"
-export WORKBENCH_API_STATE_ROOT="$PWD/workbench/.runtime/state"
-export WORKBENCH_API_SNAPSHOTS_ROOT="$PWD/workbench/snapshots"
-```
-
 Stop or inspect the workbench:
 
 ```text
@@ -367,7 +348,6 @@ mise run workbench:stop
 mise run workbench:status
 ```
 
-The historical Unix `source env.sh` interface remains a compatibility wrapper.
 Native PowerShell users can use `. .\env.ps1`, `-WorkbenchStatus`, and
 `-WorkbenchStop`.
 
