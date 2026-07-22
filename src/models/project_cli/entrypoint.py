@@ -10,7 +10,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from models.project_cli.runner import run_tests
 
         return run_tests(arguments[1:])
-    if arguments and arguments[0] in {"logs:archive", "logs-archive"}:
+    if arguments and arguments[0] == "logs:archive":
         from models.project_cli.logs_archive import archive_logs
 
         return archive_logs(arguments[1:])

@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-USAGE = """Usage: bash download_logs.sh [log_entry] [output_zip]
+USAGE = """Usage: mise run logs:archive -- [log_entry] [output_zip]
 
 Run this from the project directory. Create a zip archive for downloading data
 from ./logs, or from one folder inside ./logs. A selected folder is preserved
@@ -23,10 +23,10 @@ Arguments:
   output_zip   Zip path to create. Defaults to ./<folder>_<timestamp>.zip.
 
 Examples:
-  bash download_logs.sh
-  bash download_logs.sh my_experiment
-  bash download_logs.sh logs/my_experiment
-  bash download_logs.sh logs emperor_logs.zip"""
+  mise run logs:archive --
+  mise run logs:archive -- my_experiment
+  mise run logs:archive -- logs/my_experiment
+  mise run logs:archive -- logs emperor_logs.zip"""
 
 
 def _is_link_like(path: Path) -> bool:
