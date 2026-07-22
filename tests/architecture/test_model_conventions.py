@@ -18,101 +18,7 @@ SOURCE_ROOT = PROJECT_ROOT / "src"
 MODELS_ROOT = SOURCE_ROOT / "models"
 MODEL_PACKAGE_TESTS_ROOT = PROJECT_ROOT / "tests" / "model_packages"
 
-_STANDARD_PUBLIC_EXPORTS = ("Experiment", "ExperimentPreset")
-
-_EXPECTED_PUBLIC_EXPORTS = {
-    "models.bert.linear": (
-        "BertEmbeddingOptions",
-        "BertLinearConfigBuilder",
-        "BertMlmHeadOptions",
-        "BertNspHeadOptions",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.bert.expert_linear_adaptive": (
-        "BertExpertLinearAdaptiveConfigBuilder",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.gpt.linear": (
-        "GptEmbeddingOptions",
-        "GptLinearConfigBuilder",
-        "GptLmHeadOptions",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.gpt.linear_adaptive": (
-        "GptEmbeddingOptions",
-        "GptLinearAdaptiveConfigBuilder",
-        "GptLmHeadOptions",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.gpt.expert_linear": (
-        "GptEmbeddingOptions",
-        "GptExpertLinearConfigBuilder",
-        "GptLmHeadOptions",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.gpt.expert_linear_adaptive": (
-        "GptEmbeddingOptions",
-        "GptExpertLinearAdaptiveConfigBuilder",
-        "GptLmHeadOptions",
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-    ),
-    "models.transformer.linear": (
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-        "TransformerLinearConfigBuilder",
-    ),
-    "models.transformer.linear_adaptive": (
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-        "TransformerLinearAdaptiveConfigBuilder",
-    ),
-    "models.transformer.expert_linear": (
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-        "TransformerExpertLinearConfigBuilder",
-    ),
-    "models.transformer.expert_linear_adaptive": (
-        "Experiment",
-        "ExperimentConfig",
-        "ExperimentPreset",
-        "ExperimentPresets",
-        "Model",
-        "TransformerExpertLinearAdaptiveConfigBuilder",
-    ),
-}
+_STANDARD_PUBLIC_EXPORTS = ("MODEL_PACKAGE",)
 
 _EXPECTED_CONFIG_BUILDERS = {
     "models.bert.linear": "BertLinearConfigBuilder",
@@ -146,66 +52,9 @@ _EXPECTED_CONFIG_BUILDERS = {
     "models.neuron.expert_linear_adaptive": "NeuronExpertLinearAdaptiveConfigBuilder",
 }
 
-_RUNTIME_OPTION_COMPATIBILITY = {
-    **{
-        (f"{package}.{module}", f"{package}.runtime_options"): ()
-        for package, modules in (
-            (
-                "models.bert.linear",
-                (
-                    "_controller_stack",
-                    "_builder_options",
-                    "_linear_builder_options",
-                    "_transformer_builder_options",
-                ),
-            ),
-        )
-        for module in modules
-    },
-    (
-        "models.parametric.parametric_generator._stack_config_factory",
-        "models.parametric.parametric_generator.runtime_options",
-    ): (
-        "ParametricGeneratorStackOptions",
-        "ParametricMixtureOptions",
-        "ParametricRouterOptions",
-        "ParametricSamplerOptions",
-        "ParametricStackOptions",
-    ),
-    (
-        "models.parametric.parametric_matrix._stack_config_factory",
-        "models.parametric.parametric_matrix.runtime_options",
-    ): (
-        "ParametricMixtureOptions",
-        "ParametricRouterOptions",
-        "ParametricSamplerOptions",
-        "ParametricStackOptions",
-    ),
-    (
-        "models.parametric.parametric_vector._stack_config_factory",
-        "models.parametric.parametric_vector.runtime_options",
-    ): (
-        "ParametricMixtureOptions",
-        "ParametricRouterOptions",
-        "ParametricSamplerOptions",
-        "ParametricStackOptions",
-    ),
-    **{
-        (f"{package}._neuron_options", f"{package}.runtime_options"): (
-            "ClusterRouteHaltingOptions",
-            "NeuronClusterCapacityOptions",
-            "NeuronSubmoduleStackOptions",
-            "NeuronTerminalOptions",
-            "NeuronTerminalSamplerOptions",
-        )
-        for package in (
-            "models.neuron.linear",
-            "models.neuron.linear_adaptive",
-            "models.neuron.expert_linear",
-            "models.neuron.expert_linear_adaptive",
-        )
-    },
-}
+
+def _package_module(package) -> str:
+    return f"models.{package.identity.model_type}.{package.identity.model}"
 
 
 class TestModelConventions(unittest.TestCase):
@@ -282,21 +131,19 @@ class TestModelConventions(unittest.TestCase):
 
     def test_catalog_package_public_exports_are_stable(self):
         for entry in MODEL_CATALOG.values():
-            package = import_module(entry.module_path)
-            expected = _EXPECTED_PUBLIC_EXPORTS.get(
-                entry.module_path,
-                _STANDARD_PUBLIC_EXPORTS,
-            )
+            module_name = _package_module(entry)
+            package = import_module(module_name)
 
-            with self.subTest(package=entry.module_path):
-                self.assertEqual(tuple(package.__all__), expected)
-                for name in expected:
+            with self.subTest(package=entry.catalog_key):
+                self.assertEqual(tuple(package.__all__), _STANDARD_PUBLIC_EXPORTS)
+                for name in _STANDARD_PUBLIC_EXPORTS:
                     self.assertTrue(hasattr(package, name), name)
+                self.assertIs(package.MODEL_PACKAGE, entry)
 
     def test_catalog_packages_keep_direct_builder_imports(self):
         self.assertEqual(
             set(_EXPECTED_CONFIG_BUILDERS),
-            {entry.module_path for entry in MODEL_CATALOG.values()},
+            {_package_module(entry) for entry in MODEL_CATALOG.values()},
         )
         for module_path, builder_name in _EXPECTED_CONFIG_BUILDERS.items():
             builder_module = import_module(f"{module_path}.config_builder")
@@ -307,36 +154,21 @@ class TestModelConventions(unittest.TestCase):
 
     def test_catalog_entrypoints_are_identity_adapters_for_shared_runner(self):
         for entry in MODEL_CATALOG.values():
-            package_root = SOURCE_ROOT.joinpath(*entry.module_path.split("."))
+            package_module = _package_module(entry)
+            package_root = SOURCE_ROOT.joinpath(*package_module.split("."))
             source = (package_root / "__main__.py").read_text()
 
-            with self.subTest(package=entry.module_path):
+            with self.subTest(package=entry.catalog_key):
                 self.assertIn("run_model_package_cli", source)
                 self.assertIn(
-                    f'EXPERIMENT_MODULE_PATH = "{entry.module_path}"',
+                    f'MODEL_PACKAGE_KEY = "{entry.catalog_key}"',
                     source,
                 )
                 self.assertNotIn(".train_model(", source)
 
-    def test_runtime_option_compatibility_shims_preserve_class_identity(self):
-        for (private_path, public_path), names in _RUNTIME_OPTION_COMPATIBILITY.items():
-            private_module = import_module(private_path)
-            public_module = import_module(public_path)
-            names = names or tuple(private_module.__all__)
-            for name in names:
-                with self.subTest(private=private_path, name=name):
-                    self.assertIs(
-                        getattr(private_module, name),
-                        getattr(public_module, name),
-                    )
-
-    def test_vit_runtime_options_use_canonical_module_paths(self):
-        for package in (
-            "models.vit.linear",
-            "models.vit.linear_adaptive",
-            "models.vit.expert_linear",
-            "models.vit.expert_linear_adaptive",
-        ):
+    def test_runtime_option_types_belong_to_their_runtime_options_modules(self):
+        for entry in MODEL_CATALOG.values():
+            package = _package_module(entry)
             module_name = f"{package}.runtime_options"
             module = import_module(module_name)
             path = SOURCE_ROOT.joinpath(*module_name.split(".")).with_suffix(".py")
@@ -353,11 +185,9 @@ class TestModelConventions(unittest.TestCase):
 
     def test_all_catalog_presets_build_model_configs(self):
         for entry in MODEL_CATALOG.values():
-            presets_module = import_module(f"{entry.module_path}.presets")
-            presets = presets_module.ExperimentPresets()
-            for preset in presets_module.ExperimentPreset:
-                with self.subTest(package=entry.module_path, preset=preset.name):
-                    configs = presets.get_config(preset)
+            for preset in entry.preset_type:
+                with self.subTest(package=entry.catalog_key, preset=preset.name):
+                    configs = entry.build_configurations(preset)
                     self.assertTrue(configs)
                     self.assertTrue(
                         all(isinstance(config, ModelConfig) for config in configs)
@@ -365,11 +195,12 @@ class TestModelConventions(unittest.TestCase):
 
     def test_catalog_packages_have_one_external_test_module(self):
         for entry in MODEL_CATALOG.values():
-            package_root = SOURCE_ROOT.joinpath(*entry.module_path.split("."))
-            relative_package = entry.module_path.removeprefix("models.").split(".")
+            package_module = _package_module(entry)
+            package_root = SOURCE_ROOT.joinpath(*package_module.split("."))
+            relative_package = package_module.removeprefix("models.").split(".")
             external_test_root = MODEL_PACKAGE_TESTS_ROOT.joinpath(*relative_package)
 
-            with self.subTest(package=entry.module_path):
+            with self.subTest(package=entry.catalog_key):
                 self.assertEqual(
                     sorted(path.name for path in package_root.glob("test*.py")),
                     [],

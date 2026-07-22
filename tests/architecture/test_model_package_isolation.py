@@ -18,16 +18,10 @@ SOURCE_ROOT = PROJECT_ROOT / "src"
 _OPERATIONAL_MODEL_MODULES = frozenset(
     {
         "models.catalog",
-        "models.config_ast_listing",
+        "models.cli_selection",
         "models.config_overrides",
-        "models.config_value_parser",
-        "models.dataset_naming",
         "models.experiment_cli_parser",
-        "models.experiment_mode",
-        "models.log_migration",
-        "models.model_metadata",
         "models.package_cli",
-        "models.parser",
         "models.training_test_utils",
     }
 )
@@ -67,14 +61,12 @@ _REMOVED_MODEL_MODULES = (
     "models.bert._memory_config_factory",
     "models.bert._recurrent_config_factory",
     "models.bert._tokenwise",
-    "models.bert.linear_adaptive.runtime_defaults",
     "models.bert.linear_adaptive._adaptive_builder_options",
     "models.bert.linear_adaptive._builder_options",
     "models.bert.linear_adaptive._controller_stack",
     "models.bert.linear_adaptive._linear_builder_options",
     "models.bert.linear_adaptive._transformer_builder_options",
     "models.bert.expert_linear._base_config_builder",
-    "models.bert.expert_linear.runtime_defaults",
     "models.bert.expert_linear._control_support",
     "models.bert.expert_linear._expert_adapter_support",
     "models.bert.expert_linear._tokenwise",
@@ -118,7 +110,26 @@ _REMOVED_MODEL_MODULES = (
     "models.neuron._test_cases",
     "models.neuron.experiment_config",
     "models.parametric._shared_stack_factory",
+    "models.config_ast_listing",
+    "models.config_value_parser",
+    "models.dataset_naming",
+    "models.experiment_mode",
+    "models.log_migration",
+    "models.model_metadata",
+    "models.parser",
+    "models.bert.linear._builder_options",
+    "models.bert.linear._controller_stack",
+    "models.bert.linear._linear_builder_options",
+    "models.bert.linear._transformer_builder_options",
+    "models.neuron.linear._neuron_options",
+    "models.neuron.linear_adaptive._neuron_options",
+    "models.neuron.expert_linear._neuron_options",
+    "models.neuron.expert_linear_adaptive._neuron_options",
 )
+
+
+def _package_module(package) -> str:
+    return f"models.{package.identity.model_type}.{package.identity.model}"
 
 
 def _module_name(path: Path) -> str:
@@ -167,7 +178,7 @@ class TestModelPackageIsolation(unittest.TestCase):
     def test_catalog_packages_have_no_construction_imports_outside_themselves(self):
         violations = []
         for entry in MODEL_CATALOG.values():
-            package = entry.module_path
+            package = _package_module(entry)
             package_root = SOURCE_ROOT.joinpath(*package.split("."))
             for path in sorted(package_root.rglob("*.py")):
                 for line, imported in _imported_modules(path):
@@ -181,7 +192,7 @@ class TestModelPackageIsolation(unittest.TestCase):
         self.assertEqual(violations, [], "\n" + "\n".join(violations))
 
     def test_importing_one_catalog_package_does_not_load_another(self):
-        packages = sorted({entry.module_path for entry in MODEL_CATALOG.values()})
+        packages = sorted({_package_module(entry) for entry in MODEL_CATALOG.values()})
         script = """
 import importlib
 import json
@@ -218,6 +229,30 @@ if loaded:
                     0,
                     result.stdout + result.stderr,
                 )
+
+    def test_importing_catalog_keeps_training_and_plotting_stacks_unloaded(self):
+        script = """
+import sys
+import models.catalog
+
+forbidden = ('torch', 'lightning', 'pytorch_lightning', 'matplotlib')
+loaded = sorted(
+    name for name in sys.modules
+    if any(name == root or name.startswith(root + '.') for root in forbidden)
+)
+if loaded:
+    raise SystemExit(f'catalog imported heavy modules: {loaded}')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_obsolete_model_modules_are_removed(self):
         remaining = []
