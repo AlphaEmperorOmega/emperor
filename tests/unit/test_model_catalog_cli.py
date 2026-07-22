@@ -1,6 +1,5 @@
 import json
 import os
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -9,12 +8,12 @@ from pathlib import Path
 
 from model_runtime.packages.identity import is_safe_model_segment, split_model_id
 from models.catalog import (
-    catalog_entry,
     discover_model_identities_for_type,
+    discover_model_ids,
     discover_model_types,
     is_safe_model_id,
+    model_package,
     model_type_exists,
-    public_id_for_flat_name,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -67,24 +66,18 @@ class TestModelCatalogDiscovery(unittest.TestCase):
                 self.assertFalse(is_safe_model_id(value))
                 self.assertIsNone(split_model_id(value))
 
-    def test_legacy_vit_id_and_flat_name_are_unsupported(self):
-        self.assertIsNone(catalog_entry("transformer_encoder/" + "vit" + "_linear"))
-        self.assertIsNone(public_id_for_flat_name("vit" + "_linear"))
-        self.assertEqual(public_id_for_flat_name("linear"), "linears/linear")
-        self.assertEqual(
-            public_id_for_flat_name("linear_adaptive"),
-            "linears/linear_adaptive",
-        )
-        self.assertEqual(
-            public_id_for_flat_name("expert_linear"),
-            "bert/expert_linear",
-        )
-        self.assertEqual(
-            public_id_for_flat_name("expert_linear_adaptive"),
-            "bert/expert_linear_adaptive",
-        )
-        removed_neuron_flat_name = "neuron" + "_linear"
-        self.assertIsNone(public_id_for_flat_name(removed_neuron_flat_name))
+    def test_retired_and_flat_identities_are_unsupported(self):
+        for identity in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "vit_linear",
+            "neuron_linear",
+            "transformer_encoder/vit_linear",
+            "models.linears.linear",
+        ):
+            with self.subTest(identity=identity):
+                self.assertIsNone(model_package(identity))
 
 
 class TestModelCatalogCli(unittest.TestCase):
@@ -121,90 +114,9 @@ class TestModelCatalogCli(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stderr, "")
-        self.assertIn("--model-type linears --model linear", completed.stdout)
-        self.assertIn(
-            "--model-type linears --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type bert --model linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type bert --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type bert --model expert_linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type bert --model expert_linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn("--model-type gpt --model linear", completed.stdout)
-        self.assertIn(
-            "--model-type gpt --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type gpt --model expert_linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type gpt --model expert_linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type vit --model linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type vit --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type vit --model expert_linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type vit --model expert_linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type transformer --model linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type transformer --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type transformer --model expert_linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type transformer --model expert_linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type neuron --model linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type neuron --model linear_adaptive",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type neuron --model expert_linear",
-            completed.stdout,
-        )
-        self.assertIn(
-            "--model-type neuron --model expert_linear_adaptive",
-            completed.stdout,
-        )
+        self.assertEqual(completed.stdout.splitlines(), discover_model_ids())
 
-    def test_list_for_model_type_prints_copyable_model_flags(self):
+    def test_list_for_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "linears")
 
         self.assertEqual(completed.returncode, 0)
@@ -212,12 +124,12 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
+                "linears/linear",
+                "linears/linear_adaptive",
             ],
         )
 
-    def test_list_for_bert_model_type_prints_canonical_backend_flags(self):
+    def test_list_for_bert_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "bert")
 
         self.assertEqual(completed.returncode, 0)
@@ -225,14 +137,14 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
-                "--model expert_linear",
-                "--model expert_linear_adaptive",
+                "bert/linear",
+                "bert/linear_adaptive",
+                "bert/expert_linear",
+                "bert/expert_linear_adaptive",
             ],
         )
 
-    def test_list_for_vit_model_type_prints_canonical_backend_flags(self):
+    def test_list_for_vit_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "vit")
 
         self.assertEqual(completed.returncode, 0)
@@ -240,14 +152,14 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
-                "--model expert_linear",
-                "--model expert_linear_adaptive",
+                "vit/linear",
+                "vit/linear_adaptive",
+                "vit/expert_linear",
+                "vit/expert_linear_adaptive",
             ],
         )
 
-    def test_list_for_gpt_model_type_prints_canonical_backend_flags(self):
+    def test_list_for_gpt_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "gpt")
 
         self.assertEqual(completed.returncode, 0)
@@ -255,14 +167,14 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
-                "--model expert_linear",
-                "--model expert_linear_adaptive",
+                "gpt/linear",
+                "gpt/linear_adaptive",
+                "gpt/expert_linear",
+                "gpt/expert_linear_adaptive",
             ],
         )
 
-    def test_list_for_transformer_model_type_prints_canonical_backend_flags(self):
+    def test_list_for_transformer_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "transformer")
 
         self.assertEqual(completed.returncode, 0)
@@ -270,14 +182,14 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
-                "--model expert_linear",
-                "--model expert_linear_adaptive",
+                "transformer/linear",
+                "transformer/linear_adaptive",
+                "transformer/expert_linear",
+                "transformer/expert_linear_adaptive",
             ],
         )
 
-    def test_list_for_neuron_model_type_prints_canonical_backend_flags(self):
+    def test_list_for_neuron_model_type_prints_canonical_identities(self):
         completed = self.run_catalog("--list", "--model-type", "neuron")
 
         self.assertEqual(completed.returncode, 0)
@@ -285,10 +197,10 @@ class TestModelCatalogCli(unittest.TestCase):
         self.assertEqual(
             completed.stdout.splitlines(),
             [
-                "--model linear",
-                "--model linear_adaptive",
-                "--model expert_linear",
-                "--model expert_linear_adaptive",
+                "neuron/linear",
+                "neuron/linear_adaptive",
+                "neuron/expert_linear",
+                "neuron/expert_linear_adaptive",
             ],
         )
 
@@ -327,40 +239,19 @@ class TestConfigOverrideCli(unittest.TestCase):
         )
 
 
-@unittest.skipUnless(os.name == "posix", "experiment.sh is a Unix wrapper")
-class TestExperimentShellCatalogCli(unittest.TestCase):
+class TestProjectCatalogCli(unittest.TestCase):
     def run_experiment(self, *args):
-        command = "source experiment.sh"
-        if args:
-            command = f"{command} {shlex.join(args)}"
         with tempfile.TemporaryDirectory() as matplotlib_config_dir:
-            environment = os.environ.copy()
+            environment = dict(os.environ)
             environment["MPLCONFIGDIR"] = matplotlib_config_dir
             return subprocess.run(
-                ["bash", "-lc", command],
+                [sys.executable, "-m", "models.project_cli", *args],
                 cwd=REPO_ROOT,
                 capture_output=True,
                 text=True,
                 check=False,
                 env=environment,
             )
-
-    def run_model_command_with_python_stub(self, *args):
-        command = "\n".join(
-            [
-                "source experiment.sh >/dev/null",
-                "model_module() { printf '%s\\n' models.fake; }",
-                "python3() { printf '%s\\n' \"$@\"; }",
-                f"run_model_command linears linear {shlex.join(args)}",
-            ]
-        )
-        return subprocess.run(
-            ["bash", "-lc", command],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
 
     def test_no_argument_help_describes_checkpoint_continuation(self):
         completed = self.run_experiment()
@@ -381,7 +272,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type <type> "
+                    "Usage: mise run experiment -- --model-type <type> "
                     "--model <name> [options]"
                 ),
                 "",
@@ -478,7 +369,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type linears "
+                    "Usage: mise run experiment -- --model-type linears "
                     "--model <name> [options]"
                 ),
                 "",
@@ -497,7 +388,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type bert "
+                    "Usage: mise run experiment -- --model-type bert "
                     "--model <name> [options]"
                 ),
                 "",
@@ -518,7 +409,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type vit "
+                    "Usage: mise run experiment -- --model-type vit "
                     "--model <name> [options]"
                 ),
                 "",
@@ -539,7 +430,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type gpt "
+                    "Usage: mise run experiment -- --model-type gpt "
                     "--model <name> [options]"
                 ),
                 "",
@@ -566,7 +457,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type gpt "
+                    "Usage: mise run experiment -- --model-type gpt "
                     "--model linear [options]"
                 ),
                 "",
@@ -591,7 +482,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type transformer "
+                    "Usage: mise run experiment -- --model-type transformer "
                     "--model linear [options]"
                 ),
                 "",
@@ -610,7 +501,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type neuron "
+                    "Usage: mise run experiment -- --model-type neuron "
                     "--model <name> [options]"
                 ),
                 "",
@@ -637,7 +528,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type linears "
+                    "Usage: mise run experiment -- --model-type linears "
                     "--model linear [options]"
                 ),
                 "",
@@ -664,7 +555,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout.splitlines(),
             [
                 (
-                    "Usage: source experiment.sh --model-type linears "
+                    "Usage: mise run experiment -- --model-type linears "
                     "--model linear [options]"
                 ),
                 "",
@@ -701,7 +592,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 ),
                 "",
                 (
-                    "Run 'source experiment.sh --model-type linears --model linear "
+                    "Run 'mise run experiment -- --model-type linears --model linear "
                     "--preset <preset> --print-model' without --monitors."
                 ),
             ],
@@ -791,139 +682,6 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
             completed.stdout,
         )
 
-    def test_training_command_forwards_monitor_names_to_model_module(self):
-        completed = self.run_model_command_with_python_stub(
-            "--preset",
-            "baseline",
-            "--monitors",
-            "linear",
-            "halting",
-        )
-
-        self.assertEqual(completed.returncode, 0)
-        self.assertEqual(completed.stderr, "")
-        self.assertEqual(
-            completed.stdout.splitlines(),
-            [
-                "-m",
-                "models.fake",
-                "--preset",
-                "baseline",
-                "--monitors",
-                "linear",
-                "halting",
-            ],
-        )
-
-    def test_training_command_forwards_checkpoint_continuation_path(self):
-        completed = self.run_model_command_with_python_stub(
-            "--preset",
-            "baseline",
-            "--datasets",
-            "mnist",
-            "--resume-checkpoint",
-            "logs/source/checkpoints/last.ckpt",
-        )
-
-        self.assertEqual(completed.returncode, 0)
-        self.assertEqual(completed.stderr, "")
-        self.assertEqual(
-            completed.stdout.splitlines(),
-            [
-                "-m",
-                "models.fake",
-                "--preset",
-                "baseline",
-                "--datasets",
-                "mnist",
-                "--resume-checkpoint",
-                "logs/source/checkpoints/last.ckpt",
-            ],
-        )
-
-    def test_legacy_model_command_translates_shape_inspection_flags(self):
-        cases = (
-            ("--print-model-shapes", "outputs"),
-            ("--print-model-tensor-shapes", "variables"),
-        )
-
-        for flag, detail in cases:
-            with self.subTest(flag=flag):
-                completed = self.run_model_command_with_python_stub(
-                    "--preset",
-                    "baseline",
-                    flag,
-                )
-
-                self.assertEqual(completed.returncode, 0)
-                self.assertEqual(completed.stderr, "")
-                self.assertEqual(
-                    completed.stdout.splitlines(),
-                    [
-                        "-m",
-                        "models.project_cli",
-                        "inspect",
-                        "--model-type",
-                        "linears",
-                        "--model",
-                        "linear",
-                        "--preset",
-                        "baseline",
-                        "--shape-trace",
-                        detail,
-                    ],
-                )
-
-    def test_legacy_model_command_defers_conflicting_inspection_flags(self):
-        completed = self.run_model_command_with_python_stub(
-            "--print-model",
-            "--print-model-shapes",
-        )
-
-        self.assertEqual(completed.returncode, 0)
-        self.assertEqual(completed.stderr, "")
-        self.assertEqual(
-            completed.stdout.splitlines(),
-            [
-                "-m",
-                "models.project_cli",
-                "--model-type",
-                "linears",
-                "--model",
-                "linear",
-                "--print-model",
-                "--print-model-shapes",
-            ],
-        )
-
-    def test_training_command_does_not_swallow_config_flags_after_monitors(self):
-        completed = self.run_model_command_with_python_stub(
-            "--preset",
-            "baseline",
-            "--monitors",
-            "linear",
-            "--config",
-            "--num-epochs",
-            "1",
-        )
-
-        self.assertEqual(completed.returncode, 0)
-        self.assertEqual(completed.stderr, "")
-        self.assertEqual(
-            completed.stdout.splitlines(),
-            [
-                "-m",
-                "models.fake",
-                "--preset",
-                "baseline",
-                "--monitors",
-                "linear",
-                "--config",
-                "--num-epochs",
-                "1",
-            ],
-        )
-
     def test_list_models_for_unknown_model_type_fails_with_guidance(self):
         completed = self.run_experiment("--model-type", "missing", "--list-models")
 
@@ -935,7 +693,7 @@ class TestExperimentShellCatalogCli(unittest.TestCase):
                 "Error: unknown model type '--model-type missing'.",
                 "",
                 (
-                    "Run 'source experiment.sh --list-model-types' "
+                    "Run 'mise run experiment -- --list-model-types' "
                     "to see available model types."
                 ),
             ],

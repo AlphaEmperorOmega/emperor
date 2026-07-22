@@ -4,10 +4,10 @@ import argparse
 from collections.abc import Mapping
 from typing import Any
 
-from model_runtime.packages.definition import ModelCatalogEntry, ModelPackage
-from model_runtime.packages.identity import (
+from model_runtime.packages import (
     MODEL_ID_SEGMENT_RE,
     ModelIdentity,
+    ModelPackage,
     is_safe_model_identity,
     is_safe_model_segment,
     model_key,
@@ -40,7 +40,9 @@ from models.parametric.parametric_generator import (
 )
 from models.parametric.parametric_matrix import MODEL_PACKAGE as PARAMETRIC_MATRIX
 from models.parametric.parametric_vector import MODEL_PACKAGE as PARAMETRIC_VECTOR
-from models.transformer.expert_linear import MODEL_PACKAGE as TRANSFORMER_EXPERT_LINEAR
+from models.transformer.expert_linear import (
+    MODEL_PACKAGE as TRANSFORMER_EXPERT_LINEAR,
+)
 from models.transformer.expert_linear_adaptive import (
     MODEL_PACKAGE as TRANSFORMER_EXPERT_LINEAR_ADAPTIVE,
 )
@@ -55,34 +57,38 @@ from models.vit.expert_linear_adaptive import (
 from models.vit.linear import MODEL_PACKAGE as VIT_LINEAR
 from models.vit.linear_adaptive import MODEL_PACKAGE as VIT_LINEAR_ADAPTIVE
 
+_PACKAGES = (
+    BERT_LINEAR,
+    BERT_LINEAR_ADAPTIVE,
+    BERT_EXPERT_LINEAR,
+    BERT_EXPERT_LINEAR_ADAPTIVE,
+    GPT_LINEAR,
+    GPT_LINEAR_ADAPTIVE,
+    GPT_EXPERT_LINEAR,
+    GPT_EXPERT_LINEAR_ADAPTIVE,
+    VIT_LINEAR,
+    VIT_LINEAR_ADAPTIVE,
+    VIT_EXPERT_LINEAR,
+    VIT_EXPERT_LINEAR_ADAPTIVE,
+    TRANSFORMER_LINEAR,
+    TRANSFORMER_LINEAR_ADAPTIVE,
+    TRANSFORMER_EXPERT_LINEAR,
+    TRANSFORMER_EXPERT_LINEAR_ADAPTIVE,
+    LINEARS_LINEAR,
+    LINEARS_LINEAR_ADAPTIVE,
+    EXPERTS_LINEAR,
+    EXPERTS_LINEAR_ADAPTIVE,
+    PARAMETRIC_VECTOR,
+    PARAMETRIC_MATRIX,
+    PARAMETRIC_GENERATOR,
+    NEURON_LINEAR,
+    NEURON_LINEAR_ADAPTIVE,
+    NEURON_EXPERT_LINEAR,
+    NEURON_EXPERT_LINEAR_ADAPTIVE,
+)
+
 MODEL_CATALOG: dict[str, ModelPackage] = {
-    "bert/linear": BERT_LINEAR,
-    "bert/linear_adaptive": BERT_LINEAR_ADAPTIVE,
-    "bert/expert_linear": BERT_EXPERT_LINEAR,
-    "bert/expert_linear_adaptive": BERT_EXPERT_LINEAR_ADAPTIVE,
-    "gpt/linear": GPT_LINEAR,
-    "gpt/linear_adaptive": GPT_LINEAR_ADAPTIVE,
-    "gpt/expert_linear": GPT_EXPERT_LINEAR,
-    "gpt/expert_linear_adaptive": GPT_EXPERT_LINEAR_ADAPTIVE,
-    "vit/linear": VIT_LINEAR,
-    "vit/linear_adaptive": VIT_LINEAR_ADAPTIVE,
-    "vit/expert_linear": VIT_EXPERT_LINEAR,
-    "vit/expert_linear_adaptive": VIT_EXPERT_LINEAR_ADAPTIVE,
-    "transformer/linear": TRANSFORMER_LINEAR,
-    "transformer/linear_adaptive": TRANSFORMER_LINEAR_ADAPTIVE,
-    "transformer/expert_linear": TRANSFORMER_EXPERT_LINEAR,
-    "transformer/expert_linear_adaptive": TRANSFORMER_EXPERT_LINEAR_ADAPTIVE,
-    "linears/linear": LINEARS_LINEAR,
-    "linears/linear_adaptive": LINEARS_LINEAR_ADAPTIVE,
-    "experts/linear": EXPERTS_LINEAR,
-    "experts/linear_adaptive": EXPERTS_LINEAR_ADAPTIVE,
-    "parametric/parametric_vector": PARAMETRIC_VECTOR,
-    "parametric/parametric_matrix": PARAMETRIC_MATRIX,
-    "parametric/parametric_generator": PARAMETRIC_GENERATOR,
-    "neuron/linear": NEURON_LINEAR,
-    "neuron/linear_adaptive": NEURON_LINEAR_ADAPTIVE,
-    "neuron/expert_linear": NEURON_EXPERT_LINEAR,
-    "neuron/expert_linear_adaptive": NEURON_EXPERT_LINEAR_ADAPTIVE,
+    package.identity.catalog_key: package for package in _PACKAGES
 }
 
 MODEL_ORDER: dict[str, int] = {
@@ -111,62 +117,15 @@ MODEL_ORDER: dict[str, int] = {
 EMPTY_CATEGORY_PACKAGES: set[str] = set()
 
 
-def _module_path_for_package(package: ModelPackage) -> str:
-    return package.module_path or (
-        f"models.{package.identity.model_type}.{package.identity.model}"
-    )
-
-
-_MODULE_TO_PUBLIC_ID = {
-    _module_path_for_package(package): public_id
-    for public_id, package in MODEL_CATALOG.items()
-}
-
-
-def _flat_name_priority(public_id: str) -> int:
-    if public_id.startswith("linears/") or public_id.startswith("experts/"):
-        return 0
-    if public_id.startswith("bert/"):
-        return 1
-    if public_id.startswith("vit/"):
-        return 2
-    if public_id.startswith("neuron/"):
-        return 3
-    return 4
-
-
-FLAT_TO_PUBLIC_ID: dict[str, str] = {}
-for public_id in sorted(MODEL_CATALOG, key=_flat_name_priority):
-    flat_name = public_id.rsplit("/", 1)[-1]
-    FLAT_TO_PUBLIC_ID.setdefault(flat_name, public_id)
-
-
 def is_safe_model_id(model_id: object) -> bool:
-    if not isinstance(model_id, str):
-        return False
-    if not model_id or model_id.strip() != model_id or "\\" in model_id:
-        return False
-    segments = model_id.split("/")
-    if len(segments) < 2:
-        return False
-    return all(
-        segment not in {".", ".."} and MODEL_ID_SEGMENT_RE.fullmatch(segment)
-        for segment in segments
-    )
+    return split_model_id(model_id) is not None
 
 
-def model_identity_payload(model_id: str) -> dict[str, str]:
-    identity = model_identity_for_model_id(model_id)
+def model_package(catalog_key: str) -> ModelPackage | None:
+    identity = split_model_id(catalog_key)
     if identity is None:
-        identity = split_model_id(model_id)
-        if identity is None:
-            raise ValueError(f"Invalid model id: {model_id}")
-    return identity.to_payload()
-
-
-def model_identity_for_model_id(model_id: str) -> ModelIdentity | None:
-    package = model_package(model_id)
-    return package.identity if package is not None else None
+        return None
+    return MODEL_CATALOG.get(identity.catalog_key)
 
 
 def model_identity_for_parts(model_type: str, model: str) -> ModelIdentity | None:
@@ -181,6 +140,21 @@ def model_id_from_parts(model_type: str, model: str) -> str | None:
     return identity.catalog_key if identity is not None else None
 
 
+def model_id_from_payload(payload: Mapping[str, Any]) -> str | None:
+    model_type = payload.get("modelType")
+    model = payload.get("model")
+    if not isinstance(model_type, str) or not isinstance(model, str):
+        return None
+    return model_id_from_parts(model_type, model)
+
+
+def model_identity_payload(catalog_key: str) -> dict[str, str]:
+    package = model_package(catalog_key)
+    if package is None:
+        raise ValueError(f"Unknown Model Package identity: {catalog_key!r}")
+    return package.identity.to_payload()
+
+
 def discover_model_ids() -> list[str]:
     return sorted(
         MODEL_CATALOG,
@@ -193,7 +167,7 @@ def discover_model_packages() -> list[ModelPackage]:
 
 
 def discover_model_types() -> list[str]:
-    return sorted({package.model_type for package in MODEL_CATALOG.values()})
+    return sorted({package.identity.model_type for package in _PACKAGES})
 
 
 def model_type_exists(model_type: str) -> bool:
@@ -218,89 +192,14 @@ def discover_model_identity_payloads() -> list[dict[str, str]]:
     return [identity.to_payload() for identity in discover_model_identities()]
 
 
-def model_package(model_id: str) -> ModelPackage | None:
-    if not is_safe_model_id(model_id):
-        return None
-    return MODEL_CATALOG.get(model_id)
-
-
-def catalog_entry(model_id: str) -> ModelPackage | None:
-    return model_package(model_id)
-
-
-def module_path_for_model_id(model_id: str) -> str | None:
-    package = model_package(model_id)
-    return _module_path_for_package(package) if package is not None else None
-
-
-def module_path_for_model_identity(model_type: str, model: str) -> str | None:
-    model_id = model_id_from_parts(model_type, model)
-    return module_path_for_model_id(model_id) if model_id is not None else None
-
-
-def public_id_for_module(module_path: str) -> str | None:
-    if module_path in _MODULE_TO_PUBLIC_ID:
-        return _MODULE_TO_PUBLIC_ID[module_path]
-    for package, public_id in _MODULE_TO_PUBLIC_ID.items():
-        if module_path.startswith(f"{package}."):
-            return public_id
-    return None
-
-
-def model_package_for_module(module_path: str) -> ModelPackage | None:
-    public_id = public_id_for_module(module_path)
-    return MODEL_CATALOG.get(public_id) if public_id is not None else None
-
-
-def public_id_for_flat_name(flat_name: str) -> str | None:
-    return FLAT_TO_PUBLIC_ID.get(flat_name)
-
-
-def identity_for_module(module_path: str) -> ModelIdentity | None:
-    package = model_package_for_module(module_path)
-    return package.identity if package is not None else None
-
-
-def model_id_from_payload(payload: Mapping[str, Any]) -> str | None:
-    model_type = payload.get("modelType")
-    model = payload.get("model")
-    if isinstance(model_type, str) and isinstance(model, str):
-        return model_id_from_parts(model_type, model)
-    if not isinstance(model, str):
-        return None
-    if model_package(model) is not None:
-        return model
-    return public_id_for_flat_name(model)
-
-
-def model_identity_payload_from_id(model_id: str) -> dict[str, str]:
-    package = model_package(model_id)
-    if package is not None:
-        return package.to_identity_payload()
-    identity = split_model_id(model_id)
-    if identity is None:
-        raise ValueError(f"Invalid model id: {model_id}")
-    return identity.to_payload()
-
-
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Resolve Emperor model catalog entries."
+        description="List canonical Emperor Model Package identities."
     )
     action = parser.add_mutually_exclusive_group(required=True)
-    action.add_argument("--list", action="store_true", help="Print public model flags.")
-    action.add_argument(
-        "--list-types",
-        action="store_true",
-        help="Print available model types.",
-    )
-    action.add_argument(
-        "--module",
-        action="store_true",
-        help="Print a model module path.",
-    )
-    parser.add_argument("--model-type", help="Model type, e.g. linears.")
-    parser.add_argument("--model", help="Model name, e.g. linear.")
+    action.add_argument("--list", action="store_true")
+    action.add_argument("--list-types", action="store_true")
+    parser.add_argument("--model-type")
     return parser.parse_args()
 
 
@@ -310,61 +209,39 @@ def main() -> None:
         for model_type in discover_model_types():
             print(model_type)
         return
-
-    if args.list:
-        if args.model_type:
-            if not model_type_exists(args.model_type):
-                raise SystemExit(f"Unknown model type: --model-type {args.model_type}")
-            for identity in discover_model_identities_for_type(args.model_type):
-                print(f"--model {identity.model}")
-            return
-
-        for identity in discover_model_identities():
-            print(f"--model-type {identity.model_type} --model {identity.model}")
+    if args.model_type:
+        if not model_type_exists(args.model_type):
+            raise SystemExit(f"Unknown model type: --model-type {args.model_type}")
+        for identity in discover_model_identities_for_type(args.model_type):
+            print(identity.catalog_key)
         return
-
-    if not args.model_type or not args.model:
-        raise SystemExit("--module requires --model-type and --model.")
-    module_path = module_path_for_model_identity(args.model_type, args.model)
-    if module_path is None:
-        raise SystemExit(1)
-    print(module_path)
+    for identity in discover_model_identities():
+        print(identity.catalog_key)
 
 
 __all__ = [
     "EMPTY_CATEGORY_PACKAGES",
-    "FLAT_TO_PUBLIC_ID",
     "MODEL_CATALOG",
     "MODEL_ID_SEGMENT_RE",
     "MODEL_ORDER",
-    "ModelCatalogEntry",
     "ModelIdentity",
     "ModelPackage",
-    "catalog_entry",
     "discover_model_identities",
     "discover_model_identities_for_type",
     "discover_model_identity_payloads",
     "discover_model_ids",
     "discover_model_packages",
     "discover_model_types",
-    "identity_for_module",
     "is_safe_model_id",
     "is_safe_model_identity",
     "is_safe_model_segment",
     "model_id_from_parts",
     "model_id_from_payload",
-    "model_identity_for_model_id",
     "model_identity_for_parts",
     "model_identity_payload",
-    "model_identity_payload_from_id",
     "model_key",
     "model_package",
-    "model_package_for_module",
     "model_type_exists",
-    "module_path_for_model_id",
-    "module_path_for_model_identity",
-    "public_id_for_flat_name",
-    "public_id_for_module",
     "split_model_id",
 ]
 

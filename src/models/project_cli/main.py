@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 import sys
 from collections.abc import Callable, Sequence
 
@@ -10,7 +9,6 @@ from models.catalog import (
     discover_model_types,
     model_id_from_parts,
     model_type_exists,
-    module_path_for_model_id,
 )
 from models.config_overrides import (
     print_config_options,
@@ -19,7 +17,7 @@ from models.config_overrides import (
     print_preset_options,
 )
 
-COMMAND = "source experiment.sh"
+COMMAND = "mise run experiment --"
 MODEL_TYPE_ARG = "<type>"
 MODEL_NAME_ARG = "<name>"
 MODEL_SELECTOR_ARG = f"--model-type {MODEL_TYPE_ARG} --model {MODEL_NAME_ARG}"
@@ -353,15 +351,12 @@ def run_model_command(
         return run_inspection(
             ["--model-type", model_type, "--model", model, *inspection_arguments]
         )
-    model_id = model_id_from_parts(model_type, model)
-    module = module_path_for_model_id(model_id) if model_id else None
-    if module is None:
+    catalog_key = model_id_from_parts(model_type, model)
+    if catalog_key is None:
         return 1
-    completed = subprocess.run(  # noqa: S603 - catalog-owned module path
-        [sys.executable, "-m", module, *arguments],
-        check=False,
-    )
-    return completed.returncode
+    from models.package_cli import run_model_package_cli
+
+    return run_model_package_cli(catalog_key, arguments)
 
 
 def run_experiment(argv: Sequence[str] | None = None) -> int:
