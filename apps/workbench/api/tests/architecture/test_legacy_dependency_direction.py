@@ -132,8 +132,11 @@ SHARED_TENSORBOARD_DIR = WORKBENCH_PACKAGE_DIR / "tensorboard"
 EMPEROR_DIR = SOURCE_ROOT / "emperor"
 MODELS_DIR = SOURCE_ROOT / "models"
 CATALOG_PACKAGE_ROOTS = tuple(
-    (SOURCE_ROOT.joinpath(*entry.module_path.split(".")), entry.module_path)
-    for entry in MODEL_CATALOG.values()
+    (
+        SOURCE_ROOT / "models" / package.identity.model_type / package.identity.model,
+        f"models.{package.identity.model_type}.{package.identity.model}",
+    )
+    for package in MODEL_CATALOG.values()
 )
 
 
@@ -381,8 +384,13 @@ class DependencyDirectionTests(unittest.TestCase):
         self.assertIn("def _checkpoint_overrides", historical_source)
         self.assertNotIn("_checkpoint_overrides", inspection_test_source)
         self.assertEqual(
-            MODEL_CATALOG["linears/linear"].checkpoint_metadata_module,
-            "models.linears.linear.checkpoint_metadata",
+            MODEL_CATALOG["linears/linear"].checkpoint_config_overrides(
+                {
+                    "input_model.model.weight_params": (784, 32),
+                    "output_model.model.weight_params": (32, 10),
+                }
+            ),
+            {"input_dim": 784, "hidden_dim": 32, "output_dim": 10},
         )
 
     def test_historical_inspection_owns_checkpoint_policy_and_interpretation(
