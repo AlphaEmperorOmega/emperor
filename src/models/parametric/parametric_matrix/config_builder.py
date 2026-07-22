@@ -12,15 +12,17 @@ from models.parametric.parametric_matrix._control_config_factory import (
     build_parametric_stack_config,
 )
 from models.parametric.parametric_matrix.experiment_config import ExperimentConfig
+from models.parametric.parametric_matrix.runtime_defaults import DEFAULT_RUNTIME
 from models.parametric.parametric_matrix.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
+    RuntimeOptions,
 )
 
 
-class ParametricMatrixConfigBuilder:
+class _ParametricMatrixConfigBuilderImplementation:
     def __init__(
         self,
         batch_size: int = config.BATCH_SIZE,
@@ -185,3 +187,13 @@ def build_linear_layer_config(
         memory_config=None,
         layer_model_config=layer_model_config,
     )
+
+
+class ParametricMatrixConfigBuilder(_ParametricMatrixConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.parametric.parametric_matrix ParametricMatrixConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())

@@ -31,6 +31,7 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
 )
 from model_runtime.packages import GridSearch, RandomSearch
+from models.catalog import model_package
 from models.parametric.parametric_matrix.config_builder import (
     ParametricMatrixConfigBuilder,
 )
@@ -39,18 +40,31 @@ from models.parametric.parametric_matrix.model import Model
 from models.parametric.parametric_matrix.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.parametric.parametric_matrix.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
+    RuntimeOptions,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("parametric/parametric_matrix").bind_runtime_defaults(
+        runtime_defaults
+    )
+    return ParametricMatrixConfigBuilder(runtime=runtime).build()
+
+
+def _build_typed_config(**construction_values):
+    return ParametricMatrixConfigBuilder(
+        runtime=RuntimeOptions(construction_values)
+    ).build()
 
 
 class TestParametricMatrixModel(unittest.TestCase):
@@ -68,8 +82,11 @@ class TestParametricMatrixModel(unittest.TestCase):
                 self.assertEqual(module.__name__, module_name)
 
     def test_experiment_public_model_id_remains_catalog_id(self):
+        experiment = Experiment(
+            model_package=model_package("parametric/parametric_matrix")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "parametric/parametric_matrix",
         )
 
@@ -80,12 +97,14 @@ class TestParametricMatrixModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.parametric.parametric_matrix.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
 
@@ -95,16 +114,15 @@ class TestParametricMatrixModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(
-                dataset.__name__
-                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            (
+                dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
-                ]
+                ][0].__name__,
             ),
         )
 
     def test_modern_preset_contract_is_exposed(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_matrix").presets
 
         self.assertEqual(
             {
@@ -122,7 +140,7 @@ class TestParametricMatrixModel(unittest.TestCase):
         )
 
     def test_empty_overrides_generate_empty_locks(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_matrix").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -130,11 +148,11 @@ class TestParametricMatrixModel(unittest.TestCase):
                 self.assertEqual(presets.locked_fields(preset), {})
 
     def test_builder_returns_boundary_style_experiment_config(self):
-        cfg = ParametricMatrixConfigBuilder(
+        cfg = _build_config(
             input_dim=8,
             hidden_dim=4,
             output_dim=3,
-        ).build()
+        )
 
         self.assertIsInstance(cfg.experiment_config, ExperimentConfig)
         self.assertIsNotNone(cfg.experiment_config.input_model_config)
@@ -183,7 +201,7 @@ class TestParametricMatrixModel(unittest.TestCase):
             activation=stack_options.activation,
         )
 
-        flat_cfg = ParametricMatrixConfigBuilder(
+        flat_cfg = _build_config(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -217,8 +235,8 @@ class TestParametricMatrixModel(unittest.TestCase):
             sampler_mutual_information_loss_weight=(
                 sampler_options.mutual_information_loss_weight
             ),
-        ).build()
-        grouped_cfg = ParametricMatrixConfigBuilder(
+        )
+        grouped_cfg = _build_typed_config(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -227,16 +245,16 @@ class TestParametricMatrixModel(unittest.TestCase):
             mixture_options=mixture_options,
             sampler_options=sampler_options,
             router_options=router_options,
-        ).build()
+        )
 
         self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_router_and_sampler_defaults_match_expected_structure(self):
-        cfg = ParametricMatrixConfigBuilder(
+        cfg = _build_config(
             input_dim=8,
             hidden_dim=9,
             output_dim=3,
-        ).build()
+        )
         parametric_config = (
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -283,7 +301,7 @@ class TestParametricMatrixModel(unittest.TestCase):
 
     def test_preset_builds_current_parametric_config(self):
         hidden_dim = 5
-        cfg = ExperimentPresets()._preset(
+        cfg = model_package("parametric/parametric_matrix").presets._preset(
             input_dim=8,
             hidden_dim=hidden_dim,
             output_dim=3,
@@ -324,13 +342,13 @@ class TestParametricMatrixModel(unittest.TestCase):
         )
 
     def test_bias_option_maps_to_disabled_or_matrix_bias_config(self):
-        disabled = ExperimentPresets()._preset(
+        disabled = model_package("parametric/parametric_matrix").presets._preset(
             input_dim=8,
             hidden_dim=5,
             output_dim=3,
             adaptive_bias_option=None,
         )
-        enabled = ExperimentPresets()._preset(
+        enabled = model_package("parametric/parametric_matrix").presets._preset(
             input_dim=8,
             hidden_dim=5,
             output_dim=3,
@@ -352,7 +370,7 @@ class TestParametricMatrixModel(unittest.TestCase):
 
     def test_forward_one_batch_per_dataset(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_matrix").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -370,7 +388,7 @@ class TestParametricMatrixModel(unittest.TestCase):
                 self.assertEqual(auxiliary_loss.shape, torch.Size([]))
 
     def test_all_presets_train_one_epoch(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_matrix").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -389,7 +407,7 @@ class TestParametricMatrixModel(unittest.TestCase):
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_config_search_space_builds_configs(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_matrix").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -418,7 +436,7 @@ class TestParametricMatrixModel(unittest.TestCase):
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            ExperimentPresets().get_config(
+            model_package("parametric/parametric_matrix").presets.get_config(
                 ExperimentPreset.CONFIG,
                 dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -430,7 +448,7 @@ class TestParametricMatrixModel(unittest.TestCase):
         self.assertIn("Unknown", str(ctx.exception))
 
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_matrix").presets.get_config(
             ExperimentPreset.PRESET,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -446,7 +464,7 @@ class TestParametricMatrixModel(unittest.TestCase):
         )
 
     def test_config_search_applies_matrix_specific_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_matrix").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -473,7 +491,9 @@ class TestParametricMatrixModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = model_package("parametric/parametric_matrix").presets._preset(
+            input_dim=8, hidden_dim=4, output_dim=3
+        )
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])
