@@ -55,10 +55,13 @@ import model_runtime.inspection
 from models.catalog import discover_model_packages
 
 loaded = [
-    package.module_path
+    package.catalog_key
     for package in discover_model_packages()
+    for package_module in (
+        f'models.{package.identity.model_type}.{package.identity.model}',
+    )
     if any(
-        name == package.module_path or name.startswith(package.module_path + '.')
+        name.startswith(package_module + '.')
         for name in sys.modules
     )
 ]
@@ -89,10 +92,13 @@ from models.catalog import discover_model_packages
 
 create_app()
 loaded = [
-    package.module_path
+    package.catalog_key
     for package in discover_model_packages()
+    for package_module in (
+        f'models.{package.identity.model_type}.{package.identity.model}',
+    )
     if any(
-        name == package.module_path or name.startswith(package.module_path + '.')
+        name.startswith(package_module + '.')
         for name in sys.modules
     )
 ]
