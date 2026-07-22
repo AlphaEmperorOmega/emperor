@@ -209,7 +209,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         if not isinstance(search_key, str):
             raise AdapterProtocolError("Search-value request requires search_key.")
         parsed = parse_config_value(
-            package.metadata.search_space_module,
+            package.metadata.search_space,
             search_key,
             str(payload.get("value")),
         )

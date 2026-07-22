@@ -8,7 +8,7 @@ import torch
 
 from emperor.experiments import ExperimentTask
 from model_runtime.inspection import InspectionRequest, shape_trace
-from model_runtime.packages import ModelPackage
+from model_runtime.packages import ModelIdentity, ModelPackage
 
 
 class _ImageDataset:
@@ -44,6 +44,10 @@ class _SamplePackage:
 class _FixturePackage(ModelPackage):
     def preset_name(self, preset: object) -> str:
         return str(preset)
+
+
+class _UnusedPackageAdapter:
+    pass
 
 
 def _trace_fixture_model():
@@ -129,7 +133,10 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
                 )
 
     def test_shape_trace_records_repeated_calls_and_same_shape_variables(self) -> None:
-        package = _FixturePackage("fixtures", "shape_trace", "unused")
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
         model = _trace_fixture_model()
         sample_input = torch.zeros((1, 4))
         request = InspectionRequest(preset="baseline")

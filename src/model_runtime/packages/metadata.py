@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
@@ -73,27 +72,6 @@ class ModelMetadata:
     dataset_options: ModuleType
     monitor_options_source: ModuleType
     search_space: ModuleType
-    module_path: str | None = None
-
-    @property
-    def model_name(self) -> str:
-        return self.identity.catalog_key
-
-    @property
-    def config_module(self) -> ModuleType:
-        return self.runtime_defaults
-
-    @property
-    def dataset_options_module(self) -> ModuleType:
-        return self.dataset_options
-
-    @property
-    def monitor_options_module(self) -> ModuleType:
-        return self.monitor_options_source
-
-    @property
-    def search_space_module(self) -> ModuleType:
-        return self.search_space
 
     @property
     def dataset_options_by_task(self) -> dict[ExperimentTask, list[type]]:
@@ -157,37 +135,4 @@ class ModelMetadata:
         }
 
 
-def load_model_metadata_from_module_path(
-    module_path: str,
-    *,
-    model_name: str | None = None,
-) -> ModelMetadata:
-    identity_name = model_name or module_path.removeprefix("models.").replace(".", "/")
-    segments = identity_name.split("/")
-    if len(segments) != 2:
-        raise ValueError(f"Invalid model identity: {identity_name!r}")
-    identity = ModelIdentity(segments[0], segments[1])
-    return ModelMetadata(
-        identity=identity,
-        runtime_defaults=importlib.import_module(f"{module_path}.config"),
-        dataset_options=importlib.import_module(f"{module_path}.dataset_options"),
-        monitor_options_source=importlib.import_module(
-            f"{module_path}.monitor_options"
-        ),
-        search_space=importlib.import_module(f"{module_path}.search_space"),
-        module_path=module_path,
-    )
-
-
-def load_model_metadata_for_config_module(config_module: ModuleType) -> ModelMetadata:
-    module_name = config_module.__name__
-    if not module_name.endswith(".config"):
-        raise ValueError(f"Expected a config module, got {module_name!r}")
-    return load_model_metadata_from_module_path(module_name[: -len(".config")])
-
-
-__all__ = [
-    "ModelMetadata",
-    "load_model_metadata_for_config_module",
-    "load_model_metadata_from_module_path",
-]
+__all__ = ["ModelMetadata"]

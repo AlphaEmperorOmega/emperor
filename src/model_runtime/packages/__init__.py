@@ -8,7 +8,6 @@ if TYPE_CHECKING:
         ConfigValueError,
         abstract_config_class_error,
         canonical_config_key,
-        canonical_config_key_for_module,
         config_key_to_flag,
         config_key_to_model_param,
         config_key_to_param,
@@ -28,11 +27,7 @@ if TYPE_CHECKING:
         dataset_name,
         normalize_dataset_name,
     )
-    from model_runtime.packages.definition import (
-        ModelCatalogEntry,
-        ModelPackage,
-        model_package_from_module_path,
-    )
+    from model_runtime.packages.definition import ModelPackage
     from model_runtime.packages.identity import (
         MODEL_ID_SEGMENT_RE,
         ModelIdentity,
@@ -45,11 +40,7 @@ if TYPE_CHECKING:
         DEFAULT_INSPECTION_CONSTRUCTION_LIMITS,
         InspectionConstructionLimits,
     )
-    from model_runtime.packages.metadata import (
-        ModelMetadata,
-        load_model_metadata_for_config_module,
-        load_model_metadata_from_module_path,
-    )
+    from model_runtime.packages.metadata import ModelMetadata
     from model_runtime.packages.presets import (
         BuilderBackedExperimentPresetsBase,
         ExperimentPresetsBase,
@@ -69,7 +60,6 @@ __all__ = [
     "ExperimentPresetsBase",
     "GridSearch",
     "InspectionConstructionLimits",
-    "ModelCatalogEntry",
     "ModelIdentity",
     "ModelMetadata",
     "ModelPackage",
@@ -79,7 +69,6 @@ __all__ = [
     "SearchMode",
     "abstract_config_class_error",
     "canonical_config_key",
-    "canonical_config_key_for_module",
     "config_key_to_flag",
     "config_key_to_model_param",
     "config_key_to_param",
@@ -92,10 +81,7 @@ __all__ = [
     "is_safe_model_identity",
     "is_safe_model_segment",
     "iter_supported_config_keys",
-    "load_model_metadata_for_config_module",
-    "load_model_metadata_from_module_path",
     "model_key",
-    "model_package_from_module_path",
     "normalize_dataset_name",
     "normalize_key",
     "parse_config_value",
@@ -108,7 +94,6 @@ _CONFIGURATION_EXPORTS = {
     "ConfigValueError",
     "abstract_config_class_error",
     "canonical_config_key",
-    "canonical_config_key_for_module",
     "config_key_to_flag",
     "config_key_to_model_param",
     "config_key_to_param",
@@ -127,9 +112,7 @@ _DATASET_EXPORTS = {
     "normalize_dataset_name",
 }
 _DEFINITION_EXPORTS = {
-    "ModelCatalogEntry",
     "ModelPackage",
-    "model_package_from_module_path",
 }
 _IDENTITY_EXPORTS = {
     "MODEL_ID_SEGMENT_RE",
@@ -145,8 +128,6 @@ _INSPECTION_LIMIT_EXPORTS = {
 }
 _METADATA_EXPORTS = {
     "ModelMetadata",
-    "load_model_metadata_for_config_module",
-    "load_model_metadata_from_module_path",
 }
 _PRESET_EXPORTS = {
     "BuilderBackedExperimentPresetsBase",

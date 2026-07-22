@@ -19,17 +19,35 @@ from model_runtime.inspection import (
     supported_config_keys,
     validate_configuration,
 )
-from model_runtime.packages import ModelPackage
+from model_runtime.packages import ModelIdentity, ModelPackage
 from models.catalog import model_package
+
+
+class _BrokenPackageAdapter:
+    @staticmethod
+    def _missing(*_args, **_kwargs):
+        raise ModuleNotFoundError("No module named 'models.__inspection_missing__'")
+
+    load_metadata = _missing
+    load_runtime_options_type = _missing
+    bind_runtime_defaults = _missing
+    load_preset_type = _missing
+    load_presets = _missing
+    build_configurations = _missing
+    build_model = _missing
+    build_experiment = _missing
+
+
+def _broken_package() -> ModelPackage:
+    return ModelPackage(
+        ModelIdentity("broken", "missing"),
+        _BrokenPackageAdapter(),
+    )
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):
     def test_broken_package_override_failures_are_transport_neutral(self) -> None:
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
-        )
+        package = _broken_package()
         calls = (
             lambda: supported_config_keys(package),
             lambda: parse_overrides(package, {"HIDDEN_DIM": "1"}),
@@ -47,11 +65,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                     call()
 
     def test_broken_package_schema_failures_are_transport_neutral(self) -> None:
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
-        )
+        package = _broken_package()
 
         for inspect_schema in (configuration_schema, search_space_schema):
             with self.subTest(call=inspect_schema.__name__):
@@ -76,14 +90,14 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         self.assertEqual(fields["HIDDEN_DIM"].section_path, ("Global",))
         self.assertEqual(
             fields["HIDDEN_DIM"].maximum,
-            package.inspection_construction_limits.maximum_dimension,
+            package.inspection_construction_limits.maximum_hidden_dimension,
         )
         self.assertEqual(
             fields["STACK_NUM_LAYERS"].maximum,
             package.inspection_construction_limits.maximum_layer_count,
         )
-        self.assertTrue(fields["GATE_FLAG"].locked)
-        self.assertEqual(fields["GATE_FLAG"].locked_value, True)
+        self.assertTrue(fields["STACK_GATE_FLAG"].locked)
+        self.assertEqual(fields["STACK_GATE_FLAG"].locked_value, True)
 
     def test_selected_adaptive_package_produces_search_metadata_records(self) -> None:
         package = model_package("linears/linear_adaptive")
@@ -111,7 +125,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
 
         parsed = parse_overrides(
             package,
-            {"hidden-dim": "128", "gate_flag": "true"},
+            {"hidden-dim": "128", "stack_gate_flag": "true"},
         )
 
         self.assertEqual(
@@ -128,7 +142,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         with self.assertRaisesRegex(InspectionError, "locked fields"):
             parse_overrides(
                 package,
-                {"gate_flag": "false"},
+                {"stack_gate_flag": "false"},
                 preset="gating",
             )
 
@@ -148,14 +162,14 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             ).axes
         }
 
-        self.assertTrue(fields["EXPERT_TOP_K"].locked)
-        self.assertEqual(fields["EXPERT_TOP_K"].locked_value, 1)
-        self.assertTrue(axes["EXPERT_TOP_K"].locked)
-        self.assertEqual(axes["EXPERT_TOP_K"].locked_value, 1)
+        self.assertTrue(fields["TOP_K"].locked)
+        self.assertEqual(fields["TOP_K"].locked_value, 1)
+        self.assertTrue(axes["TOP_K"].locked)
+        self.assertEqual(axes["TOP_K"].locked_value, 1)
         with self.assertRaisesRegex(InspectionError, "locked fields: top_k"):
             parse_overrides(
                 package,
-                {"expert_top_k": "1"},
+                {"top_k": "1"},
                 preset="top1-switch-aux",
             )
 

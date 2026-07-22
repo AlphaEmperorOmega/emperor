@@ -46,12 +46,6 @@ class InspectionConstructionLimits:
             )
         object.__setattr__(self, "field_maximums", _frozen_limits(self.field_maximums))
 
-    @property
-    def maximum_dimension(self) -> int:
-        """Compatibility name for the primary hidden/model dimension bound."""
-
-        return self.maximum_hidden_dimension
-
     def maximum_for(self, config_key: str) -> int | float | None:
         """Return the explicit construction bound for one Runtime Defaults field."""
 

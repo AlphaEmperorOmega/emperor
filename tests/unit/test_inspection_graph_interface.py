@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from dataclasses import FrozenInstanceError
-from unittest.mock import PropertyMock, patch
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -22,17 +22,35 @@ from model_runtime.inspection import (
     inspect_model,
     inspect_model_graph,
 )
-from model_runtime.packages import ModelPackage
+from model_runtime.packages import ModelIdentity, ModelPackage
 from models.catalog import model_package
+
+
+class _BrokenPackageAdapter:
+    @staticmethod
+    def _missing(*_args, **_kwargs):
+        raise ModuleNotFoundError("No module named 'models.__inspection_missing__'")
+
+    load_metadata = _missing
+    load_runtime_options_type = _missing
+    bind_runtime_defaults = _missing
+    load_preset_type = _missing
+    load_presets = _missing
+    build_configurations = _missing
+    build_model = _missing
+    build_experiment = _missing
+
+
+def _broken_package() -> ModelPackage:
+    return ModelPackage(
+        ModelIdentity("broken", "missing"),
+        _BrokenPackageAdapter(),
+    )
 
 
 class InspectionGraphInterfaceTests(unittest.TestCase):
     def test_broken_package_construction_failure_is_transport_neutral(self) -> None:
-        package = ModelPackage(
-            "broken",
-            "missing",
-            "models.__inspection_missing__",
-        )
+        package = _broken_package()
 
         with self.assertRaisesRegex(
             InspectionError,
@@ -142,7 +160,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                 package,
                 InspectionRequest(
                     preset="gating",
-                    overrides={"gate_flag": "false"},
+                    overrides={"stack_gate_flag": "false"},
                 ),
             )
 
@@ -155,8 +173,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
 
         with patch.object(
             ModelPackage,
-            "model_class",
-            new_callable=PropertyMock,
+            "build_model",
             side_effect=AssertionError("model constructor was observed"),
         ):
             with self.assertRaisesRegex(
@@ -168,7 +185,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                     InspectionRequest(
                         preset="baseline",
                         overrides={
-                            "hidden_dim": limits.maximum_dimension + 1,
+                            "hidden_dim": limits.maximum_hidden_dimension + 1,
                         },
                     ),
                 )
@@ -180,8 +197,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
 
         with patch.object(
             ModelPackage,
-            "model_class",
-            new_callable=PropertyMock,
+            "build_model",
             side_effect=AssertionError("model constructor was observed"),
         ):
             with self.assertRaisesRegex(
@@ -193,7 +209,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                     InspectionRequest(
                         preset="baseline",
                         overrides={
-                            "hidden_dim": limits.maximum_dimension,
+                            "hidden_dim": limits.maximum_hidden_dimension,
                             "stack_num_layers": limits.maximum_layer_count,
                         },
                     ),
