@@ -286,6 +286,76 @@ class InspectorSchemaTests(unittest.TestCase):
                 for field_key in hidden_fields:
                     self.assertNotIn(field_key, fields)
 
+    def test_mlp_mixer_schemas_expose_only_applicable_mixer_controls(self) -> None:
+        common_fields = {
+            "hidden_dim",
+            "image_patch_size",
+            "input_channels",
+            "image_height",
+            "stack_num_layers",
+            "layer_norm_position",
+            "token_mixer_stack_hidden_dim",
+            "token_mixer_num_layers",
+            "channel_mixer_stack_hidden_dim",
+            "channel_mixer_num_layers",
+            "stack_gate_flag",
+            "stack_halting_flag",
+            "memory_flag",
+            "recurrent_flag",
+        }
+        excluded_fields = {
+            "class_token_flag",
+            "positional_embedding_option",
+            "num_heads",
+            "attn_num_heads",
+            "query_dim",
+            "key_dim",
+            "value_dim",
+            "causal_attention_mask_flag",
+            "decoder_num_layers",
+        }
+
+        for backend in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            model_name = f"mlp_mixer/{backend}"
+            fields = _fields_by_key(config_schema(model_name))
+            axes = _axes_by_key(search_space_schema(model_name, "baseline"))
+            adaptive = "adaptive" in backend
+            expert = "expert" in backend
+
+            with self.subTest(model_name=model_name):
+                self.assertGreaterEqual(set(fields), common_fields)
+                self.assertFalse(set(fields) & excluded_fields)
+                self.assertEqual(
+                    "adaptive_generator_stack_hidden_dim" in fields,
+                    adaptive,
+                )
+                self.assertEqual("top_k" in fields, expert)
+                self.assertEqual("num_experts" in fields, expert)
+                self.assertEqual("routing_initialization_mode" in fields, expert)
+                self.assertEqual("compute_expert_mixture_flag" in fields, expert)
+                self.assertGreaterEqual(
+                    set(axes),
+                    {
+                        "learning_rate",
+                        "hidden_dim",
+                        "image_patch_size",
+                        "stack_num_layers",
+                        "token_mixer_stack_hidden_dim",
+                        "channel_mixer_stack_hidden_dim",
+                    },
+                )
+                self.assertEqual(
+                    "adaptive_generator_stack_hidden_dim" in axes,
+                    adaptive,
+                )
+                self.assertEqual("top_k" in axes, expert)
+                self.assertEqual("num_experts" in axes, expert)
+
     def test_adaptive_expert_schemas_remove_attention_mode_switch(self) -> None:
         for model_name in (
             "bert/expert_linear_adaptive",

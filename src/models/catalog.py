@@ -29,6 +29,14 @@ from models.gpt.linear import MODEL_PACKAGE as GPT_LINEAR
 from models.gpt.linear_adaptive import MODEL_PACKAGE as GPT_LINEAR_ADAPTIVE
 from models.linears.linear import MODEL_PACKAGE as LINEARS_LINEAR
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
+from models.mlp_mixer.expert_linear import MODEL_PACKAGE as MLP_MIXER_EXPERT_LINEAR
+from models.mlp_mixer.expert_linear_adaptive import (
+    MODEL_PACKAGE as MLP_MIXER_EXPERT_LINEAR_ADAPTIVE,
+)
+from models.mlp_mixer.linear import MODEL_PACKAGE as MLP_MIXER_LINEAR
+from models.mlp_mixer.linear_adaptive import (
+    MODEL_PACKAGE as MLP_MIXER_LINEAR_ADAPTIVE,
+)
 from models.neuron.expert_linear import MODEL_PACKAGE as NEURON_EXPERT_LINEAR
 from models.neuron.expert_linear_adaptive import (
     MODEL_PACKAGE as NEURON_EXPERT_LINEAR_ADAPTIVE,
@@ -70,6 +78,10 @@ _PACKAGES = (
     VIT_LINEAR_ADAPTIVE,
     VIT_EXPERT_LINEAR,
     VIT_EXPERT_LINEAR_ADAPTIVE,
+    MLP_MIXER_LINEAR,
+    MLP_MIXER_LINEAR_ADAPTIVE,
+    MLP_MIXER_EXPERT_LINEAR,
+    MLP_MIXER_EXPERT_LINEAR_ADAPTIVE,
     TRANSFORMER_LINEAR,
     TRANSFORMER_LINEAR_ADAPTIVE,
     TRANSFORMER_EXPERT_LINEAR,
@@ -104,6 +116,10 @@ MODEL_ORDER: dict[str, int] = {
     "vit/linear_adaptive": 1,
     "vit/expert_linear": 2,
     "vit/expert_linear_adaptive": 3,
+    "mlp_mixer/linear": 0,
+    "mlp_mixer/linear_adaptive": 1,
+    "mlp_mixer/expert_linear": 2,
+    "mlp_mixer/expert_linear_adaptive": 3,
     "transformer/linear": 0,
     "transformer/linear_adaptive": 1,
     "transformer/expert_linear": 2,

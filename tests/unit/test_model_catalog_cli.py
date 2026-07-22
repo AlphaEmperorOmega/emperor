@@ -30,6 +30,7 @@ class TestModelCatalogDiscovery(unittest.TestCase):
                 "experts",
                 "gpt",
                 "linears",
+                "mlp_mixer",
                 "neuron",
                 "parametric",
                 "transformer",
@@ -102,6 +103,7 @@ class TestModelCatalogCli(unittest.TestCase):
                 "experts",
                 "gpt",
                 "linears",
+                "mlp_mixer",
                 "neuron",
                 "parametric",
                 "transformer",
@@ -156,6 +158,21 @@ class TestModelCatalogCli(unittest.TestCase):
                 "vit/linear_adaptive",
                 "vit/expert_linear",
                 "vit/expert_linear_adaptive",
+            ],
+        )
+
+    def test_list_for_mlp_mixer_model_type_prints_canonical_identities(self):
+        completed = self.run_catalog("--list", "--model-type", "mlp_mixer")
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertEqual(
+            completed.stdout.splitlines(),
+            [
+                "mlp_mixer/linear",
+                "mlp_mixer/linear_adaptive",
+                "mlp_mixer/expert_linear",
+                "mlp_mixer/expert_linear_adaptive",
             ],
         )
 
@@ -281,6 +298,7 @@ class TestProjectCatalogCli(unittest.TestCase):
                 "  --model-type experts",
                 "  --model-type gpt",
                 "  --model-type linears",
+                "  --model-type mlp_mixer",
                 "  --model-type neuron",
                 "  --model-type parametric",
                 "  --model-type transformer",

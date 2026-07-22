@@ -16,6 +16,7 @@ class InspectionShapeTraceTests(unittest.TestCase):
         cases = (
             ("linears/linear", ((1, 1, 28, 28),)),
             ("vit/linear", ((1, 1, 28, 28),)),
+            ("mlp_mixer/linear", ((1, 1, 28, 28),)),
             ("bert/linear", ((1, 35),)),
             ("gpt/linear", ((1, 35),)),
             ("transformer/linear", ((1, 64), (1, 63))),

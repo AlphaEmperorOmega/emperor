@@ -33,6 +33,10 @@ class InspectorDiscoveryTests(unittest.TestCase):
                 "gpt/expert_linear_adaptive",
                 "linears/linear",
                 "linears/linear_adaptive",
+                "mlp_mixer/linear",
+                "mlp_mixer/linear_adaptive",
+                "mlp_mixer/expert_linear",
+                "mlp_mixer/expert_linear_adaptive",
                 "neuron/linear",
                 "neuron/linear_adaptive",
                 "neuron/expert_linear",
@@ -83,6 +87,27 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertEqual(dataset_by_name["Mnist"]["inputDim"], 784)
         self.assertEqual(dataset_by_name["Mnist"]["outputDim"], 10)
         self.assertIn("Cifar10", dataset_by_name)
+
+    def test_dataset_discovery_for_mlp_mixer_image_classification(self) -> None:
+        for backend in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            with self.subTest(backend=backend):
+                payload = list_model_datasets(f"mlp_mixer/{backend}")
+                self.assertEqual(
+                    payload["defaultExperimentTask"],
+                    "image-classification",
+                )
+                self.assertEqual(
+                    [
+                        dataset["name"]
+                        for dataset in payload["datasetGroups"][0]["datasets"]
+                    ],
+                    ["Mnist", "FashionMNIST", "Cifar10", "Cifar100"],
+                )
 
     def test_dataset_discovery_for_gpt_uses_causal_language_modeling(self) -> None:
         payload = list_model_datasets("gpt/linear")
@@ -145,6 +170,10 @@ class InspectorDiscoveryTests(unittest.TestCase):
             monitor["name"]: monitor
             for monitor in list_model_monitors("parametric/parametric_matrix")
         }
+        mixer_monitor_names = {
+            monitor["name"]
+            for monitor in list_model_monitors("mlp_mixer/expert_linear_adaptive")
+        }
 
         self.assertEqual(
             [monitor["name"] for monitor in linear_monitors],
@@ -200,6 +229,10 @@ class InspectorDiscoveryTests(unittest.TestCase):
         )
         self.assertFalse(parametric_monitor_by_name["parametric"]["defaultEnabled"])
         self.assertIn("histogram", parametric_monitor_by_name["parametric"]["kinds"])
+        self.assertEqual(
+            mixer_monitor_names,
+            {"mixer", "layer-controller", "sampler", "adaptive", "weight-bank"},
+        )
 
     def test_one_preset_in_every_model_package_is_inspectable(self) -> None:
         for model in discover_models():

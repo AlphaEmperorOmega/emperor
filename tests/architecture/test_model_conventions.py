@@ -33,6 +33,12 @@ _EXPECTED_CONFIG_BUILDERS = {
     "models.vit.linear_adaptive": "VitLinearAdaptiveConfigBuilder",
     "models.vit.expert_linear": "VitExpertLinearConfigBuilder",
     "models.vit.expert_linear_adaptive": "VitExpertLinearAdaptiveConfigBuilder",
+    "models.mlp_mixer.linear": "MlpMixerLinearConfigBuilder",
+    "models.mlp_mixer.linear_adaptive": "MlpMixerLinearAdaptiveConfigBuilder",
+    "models.mlp_mixer.expert_linear": "MlpMixerExpertLinearConfigBuilder",
+    "models.mlp_mixer.expert_linear_adaptive": (
+        "MlpMixerExpertLinearAdaptiveConfigBuilder"
+    ),
     "models.transformer.linear": "TransformerLinearConfigBuilder",
     "models.transformer.linear_adaptive": ("TransformerLinearAdaptiveConfigBuilder"),
     "models.transformer.expert_linear": "TransformerExpertLinearConfigBuilder",

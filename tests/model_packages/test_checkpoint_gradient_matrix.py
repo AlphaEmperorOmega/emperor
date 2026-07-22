@@ -14,6 +14,7 @@ CHECKPOINT_REPRESENTATIVES = {
     "experts": "experts/linear",
     "gpt": "gpt/linear",
     "linears": "linears/linear",
+    "mlp_mixer": "mlp_mixer/linear",
     "neuron": "neuron/linear",
     "parametric": "parametric/parametric_vector",
     "transformer": "transformer/linear",
@@ -27,6 +28,9 @@ EXPECTED_STATE_TOPOLOGY_DIGESTS = {
     "gpt/linear": "54c78200bb9174a43c25b60945796f9575af9dceb22a9ae8a6a9fd55a64205de",
     "linears/linear": (
         "b2581d7521ca8f3662e48bd8bfa81414d694d734633d5a901e5b3133d9163f56"
+    ),
+    "mlp_mixer/linear": (
+        "11177135f206d6071e1447b47a6d89fdce2f7f96ec2a4ea5fde649b583dad10b"
     ),
     "neuron/linear": "13dbc77f380c5cb91816620c01167d6904e9f50084d43d6b291b6ff587d0d5a4",
     "parametric/parametric_vector": (
@@ -45,6 +49,10 @@ GRADIENT_PACKAGES = (
     "neuron/expert_linear",
     "neuron/expert_linear_adaptive",
     "vit/linear_adaptive",
+    "mlp_mixer/linear",
+    "mlp_mixer/linear_adaptive",
+    "mlp_mixer/expert_linear",
+    "mlp_mixer/expert_linear_adaptive",
 )
 NEURON_GRADIENT_PACKAGES = (
     "neuron/linear",
