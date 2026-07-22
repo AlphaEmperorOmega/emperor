@@ -264,7 +264,7 @@ def _modern_decoder_options(
         num_layers=config_module.STACK_NUM_LAYERS,
         activation=config_module.STACK_ACTIVATION,
         dropout_probability=config_module.STACK_DROPOUT_PROBABILITY,
-        layer_norm_position=config_module.STACK_LAYER_NORM_POSITION,
+        layer_norm_position=config_module.LAYER_NORM_POSITION,
     )
     return replace(
         options,
@@ -276,7 +276,6 @@ def _modern_decoder_options(
                 "stack_activation": "activation",
                 "stack_dropout_probability": "dropout_probability",
                 "layer_norm_position": "layer_norm_position",
-                "stack_layer_norm_position": "layer_norm_position",
             },
         ),
     )
@@ -384,7 +383,7 @@ def _modern_main_stack_options(
 ) -> MainLayerStackOptions:
     options = provided or MainLayerStackOptions(
         bias_flag=config_module.STACK_BIAS_FLAG,
-        layer_norm_position=config_module.STACK_LAYER_NORM_POSITION,
+        layer_norm_position=config_module.LAYER_NORM_POSITION,
         num_layers=config_module.STACK_NUM_LAYERS,
         activation=config_module.STACK_ACTIVATION,
         residual_connection_option=config_module.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -399,7 +398,6 @@ def _modern_main_stack_options(
             {
                 "stack_bias_flag": "bias_flag",
                 "layer_norm_position": "layer_norm_position",
-                "stack_layer_norm_position": "layer_norm_position",
                 "stack_num_layers": "num_layers",
                 "stack_activation": "activation",
                 "stack_residual_connection_option": "residual_connection_option",
@@ -535,14 +533,14 @@ def _modern_layer_controller_options(
     gate_stack_flat_prefix = f"{flat_lead}gate_stack"
     halting_stack_flat_prefix = f"{flat_lead}halting_stack"
     options = provided or LayerControllerOptions(
-        stack_gate_flag=getattr(config_module, f"{config_lead}GATE_FLAG"),
+        stack_gate_flag=getattr(config_module, f"{config_lead}STACK_GATE_FLAG"),
         gate_option=getattr(config_module, f"{config_lead}GATE_OPTION"),
         gate_activation=getattr(config_module, f"{config_lead}GATE_ACTIVATION"),
         gate_stack_source=_modern_default_controller_stack_source(
             config_module,
             f"{config_lead}GATE_STACK",
         ),
-        stack_halting_flag=getattr(config_module, f"{config_lead}HALTING_FLAG"),
+        stack_halting_flag=getattr(config_module, f"{config_lead}STACK_HALTING_FLAG"),
         halting_option=getattr(
             config_module,
             f"{config_lead}HALTING_OPTION",
@@ -567,10 +565,10 @@ def _modern_layer_controller_options(
     )
     if flat_prefix:
         field_map = {
-            f"{flat_lead}gate_flag": "stack_gate_flag",
+            f"{flat_lead}stack_gate_flag": "stack_gate_flag",
             f"{flat_lead}gate_option": "gate_option",
             f"{flat_lead}gate_activation": "gate_activation",
-            f"{flat_lead}halting_flag": "stack_halting_flag",
+            f"{flat_lead}stack_halting_flag": "stack_halting_flag",
             f"{flat_lead}halting_option": "halting_option",
             f"{flat_lead}halting_threshold": "halting_threshold",
             f"{flat_lead}halting_dropout": "halting_dropout",
@@ -578,11 +576,9 @@ def _modern_layer_controller_options(
         }
     else:
         field_map = {
-            "gate_flag": "stack_gate_flag",
             "stack_gate_flag": "stack_gate_flag",
             "gate_option": "gate_option",
             "gate_activation": "gate_activation",
-            "halting_flag": "stack_halting_flag",
             "stack_halting_flag": "stack_halting_flag",
             "halting_option": "halting_option",
             "halting_threshold": "halting_threshold",
@@ -671,7 +667,9 @@ def _modern_recurrent_controller_options(
             config_module,
             f"{config_prefix}_LAYER_NORM_POSITION",
         ),
-        recurrent_gate_flag=getattr(config_module, f"{config_prefix}_GATE_FLAG"),
+        recurrent_stack_gate_flag=getattr(
+            config_module, f"{config_prefix}_STACK_GATE_FLAG"
+        ),
         recurrent_gate_option=getattr(
             config_module,
             f"{config_prefix}_GATE_OPTION",
@@ -684,9 +682,9 @@ def _modern_recurrent_controller_options(
             config_module,
             f"{config_prefix}_GATE_STACK",
         ),
-        recurrent_halting_flag=getattr(
+        recurrent_stack_halting_flag=getattr(
             config_module,
-            f"{config_prefix}_HALTING_FLAG",
+            f"{config_prefix}_STACK_HALTING_FLAG",
         ),
         recurrent_halting_option=getattr(
             config_module,
@@ -716,10 +714,10 @@ def _modern_recurrent_controller_options(
             f"{flat_lead}flag": "recurrent_flag",
             f"{flat_lead}max_steps": "recurrent_max_steps",
             f"{flat_lead}layer_norm_position": "recurrent_layer_norm_position",
-            f"{flat_lead}gate_flag": "recurrent_gate_flag",
+            f"{flat_lead}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{flat_lead}gate_option": "recurrent_gate_option",
             f"{flat_lead}gate_activation": "recurrent_gate_activation",
-            f"{flat_lead}halting_flag": "recurrent_halting_flag",
+            f"{flat_lead}stack_halting_flag": "recurrent_stack_halting_flag",
             f"{flat_lead}halting_option": "recurrent_halting_option",
             f"{flat_lead}halting_threshold": "recurrent_halting_threshold",
             f"{flat_lead}halting_dropout": "recurrent_halting_dropout",
@@ -826,7 +824,6 @@ def _modern_supported_flat_keys() -> set[str]:
         "stack_activation",
         "stack_dropout_probability",
         "layer_norm_position",
-        "stack_layer_norm_position",
         "stack_residual_connection_option",
         "stack_last_layer_bias_option",
         "stack_apply_output_pipeline_flag",
@@ -858,10 +855,10 @@ def _modern_supported_flat_keys() -> set[str]:
 def _modern_role_control_flat_keys(prefix: str) -> set[str]:
     lead = f"{prefix}_" if prefix else ""
     keys = {
-        f"{lead}gate_flag",
+        f"{lead}stack_gate_flag",
         f"{lead}gate_option",
         f"{lead}gate_activation",
-        f"{lead}halting_flag",
+        f"{lead}stack_halting_flag",
         f"{lead}halting_threshold",
         f"{lead}halting_dropout",
         f"{lead}halting_hidden_state_mode",
@@ -885,10 +882,10 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
         f"{prefix}_flag",
         f"{prefix}_max_steps",
         f"{prefix}_layer_norm_position",
-        f"{prefix}_gate_flag",
+        f"{prefix}_stack_gate_flag",
         f"{prefix}_gate_option",
         f"{prefix}_gate_activation",
-        f"{prefix}_halting_flag",
+        f"{prefix}_stack_halting_flag",
         f"{prefix}_halting_threshold",
         f"{prefix}_halting_dropout",
         f"{prefix}_halting_hidden_state_mode",

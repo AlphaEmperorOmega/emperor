@@ -33,33 +33,45 @@ from emperor.transformer import (
     TransformerDecoderLayer,
     TransformerDecoderLayerState,
 )
-from model_runtime.packages import GridSearch, PresetLock, RandomSearch
-from models.catalog import MODEL_CATALOG, catalog_entry
-from models.config_overrides import iter_supported_config_keys, print_config_options
-from models.gpt.linear import (
+from model_runtime.packages import (
+    GridSearch,
+    PresetLock,
+    RandomSearch,
+    iter_supported_config_keys,
+)
+from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.config_overrides import print_config_options
+from models.experiment_cli_parser import get_experiment_parser
+from models.gpt.linear._builder_adapter import linear_builder_kwargs_from_flat
+from models.gpt.linear.config_builder import GptLinearConfigBuilder
+from models.gpt.linear.experiment_config import ExperimentConfig
+from models.gpt.linear.model import Model
+from models.gpt.linear.presets import (
     Experiment,
-    ExperimentConfig,
     ExperimentPreset,
     ExperimentPresets,
-    GptLinearConfigBuilder,
-    GptLmHeadOptions,
-    Model,
 )
-from models.gpt.linear._builder_adapter import linear_builder_kwargs_from_flat
-from models.gpt.linear.runtime_defaults import runtime_from_flat
+from models.gpt.linear.runtime_defaults import runtime_from_config, runtime_from_flat
 from models.gpt.linear.runtime_options import (
     GptEmbeddingOptions,
+    GptLmHeadOptions,
     RuntimeOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
     TransformerFeedForwardOptions,
     TransformerPositionalEmbeddingOptions,
 )
-from models.parser import get_experiment_parser, resolve_experiment_mode
 from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
+
+
+def _build_typed_config(**overrides):
+    return GptLinearConfigBuilder(
+        runtime=replace(runtime_from_config(), **overrides)
+    ).build()
 
 
 class TestGptLinearModel(unittest.TestCase):
@@ -67,7 +79,7 @@ class TestGptLinearModel(unittest.TestCase):
 
     def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
@@ -81,25 +93,22 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
 
     def config(self, **overrides):
-        return GptLinearConfigBuilder(
+        return _build_typed_config(
             input_dim=16,
             output_dim=16,
             sequence_length=6,
             **overrides,
-        ).build()
+        )
 
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
         self.assertIsNotNone(Experiment)
         self.assertIsNotNone(ExperimentConfig)
         self.assertIsNotNone(ExperimentPresets)
-        self.assertEqual(
-            MODEL_CATALOG["gpt/linear"].module_path,
-            "models.gpt.linear",
-        )
+        self.assertEqual(model_package("gpt/linear").catalog_key, "gpt/linear")
 
     def test_presets_are_contiguous_buildable_and_always_causal(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear").presets
         self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
@@ -153,11 +162,11 @@ class TestGptLinearModel(unittest.TestCase):
 
     def test_tied_head_rejects_unequal_vocabularies(self):
         with self.assertRaises(ValueError):
-            GptLinearConfigBuilder(
+            _build_typed_config(
                 input_dim=15,
                 output_dim=16,
                 sequence_length=4,
-            ).build()
+            )
 
     def test_future_tokens_do_not_change_earlier_logits(self):
         torch.manual_seed(7)
@@ -274,8 +283,12 @@ class TestGptLinearModel(unittest.TestCase):
                     importlib.import_module(module_name).__name__,
                     module_name,
                 )
-        self.assertEqual(Experiment()._public_model_id(), "gpt/linear")
-        self.assertIsNotNone(catalog_entry("gpt/linear"))
+        experiment = Experiment(model_package=model_package("gpt/linear"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "gpt/linear",
+        )
+        self.assertIsNotNone(model_package("gpt/linear"))
 
     def test_package_avoids_bert_and_gpt_sibling_construction_imports(self):
         package_dir = Path(config.__file__).resolve().parent
@@ -292,7 +305,7 @@ class TestGptLinearModel(unittest.TestCase):
                 with self.subTest(path=path.name, import_path=import_path):
                     self.assertNotIn(import_path, source)
 
-    def test_grouped_options_match_flat_configuration(self):
+    def test_flat_runtime_defaults_bind_to_typed_runtime_options(self):
         embedding_options = GptEmbeddingOptions(
             layer_norm_flag=False,
             dropout_probability=0.2,
@@ -355,21 +368,13 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertEqual(adapted["attention_options"], attention_options)
         self.assertEqual(adapted["feed_forward_options"], feed_forward_options)
         self.assertEqual(adapted["lm_head_options"], lm_head_options)
-        flat_cfg = GptLinearConfigBuilder(**adapted).build()
-        grouped_cfg = GptLinearConfigBuilder(
-            batch_size=2,
-            learning_rate=0.02,
-            input_dim=32,
-            output_dim=32,
-            sequence_length=8,
-            embedding_options=embedding_options,
-            decoder_options=decoder_options,
-            positional_embedding_options=positional_options,
-            attention_options=attention_options,
-            feed_forward_options=feed_forward_options,
-            lm_head_options=lm_head_options,
-        ).build()
-        self.assertEqual(flat_cfg, grouped_cfg)
+        flat_runtime = runtime_from_flat(flat_options, config)
+        typed_runtime = replace(runtime_from_config(), **adapted)
+        self.assertEqual(flat_runtime, typed_runtime)
+        self.assertEqual(
+            GptLinearConfigBuilder(runtime=flat_runtime).build(),
+            GptLinearConfigBuilder(runtime=typed_runtime).build(),
+        )
 
     def test_typed_runtime_builds_flat_configuration(self):
         flat_options = {
@@ -384,7 +389,10 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertEqual(
             GptLinearConfigBuilder(runtime=runtime).build(),
             GptLinearConfigBuilder(
-                **linear_builder_kwargs_from_flat(flat_options, config)
+                runtime=replace(
+                    runtime_from_config(),
+                    **linear_builder_kwargs_from_flat(flat_options, config),
+                )
             ).build(),
         )
 
@@ -405,7 +413,7 @@ class TestGptLinearModel(unittest.TestCase):
     def test_shared_defaults_build_permanently_causal_decoder(self):
         self.assertEqual(config.STACK_NUM_LAYERS, 5)
         self.assertIs(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertEqual(config.EMBEDDING_DROPOUT_PROBABILITY, 0.1)
@@ -430,16 +438,19 @@ class TestGptLinearModel(unittest.TestCase):
     def test_main_stack_controls_build_into_decoder_stack(self):
         defaults = self._default_builder_kwargs()
         cfg = GptLinearConfigBuilder(
-            **{
-                **defaults,
-                "stack_options": replace(
-                    defaults["stack_options"],
-                    residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
-                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
-                    bias_flag=False,
-                ),
-            }
+            runtime=replace(
+                runtime_from_config(),
+                **{
+                    **defaults,
+                    "stack_options": replace(
+                        defaults["stack_options"],
+                        residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+                        last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                        apply_output_pipeline_flag=False,
+                        bias_flag=False,
+                    ),
+                },
+            )
         ).build()
         stack = self._decoder_stack_config(cfg)
         self.assertEqual(
@@ -459,18 +470,18 @@ class TestGptLinearModel(unittest.TestCase):
             defaults["layer_controller_options"],
             stack_gate_flag=True,
         )
-        inherited = GptLinearConfigBuilder(
+        inherited = _build_typed_config(
             stack_options=stack_options,
             layer_controller_options=layer_options,
-        ).build()
-        explicit = GptLinearConfigBuilder(
+        )
+        explicit = _build_typed_config(
             stack_options=stack_options,
             submodule_stack_options=replace(
                 defaults["submodule_stack_options"],
                 bias_flag=True,
             ),
             layer_controller_options=layer_options,
-        ).build()
+        )
         self.assertFalse(self._decoder_gate_bias_flag(inherited))
         self.assertTrue(self._decoder_gate_bias_flag(explicit))
 
@@ -479,40 +490,43 @@ class TestGptLinearModel(unittest.TestCase):
         layer_options = defaults["layer_controller_options"]
         memory_options = defaults["dynamic_memory_options"]
         cfg = GptLinearConfigBuilder(
-            **{
-                **defaults,
-                "submodule_stack_options": replace(
-                    defaults["submodule_stack_options"],
-                    hidden_dim=17,
-                ),
-                "layer_controller_options": replace(
-                    layer_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
+            runtime=replace(
+                runtime_from_config(),
+                **{
+                    **defaults,
+                    "submodule_stack_options": replace(
+                        defaults["submodule_stack_options"],
+                        hidden_dim=17,
                     ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
+                    "layer_controller_options": replace(
+                        layer_options,
+                        stack_gate_flag=True,
+                        gate_stack_source=replace(
+                            layer_options.gate_stack_source,
+                            independent_flag=True,
+                            hidden_dim=23,
+                            num_layers=3,
+                        ),
+                        stack_halting_flag=True,
+                        halting_stack_source=replace(
+                            layer_options.halting_stack_source,
+                            independent_flag=True,
+                            hidden_dim=19,
+                            num_layers=2,
+                        ),
                     ),
-                ),
-                "dynamic_memory_options": replace(
-                    memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
+                    "dynamic_memory_options": replace(
+                        memory_options,
+                        memory_flag=True,
+                        memory_stack_source=replace(
+                            memory_options.memory_stack_source,
+                            independent_flag=True,
+                            hidden_dim=31,
+                            num_layers=4,
+                        ),
                     ),
-                ),
-            }
+                },
+            )
         ).build()
         stack = self._decoder_stack_config(cfg)
         gate = stack.layer_config.gate_config.model_config
@@ -554,11 +568,11 @@ class TestGptLinearModel(unittest.TestCase):
     def test_attention_controls_attach_only_to_projection_stack(self):
         cfg = self._baseline_config(
             {
-                "attn_gate_flag": True,
+                "attn_stack_gate_flag": True,
                 "attn_gate_stack_independent_flag": True,
                 "attn_gate_stack_hidden_dim": 12,
                 "attn_gate_stack_num_layers": 3,
-                "attn_halting_flag": True,
+                "attn_stack_halting_flag": True,
                 "attn_memory_flag": True,
             }
         )
@@ -577,40 +591,43 @@ class TestGptLinearModel(unittest.TestCase):
         layer_options = defaults["attention_projection_layer_controller_options"]
         memory_options = defaults["attention_projection_dynamic_memory_options"]
         cfg = GptLinearConfigBuilder(
-            **{
-                **defaults,
-                "attention_projection_stack_options": replace(
-                    stack_options,
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    layer_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
+            runtime=replace(
+                runtime_from_config(),
+                **{
+                    **defaults,
+                    "attention_projection_stack_options": replace(
+                        stack_options,
+                        hidden_dim=17,
                     ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
+                    "attention_projection_layer_controller_options": replace(
+                        layer_options,
+                        stack_gate_flag=True,
+                        gate_stack_source=replace(
+                            layer_options.gate_stack_source,
+                            independent_flag=True,
+                            hidden_dim=23,
+                            num_layers=3,
+                        ),
+                        stack_halting_flag=True,
+                        halting_stack_source=replace(
+                            layer_options.halting_stack_source,
+                            independent_flag=True,
+                            hidden_dim=19,
+                            num_layers=2,
+                        ),
                     ),
-                ),
-                "attention_projection_dynamic_memory_options": replace(
-                    memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
+                    "attention_projection_dynamic_memory_options": replace(
+                        memory_options,
+                        memory_flag=True,
+                        memory_stack_source=replace(
+                            memory_options.memory_stack_source,
+                            independent_flag=True,
+                            hidden_dim=31,
+                            num_layers=4,
+                        ),
                     ),
-                ),
-            }
+                },
+            )
         ).build()
         stack = self._attention_projection_stack_config(cfg)
         gate = stack.layer_config.gate_config.model_config
@@ -678,11 +695,11 @@ class TestGptLinearModel(unittest.TestCase):
     def test_feed_forward_controls_attach_only_to_ff_stack(self):
         cfg = self._baseline_config(
             {
-                "ff_gate_flag": True,
+                "ff_stack_gate_flag": True,
                 "ff_gate_stack_independent_flag": True,
                 "ff_gate_stack_hidden_dim": 12,
                 "ff_gate_stack_num_layers": 3,
-                "ff_halting_flag": True,
+                "ff_stack_halting_flag": True,
                 "ff_memory_flag": True,
             }
         )
@@ -703,40 +720,43 @@ class TestGptLinearModel(unittest.TestCase):
         layer_options = defaults["feed_forward_layer_controller_options"]
         memory_options = defaults["feed_forward_dynamic_memory_options"]
         cfg = GptLinearConfigBuilder(
-            **{
-                **defaults,
-                "feed_forward_stack_options": replace(
-                    stack_options,
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    layer_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
+            runtime=replace(
+                runtime_from_config(),
+                **{
+                    **defaults,
+                    "feed_forward_stack_options": replace(
+                        stack_options,
+                        hidden_dim=17,
                     ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
+                    "feed_forward_layer_controller_options": replace(
+                        layer_options,
+                        stack_gate_flag=True,
+                        gate_stack_source=replace(
+                            layer_options.gate_stack_source,
+                            independent_flag=True,
+                            hidden_dim=23,
+                            num_layers=3,
+                        ),
+                        stack_halting_flag=True,
+                        halting_stack_source=replace(
+                            layer_options.halting_stack_source,
+                            independent_flag=True,
+                            hidden_dim=19,
+                            num_layers=2,
+                        ),
                     ),
-                ),
-                "feed_forward_dynamic_memory_options": replace(
-                    memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
+                    "feed_forward_dynamic_memory_options": replace(
+                        memory_options,
+                        memory_flag=True,
+                        memory_stack_source=replace(
+                            memory_options.memory_stack_source,
+                            independent_flag=True,
+                            hidden_dim=31,
+                            num_layers=4,
+                        ),
                     ),
-                ),
-            }
+                },
+            )
         ).build()
         stack = self._feed_forward_stack_config(cfg)
         gate = stack.layer_config.gate_config.model_config
@@ -774,11 +794,13 @@ class TestGptLinearModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.gpt.linear.__main__",
                 run_name="__main__",
             )
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
         self.assertEqual(package.catalog_key, "gpt/linear")
@@ -787,11 +809,10 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(
-                dataset.__name__
-                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            (
+                dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
-                ]
+                ][0].__name__,
             ),
         )
 
@@ -814,10 +835,8 @@ class TestGptLinearModel(unittest.TestCase):
                 for name in supported
             )
         )
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.gpt.linear",
-        )
+        package = model_package("gpt/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -842,8 +861,8 @@ class TestGptLinearModel(unittest.TestCase):
                 "false",
             ]
         )
-        mode = resolve_experiment_mode(args, ExperimentPreset)
-        cfg = ExperimentPresets().get_config(
+        mode = resolve_cli_selection(args, package, ExperimentPreset)
+        cfg = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides=mode.config_overrides,
@@ -863,7 +882,7 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertNotIn("--causal-attention-mask-flag", listing)
 
     def test_preset_contract_and_locks_cover_every_preset(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear").presets
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
             list(range(1, len(ExperimentPreset) + 1)),
@@ -882,7 +901,7 @@ class TestGptLinearModel(unittest.TestCase):
                     self.assertIn(preset.name, lock.reason)
 
     def test_every_preset_forwards_both_datasets_causally(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear").presets
         for dataset in self._default_datasets():
             for preset in ExperimentPreset:
                 with self.subTest(dataset=dataset.__name__, preset=preset.name):
@@ -908,7 +927,7 @@ class TestGptLinearModel(unittest.TestCase):
     def test_every_preset_completes_one_tiny_training_epoch(self):
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("gpt/linear").presets.get_config(
                     preset,
                     self._default_dataset(),
                     config_overrides=self._preset_overrides(),
@@ -923,7 +942,7 @@ class TestGptLinearModel(unittest.TestCase):
                 )
 
     def test_random_search_and_unknown_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             RandomSearch(num_samples=2),
@@ -936,7 +955,7 @@ class TestGptLinearModel(unittest.TestCase):
         ):
             with self.subTest(search_key=search_key):
                 with self.assertRaisesRegex(ValueError, "Unknown"):
-                    ExperimentPresets().get_config(
+                    model_package("gpt/linear").presets.get_config(
                         ExperimentPreset.BASELINE,
                         self._default_dataset(),
                         RandomSearch(num_samples=2),
@@ -944,7 +963,7 @@ class TestGptLinearModel(unittest.TestCase):
                     )
 
     def test_grid_search_applies_decoder_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             GridSearch(),
@@ -970,10 +989,6 @@ class TestGptLinearModel(unittest.TestCase):
                 search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
                 lambda cfg: self._decoder_layer_config(cfg).layer_norm_position,
             ),
-            "stack_layer_norm_position": (
-                search_space.SEARCH_SPACE_STACK_LAYER_NORM_POSITION,
-                lambda cfg: self._decoder_layer_config(cfg).layer_norm_position,
-            ),
             "attn_num_heads": (
                 search_space.SEARCH_SPACE_ATTN_NUM_HEADS,
                 lambda cfg: self._attention_config(cfg).num_heads,
@@ -981,7 +996,7 @@ class TestGptLinearModel(unittest.TestCase):
         }
         for search_key, (expected_values, accessor) in cases.items():
             with self.subTest(search_key=search_key):
-                configs = ExperimentPresets().get_config(
+                configs = model_package("gpt/linear").presets.get_config(
                     ExperimentPreset.BASELINE,
                     self._default_dataset(),
                     GridSearch(),
@@ -993,7 +1008,7 @@ class TestGptLinearModel(unittest.TestCase):
                 )
 
     def test_unlocked_flat_and_grouped_overrides_update_nested_config(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides={
@@ -1024,7 +1039,7 @@ class TestGptLinearModel(unittest.TestCase):
 
     def test_flat_overrides_take_precedence_over_grouped_bases(self):
         defaults = self._default_builder_kwargs()
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides={
@@ -1054,7 +1069,7 @@ class TestGptLinearModel(unittest.TestCase):
         )
 
     def test_locked_presets_reject_override_and_search_conflicts(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear").presets
         with self.assertRaisesRegex(ValueError, "PRE_NORM.*layer_norm_position"):
             presets.get_config(
                 ExperimentPreset.PRE_NORM,
@@ -1072,7 +1087,7 @@ class TestGptLinearModel(unittest.TestCase):
             )
 
     def test_presets_wire_normalization_position_embedding_and_residuals(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/linear").presets
         baseline = presets.get_config(ExperimentPreset.BASELINE)[0]
         self.assertIsInstance(
             baseline.experiment_config.positional_embedding_config,
@@ -1202,16 +1217,16 @@ class TestGptLinearModel(unittest.TestCase):
         for field, overrides in cases.items():
             with self.subTest(field=field):
                 with self.assertRaisesRegex(ValueError, field):
-                    GptLinearConfigBuilder(**overrides).build()
+                    _build_typed_config(**overrides)
         for probability in (-0.01, 1.01):
             with self.subTest(probability=probability):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
-                    GptLinearConfigBuilder(
+                    _build_typed_config(
                         embedding_options=GptEmbeddingOptions(
                             layer_norm_flag=True,
                             dropout_probability=probability,
                         )
-                    ).build()
+                    )
 
     def test_model_step_accepts_next_token_batch_and_backpropagates(self):
         cfg = self._direct_config()
@@ -1304,7 +1319,7 @@ class TestGptLinearModel(unittest.TestCase):
         return linear_builder_kwargs_from_flat({}, config)
 
     def _baseline_config(self, overrides: dict | None = None):
-        return ExperimentPresets().get_config(
+        return model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides={
@@ -1341,10 +1356,16 @@ class TestGptLinearModel(unittest.TestCase):
             },
             config,
         )
+        runtime_overrides = {
+            name: value
+            for name, value in {
+                "embedding_options": embedding_options,
+                "lm_head_options": lm_head_options,
+            }.items()
+            if value is not None
+        }
         return GptLinearConfigBuilder(
-            runtime=runtime,
-            embedding_options=embedding_options,
-            lm_head_options=lm_head_options,
+            runtime=replace(runtime, **runtime_overrides)
         ).build()
 
     def _preset_overrides(self) -> dict:
