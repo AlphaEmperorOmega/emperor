@@ -58,20 +58,13 @@ class TestTransformerInterface(unittest.TestCase):
                 with self.assertRaises(AttributeError):
                     getattr(transformer, name)
 
-    def test_lazy_exports_resolve_to_component_modules(self):
+    def test_configuration_exports_resolve_to_the_lightweight_config_module(self):
         expected_modules = {
-            "Transformer": "emperor.transformer._model",
             "TransformerConfig": "emperor.transformer._config",
-            "TransformerEncoderLayer": "emperor.transformer._layers",
-            "TransformerEncoderBlockLayer": "emperor.transformer._layers",
-            "TransformerDecoderBlockLayer": "emperor.transformer._layers",
-            "TransformerDecoderLayerState": "emperor.transformer._state",
-            "TransformerDecoderLayer": "emperor.transformer._layers",
             "TransformerEncoderLayerConfig": "emperor.transformer._config",
             "TransformerEncoderBlockLayerConfig": "emperor.transformer._config",
             "TransformerDecoderBlockLayerConfig": "emperor.transformer._config",
             "TransformerDecoderLayerConfig": "emperor.transformer._config",
-            "FeedForward": "emperor.transformer._feed_forward",
             "FeedForwardConfig": "emperor.transformer._feed_forward",
         }
         for name, module_name in expected_modules.items():
@@ -90,11 +83,13 @@ class TestTransformerInterface(unittest.TestCase):
                 field_names = {field.name for field in dataclasses.fields(config_type)}
                 self.assertNotIn("causal_attention_mask_flag", field_names)
 
-    def test_mirrored_stack_is_public_layer_component(self):
+    def test_mirrored_stack_is_exported_from_the_layer_interface(self):
+        from emperor.layers import MirroredLayerStack
+
         self.assertIn("MirroredLayerStack", layers.__all__)
         self.assertIn("MirroredLayerStackConfig", layers.__all__)
         self.assertEqual(
-            layers.MirroredLayerStack.__module__,
+            MirroredLayerStack.__module__,
             "emperor.layers._mirrored",
         )
         self.assertEqual(

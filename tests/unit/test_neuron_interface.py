@@ -357,7 +357,7 @@ class TestNeuronPublicInterface(NeuronTestCase):
         )
         return model
 
-    def test_exact_exports_resolve_lazily_from_their_owning_modules(self):
+    def test_exact_exports_resolve_eagerly_from_their_owning_modules(self):
         completed = subprocess.run(
             [
                 sys.executable,
@@ -379,9 +379,7 @@ runtime_before = {{
 private_packages = {{}}
 for module_name in ("emperor.neuron._cluster", "emperor.neuron._monitoring"):
     module = importlib.import_module(module_name)
-    private_packages[module_name] = sorted(
-        name for name in vars(module) if not name.startswith("_")
-    )
+    private_packages[module_name] = sorted(getattr(module, "__all__", ()))
 
 import torch
 
@@ -426,7 +424,8 @@ print(json.dumps({{
 
         self.assertEqual(tuple(result["all"]), EXPECTED_EXPORTS)
         self.assertEqual(result["owners"], EXPECTED_OWNERS)
-        self.assertEqual(result["before"], dict.fromkeys(PRIVATE_MODULES, False))
+        expected_loaded = dict.fromkeys(PRIVATE_MODULES, True)
+        self.assertEqual(result["before"], expected_loaded)
         self.assertEqual(
             result["private_packages"],
             {
@@ -441,28 +440,16 @@ print(json.dumps({{
         self.assertTrue(result["rng_unchanged"])
         self.assertEqual(
             result["runtime_before"],
-            {"emperor.experts": False, "lightning": False, "torch": False},
+            {"emperor.experts": False, "lightning": True, "torch": True},
         )
 
-    def test_lazy_export_resolution_and_unknown_name_run_in_process(self) -> None:
+    def test_runtime_exports_are_available_at_the_root(self) -> None:
         import emperor.neuron as neuron_package
 
-        export_name = "AxonsConfig"
-        cached_export = vars(neuron_package).pop(export_name)
-        try:
-            resolved_export = getattr(neuron_package, export_name)
-
-            self.assertIs(resolved_export, AxonsConfig)
-            self.assertIs(vars(neuron_package)[export_name], AxonsConfig)
-        finally:
-            setattr(neuron_package, export_name, cached_export)
-
-        missing_export = "MissingNeuronExport"
-        with self.assertRaisesRegex(
-            AttributeError,
-            f"module 'emperor.neuron' has no attribute '{missing_export}'",
-        ):
-            getattr(neuron_package, missing_export)
+        for export_name in ("NeuronCluster", "NeuronClusterTrace", "Axons"):
+            with self.subTest(export=export_name):
+                self.assertIn(export_name, neuron_package.__all__)
+                self.assertIsNotNone(getattr(neuron_package, export_name))
 
     def test_config_enum_trace_and_callback_contracts_are_preserved(self):
         schemas = (

@@ -134,7 +134,7 @@ class TestLinearOptions(unittest.TestCase):
         self.assertEqual(LinearOptions.LINEAR.value, 0)
         self.assertEqual(LinearOptions.ADAPTIVE.value, 1)
 
-    def test_public_interface_is_exact_lazy_and_resolves_declared_owners(self):
+    def test_public_interface_is_exact_and_eagerly_imports_owners(self):
         script = """\
 import json
 import sys
@@ -180,11 +180,11 @@ print(
         self.assertEqual(
             payload["before"],
             {
-                "emperor.linears._config": False,
-                "emperor.linears._layer": False,
-                "emperor.linears._monitoring": False,
-                "emperor.linears._monitoring.callback": False,
-                "emperor.linears._options": False,
+                "emperor.linears._config": True,
+                "emperor.linears._layer": True,
+                "emperor.linears._monitoring": True,
+                "emperor.linears._monitoring.callback": True,
+                "emperor.linears._options": True,
             },
         )
         owners = {name: getattr(linears, name).__module__ for name in linears.__all__}
@@ -195,7 +195,7 @@ print(
                 "LinearAbstract": "emperor.linears._layer",
                 "LinearLayerConfig": "emperor.linears._config",
                 "LinearOptions": "emperor.linears._options",
-                "LinearMonitorCallback": ("emperor.linears._monitoring.callback"),
+                "LinearMonitorCallback": "emperor.linears._monitoring.callback",
             },
         )
         self.assertTrue(
@@ -212,7 +212,7 @@ print(
         ) as raised:
             _ = linears.MissingLinear
 
-        self.assertIsInstance(raised.exception.__cause__, KeyError)
+        self.assertIsNone(raised.exception.__cause__)
 
 
 class TestLinearLayer(unittest.TestCase):

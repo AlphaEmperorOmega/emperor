@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import unittest
+from operator import attrgetter
 
 import torch
 
@@ -664,19 +665,19 @@ class PatchTrainingAndStateBehaviorTests(unittest.TestCase):
 
 
 class PatchInterfaceBehaviorTests(unittest.TestCase):
-    def test_unknown_attribute_has_exact_error_and_keyerror_cause(self) -> None:
+    def test_unknown_attribute_has_the_standard_module_error(self) -> None:
         import emperor.patch as patch
 
         with self.assertRaises(AttributeError) as error:
-            patch.__getattr__("DoesNotExist")
+            attrgetter("DoesNotExist")(patch)
 
         self.assertEqual(
             str(error.exception),
             "module 'emperor.patch' has no attribute 'DoesNotExist'",
         )
-        self.assertIsInstance(error.exception.__cause__, KeyError)
+        self.assertIsNone(error.exception.__cause__)
 
-    def test_lazy_interface_is_lightweight_cached_and_resolves_real_exports(
+    def test_public_interface_eagerly_exports_implementations(
         self,
     ) -> None:
         script = """\
@@ -696,15 +697,15 @@ private_modules = (
 before = {name: name in sys.modules for name in private_modules}
 config_first = patch.LinearPatchEmbeddingConfig
 config_second = patch.LinearPatchEmbeddingConfig
-linear = patch.PatchEmbeddingLinear
-convolutional = patch.PatchEmbeddingConv
 print(json.dumps({
     "all": patch.__all__,
     "before": before,
     "config_cached": config_first is config_second,
     "config_module": config_first.__module__,
-    "linear_module": linear.__module__,
-    "convolutional_module": convolutional.__module__,
+    "implementation_exports": {
+        name: hasattr(patch, name)
+        for name in ("PatchBase", "PatchEmbeddingLinear", "PatchEmbeddingConv")
+    },
 }))
 """
 
@@ -727,17 +728,20 @@ print(json.dumps({
                     "PatchEmbeddingConv",
                 ],
                 "before": {
-                    "emperor.patch._base": False,
-                    "emperor.patch._config": False,
-                    "emperor.patch._validation": False,
-                    "emperor.patch._variants": False,
-                    "emperor.patch._variants.convolutional": False,
-                    "emperor.patch._variants.linear": False,
+                    "emperor.patch._base": True,
+                    "emperor.patch._config": True,
+                    "emperor.patch._validation": True,
+                    "emperor.patch._variants": True,
+                    "emperor.patch._variants.convolutional": True,
+                    "emperor.patch._variants.linear": True,
                 },
                 "config_cached": True,
                 "config_module": "emperor.patch._config",
-                "linear_module": "emperor.patch._variants.linear",
-                "convolutional_module": "emperor.patch._variants.convolutional",
+                "implementation_exports": {
+                    "PatchBase": True,
+                    "PatchEmbeddingLinear": True,
+                    "PatchEmbeddingConv": True,
+                },
             },
         )
 

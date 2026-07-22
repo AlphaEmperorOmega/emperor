@@ -663,14 +663,10 @@ class TestRecurrentLayer(unittest.TestCase):
     def test_public_exports_and_config_build_dispatch(self):
         import emperor.layers as layer_package
 
-        expected_exports = [
-            "RecurrentLayerConfig",
-            "RecurrentLayer",
-        ]
-        for name in expected_exports:
-            with self.subTest(name=name):
-                self.assertIn(name, layer_package.__all__)
-                self.assertIsNotNone(getattr(layer_package, name))
+        self.assertIn("RecurrentLayerConfig", layer_package.__all__)
+        self.assertIsNotNone(layer_package.RecurrentLayerConfig)
+        self.assertIn("RecurrentLayer", layer_package.__all__)
+        self.assertIs(layer_package.RecurrentLayer, RecurrentLayer)
         self.assertNotIn("RecurrentLayerValidator", layer_package.__all__)
 
         cfg = self.recurrent_config()

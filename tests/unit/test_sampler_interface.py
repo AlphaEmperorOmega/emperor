@@ -72,7 +72,7 @@ class SamplerPublicInterfaceTests(unittest.TestCase):
         ):
             _ = sampler.missing_sampler_export  # type: ignore[attr-defined]
 
-    def test_exact_exports_resolve_lazily_from_their_owning_modules(self) -> None:
+    def test_exact_exports_resolve_eagerly_from_their_owning_modules(self) -> None:
         completed = subprocess.run(
             [
                 sys.executable,
@@ -125,11 +125,12 @@ print(json.dumps({
 
         self.assertEqual(tuple(result["all"]), EXPECTED_EXPORTS)
         self.assertEqual(result["owners"], EXPECTED_OWNERS)
-        self.assertEqual(result["before"], dict.fromkeys(result["before"], False))
-        self.assertEqual(result["after"], dict.fromkeys(result["after"], True))
+        expected_loaded = dict.fromkeys(result["before"], True)
+        self.assertEqual(result["before"], expected_loaded)
+        self.assertEqual(result["after"], expected_loaded)
         self.assertEqual(
             result["runtime_before"],
-            {"lightning": False, "torch": False},
+            {"lightning": True, "torch": True},
         )
         self.assertEqual(
             result["private_exports"],

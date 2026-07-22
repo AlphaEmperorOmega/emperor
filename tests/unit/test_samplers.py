@@ -24,6 +24,7 @@ class TestSamplerPublicInterface(unittest.TestCase):
                 "SamplerMonitorCallback",
             ),
         )
+        self.assertIs(sampler_interface.SamplerModel, SamplerModel)
 
 
 class SamplerTestCase(unittest.TestCase):

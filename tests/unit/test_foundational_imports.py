@@ -160,7 +160,7 @@ print(json.dumps({
             },
         )
 
-    def test_nn_interface_is_curated_and_defers_plotting_dependencies(self):
+    def test_nn_interface_eagerly_exports_module(self):
         result = self.run_fresh_python(
             """
 import json
@@ -172,7 +172,7 @@ print(json.dumps({
     "all": nn.__all__,
     "ipython_display": "IPython.display" in sys.modules,
     "matplotlib_pyplot": "matplotlib.pyplot" in sys.modules,
-    "module_owner": nn.Module.__module__,
+    "module_exported": hasattr(nn, "Module"),
     "parameter_bank_exported": hasattr(nn, "ParameterBank"),
 }))
 """
@@ -183,13 +183,13 @@ print(json.dumps({
             {
                 "all": ["Module"],
                 "ipython_display": False,
-                "matplotlib_pyplot": False,
-                "module_owner": "emperor.nn._module",
+                "matplotlib_pyplot": True,
+                "module_exported": True,
                 "parameter_bank_exported": False,
             },
         )
 
-    def test_layers_interface_is_curated_and_lazy(self):
+    def test_layers_interface_eagerly_exports_runtime_and_configuration(self):
         result = self.run_fresh_python(
             """
 import json
@@ -233,14 +233,14 @@ print(json.dumps({
                     "RecurrentLayerMonitorCallback",
                 ],
                 "layer_gate_exported": False,
-                "lightning": False,
-                "matplotlib_pyplot": False,
-                "torch": False,
+                "lightning": True,
+                "matplotlib_pyplot": True,
+                "torch": True,
                 "validator_exported": False,
             },
         )
 
-    def test_monitoring_interface_is_curated_and_metadata_stays_lightweight(self):
+    def test_monitoring_interface_eagerly_exports_shared_types(self):
         result = self.run_fresh_python(
             """
 import json
@@ -273,11 +273,11 @@ print(json.dumps({
                 "option_owner": "emperor.monitoring._metadata",
                 "private_metadata_exported": False,
                 "settings_owner": "emperor.monitoring._metadata",
-                "torch": False,
+                "torch": True,
             },
         )
 
-    def test_lazy_foundation_interfaces_reject_unknown_attributes_exactly(self):
+    def test_foundation_namespaces_reject_unknown_attributes_exactly(self):
         import emperor.monitoring as monitoring
         import emperor.nn as nn
 

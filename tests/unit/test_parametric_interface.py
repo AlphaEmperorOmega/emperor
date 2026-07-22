@@ -427,7 +427,7 @@ def _digest(*tensors: torch.Tensor | None) -> str:
 
 
 class TestParametricPublicInterface(unittest.TestCase):
-    def test_exact_exports_resolve_lazily_from_their_owning_modules(self):
+    def test_exact_exports_resolve_eagerly_from_their_owning_modules(self):
         completed = subprocess.run(
             [
                 sys.executable,
@@ -508,7 +508,8 @@ print(json.dumps({
 
         self.assertEqual(tuple(result["all"]), EXPECTED_EXPORTS)
         self.assertEqual(result["owners"], EXPECTED_OWNERS)
-        self.assertEqual(result["before"], dict.fromkeys(result["before"], False))
+        expected_loaded = dict.fromkeys(result["before"], True)
+        self.assertEqual(result["before"], expected_loaded)
         self.assertEqual(
             result["private_exports"],
             dict.fromkeys(result["private_exports"], False),
@@ -516,7 +517,7 @@ print(json.dumps({
         self.assertTrue(result["rng_unchanged"])
         self.assertEqual(
             result["runtime_before"],
-            {"emperor.experts": False, "lightning": False, "torch": False},
+            {"emperor.experts": True, "lightning": True, "torch": True},
         )
 
     def test_config_state_option_and_callback_contracts_are_preserved(self):
