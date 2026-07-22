@@ -554,10 +554,9 @@ single-pass staging complete before destination writes. Each staged file is
 atomically renamed relative to validated directory descriptors, but the whole
 archive is deliberately not transactional: if a later operating-system commit
 fails, earlier replacements remain. Run History removes the private staging
-tree and invalidates affected caches even on that partial failure. Safe legacy
-top-level archive names remain accepted for filesystem compatibility even when
-the interactive Training Log Experiment name grammar would not offer them as a
-selectable experiment.
+tree and invalidates affected caches even on that partial failure. Every archive
+member must be rooted directly at an experiment path; a top-level `logs/`
+wrapper is rejected.
 
 Read paths ignore event directories containing a TensorBoard event file that
 resolves outside the requested Run root; mutation paths reject unsafe targets.
