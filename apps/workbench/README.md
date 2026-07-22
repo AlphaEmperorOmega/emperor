@@ -126,8 +126,9 @@ Run Artifact details, TensorBoard projections, archive-import results, and
 deletion values. It never returns HTTP-shaped records or owns response
 serialization. The Logs HTTP mapping Module beside the router and schemas owns
 camel case, Model Package identity expansion, response row caps, truncation
-metadata, and schema payload construction. The persistent catalog codec remains
-separate and retains its existing on-disk keys and compatibility decoding.
+metadata, and schema payload construction. The persistent catalog codec accepts
+only its canonical schema version, authority root, entry keys, and exact Model
+Package identities.
 Historical Inspection receives only one frozen context containing canonical Run
 identity, saved parameters, and contained checkpoint candidates; it does not
 receive the Run History implementation. Every candidate freezes its resolved
