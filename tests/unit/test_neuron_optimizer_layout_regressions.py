@@ -33,7 +33,6 @@ class TestNeuronOptimizerNamedLayout(unittest.TestCase):
             module,
             [source_optimizer],
             [saved_state],
-            {},
         )
         target_optimizer = torch.optim.SGD(
             [module["c"], module["b"], module["a"]],
@@ -71,7 +70,6 @@ class TestNeuronOptimizerNamedLayout(unittest.TestCase):
             module,
             [source_optimizer],
             [saved_state],
-            {},
         )
         target_optimizer = torch.optim.SGD(
             [module["c"], module["b"], module["a"]],
@@ -95,16 +93,39 @@ class TestNeuronOptimizerNamedLayout(unittest.TestCase):
         self.assertEqual(target_optimizer.param_groups, original_groups)
         self.assertFalse(manager.optimizer_requires_completion(target_optimizer))
 
-    def test_unregistered_optimizer_parameter_defers_to_native_layout(self) -> None:
+    def test_unregistered_optimizer_parameter_is_rejected(self) -> None:
         module = self._module()
         external_parameter = nn.Parameter(torch.tensor(4.0))
         optimizer = torch.optim.SGD([external_parameter], lr=0.1)
 
-        layout = NeuronOptimizerNamedLayout.capture_if_supported(
+        with self.assertRaisesRegex(RuntimeError, "must be registered"):
+            NeuronOptimizerNamedLayout.capture(
+                module,
+                [optimizer],
+                [optimizer.state_dict()],
+            )
+
+    def test_retired_append_layout_is_rejected(self) -> None:
+        module = self._module()
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        saved_state = optimizer.state_dict()
+        layout = NeuronOptimizerNamedLayout.capture(
             module,
             [optimizer],
-            [optimizer.state_dict()],
-            {},
+            [saved_state],
+        )
+        layout["optimizers"][0].update(
+            {
+                "sync_policy": "legacy_append",
+                "legacy_base_group_count": 1,
+                "legacy_reference_group_index": 0,
+            }
         )
 
-        self.assertIsNone(layout)
+        with self.assertRaisesRegex(RuntimeError, "Invalid named Neuron optimizer"):
+            NeuronOptimizerNamedLayout().prepare_for_load(
+                module,
+                [optimizer],
+                [saved_state],
+                layout,
+            )

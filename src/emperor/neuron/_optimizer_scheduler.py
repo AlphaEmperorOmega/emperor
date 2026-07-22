@@ -1,14 +1,11 @@
-"""Per-group scheduler reconciliation for dynamic Neuron optimizers."""
+"""Atomic scheduler synchronization for dynamic Neuron optimizers."""
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 from torch.optim import Optimizer
-
-from emperor.neuron._optimizer_checkpoint import LegacyOptimizerAppendPolicy
 
 _PER_GROUP_SEQUENCE_NAMES = (
     "base_lrs",
@@ -43,8 +40,6 @@ class SchedulerGroupLoadBinding:
     scheduler: object
     saved_state: dict[str, Any] | None
     optimizer: Optimizer
-    policy: LegacyOptimizerAppendPolicy | None
-    target_group_count: int
 
 
 @dataclass(frozen=True)
@@ -113,16 +108,6 @@ class NeuronSchedulerCheckpointReconciler:
         bindings: list[SchedulerGroupLoadBinding],
     ) -> None:
         self.clear()
-        for binding in bindings:
-            if binding.policy is None:
-                continue
-            _validate_scheduler_group_count(
-                binding.scheduler,
-                binding.saved_state,
-                binding.policy,
-                binding.target_group_count,
-            )
-
         live_snapshots_by_optimizer: dict[int, list[_NamespaceSnapshot]] = {}
         payload_snapshots_by_optimizer: dict[int, list[_NamespaceSnapshot]] = {}
         optimizers_by_id: dict[int, Optimizer] = {}
@@ -166,19 +151,6 @@ class NeuronSchedulerCheckpointReconciler:
             )
             for optimizer_id in live_snapshots_by_optimizer
         ]
-        try:
-            for binding in bindings:
-                if binding.policy is None:
-                    continue
-                _apply_scheduler_group_count(
-                    binding.scheduler,
-                    binding.saved_state,
-                    binding.policy,
-                    binding.target_group_count,
-                )
-        except BaseException:
-            self.clear()
-            raise
 
     def optimizer_requires_completion(self, optimizer: Optimizer) -> bool:
         return any(migration.optimizer is optimizer for migration in self._migrations)
@@ -202,64 +174,6 @@ class NeuronSchedulerCheckpointReconciler:
             for live_snapshot in reversed(migration.live_snapshots):
                 live_snapshot.restore()
         self._migrations.clear()
-
-
-def reconcile_scheduler_group_count(
-    scheduler: object,
-    saved_state: dict[str, Any] | None,
-    policy: LegacyOptimizerAppendPolicy,
-    target_group_count: int,
-) -> None:
-    """Copy the historical reference group's scheduler settings to suffix groups."""
-
-    _validate_scheduler_group_count(
-        scheduler,
-        saved_state,
-        policy,
-        target_group_count,
-    )
-    _apply_scheduler_group_count(
-        scheduler,
-        saved_state,
-        policy,
-        target_group_count,
-    )
-
-
-def preflight_scheduler_group_extension(
-    scheduler: object,
-    *,
-    previous_group_count: int,
-    reference_group_index: int,
-) -> None:
-    policy = LegacyOptimizerAppendPolicy(
-        base_group_count=previous_group_count,
-        reference_group_index=reference_group_index,
-    )
-    _validate_scheduler_group_count(
-        scheduler,
-        None,
-        policy,
-        previous_group_count + 1,
-    )
-
-
-def extend_scheduler_for_new_group(
-    scheduler: object,
-    *,
-    previous_group_count: int,
-    reference_group_index: int,
-) -> None:
-    policy = LegacyOptimizerAppendPolicy(
-        base_group_count=previous_group_count,
-        reference_group_index=reference_group_index,
-    )
-    reconcile_scheduler_group_count(
-        scheduler,
-        None,
-        policy,
-        previous_group_count + 1,
-    )
 
 
 def preflight_scheduler_group_removal(
@@ -293,93 +207,6 @@ def remove_scheduler_groups(
         removed_group_indices,
         previous_group_count=previous_group_count,
     )
-
-
-def _validate_scheduler_group_count(
-    scheduler: object,
-    saved_state: dict[str, Any] | None,
-    policy: LegacyOptimizerAppendPolicy,
-    target_group_count: int,
-) -> None:
-    _validate_supported_scheduler(scheduler)
-    if (
-        (
-            target_group_count < policy.base_group_count
-            and not policy.group_reference_indices
-        )
-        or not 0 <= policy.reference_group_index < policy.base_group_count
-        or (
-            policy.group_reference_indices
-            and (
-                len(policy.group_reference_indices) != target_group_count
-                or any(
-                    isinstance(reference_index, bool)
-                    or not isinstance(reference_index, int)
-                    or not 0 <= reference_index < policy.base_group_count
-                    for reference_index in policy.group_reference_indices
-                )
-            )
-        )
-    ):
-        raise RuntimeError("Invalid Neuron scheduler group reconciliation policy.")
-    allowed_lengths = {policy.base_group_count, target_group_count}
-    _validate_sequence_lengths(
-        scheduler.__dict__,
-        allowed_lengths,
-        operation="reconcile a legacy Neuron optimizer scheduler",
-    )
-    if saved_state is not None:
-        _validate_sequence_lengths(
-            saved_state,
-            allowed_lengths,
-            operation="reconcile a saved legacy Neuron optimizer scheduler",
-        )
-    for child_scheduler, child_state in _scheduler_children(
-        scheduler,
-        saved_state,
-    ):
-        _validate_scheduler_group_count(
-            child_scheduler,
-            child_state,
-            policy,
-            target_group_count,
-        )
-
-
-def _apply_scheduler_group_count(
-    scheduler: object,
-    saved_state: dict[str, Any] | None,
-    policy: LegacyOptimizerAppendPolicy,
-    target_group_count: int,
-) -> None:
-    for sequence_name in _PER_GROUP_SEQUENCE_NAMES:
-        _reconcile_live_sequence(
-            scheduler.__dict__,
-            sequence_name,
-            policy=policy,
-            target_group_count=target_group_count,
-            preserve_reference=sequence_name == "lr_lambdas",
-            saved_state=saved_state,
-        )
-        if saved_state is not None:
-            _extend_sequence(
-                saved_state,
-                sequence_name,
-                base_group_count=policy.base_group_count,
-                reference_group_index=policy.reference_group_index,
-                target_group_count=target_group_count,
-                preserve_reference=False,
-            )
-    for child_scheduler, child_state in _scheduler_children(
-        scheduler,
-        saved_state,
-    ):
-        _apply_scheduler_group_count(
-            child_scheduler,
-            child_state,
-            policy,
-            target_group_count,
-        )
 
 
 def _validate_scheduler_group_removal(
@@ -467,7 +294,7 @@ def _scheduler_children(
         or len(saved_child_states) != len(child_schedulers)
     ):
         raise RuntimeError(
-            "Cannot safely reconcile nested Neuron optimizer schedulers: "
+            "Cannot safely restore nested Neuron optimizer schedulers: "
             "live and saved child counts differ."
         )
     aligned_saved_child_states = (
@@ -569,66 +396,3 @@ def _validate_supported_scheduler(scheduler: object) -> None:
             f"unrecognized scheduler {scheduler_type.__module__}."
             f"{scheduler_type.__qualname__}."
         )
-
-
-def _extend_sequence(
-    namespace: dict[str, Any],
-    sequence_name: str,
-    *,
-    base_group_count: int,
-    reference_group_index: int,
-    target_group_count: int,
-    preserve_reference: bool,
-) -> None:
-    sequence_values = namespace.get(sequence_name)
-    if (
-        not isinstance(sequence_values, list)
-        or len(sequence_values) == target_group_count
-    ):
-        return
-    reference_value = sequence_values[reference_group_index]
-    sequence_values.extend(
-        reference_value if preserve_reference else deepcopy(reference_value)
-        for _ in range(target_group_count - base_group_count)
-    )
-
-
-def _reconcile_live_sequence(
-    namespace: dict[str, Any],
-    sequence_name: str,
-    *,
-    policy: LegacyOptimizerAppendPolicy,
-    target_group_count: int,
-    preserve_reference: bool,
-    saved_state: dict[str, Any] | None,
-) -> None:
-    if not policy.group_reference_indices:
-        _extend_sequence(
-            namespace,
-            sequence_name,
-            base_group_count=policy.base_group_count,
-            reference_group_index=policy.reference_group_index,
-            target_group_count=target_group_count,
-            preserve_reference=preserve_reference,
-        )
-        return
-
-    live_sequence_values = namespace.get(sequence_name)
-    if not isinstance(live_sequence_values, list):
-        return
-    base_sequence_values = tuple(live_sequence_values[: policy.base_group_count])
-    reconciled_sequence_values = [
-        (
-            base_sequence_values[reference_index]
-            if preserve_reference
-            else deepcopy(base_sequence_values[reference_index])
-        )
-        for reference_index in policy.group_reference_indices
-    ]
-    saved_sequence_values = (
-        saved_state.get(sequence_name) if saved_state is not None else None
-    )
-    if live_sequence_values is saved_sequence_values:
-        namespace[sequence_name] = reconciled_sequence_values
-    else:
-        live_sequence_values[:] = reconciled_sequence_values

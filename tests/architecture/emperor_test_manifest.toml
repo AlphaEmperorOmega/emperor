@@ -603,7 +603,6 @@ modules = [
   "src/emperor/neuron/_monitoring/__init__.py",
   "src/emperor/neuron/_monitoring/callback.py",
   "src/emperor/neuron/_monitoring/diagnostics.py",
-  "src/emperor/neuron/_optimizer_checkpoint.py",
   "src/emperor/neuron/_optimizer_layout.py",
   "src/emperor/neuron/_optimizer_scheduler.py",
   "src/emperor/neuron/_optimizer_sync.py",
