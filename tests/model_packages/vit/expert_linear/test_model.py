@@ -1,7 +1,6 @@
 import importlib
 import inspect
 import unittest
-from dataclasses import replace
 
 import torch
 
@@ -14,14 +13,12 @@ from emperor.attention import (
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.layers import RecurrentLayerConfig
 from emperor.linears import LinearLayerConfig
-from models.catalog import catalog_entry
-from models.vit.expert_linear import _config_defaults as config_defaults
+from models.catalog import model_package
 from models.vit.expert_linear.config_builder import VitExpertLinearConfigBuilder
 from models.vit.expert_linear.model import Model
 from models.vit.expert_linear.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 
 _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
@@ -44,8 +41,12 @@ class TestVitExpertLinearModel(unittest.TestCase):
 
                 self.assertEqual(module.__name__, module_name)
 
-        self.assertEqual(Experiment()._public_model_id(), "vit/expert_linear")
-        self.assertIsNotNone(catalog_entry("vit/expert_linear"))
+        experiment = Experiment(model_package=model_package("vit/expert_linear"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "vit/expert_linear",
+        )
+        self.assertIsNotNone(model_package("vit/expert_linear"))
 
     def test_attention_mode_switch_is_not_part_of_the_public_contract(self):
         self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
@@ -54,7 +55,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
             "expert_attention_flag",
             inspect.signature(VitExpertLinearConfigBuilder).parameters,
         )
-        with self.assertRaises(TypeError):
+        with self.assertRaises(ValueError):
             self._config(
                 ExperimentPreset.BASELINE,
                 {
@@ -88,20 +89,9 @@ class TestVitExpertLinearModel(unittest.TestCase):
             ExperimentPreset.TOP1_SWITCH_AUX,
             config_overrides={
                 **self._test_overrides(),
-                "feed_forward_stack_options": replace(
-                    self._default_builder_kwargs()["feed_forward_stack_options"],
-                    hidden_dim=17,
-                ),
-                "feed_forward_layer_controller_options": replace(
-                    self._default_builder_kwargs()[
-                        "feed_forward_layer_controller_options"
-                    ],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    self._default_builder_kwargs()["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "ff_stack_hidden_dim": 17,
+                "ff_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         feed_forward_stack_config = self._encoder_layer_config(
@@ -123,13 +113,8 @@ class TestVitExpertLinearModel(unittest.TestCase):
             ExperimentPreset.TOP1_SWITCH_AUX,
             config_overrides={
                 **self._test_overrides(),
-                "feed_forward_recurrent_controller_options": replace(
-                    self._default_builder_kwargs()[
-                        "feed_forward_recurrent_controller_options"
-                    ],
-                    recurrent_flag=True,
-                    recurrent_max_steps=2,
-                ),
+                "ff_recurrent_flag": True,
+                "ff_recurrent_max_steps": 2,
             },
         )
         feed_forward_stack_config = self._encoder_layer_config(
@@ -150,22 +135,9 @@ class TestVitExpertLinearModel(unittest.TestCase):
             ExperimentPreset.BASELINE,
             config_overrides={
                 **self._test_overrides(),
-                "attention_projection_stack_options": replace(
-                    self._default_builder_kwargs()[
-                        "attention_projection_stack_options"
-                    ],
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    self._default_builder_kwargs()[
-                        "attention_projection_layer_controller_options"
-                    ],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    self._default_builder_kwargs()["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "attn_stack_hidden_dim": 17,
+                "attn_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         attention_config = self._encoder_layer_config(cfg).attention_config
@@ -200,10 +172,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
             ExperimentPreset.BASELINE,
             {
                 **self._test_overrides(),
-                "encoder_options": replace(
-                    self._test_overrides()["encoder_options"],
-                    num_layers=2,
-                ),
+                "stack_num_layers": 2,
             },
         )
         model = Model(cfg)
@@ -353,7 +322,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
                 self.assertEqual(logits.shape, (2, cfg.output_dim))
 
     def _config(self, preset: ExperimentPreset, config_overrides: dict | None = None):
-        return ExperimentPresets().get_config(
+        return model_package("vit/expert_linear").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -367,69 +336,10 @@ class TestVitExpertLinearModel(unittest.TestCase):
     def _test_overrides(self) -> dict:
         return {
             "batch_size": 2,
-            "encoder_options": replace(
-                self._default_builder_kwargs()["encoder_options"],
-                hidden_dim=16,
-                num_layers=1,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                self._default_builder_kwargs()["attention_options"],
-                num_heads=4,
-            ),
-        }
-
-    def _default_builder_kwargs(self) -> dict:
-        return {
-            "feed_forward_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "FF_STACK",
-                    num_layers_key="FF_NUM_LAYERS",
-                    bias_key="FF_BIAS_FLAG",
-                )
-            ),
-            "feed_forward_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="FF_GATE",
-                    gate_stack_prefix="FF_GATE_STACK",
-                    halting_prefix="FF_HALTING",
-                    halting_stack_prefix="FF_HALTING_STACK",
-                )
-            ),
-            "feed_forward_recurrent_controller_options": (
-                config_defaults.linears_recurrent_controller_options(
-                    config,
-                    recurrent_prefix="FF_RECURRENT",
-                    gate_stack_prefix="FF_RECURRENT_GATE_STACK",
-                    halting_stack_prefix="FF_RECURRENT_HALTING_STACK",
-                )
-            ),
-            "attention_projection_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "ATTN_STACK",
-                    num_layers_key="ATTN_NUM_LAYERS",
-                    bias_key="ATTN_BIAS_FLAG",
-                )
-            ),
-            "attention_projection_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="ATTN_GATE",
-                    gate_stack_prefix="ATTN_GATE_STACK",
-                    halting_prefix="ATTN_HALTING",
-                    halting_stack_prefix="ATTN_HALTING_STACK",
-                )
-            ),
-            "expert_stack_options": config_defaults.experts_submodule_stack_options(
-                config,
-                "EXPERT_STACK",
-                bias_key="EXPERT_BIAS_FLAG",
-            ),
-            "encoder_options": config_defaults.vit_encoder_options(config),
-            "attention_options": config_defaults.vit_attention_options(config),
+            "hidden_dim": 16,
+            "stack_num_layers": 1,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 4,
         }
 
     def _fake_batch(self, cfg):

@@ -26,6 +26,7 @@ from models.vit.expert_linear._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.vit.expert_linear.experiment_config import ExperimentConfig
+from models.vit.expert_linear.runtime_defaults import DEFAULT_RUNTIME
 from models.vit.expert_linear.runtime_options import (
     DynamicMemoryOptions,
     ExpertsDynamicMemoryOptions,
@@ -38,6 +39,7 @@ from models.vit.expert_linear.runtime_options import (
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
+    RuntimeOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
@@ -51,7 +53,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class VitExpertLinearConfigBuilder:
+class _VitExpertLinearConfigBuilderImplementation:
     def __init__(
         self,
         *,
@@ -287,3 +289,13 @@ class VitExpertLinearConfigBuilder:
                 self.expert_attention_use_kv_expert_models_flag
             ),
         )
+
+
+class VitExpertLinearConfigBuilder(_VitExpertLinearConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.vit.expert_linear VitExpertLinearConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())

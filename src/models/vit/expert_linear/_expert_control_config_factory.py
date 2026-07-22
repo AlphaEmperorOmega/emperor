@@ -157,7 +157,7 @@ class ControlConfigFactory:
         return ExpertsStackOptions(
             hidden_dim=self._hidden_dim,
             bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -195,14 +195,14 @@ class ControlConfigFactory:
         if mixture_options is not None:
             return mixture_options
         return ExpertsMixtureOptions(
-            top_k=config.EXPERT_TOP_K,
-            num_experts=config.EXPERT_NUM_EXPERTS,
-            capacity_factor=config.EXPERT_CAPACITY_FACTOR,
-            dropped_token_behavior=config.EXPERT_DROPPED_TOKEN_BEHAVIOR,
-            compute_expert_mixture_flag=(config.EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG),
-            weighted_parameters_flag=config.EXPERT_WEIGHTED_PARAMETERS_FLAG,
-            weighting_position_option=config.EXPERT_WEIGHTING_POSITION_OPTION,
-            routing_initialization_mode=config.EXPERT_ROUTING_INITIALIZATION_MODE,
+            top_k=config.TOP_K,
+            num_experts=config.NUM_EXPERTS,
+            capacity_factor=config.CAPACITY_FACTOR,
+            dropped_token_behavior=config.DROPPED_TOKEN_BEHAVIOR,
+            compute_expert_mixture_flag=(config.COMPUTE_EXPERT_MIXTURE_FLAG),
+            weighted_parameters_flag=config.WEIGHTED_PARAMETERS_FLAG,
+            weighting_position_option=config.WEIGHTING_POSITION_OPTION,
+            routing_initialization_mode=config.ROUTING_INITIALIZATION_MODE,
         )
 
     def __default_expert_stack_options(
@@ -274,11 +274,11 @@ class ControlConfigFactory:
         if layer_controller_options is not None:
             return layer_controller_options
         return ExpertsLayerControllerOptions(
-            stack_gate_flag=config.GATE_FLAG,
+            stack_gate_flag=config.STACK_GATE_FLAG,
             gate_option=config.GATE_OPTION,
             gate_activation=config.GATE_ACTIVATION,
             gate_stack_source=self.__default_controller_stack_source("GATE_STACK"),
-            stack_halting_flag=config.HALTING_FLAG,
+            stack_halting_flag=config.STACK_HALTING_FLAG,
             halting_threshold=config.HALTING_THRESHOLD,
             halting_dropout=config.HALTING_DROPOUT,
             halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
@@ -317,13 +317,13 @@ class ControlConfigFactory:
             recurrent_flag=config.RECURRENT_FLAG,
             recurrent_max_steps=config.RECURRENT_MAX_STEPS,
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
-            recurrent_gate_flag=config.RECURRENT_GATE_FLAG,
+            recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
             recurrent_gate_stack_source=self.__default_controller_stack_source(
                 "RECURRENT_GATE_STACK"
             ),
-            recurrent_halting_flag=config.RECURRENT_HALTING_FLAG,
+            recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
             recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
             recurrent_halting_dropout=config.RECURRENT_HALTING_DROPOUT,
             recurrent_halting_hidden_state_mode=(
@@ -341,13 +341,13 @@ class ControlConfigFactory:
         if layer_controller_options is not None:
             return layer_controller_options
         return ExpertsLayerControllerOptions(
-            stack_gate_flag=config.EXPERT_GATE_FLAG,
+            stack_gate_flag=config.EXPERT_STACK_GATE_FLAG,
             gate_option=config.EXPERT_GATE_OPTION,
             gate_activation=config.EXPERT_GATE_ACTIVATION,
             gate_stack_source=self.__default_controller_stack_source(
                 "EXPERT_GATE_STACK"
             ),
-            stack_halting_flag=config.EXPERT_HALTING_FLAG,
+            stack_halting_flag=config.EXPERT_STACK_HALTING_FLAG,
             halting_threshold=config.EXPERT_HALTING_THRESHOLD,
             halting_dropout=config.EXPERT_HALTING_DROPOUT,
             halting_hidden_state_mode=config.EXPERT_HALTING_HIDDEN_STATE_MODE,
@@ -388,13 +388,13 @@ class ControlConfigFactory:
             recurrent_flag=config.EXPERT_RECURRENT_FLAG,
             recurrent_max_steps=config.EXPERT_RECURRENT_MAX_STEPS,
             recurrent_layer_norm_position=(config.EXPERT_RECURRENT_LAYER_NORM_POSITION),
-            recurrent_gate_flag=config.EXPERT_RECURRENT_GATE_FLAG,
+            recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.EXPERT_RECURRENT_GATE_ACTIVATION,
             recurrent_gate_stack_source=self.__default_controller_stack_source(
                 "EXPERT_RECURRENT_GATE_STACK"
             ),
-            recurrent_halting_flag=config.EXPERT_RECURRENT_HALTING_FLAG,
+            recurrent_stack_halting_flag=config.EXPERT_RECURRENT_STACK_HALTING_FLAG,
             recurrent_halting_threshold=config.EXPERT_RECURRENT_HALTING_THRESHOLD,
             recurrent_halting_dropout=config.EXPERT_RECURRENT_HALTING_DROPOUT,
             recurrent_halting_hidden_state_mode=(

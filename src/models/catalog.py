@@ -39,6 +39,7 @@ from models.transformer.linear import MODEL_PACKAGE as TRANSFORMER_LINEAR
 from models.transformer.linear_adaptive import (
     MODEL_PACKAGE as TRANSFORMER_LINEAR_ADAPTIVE,
 )
+from models.vit.expert_linear import MODEL_PACKAGE as VIT_EXPERT_LINEAR
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/linear": ModelPackage("bert", "linear", "models.bert.linear"),
@@ -53,9 +54,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "vit/linear_adaptive": ModelPackage(
         "vit", "linear_adaptive", "models.vit.linear_adaptive"
     ),
-    "vit/expert_linear": ModelPackage(
-        "vit", "expert_linear", "models.vit.expert_linear"
-    ),
+    "vit/expert_linear": VIT_EXPERT_LINEAR,
     "vit/expert_linear_adaptive": ModelPackage(
         "vit", "expert_linear_adaptive", "models.vit.expert_linear_adaptive"
     ),
