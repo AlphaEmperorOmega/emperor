@@ -5,20 +5,19 @@ import unittest
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-import models.experts.linear.config as expert_linear_config
 import models.linears.linear.config as linears_linear_config
 import models.neuron.linear.config as neuron_config
-import models.vit.linear.config as vit_config
 from emperor.layers import LayerGateOptions, LayerNormPositionOptions
-from emperor_workbench.inspection import InspectionFailure
 from model_runtime.inspection import InspectionError as SemanticInspectionError
 from model_runtime.inspection import parse_overrides
-from models.catalog import model_package_for_module
+from models.catalog import model_package
+
+from emperor_workbench.inspection import InspectionFailure
 from tests.support.inspection import inspect_model
 
 
-def parse_override_mapping(config_module, overrides):
-    package = model_package_for_module(config_module.__name__)
+def parse_override_mapping(catalog_key, overrides):
+    package = model_package(catalog_key)
     assert package is not None
     return dict(parse_overrides(package, overrides).values)
 
@@ -144,7 +143,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_gate_option_overrides_parse_to_builder_parameter_names(self) -> None:
         parsed = parse_override_mapping(
-            linears_linear_config,
+            "linears/linear",
             {
                 "gate_option": "ADDITION",
                 "recurrent_gate_option": "MULTIPLIER",
@@ -156,10 +155,10 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_stack_alias_overrides_parse_to_builder_parameter_names(self) -> None:
         parsed = parse_override_mapping(
-            linears_linear_config,
+            "linears/linear",
             {
                 "hidden_dim": "128",
-                "stack_layer_norm_position": "AFTER",
+                "layer_norm_position": "AFTER",
                 "stack_bias_flag": "false",
                 "gate_stack_independent_flag": "true",
                 "gate_stack_hidden_dim": "32",
@@ -207,7 +206,7 @@ class InspectorServiceTests(unittest.TestCase):
                     "Unknown override",
                 ):
                     parse_override_mapping(
-                        linears_linear_config,
+                        "linears/linear",
                         {override_key: "32"},
                     )
 
@@ -226,13 +225,13 @@ class InspectorServiceTests(unittest.TestCase):
                     "Unknown override",
                 ):
                     parse_override_mapping(
-                        expert_linear_config,
+                        "experts/linear",
                         {override_key: "32"},
                     )
 
     def test_nullable_empty_string_override_parses_as_none(self) -> None:
         parsed = parse_override_mapping(
-            vit_config,
+            "vit/linear",
             {"positional_embedding_padding_idx": ""},
         )
 
@@ -240,7 +239,7 @@ class InspectorServiceTests(unittest.TestCase):
 
     def test_empty_string_override_still_rejects_non_nullable_fields(self) -> None:
         with self.assertRaises(SemanticInspectionError):
-            parse_override_mapping(vit_config, {"hidden_dim": ""})
+            parse_override_mapping("vit/linear", {"hidden_dim": ""})
 
     def test_abstract_config_override_is_rejected_before_model_instantiation(
         self,
