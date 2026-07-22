@@ -8,6 +8,7 @@ from lightning.pytorch.callbacks import Callback
 from emperor.monitoring import MonitorSettings
 from model_runtime.inspection import InspectionError, parse_overrides
 from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
+from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.packages import ModelPackage, dataset_name
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.checkpoints import (
@@ -116,11 +117,12 @@ def _monitor_callbacks(
     if not monitor_names:
         return []
     try:
+        runtime_defaults = runtime_defaults_spec(package)
         parsed_overrides = parse_overrides(package, plan.overrides).values
-        default_interval = getattr(
-            package.runtime_defaults,
-            "MONITOR_LOG_EVERY_N_STEPS",
-            100,
+        default_interval = (
+            runtime_defaults.current_value("MONITOR_LOG_EVERY_N_STEPS")
+            if "MONITOR_LOG_EVERY_N_STEPS" in runtime_defaults.supported_keys
+            else 100
         )
         interval = int(
             parsed_overrides.get(

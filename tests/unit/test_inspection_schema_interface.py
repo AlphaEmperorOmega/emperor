@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -19,6 +20,7 @@ from model_runtime.inspection import (
     supported_config_keys,
     validate_configuration,
 )
+from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.packages import ModelIdentity, ModelPackage
 from models.catalog import model_package
 
@@ -46,6 +48,53 @@ def _broken_package() -> ModelPackage:
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):
+    def test_runtime_defaults_policy_is_compiled_once_per_selected_package(
+        self,
+    ) -> None:
+        catalog_package = model_package("linears/linear")
+        assert catalog_package is not None
+        package = ModelPackage(
+            catalog_package.identity,
+            catalog_package._adapter,
+            catalog_package.inspection_construction_limits,
+        )
+        original = ModelPackage.configuration_field_metadata
+
+        with patch.object(
+            ModelPackage,
+            "configuration_field_metadata",
+            autospec=True,
+            side_effect=original,
+        ) as metadata:
+            first = runtime_defaults_spec(package)
+            second = runtime_defaults_spec(package)
+            configuration_schema(package)
+            parse_overrides(package, {"hidden-dim": "64"})
+
+        self.assertIs(first, second)
+        self.assertEqual(metadata.call_count, 2)
+
+    def test_runtime_defaults_cache_uses_selected_package_identity(self) -> None:
+        catalog_package = model_package("linears/linear")
+        assert catalog_package is not None
+        first_package = ModelPackage(
+            catalog_package.identity,
+            catalog_package._adapter,
+            catalog_package.inspection_construction_limits,
+        )
+        second_package = ModelPackage(
+            catalog_package.identity,
+            catalog_package._adapter,
+            catalog_package.inspection_construction_limits,
+        )
+
+        first = runtime_defaults_spec(first_package)
+        second = runtime_defaults_spec(second_package)
+
+        self.assertIsNot(first, second)
+        self.assertEqual(first.resolve_key("hidden-dim"), "HIDDEN_DIM")
+        self.assertEqual(first.resolve_key("hidden_dim"), "HIDDEN_DIM")
+
     def test_broken_package_override_failures_are_transport_neutral(self) -> None:
         package = _broken_package()
         calls = (

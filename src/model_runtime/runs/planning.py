@@ -9,21 +9,20 @@ from model_runtime.inspection import (
     canonicalize_overrides,
     configuration_schema,
     parse_overrides,
-    preset_locks,
     reject_locked_overrides,
     search_space_schema,
     serialize_overrides,
 )
 from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
+from model_runtime.inspection.runtime_defaults import (
+    RuntimeDefaultsSpec,
+    runtime_defaults_spec,
+)
 from model_runtime.packages import (
     ModelPackage,
     abstract_config_class_error,
-    config_key_to_model_param,
     dataset_name,
-    iter_supported_config_keys,
     normalize_key,
-    parse_config_value,
-    serialize_config_value,
 )
 from model_runtime.runs.errors import InvalidRunPlan, InvalidRunRequest, PlanTooLarge
 from model_runtime.runs.records import (
@@ -113,18 +112,17 @@ def _resolve_presets(
 
 def _parse_search_value(
     *,
+    runtime_defaults: RuntimeDefaultsSpec,
     axis_key: str,
-    config_module: Any,
-    parse_key: str,
+    config_key: str,
+    search_key: str | None,
     raw_value: Any,
 ) -> _SearchValue:
-    if raw_value is None:
-        return _SearchValue(serialized=None, parsed=None)
     try:
-        parsed = parse_config_value(
-            config_module,
-            parse_key,
-            str(serialize_config_value(raw_value)),
+        parsed = runtime_defaults.parse_search_value(
+            config_key,
+            raw_value,
+            search_key=search_key,
         )
         if isinstance(parsed, type):
             abstract_error = abstract_config_class_error(parsed)
@@ -135,7 +133,7 @@ def _parse_search_value(
             f"Invalid search value for axis '{axis_key}': {raw_value!r}. {exc}"
         ) from exc
     return _SearchValue(
-        serialized=serialize_config_value(parsed),
+        serialized=runtime_defaults.serialize_value(parsed),
         parsed=parsed,
     )
 
@@ -176,19 +174,15 @@ def _parse_search(
             f"Training search accepts at most {budget.max_axes} selected axes."
         )
 
+    runtime_defaults = runtime_defaults_spec(package)
     try:
         search_space = search_space_schema(package, preset_name)
     except InspectionError as exc:
         raise _request_error(exc) from exc
     axes_by_key = {normalize_key(axis.key): axis for axis in search_space.axes}
-    config_keys_by_selection: dict[str, str] = {}
-    for config_key in iter_supported_config_keys(package.runtime_defaults):
-        config_keys_by_selection[normalize_key(config_key)] = config_key
-        config_keys_by_selection[
-            normalize_key(config_key_to_model_param(config_key))
-        ] = config_key
+    config_keys_by_selection = runtime_defaults.keys_by_alias
     try:
-        locks = preset_locks(package, preset_name)
+        locks = runtime_defaults.preset_locks(preset_name)
     except InspectionError as exc:
         raise _request_error(exc) from exc
     if spec.axes is None:
@@ -201,7 +195,7 @@ def _parse_search(
         selections = spec.axes
     if spec.axes is None and budget.max_axes is not None:
         semantic_axes = {
-            normalize_key(config_key_to_model_param(selection.key))
+            normalize_key(runtime_defaults.model_parameter(selection.key))
             for selection in selections
         }
         if len(semantic_axes) > budget.max_axes:
@@ -226,9 +220,9 @@ def _parse_search(
 
         if axis is not None:
             axis_key = axis.key
-            model_param = config_key_to_model_param(axis.key)
-            parse_module = package.metadata.search_space
-            parse_key = axis.search_key
+            config_key = axis.key
+            model_param = runtime_defaults.model_parameter(axis.key)
+            search_key = axis.search_key
             default_values = axis.values
             allowed_values: tuple[Any, ...] | None = axis.values
             locked = axis.locked
@@ -236,14 +230,15 @@ def _parse_search(
         else:
             assert config_key is not None
             axis_key = config_key
-            model_param = config_key_to_model_param(config_key)
-            parse_module = package.runtime_defaults
-            parse_key = config_key
+            model_param = runtime_defaults.model_parameter(config_key)
+            search_key = None
             default_values = ()
             allowed_values = None
             lock = locks.get(model_param)
             locked = lock is not None
-            locked_value = serialize_config_value(getattr(lock, "value", None))
+            locked_value = runtime_defaults.serialize_value(
+                getattr(lock, "value", None)
+            )
 
         semantic_axis_key = normalize_key(model_param)
         existing_position = axis_positions.get(semantic_axis_key)
@@ -264,9 +259,10 @@ def _parse_search(
             )
         parsed_values = tuple(
             _parse_search_value(
+                runtime_defaults=runtime_defaults,
                 axis_key=axis_key,
-                config_module=parse_module,
-                parse_key=parse_key,
+                config_key=config_key,
+                search_key=search_key,
                 raw_value=raw_value,
             )
             for raw_value in raw_values
@@ -337,10 +333,11 @@ def _strip_searched_overrides(
         canonical = canonicalize_overrides(package, overrides)
     except InspectionError as exc:
         raise _request_error(exc) from exc
+    runtime_defaults = runtime_defaults_spec(package)
     return {
         key: value
         for key, value in canonical.items()
-        if config_key_to_model_param(key) not in searched_model_params
+        if runtime_defaults.model_parameter(key) not in searched_model_params
     }
 
 
@@ -429,12 +426,13 @@ def _ordered_parameters(
     *,
     source: str,
 ) -> tuple[RunParameter, ...]:
+    runtime_defaults = runtime_defaults_spec(package)
     try:
         canonical = canonicalize_overrides(package, overrides)
         schema = configuration_schema(package)
     except InspectionError as exc:
         raise _request_error(exc) from exc
-    supported_keys = iter_supported_config_keys(package.runtime_defaults)
+    supported_keys = runtime_defaults.supported_keys
     missing_keys = sorted(set(canonical) - set(supported_keys))
     if missing_keys:
         raise InvalidRunRequest(
@@ -449,7 +447,7 @@ def _ordered_parameters(
     return tuple(
         RunParameter(
             key=key,
-            value=serialize_config_value(canonical[key]),
+            value=runtime_defaults.serialize_value(canonical[key]),
             source=source,  # type: ignore[arg-type]
         )
         for key in ordered_keys

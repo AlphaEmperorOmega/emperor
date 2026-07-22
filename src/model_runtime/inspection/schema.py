@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping, Sequence
 from enum import Enum
 from types import ModuleType, NoneType, UnionType
 from typing import Any, Union, get_args, get_origin
 
-from model_runtime.inspection.errors import InspectionError, _model_package_failure
+from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.field_descriptions import config_field_description
 from model_runtime.inspection.records import (
     ConfigurationField,
@@ -13,13 +14,14 @@ from model_runtime.inspection.records import (
     SearchAxis,
     SearchSpace,
 )
+from model_runtime.inspection.runtime_defaults import (
+    RuntimeDefaultsSpec,
+    runtime_defaults_spec,
+)
 from model_runtime.packages import (
     ModelPackage,
     abstract_config_class_error,
     config_key_to_flag,
-    config_key_to_model_param,
-    iter_supported_config_keys,
-    serialize_config_value,
 )
 
 DEFAULT_SECTION = "General"
@@ -31,7 +33,10 @@ PRIMITIVE_ANNOTATION_KINDS = {
 }
 
 
-def _field_section_path(key: str, metadata: dict[str, Any]) -> tuple[str, ...]:
+def _field_section_path(
+    key: str,
+    metadata: Mapping[str, Any],
+) -> tuple[str, ...]:
     raw_path = metadata.get("sectionPath")
     if isinstance(raw_path, list):
         path = tuple(item for item in raw_path if isinstance(item, str) and item)
@@ -200,37 +205,7 @@ def preset_locks(
     package: ModelPackage,
     preset_name: str | None,
 ) -> dict[str, Any]:
-    if preset_name is None:
-        return {}
-    try:
-        preset = package.resolve_preset(preset_name)
-    except ValueError as exc:
-        raise InspectionError(str(exc)) from exc
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
-    try:
-        locks = package.preset_locks(preset)
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
-    canonical: dict[str, Any] = {}
-    source_fields: dict[str, str] = {}
-    for field, lock in locks.items():
-        model_param = config_key_to_model_param(field)
-        previous = canonical.get(model_param)
-        if previous is not None:
-            previous_value = serialize_config_value(getattr(previous, "value", None))
-            value = serialize_config_value(getattr(lock, "value", None))
-            if previous_value != value:
-                raise InspectionError(
-                    f"Preset '{preset_name}' for model "
-                    f"'{package.catalog_key}' defines conflicting locks for "
-                    f"Runtime Defaults parameter '{model_param}' through "
-                    f"'{source_fields[model_param]}' and '{field}'."
-                )
-            continue
-        canonical[model_param] = lock
-        source_fields[model_param] = field
-    return canonical
+    return runtime_defaults_spec(package).preset_locks(preset_name)
 
 
 def _unique_presets(
@@ -249,19 +224,14 @@ def _unique_presets(
 
 
 def _preset_lock_details(
-    package: ModelPackage,
+    spec: RuntimeDefaultsSpec,
     preset_name: str | None,
     preset_names: tuple[str, ...] | list[str] | None,
 ) -> dict[str, list[dict[str, Any]]]:
     details: dict[str, list[dict[str, Any]]] = {}
     for selected_name in _unique_presets(preset_name, preset_names):
-        try:
-            preset = package.resolve_preset(selected_name)
-        except ValueError as exc:
-            raise InspectionError(str(exc)) from exc
-        except Exception as exc:
-            raise _model_package_failure(package.catalog_key, exc) from exc
-        locks = preset_locks(package, selected_name)
+        preset, locks = spec.resolve_preset_locks(selected_name)
+        assert preset is not None
         for field, lock in locks.items():
             details.setdefault(field, []).append(
                 {
@@ -273,10 +243,13 @@ def _preset_lock_details(
     return details
 
 
-def _shared_locked_value(lock_details: list[dict[str, Any]]) -> Any:
+def _shared_locked_value(
+    spec: RuntimeDefaultsSpec,
+    lock_details: list[dict[str, Any]],
+) -> Any:
     if not lock_details:
         return None
-    values = [serialize_config_value(detail["value"]) for detail in lock_details]
+    values = [spec.serialize_value(detail["value"]) for detail in lock_details]
     first = values[0]
     return first if all(value == first for value in values) else None
 
@@ -285,26 +258,18 @@ def configuration_schema(
     package: ModelPackage,
     preset: str | None = None,
 ) -> ConfigurationSchema:
-    try:
-        config_module = package.runtime_defaults
-        search_space_module = package.metadata.search_space
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
-    locks = preset_locks(package, preset)
-    annotations = getattr(config_module, "__annotations__", {})
-    try:
-        metadata = package.configuration_field_metadata()
-    except ValueError as exc:
-        raise InspectionError(str(exc)) from exc
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
-    skip_keys = {
-        key
-        for key in getattr(config_module, "CONFIG_SCHEMA_SKIP_KEYS", ())
-        if isinstance(key, str)
-    }
+    return _configuration_schema(runtime_defaults_spec(package), preset)
+
+
+def _configuration_schema(
+    spec: RuntimeDefaultsSpec,
+    preset: str | None,
+) -> ConfigurationSchema:
+    package = spec.package
+    locks = spec.preset_locks(preset)
+    metadata = spec.configuration_metadata
     supported_keys = [
-        key for key in iter_supported_config_keys(config_module) if key not in skip_keys
+        key for key in spec.supported_keys if key not in spec.skipped_schema_keys
     ]
     missing = [key for key in supported_keys if key not in metadata]
     if missing:
@@ -316,12 +281,12 @@ def configuration_schema(
 
     fields: list[ConfigurationField] = []
     for key in supported_keys:
-        value = getattr(config_module, key, None)
-        annotation = annotations.get(key)
+        value = spec.current_value(key)
+        annotation = spec.annotations.get(key)
         kind = _value_kind(value, annotation)
         section_path = _field_section_path(key, metadata.get(key, {}))
         nullable = value is None or _annotation_is_nullable(annotation)
-        lock = locks.get(config_key_to_model_param(key))
+        lock = locks.get(spec.model_parameter(key))
         locked_value = getattr(lock, "value", None) if lock is not None else None
         fields.append(
             ConfigurationField(
@@ -336,23 +301,23 @@ def configuration_schema(
                     default=value,
                 ),
                 value_type=kind,
-                default=serialize_config_value(value),
+                default=spec.serialize_value(value),
                 nullable=nullable,
                 choices=tuple(
-                    serialize_config_value(choice)
+                    spec.serialize_value(choice)
                     for choice in _choices_for(
-                        config_module,
-                        search_space_module,
+                        spec.config_module,
+                        spec.search_space_module,
                         value,
                         annotation,
                         kind,
                         key,
                     )
                 ),
-                maximum=package.inspection_construction_limits.maximum_for(key),
+                maximum=spec.maximum_for(key),
                 locked=lock is not None,
                 locked_value=(
-                    serialize_config_value(locked_value) if lock is not None else None
+                    spec.serialize_value(locked_value) if lock is not None else None
                 ),
                 locked_reason=(getattr(lock, "reason", "") if lock else ""),
             )
@@ -361,22 +326,19 @@ def configuration_schema(
 
 
 def _search_axis_kind(
-    config_module: ModuleType,
-    search_space_module: ModuleType,
+    spec: RuntimeDefaultsSpec,
     config_key: str,
-    values: list[Any],
+    values: Sequence[Any],
 ) -> str:
-    annotations = getattr(config_module, "__annotations__", {})
-    if hasattr(config_module, config_key):
+    if hasattr(spec.config_module, config_key):
         return _value_kind(
-            getattr(config_module, config_key, None),
-            annotations.get(config_key),
+            spec.current_value(config_key),
+            spec.annotations.get(config_key),
         )
-    search_annotations = getattr(search_space_module, "__annotations__", {})
     sample = next((value for value in values if value is not None), None)
     return _value_kind(
         sample,
-        annotations.get(config_key) or search_annotations.get(config_key),
+        spec.annotations.get(config_key) or spec.search_annotations.get(config_key),
     )
 
 
@@ -385,35 +347,25 @@ def search_space_schema(
     preset: str | None = None,
     presets: tuple[str, ...] | list[str] | None = None,
 ) -> SearchSpace:
-    lock_details_by_param = _preset_lock_details(package, preset, presets)
-    try:
-        config_module = package.runtime_defaults
-        search_space_module = package.metadata.search_space
-        metadata = package.configuration_field_metadata(include_search_space=True)
-    except ValueError as exc:
-        raise InspectionError(str(exc)) from exc
-    except Exception as exc:
-        raise _model_package_failure(package.catalog_key, exc) from exc
+    spec = runtime_defaults_spec(package)
+    lock_details_by_param = _preset_lock_details(spec, preset, presets)
+    metadata = spec.search_metadata
     config_fields = {
-        field.key: field for field in configuration_schema(package, preset).fields
+        field.key: field for field in _configuration_schema(spec, preset).fields
     }
-    prefix = "SEARCH_SPACE_"
     search_keys = sorted(
-        (
-            key
-            for key, value in vars(search_space_module).items()
-            if key.startswith(prefix) and isinstance(value, list)
-        ),
+        spec.search_values,
         key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
     )
 
     axes: list[SearchAxis] = []
     for search_key in search_keys:
+        prefix = "SEARCH_SPACE_"
         config_key = search_key[len(prefix) :]
-        values = getattr(search_space_module, search_key, [])
+        values = spec.search_values[search_key]
         field = config_fields.get(config_key)
         lock_details = lock_details_by_param.get(
-            config_key_to_model_param(config_key),
+            spec.model_parameter(config_key),
             [],
         )
         lock_reasons = tuple(
@@ -434,15 +386,14 @@ def search_space_schema(
                     )
                 ),
                 value_type=_search_axis_kind(
-                    config_module,
-                    search_space_module,
+                    spec,
                     config_key,
                     values,
                 ),
-                values=tuple(serialize_config_value(value) for value in values),
+                values=tuple(spec.serialize_value(value) for value in values),
                 locked=bool(lock_details),
                 locked_value=(
-                    _shared_locked_value(lock_details) if lock_details else None
+                    _shared_locked_value(spec, lock_details) if lock_details else None
                 ),
                 locked_reason=" ".join(lock_reasons),
                 locked_by_presets=locked_by_presets,

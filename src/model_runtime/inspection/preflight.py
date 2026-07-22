@@ -5,11 +5,11 @@ from enum import Enum
 from typing import Any
 
 from model_runtime.inspection.errors import InspectionError
-from model_runtime.packages import (
-    ModelPackage,
-    config_key_to_model_param,
-    iter_supported_config_keys,
+from model_runtime.inspection.runtime_defaults import (
+    RuntimeDefaultsSpec,
+    runtime_defaults_spec,
 )
+from model_runtime.packages import ModelPackage
 
 
 def _numeric(value: Any) -> int | float | None:
@@ -19,24 +19,23 @@ def _numeric(value: Any) -> int | float | None:
 
 
 def _effective_values(
-    package: ModelPackage,
+    spec: RuntimeDefaultsSpec,
     overrides: Mapping[str, Any],
     preset: Enum,
 ) -> dict[str, tuple[str, int | float]]:
-    config_module = package.runtime_defaults
     effective: dict[str, tuple[str, int | float]] = {}
-    for config_key in iter_supported_config_keys(config_module):
-        model_param = config_key_to_model_param(config_key)
-        value = overrides.get(model_param, getattr(config_module, config_key))
+    for config_key in spec.supported_keys:
+        model_param = spec.model_parameter(config_key)
+        value = overrides.get(model_param, spec.current_value(config_key))
         numeric = _numeric(value)
         if numeric is not None:
             effective[model_param] = (config_key, numeric)
 
-    for raw_key, lock in package.preset_locks(preset).items():
-        model_param = config_key_to_model_param(raw_key)
+    for model_param, lock in spec.locks_for_preset(preset).items():
         numeric = _numeric(getattr(lock, "value", None))
         if numeric is not None:
-            effective[model_param] = (raw_key.upper(), numeric)
+            config_key = spec.resolve_key(model_param) or model_param.upper()
+            effective[model_param] = (config_key, numeric)
     return effective
 
 
@@ -55,8 +54,9 @@ def preflight_inspection_configuration(
 ) -> int:
     """Validate safe bounds and return a conservative parameter estimate."""
 
-    limits = package.inspection_construction_limits
-    effective = _effective_values(package, overrides, preset)
+    spec = runtime_defaults_spec(package)
+    limits = spec.inspection_limits
+    effective = _effective_values(spec, overrides, preset)
     for config_key, value in effective.values():
         maximum = limits.maximum_for(config_key)
         if maximum is not None and value > maximum:
