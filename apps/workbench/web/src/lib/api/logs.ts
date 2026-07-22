@@ -22,10 +22,6 @@ type ApiRequestOptions = {
   signal?: AbortSignal;
 };
 
-function experimentFromRelativePath(relativePath: string) {
-  return relativePath.split("/").find(Boolean) ?? "unknown";
-}
-
 const logRunFields = {
   id: z.string(),
   group: z.string().nullable(),
@@ -46,22 +42,10 @@ const logRunFields = {
   metrics: jsonObjectSchema,
 };
 
-const logRunPayloadSchema = z.object({
-  ...logRunFields,
-  experiment: z.string().nullish(),
-});
-
-const logRunOutputSchema = z.object({
+export const logRunSchema = z.object({
   ...logRunFields,
   experiment: z.string(),
 });
-
-export const logRunSchema = logRunPayloadSchema
-  .transform((run) => ({
-    ...run,
-    experiment: run.experiment ?? experimentFromRelativePath(run.relativePath),
-  }))
-  .pipe(logRunOutputSchema);
 
 const logRunFacetValueSchema = z.object({
   value: z.string(),

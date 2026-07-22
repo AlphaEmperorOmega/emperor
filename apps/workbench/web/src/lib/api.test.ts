@@ -2490,7 +2490,7 @@ describe("URL and query construction", () => {
     expect(result.hasMore).toBe(false);
   });
 
-  it("derives log run experiments from legacy API payloads", async () => {
+  it("rejects log run payloads without canonical experiment identity", async () => {
     stubFetch(
       fakeResponse({
         json: () =>
@@ -2536,12 +2536,7 @@ describe("URL and query construction", () => {
       }),
     );
 
-    const result = await fetchLogRuns();
-
-    expect(result.runs.map((run) => run.experiment)).toEqual([
-      "linear",
-      "workbench-training",
-    ]);
+    await expect(fetchLogRuns()).rejects.toThrow("experiment");
   });
 
   it("does not fallback on 404 from the configured API base", async () => {

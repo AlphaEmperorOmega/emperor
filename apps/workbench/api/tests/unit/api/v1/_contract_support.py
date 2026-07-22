@@ -656,6 +656,7 @@ LOG_RUN_FIELDS = (
 LOG_RUN_REQUIRED_FIELDS = (
     "id",
     "group",
+    "experiment",
     "modelType",
     "model",
     "preset",
@@ -670,12 +671,6 @@ LOG_RUN_REQUIRED_FIELDS = (
     "hasHparams",
     "metrics",
 )
-LOG_RUN_LOOSENESS = {
-    "experiment": (
-        "logRunSchema accepts omitted experiments and derives them from "
-        "relativePath before piping to the output schema."
-    ),
-}
 LOG_CHECKPOINT_REQUEST_FIELDS = ("runIds",)
 LOG_CHECKPOINT_FIELDS = (
     "id",
@@ -1158,7 +1153,6 @@ SCHEMA_PARITY_CASES = (
         "logRunSchema",
         LOG_RUN_FIELDS,
         LOG_RUN_REQUIRED_FIELDS,
-        intentional_frontend_required_looseness=LOG_RUN_LOOSENESS,
     ),
     SchemaParityCase(
         schemas.LogRunsResponse,
