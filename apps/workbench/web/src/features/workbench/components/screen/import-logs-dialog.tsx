@@ -121,7 +121,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
     setSelectedFile(file);
     setResult(null);
     if (file && !file.name.toLowerCase().endsWith(".zip")) {
-      setError("Choose a .zip file created by download_logs.sh.");
+      setError("Choose a .zip file created by mise run logs:archive.");
       return;
     }
     if (file && maxUploadSize !== null && file.size > maxUploadSize) {
@@ -144,7 +144,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
       return;
     }
     if (!selectedFile.name.toLowerCase().endsWith(".zip")) {
-      setError("Choose a .zip file created by download_logs.sh.");
+      setError("Choose a .zip file created by mise run logs:archive.");
       return;
     }
     if (selectedFileTooLarge) {
@@ -215,7 +215,7 @@ export function ImportLogsDialog({ onClose }: { onClose: () => void }) {
               id="import-logs-description"
               className="mt-1 max-w-[42rem] text-sm leading-6 text-ink-dim"
             >
-              Upload a zip produced by download_logs.sh and extract it into the
+              Upload a zip produced by mise run logs:archive and extract it into the
               backend logs folder.
             </p>
           </div>
