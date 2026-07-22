@@ -32,9 +32,7 @@ from emperor.transformer import (
     TransformerEncoderLayer,
 )
 from model_runtime.packages import (
-    GridSearch,
     PresetLock,
-    RandomSearch,
     iter_supported_config_keys,
 )
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
@@ -1302,28 +1300,6 @@ class TestBertLinearModel(unittest.TestCase):
         token_type_ids[:, cfg.sequence_length // 2 : -1] = 1
         return input_ids, attention_mask, token_type_ids
 
-    def test_preset_accepts_search_flags(self):
-        configs = _presets().get_config(
-            ExperimentPreset.BASELINE,
-            self._default_dataset(),
-            RandomSearch(num_samples=2),
-        )
-
-        self.assertEqual(len(configs), 2)
-
-    def test_search_keys_unknown_axis_raises(self):
-        for search_key in ("bogus_axis", "encoder_options", "embedding_options"):
-            with self.subTest(search_key=search_key):
-                with self.assertRaises(ValueError) as ctx:
-                    _presets().get_config(
-                        ExperimentPreset.BASELINE,
-                        self._default_dataset(),
-                        RandomSearch(num_samples=2),
-                        search_keys=[search_key],
-                    )
-
-                self.assertIn("Unknown", str(ctx.exception))
-
     def test_search_space_matches_vit_shared_axes(self):
         self.assertEqual(search_space.SEARCH_SPACE_HIDDEN_DIM, [16, 32, 64, 128])
         self.assertEqual(search_space.SEARCH_SPACE_STACK_NUM_LAYERS, [1, 2, 4, 8])
@@ -1339,54 +1315,6 @@ class TestBertLinearModel(unittest.TestCase):
             search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
         )
         self.assertEqual(search_space.SEARCH_SPACE_ATTN_NUM_HEADS, [1, 2, 4])
-
-    def test_search_applies_encoder_axes(self):
-        configs = _presets().get_config(
-            ExperimentPreset.BASELINE,
-            self._default_dataset(),
-            GridSearch(),
-            search_keys=["hidden_dim", "stack_num_layers"],
-        )
-
-        self.assertEqual(
-            len(configs),
-            len(search_space.SEARCH_SPACE_HIDDEN_DIM)
-            * len(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-        self.assertEqual(
-            {cfg.hidden_dim for cfg in configs},
-            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
-        )
-        self.assertEqual(
-            {self._encoder_stack_config(cfg).num_layers for cfg in configs},
-            set(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-
-    def test_flat_search_keys_are_supported(self):
-        cases = {
-            "layer_norm_position": (
-                search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
-                lambda cfg: self._encoder_layer_config(cfg).layer_norm_position,
-            ),
-            "attn_num_heads": (
-                search_space.SEARCH_SPACE_ATTN_NUM_HEADS,
-                lambda cfg: self._attention_config(cfg).num_heads,
-            ),
-        }
-
-        for search_key, (expected_values, accessor) in cases.items():
-            with self.subTest(search_key=search_key):
-                configs = _presets().get_config(
-                    ExperimentPreset.BASELINE,
-                    self._default_dataset(),
-                    GridSearch(),
-                    search_keys=[search_key],
-                )
-
-                self.assertEqual(
-                    [accessor(cfg) for cfg in configs],
-                    expected_values,
-                )
 
     def test_unlocked_overrides_update_flat_and_nested_config(self):
         cfg = _presets().get_config(
@@ -1508,28 +1436,6 @@ class TestBertLinearModel(unittest.TestCase):
                 ][0],
                 config_overrides={
                     "layer_norm_position": LayerNormPositionOptions.AFTER,
-                },
-            )
-
-        with self.assertRaises(ValueError):
-            presets.get_config(
-                ExperimentPreset.PRE_NORM,
-                dataset_options.DATASET_OPTIONS_BY_TASK[
-                    dataset_options.DEFAULT_EXPERIMENT_TASK
-                ][0],
-                search_keys=["layer_norm_position"],
-                search_mode=GridSearch(),
-            )
-
-        with self.assertRaisesRegex(ValueError, "PRE_NORM.*layer_norm_position"):
-            presets.get_config(
-                ExperimentPreset.PRE_NORM,
-                dataset_options.DATASET_OPTIONS_BY_TASK[
-                    dataset_options.DEFAULT_EXPERIMENT_TASK
-                ][0],
-                GridSearch(),
-                search_overrides={
-                    "layer_norm_position": [LayerNormPositionOptions.AFTER],
                 },
             )
 

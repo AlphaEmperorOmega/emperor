@@ -13,7 +13,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from emperor.augmentations.adaptive_parameters import (
     LowRankDynamicWeightConfig,
 )
-from model_runtime.packages import GridSearch, RandomSearch
 from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
@@ -193,7 +192,8 @@ class PackageCliRunsTests(unittest.TestCase):
             experiment_task=_linears_linear_adaptive().default_experiment_task,
             preset=ExperimentPreset.BASELINE,
             selected_presets=None,
-            search_mode=GridSearch(),
+            search_mode="grid",
+            random_samples=None,
             search_keys=None,
             config_overrides={},
             search_overrides={},
@@ -215,7 +215,8 @@ class PackageCliRunsTests(unittest.TestCase):
     ) -> None:
         search = _search_spec(
             SimpleNamespace(
-                search_mode=GridSearch(),
+                search_mode="grid",
+                random_samples=None,
                 search_keys=["stack_activation", "hidden_dim"],
                 search_overrides={
                     "hidden_dim": [64, 128],
@@ -239,7 +240,8 @@ class PackageCliRunsTests(unittest.TestCase):
     ) -> None:
         request_search = _search_spec(
             SimpleNamespace(
-                search_mode=RandomSearch(num_samples=2),
+                search_mode="random",
+                random_samples=2,
                 search_keys=None,
                 search_overrides={"hidden_dim": [64, 128]},
             )
@@ -268,7 +270,8 @@ class PackageCliRunsTests(unittest.TestCase):
     def test_search_set_can_add_supported_runtime_default_axes(self) -> None:
         request_search = _search_spec(
             SimpleNamespace(
-                search_mode=GridSearch(),
+                search_mode="grid",
+                random_samples=None,
                 search_keys=None,
                 search_overrides={
                     "batch_size": [16, 32],
@@ -308,7 +311,8 @@ class PackageCliRunsTests(unittest.TestCase):
                 datasets=("Mnist",),
                 search=_search_spec(
                     SimpleNamespace(
-                        search_mode=GridSearch(),
+                        search_mode="grid",
+                        random_samples=None,
                         search_keys=None,
                         search_overrides={"hidden_dim": [17, 17, 19]},
                     )
@@ -322,7 +326,8 @@ class PackageCliRunsTests(unittest.TestCase):
                 datasets=("Mnist",),
                 search=_search_spec(
                     SimpleNamespace(
-                        search_mode=GridSearch(),
+                        search_mode="grid",
+                        random_samples=None,
                         search_keys=None,
                         search_overrides={
                             "weight_option": [None, LowRankDynamicWeightConfig]

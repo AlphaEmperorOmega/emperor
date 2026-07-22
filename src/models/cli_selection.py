@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+from typing import Literal
 
 from emperor.config import BaseOptions
 from emperor.experiments import ExperimentTask
 from emperor.monitoring import MonitorSettings
 from model_runtime.packages import (
-    GridSearch,
     ModelPackage,
-    RandomSearch,
-    SearchMode,
     normalize_key,
 )
 from models.config_overrides import extract_config_overrides
@@ -30,8 +28,11 @@ class CliSelection:
     selected_presets: list[BaseOptions] | None = field(
         metadata={"help": "Ordered multi-preset selection, when requested."}
     )
-    search_mode: SearchMode = field(
+    search_mode: Literal["grid", "random"] | None = field(
         metadata={"help": "Selected grid/random search mode, if any."}
+    )
+    random_samples: int | None = field(
+        metadata={"help": "Requested random-search sample count, if any."}
     )
     search_keys: list[str] | None = field(
         metadata={"help": "Canonical search axes selected by --search-keys."}
@@ -131,11 +132,14 @@ def resolve_cli_selection(
         preset = preset_enum.get_member(args.preset)
 
     if args.random_search is not None:
-        search_mode: SearchMode = RandomSearch(args.random_search)
+        search_mode: Literal["grid", "random"] | None = "random"
+        random_samples = args.random_search
     elif args.grid_search:
-        search_mode = GridSearch()
+        search_mode = "grid"
+        random_samples = None
     else:
         search_mode = None
+        random_samples = None
     no_search_preset_names = set(no_search_presets or [])
     search_checked_presets = selected_presets or (
         [preset] if preset is not None else []
@@ -185,6 +189,7 @@ def resolve_cli_selection(
         preset=preset,
         selected_presets=selected_presets,
         search_mode=search_mode,
+        random_samples=random_samples,
         search_keys=search_keys,
         config_overrides=config_overrides,
         search_overrides=search_overrides,

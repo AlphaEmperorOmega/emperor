@@ -60,7 +60,6 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,
 )
-from model_runtime.packages import RandomSearch
 from models.catalog import model_package
 from models.experts.linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
@@ -230,17 +229,6 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_layer_model_cfg.adaptive_augmentation_config.weight_config,
             LayeredWeightedBankDynamicWeightConfig,
         )
-
-    def test_preset_accepts_search_flags(self):
-        configs = model_package("experts/linear_adaptive").presets.get_config(
-            ExperimentPreset.BASELINE,
-            dataset_options.DATASET_OPTIONS_BY_TASK[
-                dataset_options.DEFAULT_EXPERIMENT_TASK
-            ][0],
-            RandomSearch(num_samples=2),
-        )
-
-        self.assertEqual(len(configs), 2)
 
     def test_option_group_build_matches_flat_kwargs(self):
         stack_options = ExpertsStackOptions(

@@ -33,7 +33,6 @@ from emperor.layers import (
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
 from model_runtime.packages import (
-    GridSearch,
     PresetDefinition,
     config_key_to_model_param,
     iter_supported_config_keys,
@@ -833,22 +832,6 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
             search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
             search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
         )
-
-        configs = model_package("linears/linear").presets.get_config(
-            ExperimentPreset.BASELINE,
-            search_mode=GridSearch(),
-            search_keys=["hidden_dim"],
-        )
-        self.assertEqual(
-            {cfg.hidden_dim for cfg in configs},
-            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
-        )
-        with self.assertRaisesRegex(ValueError, "Unknown --search-keys"):
-            model_package("linears/linear").presets.get_config(
-                ExperimentPreset.BASELINE,
-                search_mode=GridSearch(),
-                search_keys=["not_an_axis"],
-            )
 
     def test_dataset_metadata_remains_task_grouped(self):
         self.assertIs(

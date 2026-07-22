@@ -8,7 +8,6 @@ import unittest
 from unittest.mock import patch
 
 import models.parametric.parametric_matrix.dataset_options as dataset_options
-import models.parametric.parametric_matrix.search_space as search_space
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
@@ -30,7 +29,6 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
-from model_runtime.packages import GridSearch, RandomSearch
 from models.catalog import model_package
 from models.parametric.parametric_matrix.config_builder import (
     ParametricMatrixConfigBuilder,
@@ -395,99 +393,11 @@ class TestParametricMatrixModel(unittest.TestCase):
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                search_mode = (
-                    RandomSearch(num_samples=1)
-                    if preset == ExperimentPreset.CONFIG
-                    else None
-                )
-                cfg = presets.get_config(preset, dataset, search_mode)[0]
+                cfg = presets.get_config(preset, dataset)[0]
                 model = Model(cfg)
                 datamodule = RandomImageClassificationDataModule(dataset)
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
-
-    def test_config_search_space_builds_configs(self):
-        configs = model_package("parametric/parametric_matrix").presets.get_config(
-            ExperimentPreset.CONFIG,
-            dataset_options.DATASET_OPTIONS_BY_TASK[
-                dataset_options.DEFAULT_EXPERIMENT_TASK
-            ][0],
-            RandomSearch(num_samples=2),
-        )
-
-        self.assertEqual(len(configs), 2)
-        for cfg in configs:
-            with self.subTest(hidden_dim=cfg.hidden_dim):
-                layer_model_config = (
-                    cfg.experiment_config.model_config.layer_config.layer_model_config
-                )
-                self.assertIsInstance(layer_model_config, ParametricLayerConfig)
-                self.assertIsInstance(
-                    layer_model_config.weight_mixture_config,
-                    MatrixWeightsMixtureConfig,
-                )
-                self.assertTrue(
-                    layer_model_config.bias_mixture_config is None
-                    or isinstance(
-                        layer_model_config.bias_mixture_config,
-                        MatrixBiasMixtureConfig,
-                    )
-                )
-
-    def test_search_keys_unknown_axis_raises(self):
-        with self.assertRaises(ValueError) as ctx:
-            model_package("parametric/parametric_matrix").presets.get_config(
-                ExperimentPreset.CONFIG,
-                dataset_options.DATASET_OPTIONS_BY_TASK[
-                    dataset_options.DEFAULT_EXPERIMENT_TASK
-                ][0],
-                RandomSearch(num_samples=2),
-                search_keys=["bogus_axis"],
-            )
-
-        self.assertIn("Unknown", str(ctx.exception))
-
-    def test_preset_accepts_grid_search_over_unlocked_axis(self):
-        configs = model_package("parametric/parametric_matrix").presets.get_config(
-            ExperimentPreset.PRESET,
-            dataset_options.DATASET_OPTIONS_BY_TASK[
-                dataset_options.DEFAULT_EXPERIMENT_TASK
-            ][0],
-            GridSearch(),
-            search_keys=["learning_rate"],
-        )
-
-        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_LEARNING_RATE))
-        self.assertEqual(
-            {cfg.learning_rate for cfg in configs},
-            set(search_space.SEARCH_SPACE_LEARNING_RATE),
-        )
-
-    def test_config_search_applies_matrix_specific_axes(self):
-        configs = model_package("parametric/parametric_matrix").presets.get_config(
-            ExperimentPreset.CONFIG,
-            dataset_options.DATASET_OPTIONS_BY_TASK[
-                dataset_options.DEFAULT_EXPERIMENT_TASK
-            ][0],
-            GridSearch(),
-            search_keys=["adaptive_bias_option"],
-        )
-
-        self.assertEqual(
-            len(configs), len(search_space.SEARCH_SPACE_ADAPTIVE_BIAS_OPTION)
-        )
-        self.assertEqual(
-            {
-                type(
-                    cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
-                )
-                if cfg.experiment_config.model_config.layer_config.layer_model_config.bias_mixture_config
-                is not None
-                else None
-                for cfg in configs
-            },
-            {None, MatrixBiasMixtureConfig},
-        )
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2

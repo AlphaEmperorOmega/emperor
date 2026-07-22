@@ -2,12 +2,7 @@ import random
 from collections.abc import Sequence
 from pathlib import Path
 
-from model_runtime.packages import (
-    GridSearch,
-    RandomSearch,
-    dataset_name,
-    serialize_config_value,
-)
+from model_runtime.packages import dataset_name, serialize_config_value
 from model_runtime.runs import (
     CheckpointContinuation,
     FilesystemRunArtifacts,
@@ -55,13 +50,13 @@ def _search_spec(mode) -> SearchSpec | None:
         else:
             selections[position] = selection
     axes = tuple(selections) if selections else None
-    if isinstance(mode.search_mode, RandomSearch):
+    if mode.search_mode == "random":
         return SearchSpec(
             mode="random",
             axes=axes,
-            random_samples=mode.search_mode.num_samples,
+            random_samples=mode.random_samples,
         )
-    if isinstance(mode.search_mode, GridSearch):
+    if mode.search_mode == "grid":
         return SearchSpec(mode="grid", axes=axes)
     raise ValueError(f"Unsupported search mode: {mode.search_mode!r}")
 

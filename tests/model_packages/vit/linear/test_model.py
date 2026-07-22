@@ -11,7 +11,6 @@ import torch.nn as nn
 
 import models.vit.linear.config as config
 import models.vit.linear.dataset_options as dataset_options
-import models.vit.linear.search_space as search_space
 from emperor.attention import SelfAttentionProjectionStrategy
 from emperor.embedding.absolute import (
     ImageLearnedPositionalEmbeddingConfig,
@@ -29,7 +28,7 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
-from model_runtime.packages import GridSearch, PresetLock, iter_supported_config_keys
+from model_runtime.packages import PresetLock, iter_supported_config_keys
 from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.config_overrides import print_config_options
@@ -957,43 +956,6 @@ class TestVitLinearModel(unittest.TestCase):
 
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
-    def test_search_applies_flat_encoder_axes(self):
-        configs = model_package("vit/linear").presets.get_config(
-            ExperimentPreset.BASELINE,
-            self._default_dataset(),
-            GridSearch(),
-            search_keys=["hidden_dim", "stack_num_layers"],
-            config_overrides=self._runtime_overrides(batch_size=2),
-        )
-
-        self.assertEqual(
-            len(configs),
-            len(search_space.SEARCH_SPACE_HIDDEN_DIM)
-            * len(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-        self.assertEqual(
-            {cfg.hidden_dim for cfg in configs},
-            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
-        )
-        self.assertEqual(
-            {cfg.experiment_config.encoder_config.num_layers for cfg in configs},
-            set(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-
-    def test_search_keys_unknown_axis_raises(self):
-        for search_key in ("bogus_axis", "encoder_options"):
-            with self.subTest(search_key=search_key):
-                with self.assertRaises(ValueError) as ctx:
-                    model_package("vit/linear").presets.get_config(
-                        ExperimentPreset.BASELINE,
-                        self._default_dataset(),
-                        GridSearch(),
-                        search_keys=[search_key],
-                        config_overrides=self._test_overrides(batch_size=2),
-                    )
-
-                self.assertIn("Unknown", str(ctx.exception))
-
     def test_canonical_flat_overrides_update_top_level_and_nested_config(self):
         dataset = self._default_dataset()
         cfg = model_package("vit/linear").presets.get_config(
@@ -1122,61 +1084,6 @@ class TestVitLinearModel(unittest.TestCase):
                     "layer_norm_position": LayerNormPositionOptions.BEFORE,
                 },
             )
-
-        with self.assertRaises(ValueError):
-            presets.get_config(
-                ExperimentPreset.POST_NORM,
-                self._default_dataset(),
-                GridSearch(),
-                search_keys=["layer_norm_position"],
-                config_overrides=self._runtime_overrides(batch_size=2),
-            )
-
-        with self.assertRaisesRegex(ValueError, "POST_NORM.*layer_norm_position"):
-            presets.get_config(
-                ExperimentPreset.POST_NORM,
-                self._default_dataset(),
-                GridSearch(),
-                search_overrides={
-                    "layer_norm_position": [LayerNormPositionOptions.BEFORE],
-                },
-                config_overrides=self._runtime_overrides(batch_size=2),
-            )
-
-    def test_flat_search_keys_are_supported(self):
-        cases = {
-            "stack_num_layers": (
-                search_space.SEARCH_SPACE_STACK_NUM_LAYERS,
-                lambda cfg: cfg.experiment_config.encoder_config.num_layers,
-            ),
-            "layer_norm_position": (
-                search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
-                lambda cfg: self._encoder_layer_config(cfg).layer_norm_position,
-            ),
-            "image_patch_size": (
-                search_space.SEARCH_SPACE_IMAGE_PATCH_SIZE,
-                lambda cfg: cfg.experiment_config.patch_config.patch_size,
-            ),
-            "attn_num_heads": (
-                search_space.SEARCH_SPACE_ATTN_NUM_HEADS,
-                lambda cfg: self._attention_config(cfg).num_heads,
-            ),
-        }
-
-        for search_key, (expected_values, accessor) in cases.items():
-            with self.subTest(search_key=search_key):
-                configs = model_package("vit/linear").presets.get_config(
-                    ExperimentPreset.BASELINE,
-                    self._default_dataset(),
-                    GridSearch(),
-                    search_keys=[search_key],
-                    config_overrides=self._runtime_overrides(batch_size=2),
-                )
-
-                self.assertEqual(
-                    [accessor(cfg) for cfg in configs],
-                    expected_values,
-                )
 
     def test_model_inherits_classifier_experiment(self):
         cfg = model_package("vit/linear").presets.get_config(

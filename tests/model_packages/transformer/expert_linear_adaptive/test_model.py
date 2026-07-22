@@ -16,13 +16,13 @@ from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.linears import LinearLayer
 from emperor.sampler import RouterModel
 from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
-from model_runtime.packages import GridSearch, PresetLock
+from model_runtime.packages import PresetLock
 from models.catalog import model_package
 from models.training_test_utils import (
     RandomTranslationDataModule,
     tiny_cpu_trainer,
 )
-from models.transformer.expert_linear_adaptive import dataset_options, search_space
+from models.transformer.expert_linear_adaptive import dataset_options
 from models.transformer.expert_linear_adaptive.config_builder import (
     TransformerExpertLinearAdaptiveConfigBuilder,
 )
@@ -244,34 +244,6 @@ class TestTransformerExpertLinearAdaptiveModel(unittest.TestCase):
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
                     _build_config(**overrides)
-
-    def test_adaptive_and_expert_search_axes_build(self):
-        for key, expected in (
-            (
-                "attention_projection_adaptive_weight_option",
-                search_space.SEARCH_SPACE_ATTENTION_PROJECTION_ADAPTIVE_WEIGHT_OPTION,
-            ),
-            ("top_k", search_space.SEARCH_SPACE_TOP_K),
-        ):
-            with self.subTest(key=key):
-                configs = model_package(
-                    "transformer/expert_linear_adaptive"
-                ).presets.get_config(
-                    ExperimentPreset.BASELINE,
-                    self._datasets()[0],
-                    GridSearch(),
-                    search_keys=[key],
-                    config_overrides=self._overrides(),
-                )
-                self.assertEqual(len(configs), len(expected))
-        with self.assertRaises((KeyError, ValueError)):
-            model_package("transformer/expert_linear_adaptive").presets.get_config(
-                ExperimentPreset.BASELINE,
-                self._datasets()[0],
-                GridSearch(),
-                search_keys=["not_an_axis"],
-                config_overrides=self._overrides(),
-            )
 
     def test_all_adaptive_expert_roles_and_routed_gradients(self):
         cfg = self._config(

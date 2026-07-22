@@ -169,14 +169,7 @@ class ModelPackage:
 
     @property
     def presets(self) -> Any:
-        def load_presets() -> Any:
-            presets = self._adapter.load_presets()
-            bind = getattr(presets, "bind_model_package", None)
-            if callable(bind):
-                bind(self)
-            return presets
-
-        return self._initialize_once("_presets", load_presets)
+        return self._initialize_once("_presets", self._adapter.load_presets)
 
     @property
     def default_preset(self) -> Any:

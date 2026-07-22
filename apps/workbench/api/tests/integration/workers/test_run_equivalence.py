@@ -16,7 +16,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.experiments import ExperimentTask
 from emperor.layers import ActivationOptions
-from model_runtime.packages import RandomSearch
 from models.linears.linear.presets import ExperimentPreset
 from models.package_cli import run_model_package_cli
 
@@ -51,7 +50,8 @@ class RunsCliEquivalenceTests(unittest.TestCase):
                 ExperimentPreset.BASELINE,
                 ExperimentPreset.GATING,
             ],
-            search_mode=RandomSearch(num_samples=3),
+            search_mode="random",
+            random_samples=3,
             search_keys=None,
             config_overrides={"stack_num_layers": 4},
             search_overrides={

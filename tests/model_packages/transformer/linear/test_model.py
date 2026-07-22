@@ -9,13 +9,13 @@ import torch
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.translation import TranslationExperiment
 from emperor.linears import LinearLayer
-from model_runtime.packages import GridSearch, PresetLock
+from model_runtime.packages import PresetLock
 from models.catalog import model_package
 from models.training_test_utils import (
     RandomTranslationDataModule,
     tiny_cpu_trainer,
 )
-from models.transformer.linear import dataset_options, search_space
+from models.transformer.linear import dataset_options
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
 from models.transformer.linear.presets import (
@@ -201,27 +201,6 @@ class TestTransformerLinearModel(unittest.TestCase):
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
                     _build_config(**overrides)
-
-    def test_search_axes_apply_and_unknown_axes_fail(self):
-        configs = model_package("transformer/linear").presets.get_config(
-            ExperimentPreset.BASELINE,
-            self._datasets()[0],
-            GridSearch(),
-            search_keys=["attn_num_heads"],
-            config_overrides=self._overrides(model_dim=8),
-        )
-        self.assertEqual(
-            {self._layer_configs(cfg)[0].attention_config.num_heads for cfg in configs},
-            set(search_space.SEARCH_SPACE_ATTN_NUM_HEADS),
-        )
-        with self.assertRaises((KeyError, ValueError)):
-            model_package("transformer/linear").presets.get_config(
-                ExperimentPreset.BASELINE,
-                self._datasets()[0],
-                GridSearch(),
-                search_keys=["not_an_axis"],
-                config_overrides=self._overrides(),
-            )
 
     def test_linear_backend_tying_independence_and_gradients(self):
         model = Model(self._config()).eval()

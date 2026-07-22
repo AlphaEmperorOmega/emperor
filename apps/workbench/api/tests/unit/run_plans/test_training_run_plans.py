@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from model_runtime.packages import GridSearch
 from model_runtime.runs import RunRequest, plan_runs
 from models.catalog import model_package
 from models.package_cli import _search_spec
@@ -311,7 +310,8 @@ class TrainingRunPlanTests(unittest.TestCase):
             self.fail("Expected the linears/linear Model Package.")
         cli_search = _search_spec(
             SimpleNamespace(
-                search_mode=GridSearch(),
+                search_mode="grid",
+                random_samples=None,
                 search_keys=["hidden_dim", "stack_activation"],
                 search_overrides={
                     "hidden_dim": [64, 128],

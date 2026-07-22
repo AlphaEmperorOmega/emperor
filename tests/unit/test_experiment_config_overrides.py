@@ -19,7 +19,7 @@ from emperor.datasets.image.classification import Mnist
 from emperor.halting import HaltingMonitorCallback
 from emperor.layers import ActivationOptions, LayerGateOptions
 from emperor.linears import LinearMonitorCallback
-from model_runtime.packages import GridSearch, iter_supported_config_keys
+from model_runtime.packages import iter_supported_config_keys
 from models.catalog import model_package
 from models.cli_selection import (
     CliSelection,
@@ -114,6 +114,7 @@ class TestExperimentConfigOverrideParsing(
             "preset",
             "selected_presets",
             "search_mode",
+            "random_samples",
             "search_keys",
             "config_overrides",
             "search_overrides",
@@ -602,7 +603,7 @@ class TestExperimentConfigOverrideParsing(
 
         mode = self.resolve_args(args)
 
-        self.assertIsInstance(mode.search_mode, GridSearch)
+        self.assertEqual(mode.search_mode, "grid")
         self.assertEqual(mode.search_overrides["hidden_dim"], [64, 128])
         self.assertEqual(
             mode.search_overrides["stack_activation"],
@@ -669,7 +670,7 @@ class TestExperimentConfigOverrideParsing(
         )
 
         self.assertIs(mode.preset, ParametricVectorExperimentPreset.PRESET)
-        self.assertIsInstance(mode.search_mode, GridSearch)
+        self.assertEqual(mode.search_mode, "grid")
 
     def test_malformed_search_set_raises_argument_error(self):
         args = self.make_parser().parse_args(
@@ -850,27 +851,6 @@ class TestExperimentConfigOverrideApplication(unittest.TestCase):
                     "weight_option": LowRankDynamicWeightConfig,
                 },
             )
-
-    def test_search_overrides_create_expected_configs(self):
-        configs = ExperimentPresets().get_config(
-            ExperimentPreset.SINGLE_MODEL_WEIGHT,
-            Mnist,
-            search_mode=GridSearch(),
-            search_overrides={
-                "hidden_dim": [64, 128],
-                "stack_num_layers": [2, 4],
-            },
-        )
-
-        self.assertEqual(len(configs), 4)
-        self.assertEqual(
-            sorted({cfg.hidden_dim for cfg in configs}),
-            [64, 128],
-        )
-        self.assertEqual(
-            sorted({cfg.experiment_config.model_config.num_layers for cfg in configs}),
-            [2, 4],
-        )
 
     def test_global_adaptive_generator_stack_overrides_apply(self):
         cfg = ExperimentPresets().get_config(

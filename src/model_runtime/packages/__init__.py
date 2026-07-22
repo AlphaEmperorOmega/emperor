@@ -44,12 +44,8 @@ if TYPE_CHECKING:
     from model_runtime.packages.presets import (
         BuilderBackedExperimentPresetsBase,
         ExperimentPresetsBase,
-        GridSearch,
         PresetDefinition,
         PresetLock,
-        RandomSearch,
-        SearchMode,
-        create_search_space,
     )
 
 __all__ = [
@@ -58,22 +54,18 @@ __all__ = [
     "BuilderBackedExperimentPresetsBase",
     "ConfigValueError",
     "ExperimentPresetsBase",
-    "GridSearch",
     "InspectionConstructionLimits",
     "ModelIdentity",
     "ModelMetadata",
     "ModelPackage",
     "PresetDefinition",
     "PresetLock",
-    "RandomSearch",
-    "SearchMode",
     "abstract_config_class_error",
     "canonical_config_key",
     "config_key_to_flag",
     "config_key_to_model_param",
     "config_key_to_param",
     "configuration_field_metadata",
-    "create_search_space",
     "dataset_class_name_to_cli_name",
     "dataset_cli_name",
     "dataset_label",
@@ -132,12 +124,8 @@ _METADATA_EXPORTS = {
 _PRESET_EXPORTS = {
     "BuilderBackedExperimentPresetsBase",
     "ExperimentPresetsBase",
-    "GridSearch",
     "PresetDefinition",
     "PresetLock",
-    "RandomSearch",
-    "SearchMode",
-    "create_search_space",
 }
 
 

@@ -12,13 +12,13 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.experiments.translation import TranslationExperiment
 from emperor.linears import LinearLayer
-from model_runtime.packages import GridSearch, PresetLock
+from model_runtime.packages import PresetLock
 from models.catalog import model_package
 from models.training_test_utils import (
     RandomTranslationDataModule,
     tiny_cpu_trainer,
 )
-from models.transformer.linear_adaptive import dataset_options, search_space
+from models.transformer.linear_adaptive import dataset_options
 from models.transformer.linear_adaptive.config_builder import (
     TransformerLinearAdaptiveConfigBuilder,
 )
@@ -216,27 +216,6 @@ class TestTransformerLinearAdaptiveModel(unittest.TestCase):
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
                     _build_config(**overrides)
-
-    def test_adaptive_search_axis_builds_each_weight_option(self):
-        configs = model_package("transformer/linear_adaptive").presets.get_config(
-            ExperimentPreset.BASELINE,
-            self._datasets()[0],
-            GridSearch(),
-            search_keys=["projection_adaptive_weight_option"],
-            config_overrides=self._overrides(),
-        )
-        self.assertEqual(
-            len(configs),
-            len(search_space.SEARCH_SPACE_PROJECTION_ADAPTIVE_WEIGHT_OPTION),
-        )
-        with self.assertRaises((KeyError, ValueError)):
-            model_package("transformer/linear_adaptive").presets.get_config(
-                ExperimentPreset.BASELINE,
-                self._datasets()[0],
-                GridSearch(),
-                search_keys=["not_an_axis"],
-                config_overrides=self._overrides(),
-            )
 
     def test_adaptive_paths_role_overrides_and_dynamic_gradients(self):
         cfg = self._config(

@@ -13,7 +13,6 @@ import torch.nn as nn
 
 import models.gpt.linear.config as config
 import models.gpt.linear.dataset_options as dataset_options
-import models.gpt.linear.search_space as search_space
 from emperor.attention import SelfAttentionProjectionStrategy
 from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
@@ -34,9 +33,7 @@ from emperor.transformer import (
     TransformerDecoderLayerState,
 )
 from model_runtime.packages import (
-    GridSearch,
     PresetLock,
-    RandomSearch,
     iter_supported_config_keys,
 )
 from models.catalog import model_package
@@ -941,72 +938,6 @@ class TestGptLinearModel(unittest.TestCase):
                     ),
                 )
 
-    def test_random_search_and_unknown_axes(self):
-        configs = model_package("gpt/linear").presets.get_config(
-            ExperimentPreset.BASELINE,
-            self._default_dataset(),
-            RandomSearch(num_samples=2),
-        )
-        self.assertEqual(len(configs), 2)
-        for search_key in (
-            "bogus_axis",
-            "decoder_options",
-            "embedding_options",
-        ):
-            with self.subTest(search_key=search_key):
-                with self.assertRaisesRegex(ValueError, "Unknown"):
-                    model_package("gpt/linear").presets.get_config(
-                        ExperimentPreset.BASELINE,
-                        self._default_dataset(),
-                        RandomSearch(num_samples=2),
-                        search_keys=[search_key],
-                    )
-
-    def test_grid_search_applies_decoder_axes(self):
-        configs = model_package("gpt/linear").presets.get_config(
-            ExperimentPreset.BASELINE,
-            self._default_dataset(),
-            GridSearch(),
-            search_keys=["hidden_dim", "stack_num_layers"],
-        )
-        self.assertEqual(
-            len(configs),
-            len(search_space.SEARCH_SPACE_HIDDEN_DIM)
-            * len(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-        self.assertEqual(
-            {cfg.hidden_dim for cfg in configs},
-            set(search_space.SEARCH_SPACE_HIDDEN_DIM),
-        )
-        self.assertEqual(
-            {self._decoder_stack_config(cfg).num_layers for cfg in configs},
-            set(search_space.SEARCH_SPACE_STACK_NUM_LAYERS),
-        )
-
-    def test_flat_search_keys_are_supported(self):
-        cases = {
-            "layer_norm_position": (
-                search_space.SEARCH_SPACE_LAYER_NORM_POSITION,
-                lambda cfg: self._decoder_layer_config(cfg).layer_norm_position,
-            ),
-            "attn_num_heads": (
-                search_space.SEARCH_SPACE_ATTN_NUM_HEADS,
-                lambda cfg: self._attention_config(cfg).num_heads,
-            ),
-        }
-        for search_key, (expected_values, accessor) in cases.items():
-            with self.subTest(search_key=search_key):
-                configs = model_package("gpt/linear").presets.get_config(
-                    ExperimentPreset.BASELINE,
-                    self._default_dataset(),
-                    GridSearch(),
-                    search_keys=[search_key],
-                )
-                self.assertEqual(
-                    [accessor(cfg) for cfg in configs],
-                    expected_values,
-                )
-
     def test_unlocked_flat_and_grouped_overrides_update_nested_config(self):
         cfg = model_package("gpt/linear").presets.get_config(
             ExperimentPreset.BASELINE,
@@ -1077,13 +1008,6 @@ class TestGptLinearModel(unittest.TestCase):
                 config_overrides={
                     "layer_norm_position": LayerNormPositionOptions.AFTER,
                 },
-            )
-        with self.assertRaises(ValueError):
-            presets.get_config(
-                ExperimentPreset.PRE_NORM,
-                self._default_dataset(),
-                GridSearch(),
-                search_keys=["layer_norm_position"],
             )
 
     def test_presets_wire_normalization_position_embedding_and_residuals(self):

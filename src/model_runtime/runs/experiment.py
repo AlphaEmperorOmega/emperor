@@ -258,11 +258,7 @@ class ExperimentBase:
             configs = self.preset_generator.get_config(
                 preset,
                 dataset_type,
-                None,
-                log_folder,
-                None,
                 config_overrides=run_overrides,
-                search_overrides={},
             )
             if len(configs) != 1:
                 raise ValueError(
