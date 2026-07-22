@@ -26,7 +26,6 @@ if TYPE_CHECKING:
         IndependentAttentionConfig | MixtureOfAttentionHeadsConfig
     )
 
-
 @dataclass
 class TransformerEncoderLayerConfig(ConfigBase):
     embedding_dim: int | None = optional_field(
