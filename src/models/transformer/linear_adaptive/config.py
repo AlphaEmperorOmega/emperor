@@ -1,3 +1,30 @@
+from emperor.augmentations.adaptive_parameters import (
+    AdditiveDynamicBiasConfig,  # noqa: F401
+    AffineTransformDynamicBiasConfig,  # noqa: F401
+    AntiDynamicDiagonalConfig,  # noqa: F401
+    AxisMaskConfig,
+    CombinedDynamicDiagonalConfig,  # noqa: F401
+    DiagonalAxisMaskConfig,  # noqa: F401
+    DualModelDynamicWeightConfig,  # noqa: F401
+    DynamicBiasConfig,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
+    GeneratorDynamicBiasConfig,  # noqa: F401
+    HypernetworkDynamicWeightConfig,  # noqa: F401
+    LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
+    LowRankDynamicWeightConfig,  # noqa: F401
+    MultiplicativeDynamicBiasConfig,  # noqa: F401
+    OuterProductMaskConfig,  # noqa: F401
+    PerAxisScoreMaskConfig,  # noqa: F401
+    SigmoidGatedDynamicBiasConfig,  # noqa: F401
+    SingleModelDynamicWeightConfig,  # noqa: F401
+    SoftWeightedBankDynamicWeightConfig,  # noqa: F401
+    StandardDynamicDiagonalConfig,  # noqa: F401
+    TanhGatedDynamicBiasConfig,  # noqa: F401
+    TopSliceAxisMaskConfig,  # noqa: F401
+    WeightedBankDynamicBiasConfig,  # noqa: F401
+    WeightInformedScoreAxisMaskConfig,  # noqa: F401
+)
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
@@ -26,10 +53,7 @@ from emperor.memory import (
 BATCH_SIZE = 64
 LEARNING_RATE = 1.0
 VOCAB_SIZE = 8192
-INPUT_DIM = VOCAB_SIZE
-OUTPUT_DIM = VOCAB_SIZE
 MODEL_DIM = 128
-HIDDEN_DIM = MODEL_DIM
 SOURCE_SEQUENCE_LENGTH = 64
 TARGET_SEQUENCE_LENGTH = 64
 SEQUENCE_LENGTH = 64
@@ -55,7 +79,7 @@ ATTN_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.D
 ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 ### Attention Projection Gate Options
-ATTN_GATE_FLAG: bool = False
+ATTN_STACK_GATE_FLAG: bool = False
 ATTN_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 ATTN_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 
@@ -72,7 +96,7 @@ ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
 ATTN_GATE_STACK_BIAS_FLAG: bool | None = True
 
 ### Attention Projection Halting Options
-ATTN_HALTING_FLAG: bool = False
+ATTN_STACK_HALTING_FLAG: bool = False
 ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_HALTING_THRESHOLD: float = 0.999
 ATTN_HALTING_DROPOUT: float = 0.0
@@ -123,7 +147,7 @@ ATTN_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 #### Attention Projection Recurrent Gate Options
-ATTN_RECURRENT_GATE_FLAG: bool = False
+ATTN_RECURRENT_STACK_GATE_FLAG: bool = False
 ATTN_RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 ATTN_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 
@@ -142,7 +166,7 @@ ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #### Attention Projection Recurrent Halting Options
-ATTN_RECURRENT_HALTING_FLAG: bool = False
+ATTN_RECURRENT_STACK_HALTING_FLAG: bool = False
 ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_RECURRENT_HALTING_THRESHOLD: float = 0.999
 ATTN_RECURRENT_HALTING_DROPOUT: float = 0.0
@@ -179,7 +203,7 @@ FF_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEF
 FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 ## Feed-Forward Gate Options
-FF_GATE_FLAG: bool = False
+FF_STACK_GATE_FLAG: bool = False
 FF_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 FF_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 
@@ -196,7 +220,7 @@ FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
 FF_GATE_STACK_BIAS_FLAG: bool | None = True
 
 ## Feed-Forward Halting Options
-FF_HALTING_FLAG: bool = False
+FF_STACK_HALTING_FLAG: bool = False
 FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_HALTING_THRESHOLD: float = 0.999
 FF_HALTING_DROPOUT: float = 0.0
@@ -247,7 +271,7 @@ FF_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 ### Feed-Forward Recurrent Gate Options
-FF_RECURRENT_GATE_FLAG: bool = False
+FF_RECURRENT_STACK_GATE_FLAG: bool = False
 FF_RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 FF_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 
@@ -266,7 +290,7 @@ FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ### Feed-Forward Recurrent Halting Options
-FF_RECURRENT_HALTING_FLAG: bool = False
+FF_RECURRENT_STACK_HALTING_FLAG: bool = False
 FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_RECURRENT_HALTING_THRESHOLD: float = 0.999
 FF_RECURRENT_HALTING_DROPOUT: float = 0.0
@@ -306,17 +330,22 @@ STACK_GATE_FLAG = False
 STACK_HALTING_FLAG = False
 MEMORY_FLAG = False
 RECURRENT_FLAG = False
-RECURRENT_GATE_FLAG = False
-RECURRENT_HALTING_FLAG = False
+RECURRENT_STACK_GATE_FLAG = False
+RECURRENT_STACK_HALTING_FLAG = False
 RECURRENT_MAX_STEPS = 2
 STACK_RESIDUAL_CONNECTION_OPTION = None
 RECURRENT_RESIDUAL_CONNECTION_OPTION = None
 
 # Adaptive Parameter Options
-WEIGHT_OPTION = None
-BIAS_OPTION = None
-DIAGONAL_OPTION = None
-ROW_MASK_OPTION = None
+PROJECTION_ADAPTIVE_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
+PROJECTION_ADAPTIVE_BIAS_OPTION: type[DynamicBiasConfig] | None = None
+PROJECTION_ADAPTIVE_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+PROJECTION_ADAPTIVE_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+
+FEED_FORWARD_ADAPTIVE_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
+FEED_FORWARD_ADAPTIVE_BIAS_OPTION: type[DynamicBiasConfig] | None = None
+FEED_FORWARD_ADAPTIVE_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+FEED_FORWARD_ADAPTIVE_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
 
 # Trainer
 NUM_EPOCHS = 30

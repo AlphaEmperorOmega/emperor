@@ -34,7 +34,7 @@ SEARCH_SPACE_ENCODER_LAYER_NORM_POSITION = [
     LayerNormPositionOptions.AFTER,
 ]
 SEARCH_SPACE_DECODER_LAYER_NORM_POSITION = SEARCH_SPACE_ENCODER_LAYER_NORM_POSITION
-SEARCH_SPACE_WEIGHT_OPTION = [
+SEARCH_SPACE_PROJECTION_ADAPTIVE_WEIGHT_OPTION = [
     None,
     SingleModelDynamicWeightConfig,
     DualModelDynamicWeightConfig,
@@ -43,7 +43,15 @@ SEARCH_SPACE_WEIGHT_OPTION = [
     LayeredWeightedBankDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 ]
-SEARCH_SPACE_BIAS_OPTION = [
+SEARCH_SPACE_FEED_FORWARD_ADAPTIVE_WEIGHT_OPTION = [
+    None,
+    DualModelDynamicWeightConfig,
+    LowRankDynamicWeightConfig,
+    HypernetworkDynamicWeightConfig,
+    LayeredWeightedBankDynamicWeightConfig,
+    SoftWeightedBankDynamicWeightConfig,
+]
+SEARCH_SPACE_PROJECTION_ADAPTIVE_BIAS_OPTION = [
     None,
     AffineTransformDynamicBiasConfig,
     AdditiveDynamicBiasConfig,
@@ -53,13 +61,19 @@ SEARCH_SPACE_BIAS_OPTION = [
     TanhGatedDynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
 ]
-SEARCH_SPACE_DIAGONAL_OPTION = [
+SEARCH_SPACE_FEED_FORWARD_ADAPTIVE_BIAS_OPTION = (
+    SEARCH_SPACE_PROJECTION_ADAPTIVE_BIAS_OPTION
+)
+SEARCH_SPACE_PROJECTION_ADAPTIVE_DIAGONAL_OPTION = [
     None,
     StandardDynamicDiagonalConfig,
     AntiDynamicDiagonalConfig,
     CombinedDynamicDiagonalConfig,
 ]
-SEARCH_SPACE_ROW_MASK_OPTION = [
+SEARCH_SPACE_FEED_FORWARD_ADAPTIVE_DIAGONAL_OPTION = (
+    SEARCH_SPACE_PROJECTION_ADAPTIVE_DIAGONAL_OPTION
+)
+SEARCH_SPACE_PROJECTION_ADAPTIVE_ROW_MASK_OPTION = [
     None,
     DiagonalAxisMaskConfig,
     OuterProductMaskConfig,
@@ -67,3 +81,6 @@ SEARCH_SPACE_ROW_MASK_OPTION = [
     TopSliceAxisMaskConfig,
     WeightInformedScoreAxisMaskConfig,
 ]
+SEARCH_SPACE_FEED_FORWARD_ADAPTIVE_ROW_MASK_OPTION = (
+    SEARCH_SPACE_PROJECTION_ADAPTIVE_ROW_MASK_OPTION
+)

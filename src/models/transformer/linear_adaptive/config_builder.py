@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ._building import build_experiment_config
 from ._validation import validate_runtime
-from .runtime_defaults import DEFAULT_RUNTIME, runtime_from_flat
+from .runtime_defaults import DEFAULT_RUNTIME
 from .runtime_options import RuntimeOptions
 
 if TYPE_CHECKING:
@@ -12,12 +12,10 @@ if TYPE_CHECKING:
 
 
 class TransformerLinearAdaptiveConfigBuilder:
-    def __init__(
-        self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME, **options: Any
-    ) -> None:
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
         if not isinstance(runtime, RuntimeOptions):
             raise TypeError("runtime must be a RuntimeOptions value")
-        self.runtime = runtime_from_flat(options, runtime) if options else runtime
+        self.runtime = runtime
         validate_runtime(self.runtime)
 
     def build(self) -> ModelConfig:
