@@ -13,7 +13,7 @@ from emperor.linears import LinearLayer
 from emperor.sampler import RouterModel
 from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
 from model_runtime.packages import GridSearch, PresetLock
-from models.catalog import catalog_entry
+from models.catalog import model_package
 from models.training_test_utils import (
     RandomTranslationDataModule,
     tiny_cpu_trainer,
@@ -26,12 +26,18 @@ from models.transformer.expert_linear.model import Model
 from models.transformer.expert_linear.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 
 _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("transformer/expert_linear").bind_runtime_defaults(
+        runtime_defaults
+    )
+    return TransformerExpertLinearConfigBuilder(runtime=runtime).build()
 
 
 class TestTransformerExpertLinearModel(unittest.TestCase):
@@ -57,7 +63,7 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
         ]
 
     def _config(self, preset=ExperimentPreset.BASELINE, dataset=None, **overrides):
-        return ExperimentPresets().get_config(
+        return model_package("transformer/expert_linear").presets.get_config(
             preset,
             dataset or self._datasets()[0],
             config_overrides=self._overrides(**overrides),
@@ -83,25 +89,18 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
 
     def test_public_surface_catalog_identity_and_translation_task(self):
         package = importlib.import_module("models.transformer.expert_linear")
-        self.assertEqual(
-            package.__all__,
-            [
-                "Experiment",
-                "ExperimentConfig",
-                "ExperimentPreset",
-                "ExperimentPresets",
-                "Model",
-                "TransformerExpertLinearConfigBuilder",
-            ],
-        )
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
         self.assertTrue(issubclass(Model, TranslationExperiment))
+        experiment = Experiment(
+            model_package=model_package("transformer/expert_linear")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "transformer/expert_linear",
         )
-        self.assertEqual(
-            catalog_entry("transformer/expert_linear").module_path,
-            "models.transformer.expert_linear",
+        self.assertIs(
+            package.MODEL_PACKAGE,
+            model_package("transformer/expert_linear"),
         )
         self.assertEqual(
             [dataset.language_pair for dataset in self._datasets()],
@@ -123,12 +122,14 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.transformer.expert_linear.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
         self.assertEqual(package.catalog_key, "transformer/expert_linear")
@@ -136,7 +137,7 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
         self.assertIsNone(plan.search)
         self.assertEqual(
             plan.datasets,
-            tuple(dataset.__name__ for dataset in self._datasets()),
+            (self._datasets()[0].__name__,),
         )
 
     def test_all_presets_build_forward_and_keep_attention_roles(self):
@@ -145,7 +146,7 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
             list(range(1, 29)),
         )
         source, target = self._ids()
-        presets = ExperimentPresets()
+        presets = model_package("transformer/expert_linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 cfg = self._config(preset)
@@ -172,7 +173,7 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
     def test_baseline_builds_for_both_multi30k_directions(self):
         for dataset in self._datasets():
             with self.subTest(dataset=dataset.__name__):
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("transformer/expert_linear").presets.get_config(
                     ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides={
@@ -182,8 +183,8 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
                         "decoder_num_layers": 1,
                         "attn_num_heads": 2,
                         "ff_stack_hidden_dim": 8,
-                        "expert_num_experts": 4,
-                        "expert_top_k": 2,
+                        "num_experts": 4,
+                        "top_k": 2,
                         "dropout_probability": 0.0,
                     },
                 )[0]
@@ -208,21 +209,21 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
             ("ff_num_layers", {"ff_num_layers": 0}, ValueError),
             ("dropout_probability", {"dropout_probability": -0.1}, ValueError),
             ("dropout_probability", {"dropout_probability": 1.1}, ValueError),
-            ("expert_num_experts", {"expert_num_experts": 0}, ValueError),
-            ("expert_top_k", {"expert_top_k": 0}, ValueError),
+            ("num_experts", {"num_experts": 0}, ValueError),
+            ("top_k", {"top_k": 0}, ValueError),
             (
-                "expert_top_k",
-                {"expert_num_experts": 2, "expert_top_k": 3},
+                "top_k",
+                {"num_experts": 2, "top_k": 3},
                 ValueError,
             ),
             (
-                "expert_switch_loss_weight",
-                {"expert_switch_loss_weight": -0.1},
+                "switch_loss_weight",
+                {"switch_loss_weight": -0.1},
                 ValueError,
             ),
             (
-                "expert_capacity_factor",
-                {"expert_capacity_factor": -0.1},
+                "capacity_factor",
+                {"capacity_factor": -0.1},
                 ValueError,
             ),
             ("batch_size", {"batch_size": True}, TypeError),
@@ -231,19 +232,19 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
         for field, overrides, error in cases:
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
-                    TransformerExpertLinearConfigBuilder(**overrides)
+                    _build_config(**overrides)
 
     def test_expert_search_axes_apply_and_unknown_axes_fail(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("transformer/expert_linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._datasets()[0],
             GridSearch(),
-            search_keys=["expert_top_k"],
+            search_keys=["top_k"],
             config_overrides=self._overrides(),
         )
-        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_EXPERT_TOP_K))
+        self.assertEqual(len(configs), len(search_space.SEARCH_SPACE_TOP_K))
         with self.assertRaises((KeyError, ValueError)):
-            ExperimentPresets().get_config(
+            model_package("transformer/expert_linear").presets.get_config(
                 ExperimentPreset.BASELINE,
                 self._datasets()[0],
                 GridSearch(),

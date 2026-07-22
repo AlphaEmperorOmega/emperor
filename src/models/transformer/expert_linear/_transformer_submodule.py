@@ -60,7 +60,7 @@ def _gate_config(
     stack_options = path_options.stack_options
     if recurrent:
         options = path_options.recurrent_controller_options
-        if not options.recurrent_gate_flag:
+        if not options.recurrent_stack_gate_flag:
             return None
         return GateConfig(
             option=options.recurrent_gate_option,
@@ -91,7 +91,7 @@ def _halting_config(
     stack_options = path_options.stack_options
     if recurrent:
         options = path_options.recurrent_controller_options
-        if not options.recurrent_halting_flag:
+        if not options.recurrent_stack_halting_flag:
             return None
         return options.recurrent_halting_option(
             threshold=options.recurrent_halting_threshold,
