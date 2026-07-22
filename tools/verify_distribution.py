@@ -29,13 +29,9 @@ PROJECT_FILES = (
     "LICENSE",
     "MANIFEST.in",
     "README.md",
-    "download_logs.sh",
     "env.ps1",
-    "env.sh",
-    "experiment.sh",
     "mise.toml",
     "pyproject.toml",
-    "run_test.sh",
 )
 PROJECT_TREES = (
     "constraints",
@@ -702,11 +698,7 @@ def _verify_sdist(sdist: Path) -> dict[str, int]:
         raise VerificationError(f"Source distribution is missing: {missing}")
     required_files = {
         "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
-        "download_logs.sh",
         "env.ps1",
-        "env.sh",
-        "experiment.sh",
-        "run_test.sh",
     }
     missing_files = sorted(required_files.difference(names))
     if missing_files:

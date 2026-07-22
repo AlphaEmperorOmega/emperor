@@ -303,14 +303,10 @@ class DistributionMetadataVerificationTests(unittest.TestCase):
 
 
 class SourceDistributionVerificationTests(unittest.TestCase):
-    def test_root_sdist_requires_runtime_scripts(self) -> None:
+    def test_root_sdist_requires_current_runtime_files(self) -> None:
         members = {
             "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
-            "download_logs.sh",
             "env.ps1",
-            "env.sh",
-            "experiment.sh",
-            "run_test.sh",
             "src/emperor/__init__.py",
             "src/model_runtime/__init__.py",
             "src/models/__init__.py",
@@ -327,13 +323,9 @@ class SourceDistributionVerificationTests(unittest.TestCase):
         self.assertEqual(manifest["models"], 1)
         self.assertEqual(manifest["model_runtime"], 1)
 
-    def test_root_sdist_rejects_a_missing_runtime_script(self) -> None:
+    def test_root_sdist_rejects_a_missing_runtime_file(self) -> None:
         members = {
             "constraints/python-3.13-linux-x86_64-cuda-legacy.txt",
-            "download_logs.sh",
-            "env.ps1",
-            "experiment.sh",
-            "run_test.sh",
             "src/emperor/__init__.py",
             "src/model_runtime/__init__.py",
             "src/models/__init__.py",
@@ -345,7 +337,7 @@ class SourceDistributionVerificationTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 verify_distribution.VerificationError,
-                "env.sh",
+                "env.ps1",
             ):
                 verify_distribution._verify_sdist(sdist)
 
