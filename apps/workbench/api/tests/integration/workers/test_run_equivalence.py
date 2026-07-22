@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.experiments.tasks import ExperimentTask
+from emperor.experiments import ExperimentTask
 from emperor.layers import ActivationOptions
 from model_runtime.packages import RandomSearch
 from models.linears.linear.presets import ExperimentPreset
