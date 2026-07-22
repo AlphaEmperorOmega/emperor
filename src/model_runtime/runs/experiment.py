@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import traceback
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -11,18 +10,12 @@ from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from emperor.config import BaseOptions, ModelConfig
-from emperor.datasets.image.classification import Cifar10, Cifar100, FashionMNIST, Mnist
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
-    resolve_experiment_task,
 )
 from model_runtime.packages import ModelPackage
-from model_runtime.packages.definition import model_package_from_module_path
-from model_runtime.packages.identity import split_model_id
-from model_runtime.packages.metadata import load_model_metadata_from_module_path
 from model_runtime.packages.presets import (
-    ExperimentPresetsBase,
     SearchMode,
 )
 from model_runtime.runs.artifacts import (
@@ -32,13 +25,6 @@ from model_runtime.runs.artifacts import (
     validate_artifact_namespace,
     write_run_result,
 )
-
-
-def _public_model_id_from_package(package: str) -> str:
-    model_package = model_package_from_module_path(package)
-    if model_package is not None:
-        return model_package.catalog_key
-    return package.rsplit(".", 1)[-1]
 
 
 def _validate_log_folder(log_folder: str | None) -> str | None:
@@ -69,95 +55,37 @@ class ExperimentBase:
         preset: BaseOptions | None = None,
         experiment_task: ExperimentTask | str | None = None,
         *,
-        model_package: ModelPackage | None = None,
+        model_package: ModelPackage,
         run_artifacts: FilesystemRunArtifacts | None = None,
     ) -> None:
+        if not isinstance(model_package, ModelPackage):
+            raise TypeError("Runs require an explicit ModelPackage.")
         self.model_package = model_package
         self.run_artifacts = run_artifacts
         self.preset = preset
         self.num_epochs = self._num_epochs()
         self.experiment_task = self._resolve_experiment_task(experiment_task)
         self.dataset_options = self._dataset_options_for_task(self.experiment_task)
-        self.model_type = self._model_type()
-        self.preset_generator = self._preset_generator_instance()
-        self.preset_enum = self._experiment_preset_enum()
+        self.preset_generator = model_package.presets
+        self.preset_enum = model_package.preset_type
 
     def _num_epochs(self) -> int:
         return 10
 
-    def _dataset_options(self) -> list:
-        return [Mnist, FashionMNIST, Cifar10, Cifar100]
-
-    def _model_package(self) -> ModelPackage | None:
-        return self.model_package or model_package_from_module_path(
-            type(self).__module__
-        )
-
     def _resolve_experiment_task(
         self,
         experiment_task: ExperimentTask | str | None,
-    ) -> ExperimentTask | None:
-        metadata = self._model_metadata()
-        if metadata is None:
-            return resolve_experiment_task(experiment_task)
-        if experiment_task is None:
-            return metadata.default_experiment_task
-        return resolve_experiment_task(experiment_task)
+    ) -> ExperimentTask:
+        return self.model_package.resolve_experiment_task(experiment_task)
 
     def _dataset_options_for_task(
         self,
-        experiment_task: ExperimentTask | None,
+        experiment_task: ExperimentTask,
     ) -> list:
-        metadata = self._model_metadata()
-        if metadata is None:
-            return self._dataset_options()
-        return metadata.dataset_options_for_task(experiment_task)
-
-    def _model_metadata(self):
-        model_package = self._model_package()
-        if model_package is not None:
-            return model_package.metadata
-        package = type(self).__module__.rsplit(".", 1)[0]
-        try:
-            return load_model_metadata_from_module_path(package)
-        except ModuleNotFoundError as exc:
-            expected_metadata_modules = {
-                f"{package}.config",
-                f"{package}.dataset_options",
-                f"{package}.monitor_options",
-                f"{package}.search_space",
-            }
-            if (
-                model_package_from_module_path(package) is not None
-                or exc.name not in expected_metadata_modules
-            ):
-                raise
-            return None
-
-    def _model_type(self) -> type:
-        raise NotImplementedError(
-            "The method '_model_type' must be implemented in the subclass."
-        )
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        raise NotImplementedError(
-            "The method '_preset_generator_instance' must be implemented in the "
-            "subclass."
-        )
-
-    def _experiment_preset_enum(self) -> type[BaseOptions]:
-        raise NotImplementedError(
-            "The method '_experiment_preset_enum' must be implemented in the subclass."
-        )
+        return self.model_package.metadata.dataset_options_for_task(experiment_task)
 
     def _load_trainer_config(self, config_overrides: dict | None = None) -> dict:
-        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
-        model_package = model_package_from_module_path(package)
-        config = (
-            model_package.runtime_defaults
-            if model_package is not None
-            else importlib.import_module(f"{package}.config")
-        )
+        config = self.model_package.runtime_defaults
         config_overrides = config_overrides or {}
         return {
             "trainer_args": self._trainer_args(config, config_overrides),
@@ -257,22 +185,10 @@ class ExperimentBase:
         return config_overrides.get(key.lower(), getattr(config, key, default))
 
     def _load_runtime_config(self, config_overrides: dict | None = None) -> dict:
-        package = type(self.preset_generator).__module__.rsplit(".", 1)[0]
-        model_package = model_package_from_module_path(package)
-        if model_package is not None:
-            config = model_package.runtime_defaults
-        else:
-            try:
-                config = importlib.import_module(f"{package}.config")
-            except ModuleNotFoundError as exc:
-                if exc.name != f"{package}.config":
-                    raise
-                config = None
+        config = self.model_package.runtime_defaults
         config_overrides = config_overrides or {}
 
         def runtime_value(key: str, default):
-            if config is None:
-                return config_overrides.get(key.lower(), default)
             return self._trainer_config_value(config, config_overrides, key, default)
 
         return {
@@ -519,12 +435,7 @@ class ExperimentBase:
             seed_everything(int(runtime_config["seed"]), workers=True)
         dataset = self._build_dataset(training_run)
         self._configure_dataset(dataset, runtime_config)
-        model_package = self._model_package()
-        model = (
-            model_package.build_model(training_run.config)
-            if model_package is not None
-            else self.model_type(training_run.config)
-        )
+        model = self.model_package.build_model(training_run.config)
         if model_validator is not None:
             model_validator(model)
         artifact_store = self._artifact_store(log_folder)
@@ -703,7 +614,7 @@ class ExperimentBase:
             else None
         )
         return {
-            **self._public_model_identity_payload(),
+            **self.model_package.identity.to_payload(),
             "experimentTask": experiment_task,
             "dataset": training_run.dataset_type.__name__,
             "preset": self._preset_cli_name(training_run.preset),
@@ -774,21 +685,7 @@ class ExperimentBase:
         return FilesystemRunArtifacts(root=Path("logs"), namespace=log_folder)
 
     def _model_identity(self):
-        model_package = self._model_package()
-        if model_package is not None:
-            return model_package.identity
-        return self._public_model_id()
-
-    def _public_model_id(self) -> str:
-        package = type(self).__module__.rsplit(".", 1)[0]
-        return _public_model_id_from_package(package)
-
-    def _public_model_identity_payload(self) -> dict[str, str]:
-        model_id = self._public_model_id()
-        identity = split_model_id(model_id)
-        if identity is not None:
-            return identity.to_payload()
-        return {"modelType": "models", "model": model_id}
+        return self.model_package.identity
 
 
 __all__ = ["ExperimentBase", "TrainingRun"]

@@ -226,7 +226,7 @@ def _parse_search(
         if axis is not None:
             axis_key = axis.key
             model_param = config_key_to_model_param(axis.key)
-            parse_module = package.metadata.search_space_module
+            parse_module = package.metadata.search_space
             parse_key = axis.search_key
             default_values = axis.values
             allowed_values: tuple[Any, ...] | None = axis.values
@@ -506,6 +506,8 @@ def plan_runs(
     random_source: RandomSource | None = None,
     budget: PlanningBudget | None = None,
 ) -> RunPlan:
+    if not isinstance(package, ModelPackage):
+        raise TypeError("Runs require a selected ModelPackage.")
     planning_budget = budget or PlanningBudget()
     resolved = _resolve_request(package, request, planning_budget)
     _reject_plan_budget(_planned_run_count(resolved), planning_budget)
@@ -586,6 +588,8 @@ def accept_run_plan(
     *,
     budget: PlanningBudget | None = None,
 ) -> RunPlan:
+    if not isinstance(package, ModelPackage):
+        raise TypeError("Runs require a selected ModelPackage.")
     planning_budget = budget or PlanningBudget()
     resolved = _resolve_request(package, request, planning_budget)
     if not submitted_runs:

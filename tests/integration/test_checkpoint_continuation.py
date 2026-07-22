@@ -22,6 +22,7 @@ from model_runtime.runs import (
     execute_runs,
     plan_runs,
 )
+from model_runtime.runs.experiment import ExperimentBase
 from models.catalog import model_package
 
 
@@ -115,7 +116,7 @@ class CheckpointContinuationIntegrationTests(unittest.TestCase):
             )
             source_probe = _ContinuationProbe()
             with patch.object(
-                package.experiment_type,
+                ExperimentBase,
                 "_build_dataset",
                 lambda _self, run: _InMemoryMnist(run.config.batch_size),
             ):

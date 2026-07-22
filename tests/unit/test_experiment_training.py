@@ -6,6 +6,7 @@ import unittest
 from collections.abc import Sequence
 from enum import Enum
 from pathlib import Path
+from types import ModuleType
 
 from lightning.pytorch.callbacks import Callback
 
@@ -14,13 +15,15 @@ from emperor.experiments import ExperimentTask
 from emperor.monitoring import MonitorOption
 from model_runtime.packages import (
     ExperimentPresetsBase,
+    ModelIdentity,
+    ModelMetadata,
+    ModelPackage,
     PresetDefinition,
     RandomSearch,
     create_search_space,
 )
 from model_runtime.runs import ExperimentBase, JsonlTrainingProgressCallback
 from model_runtime.runs.experiment import _result_metrics_payload
-from models.parser import resolve_dataset_names
 
 
 class FakeMetric:
@@ -155,21 +158,62 @@ class CaptureTrainingCallback(Callback):
         self.events.append(dict(event))
 
 
+class FakePackageAdapter:
+    def __init__(self) -> None:
+        identity = ModelIdentity("test", "fake")
+        runtime_defaults = ModuleType("tests.fake_runtime_defaults")
+        runtime_defaults.DATA_NUM_WORKERS = 4
+        runtime_defaults.RUN_TEST_AFTER_FIT = True
+        runtime_defaults.SEED = None
+        dataset_metadata = ModuleType("tests.fake_dataset_metadata")
+        dataset_metadata.DEFAULT_EXPERIMENT_TASK = ExperimentTask.IMAGE_CLASSIFICATION
+        dataset_metadata.DATASET_OPTIONS_BY_TASK = {
+            ExperimentTask.IMAGE_CLASSIFICATION: [FakeDatasetA, FakeDatasetB]
+        }
+        monitor_metadata = ModuleType("tests.fake_monitor_metadata")
+        monitor_metadata.MONITOR_OPTIONS = []
+        search_metadata = ModuleType("tests.fake_search_metadata")
+        self.metadata = ModelMetadata(
+            identity=identity,
+            runtime_defaults=runtime_defaults,
+            dataset_options=dataset_metadata,
+            monitor_options_source=monitor_metadata,
+            search_space=search_metadata,
+        )
+
+    def load_metadata(self):
+        return self.metadata
+
+    def load_runtime_options_type(self):
+        return object
+
+    def bind_runtime_defaults(self, values):
+        return object()
+
+    def load_preset_type(self):
+        return FakeOption
+
+    def load_presets(self):
+        return FakePresetGenerator()
+
+    def build_configurations(self, presets, preset, dataset, **kwargs):
+        return presets.get_config(preset, dataset, **kwargs)
+
+    def build_model(self, configuration):
+        return FakeModel(configuration)
+
+    def build_experiment(self, preset, **kwargs):
+        raise AssertionError("The fake package does not construct experiments.")
+
+
+def fake_model_package() -> ModelPackage:
+    adapter = FakePackageAdapter()
+    return ModelPackage(adapter.metadata.identity, adapter)
+
+
 class FakeExperiment(ExperimentBase):
     def _num_epochs(self):
         return 1
-
-    def _dataset_options(self):
-        return [FakeDatasetA, FakeDatasetB]
-
-    def _model_type(self):
-        return FakeModel
-
-    def _preset_generator_instance(self):
-        return FakePresetGenerator()
-
-    def _experiment_preset_enum(self):
-        return FakeOption
 
     def _load_trainer_config(self, config_overrides=None):
         return {"trainer_args": {}, "callbacks": []}
@@ -257,6 +301,7 @@ class TestExperimentTraining(unittest.TestCase):
         self.original_logger = experiments_base.TensorBoardLogger
         experiments_base.Trainer = FakeTrainer
         experiments_base.TensorBoardLogger = FakeLogger
+        self.model_package = fake_model_package()
 
     def tearDown(self):
         experiments_base.Trainer = self.original_trainer
@@ -265,7 +310,9 @@ class TestExperimentTraining(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_selected_datasets_limit_training_loop(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         experiment.train_model(selected_datasets=[FakeDatasetB])
 
@@ -275,7 +322,7 @@ class TestExperimentTraining(unittest.TestCase):
         )
 
     def test_selected_presets_limit_training_loop_in_order(self):
-        experiment = FakeExperiment()
+        experiment = FakeExperiment(model_package=self.model_package)
 
         experiment.train_model(
             selected_datasets=[FakeDatasetA],
@@ -288,7 +335,9 @@ class TestExperimentTraining(unittest.TestCase):
         )
 
     def test_data_num_workers_override_updates_datamodule(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         experiment.train_model(
             selected_datasets=[FakeDatasetA],
@@ -298,7 +347,9 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(FakeTrainer.instances[0].fit_datamodule.num_workers, 0)
 
     def test_run_test_after_fit_override_skips_test_phase(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         experiment.train_model(
             selected_datasets=[FakeDatasetA],
@@ -308,7 +359,9 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertFalse(hasattr(FakeTrainer.instances[0], "test_datamodule"))
 
     def test_run_test_after_fit_defaults_to_enabled(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         experiment.train_model(selected_datasets=[FakeDatasetA])
 
@@ -318,14 +371,16 @@ class TestExperimentTraining(unittest.TestCase):
         )
 
     def test_train_model_instantiates_model_with_generated_config(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         experiment.train_model(selected_datasets=[FakeDatasetA])
 
         self.assertIsInstance(FakeTrainer.instances[0].model.config, FakeConfig)
 
     def test_materialized_run_sets_progress_context_and_events(self):
-        experiment = FakeExperiment()
+        experiment = FakeExperiment(model_package=self.model_package)
         callback = CaptureTrainingCallback()
 
         experiment.train_model(
@@ -361,7 +416,7 @@ class TestExperimentTraining(unittest.TestCase):
         )
         self.assertTrue(
             callback.contexts[0]["logDir"].startswith(
-                f"logs/{experiment._public_model_id()}/HALTING/FakeDatasetB/"
+                f"logs/{experiment.model_package.catalog_key}/HALTING/FakeDatasetB/"
             )
         )
         self.assertNotIn("/default_", callback.contexts[0]["logDir"])
@@ -383,7 +438,9 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
 
     def test_train_model_rejects_path_like_log_folder(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
 
         with self.assertRaises(ValueError):
             experiment.train_model(
@@ -392,11 +449,13 @@ class TestExperimentTraining(unittest.TestCase):
             )
 
     def test_update_best_results_merges_existing_summary_before_writing(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
         summary_path = (
             Path("logs")
             / "unit_results"
-            / experiment._public_model_id()
+            / experiment.model_package.catalog_key
             / "best_results.json"
         )
         summary_path.parent.mkdir(parents=True)
@@ -437,7 +496,9 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(top5, written)
 
     def test_causal_language_model_results_rank_lowest_validation_loss_first(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
         experiment.experiment_task = ExperimentTask.CAUSAL_LANGUAGE_MODELING
         low_loss = {"metrics": {"validation/loss": 0.25}}
         high_loss = {"metrics": {"validation/loss": 0.75}}
@@ -448,7 +509,9 @@ class TestExperimentTraining(unittest.TestCase):
         )
 
     def test_causal_language_model_dataset_receives_configured_sequence_length(self):
-        experiment = FakeExperiment(FakeOption.BASELINE)
+        experiment = FakeExperiment(
+            FakeOption.BASELINE, model_package=self.model_package
+        )
         training_run = type(
             "TrainingRun",
             (),
@@ -619,17 +682,3 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertIsInstance(first, FakeMonitorCallback)
         self.assertIsInstance(second, FakeMonitorCallback)
         self.assertIsNot(first, second)
-
-    def test_resolve_dataset_names_handles_known_unknown_and_multiple(self):
-        resolved = resolve_dataset_names(
-            [FakeDatasetA, FakeDatasetB],
-            ["fake-dataset-b", "FakeDatasetB", "FakeDatasetA", "fake-dataset-a"],
-        )
-        self.assertEqual(resolved, [FakeDatasetB, FakeDatasetA])
-
-        with self.assertRaises(ValueError) as error:
-            resolve_dataset_names([FakeDatasetA], ["UnknownDataset"])
-        self.assertEqual(
-            str(error.exception),
-            "Unknown --datasets: ['UnknownDataset']. Valid datasets: fake-dataset-a",
-        )

@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 import torch
 
+from model_runtime.packages import ModelPackage
 from model_runtime.runs import execution
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
     _LoadedCheckpointContinuation,
     validate_model_state,
 )
+from models.catalog import model_package
 
 
 class _TopologyAwareModel:
@@ -85,7 +87,8 @@ class RunsCheckpointValidationTests(unittest.TestCase):
             dataset="SyntheticDataset",
         )
         plan = SimpleNamespace(runs=(semantic_run,))
-        package = SimpleNamespace(experiment_type=_Experiment)
+        package = model_package("linears/linear")
+        assert package is not None
         artifacts = SimpleNamespace(namespace="runs")
 
         with (
@@ -101,6 +104,11 @@ class RunsCheckpointValidationTests(unittest.TestCase):
             ),
             patch.object(execution, "validate_target_epochs"),
             patch.object(execution, "validate_model_state") as validate_state,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                return_value=_Experiment(),
+            ),
         ):
             execution.execute_runs(
                 package,

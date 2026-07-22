@@ -34,6 +34,8 @@ def _validated_materialized_runs(
     package: ModelPackage,
     plan: RunPlan,
 ) -> tuple[Any, list[Any], list[dict[str, Any]]]:
+    if not isinstance(package, ModelPackage):
+        raise TypeError("Runs require a selected ModelPackage.")
     if plan.identity != package.identity:
         raise _invalid_plan(
             f"Run plan model '{plan.identity.catalog_key}' does not match "
@@ -166,11 +168,9 @@ def execute_runs(
         )
     callbacks.extend(_monitor_callbacks(package, plan, monitors))
 
-    experiment_type = package.experiment_type
-    experiment = experiment_type(
+    experiment = package.build_experiment(
         selected_presets[0],
         experiment_task=experiment_task,
-        model_package=package,
         run_artifacts=artifacts,
     )
     best_results = experiment.load_best_results(artifacts.namespace)

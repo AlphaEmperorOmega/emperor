@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import unittest
-from enum import Enum
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from lightning.pytorch.callbacks import Callback
 
+from emperor.config import BaseOptions
 from emperor.experiments import ExperimentTask
-from model_runtime.packages.identity import ModelIdentity
+from model_runtime.packages import ModelIdentity, ModelMetadata, ModelPackage
 from model_runtime.runs import execution, experiment
 from model_runtime.runs.experiment import ExperimentBase
 from model_runtime.runs.records import RunParameter, RunPlan, RunSpec
@@ -23,7 +23,7 @@ class SyntheticDataset:
         self.batch_size = batch_size
 
 
-class _Preset(Enum):
+class _Preset(BaseOptions):
     BASELINE = "baseline"
 
 
@@ -35,6 +35,71 @@ class _PresetGenerator:
     @staticmethod
     def get_config(*_args, **_kwargs) -> list[_Config]:
         return [_Config()]
+
+
+class _ParameterPackageAdapter:
+    def __init__(self) -> None:
+        identity = ModelIdentity("fixtures", "parameters")
+        runtime_defaults = ModuleType("tests.parameter_runtime_defaults")
+        runtime_defaults.DATA_NUM_WORKERS = None
+        runtime_defaults.RUN_TEST_AFTER_FIT = False
+        runtime_defaults.SEED = None
+        dataset_options = ModuleType("tests.parameter_dataset_options")
+        dataset_options.DEFAULT_EXPERIMENT_TASK = ExperimentTask.IMAGE_CLASSIFICATION
+        dataset_options.DATASET_OPTIONS_BY_TASK = {
+            ExperimentTask.IMAGE_CLASSIFICATION: [SyntheticDataset]
+        }
+        monitor_options = ModuleType("tests.parameter_monitor_options")
+        monitor_options.MONITOR_OPTIONS = []
+        search_space = ModuleType("tests.parameter_search_space")
+        self.metadata = ModelMetadata(
+            identity=identity,
+            runtime_defaults=runtime_defaults,
+            dataset_options=dataset_options,
+            monitor_options_source=monitor_options,
+            search_space=search_space,
+        )
+
+    def load_metadata(self):
+        return self.metadata
+
+    def load_runtime_options_type(self):
+        return object
+
+    def bind_runtime_defaults(self, _values):
+        return object()
+
+    def load_preset_type(self):
+        return _Preset
+
+    def load_presets(self):
+        return _PresetGenerator()
+
+    def build_configurations(self, presets, preset, dataset, **kwargs):
+        return presets.get_config(preset, dataset, **kwargs)
+
+    def build_model(self, configuration):
+        return _Model(configuration)
+
+    def build_experiment(
+        self,
+        preset,
+        *,
+        experiment_task,
+        model_package,
+        run_artifacts,
+    ):
+        return _ParameterExperiment(
+            preset,
+            experiment_task=experiment_task,
+            model_package=model_package,
+            run_artifacts=run_artifacts,
+        )
+
+
+def _parameter_model_package() -> ModelPackage:
+    adapter = _ParameterPackageAdapter()
+    return ModelPackage(adapter.metadata.identity, adapter)
 
 
 class _Model:
@@ -76,18 +141,6 @@ class _ParameterExperiment(ExperimentBase):
     def _num_epochs(self) -> int:
         return 1
 
-    def _dataset_options(self) -> list[type]:
-        return [SyntheticDataset]
-
-    def _model_type(self) -> type:
-        return _Model
-
-    def _preset_generator_instance(self):
-        return _PresetGenerator()
-
-    def _experiment_preset_enum(self):
-        return _Preset
-
     def _load_trainer_config(self, config_overrides=None) -> dict:
         return {"trainer_args": {}, "callbacks": []}
 
@@ -109,37 +162,10 @@ class _ParameterExperiment(ExperimentBase):
     ) -> None:
         pass
 
-    def _public_model_id(self) -> str:
-        return "fixtures/parameters"
-
-
-class _PlanningPackage:
-    identity = ModelIdentity("fixtures", "parameters")
-    catalog_key = identity.catalog_key
-
-    @staticmethod
-    def resolve_experiment_task(_task: str) -> str:
-        return "image-classification"
-
-    @staticmethod
-    def resolve_preset(_preset: str) -> _Preset:
-        return _Preset.BASELINE
-
-    @staticmethod
-    def resolve_dataset(_dataset: str, _task: str) -> type:
-        return SyntheticDataset
-
-    @staticmethod
-    def task_name(_task: str) -> str:
-        return "image-classification"
-
-    @staticmethod
-    def preset_name(preset: _Preset) -> str:
-        return preset.value
-
 
 class RunsParameterPreservationTests(unittest.TestCase):
     def test_materialized_run_retains_requested_parameter_names(self) -> None:
+        package = _parameter_model_package()
         run = RunSpec(
             id="run-0001",
             experiment_task="image-classification",
@@ -154,7 +180,7 @@ class RunsParameterPreservationTests(unittest.TestCase):
             ),
         )
         plan = RunPlan(
-            identity=_PlanningPackage.identity,
+            identity=package.identity,
             presets=("baseline",),
             experiment_task="image-classification",
             datasets=("SyntheticDataset",),
@@ -172,7 +198,7 @@ class RunsParameterPreservationTests(unittest.TestCase):
             patch.object(execution, "_reject_conflicting_locks"),
         ):
             _task, _presets, materialized = execution._validated_materialized_runs(
-                _PlanningPackage(),
+                package,
                 plan,
             )
 
@@ -180,8 +206,10 @@ class RunsParameterPreservationTests(unittest.TestCase):
         self.assertEqual(materialized[0]["config_overrides"], {"num_epochs": 3})
 
     def test_requested_parameters_drive_artifacts_and_progress(self) -> None:
+        package = _parameter_model_package()
         runtime = _ParameterExperiment(
-            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            model_package=package,
         )
         training_run = runtime.materialize_training_runs(
             [

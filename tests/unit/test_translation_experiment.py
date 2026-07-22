@@ -6,6 +6,7 @@ from unittest.mock import patch
 import torch
 
 from emperor.experiments import ExperimentTask, experiment_task_name
+from models.catalog import model_package
 from models.training_test_utils import RandomTranslationDataModule
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
@@ -14,17 +15,20 @@ from models.transformer.linear.presets import Experiment
 
 class TestTranslationExperiment(unittest.TestCase):
     def preset(self):
-        config = TransformerLinearConfigBuilder(
-            batch_size=2,
-            model_dim=16,
-            source_sequence_length=6,
-            target_sequence_length=6,
-            encoder_num_layers=1,
-            decoder_num_layers=1,
-            attn_num_heads=2,
-            ff_stack_hidden_dim=32,
-            dropout_probability=0.0,
-        ).build()
+        runtime = model_package("transformer/linear").bind_runtime_defaults(
+            {
+                "batch_size": 2,
+                "model_dim": 16,
+                "source_sequence_length": 6,
+                "target_sequence_length": 6,
+                "encoder_num_layers": 1,
+                "decoder_num_layers": 1,
+                "attn_num_heads": 2,
+                "ff_stack_hidden_dim": 32,
+                "dropout_probability": 0.0,
+            }
+        )
+        config = TransformerLinearConfigBuilder(runtime=runtime).build()
         return Model(config)
 
     def batch(self):
@@ -144,7 +148,8 @@ class TestTranslationExperiment(unittest.TestCase):
         )
 
     def test_task_ranking_and_dataset_length_hook(self):
-        experiment = Experiment()
+        package = model_package("transformer/linear")
+        experiment = Experiment(model_package=package)
         self.assertEqual(experiment.experiment_task, ExperimentTask.TEXT_TRANSLATION)
         self.assertEqual(
             experiment_task_name(experiment.experiment_task), "text-translation"
@@ -158,11 +163,14 @@ class TestTranslationExperiment(unittest.TestCase):
             experiment._result_ranking_score({"metrics": {"validation/loss": 2.0}}),
         )
 
-        config = TransformerLinearConfigBuilder(
-            batch_size=7,
-            source_sequence_length=31,
-            target_sequence_length=29,
-        ).build()
+        runtime = package.bind_runtime_defaults(
+            {
+                "batch_size": 7,
+                "source_sequence_length": 31,
+                "target_sequence_length": 29,
+            }
+        )
+        config = TransformerLinearConfigBuilder(runtime=runtime).build()
         training_run = SimpleNamespace(config=config)
         self.assertEqual(
             experiment._dataset_constructor_kwargs(training_run),

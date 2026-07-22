@@ -67,10 +67,10 @@ class RunsPlanningTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(dict(plan.overrides), {"EXPERT_NUM_EXPERTS": 7})
+        self.assertEqual(dict(plan.overrides), {"NUM_EXPERTS": 7})
         self.assertEqual(
             dict(plan.runs[0].overrides),
-            {"EXPERT_NUM_EXPERTS": 7},
+            {"NUM_EXPERTS": 7},
         )
 
     def test_visible_fixed_parameter_order_preserves_schema_order(self) -> None:
@@ -114,7 +114,7 @@ class RunsPlanningTests(unittest.TestCase):
                 overrides={"top_k": 1},
             ),
         )
-        self.assertEqual(equal_plan.runs[0].overrides["EXPERT_TOP_K"], 1)
+        self.assertEqual(equal_plan.runs[0].overrides["TOP_K"], 1)
         with self.assertRaisesRegex(
             InvalidRunRequest,
             "does not allow overriding locked fields: top_k",
@@ -129,7 +129,7 @@ class RunsPlanningTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(
             InvalidRunRequest,
-            "EXPERT_TOP_K.*locked by preset",
+            "TOP_K.*locked by preset",
         ):
             plan_runs(
                 package,
@@ -138,7 +138,7 @@ class RunsPlanningTests(unittest.TestCase):
                     datasets=("Multi30kDeEn",),
                     search=SearchSpec(
                         mode="grid",
-                        axes=(SearchAxisSelection("expert_top_k", (2,)),),
+                        axes=(SearchAxisSelection("top_k", (2,)),),
                     ),
                 ),
             )
@@ -178,7 +178,7 @@ class RunsPlanningTests(unittest.TestCase):
                 RunRequest(
                     presets=("baseline", "post-norm"),
                     datasets=("Mnist",),
-                    overrides={"stack_layer_norm_position": "BEFORE"},
+                    overrides={"layer_norm_position": "BEFORE"},
                     search=SearchSpec(mode="grid"),
                 ),
                 budget=PlanningBudget(max_materialized_runs=1),
@@ -202,8 +202,8 @@ class RunsPlanningTests(unittest.TestCase):
             config_key_to_model_param(axis.key) for axis in plan.search.axes or ()
         ]
         self.assertEqual(len(model_params), len(set(model_params)))
-        self.assertIn("STACK_LAYER_NORM_POSITION", plan.runs[0].overrides)
-        self.assertNotIn("LAYER_NORM_POSITION", plan.runs[0].overrides)
+        self.assertIn("LAYER_NORM_POSITION", plan.runs[0].overrides)
+        self.assertNotIn("STACK_LAYER_NORM_POSITION", plan.runs[0].overrides)
 
     def test_supported_experiment_tasks_resolve_only_package_datasets(self) -> None:
         cases = (
@@ -463,7 +463,7 @@ class RunsPlanningTests(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(equal_plan.runs[0].overrides["GATE_FLAG"], "true")
+        self.assertEqual(equal_plan.runs[0].overrides["STACK_GATE_FLAG"], "true")
         with self.assertRaisesRegex(
             InvalidRunRequest,
             "does not allow overriding locked fields: stack_gate_flag",

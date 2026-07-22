@@ -15,7 +15,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 
-from model_runtime.packages.identity import ModelIdentity
+from model_runtime.packages import ModelIdentity, ModelPackage
 from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
@@ -287,9 +287,9 @@ class RunsExecutionTests(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as tmp,
             patch.object(
-                package.experiment_type,
-                "_materialized_training_runs",
-            ) as materialize,
+                ModelPackage,
+                "build_experiment",
+            ) as build_experiment,
             self.assertRaisesRegex(
                 InvalidCheckpointContinuation,
                 "exactly one Run",
@@ -302,7 +302,7 @@ class RunsExecutionTests(unittest.TestCase):
                 continuation=CheckpointContinuation(Path("missing.ckpt")),
             )
 
-        materialize.assert_not_called()
+        build_experiment.assert_not_called()
         self.assertEqual(_Trainer.instances, [])
 
     def test_continuation_rejects_missing_checkpoint_before_materialization(
@@ -316,9 +316,9 @@ class RunsExecutionTests(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as tmp,
             patch.object(
-                package.experiment_type,
-                "_materialized_training_runs",
-            ) as materialize,
+                ModelPackage,
+                "build_experiment",
+            ) as build_experiment,
             self.assertRaisesRegex(
                 InvalidCheckpointContinuation,
                 "readable regular file",
@@ -331,7 +331,7 @@ class RunsExecutionTests(unittest.TestCase):
                 continuation=CheckpointContinuation(Path(tmp) / "missing.ckpt"),
             )
 
-        materialize.assert_not_called()
+        build_experiment.assert_not_called()
         self.assertEqual(_Trainer.instances, [])
 
     def test_continuation_rejects_directory_and_unreadable_checkpoint(self) -> None:
@@ -379,9 +379,9 @@ class RunsExecutionTests(unittest.TestCase):
             checkpoint.write_bytes(b"not a torch checkpoint")
             with (
                 patch.object(
-                    package.experiment_type,
-                    "_materialized_training_runs",
-                ) as materialize,
+                    ModelPackage,
+                    "build_experiment",
+                ) as build_experiment,
                 self.assertRaisesRegex(
                     InvalidCheckpointContinuation,
                     "could not be loaded",
@@ -394,7 +394,7 @@ class RunsExecutionTests(unittest.TestCase):
                     continuation=CheckpointContinuation(checkpoint),
                 )
 
-        materialize.assert_not_called()
+        build_experiment.assert_not_called()
         self.assertEqual(_Trainer.instances, [])
 
     def test_continuation_rejects_incomplete_lightning_checkpoint(self) -> None:
@@ -425,9 +425,9 @@ class RunsExecutionTests(unittest.TestCase):
                     torch.save(payload, checkpoint)
                     with (
                         patch.object(
-                            package.experiment_type,
-                            "_materialized_training_runs",
-                        ) as materialize,
+                            ModelPackage,
+                            "build_experiment",
+                        ) as build_experiment,
                         self.assertRaisesRegex(
                             InvalidCheckpointContinuation,
                             expected,
@@ -439,7 +439,7 @@ class RunsExecutionTests(unittest.TestCase):
                             artifacts=FilesystemRunArtifacts(root=Path(tmp) / "logs"),
                             continuation=CheckpointContinuation(checkpoint),
                         )
-                    materialize.assert_not_called()
+                    build_experiment.assert_not_called()
 
         self.assertEqual(_Trainer.instances, [])
 
@@ -728,9 +728,9 @@ class RunsExecutionTests(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as tmp,
             patch.object(
-                package.experiment_type,
-                "_materialized_training_runs",
-            ) as materialize,
+                ModelPackage,
+                "build_experiment",
+            ) as build_experiment,
             self.assertRaisesRegex(InvalidRunPlan, "Unknown monitor option"),
         ):
             execute_runs(
@@ -740,7 +740,7 @@ class RunsExecutionTests(unittest.TestCase):
                 monitors=("missing-monitor",),
             )
 
-        materialize.assert_not_called()
+        build_experiment.assert_not_called()
 
 
 if __name__ == "__main__":
