@@ -12,24 +12,7 @@ from model_runtime.runs import ExperimentBase
 from . import config, dataset_options
 from .config_builder import TransformerLinearConfigBuilder
 from .model import Model
-
-
-def expand_transformer_path_locks(locks: dict) -> dict:
-    expanded = dict(locks)
-    for key, value in tuple(locks.items()):
-        if key.startswith("attn_"):
-            suffix = key[len("attn_") :]
-            for prefix in (
-                "encoder_attn_",
-                "decoder_self_attn_",
-                "decoder_cross_attn_",
-            ):
-                expanded[f"{prefix}{suffix}"] = value
-        elif key.startswith("ff_"):
-            suffix = key[len("ff_") :]
-            expanded[f"encoder_ff_{suffix}"] = value
-            expanded[f"decoder_ff_{suffix}"] = value
-    return expanded
+from .runtime_defaults import runtime_from_flat
 
 
 class ExperimentPreset(BaseOptions):
@@ -71,11 +54,17 @@ _PRESET_DEFINITIONS = {
         {}, "Canonical De-to-En Transformer baseline."
     ),
     ExperimentPreset.PRE_NORM: _definition(
-        {"layer_norm_position": LayerNormPositionOptions.BEFORE},
+        {
+            "encoder_layer_norm_position": LayerNormPositionOptions.BEFORE,
+            "decoder_layer_norm_position": LayerNormPositionOptions.BEFORE,
+        },
         "Use pre-normalization in both encoder and decoder blocks.",
     ),
     ExperimentPreset.POST_NORM: _definition(
-        {"layer_norm_position": LayerNormPositionOptions.AFTER},
+        {
+            "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+            "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
         "Use post-normalization in both encoder and decoder blocks.",
     ),
     ExperimentPreset.LEARNED_POSITIONAL: _definition(
@@ -119,11 +108,11 @@ _PRESET_DEFINITIONS = {
         {"recurrent_flag": True}, "Reuse both Transformer stacks recurrently."
     ),
     ExperimentPreset.RECURRENT_GATING: _definition(
-        {"recurrent_flag": True, "recurrent_gate_flag": True},
+        {"recurrent_flag": True, "recurrent_stack_gate_flag": True},
         "Use recurrent stacks with step gates.",
     ),
     ExperimentPreset.RECURRENT_HALTING: _definition(
-        {"recurrent_flag": True, "recurrent_halting_flag": True},
+        {"recurrent_flag": True, "recurrent_stack_halting_flag": True},
         "Use recurrent stacks with adaptive step halting.",
     ),
     ExperimentPreset.RECURRENT_MEMORY: _definition(
@@ -133,15 +122,15 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING: _definition(
         {
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         "Combine recurrence, step gating, and step halting.",
     ),
     ExperimentPreset.RECURRENT_GATING_MEMORY: _definition(
         {
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
             "memory_flag": True,
         },
         "Combine recurrence, step gating, and memory.",
@@ -149,7 +138,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING_MEMORY: _definition(
         {
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         "Combine recurrence, step halting, and memory.",
@@ -157,8 +146,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: _definition(
         {
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         "Enable all recurrent stack controllers.",
@@ -170,7 +159,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_POST_NORM: _definition(
         {
             "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
-            "layer_norm_position": LayerNormPositionOptions.AFTER,
+            "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+            "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
         },
         "Combine block residuals with internal post-normalization.",
     ),
@@ -207,7 +197,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_POST_NORM: _definition(
         {
             "recurrent_flag": True,
-            "layer_norm_position": LayerNormPositionOptions.AFTER,
+            "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
+            "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
         },
         "Use recurrent Transformer stacks with post-normalization.",
     ),
@@ -231,66 +222,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        return self._builder_type(**kwargs).build()
-
-    def locks_for_preset(self, model_config_preset):
-        locks = super().locks_for_preset(model_config_preset)
-        broadcast_scopes = {
-            "layer_norm_position": (
-                "encoder_layer_norm_position",
-                "decoder_layer_norm_position",
-            ),
-            "stack_gate_flag": (
-                "encoder_stack_gate_flag",
-                "decoder_stack_gate_flag",
-            ),
-            "stack_halting_flag": (
-                "encoder_stack_halting_flag",
-                "decoder_stack_halting_flag",
-            ),
-            "memory_flag": ("encoder_memory_flag", "decoder_memory_flag"),
-            "recurrent_flag": (
-                "encoder_recurrent_flag",
-                "decoder_recurrent_flag",
-            ),
-            "recurrent_gate_flag": (
-                "encoder_recurrent_gate_flag",
-                "decoder_recurrent_gate_flag",
-            ),
-            "recurrent_halting_flag": (
-                "encoder_recurrent_halting_flag",
-                "decoder_recurrent_halting_flag",
-            ),
-            "stack_residual_connection_option": (
-                "encoder_stack_residual_connection_option",
-                "decoder_stack_residual_connection_option",
-            ),
-            "recurrent_residual_connection_option": (
-                "encoder_recurrent_residual_connection_option",
-                "decoder_recurrent_residual_connection_option",
-            ),
-            "attn_bias_flag": (
-                "encoder_attn_bias_flag",
-                "decoder_self_attn_bias_flag",
-                "decoder_cross_attn_bias_flag",
-            ),
-            "attn_add_key_value_bias_flag": (
-                "encoder_attn_add_key_value_bias_flag",
-                "decoder_self_attn_add_key_value_bias_flag",
-                "decoder_cross_attn_add_key_value_bias_flag",
-            ),
-            "attn_zero_attention_flag": (
-                "encoder_attn_zero_attention_flag",
-                "decoder_self_attn_zero_attention_flag",
-                "decoder_cross_attn_zero_attention_flag",
-            ),
-        }
-        for field, scoped_fields in broadcast_scopes.items():
-            if field not in locks:
-                continue
-            for scoped in scoped_fields:
-                locks[scoped] = locks[field]
-        return expand_transformer_path_locks(locks)
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -299,7 +231,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

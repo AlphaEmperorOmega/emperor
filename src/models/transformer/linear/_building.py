@@ -277,13 +277,13 @@ def _controlled_stack(
         max_steps=options.recurrent_max_steps,
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack,
-        gate_config=_gate(runtime.model_dim, options.recurrent_gate_flag),
+        gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
         residual_config=None
         if options.recurrent_residual_connection_option is None
         else ResidualConfig(option=options.recurrent_residual_connection_option),
         halting_config=_halting(
             runtime.model_dim,
-            options.recurrent_halting_flag,
+            options.recurrent_stack_halting_flag,
             options.recurrent_halting_option,
             options.recurrent_halting_threshold,
         ),

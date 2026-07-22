@@ -5,6 +5,8 @@ from dataclasses import dataclass, fields, replace
 from types import ModuleType
 from typing import Any, Final
 
+from model_runtime.packages.runtime_values import validate_runtime_default_values
+
 from . import config
 from .runtime_options import (
     ControllerStackOptions,
@@ -57,13 +59,13 @@ def _layer_controller_from_config(
     prefix: str,
 ) -> LayerControllerOptions:
     return LayerControllerOptions(
-        stack_gate_flag=getattr(config_module, f"{prefix}_GATE_FLAG"),
+        stack_gate_flag=getattr(config_module, f"{prefix}_STACK_GATE_FLAG"),
         gate_option=getattr(config_module, f"{prefix}_GATE_OPTION"),
         gate_activation=getattr(config_module, f"{prefix}_GATE_ACTIVATION"),
         gate_stack_options=_controller_stack_from_config(
             config_module, f"{prefix}_GATE_STACK"
         ),
-        stack_halting_flag=getattr(config_module, f"{prefix}_HALTING_FLAG"),
+        stack_halting_flag=getattr(config_module, f"{prefix}_STACK_HALTING_FLAG"),
         halting_option=getattr(config_module, f"{prefix}_HALTING_OPTION"),
         halting_threshold=getattr(config_module, f"{prefix}_HALTING_THRESHOLD"),
         halting_dropout=getattr(config_module, f"{prefix}_HALTING_DROPOUT"),
@@ -108,7 +110,9 @@ def _recurrent_from_config(
         recurrent_layer_norm_position=getattr(
             config_module, f"{prefix}_RECURRENT_LAYER_NORM_POSITION"
         ),
-        recurrent_gate_flag=getattr(config_module, f"{prefix}_RECURRENT_GATE_FLAG"),
+        recurrent_stack_gate_flag=getattr(
+            config_module, f"{prefix}_RECURRENT_STACK_GATE_FLAG"
+        ),
         recurrent_gate_option=getattr(config_module, f"{prefix}_RECURRENT_GATE_OPTION"),
         recurrent_gate_activation=getattr(
             config_module, f"{prefix}_RECURRENT_GATE_ACTIVATION"
@@ -116,8 +120,8 @@ def _recurrent_from_config(
         recurrent_gate_stack_options=_controller_stack_from_config(
             config_module, f"{prefix}_RECURRENT_GATE_STACK"
         ),
-        recurrent_halting_flag=getattr(
-            config_module, f"{prefix}_RECURRENT_HALTING_FLAG"
+        recurrent_stack_halting_flag=getattr(
+            config_module, f"{prefix}_RECURRENT_STACK_HALTING_FLAG"
         ),
         recurrent_halting_option=getattr(
             config_module, f"{prefix}_RECURRENT_HALTING_OPTION"
@@ -225,10 +229,10 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             mapping[f"stack_{field_name}"] = ("stack", field_name)
     mapping.update(
         {
-            "gate_flag": ("controller", "stack_gate_flag"),
+            "stack_gate_flag": ("controller", "stack_gate_flag"),
             "gate_option": ("controller", "gate_option"),
             "gate_activation": ("controller", "gate_activation"),
-            "halting_flag": ("controller", "stack_halting_flag"),
+            "stack_halting_flag": ("controller", "stack_halting_flag"),
             "halting_option": ("controller", "halting_option"),
             "halting_threshold": ("controller", "halting_threshold"),
             "halting_dropout": ("controller", "halting_dropout"),
@@ -256,9 +260,9 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
                 "recurrent",
                 "recurrent_layer_norm_position",
             ),
-            "recurrent_gate_flag": (
+            "recurrent_stack_gate_flag": (
                 "recurrent",
-                "recurrent_gate_flag",
+                "recurrent_stack_gate_flag",
             ),
             "recurrent_gate_option": (
                 "recurrent",
@@ -268,9 +272,9 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
                 "recurrent",
                 "recurrent_gate_activation",
             ),
-            "recurrent_halting_flag": (
+            "recurrent_stack_halting_flag": (
                 "recurrent",
-                "recurrent_halting_flag",
+                "recurrent_stack_halting_flag",
             ),
             "recurrent_halting_option": (
                 "recurrent",
@@ -388,6 +392,20 @@ def _pop_updates(
     return updates
 
 
+def _pop_scoped_feed_forward_updates(
+    values: MutableMapping[str, Any], prefix: str
+) -> dict[str, Any]:
+    updates = {}
+    for field_name, suffix in (
+        ("hidden_dim", "stack_hidden_dim"),
+        ("num_layers", "num_layers"),
+    ):
+        key = f"{prefix}{field_name}"
+        if key in values:
+            updates[suffix] = values.pop(key)
+    return updates
+
+
 def resolve_transformer_path_options(
     values: MutableMapping[str, Any],
     defaults: TransformerPathOptions,
@@ -447,12 +465,12 @@ def resolve_transformer_path_options(
     )
     encoder_feed_forward = _apply_path_updates(
         encoder_feed_forward,
-        _pop_updates(values, "encoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        _pop_scoped_feed_forward_updates(values, "encoder_feed_forward_"),
         attention=False,
     )
     decoder_feed_forward = _apply_path_updates(
         decoder_feed_forward,
-        _pop_updates(values, "decoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        _pop_scoped_feed_forward_updates(values, "decoder_feed_forward_"),
         attention=False,
     )
     return TransformerPathOptions(
@@ -483,8 +501,8 @@ def runtime_from_config() -> RuntimeOptions:
         stack_halting_flag=config.STACK_HALTING_FLAG,
         memory_flag=config.MEMORY_FLAG,
         recurrent_flag=config.RECURRENT_FLAG,
-        recurrent_gate_flag=config.RECURRENT_GATE_FLAG,
-        recurrent_halting_flag=config.RECURRENT_HALTING_FLAG,
+        recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
+        recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
         recurrent_residual_connection_option=(
@@ -545,18 +563,17 @@ def runtime_from_flat(
     values: dict[str, Any] | None = None,
     base: RuntimeOptions | None = None,
 ) -> RuntimeOptions:
-    values = dict(values or {})
+    values = validate_runtime_default_values(
+        values,
+        package="models.transformer.linear",
+        config_module=config,
+    )
     runtime = DEFAULT_RUNTIME if base is None else base
-    scalar_aliases = {
-        "input_dim": "vocab_size",
-        "output_dim": "vocab_size",
-        "hidden_dim": "model_dim",
-    }
     scalar_updates: dict[str, Any] = {}
     model_dim_changed = False
     dropout_changed = False
     for key in list(values):
-        target = scalar_aliases.get(key, key)
+        target = key
         if target == "sequence_length":
             length = values.pop(key)
             scalar_updates.update(

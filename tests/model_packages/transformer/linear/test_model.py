@@ -10,7 +10,7 @@ from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.translation import TranslationExperiment
 from emperor.linears import LinearLayer
 from model_runtime.packages import GridSearch, PresetLock
-from models.catalog import catalog_entry
+from models.catalog import model_package
 from models.training_test_utils import (
     RandomTranslationDataModule,
     tiny_cpu_trainer,
@@ -21,10 +21,16 @@ from models.transformer.linear.model import Model
 from models.transformer.linear.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 
 _ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("transformer/linear").bind_runtime_defaults(
+        runtime_defaults
+    )
+    return TransformerLinearConfigBuilder(runtime=runtime).build()
 
 
 class TestTransformerLinearModel(unittest.TestCase):
@@ -50,7 +56,7 @@ class TestTransformerLinearModel(unittest.TestCase):
         ]
 
     def _config(self, preset=ExperimentPreset.BASELINE, dataset=None, **overrides):
-        return ExperimentPresets().get_config(
+        return model_package("transformer/linear").presets.get_config(
             preset,
             dataset or self._datasets()[0],
             config_overrides=self._overrides(**overrides),
@@ -74,23 +80,14 @@ class TestTransformerLinearModel(unittest.TestCase):
 
     def test_public_surface_catalog_identity_and_translation_task(self):
         package = importlib.import_module("models.transformer.linear")
-        self.assertEqual(
-            package.__all__,
-            [
-                "Experiment",
-                "ExperimentConfig",
-                "ExperimentPreset",
-                "ExperimentPresets",
-                "Model",
-                "TransformerLinearConfigBuilder",
-            ],
-        )
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
         self.assertTrue(issubclass(Model, TranslationExperiment))
-        self.assertEqual(Experiment()._public_model_id(), "transformer/linear")
+        experiment = Experiment(model_package=model_package("transformer/linear"))
         self.assertEqual(
-            catalog_entry("transformer/linear").module_path,
-            "models.transformer.linear",
+            experiment.model_package.identity.catalog_key,
+            "transformer/linear",
         )
+        self.assertIs(package.MODEL_PACKAGE, model_package("transformer/linear"))
         self.assertEqual(
             [dataset.language_pair for dataset in self._datasets()],
             [("de", "en"), ("en", "de")],
@@ -111,12 +108,14 @@ class TestTransformerLinearModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.transformer.linear.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
         self.assertEqual(package.catalog_key, "transformer/linear")
@@ -124,7 +123,7 @@ class TestTransformerLinearModel(unittest.TestCase):
         self.assertIsNone(plan.search)
         self.assertEqual(
             plan.datasets,
-            tuple(dataset.__name__ for dataset in self._datasets()),
+            (self._datasets()[0].__name__,),
         )
 
     def test_all_presets_build_forward_and_keep_attention_roles(self):
@@ -133,7 +132,7 @@ class TestTransformerLinearModel(unittest.TestCase):
             list(range(1, 28)),
         )
         source, target = self._ids()
-        presets = ExperimentPresets()
+        presets = model_package("transformer/linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 cfg = self._config(preset)
@@ -161,7 +160,7 @@ class TestTransformerLinearModel(unittest.TestCase):
     def test_baseline_builds_for_both_multi30k_directions(self):
         for dataset in self._datasets():
             with self.subTest(dataset=dataset.__name__):
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("transformer/linear").presets.get_config(
                     ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides={
@@ -201,10 +200,10 @@ class TestTransformerLinearModel(unittest.TestCase):
         for field, overrides, error in cases:
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
-                    TransformerLinearConfigBuilder(**overrides)
+                    _build_config(**overrides)
 
     def test_search_axes_apply_and_unknown_axes_fail(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("transformer/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._datasets()[0],
             GridSearch(),
@@ -216,7 +215,7 @@ class TestTransformerLinearModel(unittest.TestCase):
             set(search_space.SEARCH_SPACE_ATTN_NUM_HEADS),
         )
         with self.assertRaises((KeyError, ValueError)):
-            ExperimentPresets().get_config(
+            model_package("transformer/linear").presets.get_config(
                 ExperimentPreset.BASELINE,
                 self._datasets()[0],
                 GridSearch(),

@@ -20,6 +20,7 @@ from models.parametric.parametric_generator import (
 )
 from models.parametric.parametric_matrix import MODEL_PACKAGE as PARAMETRIC_MATRIX
 from models.parametric.parametric_vector import MODEL_PACKAGE as PARAMETRIC_VECTOR
+from models.transformer.linear import MODEL_PACKAGE as TRANSFORMER_LINEAR
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/linear": ModelPackage("bert", "linear", "models.bert.linear"),
@@ -52,9 +53,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "vit/expert_linear_adaptive": ModelPackage(
         "vit", "expert_linear_adaptive", "models.vit.expert_linear_adaptive"
     ),
-    "transformer/linear": ModelPackage(
-        "transformer", "linear", "models.transformer.linear"
-    ),
+    "transformer/linear": TRANSFORMER_LINEAR,
     "transformer/linear_adaptive": ModelPackage(
         "transformer", "linear_adaptive", "models.transformer.linear_adaptive"
     ),
