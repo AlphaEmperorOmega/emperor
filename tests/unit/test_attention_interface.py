@@ -69,6 +69,7 @@ BASE_CONFIG_FIELDS = (
     "relative_positional_embedding_config",
 )
 
+
 @dataclass(frozen=True)
 class AttentionFixture:
     name: str
