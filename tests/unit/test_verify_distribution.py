@@ -477,6 +477,30 @@ class DependencyCheckVerificationTests(unittest.TestCase):
         )
 
 
+class InstalledSmokeVerificationTests(unittest.TestCase):
+    def test_builds_the_catalog_model_with_the_canonical_configuration(self) -> None:
+        payload = {"model_class": "models.linears.linear.Model"}
+        with patch.object(
+            verify_distribution,
+            "_run",
+            side_effect=(
+                json.dumps(payload),
+                "linears/linear",
+                "  --model-type linears/linear",
+            ),
+        ) as run:
+            result = verify_distribution._installed_smoke(
+                Path("/venv/bin/python"),
+                Path("/outside"),
+            )
+
+        smoke_code = run.call_args_list[0].args[0][-1]
+        self.assertIn("config = package.build_configuration()", smoke_code)
+        self.assertNotIn("build_configurations", smoke_code)
+        self.assertEqual(result["cli_types"], ["linears/linear"])
+        self.assertEqual(result["project_cli_types"], ["linears/linear"])
+
+
 class WorkbenchLauncherVerificationTests(unittest.TestCase):
     def test_runs_both_launchers_and_probes_server_health(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

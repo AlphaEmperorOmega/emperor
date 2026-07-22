@@ -963,7 +963,7 @@ from models.catalog import (
 
 identities = [package.to_identity_payload() for package in discover_model_packages()]
 package = model_package('linears/linear')
-config = package.build_configurations()[0]
+config = package.build_configuration()
 model = package.build_model(config)
 inspection = inspect_model(
     package,
