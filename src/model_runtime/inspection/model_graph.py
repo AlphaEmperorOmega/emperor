@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from inspect import cleandoc
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
-from torch.nn import Module
 from torch.nn.parameter import is_lazy
 
 from emperor.config import ConfigBase
@@ -19,6 +19,18 @@ from model_runtime.inspection.records import (
 )
 
 GraphRole = Literal["architecture", "internal", "runtime"]
+
+
+class _GraphModule(Protocol):
+    def named_children(self) -> Iterator[tuple[str, _GraphModule]]: ...
+
+    def named_parameters(
+        self,
+        prefix: str = "",
+        recurse: bool = True,
+        remove_duplicate: bool = True,
+    ) -> Iterator[tuple[str, Any]]: ...
+
 
 ROOT_NODE_ID = "__root__"
 ROOT_NODE_PATH = "model"
@@ -270,7 +282,7 @@ def _config_field_value(value: Any) -> Any:
     return str(value)
 
 
-def _module_config_instance(module: Module) -> Any | None:
+def _module_config_instance(module: _GraphModule) -> Any | None:
     config = getattr(module, "_emperor_config", None)
     if config is None:
         config = getattr(module, "cfg", None)
@@ -316,7 +328,7 @@ def _flattened_residual_configuration_fields(
     )
 
 
-def _module_config(module: Module) -> GraphConfiguration | None:
+def _module_config(module: _GraphModule) -> GraphConfiguration | None:
     config = _module_config_instance(module)
     if config is None:
         return None
@@ -358,7 +370,7 @@ def _explicit_docstring_description(class_type: type[Any]) -> str | None:
     return docstring.split("\n\n", 1)[0].replace("\n", " ")
 
 
-def _component_description(module: Module) -> str | None:
+def _component_description(module: _GraphModule) -> str | None:
     module_type = type(module)
     description = COMPONENT_DESCRIPTION_BY_CLASS_NAME.get(module_type.__name__)
     if description is not None:
@@ -388,13 +400,13 @@ def _shape_value(value: Any) -> str | None:
     return " x ".join(str(dimension) for dimension in dimensions)
 
 
-def _bool_from_optional_model(module: Module, attr_name: str) -> bool | None:
+def _bool_from_optional_model(module: _GraphModule, attr_name: str) -> bool | None:
     if not hasattr(module, attr_name):
         return None
     return getattr(module, attr_name) is not None
 
 
-def _first_detail_value(module: Module, attr_paths: tuple[str, ...]) -> Any:
+def _first_detail_value(module: _GraphModule, attr_paths: tuple[str, ...]) -> Any:
     for attr_path in attr_paths:
         value: Any = module
         for attr_name in attr_path.split("."):
@@ -417,7 +429,7 @@ def _coordinate_from_neuron_name(name: str) -> list[int] | None:
         return None
 
 
-def _neuron_cluster_details(module: Module) -> dict[str, Any] | None:
+def _neuron_cluster_details(module: _GraphModule) -> dict[str, Any] | None:
     if not hasattr(module, "x_axis_total_neurons") or not hasattr(module, "cluster"):
         return None
     coordinates = sorted(
@@ -450,7 +462,7 @@ def _neuron_cluster_details(module: Module) -> dict[str, Any] | None:
     }
 
 
-def _terminal_reach_details(module: Module) -> dict[str, Any] | None:
+def _terminal_reach_details(module: _GraphModule) -> dict[str, Any] | None:
     # The reach lives on a Terminal; surface it on the parent Neuron too so a
     # neuron click shows the area its sampler can route to.
     source = module
@@ -470,7 +482,7 @@ def _terminal_reach_details(module: Module) -> dict[str, Any] | None:
     }
 
 
-def _parameter_shape_details(module: Module) -> dict[str, Any]:
+def _parameter_shape_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
     direct_parameters = dict(module.named_parameters(recurse=False))
     for detail_key, parameter_names in (
@@ -488,7 +500,7 @@ def _parameter_shape_details(module: Module) -> dict[str, Any]:
     return details
 
 
-def _dimension_details(module: Module) -> dict[str, Any]:
+def _dimension_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
     input_dim = getattr(module, "input_dim", None)
     output_dim = getattr(module, "output_dim", None)
@@ -504,7 +516,7 @@ def _dimension_details(module: Module) -> dict[str, Any]:
     return details
 
 
-def _sequence_or_attention_details(module: Module) -> dict[str, Any]:
+def _sequence_or_attention_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
     for source_attr, detail_key in (
         ("embedding_dim", "embeddingDim"),
@@ -519,7 +531,7 @@ def _sequence_or_attention_details(module: Module) -> dict[str, Any]:
     return details
 
 
-def _expert_details(module: Module) -> dict[str, Any]:
+def _expert_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
     for detail_key, attr_paths in (
         ("topK", ("top_k", "sampler_config.top_k", "cfg.top_k")),
@@ -538,7 +550,7 @@ def _expert_details(module: Module) -> dict[str, Any]:
     return details
 
 
-def _layer_behavior_details(module: Module) -> dict[str, Any]:
+def _layer_behavior_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
     dropout = getattr(module, "dropout_probability", None)
     if dropout is not None:
@@ -572,7 +584,7 @@ def _layer_behavior_details(module: Module) -> dict[str, Any]:
 
 
 def _recurrent_details(
-    module: Module,
+    module: _GraphModule,
     cluster: dict[str, Any] | None,
 ) -> dict[str, Any]:
     max_steps = getattr(module, "max_steps", None)
@@ -602,14 +614,14 @@ def _recurrent_details(
     }
 
 
-def _causal_attention_details(module: Module) -> dict[str, Any]:
+def _causal_attention_details(module: _GraphModule) -> dict[str, Any]:
     causal = getattr(module, "causal_attention_mask_flag", None)
     if causal is None:
         return {}
     return {"causalAttention": causal}
 
 
-def module_details(module: Module) -> dict[str, Any]:
+def module_details(module: _GraphModule) -> dict[str, Any]:
     details: dict[str, Any] = {}
 
     details.update(_parameter_shape_details(module))
@@ -632,7 +644,7 @@ def module_details(module: Module) -> dict[str, Any]:
     return details
 
 
-def graph_role(module: Module) -> GraphRole:
+def graph_role(module: _GraphModule) -> GraphRole:
     type_name = type(module).__name__
     if type_name in INTERNAL_GRAPH_TYPE_NAMES:
         return INTERNAL_ROLE
@@ -643,7 +655,7 @@ def graph_role(module: Module) -> GraphRole:
     return ARCHITECTURE_ROLE
 
 
-def _unique_registered_parameters(module: Module):
+def _unique_registered_parameters(module: _GraphModule):
     seen_parameter_ids: set[int] = set()
     for _name, parameter in module.named_parameters(
         recurse=True,
@@ -656,7 +668,7 @@ def _unique_registered_parameters(module: Module):
         yield parameter
 
 
-def parameter_count(module: Module) -> int:
+def parameter_count(module: _GraphModule) -> int:
     count = 0
     for parameter in _unique_registered_parameters(module):
         if is_lazy(parameter):
@@ -665,7 +677,7 @@ def parameter_count(module: Module) -> int:
     return count
 
 
-def parameter_size_bytes(module: Module) -> int:
+def parameter_size_bytes(module: _GraphModule) -> int:
     size = 0
     for parameter in _unique_registered_parameters(module):
         if is_lazy(parameter):
@@ -690,7 +702,7 @@ def _semantic_detail_value(value: Any) -> Any:
     return value
 
 
-def _node(node_id: str, path: str, module: Module) -> GraphNode:
+def _node(node_id: str, path: str, module: _GraphModule) -> GraphNode:
     type_name = type(module).__name__
     description = _component_description(module)
     return GraphNode(
@@ -711,9 +723,9 @@ def _child_path(parent_path: str, child_name: str) -> str:
 
 
 def _is_transparent_graph_container(
-    parent: Module,
+    parent: _GraphModule,
     child_name: str,
-    child: Module,
+    child: _GraphModule,
 ) -> bool:
     return (
         type(parent).__name__ == "LayerStack"
@@ -722,11 +734,11 @@ def _is_transparent_graph_container(
     )
 
 
-def inspect_model_graph(module: Module) -> ModelGraph:
+def inspect_model_graph(module: _GraphModule) -> ModelGraph:
     nodes = [_node(ROOT_NODE_ID, ROOT_NODE_PATH, module)]
     edges: list[GraphEdge] = []
 
-    def visit(parent: Module, parent_id: str, parent_path: str) -> None:
+    def visit(parent: _GraphModule, parent_id: str, parent_path: str) -> None:
         for child_name, child in parent.named_children():
             child_path = _child_path(parent_path, child_name)
             if _is_transparent_graph_container(parent, child_name, child):
@@ -744,7 +756,7 @@ def inspect_model_graph(module: Module) -> ModelGraph:
             visit(child, child_id, child_path)
 
     def visit_transparent_container(
-        container: Module,
+        container: _GraphModule,
         visible_parent_id: str,
         container_path: str,
     ) -> None:
