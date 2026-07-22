@@ -5,10 +5,7 @@ import torch
 from torch import nn
 from torch.func import functional_call
 
-from emperor.halting import (
-    HaltingHiddenStateModeOptions,
-    HaltingUsageTrackerManager,
-)
+from emperor.halting import HaltingHiddenStateModeOptions, HaltingUsageTrackerManager
 from emperor.neuron import (
     AxonsConfig,
     NeuronClusterConfig,

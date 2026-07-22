@@ -3,7 +3,11 @@ import unittest
 import torch
 
 from emperor.config import ConfigBase
-from emperor.sampler import RouterConfig, SamplerConfig, SamplerModel
+from emperor.sampler import (
+    RouterConfig,
+    SamplerConfig,
+    SamplerModel,
+)
 from emperor.sampler._validation import SamplerModelValidator
 
 

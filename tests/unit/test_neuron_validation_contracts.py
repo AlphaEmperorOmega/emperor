@@ -5,10 +5,7 @@ from types import SimpleNamespace
 
 import torch
 
-from emperor.halting import (
-    HaltingBase,
-    HaltingConfig,
-)
+from emperor.halting import HaltingBase, HaltingConfig
 from emperor.neuron import AxonsConfig, NeuronClusterConfig, NucleusConfig
 from unit.test_memory import make_memory_config
 from unit.test_neuron import NeuronTestCase

@@ -5,7 +5,10 @@ from unittest.mock import patch
 import torch
 
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
-from emperor.experiments import ExperimentTask, experiment_task_name
+from emperor.experiments import (
+    ExperimentTask,
+    experiment_task_name,
+)
 
 
 class _InMemoryCorpusMixin:

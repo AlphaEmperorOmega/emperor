@@ -36,7 +36,11 @@ from emperor.layers import (
     ResidualConfig,
     ResidualConnectionOptions,
 )
-from emperor.linears import LinearLayer, LinearLayerConfig, LinearOptions
+from emperor.linears import (
+    LinearLayer,
+    LinearLayerConfig,
+    LinearOptions,
+)
 
 
 def make_layer_stack_config(

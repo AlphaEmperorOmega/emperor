@@ -5,7 +5,10 @@ from types import SimpleNamespace
 import torch
 from torch import Tensor
 
-from emperor.halting import HaltingBase, HaltingStateBase
+from emperor.halting import (
+    HaltingBase,
+    HaltingStateBase,
+)
 
 
 class _LifecycleHalting(HaltingBase[SimpleNamespace]):

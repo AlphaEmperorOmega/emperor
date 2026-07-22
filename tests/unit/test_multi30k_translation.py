@@ -8,7 +8,10 @@ from unittest.mock import patch
 import torch
 
 import emperor.datasets.text.translation._adapter as multi30k_module
-from emperor.datasets.text.translation import Multi30kDeEn, Multi30kEnDe
+from emperor.datasets.text.translation import (
+    Multi30kDeEn,
+    Multi30kEnDe,
+)
 from emperor.datasets.text.translation._manifest import (
     BOS_ID,
     BOS_TOKEN,

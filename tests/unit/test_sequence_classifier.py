@@ -6,7 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from emperor.config import ModelConfig
-from emperor.experiments.sequence_classifier import SequenceClassifierExperiment
+from emperor.experiments.sequence_classifier import (
+    SequenceClassifierExperiment,
+)
 from emperor.experiments.sequence_classifier._metrics import (
     SequenceClassifierMetricsLogger,
 )

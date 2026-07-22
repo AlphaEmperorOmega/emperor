@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 
 import torch
+from torch import nn
+
 from emperor.experts import MixtureOfExpertsConfig, RoutingInitializationMode
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -17,7 +19,6 @@ from emperor.parametric import (
 )
 from emperor.parametric._monitoring import _ParametricDiagnostics
 from emperor.parametric._validation import ParametricLayerValidator
-from torch import nn
 
 
 class ParametricCommitRegressionTests(unittest.TestCase):

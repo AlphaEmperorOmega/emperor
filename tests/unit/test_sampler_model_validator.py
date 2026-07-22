@@ -10,7 +10,11 @@ from emperor.layers import (
     LayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.sampler import RouterConfig, SamplerConfig, SamplerModel
+from emperor.sampler import (
+    RouterConfig,
+    SamplerConfig,
+    SamplerModel,
+)
 from emperor.sampler._selection.full import SamplerFull
 from emperor.sampler._selection.sparse import SamplerSparse
 from emperor.sampler._selection.top_k import SamplerTopk

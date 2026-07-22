@@ -12,10 +12,7 @@ from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 from torch.utils.data import DataLoader, TensorDataset
 
-from emperor.neuron import (
-    NeuronClusterConfig,
-    NeuronClusterOptimizerSyncCallback,
-)
+from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
     _LoadedCheckpointContinuation,

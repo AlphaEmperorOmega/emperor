@@ -7,10 +7,7 @@ import torch
 import torch.nn as nn
 from lightning.pytorch.trainer.states import TrainerFn
 
-from emperor.neuron import (
-    NeuronClusterConfig,
-    NeuronClusterOptimizerSyncCallback,
-)
+from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
 from emperor.neuron._optimizer_layout import (
     OPTIMIZER_LAYOUT_CHECKPOINT_KEY,
     NeuronOptimizerNamedLayout,

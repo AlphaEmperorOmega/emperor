@@ -3,7 +3,11 @@ from types import SimpleNamespace
 
 import torch
 
-from emperor.neuron import NeuronCluster, NeuronClusterConfig, NeuronConfig
+from emperor.neuron import (
+    NeuronCluster,
+    NeuronClusterConfig,
+    NeuronConfig,
+)
 from emperor.neuron._validation import (
     NeuronClusterValidator,
     NeuronValidator,

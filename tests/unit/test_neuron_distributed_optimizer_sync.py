@@ -11,10 +11,7 @@ from lightning.pytorch.strategies import DDPStrategy
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 
-from emperor.neuron import (
-    NeuronClusterConfig,
-    NeuronClusterOptimizerSyncCallback,
-)
+from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
 from emperor.neuron._distributed_gradients import (
     _average_gradient,
     average_post_wrap_gradients,

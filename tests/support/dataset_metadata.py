@@ -18,7 +18,10 @@ from emperor.datasets.text.bert_pretraining import (
     WikiText2BertPretraining,
 )
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
-from emperor.datasets.text.translation import Multi30kDeEn, Multi30kEnDe
+from emperor.datasets.text.translation import (
+    Multi30kDeEn,
+    Multi30kEnDe,
+)
 from emperor.experiments import ExperimentTask
 
 OFFLINE_TEXT_SPLITS = {

@@ -13,10 +13,7 @@ from emperor.layers import (
     LayerNormPositionOptions,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.neuron import (
-    NeuronClusterConfig,
-    NeuronClusterOptimizerSyncCallback,
-)
+from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
 from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.experiment_cli_parser import get_experiment_parser
