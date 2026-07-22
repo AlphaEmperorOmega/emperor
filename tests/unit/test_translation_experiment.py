@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import torch
 
-from emperor.experiments import ExperimentTask, experiment_task_name
+from emperor.experiments import (
+    ExperimentTask,
+    experiment_task_name,
+)
+from model_runtime.task_behavior import experiment_task_behavior
 from models.catalog import model_package
 from models.training_test_utils import RandomTranslationDataModule
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
@@ -154,13 +158,14 @@ class TestTranslationExperiment(unittest.TestCase):
         self.assertEqual(
             experiment_task_name(experiment.experiment_task), "text-translation"
         )
+        behavior = experiment_task_behavior(experiment.experiment_task)
         self.assertGreater(
-            experiment._result_ranking_score({"metrics": {"validation/bleu": 12.0}}),
-            experiment._result_ranking_score({"metrics": {"validation/loss": 1.0}}),
+            behavior.ranking_score({"metrics": {"validation/bleu": 12.0}}),
+            behavior.ranking_score({"metrics": {"validation/loss": 1.0}}),
         )
         self.assertGreater(
-            experiment._result_ranking_score({"metrics": {"validation/loss": 1.0}}),
-            experiment._result_ranking_score({"metrics": {"validation/loss": 2.0}}),
+            behavior.ranking_score({"metrics": {"validation/loss": 1.0}}),
+            behavior.ranking_score({"metrics": {"validation/loss": 2.0}}),
         )
 
         runtime = package.bind_runtime_defaults(

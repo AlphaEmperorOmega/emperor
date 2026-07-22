@@ -13,7 +13,6 @@ from typing import Literal
 import torch
 from torch import Tensor, nn
 
-from emperor.experiments import ExperimentTask
 from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.materialization import (
     MaterializedConfiguration,
@@ -22,6 +21,7 @@ from model_runtime.inspection.materialization import (
 from model_runtime.inspection.model_graph import inspect_model_graph
 from model_runtime.inspection.records import InspectionRequest, InspectionResult
 from model_runtime.packages import ModelPackage
+from model_runtime.task_behavior import SyntheticInputError, experiment_task_behavior
 
 ShapeTraceDetail = Literal["outputs", "variables"]
 
@@ -427,21 +427,6 @@ def _trace_module_calls(model: nn.Module, graph):
     return calls, module_paths, handles
 
 
-def _positive_integer(value: object, label: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise InspectionError(
-            f"Cannot build a shape-trace input because {label} is not a positive "
-            f"integer: {value!r}."
-        )
-    return value
-
-
-def _token_batch(length: int, vocabulary_size: int, token_id: int = 1) -> Tensor:
-    if not 0 <= token_id < vocabulary_size:
-        token_id = 1 if vocabulary_size > 1 else 0
-    return torch.full((1, length), token_id, dtype=torch.long)
-
-
 def _sample_inputs(
     materialized: MaterializedConfiguration,
 ) -> tuple[str, str, tuple[Tensor, ...]]:
@@ -450,58 +435,13 @@ def _sample_inputs(
     dataset = materialized.dataset
     configuration = materialized.configuration
 
-    if task == ExperimentTask.IMAGE_CLASSIFICATION:
-        channels = _positive_integer(
-            getattr(dataset, "num_channels", None),
-            f"{dataset.__name__}.num_channels",
+    try:
+        inputs = experiment_task_behavior(task).synthetic_inputs(
+            dataset,
+            configuration,
         )
-        width = _positive_integer(
-            getattr(dataset, "default_width", None),
-            f"{dataset.__name__}.default_width",
-        )
-        height = _positive_integer(
-            getattr(dataset, "default_height", None),
-            f"{dataset.__name__}.default_height",
-        )
-        inputs = (torch.zeros((1, channels, height, width), dtype=torch.float32),)
-    elif task in {
-        ExperimentTask.BERT_PRETRAINING,
-        ExperimentTask.CAUSAL_LANGUAGE_MODELING,
-    }:
-        sequence_length = _positive_integer(
-            getattr(configuration, "sequence_length", None),
-            "configuration.sequence_length",
-        )
-        vocabulary_size = _positive_integer(
-            getattr(configuration, "input_dim", None),
-            "configuration.input_dim",
-        )
-        inputs = (_token_batch(sequence_length, vocabulary_size),)
-    elif task == ExperimentTask.TEXT_TRANSLATION:
-        experiment_config = getattr(configuration, "experiment_config", None)
-        source_length = _positive_integer(
-            getattr(experiment_config, "source_sequence_length", None),
-            "configuration.experiment_config.source_sequence_length",
-        )
-        target_length = _positive_integer(
-            getattr(experiment_config, "target_sequence_length", None),
-            "configuration.experiment_config.target_sequence_length",
-        )
-        vocabulary_size = _positive_integer(
-            getattr(experiment_config, "vocab_size", None),
-            "configuration.experiment_config.vocab_size",
-        )
-        source_token = int(getattr(experiment_config, "bos_token_id", 1))
-        target_token = source_token
-        inputs = (
-            _token_batch(source_length, vocabulary_size, source_token),
-            _token_batch(max(1, target_length - 1), vocabulary_size, target_token),
-        )
-    else:
-        raise InspectionError(
-            f"Shape tracing does not have a synthetic input for Experiment Task "
-            f"'{package.task_name(task)}'."
-        )
+    except SyntheticInputError as exc:
+        raise InspectionError(str(exc)) from exc
 
     return dataset.__name__, package.task_name(task), inputs
 

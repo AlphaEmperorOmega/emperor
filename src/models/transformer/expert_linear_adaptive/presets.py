@@ -346,11 +346,3 @@ class Experiment(ExperimentBase):
 
     def _experiment_preset_enum(self) -> type[BaseOptions]:
         return ExperimentPreset
-
-    def _dataset_constructor_kwargs(self, training_run) -> dict:
-        experiment_config = training_run.config.experiment_config
-        return {
-            "batch_size": training_run.config.batch_size,
-            "source_sequence_length": experiment_config.source_sequence_length,
-            "target_sequence_length": experiment_config.target_sequence_length,
-        }

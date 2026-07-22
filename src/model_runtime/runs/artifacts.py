@@ -16,6 +16,7 @@ from model_runtime.packages.identity import ModelIdentity
 from model_runtime.runs.json_values import require_finite_json
 from model_runtime.runs.locking import exclusive_file_lock
 from model_runtime.runs.progress import sanitize_metric_payload
+from model_runtime.task_behavior import experiment_task_behavior
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
 DEFAULT_RESULT_STRING_VALUE_LIMIT = 20_000
@@ -60,34 +61,8 @@ def result_ranking_score(
     experiment_task: ExperimentTask | None,
     result: Mapping[str, Any],
 ) -> tuple[float, float]:
-    metrics = result.get("metrics", {})
-    if not isinstance(metrics, Mapping):
-        metrics = {}
-    if experiment_task == ExperimentTask.CAUSAL_LANGUAGE_MODELING:
-        validation_loss = metrics.get("validation/loss")
-        if validation_loss is None:
-            validation_loss = metrics.get("validation_loss")
-        if validation_loss is not None:
-            return (1.0, -float(validation_loss))
-        return (0.0, float("-inf"))
-
-    if experiment_task == ExperimentTask.TEXT_TRANSLATION:
-        bleu = metrics.get("validation/bleu")
-        if bleu is None:
-            bleu = metrics.get("validation_bleu")
-        if bleu is not None:
-            return (2.0, float(bleu))
-        validation_loss = metrics.get("validation/loss")
-        if validation_loss is None:
-            validation_loss = metrics.get("validation_loss")
-        if validation_loss is not None:
-            return (1.0, -float(validation_loss))
-        return (0.0, float("-inf"))
-
-    accuracy = metrics.get("validation_accuracy")
-    if accuracy is None:
-        accuracy = metrics.get("validation/accuracy", 0)
-    return (1.0, float(accuracy))
+    task = experiment_task or ExperimentTask.IMAGE_CLASSIFICATION
+    return experiment_task_behavior(task).ranking_score(result)
 
 
 @contextmanager

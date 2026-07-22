@@ -22,6 +22,7 @@ from model_runtime.runs.artifacts import (
     validate_artifact_namespace,
     write_run_result,
 )
+from model_runtime.task_behavior import experiment_task_behavior
 
 
 def _validate_log_folder(log_folder: str | None) -> str | None:
@@ -205,12 +206,12 @@ class ExperimentBase:
             dataset.seed = int(seed)
 
     def _dataset_constructor_kwargs(self, training_run: TrainingRun) -> dict:
-        """Return package-specific keyword arguments for a data module."""
+        """Return Experiment Task arguments for a data module."""
 
-        kwargs = {"batch_size": training_run.config.batch_size}
-        if training_run.experiment_task == ExperimentTask.CAUSAL_LANGUAGE_MODELING:
-            kwargs["sequence_length"] = training_run.config.sequence_length
-        return kwargs
+        task = getattr(training_run, "experiment_task", None) or self.experiment_task
+        return experiment_task_behavior(task).dataset_constructor_kwargs(
+            training_run.config
+        )
 
     def _build_dataset(self, training_run: TrainingRun):
         return training_run.dataset_type(
