@@ -797,13 +797,38 @@ class InspectorSchemaTests(unittest.TestCase):
                 if "expert" in backend:
                     self.assertTrue({"num_experts", "top_k"}.issubset(axes))
                 if "adaptive" in backend:
-                    self.assertTrue(
+                    roles = (
+                        (
+                            "attention_projection_adaptive",
+                            "attention_expert_adaptive",
+                            "router_adaptive",
+                            "feed_forward_adaptive",
+                        )
+                        if "expert" in backend
+                        else (
+                            "projection_adaptive",
+                            "feed_forward_adaptive",
+                        )
+                    )
+                    adaptive_axes = {
+                        f"{role}_{field}"
+                        for role in roles
+                        for field in (
+                            "weight_option",
+                            "bias_option",
+                            "diagonal_option",
+                            "row_mask_option",
+                        )
+                    }
+                    self.assertTrue(adaptive_axes.issubset(axes))
+                    self.assertFalse(
                         {
                             "weight_option",
                             "bias_option",
                             "diagonal_option",
                             "row_mask_option",
-                        }.issubset(axes)
+                        }
+                        & set(axes)
                     )
 
     def test_linear_schemas_do_not_expose_halting_output_dims(self) -> None:
