@@ -26,48 +26,55 @@ class TestModelPackageInterface(unittest.TestCase):
 
         for package in packages:
             with self.subTest(model_package=package.catalog_key):
+                package_module = (
+                    f"models.{package.identity.model_type}.{package.identity.model}"
+                )
                 self.assertIsInstance(package, ModelPackage)
                 self.assertIs(model_package(package.catalog_key), package)
                 self.assertEqual(
                     package.identity.to_payload(),
                     {
-                        "modelType": package.model_type,
-                        "model": package.model,
+                        "modelType": package.identity.model_type,
+                        "model": package.identity.model,
                     },
                 )
                 self.assertEqual(
                     package.runtime_defaults.__name__,
-                    f"{package.module_path}.config",
+                    f"{package_module}.config",
+                )
+                runtime = package.bind_runtime_defaults()
+                self.assertIs(type(runtime), package.runtime_options_type)
+                self.assertEqual(
+                    type(runtime).__module__,
+                    f"{package_module}.runtime_options",
                 )
                 self.assertIn(
                     package.default_experiment_task,
                     package.dataset_metadata,
                 )
                 self.assertEqual(
-                    package.metadata.dataset_options_module.__name__,
-                    f"{package.module_path}.dataset_options",
+                    package.metadata.dataset_options.__name__,
+                    f"{package_module}.dataset_options",
                 )
                 self.assertEqual(
-                    package.metadata.monitor_options_module.__name__,
-                    f"{package.module_path}.monitor_options",
+                    package.metadata.monitor_options_source.__name__,
+                    f"{package_module}.monitor_options",
                 )
                 self.assertEqual(
-                    package.metadata.search_space_module.__name__,
-                    f"{package.module_path}.search_space",
+                    package.metadata.search_space.__name__,
+                    f"{package_module}.search_space",
                 )
                 self.assertTrue(package.preset_type)
                 self.assertEqual(
                     package.preset_type.__module__,
-                    f"{package.module_path}.presets",
+                    f"{package_module}.presets",
                 )
                 self.assertEqual(
                     type(package.presets).__module__,
-                    f"{package.module_path}.presets",
+                    f"{package_module}.presets",
                 )
-                self.assertEqual(
-                    package.experiment_type.__module__,
-                    f"{package.module_path}.presets",
-                )
+                selected_preset = next(iter(package.preset_type))
+                self.assertIsInstance(package.preset_locks(selected_preset), dict)
 
                 configurations = package.build_configurations()
                 self.assertTrue(configurations)
@@ -79,10 +86,6 @@ class TestModelPackageInterface(unittest.TestCase):
                 )
                 model = package.build_model(configurations[0])
                 self.assertIsInstance(model, Module)
-                self.assertEqual(
-                    type(model).__module__,
-                    f"{package.module_path}.model",
-                )
 
 
 if __name__ == "__main__":

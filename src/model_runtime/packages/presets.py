@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import itertools
 import json
 import random
@@ -11,14 +10,8 @@ from pathlib import Path
 
 from emperor.config import ModelConfig
 from emperor.datasets.image.classification import Mnist
-from model_runtime.packages.configuration import (
-    canonical_config_key,
-    config_key_to_model_param,
-)
-from model_runtime.packages.definition import model_package_from_module_path
-from model_runtime.packages.definition import (
-    model_package_from_module_path as model_package_for_module,
-)
+from model_runtime.packages.configuration import config_key_to_model_param
+from model_runtime.packages.definition import ModelPackage
 from model_runtime.runs.artifacts import validate_artifact_namespace
 from model_runtime.runs.search import (
     _combination_at_index as _runs_combination_at_index,
@@ -27,13 +20,6 @@ from model_runtime.runs.search import _combination_count as _runs_combination_co
 from model_runtime.runs.search import (
     _sample_unique_combination_indices as _runs_sample_unique_indices,
 )
-
-
-def _public_model_id_from_package(package: str) -> str:
-    model_package = model_package_from_module_path(package)
-    if model_package is not None:
-        return model_package.catalog_key
-    return package.rsplit(".", 1)[-1]
 
 
 def _validate_log_folder(log_folder: str | None) -> str | None:
@@ -157,6 +143,22 @@ class ExperimentPresetsBase:
         preset_definitions: Mapping[object, PresetDefinition],
     ) -> None:
         self._preset_definitions = dict(preset_definitions)
+        self._model_package: ModelPackage | None = None
+
+    def bind_model_package(self, package: ModelPackage) -> None:
+        if not isinstance(package, ModelPackage):
+            raise TypeError("Preset binding requires a ModelPackage.")
+        if self._model_package is not None and self._model_package != package:
+            raise ValueError("Preset instances cannot be rebound to another package.")
+        self._model_package = package
+
+    def _bound_model_package(self) -> ModelPackage:
+        if self._model_package is None:
+            raise RuntimeError(
+                "Preset operations that access metadata require a selected "
+                "ModelPackage. Use MODEL_PACKAGE.presets."
+            )
+        return self._model_package
 
     def get_config(
         self,
@@ -287,8 +289,7 @@ class ExperimentPresetsBase:
         }
 
     def _best_params(self, dataset: type, log_folder: str | None = None) -> dict:
-        package = type(self).__module__.rsplit(".", 1)[0]
-        model_id = _public_model_id_from_package(package)
+        model_id = self._bound_model_package().identity.catalog_key
         log_folder = _validate_log_folder(log_folder)
         folder = Path(log_folder) / model_id if log_folder else Path(model_id)
         path = Path("logs") / folder / "best_results.json"
@@ -313,13 +314,7 @@ class ExperimentPresetsBase:
     ) -> dict:
         if search_mode is None:
             return {}
-        package = type(self).__module__.rsplit(".", 1)[0]
-        model_package = model_package_for_module(package)
-        search_space_module = (
-            model_package.metadata.search_space_module
-            if model_package is not None
-            else importlib.import_module(f"{package}.search_space")
-        )
+        search_space_module = self._bound_model_package().metadata.search_space
         prefix = "SEARCH_SPACE_"
         full_space = {
             key[len(prefix) :].lower(): value
@@ -342,8 +337,6 @@ class ExperimentPresetsBase:
                 {key: full_space[key] for key in search_keys}
             )
 
-        full_space = self._dedupe_search_space_aliases(full_space)
-
         locked_fields = self._effective_locked_fields(model_config_preset)
         if not locked_fields:
             return self._search_space_for_model_params(full_space)
@@ -363,26 +356,6 @@ class ExperimentPresetsBase:
 
     def _effective_model_param_name(self, key: str) -> str:
         return config_key_to_model_param(key)
-
-    def _dedupe_search_space_aliases(self, full_space: dict) -> dict:
-        selected: dict[str, object] = {}
-        selected_by_param: dict[str, tuple[str, int]] = {}
-        for key, value in full_space.items():
-            model_param = self._effective_model_param_name(key)
-            canonical_key = canonical_config_key(key).lower()
-            preference = 1 if canonical_key == key else 0
-            existing = selected_by_param.get(model_param)
-            if existing is None:
-                selected[key] = value
-                selected_by_param[model_param] = (key, preference)
-                continue
-            existing_key, existing_preference = existing
-            if preference <= existing_preference:
-                continue
-            del selected[existing_key]
-            selected[key] = value
-            selected_by_param[model_param] = (key, preference)
-        return selected
 
     def _effective_locked_fields(
         self,
