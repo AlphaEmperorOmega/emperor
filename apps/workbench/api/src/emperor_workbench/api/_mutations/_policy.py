@@ -30,16 +30,6 @@ class HttpOperationPolicy(StrEnum):
     LOCAL_MUTATION = "local-mutation"
     LOG_IMPORT = "log-import"
 
-    def __str__(self) -> str:
-        """Preserve the legacy ``str, Enum`` representation."""
-
-        return f"{type(self).__name__}.{self.name}"
-
-    def __format__(self, format_spec: str) -> str:
-        """Apply formatting to the compatibility string representation."""
-
-        return format(str(self), format_spec)
-
     @property
     def is_mutation(self) -> bool:
         return self is not HttpOperationPolicy.READ_ONLY

@@ -16,14 +16,14 @@ from tests.support import lifespan_client
 
 
 class HttpMutationPolicyTests(unittest.TestCase):
-    def test_policy_preserves_string_and_json_compatibility(self) -> None:
+    def test_policy_uses_its_canonical_string_value(self) -> None:
         from emperor_workbench.api._mutations import HttpOperationPolicy
 
         policy = HttpOperationPolicy.READ_ONLY
 
         self.assertEqual(policy, "read-only")
-        self.assertEqual(str(policy), "HttpOperationPolicy.READ_ONLY")
-        self.assertEqual(f"{policy:>30}", " HttpOperationPolicy.READ_ONLY")
+        self.assertEqual(str(policy), "read-only")
+        self.assertEqual(f"{policy:>30}", "read-only".rjust(30))
         self.assertEqual(
             json.loads(json.dumps({"policy": policy})),
             {"policy": "read-only"},
