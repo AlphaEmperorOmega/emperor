@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from model_runtime.cli import to_wire
+from model_runtime.cli import json_value_to_wire
 from model_runtime.packages import ModelIdentity
 
 from emperor_workbench.project_adapter._wire import (
@@ -118,7 +118,7 @@ class ModelPackageReference:
                 "checkpoint_config_overrides",
                 {
                     "model_id": self.catalog_key,
-                    "tensor_shapes": to_wire(tensor_shapes),
+                    "tensor_shapes": json_value_to_wire(tensor_shapes),
                 },
             )
         )

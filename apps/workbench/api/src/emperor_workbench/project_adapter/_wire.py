@@ -131,9 +131,3 @@ def require_field(mapping: dict[str, Any], name: str) -> Any:
         raise ProjectAdapterProtocolFailure(
             "The project Adapter result is invalid."
         ) from exc
-
-
-def tuple_tree(value: Any) -> Any:
-    if isinstance(value, list):
-        return tuple(tuple_tree(item) for item in value)
-    return value

@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import psutil
 import torch
-from model_runtime.cli import to_wire
+from model_runtime.cli import inspection_result_to_wire
 from model_runtime.inspection import InspectionRequest, InspectionResult
 
 import emperor_workbench.inspection as inspection_interface
@@ -275,7 +275,10 @@ class InspectionCapabilityTests(unittest.TestCase):
                 separators=(",", ":"),
             ).encode()
         )
-        self.assertEqual(to_wire(decoded), to_wire(result))
+        self.assertEqual(
+            inspection_result_to_wire(decoded),
+            inspection_result_to_wire(result),
+        )
 
     def test_worker_domain_and_malformed_envelopes_are_stable(self) -> None:
         expected = InspectionFailure(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import random
 import sys
 from collections.abc import Mapping
@@ -9,12 +10,21 @@ from typing import Any
 
 from model_runtime.cli import (
     PROTOCOL_VERSION,
+    configuration_schema_to_wire,
+    configuration_values_to_wire,
+    inspection_result_to_wire,
+    json_value_from_wire,
     package_metadata_to_wire,
     planning_budget_from_wire,
+    preset_locks_to_wire,
+    random_state_from_wire,
+    random_state_to_wire,
     run_plan_from_wire,
+    run_plan_to_wire,
     run_request_from_wire,
-    submitted_run_from_wire,
-    to_wire,
+    run_results_to_wire,
+    search_space_to_wire,
+    submitted_runs_from_wire,
 )
 from model_runtime.inspection import (
     InspectionError,
@@ -56,9 +66,57 @@ def _object(value: object, label: str) -> Mapping[str, Any]:
     return value
 
 
-def _tuple_tree(value: Any) -> Any:
-    if isinstance(value, list):
-        return tuple(_tuple_tree(item) for item in value)
+def _optional_object(
+    payload: Mapping[str, Any],
+    key: str,
+    label: str,
+) -> Mapping[str, Any]:
+    value = payload.get(key)
+    return {} if value is None else _object(value, label)
+
+
+def _list(value: object, label: str) -> list[Any]:
+    if not isinstance(value, list):
+        raise AdapterProtocolError(f"{label} must be a list.")
+    return value
+
+
+def _string(value: object, label: str) -> str:
+    if not isinstance(value, str):
+        raise AdapterProtocolError(f"{label} must be a string.")
+    return value
+
+
+def _optional_string(value: object, label: str) -> str | None:
+    return None if value is None else _string(value, label)
+
+
+def _strings(value: object, label: str) -> tuple[str, ...]:
+    return tuple(_string(item, f"{label} entry") for item in _list(value, label))
+
+
+def _boolean(value: object, label: str) -> bool:
+    if type(value) is not bool:
+        raise AdapterProtocolError(f"{label} must be a boolean.")
+    return value
+
+
+def _scalar(value: object, label: str) -> bool | int | float | str | None:
+    if (
+        value is None
+        or type(value) is bool
+        or type(value) is int
+        or isinstance(value, str)
+    ):
+        return value
+    if isinstance(value, float) and math.isfinite(value):
+        return value
+    raise AdapterProtocolError(f"{label} must be a finite JSON scalar.")
+
+
+def _positive_integer(value: object, label: str) -> int:
+    if type(value) is not int or value < 1:
+        raise AdapterProtocolError(f"{label} must be a positive integer.")
     return value
 
 
@@ -93,17 +151,18 @@ def _package(payload: Mapping[str, Any]):
 
 def _resolve(payload: Mapping[str, Any]) -> dict[str, Any]:
     package = _package(payload)
-    task = package.resolve_experiment_task(payload.get("experiment_task"))
-    raw_presets = payload.get("presets") or []
-    raw_datasets = payload.get("datasets") or []
-    raw_monitors = payload.get("monitors") or []
-    if not isinstance(raw_presets, list) or not isinstance(raw_datasets, list):
-        raise AdapterProtocolError("Resolve presets and datasets must be lists.")
-    if not isinstance(raw_monitors, list):
-        raise AdapterProtocolError("Resolve monitors must be a list.")
-    presets = [package.resolve_preset(str(name)) for name in raw_presets]
-    datasets = package.resolve_datasets([str(name) for name in raw_datasets], task)
-    monitors = package.resolve_monitors([str(name) for name in raw_monitors])
+    task = package.resolve_experiment_task(
+        _optional_string(payload.get("experiment_task"), "experiment_task")
+    )
+    raw_presets = payload.get("presets")
+    raw_datasets = payload.get("datasets")
+    raw_monitors = payload.get("monitors")
+    preset_names = () if raw_presets is None else _strings(raw_presets, "presets")
+    dataset_names = () if raw_datasets is None else _strings(raw_datasets, "datasets")
+    monitor_names = () if raw_monitors is None else _strings(raw_monitors, "monitors")
+    presets = [package.resolve_preset(name) for name in preset_names]
+    datasets = package.resolve_datasets(list(dataset_names), task)
+    monitors = package.resolve_monitors(list(monitor_names))
     return {
         "experiment_task": package.task_name(task),
         "presets": [
@@ -130,41 +189,51 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
     if operation == "resolve":
         return _resolve(payload)
     if operation == "configuration":
-        return to_wire(configuration_schema(package, payload.get("preset")))
+        return configuration_schema_to_wire(
+            configuration_schema(
+                package,
+                _optional_string(payload.get("preset"), "preset"),
+            )
+        )
     if operation == "search_space":
         raw_presets = payload.get("presets")
-        presets = (
-            tuple(str(item) for item in raw_presets)
-            if isinstance(raw_presets, list)
-            else None
-        )
-        return to_wire(
+        presets = None if raw_presets is None else _strings(raw_presets, "presets")
+        return search_space_to_wire(
             search_space_schema(
                 package,
-                payload.get("preset"),
+                _optional_string(payload.get("preset"), "preset"),
                 presets,
             )
         )
     if operation in {"parse_overrides", "serialize_overrides"}:
-        overrides = _object(payload.get("overrides") or {}, "overrides")
+        overrides = _optional_object(payload, "overrides", "overrides")
+        ignore_unknown = _boolean(
+            payload.get("ignore_unknown", False),
+            "ignore_unknown",
+        )
         if operation == "parse_overrides":
-            return to_wire(
+            return configuration_values_to_wire(
                 parse_overrides(
                     package,
                     overrides,
-                    preset=payload.get("preset"),
-                    ignore_unknown=bool(payload.get("ignore_unknown", False)),
+                    preset=_optional_string(payload.get("preset"), "preset"),
+                    ignore_unknown=ignore_unknown,
                 ).values
             )
-        return to_wire(
+        return configuration_values_to_wire(
             serialize_overrides(
                 package,
                 overrides,
-                ignore_unknown=bool(payload.get("ignore_unknown", False)),
+                ignore_unknown=ignore_unknown,
             )
         )
     if operation == "preset_locks":
-        return to_wire(preset_locks(package, payload.get("preset")))
+        return preset_locks_to_wire(
+            preset_locks(
+                package,
+                _optional_string(payload.get("preset"), "preset"),
+            )
+        )
     if operation == "reject_locked_overrides":
         preset = payload.get("preset")
         if not isinstance(preset, str):
@@ -172,7 +241,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         reject_locked_overrides(
             package,
             preset,
-            _object(payload.get("overrides") or {}, "overrides"),
+            _optional_object(payload, "overrides", "overrides"),
         )
         return None
     if operation == "validate":
@@ -183,9 +252,12 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
             package,
             InspectionRequest(
                 preset=preset,
-                overrides=_object(payload.get("overrides") or {}, "overrides"),
-                dataset=payload.get("dataset"),
-                experiment_task=payload.get("experiment_task"),
+                overrides=_optional_object(payload, "overrides", "overrides"),
+                dataset=_optional_string(payload.get("dataset"), "dataset"),
+                experiment_task=_optional_string(
+                    payload.get("experiment_task"),
+                    "experiment_task",
+                ),
             ),
         )
         return None
@@ -193,14 +265,17 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         preset = payload.get("preset")
         if not isinstance(preset, str):
             raise AdapterProtocolError("Inspection request requires preset.")
-        return to_wire(
+        return inspection_result_to_wire(
             inspect_model(
                 package,
                 InspectionRequest(
                     preset=preset,
-                    overrides=_object(payload.get("overrides") or {}, "overrides"),
-                    dataset=payload.get("dataset"),
-                    experiment_task=payload.get("experiment_task"),
+                    overrides=_optional_object(payload, "overrides", "overrides"),
+                    dataset=_optional_string(payload.get("dataset"), "dataset"),
+                    experiment_task=_optional_string(
+                        payload.get("experiment_task"),
+                        "experiment_task",
+                    ),
                 ),
             )
         )
@@ -211,7 +286,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         parsed = parse_config_value(
             package.metadata.search_space,
             search_key,
-            str(payload.get("value")),
+            str(_scalar(payload.get("value"), "value")),
         )
         if isinstance(parsed, type):
             abstract_error = abstract_config_class_error(parsed)
@@ -219,21 +294,25 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
                 raise ValueError(abstract_error)
         return serialize_config_value(parsed)
     if operation == "checkpoint_config_overrides":
-        return to_wire(
+        return configuration_values_to_wire(
             package.checkpoint_config_overrides(
-                _tensor_shapes(payload.get("tensor_shapes") or {})
+                _tensor_shapes(
+                    payload.get("tensor_shapes")
+                    if payload.get("tensor_shapes") is not None
+                    else {}
+                )
             )
         )
     if operation == "plan_runs":
         request = run_request_from_wire(_object(payload.get("request"), "request"))
         budget = planning_budget_from_wire(
-            _object(payload.get("budget") or {}, "budget")
+            _optional_object(payload, "budget", "budget")
         )
         raw_state = payload.get("random_state")
         random_source = None
         if raw_state is not None:
             random_source = random.Random()
-            random_source.setstate(_tuple_tree(raw_state))
+            random_source.setstate(random_state_from_wire(raw_state))
         plan = plan_runs(
             package,
             request,
@@ -241,44 +320,51 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
             budget=budget,
         )
         return {
-            "plan": to_wire(plan),
+            "plan": run_plan_to_wire(plan),
             "random_state": (
-                to_wire(random_source.getstate()) if random_source is not None else None
+                random_state_to_wire(random_source.getstate())
+                if random_source is not None
+                else None
             ),
         }
     if operation == "accept_run_plan":
         request = run_request_from_wire(_object(payload.get("request"), "request"))
-        submitted = tuple(
-            submitted_run_from_wire(_object(item, "submitted run"))
-            for item in payload.get("runs") or ()
+        submitted = submitted_runs_from_wire(
+            payload.get("runs") if payload.get("runs") is not None else []
         )
         budget = planning_budget_from_wire(
-            _object(payload.get("budget") or {}, "budget")
+            _optional_object(payload, "budget", "budget")
         )
-        return to_wire(accept_run_plan(package, request, submitted, budget=budget))
+        return run_plan_to_wire(
+            accept_run_plan(package, request, submitted, budget=budget)
+        )
     if operation == "execute_run_plan":
         plan = run_plan_from_wire(_object(payload.get("plan"), "plan"))
         progress_path = payload.get("progress_path")
         progress = (
-            JsonlRunProgress(Path(str(progress_path)))
+            JsonlRunProgress(Path(_string(progress_path, "progress_path")))
             if progress_path is not None
             else None
         )
-        return to_wire(
+        logs_root = _optional_string(payload.get("logs_root"), "logs_root") or "logs"
+        log_folder = _optional_string(payload.get("log_folder"), "log_folder")
+        progress_step_interval = _positive_integer(
+            payload.get("progress_step_interval", 25),
+            "progress_step_interval",
+        )
+        raw_monitors = payload.get("monitors")
+        monitors = () if raw_monitors is None else _strings(raw_monitors, "monitors")
+        return run_results_to_wire(
             execute_runs(
                 package,
                 plan,
                 artifacts=FilesystemRunArtifacts(
-                    root=Path(str(payload.get("logs_root") or "logs")),
-                    namespace=(
-                        str(payload["log_folder"])
-                        if payload.get("log_folder")
-                        else None
-                    ),
+                    root=Path(logs_root),
+                    namespace=log_folder,
                 ),
                 progress=progress,
-                progress_step_interval=int(payload.get("progress_step_interval") or 25),
-                monitors=tuple(str(item) for item in payload.get("monitors") or ()),
+                progress_step_interval=progress_step_interval,
+                monitors=monitors,
             )
         )
     raise AdapterProtocolError(f"Unknown Adapter operation: {operation}")
@@ -286,7 +372,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
 
 def process_request(request: Mapping[str, Any]) -> dict[str, Any]:
     version = request.get("version")
-    if version != PROTOCOL_VERSION:
+    if type(version) is not int or version != PROTOCOL_VERSION:
         raise AdapterProtocolError(
             f"Unsupported Adapter protocol version {version!r}; "
             f"expected {PROTOCOL_VERSION}."
@@ -294,7 +380,9 @@ def process_request(request: Mapping[str, Any]) -> dict[str, Any]:
     operation = request.get("operation")
     if not isinstance(operation, str):
         raise AdapterProtocolError("Adapter operation must be a string.")
-    payload = _object(request.get("payload") or {}, "payload")
+    if "payload" not in request:
+        raise AdapterProtocolError("Adapter request requires payload.")
+    payload = _object(request["payload"], "payload")
     return {
         "version": PROTOCOL_VERSION,
         "ok": True,
@@ -314,7 +402,7 @@ def _response(raw_request: bytes) -> dict[str, Any]:
             },
         }
     try:
-        request = json.loads(raw_request)
+        request = json_value_from_wire(json.loads(raw_request))
         return process_request(_object(request, "request"))
     except Exception as exc:  # The process boundary always returns one envelope.
         failure_kind = (

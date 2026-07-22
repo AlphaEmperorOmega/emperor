@@ -12,9 +12,16 @@ from typing import Any, TypeVar
 from model_runtime.cli import (
     configuration_schema_from_wire,
     inspection_result_from_wire,
+    json_value_to_wire,
+    package_metadata_from_wire,
+    planning_budget_to_wire,
+    random_state_from_wire,
+    random_state_to_wire,
     run_plan_from_wire,
+    run_plan_to_wire,
+    run_request_to_wire,
     search_space_from_wire,
-    to_wire,
+    submitted_runs_to_wire,
 )
 from model_runtime.inspection import (
     ConfigurationSchema,
@@ -39,7 +46,6 @@ from emperor_workbench.project_adapter._wire import (
     require_list,
     require_mapping,
     require_string,
-    tuple_tree,
 )
 
 DecodedT = TypeVar("DecodedT")
@@ -337,11 +343,10 @@ class ProjectAdapterClient:
         with self._metadata_lock:
             cached_metadata = self._metadata_cache.get(model_id)
             if cached_metadata is None:
-                cached_metadata = require_mapping(
-                    self.call(
-                        "package_metadata",
-                        {"model_id": model_id},
-                    )
+                cached_metadata = _decode_wire_result(
+                    package_metadata_from_wire,
+                    self.call("package_metadata", {"model_id": model_id}),
+                    name="Model Package metadata",
                 )
                 self._metadata_cache[model_id] = cached_metadata
             return deepcopy(cached_metadata)
@@ -416,7 +421,7 @@ class ProjectAdapterClient:
             {
                 "model_id": model_id,
                 "preset": request.preset,
-                "overrides": to_wire(overrides),
+                "overrides": json_value_to_wire(overrides),
                 "dataset": request.dataset,
                 "experiment_task": request.experiment_task,
             },
@@ -442,7 +447,7 @@ class ProjectAdapterClient:
             "execute_run_plan",
             {
                 "model_id": model_id,
-                "plan": to_wire(plan),
+                "plan": run_plan_to_wire(plan),
                 "logs_root": logs_root,
                 "log_folder": log_folder,
                 "progress_path": progress_path,
@@ -463,10 +468,10 @@ class ProjectAdapterClient:
             "plan_runs",
             {
                 "model_id": model_id,
-                "request": to_wire(request),
-                "budget": to_wire(budget),
+                "request": run_request_to_wire(request),
+                "budget": planning_budget_to_wire(budget),
                 "random_state": (
-                    to_wire(random_source.getstate())
+                    random_state_to_wire(random_source.getstate())
                     if random_source is not None
                     else None
                 ),
@@ -475,7 +480,9 @@ class ProjectAdapterClient:
         plan_payload = require_mapping(plan_response)
         if random_source is not None and plan_payload.get("random_state") is not None:
             try:
-                random_source.setstate(tuple_tree(plan_payload["random_state"]))
+                random_source.setstate(
+                    random_state_from_wire(plan_payload["random_state"])
+                )
             except (TypeError, ValueError) as exc:
                 raise ProjectAdapterProtocolFailure(
                     "The project Adapter random state is invalid."
@@ -498,9 +505,9 @@ class ProjectAdapterClient:
             "accept_run_plan",
             {
                 "model_id": model_id,
-                "request": to_wire(request),
-                "runs": to_wire(runs),
-                "budget": to_wire(budget),
+                "request": run_request_to_wire(request),
+                "runs": submitted_runs_to_wire(runs),
+                "budget": planning_budget_to_wire(budget),
             },
         )
         return _decode_wire_result(

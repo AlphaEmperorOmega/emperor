@@ -19,15 +19,27 @@ from emperor_workbench.settings import WorkbenchApiSettings
 from ._support import _FakeProcess, _response
 
 
+def _metadata_payload(runtime_value: object) -> dict[str, object]:
+    return {
+        "identity": {"model_type": "linears", "model": "linear"},
+        "catalog_key": "linears/linear",
+        "presets": [],
+        "default_experiment_task": "image-classification",
+        "dataset_groups": [],
+        "monitors": [],
+        "runtime_defaults": {"VALUE": runtime_value},
+    }
+
+
 class ProjectAdapterLifecycleTests(unittest.TestCase):
     def test_metadata_cache_is_isolated_per_client(self) -> None:
         first = ProjectAdapterClient(("first",), persistent=False)
         second = ProjectAdapterClient(("second",), persistent=False)
         first.call = Mock(  # type: ignore[method-assign]
-            return_value={"runtime_defaults": {"VALUE": 1}}
+            return_value=_metadata_payload(1)
         )
         second.call = Mock(  # type: ignore[method-assign]
-            return_value={"runtime_defaults": {"VALUE": 2}}
+            return_value=_metadata_payload(2)
         )
         first_reference = ModelPackageReference("linears", "linear", first)
         second_reference = ModelPackageReference("linears", "linear", second)
@@ -50,16 +62,16 @@ class ProjectAdapterLifecycleTests(unittest.TestCase):
     def test_metadata_cache_returns_mutation_isolated_payloads(self) -> None:
         client = ProjectAdapterClient(("adapter",), persistent=False)
         client.call = Mock(  # type: ignore[method-assign]
-            return_value={"runtime_defaults": {"VALUE": [1, 2]}}
+            return_value=_metadata_payload(1)
         )
         reference = ModelPackageReference("linears", "linear", client)
 
         first = reference.metadata_payload()
-        first["runtime_defaults"]["VALUE"].append(3)
+        first["runtime_defaults"]["VALUE"] = 2
 
         self.assertEqual(
-            reference.metadata_payload(),
-            {"runtime_defaults": {"VALUE": [1, 2]}},
+            reference.metadata_payload()["runtime_defaults"],
+            {"VALUE": 1},
         )
         self.assertEqual(client.call.call_count, 1)
 

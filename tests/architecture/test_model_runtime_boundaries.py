@@ -11,6 +11,8 @@ EMPEROR_ROOT = SOURCE_ROOT / "emperor"
 MODEL_RUNTIME_ROOT = SOURCE_ROOT / "model_runtime"
 INSPECTION_ROOT = MODEL_RUNTIME_ROOT / "inspection"
 RUNS_ROOT = MODEL_RUNTIME_ROOT / "runs"
+CLI_ROOT = MODEL_RUNTIME_ROOT / "cli"
+WORKBENCH_SOURCE_ROOT = PROJECT_ROOT / "apps" / "workbench" / "api" / "src"
 PROJECT_CLI_ROOT = SOURCE_ROOT / "models" / "project_cli"
 PUBLIC_RUNTIME_PACKAGES = ("packages", "inspection", "runs", "cli")
 
@@ -31,6 +33,46 @@ def _imports_under(root: Path) -> list[tuple[Path, str]]:
 
 
 class ModelRuntimeBoundaryTests(unittest.TestCase):
+    def test_wire_facade_delegates_to_record_specific_private_codecs(self) -> None:
+        for module_name in (
+            "_wire_inspection.py",
+            "_wire_packages.py",
+            "_wire_runs.py",
+            "_wire_shared.py",
+        ):
+            with self.subTest(module=module_name):
+                self.assertTrue((CLI_ROOT / module_name).is_file())
+
+        facade_path = CLI_ROOT / "wire.py"
+        facade = ast.parse(
+            facade_path.read_text(encoding="utf-8"),
+            facade_path.as_posix(),
+        )
+        facade_functions = {
+            node.name for node in facade.body if isinstance(node, ast.FunctionDef)
+        }
+        self.assertEqual(facade_functions, {"to_wire"})
+
+        unrestricted_projector_imports: list[str] = []
+        for root in (SOURCE_ROOT / "models", WORKBENCH_SOURCE_ROOT):
+            for source_path in sorted(root.rglob("*.py")):
+                tree = ast.parse(
+                    source_path.read_text(encoding="utf-8"),
+                    source_path.as_posix(),
+                )
+                for node in ast.walk(tree):
+                    if (
+                        isinstance(node, ast.ImportFrom)
+                        and node.module
+                        in {"model_runtime.cli", "model_runtime.cli.wire"}
+                        and any(alias.name == "to_wire" for alias in node.names)
+                    ):
+                        unrestricted_projector_imports.append(
+                            source_path.relative_to(PROJECT_ROOT).as_posix()
+                        )
+
+        self.assertEqual(unrestricted_projector_imports, [])
+
     def test_run_artifacts_own_lifecycle_without_experiment_forwarders(self) -> None:
         self.assertFalse((RUNS_ROOT / "locking.py").exists())
         experiment_path = RUNS_ROOT / "experiment.py"

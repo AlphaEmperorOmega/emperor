@@ -106,9 +106,9 @@ def decode_worker_request(payload: object) -> InspectionWorkerRequest:
 
 
 def success_envelope(result: InspectionResult) -> dict[str, Any]:
-    from model_runtime.cli import to_wire
+    from model_runtime.cli import inspection_result_to_wire
 
-    return {"ok": True, "result": to_wire(result)}
+    return {"ok": True, "result": inspection_result_to_wire(result)}
 
 
 def domain_failure_envelope(exc: InspectionFailure) -> dict[str, Any]:
@@ -153,79 +153,11 @@ def decode_worker_response(raw_response: bytes) -> InspectionResult:
         result = envelope["result"]
         if not isinstance(result, Mapping):
             raise TypeError("Inspection result must be a mapping.")
-        _validate_result_payload(result)
         from model_runtime.cli import inspection_result_from_wire
 
         return inspection_result_from_wire(result)
     except (KeyError, TypeError, ValueError) as exc:
         raise _invalid_worker_result() from exc
-
-
-def _validate_result_payload(payload: Mapping[str, Any]) -> None:
-    identity = _mapping(payload["identity"])
-    _string(identity["model_type"])
-    _string(identity["model"])
-    _string(payload["preset"])
-    _integer(payload["parameter_count"])
-    _integer(payload["parameter_size_bytes"])
-
-    nodes = _list(payload["nodes"])
-    edges = _list(payload["edges"])
-    for node_value in nodes:
-        node = _mapping(node_value)
-        _string(node["id"])
-        _string(node["type_name"])
-        _optional_string(node["description"])
-        _string(node["path"])
-        if node["graph_role"] not in {"architecture", "internal", "runtime"}:
-            raise ValueError("Invalid graph role.")
-        _integer(node["parameter_count"])
-        _integer(node["parameter_size_bytes"])
-        _mapping(node["details"])
-        configuration = node["configuration"]
-        if configuration is not None:
-            config = _mapping(configuration)
-            _string(config["type_name"])
-            for field_value in _list(config["fields"]):
-                field = _mapping(field_value)
-                _string(field["key"])
-                _optional_string(field["description"])
-                field["value"]
-    for edge_value in edges:
-        edge = _mapping(edge_value)
-        _string(edge["id"])
-        _string(edge["source"])
-        _string(edge["target"])
-
-
-def _mapping(value: object) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise TypeError("Expected mapping value.")
-    return value
-
-
-def _list(value: object) -> list[Any]:
-    if not isinstance(value, list):
-        raise TypeError("Expected list value.")
-    return value
-
-
-def _string(value: object) -> str:
-    if not isinstance(value, str):
-        raise TypeError("Expected string value.")
-    return value
-
-
-def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    return _string(value)
-
-
-def _integer(value: object) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise TypeError("Expected integer value.")
-    return value
 
 
 def _invalid_worker_result() -> InspectionFailure:
