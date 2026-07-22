@@ -10,8 +10,8 @@ from model_runtime.inspection import (
     InspectionRequest,
     InspectionResult,
     ParsedOverrides,
-    inspect_model_graph,
 )
+from model_runtime.inspection.model_graph import inspect_model_graph
 from model_runtime.packages import is_safe_model_identity
 
 from emperor_workbench.api.v1.inspection import (
