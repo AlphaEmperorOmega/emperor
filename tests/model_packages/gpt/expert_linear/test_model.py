@@ -25,21 +25,22 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
-from models.catalog import MODEL_CATALOG, catalog_entry
-from models.gpt.expert_linear import (
-    Experiment,
-    ExperimentConfig,
-    ExperimentPreset,
-    ExperimentPresets,
-    GptExpertLinearConfigBuilder,
-    GptLmHeadOptions,
-    Model,
-)
+from models.catalog import model_package
 from models.gpt.expert_linear._builder_adapter import (
     expert_linear_builder_kwargs_from_flat,
 )
+from models.gpt.expert_linear.config_builder import GptExpertLinearConfigBuilder
+from models.gpt.expert_linear.experiment_config import ExperimentConfig
+from models.gpt.expert_linear.model import Model
+from models.gpt.expert_linear.presets import (
+    Experiment,
+    ExperimentPreset,
+    ExperimentPresets,
+)
 from models.gpt.expert_linear.runtime_options import (
     GptEmbeddingOptions,
+    GptLmHeadOptions,
+    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
     TransformerFeedForwardOptions,
@@ -59,7 +60,7 @@ _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 class TestGptExpertLinearModel(unittest.TestCase):
     def test_runtime_defaults_describe_a_gpt2_decoder_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
@@ -75,12 +76,15 @@ class TestGptExpertLinearModel(unittest.TestCase):
     backend_module_name = "MixtureOfExperts"
 
     def config(self, **overrides):
-        return GptExpertLinearConfigBuilder(
-            input_dim=16,
-            output_dim=16,
-            sequence_length=6,
-            **overrides,
-        ).build()
+        runtime = model_package("gpt/expert_linear").bind_runtime_defaults(
+            {
+                "input_dim": 16,
+                "output_dim": 16,
+                "sequence_length": 6,
+                **overrides,
+            }
+        )
+        return GptExpertLinearConfigBuilder(runtime=runtime).build()
 
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
@@ -88,12 +92,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertIsNotNone(ExperimentConfig)
         self.assertIsNotNone(ExperimentPresets)
         self.assertEqual(
-            MODEL_CATALOG["gpt/expert_linear"].module_path,
-            "models.gpt.expert_linear",
+            model_package("gpt/expert_linear").catalog_key,
+            "gpt/expert_linear",
         )
 
     def test_presets_are_contiguous_buildable_and_always_causal(self):
-        presets = ExperimentPresets()
+        presets = model_package("gpt/expert_linear").presets
         self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
@@ -136,10 +140,8 @@ class TestGptExpertLinearModel(unittest.TestCase):
 
     def test_lm_head_options_allow_untied_biased_projection(self):
         cfg = self.config(
-            lm_head_options=GptLmHeadOptions(
-                weight_tying_flag=False,
-                bias_flag=True,
-            )
+            lm_head_weight_tying_flag=False,
+            lm_head_bias_flag=True,
         )
         model = Model(cfg)
         self.assertIsNot(model.lm_head.weight, model.token_embedding.weight)
@@ -147,11 +149,11 @@ class TestGptExpertLinearModel(unittest.TestCase):
 
     def test_tied_head_rejects_unequal_vocabularies(self):
         with self.assertRaises(ValueError):
-            GptExpertLinearConfigBuilder(
+            self.config(
                 input_dim=15,
                 output_dim=16,
                 sequence_length=4,
-            ).build()
+            )
 
     def test_future_tokens_do_not_change_earlier_logits(self):
         torch.manual_seed(7)
@@ -224,7 +226,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
 
     def test_all_public_modules_import_and_catalog_resolves(self):
         package = importlib.import_module("models.gpt.expert_linear")
-        self.assertIn("GptExpertLinearConfigBuilder", package.__all__)
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
         for module_name in (
             "models.gpt.expert_linear.config",
             "models.gpt.expert_linear.presets",
@@ -237,8 +239,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
                     importlib.import_module(module_name).__name__,
                     module_name,
                 )
-        self.assertEqual(Experiment()._public_model_id(), "gpt/expert_linear")
-        self.assertIsNotNone(catalog_entry("gpt/expert_linear"))
+        experiment = Experiment(model_package=model_package("gpt/expert_linear"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "gpt/expert_linear",
+        )
+        self.assertIsNotNone(model_package("gpt/expert_linear"))
 
     def test_attention_mode_and_causal_switches_are_not_public(self):
         self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
@@ -252,7 +258,10 @@ class TestGptExpertLinearModel(unittest.TestCase):
         parameters = inspect.signature(GptExpertLinearConfigBuilder).parameters
         self.assertNotIn("expert_attention_flag", parameters)
         self.assertNotIn("causal_attention_mask_flag", parameters)
-        self.assertIn("expert_attention_use_kv_expert_models_flag", parameters)
+        self.assertEqual(tuple(parameters), ("runtime",))
+        model_package("gpt/expert_linear").bind_runtime_defaults(
+            {"expert_attention_use_kv_expert_models_flag": False}
+        )
         with self.assertRaises(TypeError):
             GptExpertLinearConfigBuilder(expert_attention_flag=False)
         with self.assertRaises(TypeError):
@@ -270,7 +279,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertIn("ExpertsMixtureOptions", names)
         self.assertNotIn("BertEmbeddingOptions", names)
 
-    def test_flat_options_build_same_config_as_grouped_options(self):
+    def test_flat_runtime_defaults_bind_to_typed_runtime_options(self):
         embedding_options = GptEmbeddingOptions(
             layer_norm_flag=False,
             dropout_probability=0.2,
@@ -337,24 +346,9 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertEqual(adapted["attention_options"], attention_options)
         self.assertEqual(adapted["feed_forward_options"], feed_forward_options)
         self.assertEqual(adapted["lm_head_options"], lm_head_options)
-        flat_config = GptExpertLinearConfigBuilder(**adapted).build()
-        grouped_config = GptExpertLinearConfigBuilder(
-            batch_size=2,
-            learning_rate=0.02,
-            input_dim=32,
-            output_dim=32,
-            sequence_length=8,
-            embedding_options=embedding_options,
-            decoder_options=decoder_options,
-            positional_embedding_options=positional_options,
-            attention_options=attention_options,
-            feed_forward_options=feed_forward_options,
-            lm_head_options=lm_head_options,
-            mixture_options=adapted["mixture_options"],
-            expert_stack_options=adapted["expert_stack_options"],
-            router_stack_options=adapted["router_stack_options"],
-        ).build()
-        self.assertEqual(flat_config, grouped_config)
+        runtime = model_package("gpt/expert_linear").bind_runtime_defaults(flat_kwargs)
+        self.assertEqual(runtime, RuntimeOptions(adapted))
+        GptExpertLinearConfigBuilder(runtime=runtime).build()
 
     def test_feed_forward_stack_is_expert_backed(self):
         cfg = self._preset_config(ExperimentPreset.TOP1_SWITCH_AUX)
@@ -369,7 +363,6 @@ class TestGptExpertLinearModel(unittest.TestCase):
         )
 
     def test_outer_and_inner_expert_controls_are_independent(self):
-        defaults = self._default_builder_kwargs()
         for name, outer_gate, inner_gate in (
             ("outer", True, False),
             ("inner", False, True),
@@ -378,14 +371,8 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 cfg = self._preset_config(
                     ExperimentPreset.BASELINE,
                     {
-                        "feed_forward_layer_controller_options": replace(
-                            defaults["feed_forward_layer_controller_options"],
-                            stack_gate_flag=outer_gate,
-                        ),
-                        "expert_layer_controller_options": replace(
-                            defaults["expert_layer_controller_options"],
-                            stack_gate_flag=inner_gate,
-                        ),
+                        "ff_stack_gate_flag": outer_gate,
+                        "expert_stack_gate_flag": inner_gate,
                     },
                 )
                 mixture = self._decoder_layer_config(
@@ -403,15 +390,11 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 )
 
     def test_feed_forward_recurrence_wraps_outer_mixture(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.BASELINE,
             {
-                "feed_forward_recurrent_controller_options": replace(
-                    defaults["feed_forward_recurrent_controller_options"],
-                    recurrent_flag=True,
-                    recurrent_max_steps=2,
-                )
+                "ff_recurrent_flag": True,
+                "ff_recurrent_max_steps": 2,
             },
         )
         feed_forward = self._decoder_layer_config(cfg).feed_forward_config.stack_config
@@ -424,22 +407,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
         )
 
     def test_attention_controls_apply_only_to_regular_projection_path(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.BASELINE,
             {
-                "attention_projection_stack_options": replace(
-                    defaults["attention_projection_stack_options"],
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    defaults["attention_projection_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    defaults["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "attn_stack_hidden_dim": 17,
+                "attn_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         attention = self._decoder_layer_config(cfg).self_attention_config
@@ -475,16 +448,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 self.assertTrue(torch.isfinite(auxiliary_loss))
 
     def test_decoder_layers_own_disjoint_attention_and_ff_experts(self):
-        defaults = self._default_builder_kwargs()
         cfg = self._preset_config(
             ExperimentPreset.BASELINE,
             {
-                "decoder_options": replace(
-                    defaults["decoder_options"],
-                    hidden_dim=8,
-                    num_layers=2,
-                    dropout_probability=0.0,
-                )
+                "hidden_dim": 8,
+                "stack_num_layers": 2,
+                "stack_dropout_probability": 0.0,
             },
         )
         model = Model(cfg)
@@ -691,7 +660,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 overrides = self._small_overrides()
                 overrides.pop("input_dim")
                 overrides.pop("output_dim")
-                cfg = ExperimentPresets().get_config(
+                cfg = model_package("gpt/expert_linear").presets.get_config(
                     ExperimentPreset.BASELINE,
                     dataset,
                     config_overrides=overrides,
@@ -721,7 +690,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
         preset: ExperimentPreset,
         overrides: dict | None = None,
     ):
-        return ExperimentPresets().get_config(
+        return model_package("gpt/expert_linear").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -738,53 +707,25 @@ class TestGptExpertLinearModel(unittest.TestCase):
             config,
         )
         kwargs.update(overrides)
-        return GptExpertLinearConfigBuilder(**kwargs).build()
+        return GptExpertLinearConfigBuilder(runtime=RuntimeOptions(kwargs)).build()
 
     def _small_overrides(self) -> dict:
-        defaults = self._default_builder_kwargs()
         return {
             "batch_size": 2,
             "input_dim": 32,
             "output_dim": 32,
             "sequence_length": 6,
-            "decoder_options": replace(
-                defaults["decoder_options"],
-                hidden_dim=8,
-                num_layers=2,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                defaults["attention_options"],
-                num_heads=2,
-            ),
-            "attention_projection_stack_options": replace(
-                defaults["attention_projection_stack_options"],
-                hidden_dim=8,
-            ),
-            "feed_forward_stack_options": replace(
-                defaults["feed_forward_stack_options"],
-                hidden_dim=8,
-            ),
-            "submodule_stack_options": replace(
-                defaults["submodule_stack_options"],
-                hidden_dim=8,
-            ),
-            "mixture_options": replace(
-                defaults["mixture_options"],
-                num_experts=4,
-            ),
-            "expert_stack_options": replace(
-                defaults["expert_stack_options"],
-                hidden_dim=8,
-            ),
-            "router_stack_options": replace(
-                defaults["router_stack_options"],
-                hidden_dim=8,
-            ),
-            "recurrent_controller_options": replace(
-                defaults["recurrent_controller_options"],
-                recurrent_max_steps=2,
-            ),
+            "hidden_dim": 8,
+            "stack_num_layers": 2,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 2,
+            "attn_stack_hidden_dim": 8,
+            "ff_stack_hidden_dim": 8,
+            "submodule_stack_hidden_dim": 8,
+            "num_experts": 4,
+            "expert_stack_hidden_dim": 8,
+            "router_stack_hidden_dim": 8,
+            "recurrent_max_steps": 2,
         }
 
     def _default_builder_kwargs(self) -> dict:

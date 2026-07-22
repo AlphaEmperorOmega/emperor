@@ -12,11 +12,9 @@ from model_runtime.packages import (
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from models.gpt.expert_linear._builder_adapter import (
-    expert_linear_builder_kwargs_from_flat,
-)
 from models.gpt.expert_linear.config_builder import GptExpertLinearConfigBuilder
 from models.gpt.expert_linear.model import Model
+from models.gpt.expert_linear.runtime_defaults import runtime_from_flat
 
 
 class ExperimentPreset(BaseOptions):
@@ -148,14 +146,14 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
         },
         description="Default recurrent decoder with step-level gating enabled.",
     ),
     ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description="Default recurrent decoder with recurrent halting enabled.",
     ),
@@ -169,15 +167,15 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description="Default recurrent decoder with step-level gating and halting.",
     ),
     ExperimentPreset.RECURRENT_GATING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
             "memory_flag": True,
         },
         description=(
@@ -187,7 +185,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description=(
@@ -197,8 +195,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description=(
@@ -234,8 +232,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = expert_linear_builder_kwargs_from_flat(kwargs, config)
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -244,7 +241,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

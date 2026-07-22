@@ -22,6 +22,7 @@ from models.gpt.expert_linear._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.gpt.expert_linear.experiment_config import ExperimentConfig
+from models.gpt.expert_linear.runtime_defaults import DEFAULT_RUNTIME
 from models.gpt.expert_linear.runtime_options import (
     DynamicMemoryOptions,
     ExpertsDynamicMemoryOptions,
@@ -36,6 +37,7 @@ from models.gpt.expert_linear.runtime_options import (
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
+    RuntimeOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
@@ -47,7 +49,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class GptExpertLinearConfigBuilder:
+class _GptExpertLinearConfigBuilderImplementation:
     def __init__(
         self,
         *,
@@ -256,3 +258,13 @@ class GptExpertLinearConfigBuilder:
                 ),
             )
         )
+
+
+class GptExpertLinearConfigBuilder(_GptExpertLinearConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.gpt.expert_linear GptExpertLinearConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())
