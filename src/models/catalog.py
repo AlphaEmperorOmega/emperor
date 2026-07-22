@@ -17,6 +17,7 @@ from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
 )
 from models.parametric.parametric_matrix import MODEL_PACKAGE as PARAMETRIC_MATRIX
+from models.parametric.parametric_vector import MODEL_PACKAGE as PARAMETRIC_VECTOR
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
     "bert/linear": ModelPackage("bert", "linear", "models.bert.linear"),
@@ -76,9 +77,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "experts/linear_adaptive": ModelPackage(
         "experts", "linear_adaptive", "models.experts.linear_adaptive"
     ),
-    "parametric/parametric_vector": ModelPackage(
-        "parametric", "parametric_vector", "models.parametric.parametric_vector"
-    ),
+    "parametric/parametric_vector": PARAMETRIC_VECTOR,
     "parametric/parametric_matrix": PARAMETRIC_MATRIX,
     "parametric/parametric_generator": PARAMETRIC_GENERATOR,
     "neuron/linear": ModelPackage("neuron", "linear", "models.neuron.linear"),

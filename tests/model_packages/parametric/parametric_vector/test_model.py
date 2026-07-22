@@ -29,6 +29,7 @@ from emperor.parametric import (
     VectorWeightsMixtureConfig,
 )
 from model_runtime.packages import GridSearch, RandomSearch
+from models.catalog import model_package
 from models.parametric.parametric_vector.config_builder import (
     ParametricVectorConfigBuilder,
 )
@@ -37,18 +38,31 @@ from models.parametric.parametric_vector.model import Model
 from models.parametric.parametric_vector.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.parametric.parametric_vector.runtime_options import (
     ParametricMixtureOptions,
     ParametricRouterOptions,
     ParametricSamplerOptions,
     ParametricStackOptions,
+    RuntimeOptions,
 )
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("parametric/parametric_vector").bind_runtime_defaults(
+        runtime_defaults
+    )
+    return ParametricVectorConfigBuilder(runtime=runtime).build()
+
+
+def _build_typed_config(**construction_values):
+    return ParametricVectorConfigBuilder(
+        runtime=RuntimeOptions(construction_values)
+    ).build()
 
 
 class TestParametricVectorModel(unittest.TestCase):
@@ -66,8 +80,11 @@ class TestParametricVectorModel(unittest.TestCase):
                 self.assertEqual(module.__name__, module_name)
 
     def test_experiment_public_model_id_remains_catalog_id(self):
+        experiment = Experiment(
+            model_package=model_package("parametric/parametric_vector")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "parametric/parametric_vector",
         )
 
@@ -78,12 +95,14 @@ class TestParametricVectorModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.parametric.parametric_vector.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
 
@@ -93,16 +112,15 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(
-                dataset.__name__
-                for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+            (
+                dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
-                ]
+                ][0].__name__,
             ),
         )
 
     def test_modern_preset_contract_is_exposed(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_vector").presets
 
         self.assertEqual(
             {
@@ -120,7 +138,7 @@ class TestParametricVectorModel(unittest.TestCase):
         )
 
     def test_empty_overrides_generate_empty_locks(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_vector").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -128,11 +146,11 @@ class TestParametricVectorModel(unittest.TestCase):
                 self.assertEqual(presets.locked_fields(preset), {})
 
     def test_builder_returns_boundary_style_experiment_config(self):
-        cfg = ParametricVectorConfigBuilder(
+        cfg = _build_config(
             input_dim=8,
             hidden_dim=4,
             output_dim=3,
-        ).build()
+        )
 
         self.assertIsInstance(cfg.experiment_config, ExperimentConfig)
         self.assertIsNotNone(cfg.experiment_config.input_model_config)
@@ -229,14 +247,14 @@ class TestParametricVectorModel(unittest.TestCase):
             "sampler_options": sampler_options,
             "router_options": router_options,
         }
-        flat_cfg = ParametricVectorConfigBuilder(**flat_kwargs).build()
-        grouped_cfg = ParametricVectorConfigBuilder(**grouped_kwargs).build()
+        flat_cfg = _build_config(**flat_kwargs)
+        grouped_cfg = _build_typed_config(**grouped_kwargs)
 
         self.assertEqual(flat_cfg, grouped_cfg)
 
     def test_preset_builds_current_parametric_config(self):
         hidden_dim = 5
-        cfg = ExperimentPresets()._preset(
+        cfg = model_package("parametric/parametric_vector").presets._preset(
             input_dim=8,
             hidden_dim=hidden_dim,
             output_dim=3,
@@ -277,7 +295,9 @@ class TestParametricVectorModel(unittest.TestCase):
         )
 
     def test_vector_shared_router_is_rejected(self):
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = model_package("parametric/parametric_vector").presets._preset(
+            input_dim=8, hidden_dim=4, output_dim=3
+        )
         parametric_config = deepcopy(
             cfg.experiment_config.model_config.layer_config.layer_model_config
         )
@@ -290,11 +310,11 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_router_and_sampler_defaults_match_expected_structure(self):
         summary = self._router_sampler_summary(
-            ParametricVectorConfigBuilder(
+            _build_config(
                 input_dim=8,
                 hidden_dim=9,
                 output_dim=3,
-            ).build()
+            )
         )
 
         self.assertEqual(
@@ -333,7 +353,7 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_forward_one_batch_per_dataset(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_vector").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -351,7 +371,7 @@ class TestParametricVectorModel(unittest.TestCase):
                 self.assertEqual(auxiliary_loss.shape, torch.Size([]))
 
     def test_all_presets_train_one_epoch(self):
-        presets = ExperimentPresets()
+        presets = model_package("parametric/parametric_vector").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -370,7 +390,7 @@ class TestParametricVectorModel(unittest.TestCase):
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_config_search_space_builds_configs(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_vector").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -392,7 +412,7 @@ class TestParametricVectorModel(unittest.TestCase):
                 self.assertIsNone(layer_model_config.bias_mixture_config)
 
     def test_preset_accepts_grid_search_over_unlocked_axis(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_vector").presets.get_config(
             ExperimentPreset.PRESET,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -408,7 +428,7 @@ class TestParametricVectorModel(unittest.TestCase):
         )
 
     def test_config_search_applies_parametric_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("parametric/parametric_vector").presets.get_config(
             ExperimentPreset.CONFIG,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -431,7 +451,7 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_search_keys_unknown_axis_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            ExperimentPresets().get_config(
+            model_package("parametric/parametric_vector").presets.get_config(
                 ExperimentPreset.CONFIG,
                 dataset_options.DATASET_OPTIONS_BY_TASK[
                     dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -444,7 +464,9 @@ class TestParametricVectorModel(unittest.TestCase):
 
     def test_model_step_accepts_tuple_output(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(input_dim=8, hidden_dim=4, output_dim=3)
+        cfg = model_package("parametric/parametric_vector").presets._preset(
+            input_dim=8, hidden_dim=4, output_dim=3
+        )
         model = Model(cfg)
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])

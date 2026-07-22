@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from emperor.layers import ActivationOptions, ResidualConnectionOptions
 from emperor.parametric import ClipParameterOptions
+from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
 
 @dataclass(frozen=True)
@@ -41,16 +42,6 @@ class ParametricRouterOptions:
     noisy_topk_flag: bool = False
 
 
-# Preserve historical class paths for serialization compatibility.
-ParametricMixtureOptions.__module__ = (
-    "models.parametric.parametric_vector._stack_config_factory"
-)
-ParametricRouterOptions.__module__ = (
-    "models.parametric.parametric_vector._stack_config_factory"
-)
-ParametricSamplerOptions.__module__ = (
-    "models.parametric.parametric_vector._stack_config_factory"
-)
-ParametricStackOptions.__module__ = (
-    "models.parametric.parametric_vector._stack_config_factory"
-)
+@dataclass(frozen=True, slots=True)
+class RuntimeOptions(ResolvedRuntimeOptions):
+    pass
