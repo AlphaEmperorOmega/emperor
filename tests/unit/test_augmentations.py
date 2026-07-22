@@ -96,6 +96,8 @@ ADAPTIVE_PARAMETER_PUBLIC_EXPORTS = (
     "WeightDecayScheduleOptions",
     "WeightNormalizationOptions",
     "WeightNormalizationPositionOptions",
+    "AdaptiveParameterMonitorCallback",
+    "WeightBankUtilizationMonitorCallback",
 )
 
 

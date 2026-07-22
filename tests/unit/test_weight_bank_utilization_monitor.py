@@ -8,6 +8,7 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicDepthOptions,
     LayeredWeightedBankDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
+    WeightBankUtilizationMonitorCallback,
     WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,
 )
@@ -22,9 +23,6 @@ from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighte
 )
 from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (  # noqa: E501
     SoftWeightedBankDynamicWeight,
-)
-from emperor.augmentations.adaptive_parameters.monitoring import (
-    WeightBankUtilizationMonitorCallback,
 )
 from emperor.layers import (
     ActivationOptions,

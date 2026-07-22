@@ -42,11 +42,13 @@ EXPECTED_EXPORTS = (
     "WeightDecayScheduleOptions",
     "WeightNormalizationOptions",
     "WeightNormalizationPositionOptions",
+    "AdaptiveParameterMonitorCallback",
+    "WeightBankUtilizationMonitorCallback",
 )
 
 
 class TestAugmentationPublicInterface(unittest.TestCase):
-    def test_interfaces_eagerly_export_only_lightweight_configuration(self):
+    def test_interfaces_eagerly_export_public_configuration_and_callbacks(self):
         script = """\
 import json
 import sys
@@ -148,17 +150,21 @@ print(json.dumps({
             result["expected_eager_modules"],
             dict.fromkeys(result["expected_eager_modules"], True),
         )
-        self.assertEqual(
-            result["heavy_modules"],
-            dict.fromkeys(result["heavy_modules"], False),
-        )
-        self.assertEqual(
-            result["private_exports"],
-            dict.fromkeys(result["private_exports"], False),
-        )
+        expected_heavy_modules = dict.fromkeys(result["heavy_modules"], False)
+        expected_heavy_modules[
+            "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters"
+        ] = True
+        expected_heavy_modules[
+            "emperor.augmentations.adaptive_parameters._monitoring.weight_banks"
+        ] = True
+        self.assertEqual(result["heavy_modules"], expected_heavy_modules)
+        expected_private_exports = dict.fromkeys(result["private_exports"], False)
+        expected_private_exports["AdaptiveParameterMonitorCallback"] = True
+        expected_private_exports["WeightBankUtilizationMonitorCallback"] = True
+        self.assertEqual(result["private_exports"], expected_private_exports)
         self.assertEqual(
             result["runtime_loaded"],
-            {"lightning": False, "torch": False},
+            {"lightning": True, "torch": True},
         )
         self.assertEqual(
             result["shortcut_attributes"],
@@ -173,8 +179,6 @@ print(json.dumps({
         for name in (
             "AdaptiveLinearLayer",
             "AdaptiveParameterAugmentation",
-            "AdaptiveParameterMonitorCallback",
-            "WeightBankUtilizationMonitorCallback",
         ):
             with self.subTest(name=name):
                 completed = subprocess.run(
@@ -233,11 +237,13 @@ print(json.dumps({
                 "WeightBankUtilizationMonitorCallback",
             ),
         )
-        self.assertFalse(
-            hasattr(adaptive_parameters, "AdaptiveParameterMonitorCallback")
+        self.assertIs(
+            adaptive_parameters.AdaptiveParameterMonitorCallback,
+            monitoring.AdaptiveParameterMonitorCallback,
         )
-        self.assertFalse(
-            hasattr(adaptive_parameters, "WeightBankUtilizationMonitorCallback")
+        self.assertIs(
+            adaptive_parameters.WeightBankUtilizationMonitorCallback,
+            monitoring.WeightBankUtilizationMonitorCallback,
         )
 
 

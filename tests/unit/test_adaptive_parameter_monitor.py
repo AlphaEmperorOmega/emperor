@@ -5,6 +5,7 @@ from torch import nn
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterMonitorCallback,
     AdditiveDynamicBiasConfig,
     DualModelDynamicWeightConfig,
     DynamicDepthOptions,
@@ -20,9 +21,6 @@ from emperor.augmentations.adaptive_parameters._augmentation import (
 )
 from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
     MultiplicativeDynamicBias,
-)
-from emperor.augmentations.adaptive_parameters.monitoring import (
-    AdaptiveParameterMonitorCallback,
 )
 from emperor.layers import (
     ActivationOptions,
