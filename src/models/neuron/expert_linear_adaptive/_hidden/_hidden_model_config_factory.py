@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from models.neuron.expert_linear_adaptive._hidden._config_implementation import (
-    _LegacyLinearAdaptiveConfigResolver,
+    _RuntimeDefaultsResolver,
 )
 from models.neuron.expert_linear_adaptive._hidden.runtime_options import RuntimeOptions
 
 
-class HiddenModelConfigFactory(_LegacyLinearAdaptiveConfigResolver):
+class HiddenModelConfigFactory(_RuntimeDefaultsResolver):
     """Build package-local boundaries and hidden expert-adaptive configuration."""
 
     def __init__(self, runtime: RuntimeOptions) -> None:

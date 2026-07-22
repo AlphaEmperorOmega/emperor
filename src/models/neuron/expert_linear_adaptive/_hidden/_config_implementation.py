@@ -60,7 +60,7 @@ from models.neuron.expert_linear_adaptive._hidden.runtime_options import (
 )
 
 
-class _LegacyLinearAdaptiveConfigResolver:
+class _RuntimeDefaultsResolver:
     def __init__(
         self,
         batch_size: int = config.BATCH_SIZE,
@@ -69,7 +69,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         hidden_dim: int = config.HIDDEN_DIM,
         output_dim: int = config.OUTPUT_DIM,
         stack_bias_flag: bool = config.STACK_BIAS_FLAG,
-        layer_norm_position: LayerNormPositionOptions = config.STACK_LAYER_NORM_POSITION,
+        layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
         stack_residual_connection_option: ResidualConnectionOptions = config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -85,14 +85,14 @@ class _LegacyLinearAdaptiveConfigResolver:
         submodule_stack_last_layer_bias_option: LastLayerBiasOptions = config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
         submodule_stack_apply_output_pipeline_flag: bool = config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         submodule_stack_bias_flag: bool = config.SUBMODULE_STACK_BIAS_FLAG,
-        top_k: int = config.EXPERT_TOP_K,
-        num_experts: int = config.EXPERT_NUM_EXPERTS,
-        capacity_factor: float = config.EXPERT_CAPACITY_FACTOR,
-        dropped_token_behavior: DroppedTokenOptions = config.EXPERT_DROPPED_TOKEN_BEHAVIOR,
-        compute_expert_mixture_flag: bool = config.EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG,
-        weighted_parameters_flag: bool = config.EXPERT_WEIGHTED_PARAMETERS_FLAG,
-        weighting_position_option: ExpertWeightingPositionOptions = config.EXPERT_WEIGHTING_POSITION_OPTION,
-        routing_initialization_mode: RoutingInitializationMode = config.EXPERT_ROUTING_INITIALIZATION_MODE,
+        top_k: int = config.TOP_K,
+        num_experts: int = config.NUM_EXPERTS,
+        capacity_factor: float = config.CAPACITY_FACTOR,
+        dropped_token_behavior: DroppedTokenOptions = config.DROPPED_TOKEN_BEHAVIOR,
+        compute_expert_mixture_flag: bool = config.COMPUTE_EXPERT_MIXTURE_FLAG,
+        weighted_parameters_flag: bool = config.WEIGHTED_PARAMETERS_FLAG,
+        weighting_position_option: ExpertWeightingPositionOptions = config.WEIGHTING_POSITION_OPTION,
+        routing_initialization_mode: RoutingInitializationMode = config.ROUTING_INITIALIZATION_MODE,
         expert_stack_hidden_dim: int | None = None,
         expert_stack_num_layers: int | None = None,
         expert_stack_activation: ActivationOptions | None = None,
@@ -105,7 +105,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         expert_stack_apply_output_pipeline_flag: bool
         | None = config.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         expert_bias_flag: bool | None = None,
-        expert_gate_flag: bool = config.EXPERT_GATE_FLAG,
+        expert_stack_gate_flag: bool = config.EXPERT_STACK_GATE_FLAG,
         expert_gate_option: LayerGateOptions | None = config.EXPERT_GATE_OPTION,
         expert_gate_activation: ActivationOptions
         | None = config.EXPERT_GATE_ACTIVATION,
@@ -125,7 +125,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         expert_gate_stack_apply_output_pipeline_flag: bool
         | None = config.EXPERT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         expert_gate_stack_bias_flag: bool | None = config.EXPERT_GATE_STACK_BIAS_FLAG,
-        expert_halting_flag: bool = config.EXPERT_HALTING_FLAG,
+        expert_stack_halting_flag: bool = config.EXPERT_STACK_HALTING_FLAG,
         expert_halting_threshold: float = config.EXPERT_HALTING_THRESHOLD,
         expert_halting_dropout: float = config.EXPERT_HALTING_DROPOUT,
         expert_halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.EXPERT_HALTING_HIDDEN_STATE_MODE,
@@ -178,7 +178,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         expert_recurrent_flag: bool = config.EXPERT_RECURRENT_FLAG,
         expert_recurrent_max_steps: int = config.EXPERT_RECURRENT_MAX_STEPS,
         expert_recurrent_layer_norm_position: LayerNormPositionOptions = config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
-        expert_recurrent_gate_flag: bool = config.EXPERT_RECURRENT_GATE_FLAG,
+        expert_recurrent_stack_gate_flag: bool = config.EXPERT_RECURRENT_STACK_GATE_FLAG,
         expert_recurrent_gate_option: LayerGateOptions
         | None = config.EXPERT_RECURRENT_GATE_OPTION,
         expert_recurrent_gate_activation: ActivationOptions
@@ -202,7 +202,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         | None = config.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         expert_recurrent_gate_stack_bias_flag: bool
         | None = config.EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG,
-        expert_recurrent_halting_flag: bool = config.EXPERT_RECURRENT_HALTING_FLAG,
+        expert_recurrent_stack_halting_flag: bool = config.EXPERT_RECURRENT_STACK_HALTING_FLAG,
         expert_recurrent_halting_threshold: float = config.EXPERT_RECURRENT_HALTING_THRESHOLD,
         expert_recurrent_halting_dropout: float = config.EXPERT_RECURRENT_HALTING_DROPOUT,
         expert_recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -254,7 +254,7 @@ class _LegacyLinearAdaptiveConfigResolver:
             config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
         router_bias_flag: bool = config.ROUTER_BIAS_FLAG,
-        router_gate_flag: bool = config.ROUTER_GATE_FLAG,
+        router_stack_gate_flag: bool = config.ROUTER_STACK_GATE_FLAG,
         router_gate_option: LayerGateOptions | None = config.ROUTER_GATE_OPTION,
         router_gate_activation: ActivationOptions
         | None = config.ROUTER_GATE_ACTIVATION,
@@ -274,7 +274,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         router_gate_stack_apply_output_pipeline_flag: bool
         | None = config.ROUTER_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         router_gate_stack_bias_flag: bool | None = config.ROUTER_GATE_STACK_BIAS_FLAG,
-        router_halting_flag: bool = config.ROUTER_HALTING_FLAG,
+        router_stack_halting_flag: bool = config.ROUTER_STACK_HALTING_FLAG,
         router_halting_threshold: float = config.ROUTER_HALTING_THRESHOLD,
         router_halting_dropout: float = config.ROUTER_HALTING_DROPOUT,
         router_halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.ROUTER_HALTING_HIDDEN_STATE_MODE,
@@ -327,7 +327,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         router_recurrent_flag: bool = config.ROUTER_RECURRENT_FLAG,
         router_recurrent_max_steps: int = config.ROUTER_RECURRENT_MAX_STEPS,
         router_recurrent_layer_norm_position: LayerNormPositionOptions = config.ROUTER_RECURRENT_LAYER_NORM_POSITION,
-        router_recurrent_gate_flag: bool = config.ROUTER_RECURRENT_GATE_FLAG,
+        router_recurrent_stack_gate_flag: bool = config.ROUTER_RECURRENT_STACK_GATE_FLAG,
         router_recurrent_gate_option: LayerGateOptions
         | None = config.ROUTER_RECURRENT_GATE_OPTION,
         router_recurrent_gate_activation: ActivationOptions
@@ -351,7 +351,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         | None = config.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         router_recurrent_gate_stack_bias_flag: bool
         | None = config.ROUTER_RECURRENT_GATE_STACK_BIAS_FLAG,
-        router_recurrent_halting_flag: bool = config.ROUTER_RECURRENT_HALTING_FLAG,
+        router_recurrent_stack_halting_flag: bool = config.ROUTER_RECURRENT_STACK_HALTING_FLAG,
         router_recurrent_halting_threshold: float = config.ROUTER_RECURRENT_HALTING_THRESHOLD,
         router_recurrent_halting_dropout: float = config.ROUTER_RECURRENT_HALTING_DROPOUT,
         router_recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -374,7 +374,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         | None = config.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         router_recurrent_halting_stack_bias_flag: bool
         | None = config.ROUTER_RECURRENT_HALTING_STACK_BIAS_FLAG,
-        stack_gate_flag: bool = config.GATE_FLAG,
+        stack_gate_flag: bool = config.STACK_GATE_FLAG,
         gate_option: LayerGateOptions | None = config.GATE_OPTION,
         gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
         gate_stack_independent_flag: bool = config.GATE_STACK_INDEPENDENT_FLAG,
@@ -392,7 +392,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         gate_stack_apply_output_pipeline_flag: bool
         | None = config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         gate_stack_bias_flag: bool | None = config.GATE_STACK_BIAS_FLAG,
-        stack_halting_flag: bool = config.HALTING_FLAG,
+        stack_halting_flag: bool = config.STACK_HALTING_FLAG,
         halting_threshold: float = config.HALTING_THRESHOLD,
         halting_dropout: float = config.HALTING_DROPOUT,
         halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.HALTING_HIDDEN_STATE_MODE,
@@ -437,8 +437,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         | None = config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         memory_stack_bias_flag: bool | None = config.MEMORY_STACK_BIAS_FLAG,
         weight_option_flag: bool | None = None,
-        generator_depth: DynamicDepthOptions = config.WEIGHT_GENERATOR_DEPTH,
-        weight_generator_depth: DynamicDepthOptions | None = None,
+        generator_depth: DynamicDepthOptions = config.GENERATOR_DEPTH,
         diagonal_option: type[DynamicDiagonalConfig] | None = config.DIAGONAL_OPTION,
         diagonal_option_flag: bool | None = None,
         bias_option: type[DynamicBiasConfig] | None = config.BIAS_OPTION,
@@ -548,7 +547,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         adaptive_generator_stack_bias_flag: bool = config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
         input_layer_weight_option: type[DynamicWeightConfig]
         | None = config.INPUT_LAYER_WEIGHT_OPTION,
-        input_layer_weight_generator_depth: DynamicDepthOptions = config.INPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+        input_layer_generator_depth: DynamicDepthOptions = config.INPUT_LAYER_GENERATOR_DEPTH,
         input_layer_weight_decay_schedule: WeightDecayScheduleOptions = config.INPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
         input_layer_weight_decay_rate: float = config.INPUT_LAYER_WEIGHT_DECAY_RATE,
         input_layer_weight_decay_warmup_batches: int = config.INPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES,
@@ -572,7 +571,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         input_layer_mask_transition_width: float = config.INPUT_LAYER_MASK_TRANSITION_WIDTH,
         output_layer_weight_option: type[DynamicWeightConfig]
         | None = config.OUTPUT_LAYER_WEIGHT_OPTION,
-        output_layer_weight_generator_depth: DynamicDepthOptions = config.OUTPUT_LAYER_WEIGHT_GENERATOR_DEPTH,
+        output_layer_generator_depth: DynamicDepthOptions = config.OUTPUT_LAYER_GENERATOR_DEPTH,
         output_layer_weight_decay_schedule: WeightDecayScheduleOptions = config.OUTPUT_LAYER_WEIGHT_DECAY_SCHEDULE,
         output_layer_weight_decay_rate: float = config.OUTPUT_LAYER_WEIGHT_DECAY_RATE,
         output_layer_weight_decay_warmup_batches: int = config.OUTPUT_LAYER_WEIGHT_DECAY_WARMUP_BATCHES,
@@ -597,7 +596,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         router_weight_option_flag: bool | None = None,
         router_weight_option: type[DynamicWeightConfig]
         | None = config.ROUTER_WEIGHT_OPTION,
-        router_weight_generator_depth: DynamicDepthOptions = config.ROUTER_WEIGHT_GENERATOR_DEPTH,
+        router_generator_depth: DynamicDepthOptions = config.ROUTER_GENERATOR_DEPTH,
         router_weight_normalization_option: WeightNormalizationOptions = config.ROUTER_WEIGHT_NORMALIZATION_OPTION,
         router_weight_normalization_position_option: WeightNormalizationPositionOptions = config.ROUTER_WEIGHT_NORMALIZATION_POSITION_OPTION,
         router_weight_decay_schedule: WeightDecayScheduleOptions = config.ROUTER_WEIGHT_DECAY_SCHEDULE,
@@ -700,7 +699,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag: bool = config.RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag: bool = config.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
         recurrent_gate_activation: ActivationOptions
         | None = config.RECURRENT_GATE_ACTIVATION,
@@ -723,7 +722,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         | None = config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         recurrent_gate_stack_bias_flag: bool
         | None = config.RECURRENT_GATE_STACK_BIAS_FLAG,
-        recurrent_halting_flag: bool = config.RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag: bool = config.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_threshold: float = config.RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout: float = config.RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions = config.RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -832,7 +831,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         expert_layer_controller_options = (
             expert_layer_controller_options
             or ExpertsLayerControllerOptions(
-                stack_gate_flag=expert_gate_flag,
+                stack_gate_flag=expert_stack_gate_flag,
                 gate_option=expert_gate_option,
                 gate_activation=expert_gate_activation,
                 gate_stack_source=ExpertsSubmoduleStackSource(
@@ -851,7 +850,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                     dropout_probability=expert_gate_stack_dropout_probability,
                     bias_flag=expert_gate_stack_bias_flag,
                 ),
-                stack_halting_flag=expert_halting_flag,
+                stack_halting_flag=expert_stack_halting_flag,
                 halting_threshold=expert_halting_threshold,
                 halting_dropout=expert_halting_dropout,
                 halting_hidden_state_mode=expert_halting_hidden_state_mode,
@@ -912,7 +911,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                 recurrent_flag=expert_recurrent_flag,
                 recurrent_max_steps=expert_recurrent_max_steps,
                 recurrent_layer_norm_position=(expert_recurrent_layer_norm_position),
-                recurrent_gate_flag=expert_recurrent_gate_flag,
+                recurrent_stack_gate_flag=expert_recurrent_stack_gate_flag,
                 recurrent_gate_option=expert_recurrent_gate_option,
                 recurrent_gate_activation=expert_recurrent_gate_activation,
                 recurrent_gate_stack_source=ExpertsSubmoduleStackSource(
@@ -937,7 +936,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                     ),
                     bias_flag=expert_recurrent_gate_stack_bias_flag,
                 ),
-                recurrent_halting_flag=expert_recurrent_halting_flag,
+                recurrent_stack_halting_flag=expert_recurrent_stack_halting_flag,
                 recurrent_halting_threshold=(expert_recurrent_halting_threshold),
                 recurrent_halting_dropout=expert_recurrent_halting_dropout,
                 recurrent_halting_hidden_state_mode=(
@@ -997,7 +996,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         router_layer_controller_options = (
             router_layer_controller_options
             or ExpertsLayerControllerOptions(
-                stack_gate_flag=router_gate_flag,
+                stack_gate_flag=router_stack_gate_flag,
                 gate_option=router_gate_option,
                 gate_activation=router_gate_activation,
                 gate_stack_source=ExpertsSubmoduleStackSource(
@@ -1016,7 +1015,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                     dropout_probability=router_gate_stack_dropout_probability,
                     bias_flag=router_gate_stack_bias_flag,
                 ),
-                stack_halting_flag=router_halting_flag,
+                stack_halting_flag=router_stack_halting_flag,
                 halting_threshold=router_halting_threshold,
                 halting_dropout=router_halting_dropout,
                 halting_hidden_state_mode=router_halting_hidden_state_mode,
@@ -1077,7 +1076,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                 recurrent_flag=router_recurrent_flag,
                 recurrent_max_steps=router_recurrent_max_steps,
                 recurrent_layer_norm_position=(router_recurrent_layer_norm_position),
-                recurrent_gate_flag=router_recurrent_gate_flag,
+                recurrent_stack_gate_flag=router_recurrent_stack_gate_flag,
                 recurrent_gate_option=router_recurrent_gate_option,
                 recurrent_gate_activation=router_recurrent_gate_activation,
                 recurrent_gate_stack_source=ExpertsSubmoduleStackSource(
@@ -1102,7 +1101,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                     ),
                     bias_flag=router_recurrent_gate_stack_bias_flag,
                 ),
-                recurrent_halting_flag=router_recurrent_halting_flag,
+                recurrent_stack_halting_flag=router_recurrent_stack_halting_flag,
                 recurrent_halting_threshold=(router_recurrent_halting_threshold),
                 recurrent_halting_dropout=router_recurrent_halting_dropout,
                 recurrent_halting_hidden_state_mode=(
@@ -1239,9 +1238,6 @@ class _LegacyLinearAdaptiveConfigResolver:
                 ),
                 bias_flag=adaptive_generator_stack_bias_flag,
             )
-        if weight_generator_depth is not None:
-            generator_depth = weight_generator_depth
-
         hidden_adaptive_weight_options = (
             hidden_adaptive_weight_options
             or HiddenAdaptiveWeightOptions(
@@ -1278,11 +1274,6 @@ class _LegacyLinearAdaptiveConfigResolver:
                 ),
             )
         )
-        if weight_generator_depth is not None:
-            hidden_adaptive_weight_options = replace(
-                hidden_adaptive_weight_options,
-                generator_depth=weight_generator_depth,
-            )
         hidden_adaptive_bias_options = (
             hidden_adaptive_bias_options
             or HiddenAdaptiveBiasOptions(
@@ -1381,7 +1372,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         )
         input_boundary_options = input_boundary_options or AdaptiveBoundaryModelOptions(
             weight_option=input_layer_weight_option,
-            weight_generator_depth=input_layer_weight_generator_depth,
+            generator_depth=input_layer_generator_depth,
             weight_decay_schedule=input_layer_weight_decay_schedule,
             weight_decay_rate=input_layer_weight_decay_rate,
             weight_decay_warmup_batches=input_layer_weight_decay_warmup_batches,
@@ -1407,7 +1398,7 @@ class _LegacyLinearAdaptiveConfigResolver:
             output_boundary_options
             or AdaptiveBoundaryModelOptions(
                 weight_option=output_layer_weight_option,
-                weight_generator_depth=output_layer_weight_generator_depth,
+                generator_depth=output_layer_generator_depth,
                 weight_decay_schedule=output_layer_weight_decay_schedule,
                 weight_decay_rate=output_layer_weight_decay_rate,
                 weight_decay_warmup_batches=output_layer_weight_decay_warmup_batches,
@@ -1433,7 +1424,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         router_adaptive_weight_options = (
             router_adaptive_weight_options
             or HiddenAdaptiveWeightOptions(
-                generator_depth=router_weight_generator_depth,
+                generator_depth=router_generator_depth,
                 option_flag=self.__adaptive_option_flag(
                     router_weight_option_flag,
                     router_weight_option,
@@ -1586,7 +1577,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                 recurrent_flag=recurrent_flag,
                 recurrent_max_steps=recurrent_max_steps,
                 recurrent_layer_norm_position=recurrent_layer_norm_position,
-                recurrent_gate_flag=recurrent_gate_flag,
+                recurrent_stack_gate_flag=recurrent_stack_gate_flag,
                 recurrent_gate_option=recurrent_gate_option,
                 recurrent_gate_activation=recurrent_gate_activation,
                 recurrent_gate_stack_source=ExpertsSubmoduleStackSource(
@@ -1607,7 +1598,7 @@ class _LegacyLinearAdaptiveConfigResolver:
                     dropout_probability=recurrent_gate_stack_dropout_probability,
                     bias_flag=recurrent_gate_stack_bias_flag,
                 ),
-                recurrent_halting_flag=recurrent_halting_flag,
+                recurrent_stack_halting_flag=recurrent_stack_halting_flag,
                 recurrent_halting_threshold=recurrent_halting_threshold,
                 recurrent_halting_dropout=recurrent_halting_dropout,
                 recurrent_halting_hidden_state_mode=(
@@ -1692,7 +1683,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         )
         self.expert_bias_flag = expert_stack_options.bias_flag
         self.expert_layer_controller_options = expert_layer_controller_options
-        self.expert_gate_flag = expert_layer_controller_options.stack_gate_flag
+        self.expert_stack_gate_flag = expert_layer_controller_options.stack_gate_flag
         self.expert_gate_option = expert_layer_controller_options.gate_option
         self.expert_gate_activation = expert_layer_controller_options.gate_activation
         self.expert_gate_stack_source = (
@@ -1702,7 +1693,9 @@ class _LegacyLinearAdaptiveConfigResolver:
             self.expert_gate_stack_source,
             self.expert_stack_options,
         )
-        self.expert_halting_flag = expert_layer_controller_options.stack_halting_flag
+        self.expert_stack_halting_flag = (
+            expert_layer_controller_options.stack_halting_flag
+        )
         self.expert_halting_threshold = (
             expert_layer_controller_options.halting_threshold
         )
@@ -1741,8 +1734,8 @@ class _LegacyLinearAdaptiveConfigResolver:
         self.expert_recurrent_layer_norm_position = (
             expert_recurrent_controller_options.recurrent_layer_norm_position
         )
-        self.expert_recurrent_gate_flag = (
-            expert_recurrent_controller_options.recurrent_gate_flag
+        self.expert_recurrent_stack_gate_flag = (
+            expert_recurrent_controller_options.recurrent_stack_gate_flag
         )
         self.expert_recurrent_gate_stack_source = (
             expert_recurrent_controller_options.recurrent_gate_stack_source
@@ -1753,8 +1746,8 @@ class _LegacyLinearAdaptiveConfigResolver:
                 self.expert_stack_options,
             )
         )
-        self.expert_recurrent_halting_flag = (
-            expert_recurrent_controller_options.recurrent_halting_flag
+        self.expert_recurrent_stack_halting_flag = (
+            expert_recurrent_controller_options.recurrent_stack_halting_flag
         )
         self.expert_recurrent_halting_stack_source = (
             expert_recurrent_controller_options.recurrent_halting_stack_source
@@ -1800,7 +1793,7 @@ class _LegacyLinearAdaptiveConfigResolver:
         )
         self.router_bias_flag = router_stack_options.bias_flag
         self.router_layer_controller_options = router_layer_controller_options
-        self.router_gate_flag = router_layer_controller_options.stack_gate_flag
+        self.router_stack_gate_flag = router_layer_controller_options.stack_gate_flag
         self.router_gate_option = router_layer_controller_options.gate_option
         self.router_gate_activation = router_layer_controller_options.gate_activation
         self.router_gate_stack_source = (
@@ -1810,7 +1803,9 @@ class _LegacyLinearAdaptiveConfigResolver:
             self.router_gate_stack_source,
             self.submodule_stack_options,
         )
-        self.router_halting_flag = router_layer_controller_options.stack_halting_flag
+        self.router_stack_halting_flag = (
+            router_layer_controller_options.stack_halting_flag
+        )
         self.router_halting_threshold = (
             router_layer_controller_options.halting_threshold
         )
@@ -1852,8 +1847,8 @@ class _LegacyLinearAdaptiveConfigResolver:
         self.router_recurrent_layer_norm_position = (
             router_recurrent_controller_options.recurrent_layer_norm_position
         )
-        self.router_recurrent_gate_flag = (
-            router_recurrent_controller_options.recurrent_gate_flag
+        self.router_recurrent_stack_gate_flag = (
+            router_recurrent_controller_options.recurrent_stack_gate_flag
         )
         self.router_recurrent_gate_stack_source = (
             router_recurrent_controller_options.recurrent_gate_stack_source
@@ -1864,8 +1859,8 @@ class _LegacyLinearAdaptiveConfigResolver:
                 self.submodule_stack_options,
             )
         )
-        self.router_recurrent_halting_flag = (
-            router_recurrent_controller_options.recurrent_halting_flag
+        self.router_recurrent_stack_halting_flag = (
+            router_recurrent_controller_options.recurrent_stack_halting_flag
         )
         self.router_recurrent_halting_stack_source = (
             router_recurrent_controller_options.recurrent_halting_stack_source
@@ -2056,7 +2051,9 @@ class _LegacyLinearAdaptiveConfigResolver:
         self.recurrent_layer_norm_position = (
             recurrent_controller_options.recurrent_layer_norm_position
         )
-        self.recurrent_gate_flag = recurrent_controller_options.recurrent_gate_flag
+        self.recurrent_stack_gate_flag = (
+            recurrent_controller_options.recurrent_stack_gate_flag
+        )
         self.recurrent_gate_option = recurrent_controller_options.recurrent_gate_option
         self.recurrent_gate_activation = (
             recurrent_controller_options.recurrent_gate_activation
@@ -2068,8 +2065,8 @@ class _LegacyLinearAdaptiveConfigResolver:
             self.recurrent_gate_stack_source,
             self.gate_stack_options,
         )
-        self.recurrent_halting_flag = (
-            recurrent_controller_options.recurrent_halting_flag
+        self.recurrent_stack_halting_flag = (
+            recurrent_controller_options.recurrent_stack_halting_flag
         )
         self.recurrent_halting_threshold = (
             recurrent_controller_options.recurrent_halting_threshold

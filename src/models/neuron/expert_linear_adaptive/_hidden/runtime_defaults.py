@@ -5,7 +5,7 @@ from typing import Any, Final
 
 import models.neuron.expert_linear_adaptive.config as config
 from models.neuron.expert_linear_adaptive._hidden._config_implementation import (
-    _LegacyLinearAdaptiveConfigResolver,
+    _RuntimeDefaultsResolver,
 )
 from models.neuron.expert_linear_adaptive._hidden.runtime_options import RuntimeOptions
 
@@ -14,30 +14,12 @@ def builder_kwargs_from_flat(
     flat_kwargs: dict[str, Any],
     config_module: ModuleType,
 ) -> dict[str, Any]:
-    """Normalize the package's sole legacy alias before typed construction.
-
-    The adaptive builder already resolves every concrete option group atomically;
-    keeping alias handling here gives CLI, search, and presets one translation path.
-    """
-
     del config_module
-    kwargs = dict(flat_kwargs)
-    if "stack_layer_norm_position" in kwargs:
-        alias_value = kwargs.pop("stack_layer_norm_position")
-        if (
-            "layer_norm_position" in kwargs
-            and kwargs["layer_norm_position"] != alias_value
-        ):
-            raise ValueError(
-                "models.neuron.expert_linear_adaptive._hidden received conflicting aliases "
-                "'layer_norm_position' and 'stack_layer_norm_position'."
-            )
-        kwargs["layer_norm_position"] = alias_value
-    return kwargs
+    return dict(flat_kwargs)
 
 
 def _runtime_from_resolver(
-    resolver: _LegacyLinearAdaptiveConfigResolver,
+    resolver: _RuntimeDefaultsResolver,
 ) -> RuntimeOptions:
     return RuntimeOptions(
         batch_size=resolver.batch_size,
@@ -79,16 +61,14 @@ def _runtime_from_resolver(
     )
 
 
-def runtime_from_legacy_options(*args: Any, **kwargs: Any) -> RuntimeOptions:
-    return _runtime_from_resolver(_LegacyLinearAdaptiveConfigResolver(*args, **kwargs))
-
-
 def runtime_from_flat(
     flat_kwargs: dict[str, Any] | None = None,
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
-    return runtime_from_legacy_options(
-        **builder_kwargs_from_flat(flat_kwargs or {}, config_module)
+    return _runtime_from_resolver(
+        _RuntimeDefaultsResolver(
+            **builder_kwargs_from_flat(flat_kwargs or {}, config_module)
+        )
     )
 
 
@@ -99,5 +79,4 @@ __all__ = [
     "DEFAULT_RUNTIME",
     "builder_kwargs_from_flat",
     "runtime_from_flat",
-    "runtime_from_legacy_options",
 ]
