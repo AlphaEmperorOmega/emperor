@@ -5,7 +5,9 @@ from torch import Tensor
 
 from emperor.config import ConfigBase
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.layers import Layer
+from emperor.layers import (
+    Layer,
+)
 from emperor.nn import Module
 
 if TYPE_CHECKING:

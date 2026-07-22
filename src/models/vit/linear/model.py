@@ -4,7 +4,10 @@ import torch.nn as nn
 from torch import Tensor
 
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.layers import Layer, LayerState
+from emperor.layers import (
+    Layer,
+    LayerState,
+)
 from models.vit.linear.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:

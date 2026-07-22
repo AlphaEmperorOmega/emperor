@@ -30,7 +30,9 @@ from emperor.augmentations.adaptive_parameters import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.datasets.text.bert_pretraining import BERT_PRETRAINING_TARGET_VOCAB_SIZE
+from emperor.datasets.text.bert_pretraining import (
+    BERT_PRETRAINING_TARGET_VOCAB_SIZE,
+)
 from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,

@@ -5,7 +5,11 @@ from torch import Tensor
 
 from emperor.config import ConfigBase
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.layers import Layer, LayerConfig, LayerStackConfig
+from emperor.layers import (
+    Layer,
+    LayerConfig,
+    LayerStackConfig,
+)
 from emperor.nn import Module
 from emperor.parametric import ParametricLayerState
 from models.parametric.parametric_matrix.experiment_config import ExperimentConfig

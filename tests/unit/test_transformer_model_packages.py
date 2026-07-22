@@ -23,11 +23,18 @@ from emperor.augmentations.adaptive_parameters._linear_adapter import (
 )
 from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.halting import StickBreaking
-from emperor.layers import ActivationOptions, LastLayerBiasOptions, RecurrentLayer
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    RecurrentLayer,
+)
 from emperor.layers._composition.gate import LayerGate
 from emperor.linears import LinearLayer
 from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
-from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
+from emperor.transformer import (
+    TransformerDecoderLayer,
+    TransformerEncoderLayer,
+)
 from model_runtime.packages import iter_supported_config_keys
 from models.catalog import model_package
 from models.config_overrides import print_config_options
