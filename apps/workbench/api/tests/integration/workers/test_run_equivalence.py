@@ -14,7 +14,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from emperor.experiments.tasks import ExperimentTask
 from emperor.layers import ActivationOptions
+from model_runtime.packages import RandomSearch
+from models.linears.linear.presets import ExperimentPreset
+from models.package_cli import run_model_package_cli
+
 from emperor_workbench.model_packages import ModelPackageCatalog
 from emperor_workbench.run_plans import (
     CreateTrainingRunPlanCommand,
@@ -24,9 +29,6 @@ from emperor_workbench.run_plans import (
     TrainingSearch,
 )
 from emperor_workbench.training_jobs import worker as training_worker
-from model_runtime.packages import RandomSearch
-from models.linears.linear.presets import ExperimentPreset
-from models.package_cli import run_model_package_cli
 from tests.support.model_packages import project_adapter_client
 
 
@@ -43,7 +45,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
             logdir="runs_equivalence",
         )
         mode = SimpleNamespace(
-            experiment_task=None,
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
             preset=ExperimentPreset.BASELINE,
             selected_presets=[
                 ExperimentPreset.BASELINE,
@@ -61,7 +63,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
             },
             monitor_names=["linear"],
         )
-        parser = SimpleNamespace(parse_args=lambda: args)
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
         random_state = random.getstate()
         try:
             random.seed(13)
@@ -71,7 +73,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
                     return_value=parser,
                 ),
                 patch(
-                    "models.package_cli.resolve_experiment_mode",
+                    "models.package_cli.resolve_cli_selection",
                     return_value=mode,
                 ),
                 patch(
@@ -79,11 +81,7 @@ class RunsCliEquivalenceTests(unittest.TestCase):
                     return_value=(),
                 ) as cli_execute,
             ):
-                run_model_package_cli(
-                    experiment_type=object,
-                    preset_type=ExperimentPreset,
-                    module_path="models.linears.linear",
-                )
+                run_model_package_cli("linears/linear")
         finally:
             random.setstate(random_state)
 
