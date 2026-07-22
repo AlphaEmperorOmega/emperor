@@ -244,15 +244,6 @@ class TrainingProgressStore:
             )
             return self._snapshot(entry, new_events=[], reset=reset)
 
-    def read_snapshot_uncached(
-        self,
-        job: TrainingJobRecord,
-    ) -> TrainingProgressSnapshot:
-        """Compatibility read that retains no state in this store."""
-
-        temporary = TrainingProgressStore(max_cached_jobs=1)
-        return temporary.read_snapshot(job)
-
     def _refresh_entry(
         self,
         job: TrainingJobRecord,
