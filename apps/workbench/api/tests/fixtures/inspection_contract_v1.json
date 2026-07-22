@@ -6,8 +6,8 @@
   },
   "graphs": {
     "simple-baseline": {
-      "sha256": "2ad1d163402395064e1d9de095f841fd31a488269816977a0b34d3b93f3b54e3",
-      "bytes": 25905,
+      "sha256": "9eb2b6b7f5184f851c481588308df1bda4d318bb96ce03d8c37a5537ab1ba7be",
+      "bytes": 27169,
       "model": "linears/linear",
       "preset": "baseline",
       "dataset": "Mnist",
@@ -16,8 +16,8 @@
       "edgeCount": 28
     },
     "simple-gating": {
-      "sha256": "01aa6879758ab07bf9dc8a0b1f3d113d88bfc57a80b84e938396634571cde7f2",
-      "bytes": 71189,
+      "sha256": "c6995b05e29f58568d7253313aa2daabcd1122a6865b48be63e19f2437adcc6e",
+      "bytes": 74483,
       "model": "linears/linear",
       "preset": "gating",
       "dataset": "FashionMNIST",
@@ -26,8 +26,8 @@
       "edgeCount": 63
     },
     "adaptive-full-stack": {
-      "sha256": "7d72f5d3330da6c8cf33ac2ab855eca3201b32ea61834cff63bc937c12bc9b62",
-      "bytes": 363536,
+      "sha256": "45fb757905dc855a3bda89a03181a7135d2a8b46f5166f820bf57331ea7cebcf",
+      "bytes": 376980,
       "model": "linears/linear_adaptive",
       "preset": "full-stack",
       "dataset": "Cifar10",
@@ -36,34 +36,34 @@
       "edgeCount": 253
     },
     "bert-task": {
-      "sha256": "976a3df42a0212e55ba8a67e512d5ade9dd8aacf8dc3b0f4d7eabeb7676b60f3",
-      "bytes": 256492,
+      "sha256": "444831bc02eb184b029636791ccca68d9f906033ee6f927ac81afe09660b027c",
+      "bytes": 288797,
       "model": "bert/linear",
       "preset": "baseline",
       "dataset": "PennTreebankBertPretraining",
       "experimentTask": "bert-pretraining",
-      "nodeCount": 179,
-      "edgeCount": 178
+      "nodeCount": 174,
+      "edgeCount": 173
     },
     "gpt-task": {
-      "sha256": "a3f8cd9d83c8120b4210254bfdc08a7f0ee37caa663ed051765e97d48db92f63",
-      "bytes": 254533,
+      "sha256": "6ff64c5f374b24711855f74533482595379a3b7ce4ecd270d84c545601e9d6d9",
+      "bytes": 286793,
       "model": "gpt/linear",
       "preset": "baseline",
       "dataset": "WikiText2",
       "experimentTask": "causal-language-modeling",
-      "nodeCount": 171,
-      "edgeCount": 170
+      "nodeCount": 166,
+      "edgeCount": 165
     },
     "translation-task": {
-      "sha256": "58bae99519dc344d96a351b4069c51bf8539d0298f283536227397816c2d108b",
-      "bytes": 398872,
+      "sha256": "8cd67d1321f28b93a9cded1e684a0de5b6d57f670698981fa697d4c3759196cd",
+      "bytes": 468315,
       "model": "transformer/linear",
       "preset": "baseline",
       "dataset": "Multi30kDeEn",
       "experimentTask": "text-translation",
-      "nodeCount": 255,
-      "edgeCount": 254
+      "nodeCount": 276,
+      "edgeCount": 275
     }
   },
   "schemas": {
@@ -71,44 +71,44 @@
       "model": "linears/linear",
       "preset": "baseline",
       "presets": null,
-      "configSha256": "f609618927e38651ffc561a9a988360dead19781312bd0e17d526338f6f81397",
-      "configBytes": 67846,
-      "fieldCount": 124,
-      "searchSha256": "cf95511c44fbe4b6a7b8413e67476c563925cf378d8faa906a88ae73116d56cc",
-      "searchBytes": 2202,
-      "axisCount": 7
+      "configSha256": "acf095c8486a290eec0a0c4af907ceacdf300bac8ba95a52ddf4fbd0689a1bcc",
+      "configBytes": 68968,
+      "fieldCount": 126,
+      "searchSha256": "6bd6aebeda5fdb2addd4024bb85682ec874428f44f2297e7baddebc8043dcebf",
+      "searchBytes": 1864,
+      "axisCount": 6
     },
     "simple-gating": {
       "model": "linears/linear",
       "preset": "gating",
       "presets": null,
-      "configSha256": "2ce853177593bf356a2e65579aa714666b637f0799112e768d2f4b2273560a75",
-      "configBytes": 67917,
-      "fieldCount": 124,
-      "searchSha256": "de945cd2b9a151f0763db98728288cf40a9c4b71d3581043b8e772753f21d3c9",
-      "searchBytes": 2200,
-      "axisCount": 7
+      "configSha256": "d0716984f9643d1e5d67938b6400ab3bdfad0c54760d388bfbaf5eaa2fe955ad",
+      "configBytes": 69039,
+      "fieldCount": 126,
+      "searchSha256": "0da0dd9f8b6836a242bb2ccfc62c0131800e04d534886373dbeb5d979eb812f3",
+      "searchBytes": 1862,
+      "axisCount": 6
     },
     "adaptive-full-stack": {
       "model": "linears/linear_adaptive",
       "preset": "full-stack",
       "presets": null,
-      "configSha256": "1e64df5f12c20ec1d441eb4750ead1c4d84c3f18d886535ebe448d3c6ea49e20",
-      "configBytes": 136269,
-      "fieldCount": 237,
-      "searchSha256": "9b52c80bcbae9c8dba00f5684e7df32f8f75e41febca3cfcd93c20a8790eed50",
-      "searchBytes": 11784,
+      "configSha256": "41cf1f26c852e0c73aa59c62df17a82e75c11a79b6318df342ec32cde351eacb",
+      "configBytes": 137253,
+      "fieldCount": 239,
+      "searchSha256": "13d65d1ca3044646e0c78c93e2cb9c3057522eaccc3fd6c3c499f5f86bb068de",
+      "searchBytes": 11732,
       "axisCount": 31
     },
     "adaptive-union": {
       "model": "linears/linear_adaptive",
       "preset": "baseline",
       "presets": ["full-stack", "dual-weight-gating"],
-      "configSha256": "802ab512be56fd5739322d583bddec323c7e8e3ecd069a3e1581f10f62a62d21",
-      "configBytes": 135558,
-      "fieldCount": 237,
-      "searchSha256": "2e450537e5f95b0db8905c0f0fa2ff49206491ab174b25dc35d3b6ee84ddf8ab",
-      "searchBytes": 11971,
+      "configSha256": "47260fd3fb54b7ce59b9180fe6f06d6c56974e8d21cc21b8f86c77ac6f2764bd",
+      "configBytes": 136542,
+      "fieldCount": 239,
+      "searchSha256": "0c202f161aee4d1d9f0c5c0867c1535c6c60239c2b26eaac07a2e85d1f30a17d",
+      "searchBytes": 11919,
       "axisCount": 31
     }
   },
