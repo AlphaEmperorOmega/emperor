@@ -46,6 +46,7 @@ from models.vit.expert_linear import MODEL_PACKAGE as VIT_EXPERT_LINEAR
 from models.vit.expert_linear_adaptive import (
     MODEL_PACKAGE as VIT_EXPERT_LINEAR_ADAPTIVE,
 )
+from models.vit.linear import MODEL_PACKAGE as VIT_LINEAR
 from models.vit.linear_adaptive import MODEL_PACKAGE as VIT_LINEAR_ADAPTIVE
 
 MODEL_CATALOG: dict[str, ModelPackage] = {
@@ -57,7 +58,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "gpt/linear_adaptive": GPT_LINEAR_ADAPTIVE,
     "gpt/expert_linear": GPT_EXPERT_LINEAR,
     "gpt/expert_linear_adaptive": GPT_EXPERT_LINEAR_ADAPTIVE,
-    "vit/linear": ModelPackage("vit", "linear", "models.vit.linear"),
+    "vit/linear": VIT_LINEAR,
     "vit/linear_adaptive": VIT_LINEAR_ADAPTIVE,
     "vit/expert_linear": VIT_EXPERT_LINEAR,
     "vit/expert_linear_adaptive": VIT_EXPERT_LINEAR_ADAPTIVE,

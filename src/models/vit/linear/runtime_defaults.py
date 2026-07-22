@@ -5,15 +5,11 @@ from types import ModuleType
 from typing import Any, Final
 
 import models.vit.linear.config as config
-from models.vit.linear import _config_defaults
+from model_runtime.packages.runtime_values import validate_runtime_default_values
 from models.vit.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.vit.linear.runtime_options import RuntimeOptions
 
 _RUNTIME_FIELDS = {field.name for field in fields(RuntimeOptions)}
-
-
-def patch_options_from_config(config_module: ModuleType = config):
-    return _config_defaults.vit_patch_options(config_module)
 
 
 def runtime_from_config(config_module: ModuleType = config) -> RuntimeOptions:
@@ -44,7 +40,7 @@ def runtime_from_config(config_module: ModuleType = config) -> RuntimeOptions:
     )
 
 
-def runtime_with_builder_options(
+def _runtime_with_fields(
     runtime: RuntimeOptions,
     builder_options: dict[str, Any],
 ) -> RuntimeOptions:
@@ -64,10 +60,14 @@ def runtime_from_flat(
 ) -> RuntimeOptions:
     runtime = runtime_from_config(config_module)
     builder_options = linear_builder_kwargs_from_flat(
-        flat_kwargs or {},
+        validate_runtime_default_values(
+            flat_kwargs,
+            package="models.vit.linear",
+            config_module=config_module,
+        ),
         config_module,
     )
-    return runtime_with_builder_options(runtime, builder_options)
+    return _runtime_with_fields(runtime, builder_options)
 
 
 DEFAULT_RUNTIME: Final[RuntimeOptions] = runtime_from_flat()
@@ -75,8 +75,6 @@ DEFAULT_RUNTIME: Final[RuntimeOptions] = runtime_from_flat()
 
 __all__ = [
     "DEFAULT_RUNTIME",
-    "patch_options_from_config",
     "runtime_from_config",
     "runtime_from_flat",
-    "runtime_with_builder_options",
 ]

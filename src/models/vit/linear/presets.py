@@ -1,7 +1,5 @@
 # ruff: noqa: E501
 
-from dataclasses import replace
-
 import models.vit.linear.config as config
 import models.vit.linear.dataset_options as dataset_options
 from emperor.config import BaseOptions
@@ -17,10 +15,7 @@ from model_runtime.packages import (
 from model_runtime.runs import ExperimentBase
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear.model import Model
-from models.vit.linear.runtime_defaults import (
-    patch_options_from_config,
-    runtime_from_flat,
-)
+from models.vit.linear.runtime_defaults import runtime_from_flat
 
 
 def default_patch_size_for_dataset(dataset: type) -> int:
@@ -194,7 +189,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
         },
         description="Default recurrent config with step-level gating enabled after each "
         "recurrent encoder update.",
@@ -202,7 +197,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description="Default recurrent config with recurrent halting enabled, allowing "
         "early stopping before the max step count.",
@@ -218,8 +213,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description="Default recurrent config with both step-level gating and recurrent "
         "halting enabled.",
@@ -227,7 +222,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with step-level gating and shared memory "
@@ -236,7 +231,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with recurrent halting and shared memory "
@@ -245,8 +240,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with step-level gating, recurrent "
@@ -282,16 +277,12 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
     def _dataset_config(self, dataset: type) -> dict:
         dataset_config = super()._dataset_config(dataset)
         dataset_patch_size = default_patch_size_for_dataset(dataset)
-        dataset_patch_options = replace(
-            patch_options_from_config(config),
-            patch_size=dataset_patch_size,
-            input_channels=dataset.num_channels,
-            image_height=dataset.default_height,
-        )
 
         return {
             **dataset_config,
-            "patch_options": dataset_patch_options,
+            "image_patch_size": dataset_patch_size,
+            "input_channels": dataset.num_channels,
+            "image_height": dataset.default_height,
             "output_dim": dataset.num_classes,
         }
 
@@ -305,7 +296,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

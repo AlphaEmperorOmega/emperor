@@ -72,7 +72,7 @@ class PatchConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             causal_attention_mask_flag=False,
         )
 

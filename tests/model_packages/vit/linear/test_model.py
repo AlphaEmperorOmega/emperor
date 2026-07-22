@@ -3,7 +3,6 @@ import runpy
 import sys
 import unittest
 from contextlib import redirect_stdout
-from dataclasses import replace
 from io import StringIO
 from unittest.mock import patch
 
@@ -30,157 +29,23 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
-from model_runtime.packages import GridSearch, PresetLock
-from models.config_overrides import iter_supported_config_keys, print_config_options
-from models.parser import get_experiment_parser, resolve_experiment_mode
+from model_runtime.packages import GridSearch, PresetLock, iter_supported_config_keys
+from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.config_overrides import print_config_options
+from models.experiment_cli_parser import get_experiment_parser
 from models.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
-from models.vit.linear import _config_defaults as config_defaults
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear.model import Model
 from models.vit.linear.presets import (
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.vit.linear.runtime_defaults import runtime_from_flat
-from models.vit.linear.runtime_options import RuntimeOptions, VitPatchOptions
-
-
-def _patch_options():
-    return config_defaults.vit_patch_options(config)
-
-
-def _positional_embedding_options():
-    return config_defaults.vit_positional_embedding_options(config)
-
-
-def _encoder_options():
-    return config_defaults.vit_encoder_options(config)
-
-
-def _attention_options():
-    return config_defaults.vit_attention_options(config)
-
-
-def _feed_forward_options():
-    return config_defaults.vit_feed_forward_options(config)
-
-
-def _output_options():
-    return config_defaults.vit_output_options(config)
-
-
-def _stack_options():
-    return config_defaults.main_layer_stack_options(config)
-
-
-def _submodule_stack_options():
-    return config_defaults.linears_submodule_stack_options(
-        config,
-        "SUBMODULE_STACK",
-    )
-
-
-def _attention_projection_stack_options():
-    return config_defaults.linears_submodule_stack_options(
-        config,
-        "ATTN_STACK",
-        num_layers_key="ATTN_NUM_LAYERS",
-        bias_key="ATTN_BIAS_FLAG",
-    )
-
-
-def _feed_forward_stack_options():
-    return config_defaults.linears_submodule_stack_options(
-        config,
-        "FF_STACK",
-        num_layers_key="FF_NUM_LAYERS",
-        bias_key="FF_BIAS_FLAG",
-    )
-
-
-def _layer_controller_options():
-    return config_defaults.linears_layer_controller_options(
-        config,
-        gate_prefix="GATE",
-        gate_stack_prefix="GATE_STACK",
-        halting_prefix="HALTING",
-        halting_stack_prefix="HALTING_STACK",
-    )
-
-
-def _dynamic_memory_options():
-    return config_defaults.linears_dynamic_memory_options(
-        config,
-        memory_prefix="MEMORY",
-        memory_stack_prefix="MEMORY_STACK",
-    )
-
-
-def _recurrent_controller_options():
-    return config_defaults.linears_recurrent_controller_options(
-        config,
-        recurrent_prefix="RECURRENT",
-        gate_stack_prefix="RECURRENT_GATE_STACK",
-        halting_stack_prefix="RECURRENT_HALTING_STACK",
-    )
-
-
-def _attention_projection_layer_controller_options():
-    return config_defaults.linears_layer_controller_options(
-        config,
-        gate_prefix="ATTN_GATE",
-        gate_stack_prefix="ATTN_GATE_STACK",
-        halting_prefix="ATTN_HALTING",
-        halting_stack_prefix="ATTN_HALTING_STACK",
-    )
-
-
-def _attention_projection_dynamic_memory_options():
-    return config_defaults.linears_dynamic_memory_options(
-        config,
-        memory_prefix="ATTN_MEMORY",
-        memory_stack_prefix="ATTN_MEMORY_STACK",
-    )
-
-
-def _attention_projection_recurrent_controller_options():
-    return config_defaults.linears_recurrent_controller_options(
-        config,
-        recurrent_prefix="ATTN_RECURRENT",
-        gate_stack_prefix="ATTN_RECURRENT_GATE_STACK",
-        halting_stack_prefix="ATTN_RECURRENT_HALTING_STACK",
-    )
-
-
-def _feed_forward_layer_controller_options():
-    return config_defaults.linears_layer_controller_options(
-        config,
-        gate_prefix="FF_GATE",
-        gate_stack_prefix="FF_GATE_STACK",
-        halting_prefix="FF_HALTING",
-        halting_stack_prefix="FF_HALTING_STACK",
-    )
-
-
-def _feed_forward_dynamic_memory_options():
-    return config_defaults.linears_dynamic_memory_options(
-        config,
-        memory_prefix="FF_MEMORY",
-        memory_stack_prefix="FF_MEMORY_STACK",
-    )
-
-
-def _feed_forward_recurrent_controller_options():
-    return config_defaults.linears_recurrent_controller_options(
-        config,
-        recurrent_prefix="FF_RECURRENT",
-        gate_stack_prefix="FF_RECURRENT_GATE_STACK",
-        halting_stack_prefix="FF_RECURRENT_HALTING_STACK",
-    )
+from models.vit.linear.runtime_options import RuntimeOptions
 
 
 class TestVitLinearModel(unittest.TestCase):
@@ -198,76 +63,61 @@ class TestVitLinearModel(unittest.TestCase):
                 self.assertEqual(module.__name__, module_name)
 
     def test_experiment_public_model_id_remains_catalog_id(self):
+        experiment = Experiment(model_package=model_package("vit/linear"))
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "vit/linear",
         )
 
-    def test_grouped_option_build_applies_nested_config(self):
-        patch_options = replace(
-            _patch_options(),
-            patch_size=4,
-            input_channels=3,
-            image_height=8,
-            dropout_probability=0.2,
-            bias_flag=False,
+    def test_canonical_runtime_defaults_build_nested_config(self):
+        runtime = model_package("vit/linear").bind_runtime_defaults(
+            {
+                "batch_size": 2,
+                "learning_rate": 0.02,
+                "input_dim": 192,
+                "output_dim": 5,
+                "image_patch_size": 4,
+                "input_channels": 3,
+                "image_height": 8,
+                "patch_dropout_probability": 0.2,
+                "patch_bias_flag": False,
+                "hidden_dim": 16,
+                "stack_num_layers": 2,
+                "stack_activation": ActivationOptions.RELU,
+                "stack_dropout_probability": 0.1,
+                "layer_norm_position": LayerNormPositionOptions.AFTER,
+                "positional_embedding_option": (
+                    ImageSinusoidalPositionalEmbeddingConfig
+                ),
+                "positional_embedding_padding_idx": None,
+                "positional_embedding_auto_expand_flag": True,
+                "attn_num_heads": 4,
+                "attn_num_layers": 2,
+                "attn_bias_flag": True,
+                "attn_add_key_value_bias_flag": True,
+                "ff_num_layers": 2,
+                "ff_bias_flag": False,
+            }
         )
-        encoder_options = replace(
-            _encoder_options(),
-            hidden_dim=16,
-            num_layers=2,
-            activation=ActivationOptions.RELU,
-            dropout_probability=0.1,
-            layer_norm_position=LayerNormPositionOptions.AFTER,
-        )
-        positional_embedding_options = replace(
-            _positional_embedding_options(),
-            option=ImageSinusoidalPositionalEmbeddingConfig,
-            padding_idx=None,
-            auto_expand_flag=True,
-        )
-        attention_options = replace(
-            _attention_options(),
-            num_heads=4,
-            num_layers=2,
-            bias_flag=True,
-            add_key_value_bias_flag=True,
-        )
-        feed_forward_options = replace(
-            _feed_forward_options(),
-            num_layers=2,
-            bias_flag=False,
-        )
-
-        cfg = VitLinearConfigBuilder(
-            batch_size=2,
-            learning_rate=0.02,
-            input_dim=192,
-            output_dim=5,
-            patch_options=patch_options,
-            encoder_options=encoder_options,
-            positional_embedding_options=positional_embedding_options,
-            attention_options=attention_options,
-            feed_forward_options=feed_forward_options,
-        ).build()
+        cfg = VitLinearConfigBuilder(runtime=runtime).build()
 
         self.assertEqual(cfg.batch_size, 2)
         self.assertEqual(cfg.learning_rate, 0.02)
         self.assertEqual(cfg.input_dim, 192)
-        self.assertEqual(cfg.hidden_dim, encoder_options.hidden_dim)
+        self.assertEqual(cfg.hidden_dim, 16)
         self.assertEqual(cfg.output_dim, 5)
         self.assertEqual(cfg.sequence_length, 5)
         self.assertEqual(
             cfg.experiment_config.patch_config.patch_size,
-            patch_options.patch_size,
+            4,
         )
         self.assertEqual(
             cfg.experiment_config.patch_config.dropout_probability,
-            patch_options.dropout_probability,
+            0.2,
         )
         self.assertEqual(
             self._encoder_layer_config(cfg).layer_norm_position,
-            encoder_options.layer_norm_position,
+            LayerNormPositionOptions.AFTER,
         )
         self.assertIsInstance(
             cfg.experiment_config.positional_embedding_config,
@@ -278,7 +128,7 @@ class TestVitLinearModel(unittest.TestCase):
         )
         self.assertEqual(
             self._feed_forward_stack_config(cfg).num_layers,
-            feed_forward_options.num_layers,
+            2,
         )
 
     def test_direct_builder_rejects_legacy_flat_and_positional_args(self):
@@ -310,12 +160,9 @@ class TestVitLinearModel(unittest.TestCase):
     def test_output_config_factory_builds_cls_classification_head(self):
         overrides = self._small_image_overrides(batch_size=2)
         overrides["output_dim"] = 7
-        overrides["encoder_options"] = replace(
-            overrides["encoder_options"],
-            activation=ActivationOptions.RELU,
-            dropout_probability=0.2,
-        )
-        cfg = VitLinearConfigBuilder(**overrides).build()
+        overrides["stack_activation"] = ActivationOptions.RELU
+        overrides["stack_dropout_probability"] = 0.2
+        cfg = self._build_config(**overrides)
 
         output_cfg = cfg.experiment_config.output_config
 
@@ -325,16 +172,13 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsInstance(output_cfg.layer_model_config, LinearLayerConfig)
         self.assertTrue(output_cfg.layer_model_config.bias_flag)
 
-    def test_encoder_stack_options_build_through_preset(self):
-        cfg = ExperimentPresets()._preset(
+    def test_encoder_stack_fields_build_through_runtime_defaults(self):
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            stack_options=replace(
-                _stack_options(),
-                residual_connection_option=ResidualConnectionOptions.RESIDUAL,
-                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
-                bias_flag=False,
-            ),
+            stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            stack_apply_output_pipeline_flag=False,
+            stack_bias_flag=False,
         )
         encoder_cfg = self._encoder_stack_config(cfg)
 
@@ -352,23 +196,17 @@ class TestVitLinearModel(unittest.TestCase):
         )
 
     def test_stack_gate_flag_creates_encoder_block_gate_config(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            layer_controller_options=replace(
-                _layer_controller_options(),
-                stack_gate_flag=True,
-            ),
+            stack_gate_flag=True,
         )
 
         self.assertIsNotNone(self._encoder_block_config(cfg).gate_config)
 
     def test_stack_halting_flag_creates_shared_encoder_halting_config(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            layer_controller_options=replace(
-                _layer_controller_options(),
-                stack_halting_flag=True,
-            ),
+            stack_halting_flag=True,
         )
 
         encoder_stack = self._encoder_stack_config(cfg)
@@ -377,17 +215,11 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_soft_halting_option_is_forwarded_but_rejected_until_supported(self):
         overrides = self._small_image_overrides(batch_size=2)
-        overrides["encoder_options"] = replace(
-            overrides["encoder_options"],
-            num_layers=2,
-        )
-        cfg = ExperimentPresets()._preset(
+        overrides["stack_num_layers"] = 2
+        cfg = self._build_config(
             **overrides,
-            layer_controller_options=replace(
-                _layer_controller_options(),
-                stack_halting_flag=True,
-                halting_option=SoftHaltingConfig,
-            ),
+            stack_halting_flag=True,
+            halting_option=SoftHaltingConfig,
         )
 
         encoder_stack = self._encoder_stack_config(cfg)
@@ -399,25 +231,19 @@ class TestVitLinearModel(unittest.TestCase):
             encoder_stack.build()
 
     def test_memory_flag_creates_encoder_stack_shared_memory(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            dynamic_memory_options=replace(
-                _dynamic_memory_options(),
-                memory_flag=True,
-            ),
+            memory_flag=True,
         )
 
         self.assertIsNotNone(self._encoder_stack_config(cfg).shared_memory_config)
 
     def test_recurrent_flag_wraps_encoder_stack_and_forwards_batch(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=batch_size),
-            recurrent_controller_options=replace(
-                _recurrent_controller_options(),
-                recurrent_flag=True,
-                recurrent_max_steps=2,
-            ),
+            recurrent_flag=True,
+            recurrent_max_steps=2,
         )
         model = Model(cfg)
         images = torch.randn(batch_size, 3, 8, 8)
@@ -431,19 +257,13 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (batch_size, 5))
 
     def test_independent_gate_stack_overrides_controller_dimensions(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            layer_controller_options=replace(
-                _layer_controller_options(),
-                stack_gate_flag=True,
-                gate_stack_source=replace(
-                    _layer_controller_options().gate_stack_source,
-                    independent_flag=True,
-                    hidden_dim=29,
-                    num_layers=3,
-                    activation=ActivationOptions.SILU,
-                ),
-            ),
+            stack_gate_flag=True,
+            gate_stack_independent_flag=True,
+            gate_stack_hidden_dim=29,
+            gate_stack_num_layers=3,
+            gate_stack_activation=ActivationOptions.SILU,
         )
         gate_cfg = self._encoder_block_config(cfg).gate_config.model_config
 
@@ -542,18 +362,15 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertTrue(feed_forward_stack_cfg.apply_output_pipeline_flag)
 
     def test_attention_projection_stack_overrides_configure_projection_stack(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            attention_projection_stack_options=replace(
-                _attention_projection_stack_options(),
-                hidden_dim=29,
-                activation=ActivationOptions.SILU,
-                residual_connection_option=ResidualConnectionOptions.RESIDUAL,
-                dropout_probability=0.2,
-                layer_norm_position=LayerNormPositionOptions.AFTER,
-                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
-            ),
+            attn_stack_hidden_dim=29,
+            attn_stack_activation=ActivationOptions.SILU,
+            attn_stack_residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+            attn_stack_dropout_probability=0.2,
+            attn_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            attn_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            attn_stack_apply_output_pipeline_flag=False,
         )
         projection_stack_cfg = self._attention_projection_stack_config(cfg)
 
@@ -579,12 +396,9 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_attention_num_layers_and_bias_remain_canonical_for_projection_stack(self):
         overrides = self._small_image_overrides(batch_size=2)
-        overrides["attention_options"] = replace(
-            _attention_options(),
-            num_layers=3,
-            bias_flag=True,
-        )
-        cfg = ExperimentPresets()._preset(
+        overrides["attn_num_layers"] = 3
+        overrides["attn_bias_flag"] = True
+        cfg = self._build_config(
             **overrides,
         )
         projection_stack_cfg = self._attention_projection_stack_config(cfg)
@@ -594,21 +408,12 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_attention_projection_controls_attach_to_projection_stack_only(self):
         overrides = self._small_image_overrides(batch_size=2)
-        overrides["attention_options"] = replace(
-            _attention_options(),
-            num_layers=2,
-        )
-        cfg = ExperimentPresets()._preset(
+        overrides["attn_num_layers"] = 2
+        cfg = self._build_config(
             **overrides,
-            attention_projection_layer_controller_options=replace(
-                _attention_projection_layer_controller_options(),
-                stack_gate_flag=True,
-                stack_halting_flag=True,
-            ),
-            attention_projection_dynamic_memory_options=replace(
-                _attention_projection_dynamic_memory_options(),
-                memory_flag=True,
-            ),
+            attn_stack_gate_flag=True,
+            attn_stack_halting_flag=True,
+            attn_memory_flag=True,
         )
         projection_stack_cfg = self._attention_projection_stack_config(cfg)
 
@@ -621,13 +426,10 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_attention_projection_recurrent_flag_wraps_stack_and_forwards_batch(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=batch_size),
-            attention_projection_recurrent_controller_options=replace(
-                _attention_projection_recurrent_controller_options(),
-                recurrent_flag=True,
-                recurrent_max_steps=2,
-            ),
+            attn_recurrent_flag=True,
+            attn_recurrent_max_steps=2,
         )
         model = Model(cfg)
         images = torch.randn(batch_size, 3, 8, 8)
@@ -645,48 +447,24 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (batch_size, 5))
 
     def test_independent_attention_projection_stacks_override_only_controllers(self):
-        attention_options = replace(
-            _attention_options(),
-            num_layers=2,
-        )
         overrides = self._small_image_overrides(batch_size=2)
-        overrides["attention_options"] = attention_options
-        cfg = ExperimentPresets()._preset(
+        overrides["attn_num_layers"] = 2
+        cfg = self._build_config(
             **overrides,
-            attention_projection_stack_options=replace(
-                _attention_projection_stack_options(),
-                hidden_dim=17,
-                num_layers=attention_options.num_layers,
-                bias_flag=attention_options.bias_flag,
-            ),
-            attention_projection_layer_controller_options=replace(
-                _attention_projection_layer_controller_options(),
-                stack_gate_flag=True,
-                gate_stack_source=replace(
-                    _attention_projection_layer_controller_options().gate_stack_source,
-                    independent_flag=True,
-                    hidden_dim=23,
-                    num_layers=3,
-                    activation=ActivationOptions.TANH,
-                ),
-                stack_halting_flag=True,
-                halting_stack_source=replace(
-                    _attention_projection_layer_controller_options().halting_stack_source,
-                    independent_flag=True,
-                    hidden_dim=19,
-                    num_layers=2,
-                ),
-            ),
-            attention_projection_dynamic_memory_options=replace(
-                _attention_projection_dynamic_memory_options(),
-                memory_flag=True,
-                memory_stack_source=replace(
-                    _attention_projection_dynamic_memory_options().memory_stack_source,
-                    independent_flag=True,
-                    hidden_dim=31,
-                    num_layers=4,
-                ),
-            ),
+            attn_stack_hidden_dim=17,
+            attn_stack_gate_flag=True,
+            attn_gate_stack_independent_flag=True,
+            attn_gate_stack_hidden_dim=23,
+            attn_gate_stack_num_layers=3,
+            attn_gate_stack_activation=ActivationOptions.TANH,
+            attn_stack_halting_flag=True,
+            attn_halting_stack_independent_flag=True,
+            attn_halting_stack_hidden_dim=19,
+            attn_halting_stack_num_layers=2,
+            attn_memory_flag=True,
+            attn_memory_stack_independent_flag=True,
+            attn_memory_stack_hidden_dim=31,
+            attn_memory_stack_num_layers=4,
         )
         projection_stack_cfg = self._attention_projection_stack_config(cfg)
         gate_stack_cfg = projection_stack_cfg.layer_config.gate_config.model_config
@@ -705,31 +483,16 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(memory_stack_cfg.num_layers, 4)
 
     def test_attention_recurrent_controller_stacks_inherit_attention_stack(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            attention_projection_stack_options=replace(
-                _attention_projection_stack_options(),
-                hidden_dim=17,
-            ),
-            attention_projection_layer_controller_options=replace(
-                _attention_projection_layer_controller_options(),
-                gate_stack_source=replace(
-                    _attention_projection_layer_controller_options().gate_stack_source,
-                    independent_flag=True,
-                    hidden_dim=23,
-                ),
-                halting_stack_source=replace(
-                    _attention_projection_layer_controller_options().halting_stack_source,
-                    independent_flag=True,
-                    hidden_dim=19,
-                ),
-            ),
-            attention_projection_recurrent_controller_options=replace(
-                _attention_projection_recurrent_controller_options(),
-                recurrent_flag=True,
-                recurrent_gate_flag=True,
-                recurrent_halting_flag=True,
-            ),
+            attn_stack_hidden_dim=17,
+            attn_gate_stack_independent_flag=True,
+            attn_gate_stack_hidden_dim=23,
+            attn_halting_stack_independent_flag=True,
+            attn_halting_stack_hidden_dim=19,
+            attn_recurrent_flag=True,
+            attn_recurrent_stack_gate_flag=True,
+            attn_recurrent_stack_halting_flag=True,
         )
         recurrent_cfg = self._attention_config(cfg).projection_model_config
         recurrent_gate_stack_cfg = recurrent_cfg.gate_config.model_config
@@ -739,18 +502,15 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(recurrent_halting_stack_cfg.hidden_dim, 17)
 
     def test_feed_forward_stack_overrides_configure_transformer_ff_stack(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_stack_options=replace(
-                _feed_forward_stack_options(),
-                hidden_dim=29,
-                activation=ActivationOptions.SILU,
-                residual_connection_option=ResidualConnectionOptions.RESIDUAL,
-                dropout_probability=0.2,
-                layer_norm_position=LayerNormPositionOptions.AFTER,
-                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
-            ),
+            ff_stack_hidden_dim=29,
+            ff_stack_activation=ActivationOptions.SILU,
+            ff_stack_residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+            ff_stack_dropout_probability=0.2,
+            ff_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
+            ff_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            ff_stack_apply_output_pipeline_flag=False,
         )
         feed_forward_stack_cfg = self._feed_forward_stack_config(cfg)
 
@@ -775,13 +535,10 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertFalse(feed_forward_stack_cfg.apply_output_pipeline_flag)
 
     def test_feed_forward_num_layers_and_bias_remain_canonical(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_options=replace(
-                _feed_forward_options(),
-                num_layers=3,
-                bias_flag=False,
-            ),
+            ff_num_layers=3,
+            ff_bias_flag=False,
         )
         feed_forward_stack_cfg = self._feed_forward_stack_config(cfg)
 
@@ -791,12 +548,9 @@ class TestVitLinearModel(unittest.TestCase):
         )
 
     def test_feed_forward_gate_flag_attaches_gate_to_ff_stack_only(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_layer_controller_options=replace(
-                _feed_forward_layer_controller_options(),
-                stack_gate_flag=True,
-            ),
+            ff_stack_gate_flag=True,
         )
 
         self.assertIsNotNone(
@@ -805,12 +559,9 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNone(self._encoder_block_config(cfg).gate_config)
 
     def test_feed_forward_halting_flag_attaches_halting_to_ff_stack_only(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_layer_controller_options=replace(
-                _feed_forward_layer_controller_options(),
-                stack_halting_flag=True,
-            ),
+            ff_stack_halting_flag=True,
         )
 
         self.assertIsNotNone(
@@ -819,12 +570,9 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNone(self._encoder_block_config(cfg).halting_config)
 
     def test_feed_forward_memory_flag_attaches_shared_memory_to_ff_stack_only(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_dynamic_memory_options=replace(
-                _feed_forward_dynamic_memory_options(),
-                memory_flag=True,
-            ),
+            ff_memory_flag=True,
         )
 
         self.assertIsNotNone(self._feed_forward_stack_config(cfg).shared_memory_config)
@@ -832,13 +580,10 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_feed_forward_recurrent_flag_wraps_ff_stack_and_forwards_batch(self):
         batch_size = 2
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=batch_size),
-            feed_forward_recurrent_controller_options=replace(
-                _feed_forward_recurrent_controller_options(),
-                recurrent_flag=True,
-                recurrent_max_steps=2,
-            ),
+            ff_recurrent_flag=True,
+            ff_recurrent_max_steps=2,
         )
         model = Model(cfg)
         images = torch.randn(batch_size, 3, 8, 8)
@@ -852,40 +597,22 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (batch_size, 5))
 
     def test_independent_feed_forward_controller_stacks_override_only_controllers(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_stack_options=replace(
-                _feed_forward_stack_options(),
-                hidden_dim=17,
-            ),
-            feed_forward_layer_controller_options=replace(
-                _feed_forward_layer_controller_options(),
-                stack_gate_flag=True,
-                gate_stack_source=replace(
-                    _feed_forward_layer_controller_options().gate_stack_source,
-                    independent_flag=True,
-                    hidden_dim=23,
-                    num_layers=3,
-                    activation=ActivationOptions.TANH,
-                ),
-                stack_halting_flag=True,
-                halting_stack_source=replace(
-                    _feed_forward_layer_controller_options().halting_stack_source,
-                    independent_flag=True,
-                    hidden_dim=19,
-                    num_layers=2,
-                ),
-            ),
-            feed_forward_dynamic_memory_options=replace(
-                _feed_forward_dynamic_memory_options(),
-                memory_flag=True,
-                memory_stack_source=replace(
-                    _feed_forward_dynamic_memory_options().memory_stack_source,
-                    independent_flag=True,
-                    hidden_dim=31,
-                    num_layers=4,
-                ),
-            ),
+            ff_stack_hidden_dim=17,
+            ff_stack_gate_flag=True,
+            ff_gate_stack_independent_flag=True,
+            ff_gate_stack_hidden_dim=23,
+            ff_gate_stack_num_layers=3,
+            ff_gate_stack_activation=ActivationOptions.TANH,
+            ff_stack_halting_flag=True,
+            ff_halting_stack_independent_flag=True,
+            ff_halting_stack_hidden_dim=19,
+            ff_halting_stack_num_layers=2,
+            ff_memory_flag=True,
+            ff_memory_stack_independent_flag=True,
+            ff_memory_stack_hidden_dim=31,
+            ff_memory_stack_num_layers=4,
         )
         feed_forward_stack_cfg = self._feed_forward_stack_config(cfg)
         gate_stack_cfg = feed_forward_stack_cfg.layer_config.gate_config.model_config
@@ -904,31 +631,16 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(memory_stack_cfg.num_layers, 4)
 
     def test_feed_forward_recurrent_controller_stacks_inherit_ff_stack(self):
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            feed_forward_stack_options=replace(
-                _feed_forward_stack_options(),
-                hidden_dim=17,
-            ),
-            feed_forward_layer_controller_options=replace(
-                _feed_forward_layer_controller_options(),
-                gate_stack_source=replace(
-                    _feed_forward_layer_controller_options().gate_stack_source,
-                    independent_flag=True,
-                    hidden_dim=23,
-                ),
-                halting_stack_source=replace(
-                    _feed_forward_layer_controller_options().halting_stack_source,
-                    independent_flag=True,
-                    hidden_dim=19,
-                ),
-            ),
-            feed_forward_recurrent_controller_options=replace(
-                _feed_forward_recurrent_controller_options(),
-                recurrent_flag=True,
-                recurrent_gate_flag=True,
-                recurrent_halting_flag=True,
-            ),
+            ff_stack_hidden_dim=17,
+            ff_gate_stack_independent_flag=True,
+            ff_gate_stack_hidden_dim=23,
+            ff_halting_stack_independent_flag=True,
+            ff_halting_stack_hidden_dim=19,
+            ff_recurrent_flag=True,
+            ff_recurrent_stack_gate_flag=True,
+            ff_recurrent_stack_halting_flag=True,
         )
         recurrent_cfg = self._feed_forward_config(cfg).stack_config
         recurrent_gate_stack_cfg = recurrent_cfg.gate_config.model_config
@@ -944,12 +656,14 @@ class TestVitLinearModel(unittest.TestCase):
                 "models.package_cli.execute_runs",
                 return_value=(),
             ) as execute_runs,
+            self.assertRaises(SystemExit) as exit_context,
         ):
             runpy.run_module(
                 "models.vit.linear.__main__",
                 run_name="__main__",
             )
 
+        self.assertEqual(exit_context.exception.code, 0)
         execute_runs.assert_called_once()
         package, plan = execute_runs.call_args.args
 
@@ -959,7 +673,7 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertEqual(dict(plan.overrides), {})
         self.assertEqual(
             plan.datasets,
-            tuple(dataset.__name__ for dataset in self._default_datasets()),
+            (self._default_dataset().__name__,),
         )
 
     def test_cli_and_config_listing_expose_flat_vit_flags(self):
@@ -975,17 +689,14 @@ class TestVitLinearModel(unittest.TestCase):
                 "image_patch_size",
                 "attn_num_heads",
                 "layer_norm_position",
-                "stack_layer_norm_position",
                 "stack_num_layers",
             }
             <= supported_keys
         )
         self.assertNotIn("sequence_length", supported_keys)
 
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.vit.linear",
-        )
+        package = model_package("vit/linear")
+        parser = get_experiment_parser(package)
         parser.parse_args(["--preset", "baseline", "--batch-size", "2"])
         parser.parse_args(["--preset", "baseline", "--hidden-dim", "16"])
         parser.parse_args(["--preset", "baseline", "--image-patch-size", "4"])
@@ -1080,11 +791,11 @@ class TestVitLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RECURRENT_GATING: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
             },
             ExperimentPreset.RECURRENT_HALTING: {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
             },
             ExperimentPreset.RECURRENT_MEMORY: {
                 "recurrent_flag": True,
@@ -1092,23 +803,23 @@ class TestVitLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RECURRENT_GATING_HALTING: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
             },
             ExperimentPreset.RECURRENT_GATING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
+                "recurrent_stack_gate_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_HALTING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: {
                 "recurrent_flag": True,
-                "recurrent_gate_flag": True,
-                "recurrent_halting_flag": True,
+                "recurrent_stack_gate_flag": True,
+                "recurrent_stack_halting_flag": True,
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_RESIDUAL: {
@@ -1123,7 +834,7 @@ class TestVitLinearModel(unittest.TestCase):
             },
         }
 
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         self.assertEqual(
             {
@@ -1145,7 +856,7 @@ class TestVitLinearModel(unittest.TestCase):
                 )
 
     def test_preset_locks_are_exposed_with_reasons(self):
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
@@ -1163,7 +874,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_all_presets_forward_one_batch(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
         dataset = self._default_dataset()
 
         for preset in ExperimentPreset:
@@ -1183,7 +894,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_baseline_forwards_all_image_datasets(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         for dataset in self._default_datasets():
             with self.subTest(dataset=dataset.__name__):
@@ -1202,7 +913,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_equal_batch_and_sequence_lengths_preserve_sample_isolation(self):
         batch_size = 5
-        cfg = ExperimentPresets()._preset(
+        cfg = self._build_config(
             **self._small_image_overrides(batch_size=batch_size),
         )
         model = Model(cfg).eval()
@@ -1228,7 +939,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
         dataset = self._default_dataset()
 
         for preset in ExperimentPreset:
@@ -1247,7 +958,7 @@ class TestVitLinearModel(unittest.TestCase):
                 tiny_cpu_trainer().fit(model, datamodule=datamodule)
 
     def test_search_applies_flat_encoder_axes(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             GridSearch(),
@@ -1273,7 +984,7 @@ class TestVitLinearModel(unittest.TestCase):
         for search_key in ("bogus_axis", "encoder_options"):
             with self.subTest(search_key=search_key):
                 with self.assertRaises(ValueError) as ctx:
-                    ExperimentPresets().get_config(
+                    model_package("vit/linear").presets.get_config(
                         ExperimentPreset.BASELINE,
                         self._default_dataset(),
                         GridSearch(),
@@ -1283,29 +994,19 @@ class TestVitLinearModel(unittest.TestCase):
 
                 self.assertIn("Unknown", str(ctx.exception))
 
-    def test_unlocked_grouped_overrides_update_top_level_and_nested_config(self):
+    def test_canonical_flat_overrides_update_top_level_and_nested_config(self):
         dataset = self._default_dataset()
-        encoder_options = replace(
-            _encoder_options(),
-            hidden_dim=24,
-            num_layers=2,
-            activation=ActivationOptions.RELU,
-            dropout_probability=0.2,
-        )
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset,
             config_overrides={
                 "batch_size": 2,
-                "encoder_options": encoder_options,
-                "patch_options": self._dataset_patch_options(
-                    dataset,
-                    dropout_probability=0.3,
-                ),
-                "attention_options": replace(
-                    _attention_options(),
-                    num_heads=4,
-                ),
+                "hidden_dim": 24,
+                "stack_num_layers": 2,
+                "stack_activation": ActivationOptions.RELU,
+                "stack_dropout_probability": 0.2,
+                "patch_dropout_probability": 0.3,
+                "attn_num_heads": 4,
             },
         )[0]
 
@@ -1328,10 +1029,8 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_flat_cli_overrides_update_grouped_builder_options(self):
         dataset = self._default_dataset()
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.vit.linear",
-        )
+        package = model_package("vit/linear")
+        parser = get_experiment_parser(package)
         args = parser.parse_args(
             [
                 "--preset",
@@ -1348,9 +1047,9 @@ class TestVitLinearModel(unittest.TestCase):
                 "4",
             ]
         )
-        mode = resolve_experiment_mode(args, ExperimentPreset)
+        mode = resolve_cli_selection(args, package, ExperimentPreset)
 
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset,
             config_overrides=mode.config_overrides,
@@ -1365,63 +1064,54 @@ class TestVitLinearModel(unittest.TestCase):
         )
         self.assertEqual(self._attention_config(cfg).num_heads, 4)
 
-    def test_flat_layer_norm_aliases_update_encoder_options(self):
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            "models.vit.linear",
+    def test_canonical_layer_norm_flag_updates_encoder_options(self):
+        package = model_package("vit/linear")
+        parser = get_experiment_parser(package)
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--batch-size",
+                "2",
+                "--layer-norm-position",
+                "AFTER",
+            ]
         )
-        for flag in ("--layer-norm-position", "--stack-layer-norm-position"):
-            with self.subTest(flag=flag):
-                args = parser.parse_args(
-                    [
-                        "--preset",
-                        "baseline",
-                        "--batch-size",
-                        "2",
-                        flag,
-                        "AFTER",
-                    ]
-                )
-                mode = resolve_experiment_mode(args, ExperimentPreset)
-                cfg = ExperimentPresets().get_config(
-                    ExperimentPreset.BASELINE,
-                    self._default_dataset(),
-                    config_overrides=mode.config_overrides,
-                )[0]
-
-                self.assertIs(
-                    mode.config_overrides["layer_norm_position"],
-                    LayerNormPositionOptions.AFTER,
-                )
-                self.assertEqual(
-                    self._encoder_layer_config(cfg).layer_norm_position,
-                    LayerNormPositionOptions.AFTER,
-                )
-
-    def test_flat_overrides_update_grouped_override_base(self):
-        dataset = self._default_dataset()
-        cfg = ExperimentPresets().get_config(
+        mode = resolve_cli_selection(args, package, ExperimentPreset)
+        cfg = package.presets.get_config(
             ExperimentPreset.BASELINE,
-            dataset,
-            config_overrides={
-                "batch_size": 2,
-                "encoder_options": replace(
-                    _encoder_options(),
-                    hidden_dim=16,
-                    num_layers=1,
-                    dropout_probability=0.2,
-                ),
-                "hidden_dim": 24,
-                "stack_num_layers": 2,
-            },
+            self._default_dataset(),
+            config_overrides=mode.config_overrides,
         )[0]
 
-        self.assertEqual(cfg.hidden_dim, 24)
-        self.assertEqual(cfg.experiment_config.encoder_config.num_layers, 2)
-        self.assertEqual(self._encoder_layer_config(cfg).dropout_probability, 0.2)
+        self.assertIs(
+            mode.config_overrides["layer_norm_position"],
+            LayerNormPositionOptions.AFTER,
+        )
+        self.assertEqual(
+            self._encoder_layer_config(cfg).layer_norm_position,
+            LayerNormPositionOptions.AFTER,
+        )
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                [
+                    "--preset",
+                    "baseline",
+                    "--stack-layer-norm-position",
+                    "AFTER",
+                ]
+            )
+
+    def test_grouped_override_name_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "encoder_options"):
+            model_package("vit/linear").presets.get_config(
+                ExperimentPreset.BASELINE,
+                self._default_dataset(),
+                config_overrides={"encoder_options": object()},
+            )
 
     def test_locked_preset_rejects_conflicting_overrides(self):
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         with self.assertRaisesRegex(ValueError, "POST_NORM.*layer_norm_position"):
             presets.get_config(
@@ -1475,7 +1165,7 @@ class TestVitLinearModel(unittest.TestCase):
 
         for search_key, (expected_values, accessor) in cases.items():
             with self.subTest(search_key=search_key):
-                configs = ExperimentPresets().get_config(
+                configs = model_package("vit/linear").presets.get_config(
                     ExperimentPreset.BASELINE,
                     self._default_dataset(),
                     GridSearch(),
@@ -1489,7 +1179,7 @@ class TestVitLinearModel(unittest.TestCase):
                 )
 
     def test_model_inherits_classifier_experiment(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides=self._test_overrides(batch_size=2),
@@ -1506,7 +1196,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_patch_embedding_prepends_class_token(self):
         batch_size = 2
         dataset = self._default_dataset()
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
@@ -1531,7 +1221,7 @@ class TestVitLinearModel(unittest.TestCase):
         )
 
     def test_class_token_positional_embedding_is_trainable(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides=self._test_overrides(batch_size=2),
@@ -1544,7 +1234,7 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertTrue(embedding.weight.requires_grad)
 
     def test_encoder_is_built_from_transformer_encoder_block_layers(self):
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             self._default_dataset(),
             config_overrides=self._test_overrides(batch_size=2),
@@ -1561,7 +1251,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_model_step_accepts_classifier_batch(self):
         batch_size = 2
         dataset = self._default_dataset()
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
@@ -1580,7 +1270,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_auxiliary_loss_from_encoder_is_included_by_classifier_experiment(self):
         batch_size = 2
         dataset = self._default_dataset()
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("vit/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset,
             config_overrides=self._test_overrides(batch_size),
@@ -1596,7 +1286,7 @@ class TestVitLinearModel(unittest.TestCase):
         torch.testing.assert_close(loss, expected_loss)
 
     def test_dataset_metadata_drives_channels_classes_and_sequence_length(self):
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         for dataset in self._default_datasets():
             with self.subTest(dataset=dataset.__name__):
@@ -1628,7 +1318,7 @@ class TestVitLinearModel(unittest.TestCase):
                 )
 
     def test_presets_wire_config_variants(self):
-        presets = ExperimentPresets()
+        presets = model_package("vit/linear").presets
 
         cfg = presets.get_config(ExperimentPreset.BASELINE)[0]
         self.assertIsInstance(
@@ -1680,13 +1370,7 @@ class TestVitLinearModel(unittest.TestCase):
 
     def test_invalid_patch_size_for_image_height_raises(self):
         with self.assertRaises(ValueError):
-            VitLinearConfigBuilder(
-                patch_options=replace(
-                    _patch_options(),
-                    image_height=30,
-                    patch_size=4,
-                )
-            ).build()
+            self._build_config(image_height=30, image_patch_size=4)
 
     def _default_datasets(self) -> list[type]:
         return dataset_options.DATASET_OPTIONS_BY_TASK[
@@ -1702,50 +1386,28 @@ class TestVitLinearModel(unittest.TestCase):
     def _test_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
-            "encoder_options": replace(
-                _encoder_options(),
-                hidden_dim=16,
-                num_layers=1,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                _attention_options(),
-                num_heads=4,
-            ),
+            "hidden_dim": 16,
+            "stack_num_layers": 1,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 4,
         }
 
     def _small_image_overrides(self, batch_size: int) -> dict:
         return {
             "batch_size": batch_size,
             "output_dim": 5,
-            "patch_options": replace(
-                _patch_options(),
-                patch_size=4,
-                image_height=8,
-                input_channels=3,
-            ),
-            "encoder_options": replace(
-                _encoder_options(),
-                hidden_dim=16,
-                num_layers=1,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                _attention_options(),
-                num_heads=4,
-            ),
+            "image_patch_size": 4,
+            "image_height": 8,
+            "input_channels": 3,
+            "hidden_dim": 16,
+            "stack_num_layers": 1,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 4,
         }
 
-    def _dataset_patch_options(self, dataset: type, **overrides) -> VitPatchOptions:
-        from models.vit.linear.presets import default_patch_size_for_dataset
-
-        return replace(
-            _patch_options(),
-            patch_size=default_patch_size_for_dataset(dataset),
-            input_channels=dataset.num_channels,
-            image_height=dataset.default_height,
-            **overrides,
-        )
+    def _build_config(self, **runtime_defaults):
+        runtime = model_package("vit/linear").bind_runtime_defaults(runtime_defaults)
+        return VitLinearConfigBuilder(runtime=runtime).build()
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
