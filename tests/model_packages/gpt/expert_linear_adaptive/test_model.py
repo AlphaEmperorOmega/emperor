@@ -17,7 +17,10 @@ from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.layers import ActivationOptions, LayerNormPositionOptions
-from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
+from emperor.transformer import (
+    TransformerDecoderLayerConfig,
+    TransformerDecoderLayerState,
+)
 from models.catalog import model_package
 from models.gpt.expert_linear_adaptive.config_builder import (
     GptExpertLinearAdaptiveConfigBuilder,
@@ -42,6 +45,7 @@ _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
 _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
+_TRANSFORMER_DECODER_LAYER_TYPE = TransformerDecoderLayerConfig().registry_owner()
 
 
 class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
@@ -122,7 +126,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         decoder_layers = [
             module
             for module in model.modules()
-            if isinstance(module, TransformerDecoderLayer)
+            if isinstance(module, _TRANSFORMER_DECODER_LAYER_TYPE)
         ]
         self.assertTrue(decoder_layers)
         self.assertTrue(

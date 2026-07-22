@@ -24,7 +24,10 @@ from emperor.layers import (
     RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
+from emperor.transformer import (
+    TransformerDecoderLayerConfig,
+    TransformerDecoderLayerState,
+)
 from models.catalog import model_package
 from models.gpt.expert_linear._builder_adapter import (
     expert_linear_builder_kwargs_from_flat,
@@ -55,6 +58,7 @@ _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
 _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
+_TRANSFORMER_DECODER_LAYER_TYPE = TransformerDecoderLayerConfig().registry_owner()
 
 
 class TestGptExpertLinearModel(unittest.TestCase):
@@ -131,7 +135,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
         decoder_layers = [
             module
             for module in model.modules()
-            if isinstance(module, TransformerDecoderLayer)
+            if isinstance(module, _TRANSFORMER_DECODER_LAYER_TYPE)
         ]
         self.assertTrue(decoder_layers)
         self.assertTrue(

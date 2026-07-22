@@ -27,7 +27,10 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.transformer import TransformerEncoderBlockLayer, TransformerEncoderLayer
+from emperor.transformer import (
+    TransformerEncoderBlockLayerConfig,
+    TransformerEncoderLayerConfig,
+)
 from model_runtime.packages import PresetLock, iter_supported_config_keys
 from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
@@ -45,6 +48,11 @@ from models.vit.linear.presets import (
 )
 from models.vit.linear.runtime_defaults import runtime_from_flat
 from models.vit.linear.runtime_options import RuntimeOptions
+
+_TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE = (
+    TransformerEncoderBlockLayerConfig().registry_owner()
+)
+_TRANSFORMER_ENCODER_LAYER_TYPE = TransformerEncoderLayerConfig().registry_owner()
 
 
 class TestVitLinearModel(unittest.TestCase):
@@ -1152,8 +1160,8 @@ class TestVitLinearModel(unittest.TestCase):
 
         self.assertGreater(len(encoder_layers), 0)
         for layer in encoder_layers:
-            self.assertIsInstance(layer, TransformerEncoderBlockLayer)
-            self.assertIsInstance(layer.model, TransformerEncoderLayer)
+            self.assertIsInstance(layer, _TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE)
+            self.assertIsInstance(layer.model, _TRANSFORMER_ENCODER_LAYER_TYPE)
 
     def test_model_step_accepts_classifier_batch(self):
         batch_size = 2

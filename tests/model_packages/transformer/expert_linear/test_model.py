@@ -11,7 +11,10 @@ from emperor.experiments.translation import TranslationExperiment
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.linears import LinearLayer
 from emperor.sampler import RouterModel
-from emperor.transformer import TransformerDecoderLayer, TransformerEncoderLayer
+from emperor.transformer import (
+    TransformerDecoderLayerConfig,
+    TransformerEncoderLayerConfig,
+)
 from model_runtime.packages import PresetLock
 from models.catalog import model_package
 from models.training_test_utils import (
@@ -31,6 +34,8 @@ from models.transformer.expert_linear.presets import (
 _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
 _MIXTURE_OF_EXPERTS_TYPE = MixtureOfExpertsModelConfig().registry_owner()
+_TRANSFORMER_DECODER_LAYER_TYPE = TransformerDecoderLayerConfig().registry_owner()
+_TRANSFORMER_ENCODER_LAYER_TYPE = TransformerEncoderLayerConfig().registry_owner()
 
 
 def _build_config(**runtime_defaults):
@@ -244,12 +249,12 @@ class TestTransformerExpertLinearModel(unittest.TestCase):
         encoder_layer = next(
             module
             for module in model.encoder.modules()
-            if isinstance(module, TransformerEncoderLayer)
+            if isinstance(module, _TRANSFORMER_ENCODER_LAYER_TYPE)
         )
         decoder_layer = next(
             module
             for module in model.decoder.modules()
-            if isinstance(module, TransformerDecoderLayer)
+            if isinstance(module, _TRANSFORMER_DECODER_LAYER_TYPE)
         )
         self_attention = encoder_layer.self_attention_model
         cross_attention = decoder_layer.cross_attention_model

@@ -28,8 +28,8 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.transformer import (
-    TransformerEncoderBlockLayer,
-    TransformerEncoderLayer,
+    TransformerEncoderBlockLayerConfig,
+    TransformerEncoderLayerConfig,
 )
 from model_runtime.packages import (
     PresetLock,
@@ -64,6 +64,11 @@ from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
+
+_TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE = (
+    TransformerEncoderBlockLayerConfig().registry_owner()
+)
+_TRANSFORMER_ENCODER_LAYER_TYPE = TransformerEncoderLayerConfig().registry_owner()
 
 
 def _default_builder_kwargs() -> dict:
@@ -2001,8 +2006,8 @@ class TestBertLinearModel(unittest.TestCase):
 
         self.assertGreater(len(encoder_layers), 0)
         for layer in encoder_layers:
-            self.assertIsInstance(layer, TransformerEncoderBlockLayer)
-            self.assertIsInstance(layer.model, TransformerEncoderLayer)
+            self.assertIsInstance(layer, _TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE)
+            self.assertIsInstance(layer.model, _TRANSFORMER_ENCODER_LAYER_TYPE)
 
     def _encoder_layers(self, model) -> list:
         transformer = model.transformer

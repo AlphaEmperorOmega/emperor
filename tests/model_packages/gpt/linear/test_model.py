@@ -28,8 +28,8 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.transformer import (
-    TransformerDecoderBlockLayer,
-    TransformerDecoderLayer,
+    TransformerDecoderBlockLayerConfig,
+    TransformerDecoderLayerConfig,
     TransformerDecoderLayerState,
 )
 from model_runtime.packages import (
@@ -63,6 +63,11 @@ from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
+
+_TRANSFORMER_DECODER_BLOCK_LAYER_TYPE = (
+    TransformerDecoderBlockLayerConfig().registry_owner()
+)
+_TRANSFORMER_DECODER_LAYER_TYPE = TransformerDecoderLayerConfig().registry_owner()
 
 
 def _build_typed_config(**overrides):
@@ -139,7 +144,7 @@ class TestGptLinearModel(unittest.TestCase):
         decoder_layers = [
             module
             for module in model.modules()
-            if isinstance(module, TransformerDecoderLayer)
+            if isinstance(module, _TRANSFORMER_DECODER_LAYER_TYPE)
         ]
         self.assertTrue(decoder_layers)
         self.assertTrue(
@@ -1235,8 +1240,8 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertGreater(len(layers), 0)
         for layer in layers:
             with self.subTest(layer=type(layer).__name__):
-                self.assertIsInstance(layer, TransformerDecoderBlockLayer)
-                self.assertIsInstance(layer.model, TransformerDecoderLayer)
+                self.assertIsInstance(layer, _TRANSFORMER_DECODER_BLOCK_LAYER_TYPE)
+                self.assertIsInstance(layer.model, _TRANSFORMER_DECODER_LAYER_TYPE)
                 self.assertIsNone(layer.model.cross_attention_model)
 
     def _default_builder_kwargs(self) -> dict:

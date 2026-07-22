@@ -13,7 +13,10 @@ import models.gpt.linear_adaptive.runtime_options as runtime_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import ActivationOptions, LayerNormPositionOptions
-from emperor.transformer import TransformerDecoderLayer, TransformerDecoderLayerState
+from emperor.transformer import (
+    TransformerDecoderLayerConfig,
+    TransformerDecoderLayerState,
+)
 from models.catalog import model_package
 from models.gpt.linear_adaptive import _config_defaults as config_defaults
 from models.gpt.linear_adaptive._builder_adapter import (
@@ -32,6 +35,8 @@ from models.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
+
+_TRANSFORMER_DECODER_LAYER_TYPE = TransformerDecoderLayerConfig().registry_owner()
 
 
 class TestGptLinearAdaptiveModel(unittest.TestCase):
@@ -108,7 +113,7 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         decoder_layers = [
             module
             for module in model.modules()
-            if isinstance(module, TransformerDecoderLayer)
+            if isinstance(module, _TRANSFORMER_DECODER_LAYER_TYPE)
         ]
         self.assertTrue(decoder_layers)
         self.assertTrue(
