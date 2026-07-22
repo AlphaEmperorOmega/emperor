@@ -121,7 +121,7 @@ def _default_hidden_adaptive_weight_options(
     adaptive_options = _adaptive_options()
     return adaptive_options.HiddenAdaptiveWeightOptions(
         generator_depth=getattr(
-            config_module, _config_key(config_prefix, "WEIGHT_GENERATOR_DEPTH")
+            config_module, _config_key(config_prefix, "GENERATOR_DEPTH")
         ),
         option_flag=getattr(
             config_module, _config_key(config_prefix, "WEIGHT_OPTION_FLAG")

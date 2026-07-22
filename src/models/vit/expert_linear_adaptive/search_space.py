@@ -9,7 +9,6 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
-SEARCH_SPACE_STACK_LAYER_NORM_POSITION: list = SEARCH_SPACE_LAYER_NORM_POSITION
 SEARCH_SPACE_IMAGE_PATCH_SIZE: list = [4, 2, 1]
 SEARCH_SPACE_ATTN_NUM_HEADS: list = [1, 2, 4]
 
@@ -22,7 +21,7 @@ SEARCH_SPACE_WEIGHT_OPTION: list = [
     LayeredWeightedBankDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 ]
-SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH: list = [
+SEARCH_SPACE_GENERATOR_DEPTH: list = [
     DynamicDepthOptions.DEPTH_OF_ONE,
     DynamicDepthOptions.DEPTH_OF_TWO,
     DynamicDepthOptions.DEPTH_OF_FOUR,

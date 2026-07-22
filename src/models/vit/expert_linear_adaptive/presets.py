@@ -11,13 +11,11 @@ from model_runtime.packages import (
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
-from models.vit.expert_linear_adaptive._builder_adapter import (
-    expert_linear_adaptive_builder_kwargs_from_flat,
-)
 from models.vit.expert_linear_adaptive.config_builder import (
     VitExpertLinearAdaptiveConfigBuilder,
 )
 from models.vit.expert_linear_adaptive.model import Model
+from models.vit.expert_linear_adaptive.runtime_defaults import runtime_from_flat
 
 
 def default_patch_size_for_dataset(dataset: type) -> int:
@@ -116,11 +114,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         }
 
     def _preset(self, **kwargs):
-        builder_kwargs = expert_linear_adaptive_builder_kwargs_from_flat(
-            kwargs,
-            config,
-        )
-        return self._builder_type(**builder_kwargs).build()
+        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
@@ -129,7 +123,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

@@ -80,14 +80,14 @@ def _mixture_options_from_kwargs(
     provided: expert_options.ExpertsMixtureOptions | None,
 ) -> expert_options.ExpertsMixtureOptions:
     options = provided or expert_options.ExpertsMixtureOptions(
-        top_k=config_module.EXPERT_TOP_K,
-        num_experts=config_module.EXPERT_NUM_EXPERTS,
-        capacity_factor=config_module.EXPERT_CAPACITY_FACTOR,
-        dropped_token_behavior=config_module.EXPERT_DROPPED_TOKEN_BEHAVIOR,
-        compute_expert_mixture_flag=config_module.EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG,
-        weighted_parameters_flag=config_module.EXPERT_WEIGHTED_PARAMETERS_FLAG,
-        weighting_position_option=config_module.EXPERT_WEIGHTING_POSITION_OPTION,
-        routing_initialization_mode=config_module.EXPERT_ROUTING_INITIALIZATION_MODE,
+        top_k=config_module.TOP_K,
+        num_experts=config_module.NUM_EXPERTS,
+        capacity_factor=config_module.CAPACITY_FACTOR,
+        dropped_token_behavior=config_module.DROPPED_TOKEN_BEHAVIOR,
+        compute_expert_mixture_flag=config_module.COMPUTE_EXPERT_MIXTURE_FLAG,
+        weighted_parameters_flag=config_module.WEIGHTED_PARAMETERS_FLAG,
+        weighting_position_option=config_module.WEIGHTING_POSITION_OPTION,
+        routing_initialization_mode=config_module.ROUTING_INITIALIZATION_MODE,
     )
     updates = _pop_updates(
         kwargs,
@@ -177,11 +177,11 @@ def _layer_controller_options_from_kwargs(
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
     options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.GATE_FLAG,
+        stack_gate_flag=config_module.STACK_GATE_FLAG,
         gate_option=config_module.GATE_OPTION,
         gate_activation=config_module.GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(config_module, "gate_stack"),
-        stack_halting_flag=config_module.HALTING_FLAG,
+        stack_halting_flag=config_module.STACK_HALTING_FLAG,
         halting_option=config_module.HALTING_OPTION,
         halting_threshold=config_module.HALTING_THRESHOLD,
         halting_dropout=config_module.HALTING_DROPOUT,
@@ -257,13 +257,13 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_flag=config_module.RECURRENT_FLAG,
         recurrent_max_steps=config_module.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.RECURRENT_HALTING_DROPOUT,
@@ -278,10 +278,10 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_flag": "recurrent_flag",
             "recurrent_max_steps": "recurrent_max_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "recurrent_gate_flag": "recurrent_gate_flag",
+            "recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "recurrent_gate_option": "recurrent_gate_option",
             "recurrent_gate_activation": "recurrent_gate_activation",
-            "recurrent_halting_flag": "recurrent_halting_flag",
+            "recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "recurrent_halting_option": "recurrent_halting_option",
             "recurrent_halting_threshold": "recurrent_halting_threshold",
             "recurrent_halting_dropout": "recurrent_halting_dropout",
@@ -310,13 +310,13 @@ def _expert_layer_controller_options_from_kwargs(
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
     options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.EXPERT_GATE_FLAG,
+        stack_gate_flag=config_module.EXPERT_STACK_GATE_FLAG,
         gate_option=config_module.EXPERT_GATE_OPTION,
         gate_activation=config_module.EXPERT_GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(
             config_module, "expert_gate_stack"
         ),
-        stack_halting_flag=config_module.EXPERT_HALTING_FLAG,
+        stack_halting_flag=config_module.EXPERT_STACK_HALTING_FLAG,
         halting_option=config_module.EXPERT_HALTING_OPTION,
         halting_threshold=config_module.EXPERT_HALTING_THRESHOLD,
         halting_dropout=config_module.EXPERT_HALTING_DROPOUT,
@@ -329,10 +329,10 @@ def _expert_layer_controller_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "expert_gate_flag": "stack_gate_flag",
+            "expert_stack_gate_flag": "stack_gate_flag",
             "expert_gate_option": "gate_option",
             "expert_gate_activation": "gate_activation",
-            "expert_halting_flag": "stack_halting_flag",
+            "expert_stack_halting_flag": "stack_halting_flag",
             "expert_halting_option": "halting_option",
             "expert_halting_threshold": "halting_threshold",
             "expert_halting_dropout": "halting_dropout",
@@ -397,13 +397,13 @@ def _expert_recurrent_controller_options_from_kwargs(
         recurrent_flag=config_module.EXPERT_RECURRENT_FLAG,
         recurrent_max_steps=config_module.EXPERT_RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.EXPERT_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.EXPERT_RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.EXPERT_RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.EXPERT_RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.EXPERT_RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "expert_recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.EXPERT_RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.EXPERT_RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.EXPERT_RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.EXPERT_RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.EXPERT_RECURRENT_HALTING_DROPOUT,
@@ -418,10 +418,10 @@ def _expert_recurrent_controller_options_from_kwargs(
             "expert_recurrent_flag": "recurrent_flag",
             "expert_recurrent_max_steps": "recurrent_max_steps",
             "expert_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "expert_recurrent_gate_flag": "recurrent_gate_flag",
+            "expert_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "expert_recurrent_gate_option": "recurrent_gate_option",
             "expert_recurrent_gate_activation": "recurrent_gate_activation",
-            "expert_recurrent_halting_flag": "recurrent_halting_flag",
+            "expert_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "expert_recurrent_halting_option": "recurrent_halting_option",
             "expert_recurrent_halting_threshold": "recurrent_halting_threshold",
             "expert_recurrent_halting_dropout": "recurrent_halting_dropout",
@@ -450,13 +450,13 @@ def _router_layer_controller_options_from_kwargs(
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
     options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.ROUTER_GATE_FLAG,
+        stack_gate_flag=config_module.ROUTER_STACK_GATE_FLAG,
         gate_option=config_module.ROUTER_GATE_OPTION,
         gate_activation=config_module.ROUTER_GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(
             config_module, "router_gate_stack"
         ),
-        stack_halting_flag=config_module.ROUTER_HALTING_FLAG,
+        stack_halting_flag=config_module.ROUTER_STACK_HALTING_FLAG,
         halting_option=config_module.ROUTER_HALTING_OPTION,
         halting_threshold=config_module.ROUTER_HALTING_THRESHOLD,
         halting_dropout=config_module.ROUTER_HALTING_DROPOUT,
@@ -469,10 +469,10 @@ def _router_layer_controller_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "router_gate_flag": "stack_gate_flag",
+            "router_stack_gate_flag": "stack_gate_flag",
             "router_gate_option": "gate_option",
             "router_gate_activation": "gate_activation",
-            "router_halting_flag": "stack_halting_flag",
+            "router_stack_halting_flag": "stack_halting_flag",
             "router_halting_option": "halting_option",
             "router_halting_threshold": "halting_threshold",
             "router_halting_dropout": "halting_dropout",
@@ -537,13 +537,13 @@ def _router_recurrent_controller_options_from_kwargs(
         recurrent_flag=config_module.ROUTER_RECURRENT_FLAG,
         recurrent_max_steps=config_module.ROUTER_RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.ROUTER_RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.ROUTER_RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.ROUTER_RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.ROUTER_RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "router_recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.ROUTER_RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.ROUTER_RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.ROUTER_RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.ROUTER_RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.ROUTER_RECURRENT_HALTING_DROPOUT,
@@ -558,10 +558,10 @@ def _router_recurrent_controller_options_from_kwargs(
             "router_recurrent_flag": "recurrent_flag",
             "router_recurrent_max_steps": "recurrent_max_steps",
             "router_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "router_recurrent_gate_flag": "recurrent_gate_flag",
+            "router_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "router_recurrent_gate_option": "recurrent_gate_option",
             "router_recurrent_gate_activation": "recurrent_gate_activation",
-            "router_recurrent_halting_flag": "recurrent_halting_flag",
+            "router_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "router_recurrent_halting_option": "recurrent_halting_option",
             "router_recurrent_halting_threshold": "recurrent_halting_threshold",
             "router_recurrent_halting_dropout": "recurrent_halting_dropout",
