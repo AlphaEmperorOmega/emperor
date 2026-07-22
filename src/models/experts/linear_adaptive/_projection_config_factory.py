@@ -37,7 +37,7 @@ from models.experts.linear_adaptive.runtime_options import (
 @dataclass(frozen=True, slots=True)
 class AdaptiveBoundaryModelOptions:
     weight_option: type[DynamicWeightConfig] | None
-    weight_generator_depth: DynamicDepthOptions
+    generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
     weight_decay_rate: float
     weight_decay_warmup_batches: int
@@ -118,7 +118,7 @@ class BoundaryModelConfigFactory:
         augmentation = AdaptiveParameterAugmentationConfig(
             weight_config=build_weight_config(
                 weight_option=options.weight_option,
-                generator_depth=options.weight_generator_depth,
+                generator_depth=options.generator_depth,
                 decay_schedule=options.weight_decay_schedule,
                 decay_rate=options.weight_decay_rate,
                 decay_warmup_batches=options.weight_decay_warmup_batches,

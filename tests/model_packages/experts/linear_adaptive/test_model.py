@@ -61,6 +61,7 @@ from emperor.memory import (
     WeightedDynamicMemoryConfig,
 )
 from model_runtime.packages import RandomSearch
+from models.catalog import model_package
 from models.experts.linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
 )
@@ -70,7 +71,6 @@ from models.experts.linear_adaptive.config_builder import (
 from models.experts.linear_adaptive.model import Model
 from models.experts.linear_adaptive.presets import (
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.experts.linear_adaptive.runtime_defaults import runtime_from_flat
 from models.experts.linear_adaptive.runtime_options import (
@@ -95,11 +95,11 @@ from models.experts.linear_adaptive.runtime_options import (
 
 class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
-        return ExperimentPresets()._preset(**kwargs)
+        return model_package("experts/linear_adaptive").presets._preset(**kwargs)
 
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear_adaptive").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -122,7 +122,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_baseline_forwards_all_datasets(self):
         batch_size = 2
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear_adaptive").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -142,7 +142,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
-        cfg = ExperimentPresets().get_config(
+        cfg = model_package("experts/linear_adaptive").presets.get_config(
             ExperimentPreset.ADAPTIVE_TOP1_SWITCH,
             dataset,
         )[0]
@@ -232,7 +232,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
 
     def test_preset_accepts_search_flags(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("experts/linear_adaptive").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -367,11 +367,11 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             recurrent_flag=True,
             recurrent_max_steps=3,
             recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_activation=ActivationOptions.SIGMOID,
             recurrent_gate_stack_source=self.experts_stack_source(gate_stack_options),
-            recurrent_halting_flag=True,
+            recurrent_stack_halting_flag=True,
             recurrent_halting_threshold=0.71,
             recurrent_halting_dropout=0.09,
             recurrent_halting_hidden_state_mode=(
@@ -566,7 +566,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             "recurrent_layer_norm_position": (
                 recurrent_controller_options.recurrent_layer_norm_position
             ),
-            "recurrent_gate_flag": (recurrent_controller_options.recurrent_gate_flag),
+            "recurrent_stack_gate_flag": (
+                recurrent_controller_options.recurrent_stack_gate_flag
+            ),
             "recurrent_gate_option": (
                 recurrent_controller_options.recurrent_gate_option
             ),
@@ -579,8 +581,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 gate_stack_options,
                 bias_name="recurrent_gate_stack_bias_flag",
             ),
-            "recurrent_halting_flag": (
-                recurrent_controller_options.recurrent_halting_flag
+            "recurrent_stack_halting_flag": (
+                recurrent_controller_options.recurrent_stack_halting_flag
             ),
             "recurrent_halting_threshold": (
                 recurrent_controller_options.recurrent_halting_threshold
@@ -652,28 +654,31 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         }
 
         flat_cfg = self.experts_preset(**flat_kwargs)
-        grouped_cfg = LinearAdaptiveConfigBuilder(
-            batch_size=3,
-            learning_rate=0.02,
-            input_dim=8,
-            output_dim=4,
-            stack_options=stack_options,
-            submodule_stack_options=submodule_stack_options,
-            mixture_options=mixture_options,
-            expert_stack_options=expert_stack_options,
-            sampler_options=sampler_options,
-            router_options=router_options,
-            router_stack_options=router_stack_options,
-            layer_controller_options=layer_controller_options,
-            dynamic_memory_options=dynamic_memory_options,
-            recurrent_controller_options=recurrent_controller_options,
-            adaptive_generator_stack_options=adaptive_generator_stack_options,
-            hidden_adaptive_weight_options=hidden_adaptive_weight_options,
-            hidden_adaptive_bias_options=hidden_adaptive_bias_options,
-            hidden_adaptive_diagonal_options=hidden_adaptive_diagonal_options,
-            hidden_adaptive_mask_options=hidden_adaptive_mask_options,
-            router_adaptive_weight_options=router_adaptive_weight_options,
-        ).build()
+        grouped_runtime = runtime_from_flat(
+            {
+                "batch_size": 3,
+                "learning_rate": 0.02,
+                "input_dim": 8,
+                "output_dim": 4,
+                "stack_options": stack_options,
+                "submodule_stack_options": submodule_stack_options,
+                "mixture_options": mixture_options,
+                "expert_stack_options": expert_stack_options,
+                "sampler_options": sampler_options,
+                "router_options": router_options,
+                "router_stack_options": router_stack_options,
+                "layer_controller_options": layer_controller_options,
+                "dynamic_memory_options": dynamic_memory_options,
+                "recurrent_controller_options": recurrent_controller_options,
+                "adaptive_generator_stack_options": adaptive_generator_stack_options,
+                "hidden_adaptive_weight_options": hidden_adaptive_weight_options,
+                "hidden_adaptive_bias_options": hidden_adaptive_bias_options,
+                "hidden_adaptive_diagonal_options": hidden_adaptive_diagonal_options,
+                "hidden_adaptive_mask_options": hidden_adaptive_mask_options,
+                "router_adaptive_weight_options": router_adaptive_weight_options,
+            }
+        )
+        grouped_cfg = LinearAdaptiveConfigBuilder(runtime=grouped_runtime).build()
 
         self.assertEqual(flat_cfg, grouped_cfg)
 
@@ -688,10 +693,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         }
 
         self.assertIn("runtime", parameters)
-        self.assertLessEqual(
-            set(parameters),
-            {"self", "legacy_args", "runtime", "legacy_options"},
-        )
+        self.assertEqual(set(parameters), {"self", "runtime"})
 
         for name in old_names:
             with self.subTest(name=name):
@@ -878,12 +880,12 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_router_controller_flags_build_stable_trunk_and_logits_head(self):
         cfg = self.experts_preset(
-            router_gate_flag=True,
-            router_halting_flag=True,
+            router_stack_gate_flag=True,
+            router_stack_halting_flag=True,
             router_memory_flag=True,
             router_recurrent_flag=True,
-            router_recurrent_gate_flag=True,
-            router_recurrent_halting_flag=True,
+            router_recurrent_stack_gate_flag=True,
+            router_recurrent_stack_halting_flag=True,
             router_weight_option=LayeredWeightedBankDynamicWeightConfig,
         )
         router_model_cfg = self._moe_model_config(
@@ -893,7 +895,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         self.assertIsInstance(router_model_cfg, RouterControllerModelConfig)
         self.assertEqual(router_model_cfg.input_dim, config.HIDDEN_DIM)
         self.assertEqual(router_model_cfg.hidden_dim, config.SUBMODULE_STACK_HIDDEN_DIM)
-        self.assertEqual(router_model_cfg.output_dim, config.EXPERT_NUM_EXPERTS)
+        self.assertEqual(router_model_cfg.output_dim, config.NUM_EXPERTS)
         self.assertIsInstance(router_model_cfg.trunk_config, RecurrentLayerConfig)
         self.assertIsInstance(router_model_cfg.head_config, LayerConfig)
 
@@ -937,12 +939,12 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             router_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             router_stack_apply_output_pipeline_flag=True,
             router_bias_flag=True,
-            router_gate_flag=True,
-            router_halting_flag=True,
+            router_stack_gate_flag=True,
+            router_stack_halting_flag=True,
             router_memory_flag=True,
             router_recurrent_flag=True,
-            router_recurrent_gate_flag=True,
-            router_recurrent_halting_flag=True,
+            router_recurrent_stack_gate_flag=True,
+            router_recurrent_stack_halting_flag=True,
         )
         router_model_cfg = self._moe_model_config(
             cfg
@@ -989,20 +991,20 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
     def test_flat_router_controller_kwargs_reach_controller_stacks(self):
         cfg = self.experts_preset(
-            router_gate_flag=True,
+            router_stack_gate_flag=True,
             router_gate_stack_independent_flag=True,
             router_gate_stack_hidden_dim=41,
-            router_halting_flag=True,
+            router_stack_halting_flag=True,
             router_halting_stack_independent_flag=True,
             router_halting_stack_hidden_dim=45,
             router_memory_flag=True,
             router_memory_stack_independent_flag=True,
             router_memory_stack_hidden_dim=43,
             router_recurrent_flag=True,
-            router_recurrent_gate_flag=True,
+            router_recurrent_stack_gate_flag=True,
             router_recurrent_gate_stack_independent_flag=True,
             router_recurrent_gate_stack_hidden_dim=47,
-            router_recurrent_halting_flag=True,
+            router_recurrent_stack_halting_flag=True,
             router_recurrent_halting_stack_independent_flag=True,
             router_recurrent_halting_stack_hidden_dim=49,
         )
@@ -1230,14 +1232,14 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             stack_gate_flag=True,
             gate_stack_independent_flag=True,
             gate_stack_hidden_dim=32,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             recurrent_gate_stack_independent_flag=True,
             recurrent_gate_stack_hidden_dim=64,
             stack_halting_flag=True,
             halting_stack_independent_flag=True,
             halting_threshold=0.55,
             halting_stack_hidden_dim=40,
-            recurrent_halting_flag=True,
+            recurrent_stack_halting_flag=True,
             recurrent_halting_threshold=0.75,
             recurrent_halting_dropout=0.2,
             recurrent_halting_hidden_state_mode=(
@@ -1267,7 +1269,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
 
     def test_expert_gate_config_is_internal_to_expert_model_config(self):
-        cfg = self.experts_preset(expert_gate_flag=True)
+        cfg = self.experts_preset(expert_stack_gate_flag=True)
         outer_stack = cfg.experiment_config.model_config.stack_config
         expert_cfg = self._expert_model_config(cfg)
 
@@ -1280,7 +1282,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
 
     def test_expert_halting_config_is_internal_to_expert_model_config(self):
-        cfg = self.experts_preset(expert_halting_flag=True)
+        cfg = self.experts_preset(expert_stack_halting_flag=True)
         outer_stack = cfg.experiment_config.model_config.stack_config
         expert_cfg = self._expert_model_config(cfg)
 
@@ -1309,8 +1311,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_expert_recurrent_wraps_only_expert_model_config(self):
         cfg = self.experts_preset(
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
-            expert_recurrent_halting_flag=True,
+            expert_recurrent_stack_gate_flag=True,
+            expert_recurrent_stack_halting_flag=True,
             expert_recurrent_halting_threshold=0.77,
             expert_recurrent_gate_stack_independent_flag=True,
             expert_recurrent_gate_stack_hidden_dim=25,
@@ -1334,10 +1336,10 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_expert_controller_stacks_inherit_expert_stack_by_default(self):
         inherited_cfg = self.experts_preset(
             expert_stack_hidden_dim=31,
-            expert_gate_flag=True,
+            expert_stack_gate_flag=True,
             expert_gate_stack_hidden_dim=62,
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
+            expert_recurrent_stack_gate_flag=True,
             expert_recurrent_gate_stack_hidden_dim=93,
         )
         inherited_expert_cfg = self._expert_model_config(inherited_cfg)
@@ -1354,11 +1356,11 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
         custom_cfg = self.experts_preset(
             expert_stack_hidden_dim=31,
-            expert_gate_flag=True,
+            expert_stack_gate_flag=True,
             expert_gate_stack_independent_flag=True,
             expert_gate_stack_hidden_dim=62,
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
+            expert_recurrent_stack_gate_flag=True,
             expert_recurrent_gate_stack_independent_flag=True,
             expert_recurrent_gate_stack_hidden_dim=93,
         )
@@ -1403,7 +1405,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             expected_memory,
         ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear_adaptive").presets.get_config(
+                    preset
+                )[0]
                 stack_cfg = cfg.experiment_config.model_config.stack_config
 
                 self.assertEqual(
@@ -1423,7 +1427,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         cases = {
             ExperimentPreset.RESIDUAL: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
                 False,
                 False,
                 False,
@@ -1447,7 +1451,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ),
             ExperimentPreset.RESIDUAL_GATING: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
                 True,
                 False,
                 False,
@@ -1455,7 +1459,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ),
             ExperimentPreset.RESIDUAL_HALTING: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
                 False,
                 True,
                 False,
@@ -1463,7 +1467,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ),
             ExperimentPreset.RESIDUAL_MEMORY: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
                 False,
                 False,
                 True,
@@ -1471,7 +1475,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             ),
             ExperimentPreset.RECURRENT_RESIDUAL: (
                 ResidualConnectionOptions.RESIDUAL,
-                config.STACK_LAYER_NORM_POSITION,
+                config.LAYER_NORM_POSITION,
                 False,
                 False,
                 False,
@@ -1496,7 +1500,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             expected_recurrent,
         ) in cases.items():
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear_adaptive").presets.get_config(
+                    preset
+                )[0]
                 model_cfg = cfg.experiment_config.model_config
                 stack_cfg = self._moe_model_config(cfg).stack_config
                 layer_cfg = stack_cfg.layer_config
@@ -1526,7 +1532,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         cfg = self.experts_preset(
             recurrent_flag=True,
             stack_gate_flag=True,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
         )
@@ -1583,7 +1589,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             expected_memory,
         ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear_adaptive").presets.get_config(
+                    preset
+                )[0]
                 recurrent_cfg = cfg.experiment_config.model_config
 
                 self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -1720,7 +1728,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     preset=preset.name,
                     expected_config_role=expected_field,
                 ):
-                    cfg = ExperimentPresets().get_config(preset)[0]
+                    cfg = model_package("experts/linear_adaptive").presets.get_config(
+                        preset
+                    )[0]
                     augmentation_config = self._expert_augmentation_config(cfg)
 
                     for field in (
@@ -1761,7 +1771,9 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
 
         for preset, expected_values in cases:
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear_adaptive").presets.get_config(
+                    preset
+                )[0]
                 weight_config = self._expert_augmentation_config(cfg).weight_config
 
                 self.assertIsInstance(weight_config, DualModelDynamicWeightConfig)
@@ -1769,7 +1781,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                     self.assertEqual(getattr(weight_config, field), expected)
 
     def test_linear_adaptive_combination_presets_wire_expert_config(self):
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear_adaptive").presets
         cases = [
             {
                 "preset": ExperimentPreset.FULL_STACK,
@@ -1944,12 +1956,8 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
             output_layer_bias_option=AdditiveDynamicBiasConfig,
         )
 
-        input_augmentation = (
-            cfg.experiment_config.input_model_config.layer_model_config.adaptive_augmentation_config
-        )
-        output_augmentation = (
-            cfg.experiment_config.output_model_config.layer_model_config.adaptive_augmentation_config
-        )
+        input_augmentation = cfg.experiment_config.input_model_config.layer_model_config.adaptive_augmentation_config
+        output_augmentation = cfg.experiment_config.output_model_config.layer_model_config.adaptive_augmentation_config
         hidden_augmentation = self._expert_augmentation_config(cfg)
         router_augmentation = self._router_augmentation_config(cfg)
 
@@ -2207,7 +2215,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         )
 
     def test_new_adaptive_moe_presets_wire_config(self):
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear_adaptive").presets
         cases = [
             {
                 "preset": ExperimentPreset.ADAPTIVE_SHARED_ROUTER,
@@ -2450,8 +2458,14 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         option_prefix: str,
         stack_prefix: str,
     ) -> dict[str, object]:
+        role_prefix = option_prefix.removesuffix("_weight")
+        if role_prefix == "weight":
+            role_prefix = ""
+        generator_depth_key = (
+            f"{role_prefix}_generator_depth" if role_prefix else "generator_depth"
+        )
         return {
-            f"{option_prefix}_generator_depth": options.generator_depth,
+            generator_depth_key: options.generator_depth,
             f"{option_prefix}_option_flag": options.option_flag,
             f"{option_prefix}_option": options.option,
             f"{option_prefix}_normalization_option": options.normalization_option,
