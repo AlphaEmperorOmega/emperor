@@ -34,15 +34,21 @@ class MixerAttentionValidator(ValidatorBase):
 
     @staticmethod
     def _validate_mixing_model_config(mixing_model_config: object) -> None:
+        from emperor.experts import MixtureOfExpertsModelConfig
         from emperor.layers import LayerStackConfig, RecurrentLayerConfig
 
         if not isinstance(
             mixing_model_config,
-            (LayerStackConfig, RecurrentLayerConfig),
+            (
+                LayerStackConfig,
+                MixtureOfExpertsModelConfig,
+                RecurrentLayerConfig,
+            ),
         ):
             raise TypeError(
                 "mixing_model_config must be a LayerStackConfig or "
-                "RecurrentLayerConfig for MixerAttention, got "
+                "RecurrentLayerConfig, or a MixtureOfExpertsModelConfig for "
+                "MixerAttention, got "
                 f"{type(mixing_model_config).__name__}."
             )
 

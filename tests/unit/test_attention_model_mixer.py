@@ -11,6 +11,14 @@ from emperor.attention import (
 from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._variants.mixer.layer import MixerAttention
 from emperor.config import ConfigBase, optional_field
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsModelConfig,
+    RoutingInitializationMode,
+)
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -23,6 +31,7 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
+from emperor.sampler import RouterConfig, SamplerConfig
 from emperor.transformer import (
     FeedForward,
     FeedForwardConfig,
@@ -84,7 +93,9 @@ def _mixer_config(
     sequence_length: int = 3,
     batch_first_flag: bool = True,
     causal_attention_mask_flag: bool = False,
-    mixing_model_config: LayerStackConfig | RecurrentLayerConfig | None = None,
+    mixing_model_config: (
+        LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None
+    ) = None,
 ) -> MixerAttentionConfig:
     if mixing_model_config is None:
         mixing_model_config = _linear_stack(sequence_length, sequence_length)
@@ -102,6 +113,77 @@ def _feed_forward_config(embedding_dim: int) -> FeedForwardConfig:
         input_dim=embedding_dim,
         output_dim=embedding_dim,
         stack_config=_linear_stack(embedding_dim, embedding_dim),
+    )
+
+
+def _mixture_mixing_config(
+    *,
+    configured_dim: int = 7,
+    auxiliary_loss_weight: float = 0.0,
+) -> MixtureOfExpertsModelConfig:
+    num_experts = 3
+    top_k = 2
+    sampler_config = SamplerConfig(
+        top_k=top_k,
+        threshold=0.0,
+        filter_above_threshold=False,
+        num_topk_samples=0,
+        normalize_probabilities_flag=True,
+        noisy_topk_flag=False,
+        num_experts=num_experts,
+        coefficient_of_variation_loss_weight=0.0,
+        switch_loss_weight=auxiliary_loss_weight,
+        zero_centred_loss_weight=0.0,
+        mutual_information_loss_weight=0.0,
+        router_config=RouterConfig(
+            input_dim=configured_dim,
+            num_experts=num_experts,
+            noisy_topk_flag=False,
+            model_config=_linear_stack(configured_dim, num_experts),
+        ),
+    )
+    mixture_config = MixtureOfExpertsConfig(
+        input_dim=configured_dim,
+        output_dim=configured_dim,
+        top_k=top_k,
+        num_experts=num_experts,
+        capacity_factor=0.0,
+        dropped_token_behavior=DroppedTokenOptions.IDENTITY,
+        compute_expert_mixture_flag=True,
+        weighted_parameters_flag=True,
+        weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+        routing_initialization_mode=RoutingInitializationMode.LAYER,
+        sampler_config=sampler_config,
+        expert_model_config=_linear_stack(configured_dim, configured_dim),
+    )
+    stack_config = LayerStackConfig(
+        input_dim=configured_dim,
+        hidden_dim=configured_dim,
+        output_dim=configured_dim,
+        num_layers=1,
+        apply_output_pipeline_flag=False,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        shared_gate_config=None,
+        shared_halting_config=None,
+        shared_memory_config=None,
+        layer_config=MixtureOfExpertsLayerConfig(
+            activation=ActivationOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=mixture_config,
+        ),
+    )
+    return MixtureOfExpertsModelConfig(
+        input_dim=configured_dim,
+        output_dim=configured_dim,
+        top_k=top_k,
+        routing_initialization_mode=RoutingInitializationMode.LAYER,
+        sampler_config=None,
+        stack_config=stack_config,
     )
 
 
@@ -387,6 +469,81 @@ class TestMixerAttention(unittest.TestCase):
         torch.testing.assert_close(output, torch.full_like(values, 2.0))
         torch.testing.assert_close(loss, torch.tensor(0.5))
         self.assertIsNone(weights)
+
+    def test_direct_mixture_of_experts_is_exact_routed_and_differentiable(self):
+        supplied = _mixture_mixing_config(configured_dim=7)
+        model = _mixer_config(
+            embedding_dim=2,
+            sequence_length=3,
+            mixing_model_config=supplied,
+        ).build()
+        values = torch.randn(2, 3, 2, requires_grad=True)
+
+        output, weights, loss = model(values, values, values)
+        output.square().mean().backward()
+
+        self.assertEqual(output.shape, values.shape)
+        self.assertIsNone(weights)
+        torch.testing.assert_close(loss, torch.zeros_like(loss))
+        self.assertEqual(model.mixing_model.input_dim, 3)
+        self.assertEqual(model.mixing_model.output_dim, 3)
+        self.assertEqual(model.mixing_model.expert_stack.input_dim, 3)
+        self.assertEqual(model.mixing_model.expert_stack.output_dim, 3)
+        self.assertEqual((supplied.input_dim, supplied.output_dim), (7, 7))
+        self.assertIsNotNone(values.grad)
+        self.assertGreater(values.grad.abs().sum().item(), 0.0)
+
+        routed_gradients = [
+            parameter.grad
+            for name, parameter in model.named_parameters()
+            if "router" in name and parameter.grad is not None
+        ]
+        expert_gradients = [
+            parameter.grad
+            for name, parameter in model.named_parameters()
+            if "expert_modules" in name and parameter.grad is not None
+        ]
+        self.assertTrue(routed_gradients)
+        self.assertTrue(expert_gradients)
+        self.assertTrue(any(gradient.abs().sum() > 0 for gradient in routed_gradients))
+        self.assertTrue(any(gradient.abs().sum() > 0 for gradient in expert_gradients))
+
+    def test_direct_mixture_propagates_auxiliary_loss_and_loads_strictly(self):
+        config = _mixer_config(
+            embedding_dim=2,
+            sequence_length=3,
+            mixing_model_config=_mixture_mixing_config(
+                configured_dim=11,
+                auxiliary_loss_weight=0.1,
+            ),
+        )
+        source = config.build().eval()
+        restored = config.build().eval()
+        values = torch.randn(2, 3, 2)
+
+        source_output, _, source_loss = source(values, values, values)
+        incompatible = restored.load_state_dict(source.state_dict(), strict=True)
+        restored_output, _, restored_loss = restored(values, values, values)
+
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        self.assertIsNotNone(source_loss)
+        self.assertTrue(torch.isfinite(source_loss).item())
+        self.assertGreater(source_loss.item(), 0.0)
+        torch.testing.assert_close(restored_output, source_output)
+        torch.testing.assert_close(restored_loss, source_loss)
+
+    def test_invalid_direct_mixture_nested_configuration_is_rejected(self):
+        invalid = _mixture_mixing_config()
+        invalid.stack_config = None
+
+        with self.assertRaisesRegex(ValueError, "stack_config is required"):
+            _mixer_config(mixing_model_config=invalid).build()
+
+        invalid_recurrent = _recurrent_stack(3)
+        invalid_recurrent.block_config = None
+        with self.assertRaisesRegex(ValueError, "block_config is required"):
+            _mixer_config(mixing_model_config=invalid_recurrent).build()
 
     def test_rejects_invalid_configuration(self):
         cases = (

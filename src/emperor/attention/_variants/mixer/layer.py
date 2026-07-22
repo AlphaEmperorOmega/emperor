@@ -1,4 +1,6 @@
 """Private mixer-attention layer implementation."""
+
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -13,6 +15,7 @@ from emperor.nn import Module
 if TYPE_CHECKING:
     from emperor.attention._variants.mixer.config import MixerAttentionConfig
     from emperor.config import ModelConfig
+    from emperor.experts import MixtureOfExpertsModelConfig
     from emperor.layers import LayerStackConfig, RecurrentLayerConfig
 
 
@@ -34,16 +37,45 @@ class MixerAttention(MultiHeadAttentionAbstract):
         self.sequence_length: int = self.cfg.sequence_length
         self.batch_first_flag: bool = self.cfg.batch_first_flag
         self.causal_attention_mask_flag: bool = self.cfg.causal_attention_mask_flag
-        self.mixing_model_config: LayerStackConfig | RecurrentLayerConfig = (
-            self.cfg.mixing_model_config
-        )
+        self.mixing_model_config: (
+            LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig
+        ) = self.cfg.mixing_model_config
 
         self.VALIDATOR.validate(self)
-        self.mixing_model = self._build_from_config(
-            self.mixing_model_config,
-            input_dim=self.sequence_length,
-            output_dim=self.sequence_length,
-        )
+        exact_mixing_config = self.__exact_mixing_model_config(self.mixing_model_config)
+        self.mixing_model = exact_mixing_config.build()
+
+    def __exact_mixing_model_config(self, config):
+        from emperor.experts import MixtureOfExpertsModelConfig
+        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+
+        exact_config = deepcopy(config)
+        exact_config.input_dim = self.sequence_length
+        exact_config.output_dim = self.sequence_length
+        if isinstance(exact_config, MixtureOfExpertsModelConfig):
+            if exact_config.stack_config is None:
+                raise ValueError(
+                    "stack_config is required for a MixerAttention "
+                    "MixtureOfExpertsModelConfig."
+                )
+            exact_config.stack_config = self.__exact_mixing_model_config(
+                exact_config.stack_config
+            )
+        elif isinstance(exact_config, RecurrentLayerConfig):
+            if exact_config.block_config is None:
+                raise ValueError(
+                    "block_config is required for a MixerAttention "
+                    "RecurrentLayerConfig."
+                )
+            exact_config.block_config = self.__exact_mixing_model_config(
+                exact_config.block_config
+            )
+        elif not isinstance(exact_config, LayerStackConfig):
+            # RecurrentLayerConfig deliberately accepts any ConfigBase block with
+            # an input/output dimension contract. The outer mixer configuration
+            # has already been type-checked, so preserve that extensibility here.
+            return exact_config
+        return exact_config
 
     def forward(
         self,

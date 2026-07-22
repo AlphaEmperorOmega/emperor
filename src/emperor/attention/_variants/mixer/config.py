@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from emperor.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
+    from emperor.experts import MixtureOfExpertsModelConfig
     from emperor.layers import LayerStackConfig, RecurrentLayerConfig
 
 
@@ -24,7 +25,7 @@ class MixerAttentionConfig(ConfigBase):
     causal_attention_mask_flag: bool | None = optional_field(
         "Whether causal processing is requested. MixerAttention requires False."
     )
-    mixing_model_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+    mixing_model_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None" = (  # noqa: E501
         optional_field(
             "Model configuration built with sequence_length as both its input and "
             "output dimensions."
