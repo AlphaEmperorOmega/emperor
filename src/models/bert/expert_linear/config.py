@@ -96,8 +96,7 @@ POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG: bool = False
 STACK_NUM_LAYERS: int = 2
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.0
-STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.AFTER
-LAYER_NORM_POSITION: LayerNormPositionOptions = STACK_LAYER_NORM_POSITION
+LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.AFTER
 STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -128,9 +127,7 @@ NSP_HEAD_BIAS_FLAG: bool = True
 #########################################################################
 # Layer Stack Submodule Options
 SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
-SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
-    STACK_LAYER_NORM_POSITION
-)
+SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
@@ -143,7 +140,7 @@ SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # Gate Options
-GATE_FLAG: bool = False
+STACK_GATE_FLAG: bool = False
 GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 ## Gate Stack Options
@@ -160,7 +157,7 @@ GATE_STACK_BIAS_FLAG: bool | None = True
 
 #########################################################################
 # Halting Options
-HALTING_FLAG: bool = False
+STACK_HALTING_FLAG: bool = False
 HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 HALTING_THRESHOLD: float = 0.999
 HALTING_DROPOUT: float = 0.0
@@ -212,7 +209,7 @@ RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 
 ## Recurrent Gate Options
-RECURRENT_GATE_FLAG: bool = False
+RECURRENT_STACK_GATE_FLAG: bool = False
 RECURRENT_GATE_OPTION: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
 RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 ### Recurrent Gate Stack Options
@@ -228,7 +225,7 @@ RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 ## Recurrent Halting Options
-RECURRENT_HALTING_FLAG: bool = False
+RECURRENT_STACK_HALTING_FLAG: bool = False
 RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 RECURRENT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 RECURRENT_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -270,7 +267,7 @@ ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
 ### Attention Projection Gate Options
-ATTN_GATE_FLAG: bool = False
+ATTN_STACK_GATE_FLAG: bool = False
 ATTN_GATE_OPTION: LayerGateOptions | None = GATE_OPTION
 ATTN_GATE_ACTIVATION: ActivationOptions | None = GATE_ACTIVATION
 #### Attention Projection Gate Stack Options
@@ -289,7 +286,7 @@ ATTN_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 
 #########################################################################
 ### Attention Projection Halting Options
-ATTN_HALTING_FLAG: bool = False
+ATTN_STACK_HALTING_FLAG: bool = False
 ATTN_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 ATTN_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -345,7 +342,7 @@ ATTN_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 
 #########################################################################
 #### Attention Projection Recurrent Gate Options
-ATTN_RECURRENT_GATE_FLAG: bool = False
+ATTN_RECURRENT_STACK_GATE_FLAG: bool = False
 ATTN_RECURRENT_GATE_OPTION: LayerGateOptions | None = RECURRENT_GATE_OPTION
 ATTN_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = RECURRENT_GATE_ACTIVATION
 ##### Attention Projection Recurrent Gate Stack Options
@@ -364,7 +361,7 @@ ATTN_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 #### Attention Projection Recurrent Halting Options
-ATTN_RECURRENT_HALTING_FLAG: bool = False
+ATTN_RECURRENT_STACK_HALTING_FLAG: bool = False
 ATTN_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 ATTN_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 ATTN_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
@@ -401,7 +398,7 @@ FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 
 #########################################################################
 ## Feed-Forward Gate Options
-FF_GATE_FLAG: bool = False
+FF_STACK_GATE_FLAG: bool = False
 FF_GATE_OPTION: LayerGateOptions | None = GATE_OPTION
 FF_GATE_ACTIVATION: ActivationOptions | None = GATE_ACTIVATION
 ### Feed-Forward Gate Stack Options
@@ -420,7 +417,7 @@ FF_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 
 #########################################################################
 ## Feed-Forward Halting Options
-FF_HALTING_FLAG: bool = False
+FF_STACK_HALTING_FLAG: bool = False
 FF_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 FF_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -474,7 +471,7 @@ FF_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 
 #########################################################################
 ### Feed-Forward Recurrent Gate Options
-FF_RECURRENT_GATE_FLAG: bool = False
+FF_RECURRENT_STACK_GATE_FLAG: bool = False
 FF_RECURRENT_GATE_OPTION: LayerGateOptions | None = RECURRENT_GATE_OPTION
 FF_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = RECURRENT_GATE_ACTIVATION
 #### Feed-Forward Recurrent Gate Stack Options
@@ -493,7 +490,7 @@ FF_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 ### Feed-Forward Recurrent Halting Options
-FF_RECURRENT_HALTING_FLAG: bool = False
+FF_RECURRENT_STACK_HALTING_FLAG: bool = False
 FF_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 FF_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 FF_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT
@@ -517,18 +514,16 @@ FF_RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 #########################################################################
 # Mixture Of Experts Model Options
 EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG: bool = False
-EXPERT_TOP_K: int = 3
-EXPERT_NUM_EXPERTS: int = 12
-EXPERT_CAPACITY_FACTOR: float = 0.0
-EXPERT_DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
-EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG: bool = True
-EXPERT_WEIGHTED_PARAMETERS_FLAG: bool = True
-EXPERT_WEIGHTING_POSITION_OPTION: ExpertWeightingPositionOptions = (
+TOP_K: int = 3
+NUM_EXPERTS: int = 12
+CAPACITY_FACTOR: float = 0.0
+DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
+COMPUTE_EXPERT_MIXTURE_FLAG: bool = True
+WEIGHTED_PARAMETERS_FLAG: bool = True
+WEIGHTING_POSITION_OPTION: ExpertWeightingPositionOptions = (
     ExpertWeightingPositionOptions.AFTER_EXPERTS
 )
-EXPERT_ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = (
-    RoutingInitializationMode.LAYER
-)
+ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = RoutingInitializationMode.LAYER
 
 #########################################################################
 ## Expert Stack Options
@@ -550,8 +545,8 @@ EXPERT_BIAS_FLAG: bool = SUBMODULE_STACK_BIAS_FLAG
 
 #########################################################################
 ## Expert Gate Options
-# If `EXPERT_GATE_FLAG` is False, the expert gate parameters below are ignored.
-EXPERT_GATE_FLAG: bool = False
+# If `EXPERT_STACK_GATE_FLAG` is False, the expert gate parameters below are ignored.
+EXPERT_STACK_GATE_FLAG: bool = False
 EXPERT_GATE_OPTION: LayerGateOptions | None = GATE_OPTION
 EXPERT_GATE_ACTIVATION: ActivationOptions | None = GATE_ACTIVATION
 ### Expert Gate Stack Options
@@ -571,8 +566,8 @@ EXPERT_GATE_STACK_BIAS_FLAG: bool | None = GATE_STACK_BIAS_FLAG
 
 #########################################################################
 ## Expert Halting Options
-# If `EXPERT_HALTING_FLAG` is False, the expert halting parameters are ignored.
-EXPERT_HALTING_FLAG: bool = False
+# If `EXPERT_STACK_HALTING_FLAG` is False, the expert halting parameters are ignored.
+EXPERT_STACK_HALTING_FLAG: bool = False
 EXPERT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_HALTING_THRESHOLD: float = HALTING_THRESHOLD
 EXPERT_HALTING_DROPOUT: float = HALTING_DROPOUT
@@ -633,7 +628,7 @@ EXPERT_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 
 #########################################################################
 ### Expert Recurrent Gate Options
-EXPERT_RECURRENT_GATE_FLAG: bool = False
+EXPERT_RECURRENT_STACK_GATE_FLAG: bool = False
 EXPERT_RECURRENT_GATE_OPTION: LayerGateOptions | None = RECURRENT_GATE_OPTION
 EXPERT_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = RECURRENT_GATE_ACTIVATION
 #### Expert Recurrent Gate Stack Options
@@ -653,7 +648,7 @@ EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG: bool | None = None
 
 #########################################################################
 ### Expert Recurrent Halting Options
-EXPERT_RECURRENT_HALTING_FLAG: bool = False
+EXPERT_RECURRENT_STACK_HALTING_FLAG: bool = False
 EXPERT_RECURRENT_HALTING_OPTION: type[HaltingConfig] = StickBreakingConfig
 EXPERT_RECURRENT_HALTING_THRESHOLD: float = RECURRENT_HALTING_THRESHOLD
 EXPERT_RECURRENT_HALTING_DROPOUT: float = RECURRENT_HALTING_DROPOUT

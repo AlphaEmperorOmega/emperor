@@ -41,12 +41,13 @@ from models.bert.expert_linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
     BertNspHeadOptions,
+    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
     TransformerPositionalEmbeddingOptions,
 )
-from models.catalog import catalog_entry
+from models.catalog import model_package
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
@@ -65,7 +66,7 @@ def _default_builder_kwargs() -> dict:
 class TestBertExpertLinearModel(unittest.TestCase):
     def test_runtime_defaults_describe_a_conventional_bert_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.AFTER,
         )
         self.assertEqual(config.FF_NUM_LAYERS, 1)
@@ -144,7 +145,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
 
     def test_public_surface_and_catalog_id(self):
         package = importlib.import_module("models.bert.expert_linear")
-        self.assertEqual(package.__all__, ["Experiment", "ExperimentPreset"])
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
 
         for module_name in (
             "models.bert.expert_linear.config",
@@ -157,8 +158,12 @@ class TestBertExpertLinearModel(unittest.TestCase):
                 module = importlib.import_module(module_name)
                 self.assertEqual(module.__name__, module_name)
 
-        self.assertEqual(Experiment()._public_model_id(), "bert/expert_linear")
-        self.assertIsNotNone(catalog_entry("bert/expert_linear"))
+        experiment = Experiment(model_package=model_package("bert/expert_linear"))
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "bert/expert_linear",
+        )
+        self.assertIsNotNone(model_package("bert/expert_linear"))
 
     def test_attention_mode_switch_is_removed(self):
         self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
@@ -181,7 +186,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
             with self.subTest(legacy_kwargs=legacy_kwargs):
                 with self.assertRaises(TypeError):
                     BertExpertLinearConfigBuilder(**legacy_kwargs)
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(ValueError, "expert_attention_flag"):
             self._config(
                 ExperimentPreset.BASELINE,
                 {"expert_attention_flag": False},
@@ -198,7 +203,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         self.assertIn("BertEmbeddingOptions", names)
         self.assertIn("ExpertsMixtureOptions", names)
 
-    def test_flat_options_build_the_same_config_as_grouped_options(self):
+    def test_flat_runtime_defaults_bind_to_typed_runtime_options(self):
         embedding_options = BertEmbeddingOptions(
             token_type_vocab_size=4,
             layer_norm_flag=False,
@@ -292,26 +297,32 @@ class TestBertExpertLinearModel(unittest.TestCase):
         self.assertEqual(adapted["nsp_head_options"], nsp_head_options)
         self.assertNotIn("embedding_dropout_probability", adapted)
 
-        flat_config = BertExpertLinearConfigBuilder(**adapted).build()
-        grouped_config = BertExpertLinearConfigBuilder(
-            batch_size=2,
-            learning_rate=0.02,
-            input_dim=32,
-            output_dim=32,
-            sequence_length=8,
-            embedding_options=embedding_options,
-            encoder_options=encoder_options,
-            positional_embedding_options=positional_embedding_options,
-            attention_options=attention_options,
-            feed_forward_options=feed_forward_options,
-            mlm_head_options=mlm_head_options,
-            nsp_head_options=nsp_head_options,
-            mixture_options=adapted["mixture_options"],
-            expert_stack_options=adapted["expert_stack_options"],
-            router_stack_options=adapted["router_stack_options"],
+        flat_config = BertExpertLinearConfigBuilder(
+            runtime=RuntimeOptions(adapted)
+        ).build()
+        typed_config = BertExpertLinearConfigBuilder(
+            runtime=RuntimeOptions(
+                {
+                    "batch_size": 2,
+                    "learning_rate": 0.02,
+                    "input_dim": 32,
+                    "output_dim": 32,
+                    "sequence_length": 8,
+                    "embedding_options": embedding_options,
+                    "encoder_options": encoder_options,
+                    "positional_embedding_options": positional_embedding_options,
+                    "attention_options": attention_options,
+                    "feed_forward_options": feed_forward_options,
+                    "mlm_head_options": mlm_head_options,
+                    "nsp_head_options": nsp_head_options,
+                    "mixture_options": adapted["mixture_options"],
+                    "expert_stack_options": adapted["expert_stack_options"],
+                    "router_stack_options": adapted["router_stack_options"],
+                }
+            )
         ).build()
 
-        self.assertEqual(flat_config, grouped_config)
+        self.assertEqual(flat_config, typed_config)
 
     def test_feed_forward_stack_is_expert_backed(self):
         cfg = self._config(ExperimentPreset.TOP1_SWITCH_AUX)
@@ -338,20 +349,13 @@ class TestBertExpertLinearModel(unittest.TestCase):
             ("outer", True, False),
             ("inner", False, True),
         )
-        defaults = _default_builder_kwargs()
         for name, outer_gate, inner_gate in cases:
             with self.subTest(name=name):
                 cfg = self._config(
                     ExperimentPreset.BASELINE,
                     {
-                        "feed_forward_layer_controller_options": replace(
-                            defaults["feed_forward_layer_controller_options"],
-                            stack_gate_flag=outer_gate,
-                        ),
-                        "expert_layer_controller_options": replace(
-                            defaults["expert_layer_controller_options"],
-                            stack_gate_flag=inner_gate,
-                        ),
+                        "ff_stack_gate_flag": outer_gate,
+                        "expert_stack_gate_flag": inner_gate,
                     },
                 )
                 mixture_config = self._encoder_layer_config(
@@ -372,15 +376,11 @@ class TestBertExpertLinearModel(unittest.TestCase):
                 )
 
     def test_feed_forward_recurrence_wraps_the_outer_mixture(self):
-        defaults = _default_builder_kwargs()
         cfg = self._config(
             ExperimentPreset.BASELINE,
             {
-                "feed_forward_recurrent_controller_options": replace(
-                    defaults["feed_forward_recurrent_controller_options"],
-                    recurrent_flag=True,
-                    recurrent_max_steps=2,
-                )
+                "ff_recurrent_flag": True,
+                "ff_recurrent_max_steps": 2,
             },
         )
         feed_forward_config = self._encoder_layer_config(
@@ -400,22 +400,12 @@ class TestBertExpertLinearModel(unittest.TestCase):
         self.assertEqual(nsp_logits.shape, (2, 2))
 
     def test_attention_controls_apply_only_to_regular_projection_stack(self):
-        defaults = _default_builder_kwargs()
         cfg = self._config(
             ExperimentPreset.BASELINE,
             {
-                "attention_projection_stack_options": replace(
-                    defaults["attention_projection_stack_options"],
-                    hidden_dim=17,
-                ),
-                "attention_projection_layer_controller_options": replace(
-                    defaults["attention_projection_layer_controller_options"],
-                    stack_gate_flag=True,
-                ),
-                "expert_stack_options": replace(
-                    defaults["expert_stack_options"],
-                    hidden_dim=11,
-                ),
+                "attn_stack_hidden_dim": 17,
+                "attn_stack_gate_flag": True,
+                "expert_stack_hidden_dim": 11,
             },
         )
         attention_config = self._encoder_layer_config(cfg).attention_config
@@ -456,16 +446,12 @@ class TestBertExpertLinearModel(unittest.TestCase):
                 self.assertTrue(torch.isfinite(auxiliary_loss))
 
     def test_encoder_layers_have_disjoint_attention_and_feed_forward_experts(self):
-        defaults = _default_builder_kwargs()
         cfg = self._config(
             ExperimentPreset.BASELINE,
             {
-                "encoder_options": replace(
-                    defaults["encoder_options"],
-                    hidden_dim=8,
-                    num_layers=2,
-                    dropout_probability=0.0,
-                )
+                "hidden_dim": 8,
+                "stack_num_layers": 2,
+                "stack_dropout_probability": 0.0,
             },
         )
         model = Model(cfg)
@@ -823,51 +809,25 @@ class TestBertExpertLinearModel(unittest.TestCase):
             config,
         )
         builder_kwargs.update(overrides)
-        return BertExpertLinearConfigBuilder(**builder_kwargs).build()
+        return BertExpertLinearConfigBuilder(
+            runtime=RuntimeOptions(builder_kwargs)
+        ).build()
 
     def _small_overrides(self) -> dict:
-        defaults = _default_builder_kwargs()
         return {
             "batch_size": 2,
             "sequence_length": 6,
-            "encoder_options": replace(
-                defaults["encoder_options"],
-                hidden_dim=8,
-                num_layers=2,
-                dropout_probability=0.0,
-            ),
-            "attention_options": replace(
-                defaults["attention_options"],
-                num_heads=2,
-            ),
-            "attention_projection_stack_options": replace(
-                defaults["attention_projection_stack_options"],
-                hidden_dim=8,
-            ),
-            "feed_forward_stack_options": replace(
-                defaults["feed_forward_stack_options"],
-                hidden_dim=8,
-            ),
-            "submodule_stack_options": replace(
-                defaults["submodule_stack_options"],
-                hidden_dim=8,
-            ),
-            "mixture_options": replace(
-                defaults["mixture_options"],
-                num_experts=4,
-            ),
-            "expert_stack_options": replace(
-                defaults["expert_stack_options"],
-                hidden_dim=8,
-            ),
-            "router_stack_options": replace(
-                defaults["router_stack_options"],
-                hidden_dim=8,
-            ),
-            "recurrent_controller_options": replace(
-                defaults["recurrent_controller_options"],
-                recurrent_max_steps=2,
-            ),
+            "hidden_dim": 8,
+            "stack_num_layers": 2,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 2,
+            "attn_stack_hidden_dim": 8,
+            "ff_stack_hidden_dim": 8,
+            "submodule_stack_hidden_dim": 8,
+            "num_experts": 4,
+            "expert_stack_hidden_dim": 8,
+            "router_stack_hidden_dim": 8,
+            "recurrent_max_steps": 2,
         }
 
     def _fake_bert_inputs(self, cfg):

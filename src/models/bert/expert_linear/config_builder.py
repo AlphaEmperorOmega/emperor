@@ -22,6 +22,7 @@ from models.bert.expert_linear._positional_embedding_config_factory import (
     PositionalEmbeddingConfigFactory,
 )
 from models.bert.expert_linear.experiment_config import ExperimentConfig
+from models.bert.expert_linear.runtime_defaults import DEFAULT_RUNTIME
 from models.bert.expert_linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
@@ -37,6 +38,7 @@ from models.bert.expert_linear.runtime_options import (
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
+    RuntimeOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
@@ -48,7 +50,7 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
-class BertExpertLinearConfigBuilder:
+class _BertExpertLinearConfigBuilderImplementation:
     def __init__(
         self,
         *,
@@ -260,3 +262,13 @@ class BertExpertLinearConfigBuilder:
                 ),
             )
         )
+
+
+class BertExpertLinearConfigBuilder(_BertExpertLinearConfigBuilderImplementation):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.bert.expert_linear BertExpertLinearConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())
