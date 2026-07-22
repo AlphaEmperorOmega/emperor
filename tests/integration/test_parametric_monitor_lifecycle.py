@@ -28,7 +28,6 @@ from emperor.parametric import (
     ClipParameterOptions,
     MatrixBiasMixtureConfig,
     MatrixWeightsMixtureConfig,
-    ParametricLayer,
     ParametricLayerConfig,
     ParametricLayerMonitorCallback,
     VectorWeightsMixtureConfig,
@@ -71,7 +70,7 @@ def _linear_stack(input_dim: int, output_dim: int) -> LayerStackConfig:
     )
 
 
-def _parametric_layer(*, top_k: int = 2) -> ParametricLayer:
+def _parametric_layer(*, top_k: int = 2) -> torch.nn.Module:
     input_dim = 2
     output_dim = 2
     num_experts = 2
@@ -90,39 +89,37 @@ def _parametric_layer(*, top_k: int = 2) -> ParametricLayer:
         noisy_topk_flag=False,
         model_config=_linear_stack(input_dim, num_experts),
     )
-    layer = ParametricLayer(
-        ParametricLayerConfig(
+    layer = ParametricLayerConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        weight_mixture_config=MatrixWeightsMixtureConfig(**mixture_options),
+        bias_mixture_config=MatrixBiasMixtureConfig(**mixture_options),
+        routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+        router_config=router_config,
+        sampler_config=SamplerConfig(
+            top_k=top_k,
+            threshold=0.0,
+            filter_above_threshold=False,
+            num_topk_samples=0,
+            normalize_probabilities_flag=top_k == num_experts,
+            noisy_topk_flag=False,
+            num_experts=num_experts,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
+            router_config=None,
+        ),
+        adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            weight_mixture_config=MatrixWeightsMixtureConfig(**mixture_options),
-            bias_mixture_config=MatrixBiasMixtureConfig(**mixture_options),
-            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
-            router_config=router_config,
-            sampler_config=SamplerConfig(
-                top_k=top_k,
-                threshold=0.0,
-                filter_above_threshold=False,
-                num_topk_samples=0,
-                normalize_probabilities_flag=top_k == num_experts,
-                noisy_topk_flag=False,
-                num_experts=num_experts,
-                coefficient_of_variation_loss_weight=0.0,
-                switch_loss_weight=0.0,
-                zero_centred_loss_weight=0.0,
-                mutual_information_loss_weight=0.0,
-                router_config=None,
-            ),
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                weight_config=None,
-                diagonal_config=None,
-                bias_config=None,
-                mask_config=None,
-                model_config=None,
-            ),
-        )
-    )
+            weight_config=None,
+            diagonal_config=None,
+            bias_config=None,
+            mask_config=None,
+            model_config=None,
+        ),
+    ).build()
     with torch.no_grad():
         layer.weights_router.model[0].model.weight_params.zero_()
         layer.bias_router.model[0].model.weight_params.zero_()
@@ -153,7 +150,7 @@ def _weight_only_parametric_layer(
     num_experts: int,
     router_weights: Tensor,
     weight_bank: Tensor,
-) -> ParametricLayer:
+) -> torch.nn.Module:
     mixture_options = {
         "input_dim": input_dim,
         "output_dim": output_dim,
@@ -169,95 +166,91 @@ def _weight_only_parametric_layer(
         noisy_topk_flag=False,
         model_config=_linear_stack(input_dim, num_experts),
     )
-    layer = ParametricLayer(
-        ParametricLayerConfig(
+    layer = ParametricLayerConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        weight_mixture_config=MatrixWeightsMixtureConfig(**mixture_options),
+        bias_mixture_config=None,
+        routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+        router_config=router_config,
+        sampler_config=SamplerConfig(
+            top_k=top_k,
+            threshold=0.0,
+            filter_above_threshold=False,
+            num_topk_samples=0,
+            normalize_probabilities_flag=top_k != 1,
+            noisy_topk_flag=False,
+            num_experts=num_experts,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
+            router_config=None,
+        ),
+        adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            weight_mixture_config=MatrixWeightsMixtureConfig(**mixture_options),
-            bias_mixture_config=None,
-            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
-            router_config=router_config,
-            sampler_config=SamplerConfig(
-                top_k=top_k,
-                threshold=0.0,
-                filter_above_threshold=False,
-                num_topk_samples=0,
-                normalize_probabilities_flag=top_k != 1,
-                noisy_topk_flag=False,
-                num_experts=num_experts,
-                coefficient_of_variation_loss_weight=0.0,
-                switch_loss_weight=0.0,
-                zero_centred_loss_weight=0.0,
-                mutual_information_loss_weight=0.0,
-                router_config=None,
-            ),
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                weight_config=None,
-                diagonal_config=None,
-                bias_config=None,
-                mask_config=None,
-                model_config=None,
-            ),
-        )
-    )
+            weight_config=None,
+            diagonal_config=None,
+            bias_config=None,
+            mask_config=None,
+            model_config=None,
+        ),
+    ).build()
     with torch.no_grad():
         layer.weights_router.model[0].model.weight_params.copy_(router_weights)
         layer.weight_mixture_model.parameter_bank.copy_(weight_bank)
     return layer
 
 
-def _dense_vector_parametric_layer() -> ParametricLayer:
+def _dense_vector_parametric_layer() -> torch.nn.Module:
     input_dim = 2
     output_dim = 2
     num_experts = 4
-    layer = ParametricLayer(
-        ParametricLayerConfig(
+    layer = ParametricLayerConfig(
+        input_dim=input_dim,
+        output_dim=output_dim,
+        weight_mixture_config=VectorWeightsMixtureConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            weight_mixture_config=VectorWeightsMixtureConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                top_k=num_experts,
-                num_experts=num_experts,
-                weighted_parameters_flag=True,
-                clip_parameter_option=ClipParameterOptions.DISABLED,
-                clip_range=1.0,
-            ),
-            bias_mixture_config=None,
-            routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
-            router_config=RouterConfig(
-                input_dim=input_dim,
-                num_experts=num_experts,
-                noisy_topk_flag=False,
-                model_config=_linear_stack(input_dim, num_experts),
-            ),
-            sampler_config=SamplerConfig(
-                top_k=num_experts,
-                threshold=0.0,
-                filter_above_threshold=False,
-                num_topk_samples=0,
-                normalize_probabilities_flag=True,
-                noisy_topk_flag=False,
-                num_experts=num_experts,
-                coefficient_of_variation_loss_weight=0.0,
-                switch_loss_weight=0.0,
-                zero_centred_loss_weight=0.0,
-                mutual_information_loss_weight=0.0,
-                router_config=None,
-            ),
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                input_dim=input_dim,
-                output_dim=output_dim,
-                weight_config=None,
-                diagonal_config=None,
-                bias_config=None,
-                mask_config=None,
-                model_config=None,
-            ),
-        )
-    )
+            top_k=num_experts,
+            num_experts=num_experts,
+            weighted_parameters_flag=True,
+            clip_parameter_option=ClipParameterOptions.DISABLED,
+            clip_range=1.0,
+        ),
+        bias_mixture_config=None,
+        routing_initialization_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
+        router_config=RouterConfig(
+            input_dim=input_dim,
+            num_experts=num_experts,
+            noisy_topk_flag=False,
+            model_config=_linear_stack(input_dim, num_experts),
+        ),
+        sampler_config=SamplerConfig(
+            top_k=num_experts,
+            threshold=0.0,
+            filter_above_threshold=False,
+            num_topk_samples=0,
+            normalize_probabilities_flag=True,
+            noisy_topk_flag=False,
+            num_experts=num_experts,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
+            router_config=None,
+        ),
+        adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            weight_config=None,
+            diagonal_config=None,
+            bias_config=None,
+            mask_config=None,
+            model_config=None,
+        ),
+    ).build()
     identity_rows = torch.tensor(
         [
             [[1.0, 0.0]] * num_experts,
@@ -276,7 +269,7 @@ class _ParametricTrainingModule(LightningModule):
         *,
         fail_after_forward: bool = False,
         learning_rate: float = 0.05,
-        parametric_layer: ParametricLayer | None = None,
+        parametric_layer: torch.nn.Module | None = None,
     ) -> None:
         super().__init__()
         self.parametric = (
