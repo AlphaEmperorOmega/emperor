@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
+from model_runtime.packages.runtime_values import validate_runtime_default_values
 from models.bert.expert_linear_adaptive._linear_adapter_support import (
     _adaptive_generator_stack_options_from_kwargs,
     _hidden_adaptive_bias_options_from_kwargs,
@@ -12,6 +14,7 @@ from models.bert.expert_linear_adaptive._linear_adapter_support import (
     _hidden_adaptive_weight_options_from_kwargs,
 )
 from models.bert.expert_linear_adaptive.runtime_options import (
+    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
@@ -28,7 +31,7 @@ if TYPE_CHECKING:
     )
 
 
-def _load_legacy_adapter_dependencies() -> None:
+def _load_expert_adapter_dependencies() -> None:
     global ExpertsDynamicMemoryOptions
     global ExpertsLayerControllerOptions
     global ExpertsRecurrentControllerOptions
@@ -138,10 +141,10 @@ _SUBMODULE_STACK_FIELD_MAP = {
 }
 
 
-def _legacy_linear_builder_kwargs_from_flat(
+def _linear_builder_kwargs_from_flat(
     flat_kwargs: dict[str, Any], config_module: ModuleType
 ) -> dict[str, Any]:
-    _load_legacy_adapter_dependencies()
+    _load_expert_adapter_dependencies()
     kwargs = dict(flat_kwargs)
     builder_kwargs = _pop_top_level_kwargs(kwargs)
     encoder_options = _encoder_options_from_kwargs(
@@ -415,7 +418,7 @@ def _linear_builder_kwargs_only(
 ) -> dict[str, Any]:
     return {
         key: value
-        for key, value in _legacy_linear_builder_kwargs_from_flat(
+        for key, value in _linear_builder_kwargs_from_flat(
             flat_kwargs, config_module
         ).items()
         if key in _BERT_LINEAR_ALLOWED_KWARGS
@@ -471,7 +474,6 @@ def _encoder_options_from_kwargs(
             "stack_activation": "activation",
             "stack_dropout_probability": "dropout_probability",
             "layer_norm_position": "layer_norm_position",
-            "stack_layer_norm_position": "layer_norm_position",
             "causal_attention_mask_flag": "causal_attention_mask_flag",
         },
     )
@@ -638,11 +640,11 @@ def _layer_controller_options_from_kwargs(
     provided: ExpertsLayerControllerOptions | None,
 ) -> ExpertsLayerControllerOptions:
     options = provided or ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.GATE_FLAG,
+        stack_gate_flag=config_module.STACK_GATE_FLAG,
         gate_option=config_module.GATE_OPTION,
         gate_activation=config_module.GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(config_module, "gate_stack"),
-        stack_halting_flag=config_module.HALTING_FLAG,
+        stack_halting_flag=config_module.STACK_HALTING_FLAG,
         halting_option=config_module.HALTING_OPTION,
         halting_threshold=config_module.HALTING_THRESHOLD,
         halting_dropout=config_module.HALTING_DROPOUT,
@@ -688,10 +690,10 @@ def _attention_projection_layer_controller_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "attn_gate_flag": "stack_gate_flag",
+            "attn_stack_gate_flag": "stack_gate_flag",
             "attn_gate_option": "gate_option",
             "attn_gate_activation": "gate_activation",
-            "attn_halting_flag": "stack_halting_flag",
+            "attn_stack_halting_flag": "stack_halting_flag",
             "attn_halting_option": "halting_option",
             "attn_halting_threshold": "halting_threshold",
             "attn_halting_dropout": "halting_dropout",
@@ -721,10 +723,10 @@ def _feed_forward_layer_controller_options_from_kwargs(
     updates = _pop_updates(
         kwargs,
         {
-            "ff_gate_flag": "stack_gate_flag",
+            "ff_stack_gate_flag": "stack_gate_flag",
             "ff_gate_option": "gate_option",
             "ff_gate_activation": "gate_activation",
-            "ff_halting_flag": "stack_halting_flag",
+            "ff_stack_halting_flag": "stack_halting_flag",
             "ff_halting_option": "halting_option",
             "ff_halting_threshold": "halting_threshold",
             "ff_halting_dropout": "halting_dropout",
@@ -831,13 +833,13 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_flag=config_module.RECURRENT_FLAG,
         recurrent_max_steps=config_module.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.RECURRENT_HALTING_DROPOUT,
@@ -852,10 +854,10 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_flag": "recurrent_flag",
             "recurrent_max_steps": "recurrent_max_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "recurrent_gate_flag": "recurrent_gate_flag",
+            "recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "recurrent_gate_option": "recurrent_gate_option",
             "recurrent_gate_activation": "recurrent_gate_activation",
-            "recurrent_halting_flag": "recurrent_halting_flag",
+            "recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "recurrent_halting_option": "recurrent_halting_option",
             "recurrent_halting_threshold": "recurrent_halting_threshold",
             "recurrent_halting_dropout": "recurrent_halting_dropout",
@@ -892,10 +894,10 @@ def _attention_projection_recurrent_controller_options_from_kwargs(
             "attn_recurrent_flag": "recurrent_flag",
             "attn_recurrent_max_steps": "recurrent_max_steps",
             "attn_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "attn_recurrent_gate_flag": "recurrent_gate_flag",
+            "attn_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "attn_recurrent_gate_option": "recurrent_gate_option",
             "attn_recurrent_gate_activation": "recurrent_gate_activation",
-            "attn_recurrent_halting_flag": "recurrent_halting_flag",
+            "attn_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "attn_recurrent_halting_option": "recurrent_halting_option",
             "attn_recurrent_halting_threshold": "recurrent_halting_threshold",
             "attn_recurrent_halting_dropout": "recurrent_halting_dropout",
@@ -932,10 +934,10 @@ def _feed_forward_recurrent_controller_options_from_kwargs(
             "ff_recurrent_flag": "recurrent_flag",
             "ff_recurrent_max_steps": "recurrent_max_steps",
             "ff_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "ff_recurrent_gate_flag": "recurrent_gate_flag",
+            "ff_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "ff_recurrent_gate_option": "recurrent_gate_option",
             "ff_recurrent_gate_activation": "recurrent_gate_activation",
-            "ff_recurrent_halting_flag": "recurrent_halting_flag",
+            "ff_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "ff_recurrent_halting_option": "recurrent_halting_option",
             "ff_recurrent_halting_threshold": "recurrent_halting_threshold",
             "ff_recurrent_halting_dropout": "recurrent_halting_dropout",
@@ -1024,13 +1026,13 @@ def _default_attention_projection_layer_controller_options(
     config_module: ModuleType,
 ) -> ExpertsLayerControllerOptions:
     return ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.ATTN_GATE_FLAG,
+        stack_gate_flag=config_module.ATTN_STACK_GATE_FLAG,
         gate_option=config_module.ATTN_GATE_OPTION,
         gate_activation=config_module.ATTN_GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(
             config_module, "attn_gate_stack"
         ),
-        stack_halting_flag=config_module.ATTN_HALTING_FLAG,
+        stack_halting_flag=config_module.ATTN_STACK_HALTING_FLAG,
         halting_threshold=config_module.ATTN_HALTING_THRESHOLD,
         halting_dropout=config_module.ATTN_HALTING_DROPOUT,
         halting_hidden_state_mode=config_module.ATTN_HALTING_HIDDEN_STATE_MODE,
@@ -1045,13 +1047,13 @@ def _default_feed_forward_layer_controller_options(
     config_module: ModuleType,
 ) -> ExpertsLayerControllerOptions:
     return ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.FF_GATE_FLAG,
+        stack_gate_flag=config_module.FF_STACK_GATE_FLAG,
         gate_option=config_module.FF_GATE_OPTION,
         gate_activation=config_module.FF_GATE_ACTIVATION,
         gate_stack_source=_default_controller_stack_source(
             config_module, "ff_gate_stack"
         ),
-        stack_halting_flag=config_module.FF_HALTING_FLAG,
+        stack_halting_flag=config_module.FF_STACK_HALTING_FLAG,
         halting_threshold=config_module.FF_HALTING_THRESHOLD,
         halting_dropout=config_module.FF_HALTING_DROPOUT,
         halting_hidden_state_mode=config_module.FF_HALTING_HIDDEN_STATE_MODE,
@@ -1099,13 +1101,13 @@ def _default_attention_projection_recurrent_controller_options(
         recurrent_flag=config_module.ATTN_RECURRENT_FLAG,
         recurrent_max_steps=config_module.ATTN_RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.ATTN_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.ATTN_RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.ATTN_RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.ATTN_RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.ATTN_RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "attn_recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.ATTN_RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.ATTN_RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_threshold=config_module.ATTN_RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.ATTN_RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=config_module.ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -1122,13 +1124,13 @@ def _default_feed_forward_recurrent_controller_options(
         recurrent_flag=config_module.FF_RECURRENT_FLAG,
         recurrent_max_steps=config_module.FF_RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.FF_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_gate_flag=config_module.FF_RECURRENT_GATE_FLAG,
+        recurrent_stack_gate_flag=config_module.FF_RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.FF_RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.FF_RECURRENT_GATE_ACTIVATION,
         recurrent_gate_stack_source=_default_controller_stack_source(
             config_module, "ff_recurrent_gate_stack"
         ),
-        recurrent_halting_flag=config_module.FF_RECURRENT_HALTING_FLAG,
+        recurrent_stack_halting_flag=config_module.FF_RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_threshold=config_module.FF_RECURRENT_HALTING_THRESHOLD,
         recurrent_halting_dropout=config_module.FF_RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=config_module.FF_RECURRENT_HALTING_HIDDEN_STATE_MODE,
@@ -1172,3 +1174,23 @@ def _pop_updates(kwargs: dict[str, Any], mapping: dict[str, str]) -> dict[str, A
         if flat_key in kwargs:
             updates[option_field] = kwargs.pop(flat_key)
     return updates
+
+
+def runtime_from_flat(values: Mapping[str, object] | None = None) -> RuntimeOptions:
+    from models.bert.expert_linear_adaptive import config
+
+    return RuntimeOptions(
+        expert_linear_adaptive_builder_kwargs_from_flat(
+            validate_runtime_default_values(
+                values,
+                package="models.bert.expert_linear_adaptive",
+                config_module=config,
+            ),
+            config,
+        )
+    )
+
+
+DEFAULT_RUNTIME: Final = runtime_from_flat()
+
+__all__ = ["DEFAULT_RUNTIME", "runtime_from_flat"]

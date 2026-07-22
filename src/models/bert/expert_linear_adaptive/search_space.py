@@ -35,7 +35,7 @@ SEARCH_SPACE_WEIGHT_OPTION: list = [
     SoftWeightedBankDynamicWeightConfig,
 ]
 
-SEARCH_SPACE_WEIGHT_GENERATOR_DEPTH: list = [
+SEARCH_SPACE_GENERATOR_DEPTH: list = [
     DynamicDepthOptions.DEPTH_OF_ONE,
     DynamicDepthOptions.DEPTH_OF_TWO,
     DynamicDepthOptions.DEPTH_OF_FOUR,

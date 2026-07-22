@@ -14,6 +14,9 @@ from model_runtime.packages.identity import (
     split_model_id,
 )
 from models.bert.expert_linear import MODEL_PACKAGE as BERT_EXPERT_LINEAR
+from models.bert.expert_linear_adaptive import (
+    MODEL_PACKAGE as BERT_EXPERT_LINEAR_ADAPTIVE,
+)
 from models.experts.linear import MODEL_PACKAGE as EXPERTS_LINEAR
 from models.experts.linear_adaptive import MODEL_PACKAGE as EXPERTS_LINEAR_ADAPTIVE
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
@@ -37,9 +40,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
         "bert", "linear_adaptive", "models.bert.linear_adaptive"
     ),
     "bert/expert_linear": BERT_EXPERT_LINEAR,
-    "bert/expert_linear_adaptive": ModelPackage(
-        "bert", "expert_linear_adaptive", "models.bert.expert_linear_adaptive"
-    ),
+    "bert/expert_linear_adaptive": BERT_EXPERT_LINEAR_ADAPTIVE,
     "gpt/linear": ModelPackage("gpt", "linear", "models.gpt.linear"),
     "gpt/linear_adaptive": ModelPackage(
         "gpt", "linear_adaptive", "models.gpt.linear_adaptive"

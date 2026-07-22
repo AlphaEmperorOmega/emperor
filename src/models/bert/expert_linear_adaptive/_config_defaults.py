@@ -57,7 +57,7 @@ def hidden_adaptive_weight_options(
     stack_prefix: str = "WEIGHT_GENERATOR_STACK",
 ) -> HiddenAdaptiveWeightOptions:
     return HiddenAdaptiveWeightOptions(
-        generator_depth=getattr(config, f"{prefix}WEIGHT_GENERATOR_DEPTH"),
+        generator_depth=getattr(config, f"{prefix}GENERATOR_DEPTH"),
         option_flag=getattr(config, f"{prefix}WEIGHT_OPTION_FLAG"),
         option=getattr(config, f"{prefix}WEIGHT_OPTION"),
         normalization_option=getattr(

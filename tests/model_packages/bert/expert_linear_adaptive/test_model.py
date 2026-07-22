@@ -22,7 +22,7 @@ from models.bert.expert_linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
-from models.catalog import catalog_entry
+from models.catalog import model_package
 from models.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
@@ -37,7 +37,7 @@ _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
     def test_runtime_defaults_describe_a_conventional_bert_block(self):
         self.assertEqual(
-            config.STACK_LAYER_NORM_POSITION,
+            config.LAYER_NORM_POSITION,
             LayerNormPositionOptions.AFTER,
         )
         self.assertEqual(config.FF_NUM_LAYERS, 1)
@@ -127,11 +127,14 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
 
                 self.assertEqual(module.__name__, module_name)
 
+        experiment = Experiment(
+            model_package=model_package("bert/expert_linear_adaptive")
+        )
         self.assertEqual(
-            Experiment()._public_model_id(),
+            experiment.model_package.identity.catalog_key,
             "bert/expert_linear_adaptive",
         )
-        self.assertIsNotNone(catalog_entry("bert/expert_linear_adaptive"))
+        self.assertIsNotNone(model_package("bert/expert_linear_adaptive"))
 
     def test_attention_mode_switch_is_removed(self):
         self.assertFalse(hasattr(config, "EXPERT_ATTENTION_FLAG"))
@@ -142,11 +145,15 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         )
         parameters = inspect.signature(BertExpertLinearAdaptiveConfigBuilder).parameters
         self.assertNotIn("expert_attention_flag", parameters)
-        self.assertIn("expert_attention_use_kv_expert_models_flag", parameters)
+        self.assertEqual(tuple(parameters), ("runtime",))
+        package = model_package("bert/expert_linear_adaptive")
+        package.bind_runtime_defaults(
+            {"expert_attention_use_kv_expert_models_flag": False}
+        )
 
         with self.assertRaises(TypeError):
             BertExpertLinearAdaptiveConfigBuilder(expert_attention_flag=False)
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(ValueError, "expert_attention_flag"):
             self._config(
                 ExperimentPreset.BASELINE,
                 {"expert_attention_flag": False},

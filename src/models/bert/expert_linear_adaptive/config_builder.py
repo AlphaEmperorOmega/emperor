@@ -14,6 +14,7 @@ from models.bert.expert_linear_adaptive._expert_control_config_factory import (
 )
 from models.bert.expert_linear_adaptive.experiment_config import ExperimentConfig
 from models.bert.expert_linear_adaptive.runtime_defaults import (
+    DEFAULT_RUNTIME,
     expert_linear_adaptive_builder_kwargs_from_flat,
 )
 from models.bert.expert_linear_adaptive.runtime_options import (
@@ -30,6 +31,7 @@ from models.bert.expert_linear_adaptive.runtime_options import (
     HiddenAdaptiveDiagonalOptions,
     HiddenAdaptiveMaskOptions,
     HiddenAdaptiveWeightOptions,
+    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
@@ -37,7 +39,7 @@ from models.bert.expert_linear_adaptive.runtime_options import (
 )
 
 
-class BertExpertLinearAdaptiveConfigBuilder(BertBackendConfigBuilder):
+class _BertExpertLinearAdaptiveConfigBuilderImplementation(BertBackendConfigBuilder):
     def __init__(
         self,
         *,
@@ -305,7 +307,7 @@ class BertExpertLinearAdaptiveConfigBuilder(BertBackendConfigBuilder):
             ),
         )
 
-    def _legacy_experts_stack_options(self) -> ExpertsStackOptions:
+    def _attention_experts_stack_options(self) -> ExpertsStackOptions:
         return ExpertsStackOptions(
             hidden_dim=self.hidden_dim,
             bias_flag=self.feed_forward_options.bias_flag,
@@ -326,7 +328,7 @@ class BertExpertLinearAdaptiveConfigBuilder(BertBackendConfigBuilder):
         stack_options = (
             self._feed_forward_experts_stack_options()
             if use_feed_forward_stack_options
-            else self._legacy_experts_stack_options()
+            else self._attention_experts_stack_options()
         )
         factory = ControlConfigFactory(
             ControlConfigDependencies(
@@ -373,3 +375,15 @@ class BertExpertLinearAdaptiveConfigBuilder(BertBackendConfigBuilder):
         if isinstance(model_config, MixtureOfExpertsModelConfig):
             return model_config
         return model_config.block_config
+
+
+class BertExpertLinearAdaptiveConfigBuilder(
+    _BertExpertLinearAdaptiveConfigBuilderImplementation
+):
+    def __init__(self, *, runtime: RuntimeOptions = DEFAULT_RUNTIME) -> None:
+        if type(runtime) is not RuntimeOptions:
+            raise TypeError(
+                "models.bert.expert_linear_adaptive BertExpertLinearAdaptiveConfigBuilder runtime must be RuntimeOptions"
+            )
+        self.runtime = runtime
+        super().__init__(**runtime._as_construction_kwargs())
