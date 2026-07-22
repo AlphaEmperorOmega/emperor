@@ -29,8 +29,8 @@ class _TrackedAdapter:
     def load_presets(self):
         return self.load("presets")
 
-    def build_configurations(self, presets, preset, dataset, **kwargs):
-        return []
+    def build_configuration(self, presets, preset, dataset, **kwargs):
+        return None
 
     def build_model(self, configuration):
         return None

@@ -44,13 +44,13 @@ class _PackageAdapter(Protocol):
 
     def load_presets(self) -> Any: ...
 
-    def build_configurations(
+    def build_configuration(
         self,
         presets: Any,
         preset: Any,
-        dataset: type | None,
+        dataset: type,
         **kwargs: Any,
-    ) -> list[ModelConfig]: ...
+    ) -> ModelConfig: ...
 
     def build_model(self, configuration: ModelConfig) -> Any: ...
 
@@ -178,6 +178,10 @@ class ModelPackage:
 
         return self._initialize_once("_presets", load_presets)
 
+    @property
+    def default_preset(self) -> Any:
+        return self.presets.default_preset
+
     def checkpoint_config_overrides(
         self,
         tensor_shapes: Mapping[str, tuple[int, ...]],
@@ -202,17 +206,18 @@ class ModelPackage:
             )
         return dict(overrides)
 
-    def build_configurations(
+    def build_configuration(
         self,
         preset: Any = None,
         dataset: type | None = None,
         **kwargs: Any,
-    ) -> list[ModelConfig]:
-        selected_preset = preset or next(iter(self.preset_type))
-        return self._adapter.build_configurations(
+    ) -> ModelConfig:
+        selected_preset = self.default_preset if preset is None else preset
+        selected_dataset = self.resolve_dataset(None) if dataset is None else dataset
+        return self._adapter.build_configuration(
             self.presets,
             selected_preset,
-            dataset,
+            selected_dataset,
             **kwargs,
         )
 
@@ -352,27 +357,7 @@ class ModelPackage:
         return unique
 
     def monitor_options(self):
-        from emperor.monitoring import MonitorOption
-
-        options = list(self.monitor_metadata or [])
-        invalid = [
-            type(option).__name__
-            for option in options
-            if not isinstance(option, MonitorOption)
-        ]
-        if invalid:
-            raise ValueError(
-                f"Model package '{self.catalog_key}' has invalid MONITOR_OPTIONS "
-                f"entries: {', '.join(invalid)}."
-            )
-        names = [option.name for option in options]
-        duplicates = sorted(name for name in set(names) if names.count(name) > 1)
-        if duplicates:
-            raise ValueError(
-                f"Model package '{self.catalog_key}' has duplicate monitor options: "
-                f"{', '.join(duplicates)}."
-            )
-        return options
+        return list(self.monitor_metadata)
 
     def resolve_monitors(self, monitor_names: list[str] | None):
         if not monitor_names:

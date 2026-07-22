@@ -196,8 +196,8 @@ class FakePackageAdapter:
     def load_presets(self):
         return FakePresetGenerator()
 
-    def build_configurations(self, presets, preset, dataset, **kwargs):
-        return presets.get_config(preset, dataset, **kwargs)
+    def build_configuration(self, presets, preset, dataset, **kwargs):
+        return presets.get_config(preset, dataset, **kwargs)[0]
 
     def build_model(self, configuration):
         return FakeModel(configuration)

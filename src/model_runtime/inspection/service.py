@@ -91,7 +91,7 @@ def _build_configuration(
             raise
         except Exception as exc:
             raise _model_package_failure(package.catalog_key, exc) from exc
-        configurations = package.build_configurations(
+        configuration = package.build_configuration(
             preset,
             dataset,
             config_overrides=dict(parsed_overrides.values),
@@ -105,12 +105,7 @@ def _build_configuration(
             f"Failed to build preset '{request.preset}' for model "
             f"'{package.catalog_key}': {exc}"
         ) from exc
-    if not configurations:
-        raise InspectionError(
-            f"Preset '{request.preset}' for model '{package.catalog_key}' did not "
-            "produce configs."
-        )
-    return preset, configurations[0]
+    return preset, configuration
 
 
 def validate_configuration(

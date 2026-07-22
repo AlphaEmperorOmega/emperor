@@ -187,11 +187,8 @@ class TestModelConventions(unittest.TestCase):
         for entry in MODEL_CATALOG.values():
             for preset in entry.preset_type:
                 with self.subTest(package=entry.catalog_key, preset=preset.name):
-                    configs = entry.build_configurations(preset)
-                    self.assertTrue(configs)
-                    self.assertTrue(
-                        all(isinstance(config, ModelConfig) for config in configs)
-                    )
+                    config = entry.build_configuration(preset)
+                    self.assertIsInstance(config, ModelConfig)
 
     def test_catalog_packages_have_one_external_test_module(self):
         for entry in MODEL_CATALOG.values():

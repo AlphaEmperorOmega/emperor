@@ -36,7 +36,7 @@ class _BrokenPackageAdapter:
     bind_runtime_defaults = _missing
     load_preset_type = _missing
     load_presets = _missing
-    build_configurations = _missing
+    build_configuration = _missing
     build_model = _missing
     build_experiment = _missing
 

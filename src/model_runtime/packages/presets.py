@@ -145,6 +145,12 @@ class ExperimentPresetsBase:
         self._preset_definitions = dict(preset_definitions)
         self._model_package: ModelPackage | None = None
 
+    @property
+    def default_preset(self):
+        raise NotImplementedError(
+            "Preset providers must declare one canonical default preset."
+        )
+
     def bind_model_package(self, package: ModelPackage) -> None:
         if not isinstance(package, ModelPackage):
             raise TypeError("Preset binding requires a ModelPackage.")
@@ -502,6 +508,10 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
         self._builder_type = builder_type
         self._default_preset = default_preset
         self._default_dataset = default_dataset
+
+    @property
+    def default_preset(self):
+        return self._default_preset
 
     def get_config(
         self,

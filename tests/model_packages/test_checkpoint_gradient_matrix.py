@@ -67,7 +67,7 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
             with self.subTest(family=family, model_package=model_id):
                 package = model_package(model_id)
                 self.assertIsNotNone(package)
-                config = package.build_configurations()[0]
+                config = package.build_configuration()
                 model = package.build_model(config)
                 state = model.state_dict()
                 topology = [
@@ -131,7 +131,7 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
                 package = model_package(model_id)
                 self.assertIsNotNone(package)
                 dataset = package.dataset_metadata[package.default_experiment_task][0]
-                config = package.build_configurations(dataset=dataset)[0]
+                config = package.build_configuration(dataset=dataset)
                 model = package.build_model(config)
                 inputs = torch.randn(
                     2,
@@ -193,7 +193,7 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
                 package = model_package(model_id)
                 self.assertIsNotNone(package)
                 dataset = package.dataset_metadata[package.default_experiment_task][0]
-                config = package.build_configurations(dataset=dataset)[0]
+                config = package.build_configuration(dataset=dataset)
                 model = package.build_model(config).double().eval()
                 cluster = model.neuron_cluster
                 called_nuclei: set[str] = set()

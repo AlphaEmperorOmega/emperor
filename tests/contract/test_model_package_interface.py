@@ -76,15 +76,9 @@ class TestModelPackageInterface(unittest.TestCase):
                 selected_preset = next(iter(package.preset_type))
                 self.assertIsInstance(package.preset_locks(selected_preset), dict)
 
-                configurations = package.build_configurations()
-                self.assertTrue(configurations)
-                self.assertTrue(
-                    all(
-                        isinstance(configuration, ModelConfig)
-                        for configuration in configurations
-                    )
-                )
-                model = package.build_model(configurations[0])
+                configuration = package.build_configuration()
+                self.assertIsInstance(configuration, ModelConfig)
+                model = package.build_model(configuration)
                 self.assertIsInstance(model, Module)
 
 

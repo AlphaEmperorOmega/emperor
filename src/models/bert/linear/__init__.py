@@ -37,10 +37,8 @@ class _ModelPackageAdapter:
 
         return ExperimentPresets()
 
-    def build_configurations(self, presets, preset, dataset, **kwargs):
-        if dataset is None:
-            return presets.get_config(preset, **kwargs)
-        return presets.get_config(preset, dataset, **kwargs)
+    def build_configuration(self, presets, preset, dataset, **kwargs):
+        return presets.get_config(preset, dataset, **kwargs)[0]
 
     def build_model(self, configuration):
         from .model import Model

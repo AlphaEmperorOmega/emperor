@@ -271,7 +271,7 @@ class InspectionGraphTopologyTests(unittest.TestCase):
         assert package is not None
         preset = package.resolve_preset("baseline")
         dataset = package.resolve_dataset(None)
-        cfg = package.build_configurations(preset, dataset)[0]
+        cfg = package.build_configuration(preset, dataset)
         model = package.build_model(cfg)
         result = inspect_model("linears/linear", "baseline")
         node_by_id = nodes_by_id(result["nodes"])
