@@ -6,6 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from emperor_workbench.training_jobs._filesystem_store import (
+    METADATA_FIELDS,
     FileSystemTrainingJobStore,
 )
 from tests.unit.training_jobs._support import make_record
@@ -30,34 +31,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
 
         self.assertEqual(
             set(payload),
-            {
-                "id",
-                "preset",
-                "presets",
-                "experiment_task",
-                "datasets",
-                "overrides",
-                "search",
-                "planned_run_count",
-                "run_plan",
-                "monitors",
-                "log_folder",
-                "command",
-                "root",
-                "payload_path",
-                "progress_path",
-                "log_path",
-                "created_at",
-                "updated_at",
-                "status",
-                "pid",
-                "cancellation_mode",
-                "worker_pid",
-                "process_group_id",
-                "cgroup_path",
-                "windows_job_name",
-                "exit_code",
-            },
+            METADATA_FIELDS,
         )
         self.assertEqual(payload["experiment_task"], "classification")
         self.assertEqual(payload["cancellation_mode"], "strict-cgroup")
@@ -68,7 +42,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
             "/sys/fs/cgroup/jobs/job-job-1",
         )
 
-    def test_metadata_codec_reads_legacy_task_and_containment_defaults(self) -> None:
+    def test_metadata_codec_rejects_retired_task_and_containment_fields(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             record = make_record("job-1")
@@ -90,13 +64,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
 
             recovered = FileSystemTrainingJobStore(root).get(record.id)
 
-        self.assertIsNotNone(recovered)
-        assert recovered is not None
-        self.assertEqual(recovered.experiment_task, "classification")
-        self.assertEqual(recovered.cancellation_mode, "process-group")
-        self.assertEqual(recovered.worker_pid, record.pid)
-        self.assertIsNone(recovered.process_group_id)
-        self.assertIsNone(recovered.cgroup_path)
+        self.assertIsNone(recovered)
 
     def test_save_get_and_list_records_across_store_instances(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -355,7 +323,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
             self.assertIsNone(store.get("job-a"))
             self.assertIsNone(store.get("job-b"))
 
-    def test_recovered_metadata_rebases_legacy_root_to_canonical_job_directory(
+    def test_recovered_metadata_rejects_a_noncanonical_recorded_root(
         self,
     ) -> None:
         with TemporaryDirectory() as tmp:
@@ -371,9 +339,7 @@ class FileSystemTrainingJobStoreTests(unittest.TestCase):
 
             recovered = FileSystemTrainingJobStore(root).get(record.id)
 
-        self.assertIsNotNone(recovered)
-        assert recovered is not None
-        self.assertEqual(recovered.root, root / record.id)
+        self.assertIsNone(recovered)
 
     def test_save_rejects_record_root_that_does_not_match_job_id(self) -> None:
         with TemporaryDirectory() as tmp:

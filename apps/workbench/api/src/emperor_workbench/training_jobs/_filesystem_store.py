@@ -23,6 +23,36 @@ from emperor_workbench.training_jobs._store import (
 )
 
 METADATA_FILENAME = "metadata.json"
+METADATA_FIELDS = frozenset(
+    {
+        "id",
+        "preset",
+        "presets",
+        "experiment_task",
+        "datasets",
+        "overrides",
+        "search",
+        "planned_run_count",
+        "run_plan",
+        "monitors",
+        "log_folder",
+        "command",
+        "root",
+        "payload_path",
+        "progress_path",
+        "log_path",
+        "created_at",
+        "updated_at",
+        "status",
+        "pid",
+        "cancellation_mode",
+        "worker_pid",
+        "process_group_id",
+        "cgroup_path",
+        "windows_job_name",
+        "exit_code",
+    }
+)
 
 
 class FileSystemTrainingJobStore:
@@ -203,6 +233,8 @@ def _record_from_metadata(
     payload: dict[str, Any],
     metadata_path: Path,
 ) -> TrainingJobRecord:
+    if set(payload) != METADATA_FIELDS:
+        raise ValueError("Training job metadata fields are not canonical.")
     root = _metadata_root(payload, metadata_path)
     run_plan = RunPlanPersistenceCodec.decode(payload["run_plan"])
     observed_command = payload["command"]
@@ -215,9 +247,7 @@ def _record_from_metadata(
         model=run_plan.model,
         preset=str(payload["preset"]),
         presets=[str(item) for item in payload["presets"]],
-        experiment_task=str(
-            payload.get("experiment_task") or payload.get("experimentTask") or ""
-        ),
+        experiment_task=str(payload["experiment_task"]),
         datasets=[str(item) for item in payload["datasets"]],
         overrides=dict(payload["overrides"]),
         search=RunPlanPersistenceCodec.decode_search(
@@ -232,12 +262,10 @@ def _record_from_metadata(
         pid=int(payload["pid"]),
         cancellation_mode=cast(
             ResolvedTrainingCancellationMode,
-            str(payload.get("cancellation_mode") or "process-group"),
+            str(payload["cancellation_mode"]),
         ),
         worker_pid=(
-            int(payload["worker_pid"])
-            if payload.get("worker_pid") is not None
-            else int(payload["pid"])
+            int(payload["worker_pid"]) if payload["worker_pid"] is not None else None
         ),
         process_group_id=(
             int(payload["process_group_id"])
@@ -268,10 +296,10 @@ def _metadata_root(payload: dict[str, Any], metadata_path: Path) -> Path:
     metadata_root = metadata_path.parent
     try:
         if root.resolve() != metadata_root.resolve():
-            return metadata_root
-    except OSError:
-        return metadata_root
-    return root
+            raise ValueError("Training job metadata root is not canonical.")
+    except OSError as exc:
+        raise ValueError("Training job metadata root cannot be resolved.") from exc
+    return metadata_root
 
 
-__all__ = ["FileSystemTrainingJobStore"]
+__all__ = ["FileSystemTrainingJobStore", "METADATA_FIELDS"]
