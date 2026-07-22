@@ -407,7 +407,7 @@ def _config_overrides(
 
     expert_count = _expert_count(tensor_shapes, diagnostics)
     if expert_count is not None:
-        overrides["expert_num_experts"] = expert_count
+        overrides["num_experts"] = expert_count
 
     adaptive_generator_layer_counts = []
     for pattern in _ADAPTIVE_GENERATOR_STACK_PATTERNS:
@@ -612,7 +612,7 @@ def _expert_count(
     if not candidates:
         return None
     if len(set(candidates)) != 1:
-        diagnostics.append("expert_num_experts:conflictingCounts")
+        diagnostics.append("num_experts:conflictingCounts")
         return None
     return candidates[0]
 
@@ -636,12 +636,12 @@ def _expert_module_count(
     for indices in experts_by_outer_layer.values():
         contiguous_indices = _contiguous_indices({index: () for index in indices})
         if contiguous_indices is None:
-            diagnostics.append("expert_num_experts:nonContiguous")
+            diagnostics.append("num_experts:nonContiguous")
             return None
         counts.append(len(contiguous_indices))
 
     if len(set(counts)) != 1:
-        diagnostics.append("expert_num_experts:conflictingModuleCounts")
+        diagnostics.append("num_experts:conflictingModuleCounts")
         return None
     return counts[0]
 
@@ -683,7 +683,7 @@ def _router_output_expert_count(
     if not candidates:
         return None
     if len(set(candidates)) != 1:
-        diagnostics.append("expert_num_experts:conflictingRouterOutputs")
+        diagnostics.append("num_experts:conflictingRouterOutputs")
         return None
     return candidates[0]
 

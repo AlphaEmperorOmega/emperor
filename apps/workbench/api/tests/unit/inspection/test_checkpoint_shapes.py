@@ -250,7 +250,7 @@ class CheckpointShapeExtractionTests(unittest.TestCase):
             "router_stack_independent_flag",
             checkpoint_shapes.config_overrides,
         )
-        self.assertEqual(checkpoint_shapes.config_overrides["expert_num_experts"], 3)
+        self.assertEqual(checkpoint_shapes.config_overrides["num_experts"], 3)
 
     def test_checkpoint_shape_extractor_counts_transformer_layers(self) -> None:
         checkpoint_shapes = checkpoint_graph_shapes_from_state_dict(
