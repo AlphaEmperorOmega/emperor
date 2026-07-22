@@ -63,6 +63,26 @@ class TestProjectorBase(unittest.TestCase):
 
 
 class TestSelfAttentionProjector(unittest.TestCase):
+    def test_validated_strategy_guard_rejects_post_construction_mutation(self):
+        cfg = build_attention_config(
+            config_class=SelfAttentionConfig,
+            embedding_dim=2,
+            num_heads=1,
+            query_key_projection_dim=2,
+            value_projection_dim=2,
+        )
+        projector = SelfAttentionProjector(cfg)
+        projector.projection_strategy = object()
+        values = torch.randn(1, 1, 2)
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "projection_strategy was validated during construction",
+        ):
+            projector.compute_qkv_projections(
+                QKV(query=values, key=values, value=values)
+            )
+
     def test_invalid_projection_strategy_is_rejected(self):
         cfg = build_attention_config(
             config_class=SelfAttentionConfig,
