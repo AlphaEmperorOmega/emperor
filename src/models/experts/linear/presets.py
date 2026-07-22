@@ -169,7 +169,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
         },
         description=(
             "Default recurrent config with step-level gating enabled after each "
@@ -179,7 +179,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description="Default recurrent config with recurrent halting enabled, allowing "
         "early stopping before the max step count.",
@@ -187,8 +187,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
         },
         description=(
             "Default recurrent config with both step-level gating and recurrent "
@@ -206,7 +206,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with step-level gating and shared memory "
@@ -215,7 +215,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with recurrent halting and shared memory "
@@ -224,8 +224,8 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_GATING_HALTING_MEMORY: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "recurrent_gate_flag": True,
-            "recurrent_halting_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
             "memory_flag": True,
         },
         description="Default recurrent config with step-level gating, recurrent "
@@ -344,7 +344,7 @@ class Experiment(ExperimentBase):
         experiment_preset: ExperimentPreset | None = None,
         experiment_task=None,
         *,
-        model_package=None,
+        model_package,
         run_artifacts=None,
     ) -> None:
         super().__init__(

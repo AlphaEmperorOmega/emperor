@@ -13,6 +13,7 @@ from model_runtime.packages.identity import (
     model_key,
     split_model_id,
 )
+from models.experts.linear import MODEL_PACKAGE as EXPERTS_LINEAR
 from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
 )
@@ -73,7 +74,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "linears/linear_adaptive": ModelPackage(
         "linears", "linear_adaptive", "models.linears.linear_adaptive"
     ),
-    "experts/linear": ModelPackage("experts", "linear", "models.experts.linear"),
+    "experts/linear": EXPERTS_LINEAR,
     "experts/linear_adaptive": ModelPackage(
         "experts", "linear_adaptive", "models.experts.linear_adaptive"
     ),

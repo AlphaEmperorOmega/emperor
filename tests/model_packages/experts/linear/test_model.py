@@ -1,5 +1,6 @@
 import inspect
 import unittest
+from dataclasses import replace
 
 import torch
 
@@ -30,9 +31,10 @@ from emperor.memory import (
     WeightedDynamicMemoryConfig,
 )
 from model_runtime.packages import RandomSearch
+from models.catalog import model_package
 from models.experts.linear.config_builder import LinearConfigBuilder
 from models.experts.linear.model import Model
-from models.experts.linear.presets import ExperimentPreset, ExperimentPresets
+from models.experts.linear.presets import ExperimentPreset
 from models.experts.linear.runtime_defaults import runtime_from_flat
 from models.experts.linear.runtime_options import (
     ExpertsDynamicMemoryOptions,
@@ -54,11 +56,11 @@ from models.training_test_utils import (
 
 class TestLinearModel(unittest.TestCase):
     def experts_preset(self, **kwargs):
-        return ExperimentPresets()._preset(**kwargs)
+        return model_package("experts/linear").presets._preset(**kwargs)
 
     def test_all_presets_forward_one_mnist_batch(self):
         batch_size = 4
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -76,7 +78,7 @@ class TestLinearModel(unittest.TestCase):
 
     def test_baseline_forwards_all_datasets(self):
         batch_size = 4
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
 
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -92,7 +94,7 @@ class TestLinearModel(unittest.TestCase):
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
 
     def test_all_presets_train_one_epoch(self):
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
@@ -203,7 +205,7 @@ class TestLinearModel(unittest.TestCase):
         )
 
     def test_preset_accepts_search_flags(self):
-        configs = ExperimentPresets().get_config(
+        configs = model_package("experts/linear").presets.get_config(
             ExperimentPreset.BASELINE,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
@@ -356,11 +358,11 @@ class TestLinearModel(unittest.TestCase):
             recurrent_flag=True,
             recurrent_max_steps=3,
             recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_activation=ActivationOptions.SIGMOID,
             recurrent_gate_stack_source=stack_source(gate_stack_options),
-            recurrent_halting_flag=True,
+            recurrent_stack_halting_flag=True,
             recurrent_halting_threshold=0.71,
             recurrent_halting_dropout=0.09,
             recurrent_halting_hidden_state_mode=(
@@ -552,7 +554,9 @@ class TestLinearModel(unittest.TestCase):
             "recurrent_layer_norm_position": (
                 recurrent_controller_options.recurrent_layer_norm_position
             ),
-            "recurrent_gate_flag": (recurrent_controller_options.recurrent_gate_flag),
+            "recurrent_stack_gate_flag": (
+                recurrent_controller_options.recurrent_stack_gate_flag
+            ),
             "recurrent_gate_option": (
                 recurrent_controller_options.recurrent_gate_option
             ),
@@ -579,8 +583,8 @@ class TestLinearModel(unittest.TestCase):
                 gate_stack_options.apply_output_pipeline_flag
             ),
             "recurrent_gate_stack_bias_flag": gate_stack_options.bias_flag,
-            "recurrent_halting_flag": (
-                recurrent_controller_options.recurrent_halting_flag
+            "recurrent_stack_halting_flag": (
+                recurrent_controller_options.recurrent_stack_halting_flag
             ),
             "recurrent_halting_threshold": (
                 recurrent_controller_options.recurrent_halting_threshold
@@ -614,7 +618,8 @@ class TestLinearModel(unittest.TestCase):
         }
 
         flat_cfg = self.experts_preset(**flat_kwargs)
-        grouped_builder = LinearConfigBuilder(
+        grouped_runtime = replace(
+            runtime_from_flat(),
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -630,6 +635,7 @@ class TestLinearModel(unittest.TestCase):
             dynamic_memory_options=dynamic_memory_options,
             recurrent_controller_options=recurrent_controller_options,
         )
+        grouped_builder = LinearConfigBuilder(runtime=grouped_runtime)
 
         self.assertEqual(
             grouped_builder.submodule_stack_options,
@@ -681,10 +687,7 @@ class TestLinearModel(unittest.TestCase):
         }
 
         self.assertIn("runtime", parameters)
-        self.assertLessEqual(
-            set(parameters),
-            {"self", "legacy_args", "runtime", "legacy_options"},
-        )
+        self.assertEqual(set(parameters), {"self", "runtime"})
 
         for name in flat_names:
             with self.subTest(name=name):
@@ -1016,14 +1019,14 @@ class TestLinearModel(unittest.TestCase):
             stack_gate_flag=True,
             gate_stack_independent_flag=True,
             gate_stack_hidden_dim=32,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             recurrent_gate_stack_independent_flag=True,
             recurrent_gate_stack_hidden_dim=64,
             stack_halting_flag=True,
             halting_stack_independent_flag=True,
             halting_threshold=0.55,
             halting_stack_hidden_dim=40,
-            recurrent_halting_flag=True,
+            recurrent_stack_halting_flag=True,
             recurrent_halting_threshold=0.75,
             recurrent_halting_dropout=0.2,
             recurrent_halting_hidden_state_mode=(
@@ -1053,7 +1056,7 @@ class TestLinearModel(unittest.TestCase):
         )
 
     def test_expert_gate_config_is_internal_to_expert_model_config(self):
-        cfg = self.experts_preset(expert_gate_flag=True)
+        cfg = self.experts_preset(expert_stack_gate_flag=True)
         outer_stack = cfg.experiment_config.model_config.stack_config
         expert_cfg = self._expert_model_config(cfg)
 
@@ -1066,7 +1069,7 @@ class TestLinearModel(unittest.TestCase):
         )
 
     def test_expert_halting_config_is_internal_to_expert_model_config(self):
-        cfg = self.experts_preset(expert_halting_flag=True)
+        cfg = self.experts_preset(expert_stack_halting_flag=True)
         outer_stack = cfg.experiment_config.model_config.stack_config
         expert_cfg = self._expert_model_config(cfg)
 
@@ -1095,8 +1098,8 @@ class TestLinearModel(unittest.TestCase):
     def test_expert_recurrent_wraps_only_expert_model_config(self):
         cfg = self.experts_preset(
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
-            expert_recurrent_halting_flag=True,
+            expert_recurrent_stack_gate_flag=True,
+            expert_recurrent_stack_halting_flag=True,
             expert_recurrent_halting_threshold=0.77,
             expert_recurrent_gate_stack_independent_flag=True,
             expert_recurrent_gate_stack_hidden_dim=25,
@@ -1120,10 +1123,10 @@ class TestLinearModel(unittest.TestCase):
     def test_expert_controller_stacks_inherit_expert_stack_by_default(self):
         inherited_cfg = self.experts_preset(
             expert_stack_hidden_dim=31,
-            expert_gate_flag=True,
+            expert_stack_gate_flag=True,
             expert_gate_stack_hidden_dim=62,
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
+            expert_recurrent_stack_gate_flag=True,
             expert_recurrent_gate_stack_hidden_dim=93,
         )
         inherited_expert_cfg = self._expert_model_config(inherited_cfg)
@@ -1140,11 +1143,11 @@ class TestLinearModel(unittest.TestCase):
 
         custom_cfg = self.experts_preset(
             expert_stack_hidden_dim=31,
-            expert_gate_flag=True,
+            expert_stack_gate_flag=True,
             expert_gate_stack_independent_flag=True,
             expert_gate_stack_hidden_dim=62,
             expert_recurrent_flag=True,
-            expert_recurrent_gate_flag=True,
+            expert_recurrent_stack_gate_flag=True,
             expert_recurrent_gate_stack_independent_flag=True,
             expert_recurrent_gate_stack_hidden_dim=93,
         )
@@ -1189,7 +1192,7 @@ class TestLinearModel(unittest.TestCase):
             expected_memory,
         ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear").presets.get_config(preset)[0]
                 stack_cfg = cfg.experiment_config.model_config.stack_config
 
                 self.assertEqual(
@@ -1209,7 +1212,7 @@ class TestLinearModel(unittest.TestCase):
         cfg = self.experts_preset(
             recurrent_flag=True,
             stack_gate_flag=True,
-            recurrent_gate_flag=True,
+            recurrent_stack_gate_flag=True,
             gate_option=LayerGateOptions.MULTIPLIER,
             recurrent_gate_option=LayerGateOptions.MULTIPLIER,
         )
@@ -1265,7 +1268,7 @@ class TestLinearModel(unittest.TestCase):
             expected_memory,
         ) in expected_controllers.items():
             with self.subTest(preset=preset.name):
-                cfg = ExperimentPresets().get_config(preset)[0]
+                cfg = model_package("experts/linear").presets.get_config(preset)[0]
                 recurrent_cfg = cfg.experiment_config.model_config
 
                 self.assertIsInstance(recurrent_cfg, RecurrentLayerConfig)
@@ -1291,7 +1294,7 @@ class TestLinearModel(unittest.TestCase):
                 self.assertIsNone(inner_layer_config.halting_config)
 
     def test_linear_family_presets_wire_expert_stack_config(self):
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
         cases = [
             {
                 "preset": ExperimentPreset.RESIDUAL,
@@ -1378,7 +1381,7 @@ class TestLinearModel(unittest.TestCase):
                     self.assertIsNotNone(stack_cfg.shared_memory_config)
 
     def test_new_moe_combination_presets_wire_config(self):
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
         cases = [
             {
                 "preset": ExperimentPreset.SHARED_ROUTER_AFTER_WEIGHT,
@@ -1516,7 +1519,7 @@ class TestLinearModel(unittest.TestCase):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ][0]
-        presets = ExperimentPresets()
+        presets = model_package("experts/linear").presets
 
         for preset in (
             ExperimentPreset.TOP1_SWITCH_AUX,

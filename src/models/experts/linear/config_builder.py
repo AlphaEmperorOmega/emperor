@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from models.experts.linear._hidden_model_config_factory import (
     HiddenModelConfigDependencies,
@@ -9,10 +9,7 @@ from models.experts.linear._projection_config_factory import (
     ProjectionConfigFactory,
 )
 from models.experts.linear.experiment_config import ExperimentConfig
-from models.experts.linear.runtime_defaults import (
-    DEFAULT_RUNTIME,
-    runtime_from_legacy_options,
-)
+from models.experts.linear.runtime_defaults import DEFAULT_RUNTIME
 from models.experts.linear.runtime_options import RuntimeOptions
 
 if TYPE_CHECKING:
@@ -22,16 +19,9 @@ if TYPE_CHECKING:
 class LinearConfigBuilder:
     def __init__(
         self,
-        *legacy_args: Any,
+        *,
         runtime: RuntimeOptions = DEFAULT_RUNTIME,
-        **legacy_options: Any,
     ) -> None:
-        if legacy_args or legacy_options:
-            if runtime is not DEFAULT_RUNTIME:
-                raise TypeError(
-                    "runtime cannot be combined with legacy builder options"
-                )
-            runtime = runtime_from_legacy_options(*legacy_args, **legacy_options)
         if not isinstance(runtime, RuntimeOptions):
             raise TypeError("runtime must be a RuntimeOptions value")
 
