@@ -13,7 +13,7 @@ import torch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from lightning.pytorch.callbacks import Callback, ModelCheckpoint
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 from model_runtime.packages import ModelIdentity, ModelPackage
 from model_runtime.runs import (
@@ -67,38 +67,17 @@ class _Trainer:
 
 class _FailingTrainer(_Trainer):
     def fit(self, model, datamodule) -> None:
-        raise RuntimeError("training exploded")
+        exception = RuntimeError("training exploded")
+        for callback in self.callbacks:
+            on_exception = getattr(callback, "on_exception", None)
+            if callable(on_exception):
+                on_exception(self, model, exception)
+        raise exception
 
 
-class _Progress(Callback):
+class _Progress:
     def __init__(self) -> None:
-        super().__init__()
-        self.contexts: list[dict] = []
         self.events: list[dict] = []
-
-    def set_run_context(
-        self,
-        dataset,
-        log_dir=None,
-        preset=None,
-        preset_key=None,
-        run_id=None,
-        run_index=None,
-        run_total=None,
-        total_epochs=None,
-    ) -> None:
-        self.contexts.append(
-            {
-                "dataset": dataset,
-                "logDir": log_dir,
-                "preset": preset,
-                "presetKey": preset_key,
-                "runId": run_id,
-                "runIndex": run_index,
-                "runTotal": run_total,
-                "totalEpochs": total_epochs,
-            }
-        )
 
     def write_event(self, event) -> None:
         self.events.append(dict(event))
@@ -168,10 +147,15 @@ class RunsExecutionTests(unittest.TestCase):
                 [event["type"] for event in progress.events],
                 ["dataset_started", "dataset_completed"],
             )
-            self.assertEqual(progress.contexts[0]["runId"], "run-0001")
-            self.assertEqual(progress.contexts[0]["runIndex"], 1)
-            self.assertEqual(progress.contexts[0]["runTotal"], 1)
+            self.assertEqual(progress.events[0]["runId"], "run-0001")
+            self.assertEqual(progress.events[0]["runIndex"], 1)
+            self.assertEqual(progress.events[0]["runTotal"], 1)
+            self.assertEqual(
+                progress.events[0]["experimentTask"],
+                "image-classification",
+            )
             self.assertEqual(len(_Trainer.instances), 1)
+            self.assertNotIn(progress, _Trainer.instances[0].callbacks)
             self.assertEqual(_Trainer.instances[0].fit_kwargs, {})
             self.assertFalse(
                 any(

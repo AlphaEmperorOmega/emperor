@@ -23,7 +23,7 @@ from model_runtime.runs.errors import (
     InvalidRunPlan,
     InvalidRunRequest,
 )
-from model_runtime.runs.progress import NeuronClusterGrowthCallback
+from model_runtime.runs.progress import RunProgress, require_run_progress
 from model_runtime.runs.records import RunPlan, RunResult
 
 
@@ -144,10 +144,12 @@ def execute_runs(
     plan: RunPlan,
     *,
     artifacts: FilesystemRunArtifacts,
-    progress: Callback | None = None,
+    progress: RunProgress | None = None,
+    progress_step_interval: int = 1,
     monitors: Sequence[str] = (),
     continuation: CheckpointContinuation | None = None,
 ) -> tuple[RunResult, ...]:
+    selected_progress = require_run_progress(progress) if progress is not None else None
     (
         experiment_task,
         selected_presets,
@@ -162,16 +164,6 @@ def execute_runs(
     )
 
     callbacks: list[Callback] = []
-    if progress is not None:
-        write_event = getattr(progress, "write_event", None)
-        if not callable(write_event):
-            raise TypeError("Runs progress callbacks must define write_event(event).")
-        callbacks.extend(
-            [
-                progress,
-                NeuronClusterGrowthCallback(write_event),
-            ]
-        )
     callbacks.extend(_monitor_callbacks(package, plan, monitors))
 
     experiment = package.build_experiment(
@@ -213,6 +205,8 @@ def execute_runs(
             log_folder=artifacts.namespace,
             callbacks=callbacks,
             best_results=best_results,
+            progress=selected_progress,
+            progress_step_interval=progress_step_interval,
             ckpt_path=checkpoint_path,
             model_validator=model_validator,
             resumed_from=provenance,

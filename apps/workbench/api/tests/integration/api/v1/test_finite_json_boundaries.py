@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 from model_runtime.runs.artifacts import write_run_result
-from model_runtime.runs.progress import JsonlTrainingProgressCallback
+from model_runtime.runs.progress import JsonlRunProgress
 
 from emperor_workbench.api import create_app
 from emperor_workbench.settings import WorkbenchApiSettings
@@ -70,7 +70,7 @@ class FiniteJsonBoundaryTests(unittest.TestCase):
             self.assertFalse(result_path.exists())
 
             progress_path = root / "job" / "progress.jsonl"
-            progress = JsonlTrainingProgressCallback(progress_path)
+            progress = JsonlRunProgress(progress_path)
             with self.assertRaises(ValueError):
                 progress.write_event({"type": "step", "metrics": {"loss": math.inf}})
             self.assertFalse(progress_path.exists())

@@ -15,12 +15,19 @@ from emperor.experiments import (
     experiment_task_name,
 )
 from model_runtime.packages import ModelPackage
+from model_runtime.runs._lightning_progress import lightning_progress_adapter
 from model_runtime.runs.artifacts import (
     FilesystemRunArtifacts,
     result_metrics_payload,
     result_ranking_score,
     validate_artifact_namespace,
     write_run_result,
+)
+from model_runtime.runs.progress import (
+    ContextualRunProgress,
+    RunProgress,
+    RunProgressContext,
+    contextual_run_progress,
 )
 from model_runtime.task_behavior import experiment_task_behavior
 
@@ -289,6 +296,8 @@ class ExperimentBase:
         log_folder: str | None,
         callbacks: list[Callback],
         best_results: dict,
+        progress: RunProgress | None = None,
+        progress_step_interval: int = 1,
         ckpt_path: Path | None = None,
         model_validator: Callable[[object], None] | None = None,
         resumed_from: Mapping[str, object] | None = None,
@@ -300,6 +309,8 @@ class ExperimentBase:
             log_folder=log_folder,
             callbacks=callbacks,
             best_results=best_results,
+            progress=progress,
+            progress_step_interval=progress_step_interval,
             ckpt_path=ckpt_path,
             model_validator=model_validator,
             resumed_from=resumed_from,
@@ -312,104 +323,119 @@ class ExperimentBase:
         log_folder: str | None,
         callbacks: list[Callback],
         best_results: dict,
+        progress: RunProgress | None = None,
+        progress_step_interval: int = 1,
         ckpt_path: Path | None = None,
         model_validator: Callable[[object], None] | None = None,
         resumed_from: Mapping[str, object] | None = None,
     ) -> tuple[dict, str]:
-        trainer_config = self._load_trainer_config(training_run.config_overrides)
-        runtime_config = self._load_runtime_config(training_run.config_overrides)
-        if runtime_config["seed"] is not None:
-            seed_everything(int(runtime_config["seed"]), workers=True)
-        dataset = self._build_dataset(training_run)
-        self._configure_dataset(dataset, runtime_config)
-        model = self.model_package.build_model(training_run.config)
-        if model_validator is not None:
-            model_validator(model)
-        artifact_store = self._artifact_store(log_folder)
-        logger = TensorBoardLogger(
-            save_dir=str(artifact_store.root),
-            name=self._build_log_path(
-                training_run.preset,
-                training_run.dataset_type,
-                training_run.parameters,
-                log_folder,
-            ),
-        )
-        self._set_training_run_context(training_run, logger, callbacks)
-        self._emit_dataset_started(
-            training_run,
-            logger,
-            callbacks,
-            resumed_from=resumed_from,
-        )
-        trainer = Trainer(
-            max_epochs=training_run.num_epochs,
-            logger=logger,
-            callbacks=[*trainer_config["callbacks"], *callbacks],
-            **trainer_config["trainer_args"],
+        run_progress = contextual_run_progress(
+            progress,
+            self._run_progress_context(training_run),
         )
         try:
+            trainer_config = self._load_trainer_config(training_run.config_overrides)
+            runtime_config = self._load_runtime_config(training_run.config_overrides)
+            if runtime_config["seed"] is not None:
+                seed_everything(int(runtime_config["seed"]), workers=True)
+            dataset = self._build_dataset(training_run)
+            self._configure_dataset(dataset, runtime_config)
+            model = self.model_package.build_model(training_run.config)
+            if model_validator is not None:
+                model_validator(model)
+            artifact_store = self._artifact_store(log_folder)
+            logger = TensorBoardLogger(
+                save_dir=str(artifact_store.root),
+                name=self._build_log_path(
+                    training_run.preset,
+                    training_run.dataset_type,
+                    training_run.parameters,
+                    log_folder,
+                ),
+            )
+            if run_progress is not None:
+                run_progress = run_progress.with_log_dir(logger.log_dir)
+            self._emit_dataset_started(
+                training_run,
+                run_progress,
+                resumed_from=resumed_from,
+            )
+            progress_callbacks = (
+                [
+                    lightning_progress_adapter(
+                        run_progress,
+                        step_interval=progress_step_interval,
+                    )
+                ]
+                if run_progress is not None
+                else []
+            )
+            trainer = Trainer(
+                max_epochs=training_run.num_epochs,
+                logger=logger,
+                callbacks=[
+                    *trainer_config["callbacks"],
+                    *callbacks,
+                    *progress_callbacks,
+                ],
+                **trainer_config["trainer_args"],
+            )
             if ckpt_path is None:
                 trainer.fit(model, datamodule=dataset)
             else:
                 trainer.fit(model, datamodule=dataset, ckpt_path=ckpt_path)
             if runtime_config["run_test_after_fit"]:
                 trainer.test(model, datamodule=dataset)
+            result = self._training_result(
+                training_run,
+                trainer,
+                resumed_from=resumed_from,
+            )
+            self._write_training_result(logger.log_dir, result)
+            self._update_best_results(result, best_results, log_folder)
+            self._emit_dataset_completed(
+                result,
+                run_progress,
+                resumed_from=resumed_from,
+            )
+            return result, logger.log_dir
         except Exception as exc:
-            self._emit_training_error(training_run, exc, callbacks)
+            self._emit_training_error(exc, run_progress)
             raise
 
-        result = self._training_result(
-            training_run,
-            trainer,
-            resumed_from=resumed_from,
-        )
-        self._write_training_result(logger.log_dir, result)
-        self._update_best_results(result, best_results, log_folder)
-        self._emit_dataset_completed(
-            training_run,
-            logger,
-            result,
-            callbacks,
-            resumed_from=resumed_from,
-        )
-        return result, logger.log_dir
-
-    def _set_training_run_context(
+    def _run_progress_context(
         self,
         training_run: TrainingRun,
-        logger,
-        callbacks: list[Callback],
-    ) -> None:
-        for callback in callbacks:
-            set_run_context = getattr(callback, "set_run_context", None)
-            if callable(set_run_context):
-                set_run_context(
-                    training_run.dataset_type.__name__,
-                    logger.log_dir,
-                    self._preset_cli_name(training_run.preset),
-                    training_run.preset.name,
-                    run_id=training_run.run_id,
-                    run_index=training_run.run_index,
-                    run_total=training_run.run_total,
-                    total_epochs=training_run.num_epochs,
-                )
+    ) -> RunProgressContext:
+        experiment_task = (
+            experiment_task_name(training_run.experiment_task)
+            if training_run.experiment_task is not None
+            else None
+        )
+        return RunProgressContext(
+            experiment_task=experiment_task,
+            dataset=training_run.dataset_type.__name__,
+            preset=self._preset_cli_name(training_run.preset),
+            preset_key=training_run.preset.name,
+            log_dir=None,
+            run_id=training_run.run_id,
+            run_index=training_run.run_index,
+            run_total=training_run.run_total,
+            total_epochs=training_run.num_epochs,
+        )
 
     def _emit_dataset_started(
         self,
         training_run: TrainingRun,
-        logger,
-        callbacks: list[Callback],
+        progress: ContextualRunProgress | None,
         *,
         resumed_from: Mapping[str, object] | None = None,
     ) -> None:
         self._write_progress_event(
-            callbacks,
+            progress,
             {
-                **self._training_run_event_fields(training_run),
                 "type": "dataset_started",
                 "status": "running",
-                "logDir": logger.log_dir,
                 "params": training_run.parameters,
                 **(
                     {"resumedFrom": dict(resumed_from)}
@@ -421,14 +447,12 @@ class ExperimentBase:
 
     def _emit_training_error(
         self,
-        training_run: TrainingRun,
         exc: Exception,
-        callbacks: list[Callback],
+        progress: ContextualRunProgress | None,
     ) -> None:
         self._write_progress_event(
-            callbacks,
+            progress,
             {
-                **self._training_run_event_fields(training_run),
                 "type": "error",
                 "status": "failed",
                 "error": str(exc),
@@ -438,21 +462,17 @@ class ExperimentBase:
 
     def _emit_dataset_completed(
         self,
-        training_run: TrainingRun,
-        logger,
         result: dict,
-        callbacks: list[Callback],
+        progress: ContextualRunProgress | None,
         *,
         resumed_from: Mapping[str, object] | None = None,
     ) -> None:
         self._write_progress_event(
-            callbacks,
+            progress,
             {
-                **self._training_run_event_fields(training_run),
                 "type": "dataset_completed",
                 "status": "running",
                 "metrics": result["metrics"],
-                "logDir": logger.log_dir,
                 **(
                     {"resumedFrom": dict(resumed_from)}
                     if resumed_from is not None
@@ -461,32 +481,13 @@ class ExperimentBase:
             },
         )
 
-    def _training_run_event_fields(self, training_run: TrainingRun) -> dict:
-        experiment_task = (
-            experiment_task_name(training_run.experiment_task)
-            if training_run.experiment_task is not None
-            else None
-        )
-        return {
-            "experimentTask": experiment_task,
-            "dataset": training_run.dataset_type.__name__,
-            "preset": self._preset_cli_name(training_run.preset),
-            "presetKey": training_run.preset.name,
-            "runId": training_run.run_id,
-            "runIndex": training_run.run_index,
-            "runTotal": training_run.run_total,
-            "totalEpochs": training_run.num_epochs,
-        }
-
+    @staticmethod
     def _write_progress_event(
-        self,
-        callbacks: list[Callback],
+        progress: ContextualRunProgress | None,
         event: dict,
     ) -> None:
-        for callback in callbacks:
-            write_event = getattr(callback, "write_event", None)
-            if callable(write_event):
-                write_event(event)
+        if progress is not None:
+            progress.write_event(event)
 
     def _training_result(
         self,

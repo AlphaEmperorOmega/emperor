@@ -15,7 +15,8 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from model_runtime.runs.progress import NeuronClusterGrowthCallback
+from model_runtime.runs._lightning_progress import lightning_progress_adapter
+from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
 
 from emperor_workbench.run_plans import (
     MAX_TRAINING_DATASETS,
@@ -470,7 +471,24 @@ class TrainingWorkerProgressTests(unittest.TestCase):
 
     def test_neuron_cluster_growth_callback_caps_coordinate_payloads(self) -> None:
         events: list[dict[str, object]] = []
-        callback = NeuronClusterGrowthCallback(events.append)
+        progress = SimpleNamespace(write_event=lambda event: events.append(dict(event)))
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(
+                progress,
+                RunProgressContext(
+                    experiment_task="image-classification",
+                    dataset="Mnist",
+                    preset="baseline",
+                    preset_key="BASELINE",
+                    log_dir="logs/run/version_0",
+                    run_id="run-0001",
+                    run_index=1,
+                    run_total=1,
+                    total_epochs=4,
+                ),
+            ),
+            step_interval=100,
+        )
         initial_names = {"neuron_1_1_1"}
         all_names = {
             *initial_names,

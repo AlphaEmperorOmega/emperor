@@ -23,7 +23,7 @@ if TYPE_CHECKING:
         require_finite_json,
     )
     from model_runtime.runs.planning import accept_run_plan, plan_runs
-    from model_runtime.runs.progress import JsonlTrainingProgressCallback
+    from model_runtime.runs.progress import JsonlRunProgress, RunProgress
     from model_runtime.runs.records import (
         PlanningBudget,
         RandomSource,
@@ -43,7 +43,7 @@ __all__ = [
     "InvalidRunPlan",
     "InvalidRunRequest",
     "FilesystemRunArtifacts",
-    "JsonlTrainingProgressCallback",
+    "JsonlRunProgress",
     "NonFiniteJsonValue",
     "NonFiniteJsonValueError",
     "PlanTooLarge",
@@ -51,6 +51,7 @@ __all__ = [
     "RandomSource",
     "RunParameter",
     "RunPlan",
+    "RunProgress",
     "RunRequest",
     "RunResult",
     "RunSpec",
@@ -76,7 +77,7 @@ _ERROR_EXPORTS = {
 }
 _CHECKPOINT_EXPORTS = {"CheckpointContinuation"}
 _ARTIFACT_EXPORTS = {"FilesystemRunArtifacts"}
-_PROGRESS_EXPORTS = {"JsonlTrainingProgressCallback"}
+_PROGRESS_EXPORTS = {"JsonlRunProgress", "RunProgress"}
 _JSON_VALUE_EXPORTS = {
     "NonFiniteJsonValue",
     "NonFiniteJsonValueError",

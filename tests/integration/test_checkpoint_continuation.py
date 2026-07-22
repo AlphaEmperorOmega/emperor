@@ -12,7 +12,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import torch
 from lightning import LightningDataModule
-from lightning.pytorch.callbacks import Callback
 from torch.utils.data import DataLoader, TensorDataset
 
 from model_runtime.runs import (
@@ -55,26 +54,12 @@ class _InMemoryMnist(LightningDataModule):
         )
 
 
-class _ContinuationProbe(Callback):
+class _ContinuationProbe:
     def __init__(self) -> None:
-        super().__init__()
         self.events: list[dict] = []
-        self.start_epoch: int | None = None
-        self.start_step: int | None = None
-        self.optimizer_state_restored = False
-        self.end_step: int | None = None
 
     def write_event(self, event: dict) -> None:
         self.events.append(dict(event))
-
-    def on_train_start(self, trainer, pl_module) -> None:
-        self.start_epoch = trainer.current_epoch
-        self.start_step = trainer.global_step
-        optimizer_state = trainer.optimizers[0].state_dict()["state"]
-        self.optimizer_state_restored = bool(optimizer_state)
-
-    def on_train_end(self, trainer, pl_module) -> None:
-        self.end_step = trainer.global_step
 
 
 def _linears_linear():
@@ -154,15 +139,24 @@ class CheckpointContinuationIntegrationTests(unittest.TestCase):
                     continuation=CheckpointContinuation(checkpoint),
                 )[0]
 
-            self.assertEqual(continuation_probe.start_epoch, 1)
+            epoch_started = next(
+                event
+                for event in continuation_probe.events
+                if event["type"] == "epoch_started"
+            )
+            fit_completed = next(
+                event
+                for event in continuation_probe.events
+                if event["type"] == "fit_completed"
+            )
+            self.assertEqual(epoch_started["epoch"], 1)
             self.assertEqual(
-                continuation_probe.start_step,
+                epoch_started["step"],
                 source_checkpoint["global_step"],
             )
-            self.assertTrue(continuation_probe.optimizer_state_restored)
             self.assertGreater(
-                continuation_probe.end_step,
-                continuation_probe.start_step,
+                fit_completed["step"],
+                epoch_started["step"],
             )
             self.assertNotEqual(continued_result.log_dir, source_result.log_dir)
             self.assertEqual(

@@ -35,7 +35,7 @@ from model_runtime.packages import (
 )
 from model_runtime.runs import (
     FilesystemRunArtifacts,
-    JsonlTrainingProgressCallback,
+    JsonlRunProgress,
     RunsError,
     accept_run_plan,
     execute_runs,
@@ -260,10 +260,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
         plan = run_plan_from_wire(_object(payload.get("plan"), "plan"))
         progress_path = payload.get("progress_path")
         progress = (
-            JsonlTrainingProgressCallback(
-                Path(str(progress_path)),
-                step_interval=int(payload.get("progress_step_interval") or 25),
-            )
+            JsonlRunProgress(Path(str(progress_path)))
             if progress_path is not None
             else None
         )
@@ -280,6 +277,7 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
                     ),
                 ),
                 progress=progress,
+                progress_step_interval=int(payload.get("progress_step_interval") or 25),
                 monitors=tuple(str(item) for item in payload.get("monitors") or ()),
             )
         )

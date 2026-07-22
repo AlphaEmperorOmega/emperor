@@ -18,8 +18,34 @@ from model_runtime.packages import (
     ModelPackage,
     PresetDefinition,
 )
-from model_runtime.runs import ExperimentBase, JsonlTrainingProgressCallback
+from model_runtime.runs import ExperimentBase, JsonlRunProgress
+from model_runtime.runs._lightning_progress import lightning_progress_adapter
 from model_runtime.runs.experiment import _result_metrics_payload
+from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
+
+
+def _progress_callback(
+    path: Path,
+    *,
+    step_interval: int = 1,
+    **writer_options,
+) -> Callback:
+    writer = JsonlRunProgress(path, **writer_options)
+    progress = ContextualRunProgress(
+        writer,
+        RunProgressContext(
+            experiment_task="image-classification",
+            dataset="FakeDatasetB",
+            preset="baseline",
+            preset_key="BASELINE",
+            log_dir="logs/test",
+            run_id="run-0001",
+            run_index=1,
+            run_total=1,
+            total_epochs=1,
+        ),
+    )
+    return lightning_progress_adapter(progress, step_interval=step_interval)
 
 
 class FakeMetric:
@@ -118,34 +144,9 @@ class FakeMonitorCallback(Callback):
     pass
 
 
-class CaptureTrainingCallback(Callback):
+class CaptureRunProgress:
     def __init__(self):
-        self.contexts = []
         self.events = []
-
-    def set_run_context(
-        self,
-        dataset,
-        log_dir=None,
-        preset=None,
-        preset_key=None,
-        run_id=None,
-        run_index=None,
-        run_total=None,
-        total_epochs=None,
-    ):
-        self.contexts.append(
-            {
-                "dataset": dataset,
-                "logDir": log_dir,
-                "preset": preset,
-                "presetKey": preset_key,
-                "runId": run_id,
-                "runIndex": run_index,
-                "runTotal": run_total,
-                "totalEpochs": total_epochs,
-            }
-        )
 
     def write_event(self, event):
         self.events.append(dict(event))
@@ -239,6 +240,7 @@ class TestExperimentTraining(unittest.TestCase):
         config_overrides=None,
         parameters=None,
         callbacks=None,
+        progress=None,
         log_folder=None,
         run_id="run-0001",
         run_index=1,
@@ -263,6 +265,7 @@ class TestExperimentTraining(unittest.TestCase):
             log_folder=log_folder,
             callbacks=callbacks or [],
             best_results=experiment.load_best_results(log_folder),
+            progress=progress,
         )
 
     def test_data_num_workers_override_updates_datamodule(self):
@@ -312,11 +315,11 @@ class TestExperimentTraining(unittest.TestCase):
 
     def test_materialized_run_sets_progress_context_and_events(self):
         experiment = FakeExperiment(model_package=self.model_package)
-        callback = CaptureTrainingCallback()
+        progress = CaptureRunProgress()
 
         self._execute_run(
             experiment,
-            callbacks=[callback],
+            progress=progress,
             dataset_type=FakeDatasetB,
             preset=FakeOption.HALTING,
             parameters={"NUM_EPOCHS": 3},
@@ -328,12 +331,25 @@ class TestExperimentTraining(unittest.TestCase):
 
         self.assertEqual(experiment.preset_generator.seen_presets, ["HALTING"])
         self.assertEqual(experiment.preset_generator.seen_datasets, ["FakeDatasetB"])
-        self.assertEqual(len(callback.contexts), 1)
+        self.assertEqual(len(progress.events), 2)
+        started, completed = progress.events
         self.assertEqual(
-            callback.contexts[0],
+            {
+                key: started[key]
+                for key in (
+                    "dataset",
+                    "logDir",
+                    "preset",
+                    "presetKey",
+                    "runId",
+                    "runIndex",
+                    "runTotal",
+                    "totalEpochs",
+                )
+            },
             {
                 "dataset": "FakeDatasetB",
-                "logDir": callback.contexts[0]["logDir"],
+                "logDir": started["logDir"],
                 "preset": "halting",
                 "presetKey": "HALTING",
                 "runId": "run-from-plan",
@@ -343,17 +359,15 @@ class TestExperimentTraining(unittest.TestCase):
             },
         )
         self.assertTrue(
-            callback.contexts[0]["logDir"].startswith(
+            started["logDir"].startswith(
                 f"logs/{experiment.model_package.catalog_key}/HALTING/FakeDatasetB/"
             )
         )
-        self.assertNotIn("/default_", callback.contexts[0]["logDir"])
+        self.assertNotIn("/default_", started["logDir"])
         self.assertEqual(
-            [event["type"] for event in callback.events],
+            [event["type"] for event in progress.events],
             ["dataset_started", "dataset_completed"],
         )
-
-        started, completed = callback.events
         self.assertEqual(started["status"], "running")
         self.assertEqual(started["dataset"], "FakeDatasetB")
         self.assertEqual(started["preset"], "halting")
@@ -458,19 +472,12 @@ class TestExperimentTraining(unittest.TestCase):
     def test_progress_callback_emits_jsonl_events(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "progress.jsonl"
-            callback = JsonlTrainingProgressCallback(path)
+            callback = _progress_callback(path)
             trainer = FakeTrainer(
                 max_epochs=1,
                 logger=FakeLogger("logs", "test"),
                 callbacks=[],
             )
-            callback.set_run_context(
-                "FakeDatasetB",
-                "logs/test",
-                "baseline",
-                "BASELINE",
-            )
-
             callback.on_train_batch_end(trainer, None, None, None, 3)
 
             event = json.loads(path.read_text().splitlines()[0])
@@ -485,19 +492,12 @@ class TestExperimentTraining(unittest.TestCase):
     def test_progress_callback_can_throttle_step_events(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "progress.jsonl"
-            callback = JsonlTrainingProgressCallback(path, step_interval=5)
+            callback = _progress_callback(path, step_interval=5)
             trainer = FakeTrainer(
                 max_epochs=1,
                 logger=FakeLogger("logs", "test"),
                 callbacks=[],
             )
-            callback.set_run_context(
-                "FakeDatasetB",
-                "logs/test",
-                "baseline",
-                "BASELINE",
-            )
-
             callback.on_train_batch_end(trainer, None, None, None, 3)
             self.assertFalse(path.exists())
 
@@ -512,7 +512,7 @@ class TestExperimentTraining(unittest.TestCase):
     def test_progress_callback_filters_high_cardinality_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "progress.jsonl"
-            callback = JsonlTrainingProgressCallback(
+            callback = _progress_callback(
                 path,
                 metric_key_limit=3,
             )
@@ -569,7 +569,7 @@ class TestExperimentTraining(unittest.TestCase):
     def test_progress_callback_enforces_event_byte_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "progress.jsonl"
-            callback = JsonlTrainingProgressCallback(
+            callback = _progress_callback(
                 path,
                 metric_key_limit=100,
                 event_byte_limit=800,

@@ -5,8 +5,6 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
-from lightning.pytorch.callbacks import Callback
-
 from emperor.config import BaseOptions
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelIdentity, ModelMetadata, ModelPackage
@@ -128,9 +126,8 @@ class _Trainer:
         self.datamodule = datamodule
 
 
-class _Progress(Callback):
+class _Progress:
     def __init__(self) -> None:
-        super().__init__()
         self.events: list[dict] = []
 
     def write_event(self, event: dict) -> None:
@@ -232,8 +229,9 @@ class RunsParameterPreservationTests(unittest.TestCase):
             result, log_dir = runtime.execute_training_run(
                 training_run,
                 log_folder="runs",
-                callbacks=[progress],
+                callbacks=[],
                 best_results={},
+                progress=progress,
             )
 
         self.assertEqual(training_run.parameters, {"NUM_EPOCHS": 3})

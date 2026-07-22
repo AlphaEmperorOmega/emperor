@@ -9,7 +9,7 @@ from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "matplotlib"))
 
-from model_runtime.runs import JsonlTrainingProgressCallback, RunPlan
+from model_runtime.runs import JsonlRunProgress, RunPlan
 
 from emperor_workbench.run_plans import RunPlanWorkerAcceptance
 from emperor_workbench.training_jobs._containment._launcher import (
@@ -47,10 +47,7 @@ def main() -> None:
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Training worker payload must be a JSON object.")
-    progress = JsonlTrainingProgressCallback(
-        progress_path,
-        step_interval=WORKBENCH_PROGRESS_STEP_INTERVAL,
-    )
+    progress = JsonlRunProgress(progress_path)
     raw_plan = payload.get("runPlan")
     experiment_task = (
         raw_plan.get("experimentTask") if isinstance(raw_plan, dict) else None
