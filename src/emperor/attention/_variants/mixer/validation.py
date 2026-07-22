@@ -82,9 +82,7 @@ class MixerAttentionValidator(ValidatorBase):
         static_v: "Tensor | None",
     ) -> None:
         if key_padding_mask is not None:
-            raise RuntimeError(
-                "MixerAttention does not support key padding masks."
-            )
+            raise RuntimeError("MixerAttention does not support key padding masks.")
         if attention_mask is not None:
             raise RuntimeError("MixerAttention does not support attention masks.")
         if static_k is not None or static_v is not None:
@@ -99,13 +97,11 @@ class MixerAttentionValidator(ValidatorBase):
     ) -> None:
         if not torch.is_tensor(tensor):
             raise TypeError(
-                "MixerAttention input must be a Tensor, got "
-                f"{type(tensor).__name__}."
+                f"MixerAttention input must be a Tensor, got {type(tensor).__name__}."
             )
         if tensor.dim() != 3:
             raise RuntimeError(
-                "MixerAttention input must be rank three, got rank "
-                f"{tensor.dim()}."
+                f"MixerAttention input must be rank three, got rank {tensor.dim()}."
             )
         if not torch.is_floating_point(tensor):
             raise RuntimeError("MixerAttention input must be floating point.")
