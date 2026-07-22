@@ -137,10 +137,10 @@ path, byte size, and nanosecond modification time. The deep
 saved/checkpoint/request precedence, semantic retry, and graph annotation. It
 opens at most 32 candidates, permits at most 256 MiB per file and 512 MiB in
 aggregate, and verifies descriptor freshness before and after loading. The
-generic shape interpreter remains a compatibility fallback; package-specific
-state-dict knowledge is supplied through the selected Model Package's explicitly
-declared checkpoint-metadata capability and takes precedence without coupling
-Workbench to that package's Implementation.
+generic shape interpreter handles the current checkpoint layout when a package
+does not declare checkpoint metadata; package-specific state-dict knowledge is
+supplied through the selected Model Package's explicit capability without
+coupling Workbench to that package's Implementation.
 Run History owns neither checkpoint ranking nor checkpoint shape
 interpretation; it only freezes contained candidates and parses filename
 epoch/step facts needed by its own Run Artifact metadata.
