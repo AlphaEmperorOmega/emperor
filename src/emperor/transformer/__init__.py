@@ -1,3 +1,5 @@
+"""Public Interface for Transformer construction and execution."""
+
 from emperor.transformer._config import (
     TransformerConfig,
     TransformerDecoderBlockLayerConfig,
