@@ -100,6 +100,27 @@ def reject_locked_overrides(
     )
 
 
+def reject_conflicting_locked_overrides(
+    package: ModelPackage,
+    preset_name: str,
+    parsed_overrides: Mapping[str, Any],
+) -> None:
+    locks = preset_locks(package, preset_name)
+    conflicts = sorted(
+        key
+        for key, value in parsed_overrides.items()
+        if key in locks and value != getattr(locks[key], "value", None)
+    )
+    if not conflicts:
+        return
+    details = ", ".join(
+        f"{key} ({getattr(locks[key], 'reason', '')})" for key in conflicts
+    )
+    raise InspectionError(
+        f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
+    )
+
+
 def parse_overrides(
     package: ModelPackage,
     overrides: Mapping[str, Any] | None,
@@ -199,6 +220,7 @@ def serialize_overrides(
 __all__ = [
     "canonicalize_overrides",
     "parse_overrides",
+    "reject_conflicting_locked_overrides",
     "reject_locked_overrides",
     "resolve_override_key",
     "serialize_overrides",

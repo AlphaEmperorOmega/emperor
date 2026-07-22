@@ -309,29 +309,39 @@ class TestExperimentTraining(unittest.TestCase):
         os.chdir(self.original_cwd)
         self.tempdir.cleanup()
 
-    def test_selected_datasets_limit_training_loop(self):
-        experiment = FakeExperiment(
-            FakeOption.BASELINE, model_package=self.model_package
-        )
-
-        experiment.train_model(selected_datasets=[FakeDatasetB])
-
-        self.assertEqual(
-            experiment.preset_generator.seen_datasets,
-            ["FakeDatasetB"],
-        )
-
-    def test_selected_presets_limit_training_loop_in_order(self):
-        experiment = FakeExperiment(model_package=self.model_package)
-
-        experiment.train_model(
-            selected_datasets=[FakeDatasetA],
-            selected_presets=[FakeOption.GATING, FakeOption.BASELINE],
-        )
-
-        self.assertEqual(
-            experiment.preset_generator.seen_presets,
-            ["GATING", "BASELINE"],
+    def _execute_run(
+        self,
+        experiment,
+        *,
+        dataset_type=FakeDatasetA,
+        preset=FakeOption.BASELINE,
+        config_overrides=None,
+        parameters=None,
+        callbacks=None,
+        log_folder=None,
+        run_id="run-0001",
+        run_index=1,
+        run_total=1,
+    ):
+        training_run = experiment.materialize_training_runs(
+            [
+                {
+                    "id": run_id,
+                    "index": run_index,
+                    "run_total": run_total,
+                    "preset": preset,
+                    "dataset_type": dataset_type,
+                    "parameters": parameters or {},
+                    "config_overrides": config_overrides or {},
+                }
+            ],
+            log_folder,
+        )[0]
+        return experiment.execute_training_run(
+            training_run,
+            log_folder=log_folder,
+            callbacks=callbacks or [],
+            best_results=experiment.load_best_results(log_folder),
         )
 
     def test_data_num_workers_override_updates_datamodule(self):
@@ -339,8 +349,8 @@ class TestExperimentTraining(unittest.TestCase):
             FakeOption.BASELINE, model_package=self.model_package
         )
 
-        experiment.train_model(
-            selected_datasets=[FakeDatasetA],
+        self._execute_run(
+            experiment,
             config_overrides={"data_num_workers": 0},
         )
 
@@ -351,8 +361,8 @@ class TestExperimentTraining(unittest.TestCase):
             FakeOption.BASELINE, model_package=self.model_package
         )
 
-        experiment.train_model(
-            selected_datasets=[FakeDatasetA],
+        self._execute_run(
+            experiment,
             config_overrides={"run_test_after_fit": False},
         )
 
@@ -363,19 +373,19 @@ class TestExperimentTraining(unittest.TestCase):
             FakeOption.BASELINE, model_package=self.model_package
         )
 
-        experiment.train_model(selected_datasets=[FakeDatasetA])
+        self._execute_run(experiment)
 
         self.assertIs(
             FakeTrainer.instances[0].test_datamodule,
             FakeTrainer.instances[0].fit_datamodule,
         )
 
-    def test_train_model_instantiates_model_with_generated_config(self):
+    def test_run_execution_instantiates_model_with_materialized_config(self):
         experiment = FakeExperiment(
             FakeOption.BASELINE, model_package=self.model_package
         )
 
-        experiment.train_model(selected_datasets=[FakeDatasetA])
+        self._execute_run(experiment)
 
         self.assertIsInstance(FakeTrainer.instances[0].model.config, FakeConfig)
 
@@ -383,19 +393,16 @@ class TestExperimentTraining(unittest.TestCase):
         experiment = FakeExperiment(model_package=self.model_package)
         callback = CaptureTrainingCallback()
 
-        experiment.train_model(
+        self._execute_run(
+            experiment,
             callbacks=[callback],
-            materialized_runs=[
-                {
-                    "id": "run-from-plan",
-                    "index": 7,
-                    "run_total": 9,
-                    "preset": FakeOption.HALTING,
-                    "dataset_type": FakeDatasetB,
-                    "parameters": {"NUM_EPOCHS": 3},
-                    "config_overrides": {"num_epochs": 3},
-                }
-            ],
+            dataset_type=FakeDatasetB,
+            preset=FakeOption.HALTING,
+            parameters={"NUM_EPOCHS": 3},
+            config_overrides={"num_epochs": 3},
+            run_id="run-from-plan",
+            run_index=7,
+            run_total=9,
         )
 
         self.assertEqual(experiment.preset_generator.seen_presets, ["HALTING"])
@@ -437,16 +444,13 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(started["params"], {"NUM_EPOCHS": 3})
         self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
 
-    def test_train_model_rejects_path_like_log_folder(self):
+    def test_run_execution_rejects_path_like_log_folder(self):
         experiment = FakeExperiment(
             FakeOption.BASELINE, model_package=self.model_package
         )
 
         with self.assertRaises(ValueError):
-            experiment.train_model(
-                log_folder="../escape",
-                selected_datasets=[FakeDatasetA],
-            )
+            self._execute_run(experiment, log_folder="../escape")
 
     def test_update_best_results_merges_existing_summary_before_writing(self):
         experiment = FakeExperiment(

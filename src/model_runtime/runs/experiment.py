@@ -15,9 +15,6 @@ from emperor.experiments import (
     experiment_task_name,
 )
 from model_runtime.packages import ModelPackage
-from model_runtime.packages.presets import (
-    SearchMode,
-)
 from model_runtime.runs.artifacts import (
     FilesystemRunArtifacts,
     result_metrics_payload,
@@ -238,41 +235,6 @@ class ExperimentBase:
                 trainer_args[clean_key] = value
         return trainer_args
 
-    def train_model(
-        self,
-        search_mode: SearchMode = None,
-        log_folder: str | None = None,
-        search_keys: list[str] | None = None,
-        config_overrides: dict | None = None,
-        search_overrides: dict | None = None,
-        selected_datasets: list[type] | None = None,
-        selected_presets: list[BaseOptions] | None = None,
-        callbacks: list[Callback] | None = None,
-        materialized_runs: list[dict] | None = None,
-    ) -> None:
-        log_folder = _validate_log_folder(log_folder)
-        config_overrides = config_overrides or {}
-        search_overrides = search_overrides or {}
-        callbacks = callbacks or []
-        best_results = self._load_best_results(log_folder)
-        training_run_plan = self._build_training_run_plan(
-            search_mode=search_mode,
-            log_folder=log_folder,
-            search_keys=search_keys,
-            config_overrides=config_overrides,
-            search_overrides=search_overrides,
-            selected_datasets=selected_datasets,
-            selected_presets=selected_presets,
-            materialized_runs=materialized_runs,
-        )
-        for training_run in training_run_plan:
-            self._execute_training_run(
-                training_run,
-                log_folder=log_folder,
-                callbacks=callbacks,
-                best_results=best_results,
-            )
-
     def load_best_results(self, log_folder: str | None = None) -> dict:
         """Load ranking state through the configured Run Artifact store."""
 
@@ -285,7 +247,43 @@ class ExperimentBase:
     ) -> list[TrainingRun]:
         """Materialize an accepted semantic Run Plan for execution."""
 
-        return self._materialized_training_runs(materialized_runs, log_folder)
+        training_runs = []
+        run_total = len(materialized_runs)
+        for run_index, run in enumerate(materialized_runs, start=1):
+            preset = run["preset"]
+            dataset_type = run["dataset_type"]
+            run_overrides = run.get("config_overrides") or {}
+            run_parameters = run.get("parameters") or {}
+            run_epochs = run_overrides.get("num_epochs", self.num_epochs)
+            configs = self.preset_generator.get_config(
+                preset,
+                dataset_type,
+                None,
+                log_folder,
+                None,
+                config_overrides=run_overrides,
+                search_overrides={},
+            )
+            if len(configs) != 1:
+                raise ValueError(
+                    "Accepted Run materialization must produce exactly one "
+                    f"configuration, got {len(configs)}."
+                )
+            training_runs.append(
+                TrainingRun(
+                    experiment_task=self.experiment_task,
+                    preset=preset,
+                    dataset_type=dataset_type,
+                    config=configs[0],
+                    config_overrides=run_overrides,
+                    num_epochs=run_epochs,
+                    parameters=dict(run_parameters),
+                    run_id=run.get("id"),
+                    run_index=run.get("index", run_index),
+                    run_total=run.get("run_total", run_total),
+                )
+            )
+        return training_runs
 
     def execute_training_run(
         self,
@@ -309,114 +307,6 @@ class ExperimentBase:
             model_validator=model_validator,
             resumed_from=resumed_from,
         )
-
-    def _build_training_run_plan(
-        self,
-        *,
-        search_mode: SearchMode,
-        log_folder: str | None,
-        search_keys: list[str] | None,
-        config_overrides: dict,
-        search_overrides: dict,
-        selected_datasets: list[type] | None,
-        selected_presets: list[BaseOptions] | None,
-        materialized_runs: list[dict] | None,
-    ) -> list[TrainingRun]:
-        presets = (
-            selected_presets
-            if selected_presets is not None
-            else [self.preset]
-            if self.preset
-            else self.preset_enum
-        )
-        dataset_options = selected_datasets or self.dataset_options
-        if materialized_runs is None:
-            return self._planned_training_runs(
-                presets=presets,
-                dataset_options=dataset_options,
-                search_mode=search_mode,
-                log_folder=log_folder,
-                search_keys=search_keys,
-                config_overrides=config_overrides,
-                search_overrides=search_overrides,
-            )
-        return self._materialized_training_runs(materialized_runs, log_folder)
-
-    def _planned_training_runs(
-        self,
-        *,
-        presets,
-        dataset_options: list[type],
-        search_mode: SearchMode,
-        log_folder: str | None,
-        search_keys: list[str] | None,
-        config_overrides: dict,
-        search_overrides: dict,
-    ) -> list[TrainingRun]:
-        training_runs = []
-        for preset in presets:
-            for dataset_type in dataset_options:
-                run_overrides = config_overrides
-                run_epochs = run_overrides.get("num_epochs", self.num_epochs)
-                for config in self.preset_generator.get_config(
-                    preset,
-                    dataset_type,
-                    search_mode,
-                    log_folder,
-                    search_keys,
-                    config_overrides=run_overrides,
-                    search_overrides=search_overrides,
-                ):
-                    training_runs.append(
-                        TrainingRun(
-                            experiment_task=self.experiment_task,
-                            preset=preset,
-                            dataset_type=dataset_type,
-                            config=config,
-                            config_overrides=run_overrides,
-                            num_epochs=run_epochs,
-                            parameters=dict(run_overrides),
-                        )
-                    )
-        return training_runs
-
-    def _materialized_training_runs(
-        self,
-        materialized_runs: list[dict],
-        log_folder: str | None,
-    ) -> list[TrainingRun]:
-        training_runs = []
-        run_total = len(materialized_runs)
-        for run_index, run in enumerate(materialized_runs, start=1):
-            preset = run["preset"]
-            dataset_type = run["dataset_type"]
-            run_overrides = run.get("config_overrides") or {}
-            run_parameters = run.get("parameters") or {}
-            run_epochs = run_overrides.get("num_epochs", self.num_epochs)
-            for config in self.preset_generator.get_config(
-                preset,
-                dataset_type,
-                None,
-                log_folder,
-                None,
-                config_overrides=run_overrides,
-                search_overrides={},
-            ):
-                training_runs.append(
-                    TrainingRun(
-                        experiment_task=self.experiment_task,
-                        preset=preset,
-                        dataset_type=dataset_type,
-                        config=config,
-                        config_overrides=run_overrides,
-                        num_epochs=run_epochs,
-                        parameters=dict(run_parameters),
-                        run_id=run.get("id"),
-                        run_index=run.get("index", run_index),
-                        run_total=run.get("run_total", run_total),
-                    )
-                )
-        return training_runs
 
     def _execute_training_run(
         self,
@@ -688,4 +578,4 @@ class ExperimentBase:
         return self.model_package.identity
 
 
-__all__ = ["ExperimentBase", "TrainingRun"]
+__all__ = ["ExperimentBase"]

@@ -7,6 +7,7 @@ from lightning.pytorch.callbacks import Callback
 
 from emperor.monitoring import MonitorSettings
 from model_runtime.inspection import InspectionError, parse_overrides
+from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
 from model_runtime.packages import ModelPackage, dataset_name
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.checkpoints import (
@@ -21,7 +22,6 @@ from model_runtime.runs.errors import (
     InvalidRunPlan,
     InvalidRunRequest,
 )
-from model_runtime.runs.planning import _reject_conflicting_locks
 from model_runtime.runs.progress import NeuronClusterGrowthCallback
 from model_runtime.runs.records import RunPlan, RunResult
 
@@ -85,7 +85,11 @@ def _validated_materialized_runs(
             )
         try:
             parsed_overrides = parse_overrides(package, run.overrides).values
-            _reject_conflicting_locks(package, run.preset, parsed_overrides)
+            reject_conflicting_locked_overrides(
+                package,
+                run.preset,
+                parsed_overrides,
+            )
             preset = package.resolve_preset(run.preset)
             dataset = package.resolve_dataset(run.dataset, experiment_task)
         except (InspectionError, InvalidRunRequest, ValueError) as exc:

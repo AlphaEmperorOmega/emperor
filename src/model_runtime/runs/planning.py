@@ -14,6 +14,7 @@ from model_runtime.inspection import (
     search_space_schema,
     serialize_overrides,
 )
+from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
 from model_runtime.packages import (
     ModelPackage,
     abstract_config_class_error,
@@ -349,22 +350,13 @@ def _reject_conflicting_locks(
     parsed_overrides: Mapping[str, Any],
 ) -> None:
     try:
-        locks = preset_locks(package, preset_name)
+        reject_conflicting_locked_overrides(
+            package,
+            preset_name,
+            parsed_overrides,
+        )
     except InspectionError as exc:
         raise _request_error(exc) from exc
-    conflicts = sorted(
-        key
-        for key, value in parsed_overrides.items()
-        if key in locks and value != getattr(locks[key], "value", None)
-    )
-    if not conflicts:
-        return
-    details = ", ".join(
-        f"{key} ({getattr(locks[key], 'reason', '')})" for key in conflicts
-    )
-    raise InvalidRunRequest(
-        f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
-    )
 
 
 def _resolve_request(

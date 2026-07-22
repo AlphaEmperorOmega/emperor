@@ -195,7 +195,7 @@ class RunsParameterPreservationTests(unittest.TestCase):
                 "parse_overrides",
                 return_value=SimpleNamespace(values={"num_epochs": 3}),
             ),
-            patch.object(execution, "_reject_conflicting_locks"),
+            patch.object(execution, "reject_conflicting_locked_overrides"),
         ):
             _task, _presets, materialized = execution._validated_materialized_runs(
                 package,

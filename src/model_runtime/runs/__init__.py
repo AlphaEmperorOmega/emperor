@@ -14,7 +14,7 @@ if TYPE_CHECKING:
         RunsError,
     )
     from model_runtime.runs.execution import execute_runs
-    from model_runtime.runs.experiment import ExperimentBase, TrainingRun
+    from model_runtime.runs.experiment import ExperimentBase
     from model_runtime.runs.json_values import (
         NonFiniteJsonValue,
         NonFiniteJsonValueError,
@@ -61,7 +61,6 @@ __all__ = [
     "accept_run_plan",
     "execute_runs",
     "ExperimentBase",
-    "TrainingRun",
     "plan_runs",
     "non_finite_json_values",
     "replace_non_finite_json",
@@ -99,7 +98,7 @@ _RECORD_EXPORTS = {
 }
 _PLANNING_EXPORTS = {"accept_run_plan", "plan_runs"}
 _EXECUTION_EXPORTS = {"execute_runs"}
-_EXPERIMENT_EXPORTS = {"ExperimentBase", "TrainingRun"}
+_EXPERIMENT_EXPORTS = {"ExperimentBase"}
 
 
 def __getattr__(name: str) -> Any:
