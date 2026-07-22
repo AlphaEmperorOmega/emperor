@@ -116,7 +116,7 @@ def _stack_options(kwargs, config, provided):
     value = provided or options.ExpertsStackOptions(
         hidden_dim=config.HIDDEN_DIM,
         bias_flag=config.STACK_BIAS_FLAG,
-        layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+        layer_norm_position=config.LAYER_NORM_POSITION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -130,7 +130,6 @@ def _stack_options(kwargs, config, provided):
             "hidden_dim": "hidden_dim",
             "stack_bias_flag": "bias_flag",
             "layer_norm_position": "layer_norm_position",
-            "stack_layer_norm_position": "layer_norm_position",
             "stack_num_layers": "num_layers",
             "stack_activation": "activation",
             "stack_residual_connection_option": "residual_connection_option",
@@ -193,14 +192,14 @@ def _router_stack_defaults(config):
 
 def _mixture_options(kwargs, config, provided):
     value = provided or options.ExpertsMixtureOptions(
-        top_k=config.EXPERT_TOP_K,
-        num_experts=config.EXPERT_NUM_EXPERTS,
-        capacity_factor=config.EXPERT_CAPACITY_FACTOR,
-        dropped_token_behavior=config.EXPERT_DROPPED_TOKEN_BEHAVIOR,
-        compute_expert_mixture_flag=config.EXPERT_COMPUTE_EXPERT_MIXTURE_FLAG,
-        weighted_parameters_flag=config.EXPERT_WEIGHTED_PARAMETERS_FLAG,
-        weighting_position_option=config.EXPERT_WEIGHTING_POSITION_OPTION,
-        routing_initialization_mode=config.EXPERT_ROUTING_INITIALIZATION_MODE,
+        top_k=config.TOP_K,
+        num_experts=config.NUM_EXPERTS,
+        capacity_factor=config.CAPACITY_FACTOR,
+        dropped_token_behavior=config.DROPPED_TOKEN_BEHAVIOR,
+        compute_expert_mixture_flag=config.COMPUTE_EXPERT_MIXTURE_FLAG,
+        weighted_parameters_flag=config.WEIGHTED_PARAMETERS_FLAG,
+        weighting_position_option=config.WEIGHTING_POSITION_OPTION,
+        routing_initialization_mode=config.ROUTING_INITIALIZATION_MODE,
     )
     fields = (
         "top_k",
@@ -291,18 +290,20 @@ def _stack_source(kwargs, config, flat_prefix, config_prefix, role, provided=Non
 
 
 def _layer_controller_options(kwargs, config, provided, *, flat_prefix, config_prefix):
-    gate_flag_key = f"{flat_prefix}gate_flag" if flat_prefix else "stack_gate_flag"
+    gate_flag_key = (
+        f"{flat_prefix}stack_gate_flag" if flat_prefix else "stack_gate_flag"
+    )
     halting_flag_key = (
-        f"{flat_prefix}halting_flag" if flat_prefix else "stack_halting_flag"
+        f"{flat_prefix}stack_halting_flag" if flat_prefix else "stack_halting_flag"
     )
     value = provided or options.ExpertsLayerControllerOptions(
-        stack_gate_flag=getattr(config, f"{config_prefix}GATE_FLAG"),
+        stack_gate_flag=getattr(config, f"{config_prefix}STACK_GATE_FLAG"),
         gate_option=getattr(config, f"{config_prefix}GATE_OPTION"),
         gate_activation=getattr(config, f"{config_prefix}GATE_ACTIVATION"),
         gate_stack_source=_stack_source(
             kwargs, config, flat_prefix, config_prefix, "gate"
         ),
-        stack_halting_flag=getattr(config, f"{config_prefix}HALTING_FLAG"),
+        stack_halting_flag=getattr(config, f"{config_prefix}STACK_HALTING_FLAG"),
         halting_threshold=getattr(config, f"{config_prefix}HALTING_THRESHOLD"),
         halting_dropout=getattr(config, f"{config_prefix}HALTING_DROPOUT"),
         halting_hidden_state_mode=getattr(
@@ -392,13 +393,15 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
         recurrent_layer_norm_position=getattr(
             config, f"{recurrent_config}LAYER_NORM_POSITION"
         ),
-        recurrent_gate_flag=getattr(config, f"{recurrent_config}GATE_FLAG"),
+        recurrent_stack_gate_flag=getattr(config, f"{recurrent_config}STACK_GATE_FLAG"),
         recurrent_gate_option=getattr(config, f"{recurrent_config}GATE_OPTION"),
         recurrent_gate_activation=getattr(config, f"{recurrent_config}GATE_ACTIVATION"),
         recurrent_gate_stack_source=_stack_source(
             kwargs, config, recurrent_flat, recurrent_config, "gate"
         ),
-        recurrent_halting_flag=getattr(config, f"{recurrent_config}HALTING_FLAG"),
+        recurrent_stack_halting_flag=getattr(
+            config, f"{recurrent_config}STACK_HALTING_FLAG"
+        ),
         recurrent_halting_threshold=getattr(
             config, f"{recurrent_config}HALTING_THRESHOLD"
         ),
@@ -416,10 +419,10 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
             f"{recurrent_flat}flag": "recurrent_flag",
             f"{recurrent_flat}max_steps": "recurrent_max_steps",
             f"{recurrent_flat}layer_norm_position": "recurrent_layer_norm_position",
-            f"{recurrent_flat}gate_flag": "recurrent_gate_flag",
+            f"{recurrent_flat}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{recurrent_flat}gate_option": "recurrent_gate_option",
             f"{recurrent_flat}gate_activation": "recurrent_gate_activation",
-            f"{recurrent_flat}halting_flag": "recurrent_halting_flag",
+            f"{recurrent_flat}stack_halting_flag": "recurrent_stack_halting_flag",
             f"{recurrent_flat}halting_threshold": "recurrent_halting_threshold",
             f"{recurrent_flat}halting_dropout": "recurrent_halting_dropout",
             f"{recurrent_flat}halting_hidden_state_mode": (

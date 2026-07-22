@@ -22,7 +22,7 @@ class ProjectionConfigFactory:
         self.stack_options = dependencies.stack_options or ExpertsStackOptions(
             hidden_dim=dependencies.hidden_dim,
             bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.STACK_LAYER_NORM_POSITION,
+            layer_norm_position=config.LAYER_NORM_POSITION,
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
