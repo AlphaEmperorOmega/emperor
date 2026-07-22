@@ -17,6 +17,9 @@ from emperor.neuron import (
     NeuronClusterConfig,
     NeuronClusterOptimizerSyncCallback,
 )
+from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.experiment_cli_parser import get_experiment_parser
 from models.neuron.linear._hidden_block import HiddenBlockAdapter, HiddenBlockConfig
 from models.neuron.linear.config_builder import NeuronLinearConfigBuilder
 from models.neuron.linear.experiment_config import ExperimentConfig
@@ -25,10 +28,13 @@ from models.neuron.linear.presets import (
     _PRESET_DEFINITIONS,
     Experiment,
     ExperimentPreset,
-    ExperimentPresets,
 )
 from models.neuron.linear.runtime_options import NeuronClusterCapacityOptions
-from models.parser import get_experiment_parser, resolve_experiment_mode
+
+
+def _build_config(**runtime_defaults):
+    runtime = model_package("neuron/linear").bind_runtime_defaults(runtime_defaults)
+    return NeuronLinearConfigBuilder(runtime=runtime).build()
 
 
 class TestNeuronLinearModel(unittest.TestCase):
@@ -36,10 +42,8 @@ class TestNeuronLinearModel(unittest.TestCase):
 
     def test_public_imports_and_cli_resolution(self):
         package = importlib.import_module(self.package_module)
-        parser = get_experiment_parser(
-            ExperimentPreset.names(),
-            self.package_module,
-        )
+        registration = model_package("neuron/linear")
+        parser = get_experiment_parser(registration)
         args = parser.parse_args(
             [
                 "--preset",
@@ -49,13 +53,17 @@ class TestNeuronLinearModel(unittest.TestCase):
                 "cluster-max-steps",
             ]
         )
-        mode = resolve_experiment_mode(args, ExperimentPreset)
+        mode = resolve_cli_selection(args, registration, ExperimentPreset)
 
-        self.assertIs(package.ExperimentPreset, ExperimentPreset)
-        self.assertEqual(package.__all__, ["Experiment", "ExperimentPreset"])
+        self.assertIs(package.MODEL_PACKAGE, registration)
+        self.assertEqual(package.__all__, ["MODEL_PACKAGE"])
         self.assertIs(mode.preset, ExperimentPreset.BASELINE)
         self.assertEqual(mode.search_keys, ["cluster_max_steps"])
-        self.assertEqual(Experiment()._public_model_id(), "neuron/linear")
+        experiment = Experiment(model_package=registration)
+        self.assertEqual(
+            experiment.model_package.identity.catalog_key,
+            "neuron/linear",
+        )
 
     def test_local_preset_snapshot_is_complete(self):
         presets = list(ExperimentPreset)
@@ -72,7 +80,7 @@ class TestNeuronLinearModel(unittest.TestCase):
                 self.assertTrue(definition.description.strip())
 
     def test_all_presets_build_from_local_definitions(self):
-        presets = ExperimentPresets()
+        presets = model_package("neuron/linear").presets
         dataset = self._datasets()[0]
 
         for preset in ExperimentPreset:
@@ -104,7 +112,7 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
 
     def test_hidden_flat_overrides_build_locally(self):
-        cfg = NeuronLinearConfigBuilder(
+        cfg = _build_config(
             batch_size=3,
             learning_rate=0.02,
             input_dim=8,
@@ -112,7 +120,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             output_dim=4,
             stack_num_layers=1,
             stack_activation=ActivationOptions.MISH,
-        ).build()
+        )
 
         self.assertEqual(cfg.batch_size, 3)
         self.assertEqual(cfg.learning_rate, 0.02)
@@ -121,7 +129,7 @@ class TestNeuronLinearModel(unittest.TestCase):
         self.assertEqual(cfg.output_dim, 4)
 
     def test_builder_wires_neuron_cluster_options(self):
-        cfg = NeuronLinearConfigBuilder(
+        cfg = _build_config(
             cluster_x_axis_total_neurons=6,
             cluster_y_axis_total_neurons=5,
             cluster_z_axis_total_neurons=2,
@@ -136,7 +144,7 @@ class TestNeuronLinearModel(unittest.TestCase):
             cluster_halting_stack_hidden_dim=33,
             cluster_halting_stack_layer_norm_position=LayerNormPositionOptions.BEFORE,
             cluster_halting_stack_bias_flag=False,
-        ).build()
+        )
         cluster_config = cfg.experiment_config.neuron_cluster_config
         terminal_sampler = cluster_config.neuron_config.terminal_config.sampler_config
         router_config = terminal_sampler.router_config
@@ -161,7 +169,7 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_grouped_cluster_capacity_matches_flat_values(self):
+    def test_flat_cluster_capacity_binds_to_typed_runtime_options(self):
         capacity = NeuronClusterCapacityOptions(
             x_axis_total_neurons=6,
             y_axis_total_neurons=5,
@@ -172,46 +180,48 @@ class TestNeuronLinearModel(unittest.TestCase):
             max_steps=3,
             growth_threshold=99,
         )
-        flat = NeuronLinearConfigBuilder(
-            hidden_dim=12,
-            cluster_x_axis_total_neurons=6,
-            cluster_y_axis_total_neurons=5,
-            cluster_z_axis_total_neurons=2,
-            cluster_initial_x_axis_total_neurons=2,
-            cluster_initial_y_axis_total_neurons=2,
-            cluster_initial_z_axis_total_neurons=1,
-            cluster_max_steps=3,
-            cluster_growth_threshold=99,
-        ).build()
-        grouped = NeuronLinearConfigBuilder(
-            hidden_dim=12,
-            cluster_capacity_options=capacity,
-        ).build()
+        runtime = model_package("neuron/linear").bind_runtime_defaults(
+            {
+                "hidden_dim": 12,
+                "cluster_x_axis_total_neurons": 6,
+                "cluster_y_axis_total_neurons": 5,
+                "cluster_z_axis_total_neurons": 2,
+                "cluster_initial_x_axis_total_neurons": 2,
+                "cluster_initial_y_axis_total_neurons": 2,
+                "cluster_initial_z_axis_total_neurons": 1,
+                "cluster_max_steps": 3,
+                "cluster_growth_threshold": 99,
+            }
+        )
 
-        self.assertEqual(flat, grouped)
+        self.assertEqual(
+            runtime._as_construction_kwargs()["cluster_capacity_options"],
+            capacity,
+        )
+        NeuronLinearConfigBuilder(runtime=runtime).build()
 
     def test_cluster_terminal_top_k_is_clamped(self):
-        maximum = NeuronLinearConfigBuilder(
+        maximum = _build_config(
             cluster_terminal_top_k=999,
             cluster_terminal_sampler_num_topk_samples=999,
-        ).build()
+        )
         maximum_sampler = self._terminal_sampler(maximum)
 
         self.assertEqual(maximum_sampler.num_experts, 18)
         self.assertEqual(maximum_sampler.top_k, 18)
         self.assertEqual(maximum_sampler.num_topk_samples, 18)
 
-        minimum = NeuronLinearConfigBuilder(
+        minimum = _build_config(
             cluster_terminal_top_k=0,
             cluster_terminal_sampler_num_topk_samples=2,
-        ).build()
+        )
         minimum_sampler = self._terminal_sampler(minimum)
 
         self.assertEqual(minimum_sampler.top_k, 1)
         self.assertEqual(minimum_sampler.num_topk_samples, 1)
 
     def test_cluster_halting_can_be_disabled(self):
-        cfg = NeuronLinearConfigBuilder(cluster_halting_flag=False).build()
+        cfg = _build_config(cluster_halting_flag=False)
 
         self.assertIsNone(cfg.experiment_config.neuron_cluster_config.halting_config)
 
@@ -244,7 +254,7 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
 
     def test_baseline_forwards_every_dataset(self):
-        presets = ExperimentPresets()
+        presets = model_package("neuron/linear").presets
         for dataset in self._datasets():
             with self.subTest(dataset=dataset.__name__):
                 cfg = presets.get_config(ExperimentPreset.BASELINE, dataset)[0]

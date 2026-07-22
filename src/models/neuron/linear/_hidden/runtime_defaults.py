@@ -26,17 +26,6 @@ from models.neuron.linear._hidden.runtime_options import (
 )
 
 _PACKAGE_NAME = "models.neuron.linear._hidden"
-_ALIASES = {
-    "gate_flag": "stack_gate_flag",
-    "halting_flag": "stack_halting_flag",
-    "stack_layer_norm_position": "layer_norm_position",
-    "gate_hidden_dim": "gate_stack_hidden_dim",
-    "gate_layer_norm_position": "gate_stack_layer_norm_position",
-    "gate_bias_flag": "gate_stack_bias_flag",
-    "halting_hidden_dim": "halting_stack_hidden_dim",
-    "halting_layer_norm_position": "halting_stack_layer_norm_position",
-    "halting_bias_flag": "halting_stack_bias_flag",
-}
 _CONTROLLER_STACK_FIELDS = (
     "independent_flag",
     "hidden_dim",
@@ -76,7 +65,7 @@ def _flat_defaults() -> dict[str, object]:
         "hidden_dim": config.HIDDEN_DIM,
         "output_dim": config.OUTPUT_DIM,
         "stack_bias_flag": config.STACK_BIAS_FLAG,
-        "layer_norm_position": config.STACK_LAYER_NORM_POSITION,
+        "layer_norm_position": config.LAYER_NORM_POSITION,
         "stack_num_layers": config.STACK_NUM_LAYERS,
         "stack_activation": config.STACK_ACTIVATION,
         "stack_residual_connection_option": (config.STACK_RESIDUAL_CONNECTION_OPTION),
@@ -102,10 +91,10 @@ def _flat_defaults() -> dict[str, object]:
             config.SUBMODULE_STACK_DROPOUT_PROBABILITY
         ),
         "submodule_stack_bias_flag": config.SUBMODULE_STACK_BIAS_FLAG,
-        "stack_gate_flag": config.GATE_FLAG,
+        "stack_gate_flag": config.STACK_GATE_FLAG,
         "gate_option": config.GATE_OPTION,
         "gate_activation": config.GATE_ACTIVATION,
-        "stack_halting_flag": config.HALTING_FLAG,
+        "stack_halting_flag": config.STACK_HALTING_FLAG,
         "halting_threshold": config.HALTING_THRESHOLD,
         "halting_dropout": config.HALTING_DROPOUT,
         "halting_hidden_state_mode": config.HALTING_HIDDEN_STATE_MODE,
@@ -121,10 +110,10 @@ def _flat_defaults() -> dict[str, object]:
         "recurrent_flag": config.RECURRENT_FLAG,
         "recurrent_max_steps": config.RECURRENT_MAX_STEPS,
         "recurrent_layer_norm_position": config.RECURRENT_LAYER_NORM_POSITION,
-        "recurrent_gate_flag": config.RECURRENT_GATE_FLAG,
+        "recurrent_stack_gate_flag": config.RECURRENT_STACK_GATE_FLAG,
         "recurrent_gate_option": config.RECURRENT_GATE_OPTION,
         "recurrent_gate_activation": config.RECURRENT_GATE_ACTIVATION,
-        "recurrent_halting_flag": config.RECURRENT_HALTING_FLAG,
+        "recurrent_stack_halting_flag": config.RECURRENT_STACK_HALTING_FLAG,
         "recurrent_halting_threshold": config.RECURRENT_HALTING_THRESHOLD,
         "recurrent_halting_dropout": config.RECURRENT_HALTING_DROPOUT,
         "recurrent_halting_hidden_state_mode": (
@@ -137,7 +126,7 @@ def _flat_defaults() -> dict[str, object]:
 
 
 _DEFAULT_FLAT: Final = _flat_defaults()
-_ACCEPTED_KEYS: Final = frozenset((*_DEFAULT_FLAT, *_ALIASES))
+_ACCEPTED_KEYS: Final = frozenset(_DEFAULT_FLAT)
 
 
 def _canonical_flat_values(
@@ -159,20 +148,9 @@ def _canonical_flat_values(
             f"accepted keys: {accepted}"
         )
 
-    provided: dict[str, tuple[str, object]] = {}
-    for source_key, value in overrides.items():
-        canonical_key = _ALIASES.get(source_key, source_key)
-        previous = provided.get(canonical_key)
-        if previous is not None and previous[1] != value:
-            previous_key, previous_value = previous
-            raise ValueError(
-                f"{_PACKAGE_NAME}: conflicting aliases {previous_key!r}="
-                f"{previous_value!r} and {source_key!r}={value!r} target "
-                f"{canonical_key!r}"
-            )
-        provided[canonical_key] = (source_key, value)
-        values[canonical_key] = value
-        source_keys[canonical_key] = source_key
+    for key, value in overrides.items():
+        values[key] = value
+        source_keys[key] = key
     return values, source_keys
 
 
@@ -530,14 +508,14 @@ def runtime_from_flat(
 
     recurrent_max_steps = _int(values, sources, "recurrent_max_steps")
     _positive(sources["recurrent_max_steps"], recurrent_max_steps)
-    recurrent_gate_enabled = _bool(values, sources, "recurrent_gate_flag")
+    recurrent_gate_enabled = _bool(values, sources, "recurrent_stack_gate_flag")
     recurrent_gate_option = _optional_enum(
         values, sources, "recurrent_gate_option", LayerGateOptions
     )
     if recurrent_gate_enabled and recurrent_gate_option is None:
         raise ValueError(
             f"{_PACKAGE_NAME}: 'recurrent_gate_option' must be set when "
-            "'recurrent_gate_flag' is True"
+            "'recurrent_stack_gate_flag' is True"
         )
     recurrent_halting_threshold = _float(values, sources, "recurrent_halting_threshold")
     recurrent_halting_dropout = _float(values, sources, "recurrent_halting_dropout")
@@ -561,7 +539,7 @@ def runtime_from_flat(
             stack=recurrent_gate_stack,
         ),
         halting=HaltingOptions(
-            enabled=_bool(values, sources, "recurrent_halting_flag"),
+            enabled=_bool(values, sources, "recurrent_stack_halting_flag"),
             threshold=recurrent_halting_threshold,
             dropout_probability=recurrent_halting_dropout,
             hidden_state_mode=_enum(

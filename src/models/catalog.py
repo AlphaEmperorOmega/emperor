@@ -29,6 +29,7 @@ from models.gpt.linear import MODEL_PACKAGE as GPT_LINEAR
 from models.gpt.linear_adaptive import MODEL_PACKAGE as GPT_LINEAR_ADAPTIVE
 from models.linears.linear import MODEL_PACKAGE as LINEARS_LINEAR
 from models.linears.linear_adaptive import MODEL_PACKAGE as LINEARS_LINEAR_ADAPTIVE
+from models.neuron.linear import MODEL_PACKAGE as NEURON_LINEAR
 from models.parametric.parametric_generator import (
     MODEL_PACKAGE as PARAMETRIC_GENERATOR,
 )
@@ -73,7 +74,7 @@ MODEL_CATALOG: dict[str, ModelPackage] = {
     "parametric/parametric_vector": PARAMETRIC_VECTOR,
     "parametric/parametric_matrix": PARAMETRIC_MATRIX,
     "parametric/parametric_generator": PARAMETRIC_GENERATOR,
-    "neuron/linear": ModelPackage("neuron", "linear", "models.neuron.linear"),
+    "neuron/linear": NEURON_LINEAR,
     "neuron/linear_adaptive": ModelPackage(
         "neuron", "linear_adaptive", "models.neuron.linear_adaptive"
     ),

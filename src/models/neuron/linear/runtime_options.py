@@ -12,6 +12,7 @@ from emperor.layers import (
     ResidualConnectionOptions,
 )
 from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
+from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
 
 @dataclass(frozen=True)
@@ -71,9 +72,6 @@ class ClusterRouteHaltingOptions:
     halting_option: type[HaltingConfig] = StickBreakingConfig
 
 
-# Preserve historical class paths for serialization compatibility.
-NeuronClusterCapacityOptions.__module__ = "models.neuron.linear._neuron_options"
-NeuronTerminalOptions.__module__ = "models.neuron.linear._neuron_options"
-NeuronSubmoduleStackOptions.__module__ = "models.neuron.linear._neuron_options"
-NeuronTerminalSamplerOptions.__module__ = "models.neuron.linear._neuron_options"
-ClusterRouteHaltingOptions.__module__ = "models.neuron.linear._neuron_options"
+@dataclass(frozen=True, slots=True)
+class RuntimeOptions(ResolvedRuntimeOptions):
+    pass
