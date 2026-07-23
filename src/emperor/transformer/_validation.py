@@ -96,6 +96,10 @@ class TransformerValidator(ValidatorBase):
         cls.validate_dimensions(embedding_dim=model.embedding_dim)
         cls._validate_layer_norm_position(model.layer_norm_position)
         cls._validate_encoder_attention_config(model.cfg.attention_config)
+        cls._validate_residual_history_bridge(
+            model.cfg.residual_config,
+            owner_name="TransformerEncoderLayerConfig",
+        )
 
     @classmethod
     def validate_decoder_layer(cls, model: "TransformerDecoderLayer") -> None:
@@ -105,6 +109,10 @@ class TransformerValidator(ValidatorBase):
         cls._validate_layer_norm_position(model.layer_norm_position)
         cls._validate_decoder_self_attention_config(model.cfg.self_attention_config)
         cls._validate_decoder_cross_attention_config(model.cfg.cross_attention_config)
+        cls._validate_residual_history_bridge(
+            model.cfg.residual_config,
+            owner_name="TransformerDecoderLayerConfig",
+        )
 
     @staticmethod
     def _validate_encoder_attention_config(attention_config) -> None:
@@ -179,6 +187,19 @@ class TransformerValidator(ValidatorBase):
                 "layer_norm_position must be a LayerNormPositionOptions value, "
                 f"got {type(layer_norm_position).__name__}"
             )
+
+    @staticmethod
+    def _validate_residual_history_bridge(residual_config, *, owner_name: str) -> None:
+        from emperor.layers import ResidualConfig, ResidualConnectionOptions
+
+        if not isinstance(residual_config, ResidualConfig):
+            return
+        if residual_config.option != ResidualConnectionOptions.ATTENTION_RESIDUAL:
+            return
+        raise ValueError(
+            f"ATTENTION_RESIDUAL is not supported for {owner_name} until "
+            "Transformer sublayers share an explicit forward-local history bridge."
+        )
 
     # --- forward-boundary validation ---
 
