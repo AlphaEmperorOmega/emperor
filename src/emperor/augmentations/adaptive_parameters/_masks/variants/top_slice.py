@@ -55,7 +55,12 @@ class TopSliceAxisMask(AxisMaskAbstract):
             dtype=axis_scores.dtype,
         )
         boundary_margins = boundary_position - axis_positions
-        transition_width = self.mask_transition_width
-        return (
-            (boundary_margins + transition_width / 2.0) / transition_width
-        ).clamp(0.0, 1.0)
+        saturated_transition_width = self._saturate_scalar_to_dtype(
+            self.mask_transition_width,
+            boundary_margins,
+            strictly_positive=True,
+        )
+        scaled_boundary_margins = boundary_margins / saturated_transition_width
+        centered_transition_scores = scaled_boundary_margins + 0.5
+        bounded_transition_scores = centered_transition_scores.clamp(0.0, 1.0)
+        return bounded_transition_scores

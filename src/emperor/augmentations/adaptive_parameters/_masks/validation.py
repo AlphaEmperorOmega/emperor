@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
@@ -30,6 +31,12 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
         cls._validate_mask_floor(model.cfg.mask_floor)
         mask_transition_width = getattr(model.cfg, "mask_transition_width", None)
         if mask_transition_width is not None:
+            if not isinstance(mask_transition_width, float):
+                raise TypeError(
+                    "mask_transition_width must be float for "
+                    f"{type(model.cfg).__name__}, got "
+                    f"{type(mask_transition_width).__name__}"
+                )
             cls._validate_mask_transition_width(mask_transition_width)
 
     @staticmethod
@@ -42,6 +49,11 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @staticmethod
     def _validate_mask_surrogate_scale(mask_surrogate_scale: float) -> None:
+        if not math.isfinite(mask_surrogate_scale):
+            raise ValueError(
+                "mask_surrogate_scale must be finite, "
+                f"received {mask_surrogate_scale!r}."
+            )
         if mask_surrogate_scale < 0.0:
             raise ValueError(
                 "mask_surrogate_scale must be greater than or equal to 0.0, "
@@ -58,6 +70,11 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @staticmethod
     def _validate_mask_transition_width(mask_transition_width: float) -> None:
+        if not math.isfinite(mask_transition_width):
+            raise ValueError(
+                "mask_transition_width must be finite, "
+                f"received {mask_transition_width!r}."
+            )
         if mask_transition_width <= 0.0:
             raise ValueError(
                 "mask_transition_width must be greater than 0.0, "

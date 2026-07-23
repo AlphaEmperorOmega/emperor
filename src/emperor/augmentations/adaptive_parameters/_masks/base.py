@@ -85,7 +85,28 @@ class AxisMaskAbstract(Module):
     def _compute_soft_mask(self, scores: Tensor) -> Tensor:
         if self.mask_surrogate_scale == 0.0:
             return scores.clamp(0.0, 1.0)
-        return torch.sigmoid(self.mask_surrogate_scale * (scores - self.mask_threshold))
+        surrogate_scale = self._saturate_scalar_to_dtype(
+            self.mask_surrogate_scale, scores, strictly_positive=False
+        )
+        return torch.sigmoid(surrogate_scale * (scores - self.mask_threshold))
+
+    @staticmethod
+    def _saturate_scalar_to_dtype(
+        value: float,
+        reference: Tensor,
+        *,
+        strictly_positive: bool,
+    ) -> Tensor:
+        reference_dtype_limits = torch.finfo(reference.dtype)
+        upper_saturation_bound = reference_dtype_limits.max
+        lower_saturation_bound = (
+            1.0 / upper_saturation_bound if strictly_positive else 0.0
+        )
+        dtype_aligned_scalar = reference.new_tensor(value)
+        saturated_scalar = dtype_aligned_scalar.clamp(
+            min=lower_saturation_bound, max=upper_saturation_bound
+        )
+        return saturated_scalar
 
     def _apply_hybrid_mask(
         self,

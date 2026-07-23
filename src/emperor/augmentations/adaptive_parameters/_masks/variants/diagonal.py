@@ -84,9 +84,10 @@ class DiagonalAxisMask(AxisMaskAbstract):
 
     def __convert_margins_to_transition_scores(self, margins: Tensor) -> Tensor:
         transition_width = self.__get_effective_transition_width()
-        half_transition_width = transition_width / 2.0
-        shifted_margins = margins + half_transition_width
-        transition_scores = shifted_margins / transition_width
+        saturated_transition_width = self._saturate_scalar_to_dtype(
+            transition_width, margins, strictly_positive=True
+        )
+        transition_scores = margins / saturated_transition_width + 0.5
         return transition_scores.clamp(0.0, 1.0)
 
     def __get_effective_transition_width(self) -> float:

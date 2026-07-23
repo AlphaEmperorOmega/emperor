@@ -668,6 +668,57 @@ class TestAxisMaskHandlers(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
+    def test_huge_surrogate_scale_saturates_to_active_dtype(self):
+        cases = (
+            (torch.float32, 0.5, 0.5, 0.0),
+            (torch.float64, 0.0, 1.0e-100, 1.0),
+        )
+
+        for dtype, threshold, score, expected_logit in cases:
+            with self.subTest(dtype=dtype):
+                cfg = self.preset(
+                    input_dim=2,
+                    output_dim=3,
+                    model_type=PerAxisScoreMaskConfig,
+                    mask_threshold=threshold,
+                    mask_surrogate_scale=1.0e100,
+                )
+                model = cfg.build().to(dtype=dtype)
+                scores = torch.tensor([score], dtype=dtype, requires_grad=True)
+
+                actual = model._compute_soft_mask(scores)
+                expected = torch.sigmoid(torch.tensor([expected_logit], dtype=dtype))
+
+                torch.testing.assert_close(actual, expected)
+                self.assertEqual(actual.dtype, dtype)
+                self.assertTrue(torch.isfinite(actual).all())
+                actual.sum().backward()
+                self.assertIsNotNone(scores.grad)
+                self.assertTrue(torch.isfinite(scores.grad).all())
+                self.assertGreater(torch.count_nonzero(scores.grad).item(), 0)
+
+    def test_representable_subnormal_transition_width_is_preserved(self):
+        model = self.preset(
+            input_dim=2,
+            output_dim=3,
+            model_type=DiagonalAxisMaskConfig,
+        ).build()
+        reference = torch.zeros((), dtype=torch.float32)
+        subnormal_width = torch.finfo(torch.float32).tiny / 2.0
+
+        actual = model._saturate_scalar_to_dtype(
+            subnormal_width,
+            reference,
+            strictly_positive=True,
+        )
+
+        torch.testing.assert_close(
+            actual,
+            reference.new_tensor(subnormal_width),
+            rtol=0.0,
+            atol=0.0,
+        )
+
     def test_per_axis_score_end_to_end_with_internal_generator(self):
         batch_size = 2
         dimension_cases = [(3, 2), (4, 5), (1, 3)]
@@ -1441,6 +1492,34 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertGreater(row_norms[2].item(), row_norms[3].item())
         self.assertGreater(row_norms[3].item(), row_norms[4].item())
 
+    def test_huge_transition_widths_have_finite_half_mask_limit(self):
+        cases = (
+            (TopSliceAxisMaskConfig, torch.zeros(1, 2)),
+            (DiagonalAxisMaskConfig, torch.zeros(1, 1)),
+        )
+        logits = torch.zeros(1, 2)
+        weight_params = torch.ones(1, 2, 3)
+
+        for config_cls, generator_output in cases:
+            with self.subTest(config_cls=config_cls.__name__):
+                cfg = self.preset(
+                    input_dim=2,
+                    output_dim=3,
+                    model_type=config_cls,
+                    mask_surrogate_scale=0.0,
+                    mask_transition_width=1.0e100,
+                )
+                model = cfg.build()
+                model.model = ConstantGenerator(generator_output)
+
+                actual = model(weight_params, logits)
+
+                torch.testing.assert_close(
+                    actual,
+                    torch.full_like(weight_params, 0.5),
+                )
+                self.assertTrue(torch.isfinite(actual).all())
+
     def test_top_slice_transition_width_one_uses_cumprod(self):
         cfg = self.preset(
             input_dim=4,
@@ -1522,6 +1601,30 @@ class TestAxisMaskHandlers(unittest.TestCase):
                     transition_width=width,
                 )
                 self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+
+    def test_tiny_diagonal_transition_width_has_finite_hard_transition_limit(self):
+        cfg = self.preset(
+            input_dim=2,
+            output_dim=3,
+            model_type=DiagonalAxisMaskConfig,
+            mask_surrogate_scale=0.0,
+            mask_transition_width=1.0e-100,
+        )
+        model = cfg.build()
+        keep_fraction = torch.tensor(0.4)
+        generator_output = torch.logit(keep_fraction).reshape(1, 1)
+        model.model = ConstantGenerator(generator_output)
+        logits = torch.zeros(1, 2)
+        weight_params = torch.ones(1, 2, 3, requires_grad=True)
+
+        actual = model(weight_params, logits)
+        expected = torch.tensor([[[1.0, 0.5, 0.0], [0.5, 0.0, 0.0]]])
+
+        torch.testing.assert_close(actual, expected)
+        self.assertTrue(torch.isfinite(actual).all())
+        actual.sum().backward()
+        self.assertIsNotNone(weight_params.grad)
+        self.assertTrue(torch.isfinite(weight_params.grad).all())
 
     def test_diagonal_mask_default_transition_width_matches_explicit_two(self):
         default_cfg = self.preset(

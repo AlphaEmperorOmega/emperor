@@ -768,6 +768,18 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 "received -0.1.",
             ),
             (
+                {"mask_surrogate_scale": float("nan")},
+                "mask_surrogate_scale must be finite, received nan.",
+            ),
+            (
+                {"mask_surrogate_scale": float("inf")},
+                "mask_surrogate_scale must be finite, received inf.",
+            ),
+            (
+                {"mask_surrogate_scale": float("-inf")},
+                "mask_surrogate_scale must be finite, received -inf.",
+            ),
+            (
                 {"mask_floor": -0.1},
                 "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
                 "received -0.1.",
@@ -800,6 +812,28 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                     f"received {width!r}.",
                     config.build,
                 )
+
+        for width in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(mask_transition_width=width):
+                config = TopSliceAxisMaskConfig(
+                    **base,
+                    mask_transition_width=width,
+                )
+                self.assert_exact_error(
+                    ValueError,
+                    f"mask_transition_width must be finite, received {width!r}.",
+                    config.build,
+                )
+
+        invalid_width_type = TopSliceAxisMaskConfig(
+            **base,
+            mask_transition_width="wide",
+        )
+        self.assert_exact_error(
+            TypeError,
+            "mask_transition_width must be float for TopSliceAxisMaskConfig, got str",
+            invalid_width_type.build,
+        )
 
     def test_dimension_validator_adapters_receive_both_dimensions(self) -> None:
         models = (
