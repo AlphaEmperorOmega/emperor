@@ -344,7 +344,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         dead_fraction = logged[f"{self.BANK_MODULE_PATH}/bank/dead_slot_fraction"]
         max_utilization = logged[f"{self.BANK_MODULE_PATH}/bank/max_utilization"]
         self.assertTrue(torch.isfinite(torch.as_tensor(max_utilization)))
-        self.assertLessEqual(float(active_slots), 3.0)
+        self.assertLessEqual(float(active_slots), bank.expanded_bank_row_count)
         self.assertGreaterEqual(float(dead_fraction), 0.0)
         self.assertLessEqual(float(dead_fraction), 1.0)
 
@@ -370,24 +370,37 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
             output_dim=3,
             bank_expansion_factor=bank_factor,
         )
-        weight_logits = torch.tensor(
+        layered_weight_logits = torch.tensor(
             [[[2.0, -1.0, -0.5, 1.5]], [[-2.0, 1.0, 0.25, -0.75]]]
         )
+        soft_weight_logits = torch.tensor(
+            [
+                [[2.0, -1.0, -0.5, 1.5, -2.0, 1.0, 0.25, -0.75]],
+                [[0.75, -0.25, 2.5, -1.5, -0.5, 1.25, -2.0, 2.0]],
+            ]
+        )
+        expanded_bank_rows = input_dim * bank_factor.value
         bias_logits = torch.tensor([[3.0, -1.0], [-2.0, 2.0]])
 
         cases = [
             (
                 soft_bank,
-                weight_logits,
+                soft_weight_logits,
                 torch.softmax(
-                    weight_logits.view(
-                        batch_size, depth.value, input_dim, bank_factor.value
+                    soft_weight_logits.view(
+                        batch_size,
+                        depth.value,
+                        input_dim,
+                        expanded_bank_rows,
                     ),
                     dim=-1,
                 ),
                 torch.softmax(
-                    weight_logits.view(
-                        batch_size, depth.value, input_dim, bank_factor.value
+                    soft_weight_logits.view(
+                        batch_size,
+                        depth.value,
+                        input_dim,
+                        expanded_bank_rows,
                     ),
                     dim=-1,
                 ),
@@ -395,11 +408,11 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
             ),
             (
                 layered_bank,
-                weight_logits,
-                torch.softmax(weight_logits, dim=-1).view(
+                layered_weight_logits,
+                torch.softmax(layered_weight_logits, dim=-1).view(
                     batch_size, depth.value, input_dim, bank_factor.value
                 ),
-                torch.softmax(weight_logits, dim=-1),
+                torch.softmax(layered_weight_logits, dim=-1),
                 lambda distribution: distribution.sum(dim=2).mean(dim=(0, 1)),
             ),
             (
@@ -481,7 +494,7 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         )
 
         names = self.scalar_names(module)
-        for slot_index in range(3):
+        for slot_index in range(bank.expanded_bank_row_count):
             self.assertIn(
                 f"{self.BANK_MODULE_PATH}/bank/slot_{slot_index}/utilization", names
             )

@@ -87,7 +87,7 @@ class _WeightBankDiagnostics:
             -1,
             bank_module.depth_value,
             bank_module.input_dim,
-            bank_module.bank_expansion_factor,
+            bank_module.expanded_bank_row_count,
         )
         bank_distribution = torch.softmax(reshaped_logits, dim=-1)
         return _BankDistributionSummary(

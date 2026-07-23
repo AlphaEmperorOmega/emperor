@@ -584,12 +584,13 @@ class TestWeightHandlerForward(unittest.TestCase):
                         normalization_position_option=WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
                     )
 
-    def test_soft_weighted_bank_forward_applies_compressed_update(self):
+    def test_soft_weighted_bank_squashes_all_expanded_rows_per_output_row(self):
         input_dim = 2
         output_dim = 3
         batch_size = 2
         depth = DynamicDepthOptions.DEPTH_OF_ONE
         bank_factor = BankExpansionFactorOptions.FACTOR_OF_TWO
+        expanded_bank_rows = input_dim * bank_factor.value
         cfg = self.preset(
             config_cls=SoftWeightedBankDynamicWeightConfig,
             input_dim=input_dim,
@@ -601,8 +602,21 @@ class TestWeightHandlerForward(unittest.TestCase):
         model = SoftWeightedBankDynamicWeight(cfg)
         weight_params = torch.zeros(input_dim, output_dim)
         input_tensor = torch.randn(batch_size, input_dim)
+        generated_logits = model.model(input_tensor)
+        self.assertEqual(
+            generated_logits.shape,
+            (
+                batch_size,
+                depth.value,
+                input_dim * expanded_bank_rows,
+            ),
+        )
+        self.assertEqual(
+            model.weight_bank.shape,
+            (depth.value, expanded_bank_rows, output_dim),
+        )
         raw_logits = torch.tensor(
-            [[[2.0, -1.0, -0.5, 1.5]]],
+            [[[-8.0, -8.0, -8.0, 8.0, 8.0, -8.0, -8.0, -8.0]]],
             dtype=weight_params.dtype,
         )
 
@@ -615,26 +629,37 @@ class TestWeightHandlerForward(unittest.TestCase):
                 return self.logits.expand(X.size(0), -1, -1)
 
         model.model = StaticDepthMapper(raw_logits)
-        model.weight_bank.data = torch.tensor(
-            [
-                [
-                    [[1.0, 2.0, 3.0], [10.0, 20.0, 30.0]],
-                    [[4.0, 5.0, 6.0], [40.0, 50.0, 60.0]],
-                ]
-            ],
-            dtype=weight_params.dtype,
-        )
+        with torch.no_grad():
+            model.weight_bank.copy_(
+                torch.tensor(
+                    [
+                        [
+                            [1.0, 2.0, 3.0],
+                            [10.0, 20.0, 30.0],
+                            [4.0, 5.0, 6.0],
+                            [40.0, 50.0, 60.0],
+                        ]
+                    ],
+                    dtype=weight_params.dtype,
+                )
+            )
 
         output = model(weight_params, input_tensor)
         bank_logits = model.model(input_tensor).view(
-            batch_size, depth.value, input_dim, bank_factor.value
+            batch_size,
+            depth.value,
+            input_dim,
+            expanded_bank_rows,
         )
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         expected_update = torch.einsum(
-            "bdik,diko->bdio", bank_distribution, model.weight_bank
+            "bdim,dmo->bdio", bank_distribution, model.weight_bank
         ).sum(dim=1)
-        self.assertTrue(torch.allclose(output, expected_update, atol=1e-6))
-        self.assertFalse(torch.allclose(output, weight_params.expand_as(output)))
+        torch.testing.assert_close(output, expected_update)
+        torch.testing.assert_close(
+            bank_distribution.sum(dim=-1),
+            torch.ones(batch_size, depth.value, input_dim),
+        )
 
     def test_layered_weighted_bank_forward_applies_depth_and_factor_reduction(self):
         input_dim = 2

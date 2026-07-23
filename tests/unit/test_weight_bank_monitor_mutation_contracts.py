@@ -180,14 +180,9 @@ class WeightBankMonitorMutationContractTests(unittest.TestCase):
         self,
     ) -> None:
         soft_bank = soft_weight_bank(input_dim=3)
-        soft_logits = torch.tensor(
-            [
-                [[2.0, -1.0, 0.5, 1.5, -0.25, 0.75]],
-                [[-2.0, 1.0, 0.25, -0.75, 2.5, -1.5]],
-            ]
-        )
+        soft_logits = torch.arange(36, dtype=torch.float32).view(2, 1, 18) / 10
         soft_distribution = torch.softmax(
-            soft_logits.view(2, 1, 3, 2),
+            soft_logits.view(2, 1, 3, soft_bank.expanded_bank_row_count),
             dim=-1,
         )
         soft_summary = _WeightBankDiagnostics.summarize(

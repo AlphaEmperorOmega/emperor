@@ -22,23 +22,23 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         super().__init__(cfg, overrides)
         self.depth_value = self.generator_depth.value
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
+        self.expanded_bank_row_count = self.input_dim * self.bank_expansion_factor
         weight_bank_shape = self.__get_weight_bank_shape()
         self.weight_bank = self._init_parameter_bank(weight_bank_shape)
 
         self.model = self._init_model()
 
-    def __get_weight_bank_shape(self) -> tuple[int, int, int, int]:
+    def __get_weight_bank_shape(self) -> tuple[int, int, int]:
         return (
             self.depth_value,
-            self.input_dim,
-            self.bank_expansion_factor,
+            self.expanded_bank_row_count,
             self.output_dim,
         )
 
     def _init_model(self) -> DepthMappingLayerStack:
         overrides = DepthMappingHandlerConfig(
             input_dim=self.input_dim,
-            output_dim=self.input_dim * self.bank_expansion_factor,
+            output_dim=self.input_dim * self.expanded_bank_row_count,
         )
         return super()._init_model(overrides)
 
@@ -49,12 +49,15 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
     ) -> Tensor:
         bank_logits = self.model(X)
         bank_logits = bank_logits.view(
-            -1, self.depth_value, self.input_dim, self.bank_expansion_factor
+            -1,
+            self.depth_value,
+            self.input_dim,
+            self.expanded_bank_row_count,
         )
 
         bank_distribution = torch.softmax(bank_logits, dim=-1)
         compressed_params = torch.einsum(
-            "bdik,diko->bdio", bank_distribution, self.weight_bank
+            "bdim,dmo->bdio", bank_distribution, self.weight_bank
         )
 
         decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
