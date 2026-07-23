@@ -14,6 +14,10 @@ if TYPE_CHECKING:
 class DynamicDiagonalValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     @classmethod
     def validate(cls, model: "DynamicDiagonalAbstract") -> None:
+        cls.validate_initialization_fields(model)
+
+    @classmethod
+    def validate_initialization_fields(cls, model: "DynamicDiagonalAbstract") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(

@@ -15,7 +15,6 @@ class WeightedBankDynamicBias(DynamicBiasAbstract):
         overrides: WeightedBankDynamicBiasConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.VALIDATOR.validate_bank_expansion_factor(self)
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         weight_bank_shape = self.__get_weight_bank_shape()
         self.weight_bank = self._init_parameter_bank(weight_bank_shape)

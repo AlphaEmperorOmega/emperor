@@ -23,6 +23,11 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @classmethod
     def validate(cls, model: "DynamicWeightAbstract") -> None:
+        cls.validate_initialization_fields(model)
+        cls.validate_variant_config(model)
+
+    @classmethod
+    def validate_initialization_fields(cls, model: "DynamicWeightAbstract") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(
@@ -30,6 +35,29 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             output_dim=model.cfg.output_dim,
         )
         cls.validate_decay_parameters(model.cfg)
+
+    @classmethod
+    def validate_variant_config(cls, model: "DynamicWeightAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters._weights.variants.layered_weighted_bank import (
+            LayeredWeightedBankDynamicWeight,
+        )
+        from emperor.augmentations.adaptive_parameters._weights.variants.single_model import (
+            SingleModelDynamicWeight,
+        )
+        from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (
+            SoftWeightedBankDynamicWeight,
+        )
+
+        if isinstance(model, SingleModelDynamicWeight):
+            cls.validate_square_dimensions(model)
+        if isinstance(
+            model,
+            (
+                LayeredWeightedBankDynamicWeight,
+                SoftWeightedBankDynamicWeight,
+            ),
+        ):
+            cls.validate_bank_expansion_factor(model)
 
     @staticmethod
     def validate_bank_expansion_factor(model: "DynamicWeightAbstract") -> None:
@@ -53,10 +81,11 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @staticmethod
     def validate_square_dimensions(model: "DynamicWeightAbstract") -> None:
-        if model.input_dim != model.output_dim:
+        if model.cfg.input_dim != model.cfg.output_dim:
             raise ValueError(
                 f"{type(model).__name__} requires input_dim == output_dim, "
-                f"received input_dim={model.input_dim}, output_dim={model.output_dim}."
+                f"received input_dim={model.cfg.input_dim}, "
+                f"output_dim={model.cfg.output_dim}."
             )
 
 

@@ -21,7 +21,6 @@ class SingleModelDynamicWeight(DynamicWeightAbstract):
         super().__init__(cfg, overrides)
         self.normalization_option = self.cfg.normalization_option
         self.normalization_position_option = self.cfg.normalization_position_option
-        self.VALIDATOR.validate_square_dimensions(self)
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:

@@ -18,6 +18,11 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
 
     @classmethod
     def validate(cls, model: "DynamicBiasAbstract") -> None:
+        cls.validate_initialization_fields(model)
+        cls.validate_variant_config(model)
+
+    @classmethod
+    def validate_initialization_fields(cls, model: "DynamicBiasAbstract") -> None:
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_dimensions(
@@ -25,6 +30,15 @@ class DynamicBiasValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             output_dim=model.cfg.output_dim,
         )
         cls.validate_decay_parameters(model.cfg)
+
+    @classmethod
+    def validate_variant_config(cls, model: "DynamicBiasAbstract") -> None:
+        from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
+            WeightedBankDynamicBias,
+        )
+
+        if isinstance(model, WeightedBankDynamicBias):
+            cls.validate_bank_expansion_factor(model)
 
     @staticmethod
     def validate_bank_expansion_factor(model: "DynamicBiasAbstract") -> None:

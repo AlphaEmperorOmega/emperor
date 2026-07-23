@@ -20,7 +20,6 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         overrides: SoftWeightedBankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.VALIDATOR.validate_bank_expansion_factor(self)
         self.depth_value = self.generator_depth.value
         self.bank_expansion_factor = self.cfg.bank_expansion_factor.value
         weight_bank_shape = self.__get_weight_bank_shape()
