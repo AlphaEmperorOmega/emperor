@@ -601,6 +601,11 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                 else:
                     model = cfg.build()
                     output = model(bias_params, logits)
+                    self.assertEqual(
+                        tuple(model.weight_bank.shape),
+                        (factor.value, output_dim),
+                    )
+                    self.assertEqual(model.bank_expansion_factor, factor.value)
                     self.assertEqual(output.shape, (batch_size, output_dim))
 
     def test_gradients_flow(self):

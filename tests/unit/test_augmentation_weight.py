@@ -1341,15 +1341,48 @@ class TestWeightHandlerForward(unittest.TestCase):
         self.assertEqual(generator.output_dim, output_dim)
 
     def test_weighted_bank_requires_bank_expansion_factor_enum(self):
-        invalid_factors = [None, 0, -1]
-        for factor in invalid_factors:
-            with self.subTest(bank_expansion_factor=factor):
-                cfg = self.preset(
-                    config_cls=LayeredWeightedBankDynamicWeightConfig,
-                    bank_expansion_factor=factor,
+        bank_cases = (
+            (
+                LayeredWeightedBankDynamicWeightConfig,
+                "LayeredWeightedBankDynamicWeight",
+            ),
+            (
+                SoftWeightedBankDynamicWeightConfig,
+                "SoftWeightedBankDynamicWeight",
+            ),
+        )
+        for config_type, model_name in bank_cases:
+            for factor in (None, 0, -1):
+                with self.subTest(config_type=config_type.__name__, factor=factor):
+                    config = self.preset(
+                        config_cls=config_type,
+                        bank_expansion_factor=factor,
+                    )
+                    with self.assertRaises(ValueError) as error:
+                        config.build()
+                    self.assertEqual(
+                        str(error.exception),
+                        f"{model_name} requires bank_expansion_factor to be a "
+                        "BankExpansionFactorOptions value, "
+                        f"received {factor!r}.",
+                    )
+
+            with self.subTest(
+                config_type=config_type.__name__,
+                factor=BankExpansionFactorOptions.DISABLED,
+            ):
+                config = self.preset(
+                    config_cls=config_type,
+                    bank_expansion_factor=BankExpansionFactorOptions.DISABLED,
                 )
-                with self.assertRaises(ValueError):
-                    cfg.build()
+                with self.assertRaises(ValueError) as error:
+                    config.build()
+                self.assertEqual(
+                    str(error.exception),
+                    f"{model_name} requires bank_expansion_factor > 0, received "
+                    "BankExpansionFactorOptions.DISABLED. Use FACTOR_OF_ONE, "
+                    "FACTOR_OF_TWO, FACTOR_OF_THREE, or FACTOR_OF_FOUR.",
+                )
 
     def test_single_model_raises_when_dims_not_square(self):
         cfg = self.preset(input_dim=12, output_dim=24)
