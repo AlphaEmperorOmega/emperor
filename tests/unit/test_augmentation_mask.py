@@ -1775,6 +1775,40 @@ class TestAxisMaskHandlers(unittest.TestCase):
         self.assertEqual(source.mask_threshold, 0.25)
         self.assertEqual(source.mask_floor, 0.0)
 
+    def test_missing_leaf_fields_report_the_exact_config_owner(self):
+        dimensioned_configs = (
+            WeightInformedScoreAxisMaskConfig,
+            PerAxisScoreMaskConfig,
+            TopSliceAxisMaskConfig,
+        )
+        for config_cls in dimensioned_configs:
+            with self.subTest(config_cls=config_cls.__name__, field="dimension"):
+                cfg = self.preset(config_cls=config_cls)
+                cfg.mask_dimension_option = None
+
+                with self.assertRaises(ValueError) as raised:
+                    cfg.build()
+
+                self.assertEqual(
+                    str(raised.exception),
+                    "mask_dimension_option is required for "
+                    f"{config_cls.__name__}, received None",
+                )
+
+        for config_cls, _ in self.mask_cases():
+            with self.subTest(config_cls=config_cls.__name__, field="model_config"):
+                cfg = self.preset(config_cls=config_cls)
+                cfg.model_config = None
+
+                with self.assertRaises(ValueError) as raised:
+                    cfg.build()
+
+                self.assertEqual(
+                    str(raised.exception),
+                    f"model_config is required for {config_cls.__name__}, "
+                    "received None",
+                )
+
     def test_mask_dimension_field_absent_on_outer_product_and_diagonal(self):
         for config_cls in (OuterProductMaskConfig, DiagonalAxisMaskConfig):
             with self.subTest(config_cls=config_cls.__name__):
