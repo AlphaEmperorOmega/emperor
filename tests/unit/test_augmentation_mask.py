@@ -719,6 +719,25 @@ class TestAxisMaskHandlers(unittest.TestCase):
             atol=0.0,
         )
 
+    def test_per_axis_threshold_is_inclusive(self):
+        cfg = self.preset(
+            input_dim=2,
+            output_dim=3,
+            model_type=PerAxisScoreMaskConfig,
+            mask_dimension_option=MaskDimensionOptions.ROW,
+            mask_threshold=0.5,
+            mask_surrogate_scale=0.0,
+            mask_floor=0.0,
+        )
+        model = PerAxisScoreMask(cfg)
+        model.eval()
+        model.model = ConstantGenerator(torch.zeros(1, 2))
+        weights = torch.ones(1, 2, 3)
+
+        output = model(weights, torch.zeros(1, 2))
+
+        torch.testing.assert_close(output, torch.full_like(weights, 0.5))
+
     def test_per_axis_score_end_to_end_with_internal_generator(self):
         batch_size = 2
         dimension_cases = [(3, 2), (4, 5), (1, 3)]
