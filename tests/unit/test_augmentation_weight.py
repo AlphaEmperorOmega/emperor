@@ -957,6 +957,51 @@ class TestWeightHandlerForward(unittest.TestCase):
                     torch.testing.assert_close(result, expected)
                     self.assertTrue(torch.isfinite(vector_gradient).all().item())
 
+    def test_soft_clamp_remains_finite_at_degenerate_limits(self):
+        for dtype in (
+            torch.float16,
+            torch.bfloat16,
+            torch.float32,
+            torch.float64,
+        ):
+            for clamp_limit in (0.0, torch.finfo(dtype).tiny / 2):
+                message = f"dtype={dtype}, clamp_limit={clamp_limit}"
+                with self.subTest(msg=message):
+                    cfg = self.preset(
+                        normalization_option=WeightNormalizationOptions.SOFT_CLAMP,
+                    )
+                    model = DualModelDynamicWeight(cfg).to(dtype=dtype)
+                    model.clamp_limit.data.fill_(clamp_limit)
+                    vectors = torch.tensor(
+                        [[[0.0, 1.0, -1.0]]],
+                        dtype=dtype,
+                        requires_grad=True,
+                    )
+
+                    result = model._apply_normalization_transform(vectors)
+                    vector_gradient, limit_gradient = torch.autograd.grad(
+                        result.sum(),
+                        (vectors, model.clamp_limit),
+                    )
+
+                    self.assertTrue(torch.isfinite(result).all().item())
+                    self.assertTrue(torch.isfinite(vector_gradient).all().item())
+                    self.assertTrue(torch.isfinite(limit_gradient).all().item())
+                    self.assertEqual(result[..., 0].item(), 0.0)
+
+    def test_clamp_uses_the_learned_limit_as_a_magnitude(self):
+        cfg = self.preset(
+            normalization_option=WeightNormalizationOptions.CLAMP,
+        )
+        model = DualModelDynamicWeight(cfg)
+        model.clamp_limit.data.fill_(-1.0)
+        vectors = torch.tensor([[[-3.0, 0.0, 3.0]]])
+
+        result = model._apply_normalization_transform(vectors)
+
+        expected = torch.tensor([[[-1.0, 0.0, 1.0]]])
+        torch.testing.assert_close(result, expected)
+
     def test_apply_normalization_transform_exact_math(self):
         cfg = self.preset(
             normalization_option=WeightNormalizationOptions.DISABLED,

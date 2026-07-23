@@ -109,11 +109,11 @@ class DynamicWeightAbstract(Module):
     ) -> Tensor:
         match self.normalization_option:
             case WeightNormalizationOptions.CLAMP:
-                return torch.clamp(vectors, -self.clamp_limit, self.clamp_limit)
+                return self.__apply_symmetric_clamp(vectors)
             case WeightNormalizationOptions.L2_SCALE:
                 return self.__apply_stable_l2_normalization(vectors) * self.scale
             case WeightNormalizationOptions.SOFT_CLAMP:
-                return self.clamp_limit * torch.tanh(vectors / self.clamp_limit)
+                return self.__apply_stable_soft_clamp(vectors)
             case WeightNormalizationOptions.RMS:
                 return self.__apply_stable_rms_normalization(vectors) * self.scale
             case WeightNormalizationOptions.SIGMOID_SCALE:
@@ -125,6 +125,14 @@ class DynamicWeightAbstract(Module):
                     "Unsupported normalization_option value: "
                     f"{self.normalization_option!r}."
                 )
+
+    def __apply_symmetric_clamp(self, vectors: Tensor) -> Tensor:
+        clamp_limit_magnitude = self.clamp_limit.abs()
+        return torch.clamp(
+            vectors,
+            -clamp_limit_magnitude,
+            clamp_limit_magnitude,
+        )
 
     def __apply_stable_l2_normalization(self, vectors: Tensor) -> Tensor:
         (
@@ -161,6 +169,15 @@ class DynamicWeightAbstract(Module):
             finite_l2_norm, normalized_by_l2_norm, normalized_by_scaled_l2_norm
         )
         return normalized_vectors.to(dtype=vectors.dtype)
+
+    def __apply_stable_soft_clamp(self, vectors: Tensor) -> Tensor:
+        clamp_limit_magnitude = self.clamp_limit.abs()
+        minimum_safe_denominator = torch.finfo(vectors.dtype).eps
+        safe_clamp_denominator = clamp_limit_magnitude.clamp_min(
+            minimum_safe_denominator
+        )
+        scaled_vectors = vectors / safe_clamp_denominator
+        return clamp_limit_magnitude * torch.tanh(scaled_vectors)
 
     def __apply_stable_rms_normalization(self, vectors: Tensor) -> Tensor:
         (
