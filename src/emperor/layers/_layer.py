@@ -18,6 +18,7 @@ from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
+    from emperor.layers._composition.attention_residual import AttentionResidualState
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
 
@@ -134,7 +135,11 @@ class Layer(LayerModuleBase):
         X = self.__maybe_apply_activation(X)
         X = self.__maybe_apply_gates(X)
         X = self.__maybe_apply_dropout(X)
-        X = self.__maybe_apply_residual_connection(X, residual)
+        X = self.__maybe_apply_residual_connection(
+            X,
+            residual,
+            residual_state=state.residual_state,
+        )
         X = self.__maybe_apply_layer_norm_after(X)
         state = self.__maybe_apply_halting(state, X)
         return self._handle_model_output(state)
@@ -206,10 +211,20 @@ class Layer(LayerModuleBase):
             return self.dropout_module(input)
         return input
 
-    def __maybe_apply_residual_connection(self, input: Tensor, prev_input: Tensor):
+    def __maybe_apply_residual_connection(
+        self,
+        input: Tensor,
+        prev_input: Tensor,
+        *,
+        residual_state: "AttentionResidualState | None" = None,
+    ):
         if self.residual_connection is None:
             return input
-        return self.residual_connection(input, prev_input)
+        return self.residual_connection(
+            input,
+            prev_input,
+            residual_state=residual_state,
+        )
 
     def __maybe_apply_layer_norm_after(self, input: Tensor):
         if self.layer_norm_position == LayerNormPositionOptions.AFTER:

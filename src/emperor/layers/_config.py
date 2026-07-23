@@ -41,10 +41,33 @@ class GateConfig(ConfigBase):
 
 
 @dataclass
+class AttentionResidualConfig(ConfigBase):
+    residual_dim: int | None = optional_field(
+        "Residual feature dimension. ResidualConnection owners override this value "
+        "from ResidualConfig.residual_dim."
+    )
+    block_size: int | None = optional_field(
+        "Number of consecutive raw transformation outputs combined into one depth "
+        "source. Use 1 for Full Attention Residuals and values greater than 1 for "
+        "Block Attention Residuals. Defaults to 1."
+    )
+    rms_norm_epsilon: float | None = optional_field(
+        "Numerical stability epsilon used to RMS-normalize routing keys. Defaults "
+        "to 1e-6."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.layers._composition.attention_residual import AttentionResidual
+
+        return AttentionResidual
+
+
+@dataclass
 class ResidualConfig(ConfigBase):
     residual_dim: int | None = optional_field(
         "Residual feature dimension. Layer owners override this value from their "
-        "output dimension. Required when model_config is provided."
+        "output dimension. Required for direct construction when model_config is "
+        "provided or option is ATTENTION_RESIDUAL."
     )
     option: ResidualConnectionOptions | None = optional_field(
         "Residual composition mode. Providing ResidualConfig enables the residual "
@@ -55,7 +78,13 @@ class ResidualConfig(ConfigBase):
         "When provided, the model receives the concatenated current and previous "
         "values and produces one raw mixing coefficient per feature. When omitted, "
         "weighted modes use a learned scalar nn.Parameter. RESIDUAL performs direct "
-        "addition and does not accept a coefficient model."
+        "addition and ATTENTION_RESIDUAL performs depth mixing; neither accepts a "
+        "coefficient model."
+    )
+    attention_config: "AttentionResidualConfig | None" = optional_field(
+        "Optional depth-mixing config for ATTENTION_RESIDUAL. When omitted, Full "
+        "Attention Residuals use block_size=1 and rms_norm_epsilon=1e-6. Other "
+        "residual modes do not accept this config."
     )
 
     def _registry_owner(self) -> type:

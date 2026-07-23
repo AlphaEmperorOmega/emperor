@@ -415,7 +415,12 @@ class LayerControllerMonitorCallback(Callback):
         pl_module: LightningModule,
     ) -> None:
         method_name = "_Layer__maybe_apply_residual_connection"
-        if getattr(layer, "residual_connection", None) is None:
+        residual_connection = getattr(layer, "residual_connection", None)
+        if residual_connection is None:
+            return
+        from emperor.layers._options import ResidualConnectionOptions
+
+        if residual_connection.option == ResidualConnectionOptions.ATTENTION_RESIDUAL:
             return
         original_residual = getattr(layer, method_name)
 

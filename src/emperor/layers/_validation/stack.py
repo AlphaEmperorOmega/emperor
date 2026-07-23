@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.layers._config import MirroredLayerStackConfig
+from emperor.layers._options import ResidualConnectionOptions
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
     _MEMORY_CONFIG_FIELDS,
@@ -42,6 +43,36 @@ class LayerStackValidator(ValidatorBase):
         cls._validate_gate_config(cfg)
         cls._validate_halting_config(cfg)
         cls._validate_memory_config(cfg)
+        cls._validate_attention_residual_config(cfg)
+
+    @staticmethod
+    def _validate_attention_residual_config(cfg: LayerStackConfig) -> None:
+        residual_config = cfg.layer_config.residual_config
+        if residual_config is None:
+            return
+        if residual_config.option != ResidualConnectionOptions.ATTENTION_RESIDUAL:
+            return
+        if cfg.input_dim != cfg.hidden_dim or cfg.hidden_dim != cfg.output_dim:
+            raise ValueError(
+                "input_dim, hidden_dim, and output_dim must all be equal when "
+                "ATTENTION_RESIDUAL is enabled, "
+                f"got input_dim={cfg.input_dim}, hidden_dim={cfg.hidden_dim}, "
+                f"output_dim={cfg.output_dim}."
+            )
+        if not cfg.apply_output_pipeline_flag:
+            raise ValueError(
+                "apply_output_pipeline_flag must be True when "
+                "ATTENTION_RESIDUAL is enabled so the final layer performs the "
+                "required final aggregation."
+            )
+        if (
+            cfg.shared_halting_config is not None
+            or cfg.layer_config.halting_config is not None
+        ):
+            raise ValueError(
+                "halting cannot be combined with ATTENTION_RESIDUAL until residual "
+                "history masking and finalization semantics are defined."
+            )
 
     @classmethod
     def _validate_gate_config(cls, cfg: LayerStackConfig) -> None:
