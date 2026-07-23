@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 import torch
@@ -18,22 +19,30 @@ class ExpertCapacityHandler:
         self.capacity_factor = self.cfg.capacity_factor
         self.num_experts = self.cfg.num_experts
         self.top_k = self.cfg.top_k
-        self.dropped_token_behavior = self.cfg.dropped_token_behavior
+        self.dropped_token_behavior = (
+            self.cfg.dropped_token_behavior or DroppedTokenOptions.ZEROS
+        )
         self.shuffle_indices: Tensor | None = None
 
     def maybe_apply_capacity_limit_token_indices(
         self,
         token_indices: Tensor,
         batch_size: int,
+        training: bool = True,
     ) -> tuple[Tensor, Tensor]:
         self.shuffle_indices = None
-        return self.__maybe_apply_capacity_limit(token_indices, batch_size)
+        return self.__maybe_apply_capacity_limit(
+            token_indices,
+            batch_size,
+            randomize=training,
+        )
 
     def __maybe_apply_capacity_limit(
         self,
         token_indices: Tensor,
         batch_size: int,
         shuffle_indices: Tensor | None = None,
+        randomize: bool = True,
     ) -> tuple[Tensor, Tensor]:
         no_dropped_indices = torch.tensor(
             [], dtype=token_indices.dtype, device=token_indices.device
@@ -41,11 +50,17 @@ class ExpertCapacityHandler:
         if self.__is_capacity_limiting_disabled():
             return token_indices, no_dropped_indices
         assigned_tokens_count = token_indices.size(0)
-        expert_capacity = self.__compute_expert_capacity(batch_size)
+        expert_capacity = self.__compute_expert_capacity(
+            batch_size,
+            assigned_tokens_count,
+        )
         if assigned_tokens_count <= expert_capacity:
             return token_indices, no_dropped_indices
         shuffled_indices = self.__resolve_shuffle_indices(
-            assigned_tokens_count, shuffle_indices, token_indices.device
+            assigned_tokens_count,
+            shuffle_indices,
+            token_indices.device,
+            randomize,
         )
         return self.__maybe_split_by_capacity(
             token_indices, expert_capacity, shuffled_indices
@@ -54,21 +69,33 @@ class ExpertCapacityHandler:
     def __is_capacity_limiting_disabled(self) -> bool:
         return self.capacity_factor == 0
 
-    def __compute_expert_capacity(self, batch_size: int) -> int:
-        average_tokens_per_expert = batch_size / self.num_experts
-        scaled_expert_capacity = average_tokens_per_expert * self.capacity_factor
-        integer_expert_capacity = int(scaled_expert_capacity)
-        expert_capacity_at_least_one = max(1, integer_expert_capacity)
-        return expert_capacity_at_least_one
+    def __compute_expert_capacity(
+        self,
+        batch_size: int,
+        assigned_tokens_count: int,
+    ) -> int:
+        total_assignments = batch_size * self.top_k
+        factor_that_retains_every_assignment = (
+            assigned_tokens_count * self.num_experts / max(1, total_assignments)
+        )
+        if self.capacity_factor >= factor_that_retains_every_assignment:
+            return assigned_tokens_count
+        average_assignments_per_expert = total_assignments / self.num_experts
+        scaled_expert_capacity = average_assignments_per_expert * self.capacity_factor
+        return max(1, math.ceil(scaled_expert_capacity))
 
     def __resolve_shuffle_indices(
         self,
         assigned_tokens_count: int,
         shuffle_indices: Tensor | None,
         device: torch.device,
+        randomize: bool,
     ) -> Tensor:
         if shuffle_indices is None:
-            shuffle_indices = torch.randperm(assigned_tokens_count, device=device)
+            if randomize:
+                shuffle_indices = torch.randperm(assigned_tokens_count, device=device)
+            else:
+                shuffle_indices = torch.arange(assigned_tokens_count, device=device)
             self.shuffle_indices = shuffle_indices
         return shuffle_indices
 

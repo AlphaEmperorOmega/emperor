@@ -29,6 +29,7 @@ class ExpertInputData:
     expert_routing_positions: Tensor | None
     dropped_routing_positions: Tensor | None
     probabilities: Tensor | None
+    dropped_probabilities: Tensor | None = None
 
 
 class MixtureOfExperts(Module):
@@ -39,6 +40,8 @@ class MixtureOfExperts(Module):
         cfg: "MixtureOfExpertsConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
+        self.VALIDATOR.validate_config_type(cfg)
+        self.VALIDATOR.validate_overrides_type(overrides)
         super().__init__()
         self.cfg: MixtureOfExpertsConfig = self._override_config(cfg, overrides)
         self.main_cfg: LayerStackConfig | RecurrentLayerConfig = (
@@ -214,6 +217,13 @@ class MixtureOfExperts(Module):
                     expert_routing_positions, probabilities, expert_index
                 )
             )
+            dropped_probabilities = (
+                self.expert_weighting_handler.maybe_get_expert_probabilities(
+                    dropped_routing_positions,
+                    probabilities,
+                    expert_index,
+                )
+            )
             expert_input = ExpertInputData(
                 expert_index=expert_index,
                 expert_samples=expert_samples,
@@ -221,6 +231,7 @@ class MixtureOfExperts(Module):
                 expert_routing_positions=expert_routing_positions,
                 dropped_routing_positions=dropped_routing_positions,
                 probabilities=expert_probabilities,
+                dropped_probabilities=dropped_probabilities,
             )
             expert_input_data.append(expert_input)
         return expert_input_data
@@ -239,7 +250,9 @@ class MixtureOfExperts(Module):
         routed_token_index_coordinates = samples_routed_to_expert.nonzero()
         token_indices_for_expert = routed_token_index_coordinates.flatten()
         return self.capacity_handler.maybe_apply_capacity_limit_token_indices(
-            token_indices_for_expert, batch_size
+            token_indices_for_expert,
+            batch_size,
+            training=self.training,
         )
 
     def __has_expert_choice_dimension(self, indices: Tensor) -> bool:
@@ -338,9 +351,15 @@ class MixtureOfExperts(Module):
     ) -> None:
         outputs_for_expert_routes = expert_output
         if self.__should_append_dropped_token_fallbacks(expert_data):
+            dropped_samples = (
+                self.expert_weighting_handler.maybe_apply_probabilities_before(
+                    expert_data.dropped_samples,
+                    expert_data.dropped_probabilities,
+                )
+            )
             expert_outputs_and_dropped_token_fallbacks = [
                 expert_output,
-                expert_data.dropped_samples,
+                dropped_samples,
             ]
             outputs_for_expert_routes = torch.cat(
                 expert_outputs_and_dropped_token_fallbacks,

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import torch
 from torch import Tensor
 
@@ -15,6 +17,8 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
         cfg: MixtureOfExpertsConfig,
         overrides: MixtureOfExpertsConfig | None = None,
     ):
+        self.VALIDATOR.validate_config_type(cfg)
+        self.VALIDATOR.validate_overrides_type(overrides)
         overrides = self.__update_overrides(overrides)
         super().__init__(cfg, overrides)
 
@@ -28,14 +32,13 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
                 routing_initialization_mode=RoutingInitializationMode.DISABLED,
             )
-        overrides.weighted_parameters_flag = True
-        overrides.compute_expert_mixture_flag = True
-        overrides.weighting_position_option = (
-            ExpertWeightingPositionOptions.AFTER_EXPERTS
+        return replace(
+            overrides,
+            weighted_parameters_flag=True,
+            compute_expert_mixture_flag=True,
+            weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+            routing_initialization_mode=RoutingInitializationMode.DISABLED,
         )
-        overrides.routing_initialization_mode = RoutingInitializationMode.DISABLED
-
-        return overrides
 
     def _split_tokens_per_expert(
         self,
@@ -111,10 +114,8 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
     def __select_expert_samples(
         self,
         input_batch: Tensor,
-        expert_routing_positions: Tensor | None,
+        expert_routing_positions: Tensor,
     ) -> Tensor:
-        if expert_routing_positions is None:
-            return input_batch
         return input_batch[expert_routing_positions]
 
     def forward(
