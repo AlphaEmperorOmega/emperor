@@ -335,6 +335,7 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
             model._init_model()
 
     def test_gradients_flow(self):
+        torch.manual_seed(0)
         batch_size = 2
         input_dim = 8
         output_dim = 4
@@ -346,17 +347,33 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
                     input_dim=input_dim,
                     output_dim=output_dim,
                 )
+                cfg.model_config.layer_config.activation = ActivationOptions.DISABLED
                 model = cfg.build()
                 logits = torch.randn(batch_size, input_dim, requires_grad=True)
-                weight_params = torch.randn(input_dim, output_dim)
+                weight_params = torch.randn(
+                    input_dim,
+                    output_dim,
+                    requires_grad=True,
+                )
                 output = model(weight_params, logits)
                 output.sum().backward()
 
                 grads = [
                     param.grad for param in model.parameters() if param.requires_grad
                 ]
-                non_none_grads = [grad for grad in grads if grad is not None]
-                self.assertTrue(len(non_none_grads) > 0)
+                self.assertTrue(grads)
+                self.assertTrue(all(grad is not None for grad in grads))
+                self.assertTrue(all(torch.isfinite(grad).all() for grad in grads))
+                self.assertGreater(
+                    sum(torch.count_nonzero(grad).item() for grad in grads),
+                    0,
+                )
+                self.assertIsNotNone(logits.grad)
+                self.assertTrue(torch.isfinite(logits.grad).all())
+                self.assertGreater(torch.count_nonzero(logits.grad).item(), 0)
+                self.assertIsNotNone(weight_params.grad)
+                self.assertTrue(torch.isfinite(weight_params.grad).all())
+                self.assertGreater(torch.count_nonzero(weight_params.grad).item(), 0)
 
     def test_option_matrix_forward_shapes(self):
         batch_size = 2

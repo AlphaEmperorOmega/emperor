@@ -603,6 +603,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     self.assertEqual(output.shape, (batch_size, output_dim))
 
     def test_gradients_flow(self):
+        torch.manual_seed(0)
         batch_size = 2
         input_dim = 8
         output_dim = 4
@@ -620,17 +621,35 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     output_dim=output_dim,
                     bank_expansion_factor=bank_factor,
                 )
+                cfg.model_config.layer_config.activation = ActivationOptions.DISABLED
                 model = cfg.build()
                 logits = torch.randn(batch_size, input_dim, requires_grad=True)
-                bias_params = torch.randn(output_dim)
+                bias_params = torch.randn(output_dim, requires_grad=True)
                 output = model(bias_params, logits)
                 output.sum().backward()
 
                 grads = [
                     param.grad for param in model.parameters() if param.requires_grad
                 ]
-                non_none_grads = [grad for grad in grads if grad is not None]
-                self.assertTrue(len(non_none_grads) > 0)
+                self.assertTrue(grads)
+                self.assertTrue(all(grad is not None for grad in grads))
+                self.assertTrue(all(torch.isfinite(grad).all() for grad in grads))
+                self.assertGreater(
+                    sum(torch.count_nonzero(grad).item() for grad in grads),
+                    0,
+                )
+                self.assertIsNotNone(logits.grad)
+                self.assertTrue(torch.isfinite(logits.grad).all())
+                self.assertGreater(torch.count_nonzero(logits.grad).item(), 0)
+                if config_cls in {
+                    GeneratorDynamicBiasConfig,
+                    WeightedBankDynamicBiasConfig,
+                }:
+                    self.assertIsNone(bias_params.grad)
+                else:
+                    self.assertIsNotNone(bias_params.grad)
+                    self.assertTrue(torch.isfinite(bias_params.grad).all())
+                    self.assertGreater(torch.count_nonzero(bias_params.grad).item(), 0)
 
     def test_bias_decay_schedule_mathematical_correctness(self):
         output_dim = 4

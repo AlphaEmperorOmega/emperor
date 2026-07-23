@@ -126,7 +126,10 @@ class TestDepthMappingAugmentation(unittest.TestCase):
         output = model(input_tensor)
         output.sum().backward()
 
-        self.assertIsNotNone(model.weight_params.grad)
+        for parameter in (input_tensor, model.weight_params, model.bias_params):
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertTrue(torch.any(parameter.grad != 0))
         self.assertEqual(model.weight_params.grad.shape, model.weight_params.shape)
 
 
@@ -482,16 +485,26 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         batch_size = 2
         input_dim = 12
         depth = DynamicDepthOptions.DEPTH_OF_TWO
-        cfg = self.preset(input_dim=input_dim, generator_depth=depth)
+        cfg = self.preset(
+            input_dim=input_dim,
+            generator_depth=depth,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            apply_output_pipeline_flag=False,
+        )
         model = DepthMappingLayerStack(cfg)
 
         input_tensor = torch.randn(batch_size, input_dim, requires_grad=True)
         output = model(input_tensor)
-        output.sum().backward()
+        output.square().sum().backward()
 
-        grads = [p.grad for p in model.parameters() if p.requires_grad]
-        non_none_grads = [g for g in grads if g is not None]
-        self.assertTrue(len(non_none_grads) > 0)
+        self.assertIsNotNone(input_tensor.grad)
+        self.assertTrue(torch.isfinite(input_tensor.grad).all())
+        self.assertTrue(torch.any(input_tensor.grad != 0))
+        gradients = [parameter.grad for parameter in model.parameters()]
+        self.assertTrue(all(gradient is not None for gradient in gradients))
+        self.assertTrue(all(torch.isfinite(gradient).all() for gradient in gradients))
+        self.assertTrue(all(torch.any(gradient != 0) for gradient in gradients))
 
     def test_non_2d_input_raises_error(self):
         cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)

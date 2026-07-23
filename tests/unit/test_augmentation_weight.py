@@ -67,6 +67,8 @@ class TestWeightHandlerForward(unittest.TestCase):
         normalization_position_option: WeightNormalizationPositionOptions = (
             WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
         ),
+        stack_activation: ActivationOptions = ActivationOptions.RELU,
+        stack_dropout_probability: float = 0.1,
         bank_expansion_factor: BankExpansionFactorOptions | None = None,
         decay_schedule: WeightDecayScheduleOptions = (
             WeightDecayScheduleOptions.DISABLED
@@ -91,10 +93,10 @@ class TestWeightHandlerForward(unittest.TestCase):
                 layer_config=LayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
-                    activation=ActivationOptions.RELU,
+                    activation=stack_activation,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     residual_config=None,
-                    dropout_probability=0.1,
+                    dropout_probability=stack_dropout_probability,
                     gate_config=None,
                     halting_config=None,
                     layer_model_config=LinearLayerConfig(
@@ -480,6 +482,127 @@ class TestWeightHandlerForward(unittest.TestCase):
                 grads = [p.grad for p in model.parameters() if p.requires_grad]
                 non_none_grads = [g for g in grads if g is not None]
                 self.assertTrue(len(non_none_grads) > 0)
+
+    def test_each_leaf_preserves_float64_and_backpropagates_to_both_inputs(self):
+        input_dim = 2
+        batch_size = 3
+        cases = (
+            (SingleModelDynamicWeightConfig, SingleModelDynamicWeight, input_dim),
+            (DualModelDynamicWeightConfig, DualModelDynamicWeight, 3),
+            (LowRankDynamicWeightConfig, LowRankDynamicWeight, 3),
+            (HypernetworkDynamicWeightConfig, HypernetworkDynamicWeight, 3),
+            (
+                LayeredWeightedBankDynamicWeightConfig,
+                LayeredWeightedBankDynamicWeight,
+                3,
+            ),
+            (
+                SoftWeightedBankDynamicWeightConfig,
+                SoftWeightedBankDynamicWeight,
+                3,
+            ),
+        )
+
+        for config_type, model_type, output_dim in cases:
+            with self.subTest(model_type=model_type.__name__):
+                torch.manual_seed(17)
+                is_bank = config_type in {
+                    LayeredWeightedBankDynamicWeightConfig,
+                    SoftWeightedBankDynamicWeightConfig,
+                }
+                config = self.preset(
+                    config_cls=config_type,
+                    input_dim=input_dim,
+                    hidden_dim=4,
+                    output_dim=output_dim,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    apply_output_pipeline_flag=False,
+                    normalization_option=WeightNormalizationOptions.DISABLED,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.DISABLED
+                    ),
+                    stack_activation=ActivationOptions.DISABLED,
+                    stack_dropout_probability=0.0,
+                    bank_expansion_factor=(
+                        BankExpansionFactorOptions.FACTOR_OF_TWO if is_bank else None
+                    ),
+                )
+                model = model_type(config).double()
+                for state_value in model.state_dict().values():
+                    if torch.is_floating_point(state_value):
+                        self.assertEqual(state_value.dtype, torch.float64)
+                        self.assertEqual(state_value.device.type, "cpu")
+                weight_params = torch.randn(
+                    input_dim,
+                    output_dim,
+                    dtype=torch.float64,
+                    requires_grad=True,
+                )
+                input_tensor = torch.randn(
+                    batch_size,
+                    input_dim,
+                    dtype=torch.float64,
+                    requires_grad=True,
+                )
+
+                output = model(weight_params, input_tensor)
+                output.square().sum().backward()
+
+                self.assertEqual(output.dtype, torch.float64)
+                self.assertEqual(output.device.type, "cpu")
+                self.assertTrue(torch.isfinite(output).all())
+                for gradient in (weight_params.grad, input_tensor.grad):
+                    self.assertIsNotNone(gradient)
+                    self.assertTrue(torch.isfinite(gradient).all())
+                    self.assertTrue(torch.any(gradient != 0))
+                active_model_gradients = [
+                    parameter.grad
+                    for name, parameter in model.named_parameters()
+                    if name not in {"scale", "clamp_limit"}
+                    and parameter.grad is not None
+                ]
+                self.assertTrue(active_model_gradients)
+                self.assertTrue(
+                    any(torch.any(gradient != 0) for gradient in active_model_gradients)
+                )
+                if is_bank:
+                    self.assertIsNotNone(model.weight_bank.grad)
+                    self.assertTrue(torch.isfinite(model.weight_bank.grad).all())
+                    self.assertTrue(torch.any(model.weight_bank.grad != 0))
+
+    def test_active_normalization_parameters_receive_finite_nonzero_gradients(self):
+        config = self.preset(
+            input_dim=3,
+            output_dim=4,
+            normalization_option=WeightNormalizationOptions.DISABLED,
+        )
+        model = DualModelDynamicWeight(config).double()
+        vectors = torch.tensor(
+            [[[-3.0, -0.5, 1.5], [0.25, 2.0, -4.0]]],
+            dtype=torch.float64,
+        )
+        cases = (
+            (WeightNormalizationOptions.SIGMOID_SCALE, model.scale),
+            (WeightNormalizationOptions.SOFT_CLAMP, model.clamp_limit),
+        )
+
+        for option, active_parameter in cases:
+            with self.subTest(option=option):
+                model.zero_grad(set_to_none=True)
+                model.normalization_option = option
+                differentiable_vectors = vectors.clone().requires_grad_()
+
+                transformed = model._apply_normalization_transform(
+                    differentiable_vectors
+                )
+                transformed.square().sum().backward()
+
+                self.assertIsNotNone(active_parameter.grad)
+                self.assertTrue(torch.isfinite(active_parameter.grad).all())
+                self.assertTrue(torch.any(active_parameter.grad != 0))
+                self.assertIsNotNone(differentiable_vectors.grad)
+                self.assertTrue(torch.isfinite(differentiable_vectors.grad).all())
+                self.assertTrue(torch.any(differentiable_vectors.grad != 0))
 
     def test_generator_depth_options(self):
         batch_size = 2
