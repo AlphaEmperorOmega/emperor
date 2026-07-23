@@ -1,8 +1,15 @@
 import unittest
+from types import SimpleNamespace
 
 import torch
 
-from emperor.augmentations.adaptive_parameters import DynamicBiasConfig
+from emperor.augmentations.adaptive_parameters import (
+    AdditiveDynamicBiasConfig,
+    BankExpansionFactorOptions,
+    DynamicBiasConfig,
+    WeightDecayScheduleOptions,
+    WeightedBankDynamicBiasConfig,
+)
 from emperor.augmentations.adaptive_parameters._biases.base import DynamicBiasAbstract
 from emperor.augmentations.adaptive_parameters._biases.validation import (
     DynamicBiasValidator,
@@ -26,9 +33,21 @@ from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative i
 from emperor.augmentations.adaptive_parameters._biases.variants.weighted_bank import (
     WeightedBankDynamicBias,
 )
+from emperor.layers import LayerStackConfig
 
 
 class TestDynamicBiasValidatorAdapter(unittest.TestCase):
+    @staticmethod
+    def valid_config() -> AdditiveDynamicBiasConfig:
+        return AdditiveDynamicBiasConfig(
+            input_dim=2,
+            output_dim=3,
+            decay_schedule=WeightDecayScheduleOptions.DISABLED,
+            decay_rate=0.0,
+            decay_warmup_batches=0,
+            model_config=LayerStackConfig(),
+        )
+
     def test_bias_modules_share_the_base_owner_adapter(self):
         module_types = (
             DynamicBiasAbstract,
@@ -77,6 +96,31 @@ class TestDynamicBiasValidatorAdapter(unittest.TestCase):
             "substituted runtime validator was called",
         ):
             model(None, torch.ones(1, 3))
+
+    def test_validator_methods_are_check_only_for_valid_values(self):
+        model = SimpleNamespace(cfg=self.valid_config())
+        weighted_model = SimpleNamespace(
+            cfg=WeightedBankDynamicBiasConfig(
+                bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+            )
+        )
+
+        self.assertIsNone(DynamicBiasValidator.validate(model))
+        self.assertIsNone(DynamicBiasValidator.ensure_parameters_exist(torch.ones(3)))
+        self.assertIsNone(
+            DynamicBiasValidator.validate_bank_expansion_factor(weighted_model)
+        )
+
+    def test_validate_rejects_invalid_field_types_through_the_bias_adapter(self):
+        cfg = self.valid_config()
+        cfg.decay_schedule = "disabled"
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^decay_schedule must be WeightDecayScheduleOptions for "
+            "AdditiveDynamicBiasConfig, got str$",
+        ):
+            DynamicBiasValidator.validate(SimpleNamespace(cfg=cfg))
 
 
 if __name__ == "__main__":

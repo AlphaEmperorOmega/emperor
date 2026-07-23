@@ -1,6 +1,10 @@
 import unittest
+from types import SimpleNamespace
 
-from emperor.augmentations.adaptive_parameters import DynamicDiagonalConfig
+from emperor.augmentations.adaptive_parameters import (
+    DynamicDiagonalConfig,
+    StandardDynamicDiagonalConfig,
+)
 from emperor.augmentations.adaptive_parameters._diagonals.base import (
     DynamicDiagonalAbstract,
 )
@@ -16,6 +20,7 @@ from emperor.augmentations.adaptive_parameters._diagonals.variants.combined impo
 from emperor.augmentations.adaptive_parameters._diagonals.variants.standard import (
     StandardDynamicDiagonal,
 )
+from emperor.layers import LayerStackConfig
 
 
 class TestDynamicDiagonalValidatorAdapter(unittest.TestCase):
@@ -45,6 +50,32 @@ class TestDynamicDiagonalValidatorAdapter(unittest.TestCase):
             "substituted construction validator was called",
         ):
             TrackingDiagonal(DynamicDiagonalConfig())
+
+    def test_validate_is_check_only_for_a_valid_diagonal_config(self):
+        model = SimpleNamespace(
+            cfg=StandardDynamicDiagonalConfig(
+                input_dim=2,
+                output_dim=3,
+                model_config=LayerStackConfig(),
+            )
+        )
+
+        self.assertIsNone(DynamicDiagonalValidator.validate(model))
+
+    def test_validate_rejects_invalid_field_types_through_diagonal_adapter(self):
+        model = SimpleNamespace(
+            cfg=StandardDynamicDiagonalConfig(
+                input_dim=True,
+                output_dim=3,
+                model_config=LayerStackConfig(),
+            )
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^input_dim must be int for StandardDynamicDiagonalConfig, got bool$",
+        ):
+            DynamicDiagonalValidator.validate(model)
 
 
 if __name__ == "__main__":
