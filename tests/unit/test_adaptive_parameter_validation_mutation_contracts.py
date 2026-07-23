@@ -763,6 +763,18 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 "mask_threshold must be between 0.0 and 1.0 inclusive, received 1.1.",
             ),
             (
+                {"mask_threshold": float("nan")},
+                "mask_threshold must be between 0.0 and 1.0 inclusive, received nan.",
+            ),
+            (
+                {"mask_threshold": float("inf")},
+                "mask_threshold must be between 0.0 and 1.0 inclusive, received inf.",
+            ),
+            (
+                {"mask_threshold": float("-inf")},
+                "mask_threshold must be between 0.0 and 1.0 inclusive, received -inf.",
+            ),
+            (
                 {"mask_surrogate_scale": -0.1},
                 "mask_surrogate_scale must be greater than or equal to 0.0, "
                 "received -0.1.",
@@ -788,6 +800,21 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 {"mask_floor": 1.0},
                 "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
                 "received 1.0.",
+            ),
+            (
+                {"mask_floor": float("nan")},
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                "received nan.",
+            ),
+            (
+                {"mask_floor": float("inf")},
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                "received inf.",
+            ),
+            (
+                {"mask_floor": float("-inf")},
+                "mask_floor must be between 0.0 inclusive and 1.0 exclusive, "
+                "received -inf.",
             ),
         )
         for overrides, message in cases:
