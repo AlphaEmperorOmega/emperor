@@ -151,15 +151,28 @@ class DynamicWeightAbstract(Module):
     ) -> Tensor:
         match schedule:
             case WeightDecayScheduleOptions.EXPONENTIAL:
-                return torch.exp(-self.decay_rate * self.decay_step)
+                return self.__compute_exponential_decay_factor()
             case WeightDecayScheduleOptions.LINEAR:
-                linear_decay_factor = 1.0 - self.decay_rate * self.decay_step
-                return torch.clamp(
-                    linear_decay_factor,
-                    min=0.0,
-                )
+                return self.__compute_linear_decay_factor()
             case WeightDecayScheduleOptions.MULTIPLICATIVE:
-                decay_base = self.decay_step.new_tensor(1.0 - self.decay_rate)
-                return torch.pow(decay_base, self.decay_step)
+                return self.__compute_multiplicative_decay_factor()
             case _:
                 raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
+
+    def __compute_exponential_decay_factor(self) -> Tensor:
+        exponential_decay_exponent = -self.decay_rate * self.decay_step
+        return torch.exp(exponential_decay_exponent)
+
+    def __compute_linear_decay_factor(self) -> Tensor:
+        unbounded_linear_decay_factor = 1.0 - self.decay_rate * self.decay_step
+        nonnegative_linear_decay_factor = torch.clamp(
+            unbounded_linear_decay_factor, min=0.0
+        )
+        return nonnegative_linear_decay_factor
+
+    def __compute_multiplicative_decay_factor(self) -> Tensor:
+        multiplicative_decay_base = self.decay_step.new_tensor(1.0 - self.decay_rate)
+        multiplicative_decay_factor = torch.pow(
+            multiplicative_decay_base, self.decay_step
+        )
+        return multiplicative_decay_factor
