@@ -10,6 +10,7 @@ from emperor.augmentations.adaptive_parameters import (
     OuterProductMaskConfig,
     PerAxisScoreMaskConfig,
     TopSliceAxisMaskConfig,
+    WeightInformedScoreAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters._masks.variants.diagonal import (
     DiagonalAxisMask,
@@ -22,6 +23,9 @@ from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
 )
 from emperor.augmentations.adaptive_parameters._masks.variants.top_slice import (
     TopSliceAxisMask,
+)
+from emperor.augmentations.adaptive_parameters._masks.variants.weight_informed import (
+    WeightInformedScoreAxisMask,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -125,6 +129,66 @@ class AdaptiveParameterMaskMutationContractTests(unittest.TestCase):
         adjusted_hard = 0.25 + 0.75 * hard
         expected = weights.unsqueeze(0) * (adjusted_hard * scores).unsqueeze(-1)
         self.assertTrue(torch.allclose(actual, expected, atol=1e-6, rtol=0.0))
+
+    def test_every_mask_broadcasts_shared_weights_across_the_input_batch(
+        self,
+    ) -> None:
+        common_config = {
+            "input_dim": 2,
+            "output_dim": 3,
+            "mask_threshold": 0.5,
+            "mask_surrogate_scale": 0.0,
+            "mask_floor": 0.25,
+            "model_config": linear_stack_config(7, 11),
+        }
+        models = (
+            WeightInformedScoreAxisMask(
+                WeightInformedScoreAxisMaskConfig(
+                    **common_config,
+                    mask_dimension_option=MaskDimensionOptions.ROW,
+                )
+            ),
+            PerAxisScoreMask(
+                PerAxisScoreMaskConfig(
+                    **common_config,
+                    mask_dimension_option=MaskDimensionOptions.ROW,
+                )
+            ),
+            TopSliceAxisMask(
+                TopSliceAxisMaskConfig(
+                    **common_config,
+                    mask_dimension_option=MaskDimensionOptions.ROW,
+                    mask_transition_width=2.0,
+                )
+            ),
+            OuterProductMask(OuterProductMaskConfig(**common_config)),
+            DiagonalAxisMask(
+                DiagonalAxisMaskConfig(
+                    **common_config,
+                    mask_transition_width=None,
+                )
+            ),
+        )
+        logits = torch.tensor([[0.2, -0.4], [1.1, 0.3]])
+        shared_weights = torch.tensor(
+            [
+                [1.0, 2.0, 3.0],
+                [4.0, 5.0, 6.0],
+            ]
+        )
+        original_shared_weights = shared_weights.clone()
+        repeated_weights = shared_weights.unsqueeze(0).expand(2, -1, -1).clone()
+
+        for model in models:
+            with self.subTest(model=type(model).__name__):
+                model.eval()
+
+                shared_output = model(shared_weights, logits)
+                repeated_output = model(repeated_weights, logits)
+
+                self.assertEqual(tuple(shared_output.shape), (2, 2, 3))
+                torch.testing.assert_close(shared_output, repeated_output)
+                torch.testing.assert_close(shared_weights, original_shared_weights)
 
     def test_outer_product_uses_distinct_rectangular_generator_outputs(
         self,

@@ -260,7 +260,7 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         model = AffineTransformDynamicBias(cfg)
         logits = torch.zeros(2, 3)
         bias_params = torch.tensor([1.0, -2.0])
-        affine_parameters = torch.tensor([[2.0, 0.5, 0.5, -2.5], [-1.5, 1.0, 1.0, 6.0]])
+        affine_parameters = torch.tensor([[2.0, 0.5], [-1.5, 1.0]])
         model.model = ConstantGenerator(affine_parameters)
 
         output = model(bias_params, logits)
@@ -335,6 +335,56 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         expected = bias_params.unsqueeze(0) * bias_scale
 
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
+
+    def test_bias_dependent_variants_transform_each_batched_bias_independently(self):
+        logits = torch.zeros(2, 3)
+        bias_params = torch.tensor([[2.0, -4.0], [3.0, 5.0]])
+        generated = torch.tensor([[0.5, -1.0], [2.0, 3.0]])
+        shared_cases = (
+            (
+                AdditiveDynamicBias,
+                AdditiveDynamicBiasConfig,
+                bias_params + generated,
+            ),
+            (
+                MultiplicativeDynamicBias,
+                MultiplicativeDynamicBiasConfig,
+                bias_params * generated,
+            ),
+            (
+                SigmoidGatedDynamicBias,
+                SigmoidGatedDynamicBiasConfig,
+                bias_params * torch.sigmoid(generated),
+            ),
+            (
+                TanhGatedDynamicBias,
+                TanhGatedDynamicBiasConfig,
+                bias_params * torch.tanh(generated),
+            ),
+        )
+
+        for model_cls, config_cls, expected in shared_cases:
+            with self.subTest(model_cls=model_cls.__name__):
+                model = model_cls(
+                    self.preset(config_cls=config_cls, input_dim=3, output_dim=2)
+                )
+                model.model = ConstantGenerator(generated)
+                torch.testing.assert_close(model(bias_params, logits), expected)
+
+        affine = AffineTransformDynamicBias(
+            self.preset(
+                config_cls=AffineTransformDynamicBiasConfig,
+                input_dim=3,
+                output_dim=2,
+            )
+        )
+        affine_parameters = torch.tensor([[2.0, 0.5], [-1.0, 3.0]])
+        affine.model = ConstantGenerator(affine_parameters)
+        bias_scale, bias_offset = affine_parameters.chunk(2, dim=-1)
+        torch.testing.assert_close(
+            affine(bias_params, logits),
+            bias_scale * bias_params + bias_offset,
+        )
 
     def test_additive_dynamic_bias_applies_bias_decay(self):
         cfg = self.preset(

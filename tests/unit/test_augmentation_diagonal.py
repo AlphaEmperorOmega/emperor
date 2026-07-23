@@ -208,6 +208,44 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
         self.assertTrue(torch.allclose(output, expected, atol=1e-6))
 
+    def test_all_diagonal_variants_preserve_batched_rectangular_base_weights(self):
+        logits = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        weight_params = torch.tensor(
+            [
+                [[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]],
+                [[-1.0, -2.0, -3.0], [-4.0, -5.0, -6.0]],
+            ]
+        )
+        diagonal_adjustment = F.pad(torch.diag_embed(logits), (0, 1, 0, 0))
+        anti_diagonal_adjustment = diagonal_adjustment.flip(dims=[2])
+        cases = (
+            (StandardDynamicDiagonalConfig, diagonal_adjustment),
+            (AntiDynamicDiagonalConfig, anti_diagonal_adjustment),
+            (
+                CombinedDynamicDiagonalConfig,
+                diagonal_adjustment + anti_diagonal_adjustment,
+            ),
+        )
+
+        for config_cls, adjustment in cases:
+            with self.subTest(config_cls=config_cls.__name__):
+                model = config_cls(
+                    input_dim=2,
+                    output_dim=3,
+                    model_config=self.preset(input_dim=2, output_dim=3).model_config,
+                ).build()
+                generators = (
+                    (model.diagonal_model.model, model.anti_diagonal_model.model)
+                    if isinstance(model, CombinedDynamicDiagonal)
+                    else (model.model,)
+                )
+                for generator in generators:
+                    self._set_generator_identity(generator)
+
+                output = model(weight_params, logits)
+
+                torch.testing.assert_close(output, weight_params + adjustment)
+
     def test_compute_diagonal_matrix_pads_rectangular_shape(self):
         cases = [
             (
