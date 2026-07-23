@@ -327,7 +327,11 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
         model = StandardDynamicDiagonal(cfg)
         model.model_config = InvalidGeneratorConfig()
 
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(
+            TypeError,
+            "^Expected model_config\\.build\\(\\.\\.\\.\\) to return a Layer, "
+            "Sequential, or LayerStack, received Identity\\.$",
+        ):
             model._init_model()
 
     def test_gradients_flow(self):

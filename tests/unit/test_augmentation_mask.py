@@ -1903,8 +1903,14 @@ class TestAxisMaskHandlers(unittest.TestCase):
         model = WeightInformedScoreAxisMask(cfg)
         model.model_config = InvalidGeneratorConfig()
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises(TypeError) as raised:
             model._init_model(1)
+
+        self.assertEqual(
+            str(raised.exception),
+            "Expected model_config.build(...) to return a Layer, Sequential, or "
+            "LayerStack, received Identity.",
+        )
 
     def test_gradients_flow_to_generator_parameters_for_all_enabled_options(self):
         batch_size = 2

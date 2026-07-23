@@ -531,6 +531,26 @@ class TestDynamicBiasHandlers(unittest.TestCase):
         ):
             cfg.build()
 
+    def test_validate_generator_model_raises_on_unknown_generator_type(self):
+        class InvalidGeneratorConfig:
+            def build(self, overrides):
+                return nn.Identity()
+
+        cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
+            input_dim=3,
+            output_dim=2,
+        )
+        model = AdditiveDynamicBias(cfg)
+        model.model_config = InvalidGeneratorConfig()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "^Expected model_config\\.build\\(\\.\\.\\.\\) to return a Layer, "
+            "Sequential, or LayerStack, received Identity\\.$",
+        ):
+            model._init_model(model.output_dim)
+
     def test_bank_expansion_factor_field_absent_on_non_bank_leaves(self):
         non_bank_leaf_classes = [
             AffineTransformDynamicBiasConfig,
