@@ -492,10 +492,8 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
     def test_capture_hook_ignores_output_without_tensor_hidden_state(self):
         callback = WeightBankUtilizationMonitorCallback()
-        hook = (
-            callback._WeightBankUtilizationMonitorCallback__make_bank_logits_capture_hook(
-                "unknown"
-            )
+        hook = callback._WeightBankUtilizationMonitorCallback__make_bank_logits_capture_hook(
+            "unknown"
         )
 
         hook(nn.Identity(), (), object())
