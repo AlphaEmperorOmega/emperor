@@ -893,6 +893,70 @@ class TestWeightHandlerForward(unittest.TestCase):
                 if normalization == WeightNormalizationOptions.DISABLED:
                     self.assertTrue(torch.equal(result, vectors))
 
+    def test_l2_and_rms_normalization_remain_finite_at_zero(self):
+        for dtype in (
+            torch.float16,
+            torch.bfloat16,
+            torch.float32,
+            torch.float64,
+        ):
+            for normalization in (
+                WeightNormalizationOptions.L2_SCALE,
+                WeightNormalizationOptions.RMS,
+            ):
+                message = f"dtype={dtype}, normalization={normalization}"
+                with self.subTest(msg=message):
+                    cfg = self.preset(normalization_option=normalization)
+                    model = DualModelDynamicWeight(cfg).to(dtype=dtype)
+                    vectors = torch.zeros(
+                        1,
+                        1,
+                        2,
+                        dtype=dtype,
+                        requires_grad=True,
+                    )
+
+                    result = model._apply_normalization_transform(vectors)
+                    (vector_gradient,) = torch.autograd.grad(result.sum(), vectors)
+
+                    self.assertTrue(torch.isfinite(result).all().item())
+                    self.assertTrue(torch.isfinite(vector_gradient).all().item())
+                    self.assertTrue(torch.equal(result, torch.zeros_like(result)))
+
+    def test_l2_and_rms_normalization_preserve_extreme_vector_direction(self):
+        expected_value_by_normalization = {
+            WeightNormalizationOptions.L2_SCALE: 2.0**-0.5,
+            WeightNormalizationOptions.RMS: 1.0,
+        }
+
+        for dtype in (
+            torch.float16,
+            torch.bfloat16,
+            torch.float32,
+            torch.float64,
+        ):
+            maximum_finite_value = torch.finfo(dtype).max
+            for normalization, expected_value in (
+                expected_value_by_normalization.items()
+            ):
+                message = f"dtype={dtype}, normalization={normalization}"
+                with self.subTest(msg=message):
+                    cfg = self.preset(normalization_option=normalization)
+                    model = DualModelDynamicWeight(cfg).to(dtype=dtype)
+                    vectors = torch.full(
+                        (1, 1, 2),
+                        maximum_finite_value / 2,
+                        dtype=dtype,
+                        requires_grad=True,
+                    )
+
+                    result = model._apply_normalization_transform(vectors)
+                    (vector_gradient,) = torch.autograd.grad(result.sum(), vectors)
+
+                    expected = torch.full_like(result, expected_value)
+                    torch.testing.assert_close(result, expected)
+                    self.assertTrue(torch.isfinite(vector_gradient).all().item())
+
     def test_apply_normalization_transform_exact_math(self):
         cfg = self.preset(
             normalization_option=WeightNormalizationOptions.DISABLED,

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
 from emperor.augmentations.adaptive_parameters._options import (
@@ -112,12 +111,11 @@ class DynamicWeightAbstract(Module):
             case WeightNormalizationOptions.CLAMP:
                 return torch.clamp(vectors, -self.clamp_limit, self.clamp_limit)
             case WeightNormalizationOptions.L2_SCALE:
-                return F.normalize(vectors, dim=-1) * self.scale
+                return self.__apply_stable_l2_normalization(vectors) * self.scale
             case WeightNormalizationOptions.SOFT_CLAMP:
                 return self.clamp_limit * torch.tanh(vectors / self.clamp_limit)
             case WeightNormalizationOptions.RMS:
-                rms = vectors.pow(2).mean(dim=-1, keepdim=True).sqrt()
-                return vectors / (rms + 1e-8) * self.scale
+                return self.__apply_stable_rms_normalization(vectors) * self.scale
             case WeightNormalizationOptions.SIGMOID_SCALE:
                 return (torch.sigmoid(vectors) * 2 - 1) * self.scale
             case WeightNormalizationOptions.DISABLED:
@@ -127,6 +125,92 @@ class DynamicWeightAbstract(Module):
                     "Unsupported normalization_option value: "
                     f"{self.normalization_option!r}."
                 )
+
+    def __apply_stable_l2_normalization(self, vectors: Tensor) -> Tensor:
+        (
+            accumulator_vectors,
+            maximum_magnitude,
+            magnitude_scaled_vectors,
+            contains_nonzero_value,
+        ) = self.__scale_vectors_by_maximum_magnitude(vectors)
+        squared_magnitude_scaled_vectors = magnitude_scaled_vectors.square()
+        scaled_squared_l2_norm = squared_magnitude_scaled_vectors.sum(
+            dim=-1,
+            keepdim=True,
+        )
+        stable_scaled_squared_l2_norm = torch.where(
+            contains_nonzero_value,
+            scaled_squared_l2_norm,
+            torch.ones_like(scaled_squared_l2_norm),
+        )
+        scaled_l2_norm = stable_scaled_squared_l2_norm.sqrt()
+        l2_norm = maximum_magnitude * scaled_l2_norm
+
+        finite_l2_norm = torch.isfinite(l2_norm)
+        safe_l2_norm = torch.where(
+            finite_l2_norm,
+            l2_norm,
+            torch.ones_like(l2_norm),
+        )
+        minimum_l2_norm = max(1e-12, torch.finfo(vectors.dtype).tiny)
+        normalized_by_l2_norm = accumulator_vectors / safe_l2_norm.clamp_min(
+            minimum_l2_norm
+        )
+        normalized_by_scaled_l2_norm = magnitude_scaled_vectors / scaled_l2_norm
+        normalized_vectors = torch.where(
+            finite_l2_norm, normalized_by_l2_norm, normalized_by_scaled_l2_norm
+        )
+        return normalized_vectors.to(dtype=vectors.dtype)
+
+    def __apply_stable_rms_normalization(self, vectors: Tensor) -> Tensor:
+        (
+            accumulator_vectors,
+            maximum_magnitude,
+            magnitude_scaled_vectors,
+            contains_nonzero_value,
+        ) = self.__scale_vectors_by_maximum_magnitude(vectors)
+        scaled_squared_mean = magnitude_scaled_vectors.square().mean(
+            dim=-1,
+            keepdim=True,
+        )
+        stable_scaled_squared_mean = torch.where(
+            contains_nonzero_value,
+            scaled_squared_mean,
+            torch.ones_like(scaled_squared_mean),
+        )
+        scaled_root_mean_square = stable_scaled_squared_mean.sqrt()
+        root_mean_square = maximum_magnitude * scaled_root_mean_square
+        minimum_root_mean_square = max(1e-8, torch.finfo(vectors.dtype).tiny)
+        normalized_vectors = accumulator_vectors / (
+            root_mean_square + minimum_root_mean_square
+        )
+        return normalized_vectors.to(dtype=vectors.dtype)
+
+    @staticmethod
+    def __scale_vectors_by_maximum_magnitude(
+        vectors: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        if vectors.dtype in (torch.float16, torch.bfloat16):
+            accumulator_vectors = vectors.float()
+        else:
+            accumulator_vectors = vectors
+        maximum_magnitude = accumulator_vectors.abs().amax(
+            dim=-1,
+            keepdim=True,
+        )
+        contains_nonzero_value = maximum_magnitude > 0
+        safe_maximum_magnitude = torch.where(
+            contains_nonzero_value,
+            maximum_magnitude,
+            torch.ones_like(maximum_magnitude),
+        )
+        magnitude_scaled_vectors = accumulator_vectors / safe_maximum_magnitude
+        return (
+            accumulator_vectors,
+            maximum_magnitude,
+            magnitude_scaled_vectors,
+            contains_nonzero_value,
+        )
 
     def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:
         if (
