@@ -267,6 +267,8 @@ class WeightBankUtilizationMonitorCallback(Callback):
             bank_logits = self._last_bank_logits.pop(module_name, None)
             if bank_logits is None:
                 continue
+            if bank_logits.numel() == 0:
+                continue
             distribution_summary = _WeightBankDiagnostics.summarize(
                 bank_module,
                 bank_logits,

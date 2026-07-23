@@ -371,6 +371,23 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         self.assertTrue(torch.isfinite(coefficient_of_variation))
         torch.testing.assert_close(coefficient_of_variation, torch.zeros(()))
 
+    def test_empty_bank_logits_do_not_emit_undefined_metrics(self):
+        bank = self.build_weighted_bank_bias()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_bank(bank, batch_size=0)
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertEqual(module.logged_scalars, [])
+        self.assertNotIn(self.BANK_MODULE_PATH, callback._last_bank_logits)
+
     def test_distribution_summaries_match_exact_bank_reductions(self):
         batch_size = 2
         input_dim = 2
