@@ -1,3 +1,4 @@
+import copy
 import unittest
 
 import torch
@@ -808,6 +809,42 @@ class TestDynamicBiasHandlers(unittest.TestCase):
             self.assertTrue(torch.equal(result, baseline))
         self.assertTrue(torch.equal(model.decay_step, frozen_decay_step))
         self.assertTrue(torch.equal(model.warmup_step, frozen_warmup_step))
+
+    def test_bias_decay_state_dict_round_trip_continues_exact_schedule_state(self):
+        cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
+            input_dim=3,
+            output_dim=2,
+            decay_schedule=WeightDecayScheduleOptions.MULTIPLICATIVE,
+            decay_rate=0.25,
+            decay_warmup_batches=2,
+        )
+        source = AdditiveDynamicBias(cfg)
+        source.model = ConstantGenerator(torch.zeros(1, 2))
+        bias_params = torch.tensor([4.0, -8.0])
+        logits = torch.zeros(1, 3)
+
+        for _ in range(4):
+            source(bias_params, logits)
+
+        saved_state = copy.deepcopy(source.state_dict())
+        restored = AdditiveDynamicBias(cfg)
+        restored.model = ConstantGenerator(torch.zeros(1, 2))
+        incompatible = restored.load_state_dict(saved_state, strict=True)
+
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        self.assertEqual(source.warmup_step.item(), 2.0)
+        self.assertEqual(source.decay_step.item(), 2.0)
+        self.assertTrue(torch.equal(restored.warmup_step, source.warmup_step))
+        self.assertTrue(torch.equal(restored.decay_step, source.decay_step))
+        self.assertTrue(
+            torch.equal(
+                restored(bias_params, logits),
+                source(bias_params, logits),
+            )
+        )
+        self.assertTrue(torch.equal(restored.decay_step, source.decay_step))
 
     def test_bias_decay_schedule_raises_on_unknown_schedule(self):
         cfg = self.preset(

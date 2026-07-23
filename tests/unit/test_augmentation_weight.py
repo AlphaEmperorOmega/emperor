@@ -1,3 +1,4 @@
+import copy
 import unittest
 
 import torch
@@ -603,6 +604,132 @@ class TestWeightHandlerForward(unittest.TestCase):
                 self.assertIsNotNone(differentiable_vectors.grad)
                 self.assertTrue(torch.isfinite(differentiable_vectors.grad).all())
                 self.assertTrue(torch.any(differentiable_vectors.grad != 0))
+
+    def test_each_leaf_strictly_restores_model_and_adam_state(self):
+        input_dim = 2
+        cases = (
+            (SingleModelDynamicWeightConfig, input_dim),
+            (DualModelDynamicWeightConfig, 3),
+            (LowRankDynamicWeightConfig, 3),
+            (HypernetworkDynamicWeightConfig, 3),
+            (LayeredWeightedBankDynamicWeightConfig, 3),
+            (SoftWeightedBankDynamicWeightConfig, 3),
+        )
+
+        for config_type, output_dim in cases:
+            with self.subTest(config_type=config_type.__name__):
+                torch.manual_seed(23)
+                is_bank = config_type in {
+                    LayeredWeightedBankDynamicWeightConfig,
+                    SoftWeightedBankDynamicWeightConfig,
+                }
+                config = self.preset(
+                    config_cls=config_type,
+                    input_dim=input_dim,
+                    hidden_dim=4,
+                    output_dim=output_dim,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    apply_output_pipeline_flag=False,
+                    normalization_option=WeightNormalizationOptions.DISABLED,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.DISABLED
+                    ),
+                    stack_activation=ActivationOptions.DISABLED,
+                    stack_dropout_probability=0.0,
+                    bank_expansion_factor=(
+                        BankExpansionFactorOptions.FACTOR_OF_TWO if is_bank else None
+                    ),
+                    decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+                    decay_rate=0.2,
+                    decay_warmup_batches=0,
+                )
+                source = config.build().double()
+                source_optimizer = torch.optim.Adam(source.parameters(), lr=0.01)
+                weight_params = torch.tensor(
+                    [[1.0, -2.0, 0.5], [0.25, 3.0, -1.0]],
+                    dtype=torch.float64,
+                )[:, :output_dim]
+                first_input = torch.tensor(
+                    [[1.0, 2.0], [-0.5, 3.0]],
+                    dtype=torch.float64,
+                )
+                continuation_input = torch.tensor(
+                    [[2.0, -1.0], [0.75, 0.5]],
+                    dtype=torch.float64,
+                )
+
+                def training_step(
+                    model,
+                    optimizer,
+                    input_tensor,
+                    base_weight_params,
+                ):
+                    optimizer.zero_grad()
+                    output = model(base_weight_params, input_tensor)
+                    output.square().mean().backward()
+                    optimizer.step()
+                    return output.detach()
+
+                training_step(source, source_optimizer, first_input, weight_params)
+                model_state = copy.deepcopy(source.state_dict())
+                optimizer_state = copy.deepcopy(source_optimizer.state_dict())
+
+                torch.manual_seed(101)
+                restored = config.build().double()
+                incompatible = restored.load_state_dict(model_state, strict=True)
+                self.assertEqual(incompatible.missing_keys, [])
+                self.assertEqual(incompatible.unexpected_keys, [])
+                restored_optimizer = torch.optim.Adam(
+                    restored.parameters(),
+                    lr=0.01,
+                )
+                restored_optimizer.load_state_dict(optimizer_state)
+
+                self.assertTupleEqual(
+                    tuple(source.state_dict()),
+                    tuple(restored.state_dict()),
+                )
+                self.assertTupleEqual(
+                    tuple(dict(source.named_parameters())),
+                    tuple(dict(restored.named_parameters())),
+                )
+                source_output = training_step(
+                    source,
+                    source_optimizer,
+                    continuation_input,
+                    weight_params,
+                )
+                restored_output = training_step(
+                    restored,
+                    restored_optimizer,
+                    continuation_input,
+                    weight_params,
+                )
+                torch.testing.assert_close(restored_output, source_output)
+                for name, source_value in source.state_dict().items():
+                    torch.testing.assert_close(
+                        restored.state_dict()[name],
+                        source_value,
+                    )
+
+                source_optimizer_state = source_optimizer.state_dict()
+                restored_optimizer_state = restored_optimizer.state_dict()
+                self.assertEqual(
+                    source_optimizer_state["param_groups"],
+                    restored_optimizer_state["param_groups"],
+                )
+                for source_values, restored_values in zip(
+                    source_optimizer_state["state"].values(),
+                    restored_optimizer_state["state"].values(),
+                    strict=True,
+                ):
+                    self.assertEqual(source_values.keys(), restored_values.keys())
+                    for key, source_value in source_values.items():
+                        restored_value = restored_values[key]
+                        if torch.is_tensor(source_value):
+                            torch.testing.assert_close(restored_value, source_value)
+                        else:
+                            self.assertEqual(restored_value, source_value)
 
     def test_generator_depth_options(self):
         batch_size = 2

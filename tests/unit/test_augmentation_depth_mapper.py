@@ -1,3 +1,4 @@
+import copy
 import unittest
 from dataclasses import fields
 
@@ -131,6 +132,55 @@ class TestDepthMappingAugmentation(unittest.TestCase):
             self.assertTrue(torch.isfinite(parameter.grad).all())
             self.assertTrue(torch.any(parameter.grad != 0))
         self.assertEqual(model.weight_params.grad.shape, model.weight_params.shape)
+
+    def test_float64_state_round_trip_preserves_bias_contract_and_output(self):
+        input_dim = 3
+        output_dim = 2
+        depth = DynamicDepthOptions.DEPTH_OF_TWO
+
+        for bias_flag in (True, False):
+            with self.subTest(bias_flag=bias_flag):
+                torch.manual_seed(13)
+                config = self.preset(
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    bias_flag=bias_flag,
+                    generator_depth=depth,
+                )
+                source = DepthMappingLayer(config).double()
+                for state_value in source.state_dict().values():
+                    self.assertEqual(state_value.dtype, torch.float64)
+                    self.assertEqual(state_value.device.type, "cpu")
+                input_tensor = torch.tensor(
+                    [
+                        [[1.0, 2.0, -1.0], [0.5, -2.0, 3.0]],
+                        [[-1.0, 0.25, 2.0], [4.0, -0.5, 1.5]],
+                    ],
+                    dtype=torch.float64,
+                )
+                expected_keys = (
+                    ("weight_params", "bias_params")
+                    if bias_flag
+                    else ("weight_params",)
+                )
+
+                source_output = source(input_tensor)
+                model_state = copy.deepcopy(source.state_dict())
+                torch.manual_seed(97)
+                restored = DepthMappingLayer(config).double()
+                incompatible = restored.load_state_dict(model_state, strict=True)
+                restored_output = restored(input_tensor)
+
+                self.assertEqual(incompatible.missing_keys, [])
+                self.assertEqual(incompatible.unexpected_keys, [])
+                self.assertTupleEqual(tuple(source.state_dict()), expected_keys)
+                self.assertTupleEqual(
+                    tuple(dict(source.named_parameters())),
+                    expected_keys,
+                )
+                self.assertEqual(source_output.dtype, torch.float64)
+                self.assertEqual(source_output.device.type, "cpu")
+                torch.testing.assert_close(restored_output, source_output)
 
 
 class TestDepthMappingLayerStack(unittest.TestCase):
@@ -505,6 +555,59 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         self.assertTrue(all(gradient is not None for gradient in gradients))
         self.assertTrue(all(torch.isfinite(gradient).all() for gradient in gradients))
         self.assertTrue(all(torch.any(gradient != 0) for gradient in gradients))
+
+    def test_float64_noncontiguous_input_and_strict_stack_state_round_trip(self):
+        input_dim = 3
+        output_dim = 2
+        depth = DynamicDepthOptions.DEPTH_OF_TWO
+        config = self.preset(
+            input_dim=input_dim,
+            hidden_dim=4,
+            output_dim=output_dim,
+            generator_depth=depth,
+            stack_num_layers=2,
+            stack_activation=ActivationOptions.DISABLED,
+            stack_dropout_probability=0.0,
+            apply_output_pipeline_flag=False,
+        )
+        torch.manual_seed(29)
+        source = DepthMappingLayerStack(config).double().eval()
+        for state_value in source.state_dict().values():
+            if torch.is_floating_point(state_value):
+                self.assertEqual(state_value.dtype, torch.float64)
+                self.assertEqual(state_value.device.type, "cpu")
+        input_tensor = torch.tensor(
+            [
+                [1.0, -2.0],
+                [0.5, 3.0],
+                [-1.0, 4.0],
+            ],
+            dtype=torch.float64,
+        ).transpose(0, 1)
+        self.assertFalse(input_tensor.is_contiguous())
+
+        source_output = source(input_tensor)
+        model_state = copy.deepcopy(source.state_dict())
+        torch.manual_seed(71)
+        restored = DepthMappingLayerStack(config).double().eval()
+        incompatible = restored.load_state_dict(model_state, strict=True)
+        restored_output = restored(input_tensor)
+
+        self.assertEqual(incompatible.missing_keys, [])
+        self.assertEqual(incompatible.unexpected_keys, [])
+        self.assertTupleEqual(
+            tuple(source.state_dict()),
+            tuple(restored.state_dict()),
+        )
+        self.assertTupleEqual(
+            tuple(dict(source.named_parameters())),
+            tuple(dict(restored.named_parameters())),
+        )
+        self.assertEqual(source_output.shape, (2, depth.value, output_dim))
+        self.assertEqual(source_output.dtype, torch.float64)
+        self.assertEqual(source_output.device.type, "cpu")
+        self.assertTrue(torch.isfinite(source_output).all())
+        torch.testing.assert_close(restored_output, source_output)
 
     def test_non_2d_input_raises_error(self):
         cfg = self.preset(generator_depth=DynamicDepthOptions.DEPTH_OF_TWO)
