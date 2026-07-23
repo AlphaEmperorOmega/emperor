@@ -297,7 +297,11 @@ class TestDynamicDiagonalHandlers(unittest.TestCase):
 
     def test_abstract_config_cannot_build(self):
         cfg = self.preset(config_cls=DynamicDiagonalConfig)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(
+            ValueError,
+            "^DynamicDiagonalConfig is abstract and has no registered "
+            "DynamicDiagonal class; instantiate a concrete leaf config instead\\.$",
+        ):
             cfg.build()
 
     def test_invalid_dimensions_raise(self):

@@ -1745,8 +1745,14 @@ class TestAxisMaskHandlers(unittest.TestCase):
     def test_abstract_mask_config_cannot_build(self):
         cfg = self.preset(config_cls=AxisMaskConfig)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as raised:
             cfg.build()
+
+        self.assertEqual(
+            str(raised.exception),
+            "AxisMaskConfig is abstract and has no registered AxisMask class; "
+            "instantiate a concrete leaf config instead.",
+        )
 
     def test_mask_dimension_field_absent_on_outer_product_and_diagonal(self):
         for config_cls in (OuterProductMaskConfig, DiagonalAxisMaskConfig):

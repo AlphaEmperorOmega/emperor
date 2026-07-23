@@ -440,8 +440,13 @@ class TestWeightHandlerForward(unittest.TestCase):
 
     def test_abstract_config_cannot_build(self):
         cfg = self.preset(config_cls=DynamicWeightConfig)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as error:
             cfg.build()
+        self.assertEqual(
+            str(error.exception),
+            "DynamicWeightConfig is abstract and has no registered "
+            "DynamicWeight class; instantiate a concrete leaf config instead.",
+        )
 
     def test_gradients_flow(self):
         batch_size = 2

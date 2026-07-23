@@ -524,7 +524,11 @@ class TestDynamicBiasHandlers(unittest.TestCase):
 
     def test_abstract_config_cannot_build(self):
         cfg = self.preset(config_cls=DynamicBiasConfig)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(
+            ValueError,
+            "^DynamicBiasConfig is abstract and has no registered "
+            "DynamicBias class; instantiate a concrete leaf config instead\\.$",
+        ):
             cfg.build()
 
     def test_bank_expansion_factor_field_absent_on_non_bank_leaves(self):
