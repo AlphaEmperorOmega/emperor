@@ -160,8 +160,14 @@ class DynamicWeightAbstract(Module):
                 raise ValueError(f"Unsupported decay_schedule value: {schedule!r}.")
 
     def __compute_exponential_decay_factor(self) -> Tensor:
-        exponential_decay_exponent = -self.decay_rate * self.decay_step
-        return torch.exp(exponential_decay_exponent)
+        maximum_finite_decay_rate = torch.finfo(self.decay_step.dtype).max
+        dtype_aligned_decay_rate = self.decay_step.new_tensor(self.decay_rate)
+        bounded_decay_rate = dtype_aligned_decay_rate.clamp(
+            max=maximum_finite_decay_rate
+        )
+        exponential_decay_exponent = -bounded_decay_rate * self.decay_step
+        exponential_decay_factor = torch.exp(exponential_decay_exponent)
+        return exponential_decay_factor
 
     def __compute_linear_decay_factor(self) -> Tensor:
         unbounded_linear_decay_factor = 1.0 - self.decay_rate * self.decay_step

@@ -729,6 +729,26 @@ class TestWeightHandlerForward(unittest.TestCase):
                         f"{expected_factor.item():.6f}",
                     )
 
+    def test_exponential_weight_decay_saturates_huge_rate_to_active_dtype(self):
+        weight_params = torch.tensor([[1.0, -2.0], [3.0, -4.0]])
+        cfg = self.preset(
+            input_dim=2,
+            output_dim=2,
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=1.0e100,
+        )
+        model = cfg.build()
+
+        initial = model._maybe_apply_weight_decay(weight_params)
+        decayed = model._maybe_apply_weight_decay(weight_params)
+
+        torch.testing.assert_close(initial, weight_params)
+        torch.testing.assert_close(decayed, torch.zeros_like(weight_params))
+        self.assertEqual(initial.dtype, weight_params.dtype)
+        self.assertEqual(decayed.dtype, weight_params.dtype)
+        self.assertTrue(torch.isfinite(initial).all())
+        self.assertTrue(torch.isfinite(decayed).all())
+
     def test_decay_schedule_disabled_leaves_weights_unchanged(self):
         input_dim = 12
         output_dim = 24

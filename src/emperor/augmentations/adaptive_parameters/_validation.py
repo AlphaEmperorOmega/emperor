@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 from torch.types import Tensor
@@ -106,7 +107,17 @@ class AdaptiveGeneratorValidatorBase:
         if schedule is None or schedule == WeightDecayScheduleOptions.DISABLED:
             return
         decay_rate = cfg.decay_rate
-        if decay_rate is None or decay_rate <= 0.0:
+        if decay_rate is None:
+            raise ValueError(
+                f"decay_rate must be greater than 0.0 when decay_schedule is "
+                f"{schedule.name}, received {decay_rate!r}."
+            )
+        if not math.isfinite(decay_rate):
+            raise ValueError(
+                f"decay_rate must be finite when decay_schedule is "
+                f"{schedule.name}, received {decay_rate!r}."
+            )
+        if decay_rate <= 0.0:
             raise ValueError(
                 f"decay_rate must be greater than 0.0 when decay_schedule is "
                 f"{schedule.name}, received {decay_rate!r}."

@@ -429,6 +429,27 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 "EXPONENTIAL, received 0.0.",
             ),
             (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                float("nan"),
+                0,
+                "decay_rate must be finite when decay_schedule is EXPONENTIAL, "
+                "received nan.",
+            ),
+            (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                float("inf"),
+                0,
+                "decay_rate must be finite when decay_schedule is EXPONENTIAL, "
+                "received inf.",
+            ),
+            (
+                WeightDecayScheduleOptions.EXPONENTIAL,
+                float("-inf"),
+                0,
+                "decay_rate must be finite when decay_schedule is EXPONENTIAL, "
+                "received -inf.",
+            ),
+            (
                 WeightDecayScheduleOptions.LINEAR,
                 1.0,
                 0,

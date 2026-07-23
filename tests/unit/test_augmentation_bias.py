@@ -592,6 +592,26 @@ class TestDynamicBiasHandlers(unittest.TestCase):
                     expected = bias_params * expected_factor
                     self.assertTrue(torch.allclose(result, expected, atol=1e-6))
 
+    def test_exponential_bias_decay_saturates_huge_rate_to_active_dtype(self):
+        bias_params = torch.tensor([1.0, -2.0, 3.0])
+        cfg = self.preset(
+            config_cls=AdditiveDynamicBiasConfig,
+            output_dim=bias_params.numel(),
+            decay_schedule=WeightDecayScheduleOptions.EXPONENTIAL,
+            decay_rate=1.0e100,
+        )
+        model = cfg.build()
+
+        initial = model._maybe_apply_bias_decay(bias_params)
+        decayed = model._maybe_apply_bias_decay(bias_params)
+
+        torch.testing.assert_close(initial, bias_params)
+        torch.testing.assert_close(decayed, torch.zeros_like(bias_params))
+        self.assertEqual(initial.dtype, bias_params.dtype)
+        self.assertEqual(decayed.dtype, bias_params.dtype)
+        self.assertTrue(torch.isfinite(initial).all())
+        self.assertTrue(torch.isfinite(decayed).all())
+
     def test_bias_decay_schedule_disabled_leaves_bias_unchanged(self):
         output_dim = 4
         bias_params = torch.randn(output_dim)
