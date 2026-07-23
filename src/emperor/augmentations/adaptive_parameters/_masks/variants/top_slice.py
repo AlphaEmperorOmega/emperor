@@ -22,25 +22,40 @@ class TopSliceAxisMask(AxisMaskAbstract):
         logits: Tensor,
     ) -> Tensor:
         axis_scores = self._compute_generator_soft_values(logits)
-        if self.mask_transition_width is not None and self.mask_transition_width > 1.0:
+        gradual_transition_enabled = (
+            self.mask_transition_width is not None and self.mask_transition_width > 1.0
+        )
+        if gradual_transition_enabled:
             transition_scores = self.__compute_transition_scores(axis_scores)
-            hard_mask = self._compute_hard_mask(transition_scores)
-            soft_mask = self._compute_soft_mask(axis_scores)
-            return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+            transition_hard_mask = self._compute_hard_mask(transition_scores)
+            axis_soft_mask = self._compute_soft_mask(axis_scores)
+            return self._apply_hybrid_mask(
+                weight_params,
+                transition_hard_mask,
+                axis_soft_mask,
+            )
 
         thresholded_axis_mask = self._compute_hard_mask(axis_scores)
-        hard_mask = thresholded_axis_mask.cumprod(dim=-1)
-        soft_mask = self._compute_soft_mask(axis_scores)
-        return self._apply_hybrid_mask(weight_params, hard_mask, soft_mask)
+        top_slice_hard_mask = thresholded_axis_mask.cumprod(dim=-1)
+        axis_soft_mask = self._compute_soft_mask(axis_scores)
+        return self._apply_hybrid_mask(
+            weight_params,
+            top_slice_hard_mask,
+            axis_soft_mask,
+        )
 
     def __compute_transition_scores(self, axis_scores: Tensor) -> Tensor:
-        binary_mask = self._compute_hard_mask(axis_scores)
-        boundary_pos = binary_mask.cumprod(dim=-1).sum(dim=-1, keepdim=True)
-        positions = torch.arange(
-            axis_scores.shape[-1],
+        thresholded_axis_mask = self._compute_hard_mask(axis_scores)
+        leading_active_mask = thresholded_axis_mask.cumprod(dim=-1)
+        boundary_position = leading_active_mask.sum(dim=-1, keepdim=True)
+        axis_position_count = axis_scores.shape[-1]
+        axis_positions = torch.arange(
+            axis_position_count,
             device=axis_scores.device,
             dtype=axis_scores.dtype,
         )
-        margins = boundary_pos - positions
-        width = self.mask_transition_width
-        return ((margins + width / 2.0) / width).clamp(0.0, 1.0)
+        boundary_margins = boundary_position - axis_positions
+        transition_width = self.mask_transition_width
+        return (
+            (boundary_margins + transition_width / 2.0) / transition_width
+        ).clamp(0.0, 1.0)
