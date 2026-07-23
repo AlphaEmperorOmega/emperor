@@ -47,18 +47,33 @@ class SoftWeightedBankDynamicWeight(DynamicWeightAbstract):
         weight_params: Tensor,
         X: Tensor,
     ) -> Tensor:
-        bank_logits = self.model(X)
-        bank_logits = bank_logits.view(
+        flattened_weight_bank_mixture_logits = self.model(X)
+        weight_bank_mixture_logits = (
+            self.__reshape_logits_into_per_input_weight_bank_mixtures(
+                flattened_weight_bank_mixture_logits
+            )
+        )
+
+        weight_bank_mixture_weights = torch.softmax(weight_bank_mixture_logits, dim=-1)
+        weight_bank_mixing_equation = "bdim,dmo->bdio"
+        per_depth_weight_updates = torch.einsum(
+            weight_bank_mixing_equation, weight_bank_mixture_weights, self.weight_bank
+        )
+
+        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
+        combined_weight_update = per_depth_weight_updates.sum(dim=1)
+        return decayed_weight_params + combined_weight_update
+
+    def __reshape_logits_into_per_input_weight_bank_mixtures(
+        self,
+        flattened_weight_bank_mixture_logits: Tensor,
+    ) -> Tensor:
+        per_input_weight_bank_mixture_shape = (
             -1,
             self.depth_value,
             self.input_dim,
             self.expanded_bank_row_count,
         )
-
-        bank_distribution = torch.softmax(bank_logits, dim=-1)
-        compressed_params = torch.einsum(
-            "bdim,dmo->bdio", bank_distribution, self.weight_bank
+        return flattened_weight_bank_mixture_logits.view(
+            per_input_weight_bank_mixture_shape
         )
-
-        decayed_weight_params = self._maybe_apply_weight_decay(weight_params)
-        return decayed_weight_params + compressed_params.sum(dim=1)
