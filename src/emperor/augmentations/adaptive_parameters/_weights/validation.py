@@ -25,6 +25,7 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     def validate(cls, model: "DynamicWeightAbstract") -> None:
         cls.validate_initialization_fields(model)
         cls.validate_variant_config(model)
+        cls.validate_model_config(model.cfg)
 
     @classmethod
     def validate_initialization_fields(cls, model: "DynamicWeightAbstract") -> None:

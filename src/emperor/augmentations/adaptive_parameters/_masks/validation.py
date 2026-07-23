@@ -15,6 +15,7 @@ class AxisMaskValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     @classmethod
     def validate(cls, model: "AxisMaskAbstract") -> None:
         cls.validate_initialization_fields(model)
+        cls.validate_model_config(model.cfg)
 
     @classmethod
     def validate_initialization_fields(cls, model: "AxisMaskAbstract") -> None:

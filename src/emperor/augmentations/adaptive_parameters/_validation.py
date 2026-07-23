@@ -47,6 +47,16 @@ class AdaptiveLinearValidator(ValidatorBase):
 
 
 class AdaptiveGeneratorValidatorBase:
+    @staticmethod
+    def validate_model_config(cfg) -> None:
+        from emperor.layers import LayerStackConfig
+
+        if not isinstance(cfg.model_config, LayerStackConfig):
+            raise TypeError(
+                "model_config must be a LayerStackConfig for "
+                f"{type(cfg).__name__}, got {type(cfg.model_config).__name__}."
+            )
+
     @classmethod
     def validate_generator_model(cls, generator_model) -> None:
         from torch.nn import Sequential

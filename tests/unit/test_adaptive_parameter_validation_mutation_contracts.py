@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from collections.abc import Callable
 from dataclasses import replace
+from types import SimpleNamespace
 
 import torch
 
@@ -29,8 +30,14 @@ from emperor.augmentations.adaptive_parameters._augmentation import (
 from emperor.augmentations.adaptive_parameters._biases.validation import (
     DynamicBiasValidator,
 )
+from emperor.augmentations.adaptive_parameters._diagonals.validation import (
+    DynamicDiagonalValidator,
+)
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
+)
+from emperor.augmentations.adaptive_parameters._masks.validation import (
+    AxisMaskValidator,
 )
 from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveGeneratorValidatorBase,
@@ -41,6 +48,9 @@ from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
     DepthMappingLayer,
     DepthMappingLayerConfig,
     DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters._weights.validation import (
+    DynamicWeightValidator,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -542,6 +552,175 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             "dynamic bias strategy.",
             lambda: DynamicBiasValidator.ensure_parameters_exist(None),
         )
+
+    def test_direct_generator_configs_reject_invalid_model_config_exactly(self) -> None:
+        invalid_model_config = object()
+        cases = (
+            AdditiveDynamicBiasConfig(
+                input_dim=2,
+                output_dim=3,
+                decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                decay_rate=0.0,
+                decay_warmup_batches=0,
+                model_config=invalid_model_config,
+            ),
+            StandardDynamicDiagonalConfig(
+                input_dim=2,
+                output_dim=3,
+                model_config=invalid_model_config,
+            ),
+            PerAxisScoreMaskConfig(
+                input_dim=2,
+                output_dim=3,
+                mask_threshold=0.5,
+                mask_surrogate_scale=5.0,
+                mask_floor=0.0,
+                mask_dimension_option=MaskDimensionOptions.ROW,
+                model_config=invalid_model_config,
+            ),
+            SingleModelDynamicWeightConfig(
+                input_dim=2,
+                output_dim=2,
+                generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                decay_rate=0.0,
+                decay_warmup_batches=0,
+                normalization_option=WeightNormalizationOptions.DISABLED,
+                normalization_position_option=(
+                    WeightNormalizationPositionOptions.DISABLED
+                ),
+                model_config=invalid_model_config,
+            ),
+        )
+
+        for config in cases:
+            with self.subTest(config_type=type(config).__name__):
+                self.assert_exact_error(
+                    TypeError,
+                    "model_config must be a LayerStackConfig for "
+                    f"{type(config).__name__}, got object.",
+                    config.build,
+                )
+
+    def test_leaf_specific_errors_precede_generator_config_type_errors(self) -> None:
+        invalid_model_config = object()
+        cases = (
+            (
+                SingleModelDynamicWeightConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    normalization_option=WeightNormalizationOptions.DISABLED,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.DISABLED
+                    ),
+                    model_config=invalid_model_config,
+                ),
+                "SingleModelDynamicWeight requires input_dim == output_dim, "
+                "received input_dim=2, output_dim=3.",
+            ),
+            (
+                WeightedBankDynamicBiasConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    bank_expansion_factor=None,
+                    model_config=invalid_model_config,
+                ),
+                "WeightedBankDynamicBias requires bank_expansion_factor to be a "
+                "BankExpansionFactorOptions value, received None.",
+            ),
+            (
+                LayeredWeightedBankDynamicWeightConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    bank_expansion_factor=None,
+                    model_config=invalid_model_config,
+                ),
+                "LayeredWeightedBankDynamicWeight requires bank_expansion_factor "
+                "to be a BankExpansionFactorOptions value, received None.",
+            ),
+        )
+
+        for config, expected_message in cases:
+            with self.subTest(config_type=type(config).__name__):
+                self.assert_exact_error(
+                    ValueError,
+                    expected_message,
+                    config.build,
+                )
+
+    def test_family_validators_directly_reject_invalid_model_configs(self) -> None:
+        invalid_model_config = object()
+        cases = (
+            (
+                DynamicBiasValidator,
+                AdditiveDynamicBiasConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    model_config=invalid_model_config,
+                ),
+            ),
+            (
+                DynamicDiagonalValidator,
+                StandardDynamicDiagonalConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    model_config=invalid_model_config,
+                ),
+            ),
+            (
+                AxisMaskValidator,
+                PerAxisScoreMaskConfig(
+                    input_dim=2,
+                    output_dim=3,
+                    mask_threshold=0.5,
+                    mask_surrogate_scale=5.0,
+                    mask_floor=0.0,
+                    mask_dimension_option=MaskDimensionOptions.ROW,
+                    model_config=invalid_model_config,
+                ),
+            ),
+            (
+                DynamicWeightValidator,
+                SingleModelDynamicWeightConfig(
+                    input_dim=2,
+                    output_dim=2,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                    decay_rate=0.0,
+                    decay_warmup_batches=0,
+                    normalization_option=WeightNormalizationOptions.DISABLED,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.DISABLED
+                    ),
+                    model_config=invalid_model_config,
+                ),
+            ),
+        )
+
+        for validator, config in cases:
+            with self.subTest(config_type=type(config).__name__):
+                self.assert_exact_error(
+                    TypeError,
+                    "model_config must be a LayerStackConfig for "
+                    f"{type(config).__name__}, got object.",
+                    lambda validator=validator, config=config: validator.validate(
+                        SimpleNamespace(cfg=config)
+                    ),
+                )
 
     def test_mask_validation_boundaries_have_exact_errors(self) -> None:
         base = {
