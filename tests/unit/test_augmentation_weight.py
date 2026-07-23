@@ -966,9 +966,10 @@ class TestWeightHandlerForward(unittest.TestCase):
             torch.float64,
         ):
             maximum_finite_value = torch.finfo(dtype).max
-            for normalization, expected_value in (
-                expected_value_by_normalization.items()
-            ):
+            for (
+                normalization,
+                expected_value,
+            ) in expected_value_by_normalization.items():
                 message = f"dtype={dtype}, normalization={normalization}"
                 with self.subTest(msg=message):
                     cfg = self.preset(normalization_option=normalization)
