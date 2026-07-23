@@ -1754,6 +1754,27 @@ class TestAxisMaskHandlers(unittest.TestCase):
             "instantiate a concrete leaf config instead.",
         )
 
+    def test_concrete_constructor_applies_overrides_without_mutating_source(self):
+        source = self.preset(
+            model_type=PerAxisScoreMaskConfig,
+            mask_threshold=0.25,
+            mask_surrogate_scale=3.0,
+            mask_floor=0.0,
+        )
+        overrides = PerAxisScoreMaskConfig(
+            mask_threshold=0.75,
+            mask_floor=0.2,
+        )
+
+        model = PerAxisScoreMask(source, overrides)
+
+        self.assertIsNot(model.cfg, source)
+        self.assertEqual(model.mask_threshold, 0.75)
+        self.assertEqual(model.mask_surrogate_scale, 3.0)
+        self.assertEqual(model.mask_floor, 0.2)
+        self.assertEqual(source.mask_threshold, 0.25)
+        self.assertEqual(source.mask_floor, 0.0)
+
     def test_mask_dimension_field_absent_on_outer_product_and_diagonal(self):
         for config_cls in (OuterProductMaskConfig, DiagonalAxisMaskConfig):
             with self.subTest(config_cls=config_cls.__name__):
