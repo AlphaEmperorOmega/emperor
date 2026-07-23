@@ -348,6 +348,29 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         self.assertGreaterEqual(float(dead_fraction), 0.0)
         self.assertLessEqual(float(dead_fraction), 1.0)
 
+    def test_single_slot_bank_logs_finite_zero_coefficient_of_variation(self):
+        bank = self.build_soft_weighted_bank_weight(
+            input_dim=1, bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_ONE
+        )
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_bank(bank)
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        logged = dict(module.logged_scalars)
+        coefficient_of_variation = logged[
+            f"{self.BANK_MODULE_PATH}/bank/utilization_coefficient_of_variation"
+        ]
+        self.assertTrue(torch.isfinite(coefficient_of_variation))
+        torch.testing.assert_close(coefficient_of_variation, torch.zeros(()))
+
     def test_distribution_summaries_match_exact_bank_reductions(self):
         batch_size = 2
         input_dim = 2

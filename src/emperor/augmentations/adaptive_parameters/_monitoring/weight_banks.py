@@ -145,12 +145,15 @@ class _WeightBankDiagnostics:
         dead_slot_utilization_floor: float,
     ) -> _BankUtilizationMetrics:
         utilization = distribution_summary.per_slot_utilization.float()
+        coefficient_of_variation = utilization.new_zeros(())
+        if utilization.numel() > 1:
+            coefficient_of_variation = utilization.std() / utilization.mean().clamp_min(
+                1e-6
+            )
         return _BankUtilizationMetrics(
             marginal_entropy=cls.distribution_entropy(utilization, dimension=-1),
             mean_per_sample_entropy=(distribution_summary.mean_per_sample_entropy),
-            coefficient_of_variation=(
-                utilization.std() / utilization.mean().clamp_min(1e-6)
-            ),
+            coefficient_of_variation=coefficient_of_variation,
             active_slots=(utilization > dead_slot_utilization_floor).sum().float(),
             dead_slot_fraction=(
                 (utilization <= dead_slot_utilization_floor).float().mean()
