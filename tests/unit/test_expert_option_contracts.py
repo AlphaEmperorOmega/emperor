@@ -267,3 +267,107 @@ class ExpertOptionContractTests(unittest.TestCase):
                 )
 
                 torch.testing.assert_close(output, torch.tensor([[2.0], [0.0]]))
+
+    def test_identity_fallback_matches_weighting_position_and_flag(self) -> None:
+        for weighted in (False, True):
+            for weighting_position in ExpertWeightingPositionOptions:
+                with self.subTest(
+                    weighted=weighted,
+                    weighting_position=weighting_position,
+                ):
+                    model = (
+                        _mixture_config(
+                            top_k=1,
+                            num_experts=2,
+                            capacity_factor=1.0,
+                            dropped_token_behavior=DroppedTokenOptions.IDENTITY,
+                            weighted=weighted,
+                            weighting_position=weighting_position,
+                        )
+                        .build()
+                        .eval()
+                    )
+                    _set_affine_experts(
+                        model,
+                        weights=(2.0, 0.0),
+                        biases=(3.0, 0.0),
+                    )
+                    if not weighted:
+                        expected = torch.tensor([[7.0], [5.0]])
+                    elif (
+                        weighting_position
+                        == ExpertWeightingPositionOptions.BEFORE_EXPERTS
+                    ):
+                        expected = torch.tensor([[4.0], [3.75]])
+                    else:
+                        expected = torch.tensor([[1.75], [3.75]])
+
+                    output, _skip_mask, _loss = model(
+                        torch.tensor([[2.0], [5.0]]),
+                        probabilities=torch.tensor([0.25, 0.75]),
+                        indices=torch.zeros(2, dtype=torch.long),
+                    )
+
+                    torch.testing.assert_close(output, expected)
+
+    def test_dropped_route_jacobian_matches_zero_and_identity_fallbacks(
+        self,
+    ) -> None:
+        for behavior in DroppedTokenOptions:
+            for weighted in (False, True):
+                for weighting_position in ExpertWeightingPositionOptions:
+                    with self.subTest(
+                        behavior=behavior,
+                        weighted=weighted,
+                        weighting_position=weighting_position,
+                    ):
+                        model = (
+                            _mixture_config(
+                                top_k=1,
+                                num_experts=2,
+                                capacity_factor=1.0,
+                                dropped_token_behavior=behavior,
+                                weighted=weighted,
+                                weighting_position=weighting_position,
+                            )
+                            .build()
+                            .eval()
+                        )
+                        _set_affine_experts(
+                            model,
+                            weights=(2.0, 0.0),
+                            biases=(3.0, 0.0),
+                        )
+                        inputs = torch.tensor(
+                            [[2.0], [5.0]],
+                            requires_grad=True,
+                        )
+                        probabilities = torch.tensor(
+                            [0.25, 0.75],
+                            requires_grad=True,
+                        )
+
+                        output, _skip_mask, _loss = model(
+                            inputs,
+                            probabilities=probabilities,
+                            indices=torch.zeros(2, dtype=torch.long),
+                        )
+                        output.sum().backward()
+
+                        expected_input_gradient = 0.0
+                        if behavior == DroppedTokenOptions.IDENTITY:
+                            expected_input_gradient = 0.75 if weighted else 1.0
+                        self.assertEqual(
+                            inputs.grad[1].item(),
+                            expected_input_gradient,
+                        )
+                        if weighted:
+                            expected_probability_gradient = (
+                                5.0 if behavior == DroppedTokenOptions.IDENTITY else 0.0
+                            )
+                            self.assertEqual(
+                                probabilities.grad[1].item(),
+                                expected_probability_gradient,
+                            )
+                        else:
+                            self.assertIsNone(probabilities.grad)
