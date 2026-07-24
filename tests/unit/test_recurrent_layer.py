@@ -1605,6 +1605,18 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIsNone(model.residual_config)
         self.assertIsNone(model.residual_connection)
 
+    def test_recurrent_rejects_attention_residual_without_a_history_bridge(self):
+        config = self.recurrent_config(
+            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ATTENTION_RESIDUAL is not supported for RecurrentLayerConfig.*"
+            "distinct learned query",
+        ):
+            RecurrentLayer(config)
+
     def test_recurrent_residual_options_apply_between_steps(self):
         dim = 3
         hidden = torch.ones(2, dim)

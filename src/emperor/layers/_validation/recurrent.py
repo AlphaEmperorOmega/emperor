@@ -5,7 +5,10 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
-from emperor.layers._options import LayerNormPositionOptions
+from emperor.layers._options import (
+    LayerNormPositionOptions,
+    ResidualConnectionOptions,
+)
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
     _MEMORY_CONFIG_FIELDS,
@@ -179,6 +182,15 @@ class RecurrentLayerValidator(ValidatorBase):
             residual_config,
             owner_name="RecurrentLayerConfig",
         )
+        if (
+            residual_config is not None
+            and residual_config.option == ResidualConnectionOptions.ATTENTION_RESIDUAL
+        ):
+            raise ValueError(
+                "ATTENTION_RESIDUAL is not supported for RecurrentLayerConfig "
+                "until recurrent depth owns a distinct learned query and an "
+                "explicit forward-local history bridge."
+            )
 
     @staticmethod
     def _validate_halting_config(

@@ -182,6 +182,18 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             cfg.residual_config,
         )
 
+    def test_rejects_attention_residual_without_an_encoder_history_bridge(self):
+        config = self.preset(
+            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL)
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ATTENTION_RESIDUAL is not supported for "
+            "TransformerEncoderLayerConfig.*history bridge",
+        ):
+            TransformerEncoderLayer(config)
+
     def test_weighted_residual_uses_separate_parameters_per_encoder_join(self):
         cfg = self.preset(
             residual_connection_option=ResidualConnectionOptions.WEIGHTED_RESIDUAL
@@ -633,6 +645,18 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             model.residual_config,
             cfg.residual_config,
         )
+
+    def test_rejects_attention_residual_without_a_decoder_history_bridge(self):
+        config = self.preset(
+            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL)
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "ATTENTION_RESIDUAL is not supported for "
+            "TransformerDecoderLayerConfig.*history bridge",
+        ):
+            TransformerDecoderLayer(config)
 
     def test_weighted_residual_uses_separate_parameters_per_decoder_join(self):
         cfg = self.preset(
