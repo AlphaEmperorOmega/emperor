@@ -42,9 +42,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/emperor"
-Repository = "https://github.com/yourusername/emperor"
-Issues = "https://github.com/yourusername/emperor/issues"
+Homepage = "https://github.com/AlphaEmperorOmega/emperor"
+Repository = "https://github.com/AlphaEmperorOmega/emperor"
+Issues = "https://github.com/AlphaEmperorOmega/emperor/issues"
 
 [tool.setuptools]
 include-package-data = false

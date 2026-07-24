@@ -120,6 +120,7 @@ class CanonicalCutoverScannerTests(unittest.TestCase):
         forbidden_fragments = (
             "logs" + "-archive",
             "Model" + " Visualizer",
+            "yourusername" + "/emperor",
             "env" + ".sh",
             "run" + "_test.sh",
             "download" + "_logs.sh",
