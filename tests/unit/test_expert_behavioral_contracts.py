@@ -25,6 +25,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    RowLayout,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -670,6 +671,109 @@ class ExpertBehavioralContractTests(unittest.TestCase):
         )
 
         self.assertIs(result.skip_mask, skip_mask)
+
+    def test_restored_moe_boundary_preserves_layout_but_routed_experts_do_not_see_it(
+        self,
+    ) -> None:
+        model = MixtureOfExpertsModel(
+            _routing_model_config(RoutingInitializationMode.LAYER)
+        )
+        routed_expert_layouts = []
+        hooks = []
+        for expert_layer in model.expert_stack:
+            for expert_model in expert_layer.model.expert_modules:
+                hooks.append(
+                    expert_model.register_forward_pre_hook(
+                        lambda _module, args: routed_expert_layouts.append(
+                            args[0].row_layout
+                        )
+                    )
+                )
+        layout = RowLayout.rows(
+            3,
+            valid_rows=torch.tensor([True, False, True]),
+            context_sharing_restricted=True,
+        )
+
+        try:
+            result = model(
+                MixtureOfExpertsLayerState(
+                    hidden=torch.randn(3, 2),
+                    row_layout=layout,
+                )
+            )
+        finally:
+            for hook in hooks:
+                hook.remove()
+
+        self.assertIs(result.row_layout, layout)
+        self.assertTrue(routed_expert_layouts)
+        self.assertTrue(all(item is None for item in routed_expert_layouts))
+
+    def test_layout_rejects_unreduced_multi_route_output_before_expert_execution(
+        self,
+    ) -> None:
+        config = _mixture_model_config()
+        config.top_k = 2
+        leaf_config = config.stack_config.layer_config.layer_model_config
+        leaf_config.top_k = 2
+        leaf_config.compute_expert_mixture_flag = False
+        model = MixtureOfExpertsModel(config)
+        expert_calls = []
+        hooks = [
+            expert.register_forward_pre_hook(lambda *_args: expert_calls.append(True))
+            for expert in model.expert_stack[0].model.expert_modules
+        ]
+        probabilities = torch.ones(3, 2)
+
+        try:
+            with self.assertRaisesRegex(
+                ValueError,
+                "multiple unreduced expert rows",
+            ):
+                model(
+                    MixtureOfExpertsLayerState(
+                        hidden=torch.randn(3, 2),
+                        probabilities=probabilities,
+                        row_layout=RowLayout.rows(
+                            3,
+                            context_sharing_restricted=False,
+                        ),
+                    )
+                )
+            self.assertEqual(expert_calls, [])
+
+            layoutless_result = model(
+                MixtureOfExpertsLayerState(
+                    hidden=torch.randn(3, 2),
+                    probabilities=probabilities,
+                )
+            )
+        finally:
+            for hook in hooks:
+                hook.remove()
+
+        self.assertEqual(tuple(layoutless_result.hidden.shape), (6, 2))
+        self.assertIsNone(layoutless_result.row_layout)
+
+    def test_top_k_one_unreduced_routing_preserves_layout(self) -> None:
+        config = _mixture_model_config()
+        leaf_config = config.stack_config.layer_config.layer_model_config
+        leaf_config.compute_expert_mixture_flag = False
+        model = MixtureOfExpertsModel(config)
+        layout = RowLayout.rows(3, context_sharing_restricted=False)
+
+        result = model(
+            MixtureOfExpertsLayerState(
+                hidden=torch.randn(3, 2),
+                probabilities=torch.ones(3),
+                indices=torch.tensor([1, 0, 1]),
+                row_layout=layout,
+            )
+        )
+
+        self.assertEqual(tuple(result.hidden.shape), (3, 2))
+        self.assertIs(result.row_layout, layout)
 
     def test_all_active_mask_matches_baseline_and_mixed_mask_keeps_gradients(
         self,
