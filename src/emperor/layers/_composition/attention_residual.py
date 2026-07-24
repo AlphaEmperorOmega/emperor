@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar, cast
 
 import torch
 import torch.nn as nn
@@ -11,6 +11,9 @@ from torch import Tensor
 from emperor.layers._config import AttentionResidualConfig
 from emperor.layers._validation import AttentionResidualValidator
 from emperor.nn import Module
+
+if TYPE_CHECKING:
+    from emperor.layers._composition.residual import ResidualConnection
 
 
 @dataclass(slots=True)
@@ -145,3 +148,20 @@ class AttentionResidual(Module):
             dim=0,
         )
         return mixed.to(dtype=values.dtype)
+
+
+class AttentionResidualOption:
+    @staticmethod
+    def forward(
+        connection: ResidualConnection,
+        current: Tensor,
+        previous: Tensor,
+        *,
+        residual_state: AttentionResidualState | None = None,
+    ) -> Tensor:
+        connection.VALIDATOR.validate_attention_residual_state(residual_state)
+        attention_residual = cast(AttentionResidual, connection.attention_residual)
+        return attention_residual(
+            current,
+            cast(AttentionResidualState, residual_state),
+        )

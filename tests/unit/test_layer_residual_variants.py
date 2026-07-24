@@ -197,6 +197,13 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                 ),
                 ("model.weight_params", "model.bias_params"),
             ),
+            (
+                ResidualConfig(
+                    option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                    residual_dim=2,
+                ),
+                ("attention_residual.query", "attention_residual.key_norm.weight"),
+            ),
         )
 
         for config, expected_names in cases:
@@ -242,6 +249,10 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                 residual_dim=2,
                 model_config=LinearLayerConfig(bias_flag=True),
             ),
+            ResidualConfig(
+                option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                residual_dim=2,
+            ),
         )
         current = torch.tensor([[2.0, 3.0]])
         previous = torch.tensor([[5.0, 7.0]])
@@ -252,8 +263,20 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                 restored = config.build()
                 restored.load_state_dict(original.state_dict(), strict=True)
 
-                expected = original(current, previous)
-                actual = restored(current, previous)
+                if config.option == ResidualConnectionOptions.ATTENTION_RESIDUAL:
+                    expected = original(
+                        current,
+                        previous,
+                        residual_state=original.new_state(previous),
+                    )
+                    actual = restored(
+                        current,
+                        previous,
+                        residual_state=restored.new_state(previous),
+                    )
+                else:
+                    expected = original(current, previous)
+                    actual = restored(current, previous)
 
                 torch.testing.assert_close(actual, expected)
 

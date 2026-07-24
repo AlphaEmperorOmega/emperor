@@ -195,7 +195,7 @@ class TestLayer(unittest.TestCase):
         self.assertIs(layer_package.ResidualConfig, ResidualConfig)
         self.assertEqual(
             tuple(residual_config_fields),
-            ("residual_dim", "option", "model_config"),
+            ("residual_dim", "option", "model_config", "attention_config"),
         )
         model_config_help = residual_config_fields["model_config"].metadata["help"]
         self.assertIn("data-dependent", model_config_help)
@@ -231,6 +231,7 @@ class TestLayer(unittest.TestCase):
                 ResidualConnectionOptions.RESIDUAL,
                 ResidualConnectionOptions.WEIGHTED_RESIDUAL,
                 ResidualConnectionOptions.WEIGHTED_BLEND,
+                ResidualConnectionOptions.ATTENTION_RESIDUAL,
             ),
         )
 
@@ -1256,6 +1257,140 @@ class TestLayer(unittest.TestCase):
                     model_config=LinearLayerConfig(bias_flag=True),
                 )
             )
+
+    def test_legacy_residual_rejects_attention_residual_configuration(self):
+        with self.assertRaisesRegex(ValueError, "attention_config.*ATTENTION_RESIDUAL"):
+            ResidualConnection(
+                ResidualConfig(
+                    option=ResidualConnectionOptions.RESIDUAL,
+                    residual_dim=2,
+                    attention_config=AttentionResidualConfig(block_size=2),
+                )
+            )
+
+    def test_attention_residual_rejects_the_wrong_attention_config_type(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            "attention_config.*AttentionResidualConfig",
+        ):
+            ResidualConnection(
+                ResidualConfig(
+                    option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                    residual_dim=2,
+                    attention_config=object(),
+                )
+            )
+
+    def test_attention_residual_requires_a_positive_integer_dimension(self):
+        invalid_dimensions = (
+            (None, TypeError),
+            (True, TypeError),
+            (0, ValueError),
+        )
+
+        for residual_dim, error_type in invalid_dimensions:
+            with self.subTest(residual_dim=residual_dim):
+                with self.assertRaisesRegex(error_type, "residual_dim"):
+                    ResidualConnection(
+                        ResidualConfig(
+                            option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                            residual_dim=residual_dim,
+                        )
+                    )
+
+    def test_attention_residual_defaults_to_full_depth_mixing(self):
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                residual_dim=2,
+            )
+        )
+        initial = torch.tensor([[2.0, 6.0]])
+        current = torch.tensor([[4.0, 10.0]])
+        residual_state = connection.new_state(initial)
+
+        result = connection(current, initial, residual_state=residual_state)
+
+        torch.testing.assert_close(result, (initial + current) / 2.0)
+        self.assertEqual(connection.attention_residual.block_size, 1)
+        self.assertEqual(connection.attention_residual.rms_norm_epsilon, 1e-6)
+        self.assertIsNone(connection.raw_weight)
+        self.assertIsNone(connection.model)
+        self.assertEqual(
+            tuple(connection.state_dict()),
+            (
+                "attention_residual.query",
+                "attention_residual.key_norm.weight",
+            ),
+        )
+
+    def test_attention_residual_build_applies_dimension_override_without_mutation(self):
+        attention_config = AttentionResidualConfig(
+            residual_dim=99,
+            block_size=3,
+            rms_norm_epsilon=1e-5,
+        )
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                residual_dim=4,
+                attention_config=attention_config,
+            )
+        )
+
+        self.assertIs(connection.attention_config, attention_config)
+        self.assertEqual(attention_config.residual_dim, 99)
+        self.assertEqual(connection.attention_residual.residual_dim, 4)
+        self.assertEqual(connection.attention_residual.block_size, 3)
+        self.assertEqual(connection.attention_residual.rms_norm_epsilon, 1e-5)
+
+    def test_attention_residual_rejects_a_coefficient_model(self):
+        with self.assertRaisesRegex(ValueError, "weighted residual modes"):
+            ResidualConnection(
+                ResidualConfig(
+                    option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                    residual_dim=2,
+                    model_config=LinearLayerConfig(bias_flag=True),
+                )
+            )
+
+    def test_attention_residual_requires_explicit_forward_local_state(self):
+        connection = ResidualConnection(
+            ResidualConfig(
+                option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                residual_dim=2,
+            )
+        )
+        hidden = torch.ones(1, 2)
+
+        with self.assertRaisesRegex(ValueError, "residual_state.*required"):
+            connection(hidden, hidden)
+
+    def test_legacy_residual_cannot_create_attention_residual_state(self):
+        connection = ResidualConnection(
+            ResidualConfig(option=ResidualConnectionOptions.RESIDUAL)
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "only available.*ATTENTION_RESIDUAL",
+        ):
+            connection.new_state(torch.ones(1, 2))
+
+    def test_legacy_residual_ignores_optional_attention_residual_state(self):
+        connection = ResidualConnection(
+            ResidualConfig(option=ResidualConnectionOptions.RESIDUAL)
+        )
+        current = torch.tensor([[2.0, 3.0]])
+        previous = torch.tensor([[5.0, 7.0]])
+
+        result = connection(
+            current,
+            previous,
+            residual_state=object(),
+        )
+
+        torch.testing.assert_close(result, current + previous)
 
     def test_existing_weighted_residual_state_is_unchanged_by_residual_dimension(self):
         connection = ResidualConnection(

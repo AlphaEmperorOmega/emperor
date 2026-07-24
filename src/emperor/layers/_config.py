@@ -66,7 +66,8 @@ class AttentionResidualConfig(ConfigBase):
 class ResidualConfig(ConfigBase):
     residual_dim: int | None = optional_field(
         "Residual feature dimension. Layer owners override this value from their "
-        "output dimension. Required when model_config is provided."
+        "output dimension. Required for direct construction when model_config is "
+        "provided or option is ATTENTION_RESIDUAL."
     )
     option: ResidualConnectionOptions | None = optional_field(
         "Residual composition mode. Providing ResidualConfig enables the residual "
@@ -77,7 +78,13 @@ class ResidualConfig(ConfigBase):
         "When provided, the model receives the concatenated current and previous "
         "values and produces one raw mixing coefficient per feature. When omitted, "
         "weighted modes use a learned scalar nn.Parameter. RESIDUAL performs direct "
-        "addition and does not accept a coefficient model."
+        "addition and ATTENTION_RESIDUAL performs depth mixing; neither accepts a "
+        "coefficient model."
+    )
+    attention_config: "AttentionResidualConfig | None" = optional_field(
+        "Optional depth-mixing config for ATTENTION_RESIDUAL. When omitted, Full "
+        "Attention Residuals use block_size=1 and rms_norm_epsilon=1e-6. Other "
+        "residual modes do not accept this config."
     )
 
     def _registry_owner(self) -> type:
