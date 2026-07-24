@@ -23,3 +23,11 @@ python -m ruff check .
 
 Start the installed application with `emperor-workbench`, or run
 `python -m emperor_workbench` while developing.
+
+## License
+
+Except where otherwise noted, the original source code and documentation in
+this distribution are licensed under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+See [LICENSE](LICENSE) for the complete terms and [NOTICE](NOTICE) for scope,
+ownership, and third-party exclusions.

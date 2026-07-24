@@ -845,5 +845,8 @@ npm run test:contract:e2e
 
 ## License
 
-[CC BY-NC 4.0](LICENSE) - free to use and modify for non-commercial purposes
-with attribution.
+Except where otherwise noted, the original source code, documentation, and
+assets in this repository are licensed under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+See [LICENSE](LICENSE) for the complete terms and [NOTICE](NOTICE) for scope,
+ownership, and third-party exclusions.
