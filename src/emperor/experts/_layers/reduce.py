@@ -114,10 +114,8 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
     def __select_expert_samples(
         self,
         input_batch: Tensor,
-        expert_routing_positions: Tensor | None,
+        expert_routing_positions: Tensor,
     ) -> Tensor:
-        if expert_routing_positions is None:
-            return input_batch
         return input_batch[expert_routing_positions]
 
     def forward(

@@ -1,7 +1,7 @@
 import math
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 from torch import Tensor
@@ -292,19 +292,30 @@ class MixtureOfExpertsValidator(ValidatorBase):
         skip_mask: Tensor | None = None,
     ) -> None:
         cls.validate_input_batch(model, input_batch)
-        if probabilities is not None:
-            cls.validate_tensor_is_vector_or_matrix("probabilities", probabilities)
-            cls.validate_routing_width("probabilities", probabilities, model.top_k)
+        cls.validate_external_routing_inputs(model, probabilities, indices)
+        validated_probabilities = cast(Tensor, probabilities)
+        cls.validate_tensor_is_vector_or_matrix(
+            "probabilities", validated_probabilities
+        )
+        cls.validate_routing_width(
+            "probabilities", validated_probabilities, model.top_k
+        )
+        cls.validate_probabilities_floating(validated_probabilities)
+        cls.validate_probabilities_dtype(input_batch, validated_probabilities)
+        cls.validate_probabilities_device(input_batch, validated_probabilities)
+        cls.validate_probabilities_finite(validated_probabilities)
+        cls.validate_probabilities_range(validated_probabilities)
         if indices is not None:
             cls.validate_tensor_is_vector_or_matrix("indices", indices)
             cls.validate_routing_width("indices", indices, model.top_k)
+            cls.validate_indices_device(input_batch, indices)
             cls.validate_indices_dtype_and_range(model, indices)
-        cls.validate_external_routing_inputs(model, probabilities, indices)
-        if probabilities is not None and probabilities.numel() != input_batch.shape[0]:
+            cls.validate_unique_expert_indices(model, indices)
+        if validated_probabilities.numel() != input_batch.shape[0]:
             raise ValueError(
                 "Input Error: 'probabilities' must contain one routing weight per "
                 "flattened reduce input sample, received probabilities shape "
-                f"{tuple(probabilities.shape)} and input_batch shape "
+                f"{tuple(validated_probabilities.shape)} and input_batch shape "
                 f"{tuple(input_batch.shape)}."
             )
         if indices is not None and indices.numel() != input_batch.shape[0]:
@@ -314,8 +325,11 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 f"{tuple(indices.shape)} and input_batch shape "
                 f"{tuple(input_batch.shape)}."
             )
-        if probabilities is not None:
-            cls.validate_skip_mask(input_batch, skip_mask, probabilities.shape[0])
+        cls.validate_skip_mask(
+            input_batch,
+            skip_mask,
+            validated_probabilities.shape[0],
+        )
 
     @staticmethod
     def validate_skip_mask(
@@ -395,6 +409,63 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_tensor_is_vector_or_matrix("probabilities", probabilities)
         cls.validate_batch_dimension("probabilities", probabilities, input_batch)
         cls.validate_routing_width("probabilities", probabilities, model.top_k)
+        cls.validate_probabilities_floating(probabilities)
+        cls.validate_probabilities_dtype(input_batch, probabilities)
+        cls.validate_probabilities_device(input_batch, probabilities)
+        cls.validate_probabilities_finite(probabilities)
+        cls.validate_probabilities_range(probabilities)
+
+    @staticmethod
+    def validate_probabilities_floating(probabilities: Tensor) -> None:
+        if not torch.is_floating_point(probabilities):
+            raise TypeError(
+                "Input Error: 'probabilities' must have a floating-point dtype "
+                f"for MixtureOfExperts, received dtype {probabilities.dtype}."
+            )
+
+    @staticmethod
+    def validate_probabilities_dtype(
+        input_batch: Tensor,
+        probabilities: Tensor,
+    ) -> None:
+        if probabilities.dtype != input_batch.dtype:
+            raise ValueError(
+                "Input Error: 'probabilities' dtype must match input_batch dtype "
+                f"for MixtureOfExperts, received probabilities dtype "
+                f"{probabilities.dtype} and input_batch dtype {input_batch.dtype}."
+            )
+
+    @staticmethod
+    def validate_probabilities_device(
+        input_batch: Tensor,
+        probabilities: Tensor,
+    ) -> None:
+        if probabilities.device != input_batch.device:
+            raise ValueError(
+                "Input Error: 'probabilities' device must match input_batch device "
+                f"for MixtureOfExperts, received probabilities device "
+                f"{probabilities.device} and input_batch device {input_batch.device}."
+            )
+
+    @staticmethod
+    def validate_probabilities_finite(probabilities: Tensor) -> None:
+        if not torch.isfinite(probabilities).all().item():
+            raise ValueError(
+                "Input Error: 'probabilities' values must all be finite for "
+                "MixtureOfExperts."
+            )
+
+    @staticmethod
+    def validate_probabilities_range(probabilities: Tensor) -> None:
+        values_are_out_of_range = torch.logical_or(
+            probabilities < 0.0,
+            probabilities > 1.0,
+        ).any()
+        if values_are_out_of_range.item():
+            raise ValueError(
+                "Input Error: 'probabilities' values must be in the closed interval "
+                "[0, 1] for MixtureOfExperts."
+            )
 
     @classmethod
     def validate_indices(
@@ -408,8 +479,18 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_tensor_is_vector_or_matrix("indices", indices)
         cls.validate_batch_dimension("indices", indices, input_batch)
         cls.validate_routing_width("indices", indices, model.top_k)
+        cls.validate_indices_device(input_batch, indices)
         cls.validate_indices_dtype_and_range(model, indices)
         cls.validate_unique_expert_indices(model, indices)
+
+    @staticmethod
+    def validate_indices_device(input_batch: Tensor, indices: Tensor) -> None:
+        if indices.device != input_batch.device:
+            raise ValueError(
+                "Input Error: 'indices' device must match input_batch device for "
+                "MixtureOfExperts, received indices device "
+                f"{indices.device} and input_batch device {input_batch.device}."
+            )
 
     @staticmethod
     def validate_indices_dtype_and_range(

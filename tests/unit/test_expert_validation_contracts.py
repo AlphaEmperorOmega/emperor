@@ -564,3 +564,202 @@ class ExpertValidationContractTests(unittest.TestCase):
 
         self.assertEqual(model.shared_sampler.router.input_dim, 2)
         self.assertIsNone(config.sampler_config.router_config.input_dim)
+
+    def test_external_probabilities_must_use_a_floating_dtype(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(TypeError) as error:
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2, dtype=torch.int64),
+                indices=torch.tensor([0, 1]),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'probabilities' must have a floating-point dtype for "
+            "MixtureOfExperts, received dtype torch.int64.",
+        )
+
+    def test_external_probabilities_must_match_input_dtype(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 2, dtype=torch.float64),
+                probabilities=torch.ones(2, dtype=torch.float32),
+                indices=torch.tensor([0, 1]),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'probabilities' dtype must match input_batch dtype for "
+            "MixtureOfExperts, received probabilities dtype torch.float32 and "
+            "input_batch dtype torch.float64.",
+        )
+
+    def test_external_probabilities_must_match_input_device(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2, device="meta"),
+                indices=torch.tensor([0, 1]),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'probabilities' device must match input_batch device for "
+            "MixtureOfExperts, received probabilities device meta and input_batch "
+            "device cpu.",
+        )
+
+    def test_external_probabilities_must_be_finite(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.tensor([float("nan"), 1.0]),
+                indices=torch.tensor([0, 1]),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'probabilities' values must all be finite for "
+            "MixtureOfExperts.",
+        )
+
+    def test_external_probabilities_must_be_in_the_unit_interval(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.tensor([-0.01, 1.0]),
+                indices=torch.tensor([0, 1]),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'probabilities' values must be in the closed interval "
+            "[0, 1] for MixtureOfExperts.",
+        )
+
+    def test_external_indices_must_match_input_device(self) -> None:
+        model = _mixture_config().build()
+
+        with self.assertRaises(ValueError) as error:
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2),
+                indices=torch.tensor([0, 1], device="meta"),
+            )
+        self.assertEqual(
+            str(error.exception),
+            "Input Error: 'indices' device must match input_batch device for "
+            "MixtureOfExperts, received indices device meta and input_batch device "
+            "cpu.",
+        )
+
+    def test_reduce_probabilities_must_use_a_floating_dtype(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "Input Error: 'probabilities' must have a floating-point dtype",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2, dtype=torch.int64),
+                indices=torch.tensor([0, 1]),
+            )
+
+    def test_reduce_reports_missing_external_probabilities_before_value_checks(
+        self,
+    ) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Missing input: 'probabilities' must be supplied",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=None,
+                indices=torch.tensor([0, 1]),
+            )
+
+    def test_reduce_indices_must_match_input_device(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'indices' device must match input_batch device",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2),
+                indices=torch.tensor([0, 1], device="meta"),
+            )
+
+    def test_reduce_rejects_duplicate_sparse_expert_indices(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config(top_k=2, num_experts=3))
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'indices' must contain distinct expert ids",
+        ):
+            model(
+                torch.ones(4, 2),
+                probabilities=torch.full((2, 2), 0.5),
+                indices=torch.tensor([[0, 0], [1, 2]]),
+            )
+
+    def test_reduce_probabilities_must_match_input_dtype(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'probabilities' dtype must match input_batch dtype",
+        ):
+            model(
+                torch.ones(2, 2, dtype=torch.float64),
+                probabilities=torch.ones(2, dtype=torch.float32),
+                indices=torch.tensor([0, 1]),
+            )
+
+    def test_reduce_probabilities_must_match_input_device(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'probabilities' device must match input_batch device",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.ones(2, device="meta"),
+                indices=torch.tensor([0, 1]),
+            )
+
+    def test_reduce_probabilities_must_be_finite(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'probabilities' values must all be finite",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.tensor([float("inf"), 1.0]),
+                indices=torch.tensor([0, 1]),
+            )
+
+    def test_reduce_probabilities_must_be_in_the_unit_interval(self) -> None:
+        model = MixtureOfExpertsReduce(_mixture_config())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Input Error: 'probabilities' values must be in the closed interval",
+        ):
+            model(
+                torch.ones(2, 2),
+                probabilities=torch.tensor([0.0, 1.01]),
+                indices=torch.tensor([0, 1]),
+            )

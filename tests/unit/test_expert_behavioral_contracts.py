@@ -466,22 +466,50 @@ class ExpertBehavioralContractTests(unittest.TestCase):
         inputs = torch.ones(2, 2)
         probabilities = torch.full((2, 2), 0.5)
         cases = (
-            (TypeError, [1, 0]),
-            (ValueError, torch.ones(2)),
-            (ValueError, torch.ones(2, 2)),
-            (ValueError, torch.ones(3, 1)),
-            (ValueError, torch.ones(2, 1, device="meta")),
+            (
+                TypeError,
+                [1, 0],
+                "Input Error: 'skip_mask' must be a Tensor or None for "
+                "MixtureOfExperts, received list.",
+            ),
+            (
+                ValueError,
+                torch.ones(2),
+                "Input Error: 'skip_mask' must have shape (batch_size, 1) for "
+                "MixtureOfExperts, received a 1D tensor with shape (2,).",
+            ),
+            (
+                ValueError,
+                torch.ones(2, 2),
+                "Input Error: 'skip_mask' feature dimension must be 1 for "
+                "MixtureOfExperts, received shape (2, 2).",
+            ),
+            (
+                ValueError,
+                torch.ones(3, 1),
+                "Input Error: 'skip_mask' batch dimension must match the expected "
+                "routing batch size for MixtureOfExperts, received skip_mask shape "
+                "(3, 1) and expected batch size 2.",
+            ),
+            (
+                ValueError,
+                torch.ones(2, 1, device="meta"),
+                "Input Error: 'skip_mask' must be on the same device as "
+                "input_batch for MixtureOfExperts, received skip_mask device meta "
+                "and input_batch device cpu.",
+            ),
         )
 
-        for error_type, skip_mask in cases:
+        for error_type, skip_mask, expected_message in cases:
             with self.subTest(error_type=error_type.__name__, skip_mask=skip_mask):
-                with self.assertRaises(error_type):
+                with self.assertRaises(error_type) as error:
                     model(
                         inputs,
                         probabilities=probabilities,
                         indices=None,
                         skip_mask=skip_mask,
                     )
+                self.assertEqual(str(error.exception), expected_message)
 
     def test_reduce_validates_mask_against_output_samples_not_mapped_rows(
         self,
