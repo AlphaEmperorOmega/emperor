@@ -2,13 +2,15 @@
 
 from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 
 from emperor.attention._ops.batching import BatchDimensionManager
 from emperor.attention._ops.bias import KeyValueBias
 from emperor.attention._ops.zero_attention import ZeroAttention
-from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
 from emperor.attention._validation import MultiHeadAttentionValidator
+from emperor.layers import RowLayout
 from emperor.nn import Module
 
 if TYPE_CHECKING:
@@ -88,7 +90,10 @@ class MultiHeadAttentionAbstract(Module):
         )
         self.VALIDATOR.validate_runtime_layout(self, runtime_layout)
         masks = self.masks.prepare_attention_masks(qkv.query, masks, runtime_layout)
-        qkv = self.projector.compute_qkv_projections(qkv)
+        runtime_layout = self.__attach_projection_row_layout(
+            qkv, masks, runtime_layout, static_k=static_k, static_v=static_v
+        )
+        qkv = self.projector.compute_qkv_projections(qkv, runtime_layout=runtime_layout)
         qkv = self.reshaper.reshape_qkv_for_attention(
             qkv, static_k, static_v, runtime_layout
         )
@@ -109,3 +114,63 @@ class MultiHeadAttentionAbstract(Module):
         )
         auxiliary_loss = self.projector.get_auxiliary_loss_and_clear()
         return attention_output, attention_weights, auxiliary_loss
+
+    def __attach_projection_row_layout(
+        self,
+        qkv: QKV,
+        masks: AttentionMasks,
+        runtime_layout: AttentionRuntimeLayout,
+        *,
+        static_k: Tensor | None,
+        static_v: Tensor | None,
+    ) -> AttentionRuntimeLayout:
+        is_self_attention = qkv.query is qkv.key and qkv.key is qkv.value
+        static_key_is_provided = static_k is not None
+        static_value_is_provided = static_v is not None
+        static_source_is_provided = static_key_is_provided or static_value_is_provided
+        valid_projection_rows = None
+        if is_self_attention and not static_source_is_provided:
+            valid_projection_rows = self.__flatten_valid_self_attention_rows(
+                masks.key_padding_mask,
+                runtime_layout,
+            )
+
+        qkv_inputs_are_not_shared = not is_self_attention
+        attention_mask_is_present = masks.attention_mask is not None
+        context_sharing_restricted = (
+            qkv_inputs_are_not_shared
+            or static_key_is_provided
+            or static_value_is_provided
+            or attention_mask_is_present
+        )
+        projection_row_layout = RowLayout.sequence(
+            leading_shape=(
+                runtime_layout.target_sequence_length,
+                runtime_layout.batch_size,
+            ),
+            batch_axis=1,
+            sequence_axis=0,
+            valid_rows=valid_projection_rows,
+            context_sharing_restricted=context_sharing_restricted,
+        )
+        return runtime_layout.with_row_layout(projection_row_layout)
+
+    @staticmethod
+    def __flatten_valid_self_attention_rows(
+        key_padding_mask: Tensor | None,
+        runtime_layout,
+    ) -> Tensor | None:
+        if key_padding_mask is None:
+            return None
+        expected_shape = (
+            runtime_layout.batch_size,
+            runtime_layout.source_sequence_length,
+        )
+        if tuple(key_padding_mask.shape) != expected_shape:
+            raise ValueError(
+                "Prepared key padding mask must align with attention source rows, "
+                f"expected {expected_shape}, received "
+                f"{tuple(key_padding_mask.shape)}."
+            )
+        valid_batch_major_rows = ~torch.isneginf(key_padding_mask)
+        return valid_batch_major_rows.transpose(0, 1).reshape(-1)

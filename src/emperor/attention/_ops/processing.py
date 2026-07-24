@@ -155,7 +155,10 @@ class ProcessorBase(Module):
         weighted_values: Tensor,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        attention_output = self.projector.compute_output_projection(weighted_values)
+        attention_output = self.projector.compute_output_projection(
+            weighted_values,
+            runtime_layout=runtime_layout,
+        )
         embedding_dim = self.embedding_dim
         batch_size = (
             runtime_layout.batch_size if runtime_layout is not None else self.batch_size

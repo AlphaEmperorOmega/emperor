@@ -10,8 +10,8 @@ from emperor.nn import Module
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
-    from emperor.attention._runtime import QKV
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+    from emperor.layers import LayerStackConfig, RecurrentLayerConfig, RowLayout
 
 
 class ProjectorBase(Module):
@@ -47,29 +47,55 @@ class ProjectorBase(Module):
         )
         return self.projection_model_config.build(overrides)
 
-    def _compute_projection(self, tensor: Tensor, model: nn.Module) -> Tensor:
+    def _compute_projection(
+        self,
+        tensor: Tensor,
+        model: nn.Module,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> Tensor:
         sequence_length, batch_size, embedding_dim = tensor.shape
         if not tensor.is_contiguous():
             tensor = tensor.contiguous()
         tensor_reshaped = tensor.view(-1, embedding_dim)
-        projection = self._forward_accumulating_loss(model, tensor_reshaped)
+        projection = self._forward_accumulating_loss(
+            model, tensor_reshaped, row_layout=row_layout
+        )
         return projection.view(sequence_length, batch_size, -1)
 
-    def _forward_accumulating_loss(self, model: nn.Module, tensor: Tensor) -> Tensor:
-        state = Layer.run_model_returning_state(model, tensor)
+    def _forward_accumulating_loss(
+        self,
+        model: nn.Module,
+        tensor: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> Tensor:
+        state = Layer.run_model_returning_state(model, tensor, row_layout=row_layout)
         if state.loss is not None:
             self._accumulate_auxiliary_loss(state.loss)
         return state.hidden
 
-    def compute_output_projection(self, weighted_values: Tensor) -> Tensor:
+    def compute_output_projection(
+        self,
+        weighted_values: Tensor,
+        *,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
+    ) -> Tensor:
+        row_layout = runtime_layout.row_layout if runtime_layout is not None else None
         uses_unflattened_sequence_batch_layout = weighted_values.dim() == 3
         if uses_unflattened_sequence_batch_layout:
-            return self._compute_projection(weighted_values, self.output_model)
-        return self._forward_accumulating_loss(self.output_model, weighted_values)
+            return self._compute_projection(
+                weighted_values, self.output_model, row_layout=row_layout
+            )
+        return self._forward_accumulating_loss(
+            self.output_model, weighted_values, row_layout=row_layout
+        )
 
     def compute_qkv_projections(
         self,
         qkv: "QKV",
+        *,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> "QKV":
         raise NotImplementedError(
             "compute_qkv_projections must be implemented by subclass."

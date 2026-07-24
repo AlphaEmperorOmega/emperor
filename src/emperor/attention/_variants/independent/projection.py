@@ -7,7 +7,7 @@ from emperor.attention._ops.projection import ProjectorBase
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
-    from emperor.attention._runtime import QKV
+    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
 
 
 class IndependentProjector(ProjectorBase):
@@ -23,8 +23,17 @@ class IndependentProjector(ProjectorBase):
     def compute_qkv_projections(
         self,
         qkv: "QKV",
+        *,
+        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> "QKV":
-        q_projection = self._compute_projection(qkv.query, self.query_model)
-        k_projection = self._compute_projection(qkv.key, self.key_model)
-        v_projection = self._compute_projection(qkv.value, self.value_model)
+        row_layout = runtime_layout.row_layout if runtime_layout is not None else None
+        q_projection = self._compute_projection(
+            qkv.query, self.query_model, row_layout=row_layout
+        )
+        k_projection = self._compute_projection(
+            qkv.key, self.key_model, row_layout=row_layout
+        )
+        v_projection = self._compute_projection(
+            qkv.value, self.value_model, row_layout=row_layout
+        )
         return replace(qkv, query=q_projection, key=k_projection, value=v_projection)

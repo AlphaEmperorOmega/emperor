@@ -39,7 +39,11 @@ PROJECTION_KINDS = ["base", "adaptive"]
 
 
 class IdentityOutputProjector:
-    def compute_output_projection(self, tensor):
+    def __init__(self):
+        self.runtime_layout = None
+
+    def compute_output_projection(self, tensor, *, runtime_layout=None):
+        self.runtime_layout = runtime_layout
         return tensor
 
 
@@ -262,6 +266,30 @@ class TestProcessorBase(unittest.TestCase):
 
         self.assertEqual(output.shape, (3, 2, 5))
         torch.testing.assert_close(output, weighted_values.view(3, 2, 5))
+
+    def test_attention_output_forwards_exact_runtime_layout_to_projector(self):
+        cfg = build_attention_config(
+            config_class=IndependentAttentionConfig,
+            batch_size=2,
+            num_heads=1,
+            embedding_dim=5,
+            query_key_projection_dim=5,
+            value_projection_dim=5,
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+        projector = IdentityOutputProjector()
+        model = ProcessorBase(cfg, projector, AttentionReshaper(cfg))
+        runtime_layout = AttentionRuntimeLayout(
+            batch_size=2,
+            target_sequence_length=3,
+            source_sequence_length=4,
+        )
+        weighted_values = torch.arange(30.0).view(6, 5)
+
+        model._compute_attention_output(weighted_values, runtime_layout)
+
+        self.assertIs(projector.runtime_layout, runtime_layout)
 
 
 class TestSelfAttentionProcessor(unittest.TestCase):

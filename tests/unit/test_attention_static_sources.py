@@ -7,6 +7,8 @@ from torch import Tensor
 from emperor.attention import (
     IndependentAttentionConfig,
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
+    SelfAttentionProjectionStrategy,
 )
 from support.attention import build_attention_config
 
@@ -319,6 +321,64 @@ class TestStaticSourceSelectionAndGradients(unittest.TestCase):
         torch.testing.assert_close(query.grad, reference_query.grad)
         torch.testing.assert_close(static_key.grad, reference_static_key.grad)
         torch.testing.assert_close(static_value.grad, reference_static_value.grad)
+
+    def test_self_attention_static_source_padding_supports_unequal_target_length(
+        self,
+    ) -> None:
+        config = build_attention_config(
+            config_class=SelfAttentionConfig,
+            batch_size=self.batch_size,
+            num_heads=self.num_heads,
+            embedding_dim=self.embedding_dim,
+            target_sequence_length=self.target_length,
+            source_sequence_length=self.source_length,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.SEPARATE
+            ),
+        )
+        model = replace(
+            config,
+            target_dtype=torch.float64,
+            batch_first_flag=False,
+        ).build()
+        model.eval()
+        with torch.no_grad():
+            for projection in (
+                model.projector.query_model,
+                model.projector.key_model,
+                model.projector.value_model,
+                model.projector.output_model,
+            ):
+                _set_stack_identity(projection)
+
+        query, _dynamic_key, _dynamic_value = self._dynamic_inputs()
+        static_key = self._static_source(0.75)
+        static_value = self._static_source(-1.25)
+        altered_static_key = static_key.detach().clone()
+        altered_static_value = static_value.detach().clone()
+        altered_static_key[:, -1].add_(1000.0)
+        altered_static_value[:, -1].sub_(1000.0)
+        padding_mask = torch.tensor([[False, False, True]])
+
+        output, _weights, _loss = model(
+            query,
+            query,
+            query,
+            k_padding_mask=padding_mask,
+            static_k=static_key,
+            static_v=static_value,
+        )
+        altered_output, _weights, _loss = model(
+            query,
+            query,
+            query,
+            k_padding_mask=padding_mask,
+            static_k=altered_static_key,
+            static_v=altered_static_value,
+        )
+
+        self.assertEqual(tuple(output.shape), (self.target_length, 1, 2))
+        torch.testing.assert_close(output, altered_output)
 
     def test_mixture_runtime_static_sources_use_actual_not_configured_batch(
         self,

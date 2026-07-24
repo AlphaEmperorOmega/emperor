@@ -536,6 +536,7 @@ print(json.dumps({
                 "input_was_batched",
                 "input_was_batch_first",
                 "source_extension_count",
+                "row_layout",
             ),
         )
         self.assertEqual(
