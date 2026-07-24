@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
     DualModelDynamicWeightConfig,
@@ -140,6 +141,7 @@ class AdaptiveParameterConfigFactory:
                 model_config=_independent_stack_config(runtime.mask.generator_stack),
             )
         return AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,
@@ -152,6 +154,7 @@ class AdaptiveParameterConfigFactory:
         options: AdaptiveProjectionOptions,
     ) -> AdaptiveParameterAugmentationConfig:
         return AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=self._weight_config(
                 options.weight_option,
                 generator_depth=options.generator_depth,

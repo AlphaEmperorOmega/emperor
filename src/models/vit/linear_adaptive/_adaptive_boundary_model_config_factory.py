@@ -5,6 +5,7 @@ import models.vit.linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DynamicBiasConfig,
@@ -265,6 +266,7 @@ class BoundaryModelConfigFactory:
         options: AdaptiveBoundaryModelOptions,
     ) -> AdaptiveLinearLayerConfig:
         adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=build_weight_config(
                 weight_option=options.weight_option,
                 generator_depth=options.generator_depth,

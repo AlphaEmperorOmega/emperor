@@ -12,6 +12,7 @@ from emperor.attention import (
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     MaskDimensionOptions,
@@ -123,6 +124,7 @@ def _adaptive_augmentation(options: AdaptiveParameterOptions):
         },
     )
     return AdaptiveParameterAugmentationConfig(
+        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
         weight_config=weight,
         bias_config=bias,
         diagonal_config=diagonal,

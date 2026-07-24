@@ -4,6 +4,7 @@ import models.bert.linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
@@ -308,6 +309,7 @@ class HiddenModelConfigFactory:
         mask_config = self.__build_mask_config()
         shared_model_config = self.__build_shared_adaptive_generator_stack_config()
         return AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,

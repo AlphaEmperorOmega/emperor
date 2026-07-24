@@ -1,5 +1,6 @@
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     LastLayerBiasOptions,
@@ -45,6 +46,7 @@ def build_parametric_stack_config(
         sampler_options=sampler_options,
     )
     adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
+        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
         input_dim=input_dim,
         output_dim=output_dim,
         weight_config=None,

@@ -6,6 +6,7 @@ from emperor.attention import MixerAttentionConfig
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
     DualModelDynamicWeightConfig,
@@ -284,6 +285,7 @@ def _backend_linear_config(
     return AdaptiveLinearLayerConfig(
         bias_flag=bias_flag or bias_config is not None,
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             diagonal_config=_diagonal_config(runtime),
             weight_config=_weight_config(runtime),
             bias_config=bias_config,

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
@@ -265,6 +266,7 @@ class ControlConfigFactory:
         mask_config = self.__build_mask_config(mask_options)
         model_config = self.__build_shared_generator_model_config()
         return AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,
