@@ -113,6 +113,9 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         with_gate: bool = True,
         gate_option: LayerGateOptions | None = None,
         activation: ActivationOptions = ActivationOptions.TANH,
+        residual_option: ResidualConnectionOptions = (
+            ResidualConnectionOptions.RESIDUAL
+        ),
     ) -> Layer:
         return Layer(
             LayerConfig(
@@ -120,7 +123,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 output_dim=4,
                 activation=activation,
                 residual_config=ResidualConfig(
-                    option=ResidualConnectionOptions.RESIDUAL
+                    option=residual_option,
                 ),
                 dropout_probability=0.25,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
@@ -262,6 +265,34 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
             any(tag.startswith("layer/activation/") for tag in module.logged_tags)
         )
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_attention_residual_skips_pairwise_metrics_and_cleans_up_safely(self):
+        layer = self.layer(
+            residual_option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+        )
+        state = self.state()
+        residual_state = layer.residual_connection.new_state(state.hidden)
+        state.residual_state = residual_state
+        original_residual = layer._Layer__maybe_apply_residual_connection
+        module = CaptureLightningModule(layer=layer)
+        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(TrainerStub(), module)
+
+        layer(state)
+
+        self.assertIn("layer/activation/zero_fraction", module.logged_tags)
+        self.assertFalse(
+            any(tag.startswith("layer/residual/") for tag in module.logged_tags)
+        )
+        callback.on_exception(TrainerStub(), module, RuntimeError("deliberate"))
+        self.assertTrue(
+            same_bound_method(
+                layer._Layer__maybe_apply_residual_connection,
+                original_residual,
+            )
+        )
+        self.assertEqual(callback._wrapped_methods, [])
+        self.assertEqual(callback._hooks, [])
 
     def test_logs_effective_gate_values_with_selected_gate_option(self):
         layer = self.layer(gate_option=LayerGateOptions.MULTIPLIER)
