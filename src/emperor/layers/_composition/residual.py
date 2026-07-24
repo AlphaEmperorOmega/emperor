@@ -12,6 +12,7 @@ from emperor.layers._composition.pairwise_residual import (
 )
 from emperor.layers._config import ResidualConfig
 from emperor.layers._options import ResidualConnectionOptions
+from emperor.layers._support import RowLayoutAwareModule
 from emperor.layers._validation import ResidualConnectionValidator
 from emperor.nn import Module
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
         AttentionResidualState,
     )
     from emperor.layers._config import AttentionResidualConfig
+    from emperor.layers._row_layout import RowLayout
     from emperor.linears import LinearLayerConfig
 
 
@@ -121,10 +123,24 @@ class ResidualConnection(Module):
         previous: Tensor,
         *,
         residual_state: "AttentionResidualState | None" = None,
+        row_layout: "RowLayout | None" = None,
     ) -> Tensor:
-        return self.__residual_option_type().forward(
+        residual_option_type = self.__residual_option_type()
+        coefficient_model_accepts_row_layout = isinstance(
+            self.model,
+            RowLayoutAwareModule,
+        )
+        if row_layout is None or not coefficient_model_accepts_row_layout:
+            return residual_option_type.forward(
+                self,
+                current,
+                previous,
+                residual_state=residual_state,
+            )
+        return residual_option_type.forward(
             self,
             current,
             previous,
             residual_state=residual_state,
+            row_layout=row_layout,
         )

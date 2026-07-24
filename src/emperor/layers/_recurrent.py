@@ -13,12 +13,13 @@ from emperor.layers._options import (
     LayerNormPositionOptions,
 )
 from emperor.layers._state import LayerState
-from emperor.layers._support import LayerModuleBase
+from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 from emperor.layers._validation import RecurrentLayerValidator
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
+    from emperor.layers._row_layout import RowLayout
     from emperor.layers._stack import LayerStack
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
@@ -29,6 +30,7 @@ class _RecurrentState:
     hidden: Tensor
     loss: Tensor | None
     context_state: LayerState
+    row_layout: "RowLayout | None" = None
     halting_state: "HaltingStateBase | None" = None
 
 
@@ -118,6 +120,7 @@ class RecurrentLayer(LayerModuleBase):
             hidden=layer_state.hidden,
             loss=layer_state.loss,
             context_state=layer_state,
+            row_layout=self.__row_layout_for_steps(layer_state),
         )
         for _ in range(self.max_steps):
             previous_step_hidden = recurrent_state.hidden
@@ -147,6 +150,7 @@ class RecurrentLayer(LayerModuleBase):
             hidden=candidate_hidden,
             loss=block_output_state.loss,
             context_state=recurrent_state.context_state,
+            row_layout=recurrent_state.row_layout,
             halting_state=recurrent_state.halting_state,
         )
 
@@ -171,12 +175,17 @@ class RecurrentLayer(LayerModuleBase):
             hidden=block_input,
             loss=recurrent_state.loss,
             halting_state=None,
+            row_layout=recurrent_state.row_layout,
         )
         block_output_state = self.block_model(block_input_state)
         self.VALIDATOR.validate_candidate(
             block_output_state.hidden,
             recurrent_state.hidden,
             self.output_dim,
+        )
+        self.VALIDATOR.validate_row_layout_preserved(
+            block_output_state.row_layout,
+            recurrent_state.row_layout,
         )
         return block_output_state
 
@@ -196,8 +205,15 @@ class RecurrentLayer(LayerModuleBase):
         recurrent_state: _RecurrentState,
         previous_hidden: Tensor,
     ) -> _RecurrentState:
-        gated_hidden = self.__maybe_apply_gate(recurrent_state.hidden)
-        residual_hidden = self.__maybe_apply_residual(gated_hidden, previous_hidden)
+        gated_hidden = self.__maybe_apply_gate(
+            recurrent_state.hidden,
+            recurrent_state.row_layout,
+        )
+        residual_hidden = self.__maybe_apply_residual(
+            gated_hidden,
+            previous_hidden,
+            recurrent_state.row_layout,
+        )
         normalized_hidden = self.__maybe_apply_layer_norm_after(residual_hidden)
         updated_halting_state, next_recurrent_hidden = (
             self.__maybe_update_halting_state(
@@ -210,25 +226,41 @@ class RecurrentLayer(LayerModuleBase):
             hidden=next_recurrent_hidden,
             loss=recurrent_state.loss,
             context_state=recurrent_state.context_state,
+            row_layout=recurrent_state.row_layout,
             halting_state=updated_halting_state,
         )
 
     def __maybe_apply_gate(
         self,
         candidate_hidden: Tensor,
+        row_layout: "RowLayout | None",
     ) -> Tensor:
         if self.recurrent_gate is None:
             return candidate_hidden
+        if isinstance(self.recurrent_gate, (LayerGate, RowLayoutAwareModule)):
+            return self.recurrent_gate(candidate_hidden, row_layout=row_layout)
         return self.recurrent_gate(candidate_hidden)
 
     def __maybe_apply_residual(
         self,
         candidate_hidden: Tensor,
         previous_hidden: Tensor,
+        row_layout: "RowLayout | None",
     ) -> Tensor:
-        if self.residual_connection is None:
+        residual_connection = self.residual_connection
+        if residual_connection is None:
             return candidate_hidden
-        return self.residual_connection(candidate_hidden, previous_hidden)
+        coefficient_model = getattr(residual_connection, "model", None)
+        if isinstance(coefficient_model, RowLayoutAwareModule):
+            return residual_connection(
+                candidate_hidden,
+                previous_hidden,
+                row_layout=row_layout,
+            )
+        return residual_connection(
+            candidate_hidden,
+            previous_hidden,
+        )
 
     def __maybe_apply_layer_norm_after(self, hidden: Tensor) -> Tensor:
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.AFTER:
@@ -280,8 +312,17 @@ class RecurrentLayer(LayerModuleBase):
             hidden=finalized_hidden,
             loss=accumulated_loss,
             context_state=recurrent_state.context_state,
+            row_layout=recurrent_state.row_layout,
             halting_state=halting_state,
         )
+
+    def __row_layout_for_steps(self, layer_state: LayerState) -> "RowLayout | None":
+        row_layout = layer_state.row_layout
+        if row_layout is None:
+            return None
+        if self.halting_model is not None or self.memory_model is not None:
+            return row_layout.with_context_sharing_restricted()
+        return row_layout
 
     def __reconstruct_layer_state(
         self,

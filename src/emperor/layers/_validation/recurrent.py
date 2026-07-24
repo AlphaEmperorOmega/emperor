@@ -121,6 +121,16 @@ class RecurrentLayerValidator(ValidatorBase):
             )
 
     @staticmethod
+    def validate_row_layout_preserved(candidate_layout, expected_layout) -> None:
+        if candidate_layout is expected_layout:
+            return
+        raise ValueError(
+            "recurrent block must preserve the exact row_layout object; row "
+            "selection, reordering, or replacement requires an explicit layout "
+            "transformation contract."
+        )
+
+    @staticmethod
     def _validate_integer_field(field_name: str, value: int) -> None:
         if not isinstance(value, int):
             raise TypeError(

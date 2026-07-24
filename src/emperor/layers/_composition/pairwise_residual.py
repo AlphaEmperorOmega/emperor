@@ -10,8 +10,11 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from emperor.layers._support import RowLayoutAwareModule
+
 if TYPE_CHECKING:
     from emperor.layers._composition.residual import ResidualConnection
+    from emperor.layers._row_layout import RowLayout
     from emperor.linears import LinearLayer, LinearLayerConfig
     from emperor.nn import Module
 
@@ -79,10 +82,17 @@ class PairwiseResidual(ABC):
         connection: ResidualConnection,
         current: Tensor,
         previous: Tensor,
+        row_layout: RowLayout | None,
     ) -> Tensor:
-        if connection.model is not None:
+        coefficient_model = connection.model
+        if coefficient_model is not None:
             coefficient_model_input = torch.cat((current, previous), dim=-1)
-            return connection.model(coefficient_model_input)
+            if isinstance(coefficient_model, RowLayoutAwareModule):
+                return coefficient_model(
+                    coefficient_model_input,
+                    row_layout=row_layout,
+                )
+            return coefficient_model(coefficient_model_input)
         raw_mix_coefficient = connection.raw_weight
         connection.VALIDATOR.validate_raw_mix_coefficient(
             raw_mix_coefficient,
@@ -99,6 +109,7 @@ class PairwiseResidual(ABC):
         previous: Tensor,
         *,
         residual_state: object | None = None,
+        row_layout: RowLayout | None = None,
     ) -> Tensor:
         """Apply this residual option to the current and previous sources."""
 
@@ -112,6 +123,7 @@ class AdditiveResidual(PairwiseResidual):
         previous: Tensor,
         *,
         residual_state: object | None = None,
+        row_layout: RowLayout | None = None,
     ) -> Tensor:
         return current + previous
 
@@ -133,11 +145,13 @@ class WeightedResidual(PairwiseResidual):
         previous: Tensor,
         *,
         residual_state: object | None = None,
+        row_layout: RowLayout | None = None,
     ) -> Tensor:
         raw_mix_coefficient = cls._resolve_raw_mix_coefficient(
             connection,
             current,
             previous,
+            row_layout,
         )
         residual_weight = torch.tanh(raw_mix_coefficient)
         return previous + residual_weight * current
@@ -162,11 +176,13 @@ class WeightedBlendResidual(PairwiseResidual):
         previous: Tensor,
         *,
         residual_state: object | None = None,
+        row_layout: RowLayout | None = None,
     ) -> Tensor:
         raw_mix_coefficient = cls._resolve_raw_mix_coefficient(
             connection,
             current,
             previous,
+            row_layout,
         )
         current_blend_coefficient = torch.sigmoid(raw_mix_coefficient)
         previous_blend_coefficient = 1.0 - current_blend_coefficient

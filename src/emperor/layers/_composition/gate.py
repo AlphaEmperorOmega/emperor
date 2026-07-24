@@ -8,6 +8,7 @@ from emperor.layers._validation import LayerGateValidator
 from emperor.nn import Module
 
 if TYPE_CHECKING:
+    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
     from emperor.nn import Module as EmperorModule
 
@@ -41,8 +42,13 @@ class LayerGate(Module):
             return gate_output
         return self.activation(gate_output)
 
-    def forward(self, current: Tensor) -> Tensor:
-        gate_output = self.__run_gate_model(current)
+    def forward(
+        self,
+        current: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> Tensor:
+        gate_output = self.__run_gate_model(current, row_layout=row_layout)
         self.VALIDATOR.validate_gate_output(gate_output, current, self.option)
         gate = self.effective_values(gate_output)
         return self.__compose_gate_with_current(current, gate)
@@ -54,14 +60,23 @@ class LayerGate(Module):
             return current + gate
         raise ValueError(f"Unsupported gate option {self.option} for LayerGate.")
 
-    def __run_gate_model(self, current: Tensor) -> Tensor:
+    def __run_gate_model(
+        self,
+        current: Tensor,
+        *,
+        row_layout: "RowLayout | None",
+    ) -> Tensor:
         self.VALIDATOR.validate_gate_model(self.model)
-        gate_state = self.__gate_state(current)
+        gate_state = self.__gate_state(current, row_layout=row_layout)
         output = self.model(gate_state)
         return output.hidden if hasattr(output, "hidden") else output
 
     @staticmethod
-    def __gate_state(current: Tensor) -> "LayerState":
+    def __gate_state(
+        current: Tensor,
+        *,
+        row_layout: "RowLayout | None",
+    ) -> "LayerState":
         from emperor.layers._state import LayerState
 
-        return LayerState(hidden=current)
+        return LayerState(hidden=current, row_layout=row_layout)

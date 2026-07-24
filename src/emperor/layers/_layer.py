@@ -12,13 +12,14 @@ from emperor.layers._options import (
     LayerNormPositionOptions,
 )
 from emperor.layers._state import LayerState
-from emperor.layers._support import LayerModuleBase
+from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 from emperor.layers._validation import LayerValidator
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
     from emperor.layers._composition.attention_residual import AttentionResidualState
+    from emperor.layers._row_layout import RowLayout
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
 
@@ -112,13 +113,27 @@ class Layer(LayerModuleBase):
         self.last_layer_flag = True
 
     @staticmethod
-    def run_model_returning_state(model: "Module", X: Tensor) -> "LayerState":
-        input_state = LayerState(hidden=X)
+    def run_model_returning_state(
+        model: "Module",
+        X: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> "LayerState":
+        input_state = LayerState(hidden=X, row_layout=row_layout)
         return model(input_state)
 
     @staticmethod
-    def run_model_returning_hidden(model: "Module", X: Tensor) -> Tensor:
-        return Layer.run_model_returning_state(model, X).hidden
+    def run_model_returning_hidden(
+        model: "Module",
+        X: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> Tensor:
+        return Layer.run_model_returning_state(
+            model,
+            X,
+            row_layout=row_layout,
+        ).hidden
 
     def forward(
         self,
@@ -133,12 +148,13 @@ class Layer(LayerModuleBase):
         X = self.__maybe_apply_memory_after(X)
         X = self.__maybe_apply_layer_norm_default(X)
         X = self.__maybe_apply_activation(X)
-        X = self.__maybe_apply_gates(X)
+        X = self.__maybe_apply_gates(X, state)
         X = self.__maybe_apply_dropout(X)
         X = self.__maybe_apply_residual_connection(
             X,
             residual,
             residual_state=state.residual_state,
+            row_layout=self.__row_layout_for_controllers(state),
         )
         X = self.__maybe_apply_layer_norm_after(X)
         state = self.__maybe_apply_halting(state, X)
@@ -177,7 +193,12 @@ class Layer(LayerModuleBase):
         self,
         main_model_input: Tensor,
         state: "LayerState",
-    ) -> tuple[Tensor, tuple | None]:
+    ) -> Tensor:
+        if isinstance(self.model, RowLayoutAwareModule):
+            return self.model(
+                main_model_input,
+                row_layout=self.__row_layout_for_controllers(state),
+            )
         return self.model(main_model_input)
 
     def __maybe_apply_memory_after(self, input: Tensor) -> Tensor:
@@ -201,10 +222,27 @@ class Layer(LayerModuleBase):
     def __maybe_apply_gates(
         self,
         input: Tensor,
+        state: LayerState | None = None,
     ) -> Tensor:
         if self.gate_model is None:
             return input
-        return self.gate_model(input)
+        return self.gate_model(
+            input,
+            row_layout=self.__row_layout_for_controllers(state),
+        )
+
+    def __row_layout_for_controllers(
+        self,
+        state: LayerState | None,
+    ) -> "RowLayout | None":
+        if state is None:
+            return None
+        row_layout = state.row_layout
+        if row_layout is None:
+            return None
+        if self.halting_model is not None or self.memory_model is not None:
+            return row_layout.with_context_sharing_restricted()
+        return row_layout
 
     def __maybe_apply_dropout(self, input: Tensor):
         if self.__should_apply_dropout():
@@ -217,10 +255,20 @@ class Layer(LayerModuleBase):
         prev_input: Tensor,
         *,
         residual_state: "AttentionResidualState | None" = None,
+        row_layout: "RowLayout | None" = None,
     ):
-        if self.residual_connection is None:
+        residual_connection = self.residual_connection
+        if residual_connection is None:
             return input
-        return self.residual_connection(
+        coefficient_model = getattr(residual_connection, "model", None)
+        if isinstance(coefficient_model, RowLayoutAwareModule):
+            return residual_connection(
+                input,
+                prev_input,
+                residual_state=residual_state,
+                row_layout=row_layout,
+            )
+        return residual_connection(
             input,
             prev_input,
             residual_state=residual_state,
