@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from torch import Tensor
 
@@ -16,7 +16,7 @@ from emperor.transformer._validation import FeedForwardValidator
 
 if TYPE_CHECKING:
     from emperor.experts import MixtureOfExpertsModelConfig
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.layers import RowLayout
 
 
 @dataclass
@@ -92,25 +92,31 @@ class FeedForward(Module):
                 output_dim=output_dim,
             )
             return mirrored
-        if isinstance(stack_config, RecurrentLayerConfig):
-            mirrored = deepcopy(stack_config)
-            mirrored.input_dim = input_dim
-            mirrored.output_dim = output_dim
-            mirrored.block_config = self.__mirror_stack_config(
-                mirrored.block_config,
-                input_dim=output_dim,
-                output_dim=output_dim,
-            )
-            return mirrored
-        raise TypeError(
-            "FeedForward cannot mirror stack_config of type "
-            f"{type(stack_config).__name__}."
+        recurrent_config = cast(RecurrentLayerConfig, stack_config)
+        mirrored = deepcopy(recurrent_config)
+        mirrored.input_dim = input_dim
+        mirrored.output_dim = output_dim
+        mirrored.block_config = self.__mirror_stack_config(
+            mirrored.block_config,
+            input_dim=output_dim,
+            output_dim=output_dim,
         )
+        return mirrored
 
-    def forward(self, input_batch: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(
+        self,
+        input_batch: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> tuple[Tensor, Tensor]:
         original_shape = input_batch.shape
         flattened_input = input_batch.reshape(-1, self.input_dim)
-        state = Layer.run_model_returning_state(self.model, flattened_input)
+        self.VALIDATOR.validate_forward_inputs(flattened_input, row_layout)
+        state = Layer.run_model_returning_state(
+            self.model,
+            flattened_input,
+            row_layout=row_layout,
+        )
         output = state.hidden.view(*original_shape[:-1], self.output_dim)
         loss = state.loss if state.loss is not None else input_batch.new_zeros(())
         return output, loss
