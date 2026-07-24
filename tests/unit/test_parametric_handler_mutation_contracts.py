@@ -7,6 +7,8 @@ from emperor.layers import (
     ActivationOptions,
     LayerNormPositionOptions,
     LayerState,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -66,6 +68,36 @@ def _owned_linear_generator_config():
 
 
 class ParametricHandlerMutationContractTests(unittest.TestCase):
+    def test_handler_reads_stack_scoped_residual_state_from_layer_state(self) -> None:
+        handler_config = _handler_config(
+            input_dim=2,
+            output_dim=2,
+            layer_model_config=_parametric_config(),
+        )
+        handler_config.residual_config = ResidualConfig(
+            option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+        )
+        handler = ParametricLayerHandler(handler_config)
+        identity = torch.eye(2)
+        with torch.no_grad():
+            handler.model.weights_router.model[0].model.weight_params.zero_()
+            handler.model.weight_mixture_model.parameter_bank.copy_(
+                torch.stack((identity, 2.0 * identity))
+            )
+        inputs = torch.tensor([[1.0, -2.0], [0.5, 4.0]])
+        state = LayerState(hidden=inputs)
+        residual_state = handler.residual_connection.new_state(inputs)
+        state.residual_state = residual_state
+
+        returned = handler(state)
+
+        expected_raw_output = 1.5 * inputs
+        self.assertIs(returned, state)
+        self.assertEqual(len(residual_state.sources), 2)
+        self.assertIs(residual_state.sources[0], inputs)
+        torch.testing.assert_close(residual_state.sources[1], expected_raw_output)
+        torch.testing.assert_close(returned.hidden, 1.25 * inputs)
+
     def test_base_handler_preserves_configuration_and_fallback_contracts(
         self,
     ) -> None:

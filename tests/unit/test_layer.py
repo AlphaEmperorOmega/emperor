@@ -708,7 +708,7 @@ class TestLayer(unittest.TestCase):
 
         self.assertEqual(
             state_fields,
-            ["hidden", "loss", "halting_state"],
+            ["hidden", "loss", "halting_state", "residual_state"],
         )
 
     def test_shared_controller_configs_belong_to_layer_stack_config(self):
