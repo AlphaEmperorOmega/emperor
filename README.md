@@ -719,8 +719,9 @@ mise run logs:archive -- my_experiment
 mise run logs:archive -- logs/my_experiment
 ```
 
-When a specific experiment folder is selected, the archive keeps that folder
-prefix so importing it restores files under the same `logs/<experiment>/` path.
+When a specific experiment folder is selected, the archive keeps that experiment
+prefix. Archive members are rooted directly at experiment paths, so importing
+restores them beneath `logs/` without a top-level `logs/` wrapper.
 
 By default, the archive is written in the current directory. Pass an explicit
 second argument to choose the zip path:
