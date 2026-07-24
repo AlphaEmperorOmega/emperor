@@ -266,6 +266,7 @@ status = "partial"
 focused_tests = [
   "tests/unit/test_layer*.py",
   "tests/unit/test_recurrent_layer*.py",
+  "tests/unit/test_row_layout*.py",
 ]
 integration_tests = ["tests/integration/test_layer_monitor_lifecycle.py"]
 mutation_scope = ["src/emperor/layers/*"]
@@ -277,7 +278,9 @@ blocked_reason = ""
 modules = [
   "src/emperor/layers/__init__.py",
   "src/emperor/layers/_composition/__init__.py",
+  "src/emperor/layers/_composition/attention_residual.py",
   "src/emperor/layers/_composition/gate.py",
+  "src/emperor/layers/_composition/pairwise_residual.py",
   "src/emperor/layers/_composition/residual.py",
   "src/emperor/layers/_config.py",
   "src/emperor/layers/_layer.py",
@@ -290,10 +293,12 @@ modules = [
   "src/emperor/layers/_mirrored.py",
   "src/emperor/layers/_options.py",
   "src/emperor/layers/_recurrent.py",
+  "src/emperor/layers/_row_layout.py",
   "src/emperor/layers/_stack.py",
   "src/emperor/layers/_state.py",
   "src/emperor/layers/_support.py",
   "src/emperor/layers/_validation/__init__.py",
+  "src/emperor/layers/_validation/attention_residual.py",
   "src/emperor/layers/_validation/common.py",
   "src/emperor/layers/_validation/gate.py",
   "src/emperor/layers/_validation/layer.py",
@@ -340,6 +345,7 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_biases/validation.py",
   "src/emperor/augmentations/adaptive_parameters/_biases/variants/weighted_bank.py",
   "src/emperor/augmentations/adaptive_parameters/_config.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/anti.py",
@@ -380,16 +386,14 @@ modules = [
 ]
 
 [families.experts]
-status = "complete"
+status = "partial"
 focused_tests = [
-  "tests/unit/test_expert_behavioral_contracts.py",
-  "tests/unit/test_expert_mutation_contracts.py",
-  "tests/unit/test_experts*.py",
+  "tests/unit/test_expert*.py",
   "tests/unit/test_mixture_of_experts*.py",
 ]
 integration_tests = []
 mutation_scope = ["src/emperor/experts/*"]
-environment = ["cpu", "float32"]
+environment = ["cpu", "float32", "float64", "non-contiguous"]
 coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-coverage.toml"
 mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-mutation.toml"
 review_evidence = ".scratch/emperor-behavioral-testing/reviews/experts-review-request.toml"
@@ -409,6 +413,7 @@ modules = [
   "src/emperor/experts/_routing/weighting.py",
   "src/emperor/experts/_state.py",
   "src/emperor/experts/_validation/__init__.py",
+  "src/emperor/experts/_validation/layer.py",
   "src/emperor/experts/_validation/mixture.py",
   "src/emperor/experts/_validation/model.py",
 ]
@@ -536,6 +541,7 @@ modules = [
 status = "pending"
 focused_tests = [
   "tests/unit/test_transformer.py",
+  "tests/unit/test_transformer_adaptive_grouping.py",
   "tests/unit/test_transformer_behavioral_contracts.py",
   "tests/unit/test_transformer_decoder_block.py",
   "tests/unit/test_transformer_feed_forward.py",
