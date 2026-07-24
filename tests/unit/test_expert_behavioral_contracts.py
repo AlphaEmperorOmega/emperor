@@ -198,8 +198,12 @@ class ExpertBehavioralContractTests(unittest.TestCase):
             mapped.routing_initialization_mode,
             RoutingInitializationMode.DISABLED,
         )
-        self.assertFalse(map_overrides.weighted_parameters_flag)
-        self.assertFalse(map_overrides.compute_expert_mixture_flag)
+        self.assertTrue(map_overrides.weighted_parameters_flag)
+        self.assertTrue(map_overrides.compute_expert_mixture_flag)
+        self.assertEqual(
+            map_overrides.routing_initialization_mode,
+            RoutingInitializationMode.LAYER,
+        )
 
         reduce_overrides = MixtureOfExpertsConfig(
             weighted_parameters_flag=False,
@@ -217,6 +221,16 @@ class ExpertBehavioralContractTests(unittest.TestCase):
         self.assertEqual(
             reduced.routing_initialization_mode,
             RoutingInitializationMode.DISABLED,
+        )
+        self.assertFalse(reduce_overrides.weighted_parameters_flag)
+        self.assertFalse(reduce_overrides.compute_expert_mixture_flag)
+        self.assertEqual(
+            reduce_overrides.weighting_position_option,
+            ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+        )
+        self.assertEqual(
+            reduce_overrides.routing_initialization_mode,
+            RoutingInitializationMode.LAYER,
         )
 
     def test_exact_guard_errors_cover_unreachable_validated_states(self) -> None:

@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from emperor.experts._config import MixtureOfExpertsConfig
 from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.experts._options import RoutingInitializationMode
@@ -23,8 +25,9 @@ class MixtureOfExpertsMap(MixtureOfExperts):
                 compute_expert_mixture_flag=False,
                 routing_initialization_mode=RoutingInitializationMode.DISABLED,
             )
-        overrides.weighted_parameters_flag = False
-        overrides.compute_expert_mixture_flag = False
-        overrides.routing_initialization_mode = RoutingInitializationMode.DISABLED
-
-        return overrides
+        return replace(
+            overrides,
+            weighted_parameters_flag=False,
+            compute_expert_mixture_flag=False,
+            routing_initialization_mode=RoutingInitializationMode.DISABLED,
+        )

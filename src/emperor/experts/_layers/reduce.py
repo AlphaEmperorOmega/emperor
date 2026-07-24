@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import torch
 from torch import Tensor
 
@@ -28,14 +30,13 @@ class MixtureOfExpertsReduce(MixtureOfExperts):
                 weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
                 routing_initialization_mode=RoutingInitializationMode.DISABLED,
             )
-        overrides.weighted_parameters_flag = True
-        overrides.compute_expert_mixture_flag = True
-        overrides.weighting_position_option = (
-            ExpertWeightingPositionOptions.AFTER_EXPERTS
+        return replace(
+            overrides,
+            weighted_parameters_flag=True,
+            compute_expert_mixture_flag=True,
+            weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+            routing_initialization_mode=RoutingInitializationMode.DISABLED,
         )
-        overrides.routing_initialization_mode = RoutingInitializationMode.DISABLED
-
-        return overrides
 
     def _split_tokens_per_expert(
         self,

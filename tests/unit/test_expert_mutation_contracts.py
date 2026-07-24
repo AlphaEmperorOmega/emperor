@@ -424,6 +424,23 @@ class ExpertMutationContractTests(unittest.TestCase):
         self.assertEqual(torch.count_nonzero(output).item(), 1)
         self.assertIn(output.abs().sum().item(), (4.0, 10.0))
 
+    def test_map_preserves_unforced_caller_overrides(self) -> None:
+        overrides = MixtureOfExpertsConfig(capacity_factor=1.5)
+
+        model = MixtureOfExpertsMap(
+            _mixture_config(top_k=1, num_experts=2),
+            overrides,
+        )
+
+        self.assertEqual(model.capacity_factor, 1.5)
+        self.assertFalse(model.weighted_parameters_flag)
+        self.assertFalse(model.compute_expert_mixture_flag)
+        self.assertEqual(
+            model.routing_initialization_mode,
+            RoutingInitializationMode.DISABLED,
+        )
+        self.assertEqual(overrides.capacity_factor, 1.5)
+
     def test_capacity_shuffle_state_is_scoped_to_one_token_routing_pair(
         self,
     ) -> None:
