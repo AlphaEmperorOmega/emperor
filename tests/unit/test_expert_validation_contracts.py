@@ -200,3 +200,17 @@ class ExpertValidationContractTests(unittest.TestCase):
             )
 
         self.assertTrue(torch.equal(torch.random.get_rng_state(), rng_state))
+
+    def test_mixture_config_build_rejects_non_finite_capacity(self) -> None:
+        for invalid_value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(invalid_value=invalid_value):
+                config = _mixture_config()
+                config.capacity_factor = invalid_value
+
+                with self.assertRaises(ValueError) as error:
+                    config.build()
+                self.assertEqual(
+                    str(error.exception),
+                    "Configuration Error: 'capacity_factor' must be finite, "
+                    f"received {invalid_value}",
+                )

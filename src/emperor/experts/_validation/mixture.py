@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 import torch
@@ -129,6 +130,11 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
     @staticmethod
     def validate_capacity_factor_is_non_negative(model: "MixtureOfExperts") -> None:
+        if not math.isfinite(model.capacity_factor):
+            raise ValueError(
+                "Configuration Error: 'capacity_factor' must be finite, received "
+                f"{model.capacity_factor}"
+            )
         if model.capacity_factor < 0.0:
             raise ValueError(
                 "Configuration Error: 'capacity_factor' must be >= 0.0, received "
