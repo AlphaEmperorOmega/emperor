@@ -10,6 +10,8 @@ from emperor.experts import (
     MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
+from emperor.experts._layers.map import MixtureOfExpertsMap
+from emperor.experts._layers.reduce import MixtureOfExpertsReduce
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -366,3 +368,92 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     linear.bias_params.grad,
                 ):
                     self.assertTrue(torch.isfinite(value).all())
+
+    def test_map_reduce_round_trip_matches_exact_asymmetric_affine_equation(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        map_model = MixtureOfExpertsMap(_mixture_config()).to(dtype=dtype)
+        reduce_model = MixtureOfExpertsReduce(_mixture_config()).to(dtype=dtype)
+        map_affines = _asymmetric_affines(dtype)
+        reduce_affines = (
+            (
+                torch.tensor([[0.6, -1.1], [1.4, 0.2]], dtype=dtype),
+                torch.tensor([-0.3, 0.5], dtype=dtype),
+            ),
+            (
+                torch.tensor([[-0.8, 0.7], [0.35, 1.6]], dtype=dtype),
+                torch.tensor([0.9, -0.4], dtype=dtype),
+            ),
+            (
+                torch.tensor([[1.2, 0.45], [-0.65, 0.85]], dtype=dtype),
+                torch.tensor([0.15, -0.75], dtype=dtype),
+            ),
+        )
+        _set_linear_expert_affines(map_model, map_affines)
+        _set_linear_expert_affines(reduce_model, reduce_affines)
+        input_template = torch.tensor(
+            [[1.2, -0.7], [-0.4, 2.1]],
+            dtype=dtype,
+        )
+        probability_template = torch.tensor(
+            [[0.2, 0.7], [0.6, 0.1]],
+            dtype=dtype,
+        )
+        indices = torch.tensor([[0, 2], [1, 0]])
+
+        expected_inputs = input_template.clone().requires_grad_()
+        expected_probabilities = probability_template.clone().requires_grad_()
+        expected_samples = []
+        for sample, sample_probabilities, sample_indices in zip(
+            expected_inputs,
+            expected_probabilities,
+            indices,
+            strict=True,
+        ):
+            expected_routes = []
+            for probability, expert_index_tensor in zip(
+                sample_probabilities,
+                sample_indices,
+                strict=True,
+            ):
+                expert_index = int(expert_index_tensor)
+                map_weight, map_bias = map_affines[expert_index]
+                reduce_weight, reduce_bias = reduce_affines[expert_index]
+                mapped_route = sample @ map_weight + map_bias
+                reduced_route = mapped_route @ reduce_weight + reduce_bias
+                expected_routes.append(probability * reduced_route)
+            expected_samples.append(torch.stack(expected_routes).sum(dim=0))
+        expected_output = torch.stack(expected_samples)
+        expected_output.sum().backward()
+
+        inputs = input_template.clone().requires_grad_()
+        probabilities = probability_template.clone().requires_grad_()
+        mapped, map_skip_mask, map_loss = map_model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        output, reduce_skip_mask, reduce_loss = reduce_model(
+            mapped,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        (output.sum() + map_loss + reduce_loss).backward()
+
+        torch.testing.assert_close(output, expected_output.detach())
+        torch.testing.assert_close(inputs.grad, expected_inputs.grad)
+        torch.testing.assert_close(
+            probabilities.grad,
+            expected_probabilities.grad,
+        )
+        self.assertIsNone(map_skip_mask)
+        self.assertIsNone(reduce_skip_mask)
+        self.assertEqual(mapped.shape, (4, 2))
+        for model in (map_model, reduce_model):
+            for expert_stack in model.expert_modules:
+                linear = expert_stack[0].model
+                for parameter in (linear.weight_params, linear.bias_params):
+                    self.assertIsNotNone(parameter.grad)
+                    self.assertTrue(torch.isfinite(parameter.grad).all())
+                    self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
