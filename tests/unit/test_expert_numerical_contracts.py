@@ -540,3 +540,55 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     unselected_linear.bias_params,
                     unselected_bias_before_step,
                 )
+
+    def test_batch_one_sparse_affine_forward_and_backward(self) -> None:
+        dtype = torch.float64
+        input_template = torch.tensor([[1.2, -0.7]], dtype=dtype)
+        probability_template = torch.tensor([0.25], dtype=dtype)
+        indices = torch.tensor([1])
+        weight, bias = _asymmetric_affines(dtype)[1]
+
+        for weighting_position in ExpertWeightingPositionOptions:
+            with self.subTest(weighting_position=weighting_position):
+                model = _mixture_config(
+                    top_k=1,
+                    num_experts=2,
+                    weighting_position=weighting_position,
+                ).build()
+                model.to(dtype=dtype)
+                _set_linear_expert_affines(
+                    model,
+                    _asymmetric_affines(dtype)[:2],
+                )
+                inputs = input_template.clone().requires_grad_()
+                probabilities = probability_template.clone().requires_grad_()
+                if weighting_position == ExpertWeightingPositionOptions.BEFORE_EXPERTS:
+                    expected = (
+                        probabilities.detach().reshape(-1, 1) * inputs.detach()
+                    ) @ weight + bias
+                else:
+                    expected = probabilities.detach().reshape(-1, 1) * (
+                        inputs.detach() @ weight + bias
+                    )
+
+                output, _skip_mask, auxiliary_loss = model(
+                    inputs,
+                    probabilities=probabilities,
+                    indices=indices,
+                )
+                (output.sum() + auxiliary_loss).backward()
+
+                self.assertEqual(output.shape, (1, 2))
+                torch.testing.assert_close(output, expected)
+                for gradient in (inputs.grad, probabilities.grad):
+                    self.assertIsNotNone(gradient)
+                    self.assertTrue(torch.isfinite(gradient).all())
+                    self.assertGreater(gradient.abs().sum().item(), 0.0)
+                selected_linear = model.expert_modules[1][0].model
+                for parameter in (
+                    selected_linear.weight_params,
+                    selected_linear.bias_params,
+                ):
+                    self.assertIsNotNone(parameter.grad)
+                    self.assertTrue(torch.isfinite(parameter.grad).all())
+                    self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
