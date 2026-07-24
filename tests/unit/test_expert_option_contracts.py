@@ -1,0 +1,246 @@
+import sys
+import unittest
+
+import torch
+
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    RoutingInitializationMode,
+)
+from emperor.experts._layers.mixture import MixtureOfExperts
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+)
+from emperor.linears import LinearLayerConfig
+
+
+def _linear_expert_stack(*, dimension: int = 1, bias: bool = True) -> LayerStackConfig:
+    return LayerStackConfig(
+        input_dim=dimension,
+        hidden_dim=dimension,
+        output_dim=dimension,
+        num_layers=1,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=LayerConfig(
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(bias_flag=bias),
+        ),
+    )
+
+
+def _mixture_config(
+    *,
+    top_k: int,
+    num_experts: int,
+    capacity_factor: float = 0.0,
+    dropped_token_behavior: DroppedTokenOptions | None = DroppedTokenOptions.ZEROS,
+    compute_expert_mixture: bool = True,
+    weighted: bool = False,
+    weighting_position: ExpertWeightingPositionOptions = (
+        ExpertWeightingPositionOptions.AFTER_EXPERTS
+    ),
+) -> MixtureOfExpertsConfig:
+    return MixtureOfExpertsConfig(
+        input_dim=1,
+        output_dim=1,
+        top_k=top_k,
+        num_experts=num_experts,
+        capacity_factor=capacity_factor,
+        dropped_token_behavior=dropped_token_behavior,
+        compute_expert_mixture_flag=compute_expert_mixture,
+        weighted_parameters_flag=weighted,
+        weighting_position_option=weighting_position,
+        routing_initialization_mode=RoutingInitializationMode.DISABLED,
+        sampler_config=None,
+        expert_model_config=_linear_expert_stack(),
+    )
+
+
+def _set_affine_experts(
+    model: MixtureOfExperts,
+    *,
+    weights: tuple[float, ...],
+    biases: tuple[float, ...] | None = None,
+) -> None:
+    if biases is None:
+        biases = (0.0,) * len(weights)
+    with torch.no_grad():
+        for expert, weight, bias in zip(
+            model.expert_modules,
+            weights,
+            biases,
+            strict=True,
+        ):
+            expert[0].model.weight_params.fill_(weight)
+            expert[0].model.bias_params.fill_(bias)
+
+
+class ExpertOptionContractTests(unittest.TestCase):
+    def test_capacity_uses_top_k_and_rounds_fractional_assignments_up(self) -> None:
+        model = (
+            _mixture_config(
+                top_k=2,
+                num_experts=4,
+                capacity_factor=0.5,
+            )
+            .build()
+            .eval()
+        )
+        _set_affine_experts(model, weights=(1.0, 0.0, 0.0, 0.0))
+        inputs = torch.arange(1.0, 6.0).reshape(-1, 1)
+        probabilities = torch.ones(5, 2)
+        indices = torch.tensor(
+            [
+                [0, 1],
+                [0, 2],
+                [0, 3],
+                [1, 2],
+                [1, 3],
+            ]
+        )
+
+        output, _skip_mask, _loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+
+        self.assertEqual(torch.count_nonzero(output).item(), 2)
+
+    def test_capacity_is_stable_and_does_not_consume_rng_in_evaluation(self) -> None:
+        model = (
+            _mixture_config(
+                top_k=1,
+                num_experts=2,
+                capacity_factor=1.0,
+            )
+            .build()
+            .eval()
+        )
+        _set_affine_experts(model, weights=(1.0, 0.0))
+        inputs = torch.arange(1.0, 5.0).reshape(-1, 1)
+        probabilities = torch.ones(4)
+        indices = torch.tensor([0, 0, 0, 1])
+        rng_state_before = torch.random.get_rng_state()
+
+        first_output, _skip_mask, _loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        rng_state_after = torch.random.get_rng_state()
+        second_output, _skip_mask, _loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+
+        torch.testing.assert_close(
+            first_output,
+            torch.tensor([[1.0], [2.0], [0.0], [0.0]]),
+        )
+        torch.testing.assert_close(second_output, first_output)
+        torch.testing.assert_close(rng_state_after, rng_state_before)
+
+    def test_disabled_capacity_does_not_consume_rng_during_training(self) -> None:
+        model = (
+            _mixture_config(
+                top_k=1,
+                num_experts=2,
+                capacity_factor=0.0,
+            )
+            .build()
+            .train()
+        )
+        _set_affine_experts(model, weights=(1.0, 0.0))
+        rng_state_before = torch.random.get_rng_state()
+
+        output, _skip_mask, _loss = model(
+            torch.tensor([[2.0], [5.0]]),
+            probabilities=torch.ones(2),
+            indices=torch.zeros(2, dtype=torch.long),
+        )
+
+        torch.testing.assert_close(output, torch.tensor([[2.0], [5.0]]))
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_state_before)
+
+    def test_training_capacity_is_seeded_and_preserves_route_alignment(self) -> None:
+        model = (
+            _mixture_config(
+                top_k=1,
+                num_experts=2,
+                capacity_factor=1.0,
+                weighted=True,
+            )
+            .build()
+            .train()
+        )
+        _set_affine_experts(model, weights=(1.0, 0.0))
+        inputs = torch.tensor([[2.0], [5.0], [7.0], [11.0]])
+        probabilities = torch.tensor([0.1, 0.3, 0.9, 0.5])
+        indices = torch.tensor([0, 0, 0, 1])
+        expected_if_retained = probabilities.reshape(-1, 1) * inputs
+        seed = 127
+
+        torch.manual_seed(seed)
+        rng_state_before = torch.random.get_rng_state()
+        first_output, _skip_mask, _loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        rng_state_after = torch.random.get_rng_state()
+        torch.manual_seed(seed)
+        second_output, _skip_mask, _loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+
+        torch.testing.assert_close(second_output, first_output)
+        self.assertFalse(torch.equal(rng_state_after, rng_state_before))
+        self.assertEqual(torch.count_nonzero(first_output[:3]).item(), 2)
+        for actual, expected in zip(
+            first_output[:3],
+            expected_if_retained[:3],
+            strict=True,
+        ):
+            self.assertTrue(
+                torch.equal(actual, expected)
+                or torch.equal(actual, torch.zeros_like(actual))
+            )
+
+    def test_huge_finite_capacity_factor_is_overflow_safe(self) -> None:
+        model = (
+            _mixture_config(
+                top_k=1,
+                num_experts=2,
+                capacity_factor=sys.float_info.max,
+            )
+            .build()
+            .train()
+        )
+        _set_affine_experts(model, weights=(1.0, 0.0))
+        rng_state_before = torch.random.get_rng_state()
+
+        output, _skip_mask, _loss = model(
+            torch.tensor([[2.0], [5.0], [7.0], [11.0]]),
+            probabilities=torch.ones(4),
+            indices=torch.zeros(4, dtype=torch.long),
+        )
+
+        torch.testing.assert_close(output, torch.tensor([[2.0], [5.0], [7.0], [11.0]]))
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_state_before)

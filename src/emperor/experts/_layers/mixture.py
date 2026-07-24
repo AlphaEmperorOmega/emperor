@@ -241,7 +241,9 @@ class MixtureOfExperts(Module):
         routed_token_index_coordinates = samples_routed_to_expert.nonzero()
         token_indices_for_expert = routed_token_index_coordinates.flatten()
         return self.capacity_handler.maybe_apply_capacity_limit_token_indices(
-            token_indices_for_expert, batch_size
+            token_indices_for_expert,
+            batch_size,
+            training=self.training,
         )
 
     def __has_expert_choice_dimension(self, indices: Tensor) -> bool:

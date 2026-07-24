@@ -424,6 +424,49 @@ class ExpertMutationContractTests(unittest.TestCase):
         self.assertEqual(torch.count_nonzero(output).item(), 1)
         self.assertIn(output.abs().sum().item(), (4.0, 10.0))
 
+    def test_capacity_token_api_defaults_to_training_shuffle(self) -> None:
+        capacity = ExpertCapacityHandler(
+            MixtureOfExpertsConfig(
+                capacity_factor=1.0,
+                num_experts=2,
+                top_k=1,
+                dropped_token_behavior=DroppedTokenOptions.ZEROS,
+            )
+        )
+        token_indices = torch.arange(4)
+        seed = 19
+        torch.manual_seed(seed)
+        expected_shuffle = torch.randperm(token_indices.numel())
+        torch.manual_seed(seed)
+
+        capacity.maybe_apply_capacity_limit_token_indices(
+            token_indices,
+            batch_size=4,
+        )
+
+        torch.testing.assert_close(capacity.shuffle_indices, expected_shuffle)
+
+    def test_evaluation_capacity_shuffle_preserves_meta_device(self) -> None:
+        capacity = ExpertCapacityHandler(
+            MixtureOfExpertsConfig(
+                capacity_factor=1.0,
+                num_experts=4,
+                top_k=1,
+                dropped_token_behavior=DroppedTokenOptions.ZEROS,
+            )
+        )
+        token_indices = torch.empty(2, dtype=torch.long, device="meta")
+
+        kept, dropped = capacity.maybe_apply_capacity_limit_token_indices(
+            token_indices,
+            batch_size=4,
+            training=False,
+        )
+
+        self.assertEqual(kept.device.type, "meta")
+        self.assertEqual(dropped.device.type, "meta")
+        self.assertEqual(capacity.shuffle_indices.device.type, "meta")
+
     def test_map_preserves_unforced_caller_overrides(self) -> None:
         overrides = MixtureOfExpertsConfig(capacity_factor=1.5)
 

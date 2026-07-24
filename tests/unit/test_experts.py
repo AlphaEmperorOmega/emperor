@@ -1,3 +1,4 @@
+import math
 import unittest
 from dataclasses import replace
 
@@ -724,7 +725,10 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         total = sample_indices.size(0) + dropped_indices.size(0)
                         if capacity_factor > 0 and dropped_indices.size(0) > 0:
                             expected_capacity = max(
-                                1, int(batch_size / num_experts * capacity_factor)
+                                1,
+                                math.ceil(
+                                    batch_size * top_k / num_experts * capacity_factor
+                                ),
                             )
                             self.assertLess(sample_indices.size(0), total)
                             self.assertEqual(sample_indices.size(0), expected_capacity)
@@ -773,7 +777,10 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                         total = sample_positions.size(0) + dropped_positions.size(0)
                         if capacity_factor > 0 and dropped_positions.size(0) > 0:
                             expected_capacity = max(
-                                1, int(batch_size / num_experts * capacity_factor)
+                                1,
+                                math.ceil(
+                                    batch_size * top_k / num_experts * capacity_factor
+                                ),
                             )
                             self.assertLess(sample_positions.size(0), total)
                             self.assertEqual(
@@ -2011,7 +2018,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
                     dropped_token_behavior=DroppedTokenOptions.ZEROS,
                 )
                 handler = ExpertCapacityHandler(cfg)
-                capacity = max(1, int(10 / 5 * capacity_factor))
+                capacity = max(1, math.ceil(10 * cfg.top_k / 5 * capacity_factor))
                 tokens_to_drop = 2
                 token_indices = torch.arange(capacity + tokens_to_drop)
                 expert_tokens, dropped_tokens = (
@@ -2043,7 +2050,7 @@ class TestExpertCapacityHandler(unittest.TestCase):
 
     def test_routing_positions_uses_stored_shuffle_indices(self):
         cfg = MixtureOfExpertsConfig(
-            capacity_factor=1.0,
+            capacity_factor=0.5,
             num_experts=5,
             top_k=2,
             dropped_token_behavior=DroppedTokenOptions.ZEROS,
