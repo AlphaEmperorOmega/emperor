@@ -19,7 +19,9 @@ class ExpertCapacityHandler:
         self.capacity_factor = self.cfg.capacity_factor
         self.num_experts = self.cfg.num_experts
         self.top_k = self.cfg.top_k
-        self.dropped_token_behavior = self.cfg.dropped_token_behavior
+        self.dropped_token_behavior = (
+            self.cfg.dropped_token_behavior or DroppedTokenOptions.ZEROS
+        )
         self.shuffle_indices: Tensor | None = None
 
     def maybe_apply_capacity_limit_token_indices(

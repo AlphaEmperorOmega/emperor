@@ -244,3 +244,26 @@ class ExpertOptionContractTests(unittest.TestCase):
 
         torch.testing.assert_close(output, torch.tensor([[2.0], [5.0], [7.0], [11.0]]))
         torch.testing.assert_close(torch.random.get_rng_state(), rng_state_before)
+
+    def test_missing_dropped_token_option_uses_zero_fallback(self) -> None:
+        for behavior in (None, DroppedTokenOptions.ZEROS):
+            with self.subTest(behavior=behavior):
+                model = (
+                    _mixture_config(
+                        top_k=1,
+                        num_experts=2,
+                        capacity_factor=1.0,
+                        dropped_token_behavior=behavior,
+                    )
+                    .build()
+                    .eval()
+                )
+                _set_affine_experts(model, weights=(1.0, 0.0))
+
+                output, _skip_mask, _loss = model(
+                    torch.tensor([[2.0], [5.0]]),
+                    probabilities=torch.ones(2),
+                    indices=torch.zeros(2, dtype=torch.long),
+                )
+
+                torch.testing.assert_close(output, torch.tensor([[2.0], [0.0]]))
