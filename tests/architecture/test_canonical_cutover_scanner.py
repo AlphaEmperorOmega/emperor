@@ -119,6 +119,7 @@ class CanonicalCutoverScannerTests(unittest.TestCase):
     def test_owned_text_does_not_advertise_retired_interfaces(self) -> None:
         forbidden_fragments = (
             "logs" + "-archive",
+            "Model" + " Visualizer",
             "env" + ".sh",
             "run" + "_test.sh",
             "download" + "_logs.sh",

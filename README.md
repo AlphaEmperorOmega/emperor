@@ -13,7 +13,7 @@ network models from reusable, inspectable components. The repository combines:
   runnable architectures.
 - `apps/workbench/api/` - the separately installable FastAPI application for
   inspection, run history, config snapshots, and local training jobs.
-- `apps/workbench/web/` - the Next.js Model Visualizer for planning experiments
+- `apps/workbench/web/` - the Next.js Workbench frontend for planning experiments
   and reviewing live or historical monitor data.
 
 The main goal is repeatable model experimentation: build small models, compare
