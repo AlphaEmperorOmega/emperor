@@ -1,4 +1,6 @@
 import math
+from dataclasses import replace
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import torch
@@ -29,6 +31,39 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_capacity_factor_is_non_negative(model)
         cls.validate_capacity_factor_consistent_with_top_k(model)
         cls.validate_dims_match_when_capacity_enabled(model)
+
+    @classmethod
+    def validate_config(
+        cls,
+        cfg,
+        *,
+        input_dim: int,
+        output_dim: int,
+    ) -> None:
+        """Validate a mixture config with its effective layer dimensions."""
+
+        cls.validate_config_type(cfg)
+        resolved_config = replace(
+            cfg,
+            input_dim=input_dim,
+            output_dim=output_dim,
+        )
+        cls.validate(
+            SimpleNamespace(
+                cfg=resolved_config,
+                input_dim=resolved_config.input_dim,
+                output_dim=resolved_config.output_dim,
+                expert_model_config=resolved_config.expert_model_config,
+                top_k=resolved_config.top_k,
+                num_experts=resolved_config.num_experts,
+                capacity_factor=resolved_config.capacity_factor,
+                weighting_position_option=(resolved_config.weighting_position_option),
+                routing_initialization_mode=(
+                    resolved_config.routing_initialization_mode
+                ),
+                sampler_config=resolved_config.sampler_config,
+            )
+        )
 
     @staticmethod
     def validate_config_type(cfg) -> None:
