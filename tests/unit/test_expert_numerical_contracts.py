@@ -457,3 +457,86 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     self.assertIsNotNone(parameter.grad)
                     self.assertTrue(torch.isfinite(parameter.grad).all())
                     self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+    def test_weighted_sparse_routing_gradients_reach_only_selected_experts(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        for weighting_position in ExpertWeightingPositionOptions:
+            with self.subTest(weighting_position=weighting_position):
+                model = _mixture_config(
+                    top_k=1,
+                    weighting_position=weighting_position,
+                ).build()
+                model.to(dtype=dtype)
+                _set_linear_expert_affines(model, _asymmetric_affines(dtype))
+                inputs = torch.tensor(
+                    [[1.2, -0.7], [-0.4, 2.1], [0.8, 0.3]],
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+                probabilities = torch.tensor(
+                    [0.2, 0.6, 0.9],
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+                indices = torch.tensor([0, 1, 0])
+
+                output, _, auxiliary_loss = model(
+                    inputs,
+                    probabilities=probabilities,
+                    indices=indices,
+                )
+                objective = (
+                    output
+                    * torch.tensor(
+                        [[1.0, -0.5], [0.7, 1.3], [-1.1, 0.4]],
+                        dtype=dtype,
+                    )
+                ).sum() + auxiliary_loss
+                objective.backward()
+
+                self.assertIsNotNone(inputs.grad)
+                self.assertTrue(torch.isfinite(inputs.grad).all())
+                self.assertGreater(inputs.grad.abs().sum().item(), 0.0)
+                self.assertIsNotNone(probabilities.grad)
+                self.assertTrue(torch.isfinite(probabilities.grad).all())
+                self.assertGreater(probabilities.grad.abs().sum().item(), 0.0)
+
+                for expert_index in (0, 1):
+                    linear = model.expert_modules[expert_index][0].model
+                    for parameter in (linear.weight_params, linear.bias_params):
+                        self.assertIsNotNone(parameter.grad)
+                        self.assertTrue(torch.isfinite(parameter.grad).all())
+                        self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+                unselected_linear = model.expert_modules[2][0].model
+                self.assertIsNone(unselected_linear.weight_params.grad)
+                self.assertIsNone(unselected_linear.bias_params.grad)
+                selected_weight_before_step = (
+                    model.expert_modules[0][0].model.weight_params.detach().clone()
+                )
+                unselected_weight_before_step = (
+                    unselected_linear.weight_params.detach().clone()
+                )
+                unselected_bias_before_step = (
+                    unselected_linear.bias_params.detach().clone()
+                )
+                optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
+
+                optimizer.step()
+
+                self.assertFalse(
+                    torch.equal(
+                        model.expert_modules[0][0].model.weight_params,
+                        selected_weight_before_step,
+                    )
+                )
+                torch.testing.assert_close(
+                    unselected_linear.weight_params,
+                    unselected_weight_before_step,
+                )
+                torch.testing.assert_close(
+                    unselected_linear.bias_params,
+                    unselected_bias_before_step,
+                )
