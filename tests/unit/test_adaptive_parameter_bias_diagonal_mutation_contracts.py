@@ -7,6 +7,7 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
     AntiDynamicDiagonalConfig,
@@ -365,7 +366,9 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
                 input_dim=2,
                 output_dim=3,
                 bias_flag=True,
-                adaptive_augmentation_config=(AdaptiveParameterAugmentationConfig()),
+                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                ),
             ),
             AdaptiveLinearLayerConfig(
                 input_dim=4,

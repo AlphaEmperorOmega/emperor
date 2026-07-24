@@ -5,6 +5,7 @@ from torch import nn
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AdaptiveParameterMonitorCallback,
     AdditiveDynamicBiasConfig,
     DualModelDynamicWeightConfig,
@@ -176,6 +177,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                 weight_config=None,
                 diagonal_config=None,
                 bias_config=None,
@@ -244,6 +246,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         return AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=DualModelDynamicWeightConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -480,6 +483,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                 bias_config=MultiplicativeDynamicBiasConfig(
                     input_dim=2,
                     output_dim=3,

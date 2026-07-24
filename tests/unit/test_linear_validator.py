@@ -5,6 +5,7 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
@@ -64,11 +65,79 @@ class TestLinearValidatorAdapter(unittest.TestCase):
                 input_dim=2,
                 output_dim=3,
                 bias_flag=True,
-                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(),
+                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                ),
             )
         )
 
         self.assertEqual(validated_models, [model])
+
+    def test_adaptive_affine_validation_dispatches_through_substituted_validator(self):
+        validation_calls = []
+
+        class TrackingAdaptiveLinearValidator(AdaptiveLinearValidator):
+            @staticmethod
+            def validate_weight_context_count(input_batch, weights):
+                validation_calls.append("weights")
+
+            @staticmethod
+            def validate_bias_context_count(input_batch, bias):
+                validation_calls.append("bias")
+
+        class TrackingAdaptiveLinearLayer(AdaptiveLinearLayer):
+            VALIDATOR = TrackingAdaptiveLinearValidator
+
+        model = TrackingAdaptiveLinearLayer(
+            AdaptiveLinearLayerConfig(
+                input_dim=2,
+                output_dim=3,
+                bias_flag=True,
+                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                ),
+            )
+        )
+
+        model._compute_affine_transformation_callback(
+            torch.ones(1, 2, 3),
+            torch.ones(1, 3),
+            torch.ones(1, 2),
+        )
+
+        self.assertEqual(validation_calls, ["weights", "bias"])
+
+    def test_adaptive_affine_context_errors_name_the_parameter_kind(self):
+        model = AdaptiveLinearLayer(
+            AdaptiveLinearLayerConfig(
+                input_dim=2,
+                output_dim=3,
+                bias_flag=True,
+                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                ),
+            )
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Dynamic weights context count must match affine input, received 2 and 1",
+        ):
+            model._compute_affine_transformation_callback(
+                torch.ones(2, 2, 3),
+                None,
+                torch.ones(1, 2),
+            )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Dynamic bias context count must match affine input, received 2 and 1",
+        ):
+            model._compute_affine_transformation_callback(
+                torch.ones(2, 3),
+                torch.ones(2, 3),
+                torch.ones(1, 2),
+            )
 
     def test_forward_dispatches_through_substituted_validator(self):
         class RejectingLinearValidator(LinearValidator):

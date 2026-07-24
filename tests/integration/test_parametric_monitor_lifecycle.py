@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -113,6 +114,7 @@ def _parametric_layer(*, top_k: int = 2) -> torch.nn.Module:
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -190,6 +192,7 @@ def _weight_only_parametric_layer(
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -244,6 +247,7 @@ def _dense_vector_parametric_layer() -> torch.nn.Module:
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,

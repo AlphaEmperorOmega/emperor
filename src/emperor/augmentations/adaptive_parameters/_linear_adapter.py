@@ -10,10 +10,11 @@ from emperor.augmentations.adaptive_parameters._config import (
 from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveLinearValidator,
 )
+from emperor.layers import RowLayout, RowLayoutAwareModule
 from emperor.linears import LinearAbstract
 
 
-class AdaptiveLinearLayer(LinearAbstract):
+class AdaptiveLinearLayer(LinearAbstract, RowLayoutAwareModule):
     VALIDATOR = AdaptiveLinearValidator
 
     def __init__(
@@ -48,7 +49,12 @@ class AdaptiveLinearLayer(LinearAbstract):
         )
         return self.adaptive_augmentation_config.build(overrides)
 
-    def forward(self, X: Tensor) -> Tensor:
+    def forward(
+        self,
+        X: Tensor,
+        *,
+        row_layout: RowLayout | None = None,
+    ) -> Tensor:
         self.VALIDATOR.validate_input_is_2d(X)
         if not self.has_adaptive_augmentation:
             return self._compute_affine_transformation_callback(
@@ -59,6 +65,7 @@ class AdaptiveLinearLayer(LinearAbstract):
             self.weight_params,
             self.bias_params,
             X,
+            row_layout=row_layout,
         )
 
     def _compute_affine_transformation_callback(
@@ -69,6 +76,9 @@ class AdaptiveLinearLayer(LinearAbstract):
 
     def __compute_linear_transformation(self, X: Tensor, weights: Tensor) -> Tensor:
         if weights.dim() == 3:
+            self.VALIDATOR.validate_weight_context_count(X, weights)
+            if X.dim() == 3:
+                return torch.bmm(X, weights)
             return torch.einsum("ij,ijk->ik", X, weights)
         return torch.matmul(X, weights)
 
@@ -76,5 +86,18 @@ class AdaptiveLinearLayer(LinearAbstract):
         self, X: Tensor, bias_params: Tensor | None = None
     ) -> Tensor:
         if bias_params is not None:
-            return X + bias_params
+            prepared_bias = self.__prepare_bias_parameters(X, bias_params)
+            return X + prepared_bias
         return X
+
+    def __prepare_bias_parameters(
+        self,
+        X: Tensor,
+        bias_params: Tensor,
+    ) -> Tensor:
+        if bias_params.dim() != 2:
+            return bias_params
+        self.VALIDATOR.validate_bias_context_count(X, bias_params)
+        if X.dim() == 3:
+            return bias_params.unsqueeze(1)
+        return bias_params

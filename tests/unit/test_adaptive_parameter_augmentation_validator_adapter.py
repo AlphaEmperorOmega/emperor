@@ -4,6 +4,7 @@ import torch
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.augmentations.adaptive_parameters._augmentation import (
     AdaptiveParameterAugmentation,
@@ -29,7 +30,11 @@ class TestAdaptiveParameterAugmentationValidatorAdapter(unittest.TestCase):
         class TrackingAugmentation(AdaptiveParameterAugmentation):
             VALIDATOR = TrackingValidator
 
-        cfg = AdaptiveParameterAugmentationConfig(input_dim=3, output_dim=4)
+        cfg = AdaptiveParameterAugmentationConfig(
+            input_dim=3,
+            output_dim=4,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+        )
 
         with self.assertRaisesRegex(
             RuntimeError,
@@ -52,6 +57,37 @@ class TestAdaptiveParameterAugmentationValidatorAdapter(unittest.TestCase):
         with self.assertRaisesRegex(
             RuntimeError,
             "substituted runtime validator was called",
+        ):
+            model(
+                lambda weights, bias, input_batch: input_batch,
+                torch.ones(3, 4),
+                None,
+                torch.ones(1, 3),
+            )
+
+    def test_grouped_runtime_validation_dispatches_through_validator(self):
+        class RejectingValidator(AdaptiveParameterAugmentationValidator):
+            @classmethod
+            def validate_grouped_forward_inputs(cls, *args):
+                raise RuntimeError("substituted grouped validator was called")
+
+        class RejectingAugmentation(AdaptiveParameterAugmentation):
+            VALIDATOR = RejectingValidator
+
+        model = RejectingAugmentation.__new__(RejectingAugmentation)
+        torch.nn.Module.__init__(model)
+        model.cfg = AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
+            group_count=1,
+        )
+        model.grouping_scope = AdaptiveParameterGroupingScopeOptions.ROWS
+        model.group_count = 1
+        model.input_dim = 3
+        model.output_dim = 4
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted grouped validator was called",
         ):
             model(
                 lambda weights, bias, input_batch: input_batch,

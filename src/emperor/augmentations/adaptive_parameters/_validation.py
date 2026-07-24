@@ -9,9 +9,13 @@ if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters._augmentation import (
         AdaptiveParameterAugmentation,
     )
+    from emperor.augmentations.adaptive_parameters._config import (
+        AdaptiveParameterAugmentationConfig,
+    )
     from emperor.augmentations.adaptive_parameters._linear_adapter import (
         AdaptiveLinearLayer,
     )
+    from emperor.layers import RowLayout
 
 
 class AdaptiveLinearValidator(ValidatorBase):
@@ -24,6 +28,12 @@ class AdaptiveLinearValidator(ValidatorBase):
         cls.validate_dimensions(
             input_dim=model.input_dim,
             output_dim=model.output_dim,
+        )
+        augmentation_validator = (
+            model.cfg.adaptive_augmentation_config.registry_owner().VALIDATOR
+        )
+        augmentation_validator.validate_grouping_configuration(
+            model.cfg.adaptive_augmentation_config
         )
         cls._validate_adaptive_bias_consistency(model)
 
@@ -44,6 +54,28 @@ class AdaptiveLinearValidator(ValidatorBase):
             raise ValueError(
                 f"Input must be a 2D matrix (batch, input_dim), "
                 f"got {X.dim()}D tensor with shape {X.shape}"
+            )
+
+    @staticmethod
+    def validate_weight_context_count(
+        input_batch: Tensor,
+        weights: Tensor,
+    ) -> None:
+        if input_batch.shape[0] != weights.shape[0]:
+            raise ValueError(
+                "Dynamic weights context count must match affine input, "
+                f"received {weights.shape[0]} and {input_batch.shape[0]}."
+            )
+
+    @staticmethod
+    def validate_bias_context_count(
+        input_batch: Tensor,
+        bias: Tensor,
+    ) -> None:
+        if input_batch.shape[0] != bias.shape[0]:
+            raise ValueError(
+                "Dynamic bias context count must match affine input, "
+                f"received {bias.shape[0]} and {input_batch.shape[0]}."
             )
 
 
@@ -231,12 +263,12 @@ class AdaptiveParameterAugmentationValidator(
         "bias_config",
         "mask_config",
         "model_config",
-        "grouping_scope",
         "group_count",
     }
 
     @classmethod
     def validate(cls, model: "AdaptiveParameterAugmentation") -> None:
+        cls.validate_grouping_configuration(model.cfg)
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls._validate_dimensions(model)
@@ -299,6 +331,76 @@ class AdaptiveParameterAugmentationValidator(
                     "AdaptiveParameterAugmentationConfig."
                 )
 
+    @classmethod
+    def validate_grouping_configuration(
+        cls,
+        config: "AdaptiveParameterAugmentationConfig",
+    ) -> None:
+        grouping_scope = config.grouping_scope
+        group_count = config.group_count
+        cls._validate_grouping_scope(grouping_scope)
+        if not cls.grouping_is_enabled(config):
+            if group_count is not None:
+                cls._validate_group_count(group_count)
+            return
+        cls._validate_group_count(group_count)
+        active_components = (
+            config.diagonal_config,
+            config.weight_config,
+            config.bias_config,
+            config.mask_config,
+        )
+        if not any(component is not None for component in active_components):
+            raise ValueError(
+                "enabled grouping requires at least one adaptive parameter component."
+            )
+
+    @classmethod
+    def grouping_is_enabled(
+        cls,
+        config: "AdaptiveParameterAugmentationConfig",
+    ) -> bool:
+        from emperor.augmentations.adaptive_parameters._options import (
+            AdaptiveParameterGroupingScopeOptions,
+        )
+
+        grouping_scope = config.grouping_scope
+        return (
+            grouping_scope is AdaptiveParameterGroupingScopeOptions.ROWS
+            or grouping_scope is AdaptiveParameterGroupingScopeOptions.SEQUENCE
+        )
+
+    @staticmethod
+    def _validate_grouping_scope(grouping_scope: object) -> None:
+        from emperor.augmentations.adaptive_parameters._options import (
+            AdaptiveParameterGroupingScopeOptions,
+        )
+
+        if grouping_scope is None:
+            raise ValueError(
+                "grouping_scope is required for a resolved "
+                "AdaptiveParameterAugmentationConfig; use DISABLED, ROWS, or "
+                "SEQUENCE."
+            )
+        if not isinstance(grouping_scope, AdaptiveParameterGroupingScopeOptions):
+            raise TypeError(
+                "grouping_scope must be an "
+                "AdaptiveParameterGroupingScopeOptions value, received "
+                f"{grouping_scope!r}."
+            )
+
+    @staticmethod
+    def _validate_group_count(group_count: int | None) -> None:
+        if (
+            isinstance(group_count, bool)
+            or not isinstance(group_count, int)
+            or group_count <= 0
+        ):
+            raise ValueError(
+                "group_count must be a positive integer when provided, "
+                f"received {group_count!r}."
+            )
+
     @staticmethod
     def _validate_model_config(name: str, model_config) -> None:
         if model_config is None:
@@ -328,3 +430,43 @@ class AdaptiveParameterAugmentationValidator(
         cls.validate_input_batch(model, input_batch)
         cls.validate_batched_weight_params(model, weight_params, input_batch)
         cls.validate_bias_params(model, bias_params, input_batch)
+
+    @staticmethod
+    def validate_grouped_base_parameters(
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+    ) -> None:
+        if weight_params.dim() != 2:
+            raise ValueError(
+                "Adaptive parameter grouping requires shared two-dimensional base "
+                "weights; row-specific base weights are not supported."
+            )
+        if bias_params is not None and bias_params.dim() != 1:
+            raise ValueError(
+                "Adaptive parameter grouping requires a shared one-dimensional base "
+                "bias; row-specific base bias is not supported."
+            )
+
+    @classmethod
+    def validate_grouped_forward_inputs(
+        cls,
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+        row_layout: "RowLayout | None",
+    ) -> None:
+        if row_layout is None:
+            raise ValueError(
+                "Enabled adaptive parameter grouping requires an explicit RowLayout."
+            )
+        cls.validate_grouped_base_parameters(weight_params, bias_params)
+
+    @classmethod
+    def validate_generated_parameters(
+        cls,
+        model: "AdaptiveParameterAugmentation",
+        weights: Tensor,
+        bias: Tensor | None,
+        conditioning_input: Tensor,
+    ) -> None:
+        cls.validate_batched_weight_params(model, weights, conditioning_input)
+        cls.validate_bias_params(model, bias, conditioning_input)

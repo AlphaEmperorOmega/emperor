@@ -4,6 +4,7 @@ import torch
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -144,6 +145,7 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                 weight_config=None,
                 bias_config=None,
                 diagonal_config=None,

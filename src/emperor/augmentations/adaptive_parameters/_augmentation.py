@@ -1,16 +1,27 @@
 from collections.abc import Callable
 from copy import deepcopy
+from typing import TYPE_CHECKING
 
 from torch import Tensor
 
 from emperor.augmentations.adaptive_parameters._config import (
     AdaptiveParameterAugmentationConfig,
 )
+from emperor.augmentations.adaptive_parameters._grouping import (
+    AdaptiveGroupPlan,
+    build_adaptive_group_plan,
+)
+from emperor.augmentations.adaptive_parameters._options import (
+    AdaptiveParameterGroupingScopeOptions,
+)
 from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveParameterAugmentationValidator,
 )
 from emperor.config import ConfigBase
 from emperor.nn import Module
+
+if TYPE_CHECKING:
+    from emperor.layers import RowLayout
 
 
 class AdaptiveParameterAugmentation(Module):
@@ -32,11 +43,17 @@ class AdaptiveParameterAugmentation(Module):
         self.bias_config = self.cfg.bias_config
         self.mask_config = self.cfg.mask_config
         self.model_config = self.cfg.model_config
+        self.grouping_scope = self.cfg.grouping_scope
+        self.group_count = self.cfg.group_count
         self.VALIDATOR.validate(self)
         self.weight_model = self.__build_from_config(self.weight_config)
         self.diagonal_model = self.__build_from_config(self.diagonal_config)
         self.bias_model = self.__build_from_config(self.bias_config)
         self.mask_model = self.__build_from_config(self.mask_config)
+
+    @property
+    def adaptive_parameter_grouping_enabled(self) -> bool:
+        return self.grouping_scope != AdaptiveParameterGroupingScopeOptions.DISABLED
 
     def __build_from_config(self, config: ConfigBase | None) -> Module | None:
         if config is None:
@@ -56,15 +73,92 @@ class AdaptiveParameterAugmentation(Module):
         weight_params: Tensor,
         bias_params: Tensor | None,
         input: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
     ) -> Tensor:
         self.VALIDATOR.validate_forward_inputs(
             self, affine_transform_callback, weight_params, bias_params, input
         )
-        weights, bias = self.__apply_adaptive_adjustments(
-            weight_params, bias_params, input
+        if self.grouping_scope != AdaptiveParameterGroupingScopeOptions.DISABLED:
+            return self.__apply_grouped_augmentation(
+                affine_transform_callback,
+                weight_params,
+                bias_params,
+                input,
+                row_layout=row_layout,
+            )
+        return self.__apply_augmentation(
+            affine_transform_callback,
+            weight_params,
+            bias_params,
+            input,
         )
-        weights = self.__maybe_apply_weight_mask(weights, input)
+
+    def __apply_grouped_augmentation(
+        self,
+        affine_transform_callback: Callable,
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+        input: Tensor,
+        *,
+        row_layout: "RowLayout | None",
+    ) -> Tensor:
+        self.VALIDATOR.validate_grouped_forward_inputs(
+            weight_params, bias_params, row_layout
+        )
+        group_plan = build_adaptive_group_plan(
+            input, self.grouping_scope, self.group_count, row_layout
+        )
+        grouped_output = self.__apply_augmentation(
+            affine_transform_callback,
+            weight_params,
+            bias_params,
+            group_plan,
+        )
+        return group_plan.restore(grouped_output)
+
+    def __apply_augmentation(
+        self,
+        affine_transform_callback: Callable,
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+        input: Tensor | AdaptiveGroupPlan,
+    ) -> Tensor:
+        parameter_generation_context = self.__prepare_input(input)
+        weights, bias = self.__prepare_parameters(
+            weight_params, bias_params, parameter_generation_context
+        )
+        if isinstance(input, AdaptiveGroupPlan):
+            input = input.grouped_members
         return affine_transform_callback(weights, bias, input)
+
+    def __prepare_input(self, input: Tensor | AdaptiveGroupPlan) -> Tensor:
+        valid_members = None
+        if isinstance(input, AdaptiveGroupPlan):
+            valid_members = input.valid_members
+            input = input.grouped_members
+
+        if valid_members is not None:
+            invalid_member_mask = ~valid_members.unsqueeze(-1)
+            input = input.masked_fill(invalid_member_mask, 0)
+        if input.dim() == 2:
+            return input
+        return input.sum(dim=1)
+
+    def __prepare_parameters(
+        self,
+        weight_params: Tensor,
+        bias_params: Tensor | None,
+        parameter_generation_context: Tensor,
+    ) -> tuple[Tensor, Tensor | None]:
+        weights, bias = self.__apply_adaptive_adjustments(
+            weight_params, bias_params, parameter_generation_context
+        )
+        weights = self.__maybe_apply_weight_mask(weights, parameter_generation_context)
+        self.VALIDATOR.validate_generated_parameters(
+            self, weights, bias, parameter_generation_context
+        )
+        return weights, bias
 
     def __apply_adaptive_adjustments(
         self, weights: Tensor, bias: Tensor | None, input: Tensor

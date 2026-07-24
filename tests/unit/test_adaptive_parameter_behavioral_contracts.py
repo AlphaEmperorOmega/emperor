@@ -10,6 +10,7 @@ import emperor.augmentations.adaptive_parameters as adaptive_parameters
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     WeightDecayScheduleOptions,
 )
@@ -82,6 +83,7 @@ def adaptive_linear_config(
         output_dim=output_dim,
         bias_flag=bias_flag,
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             bias_config=bias_config,
         ),
     )
@@ -114,7 +116,11 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
 
     def test_model_only_adjustment_path_executes_a_real_emperor_linear_layer(self):
         augmentation = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=2)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=2,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
         generator = LinearLayer(
             LinearLayerConfig(input_dim=2, output_dim=2, bias_flag=True)
@@ -347,7 +353,11 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
 
     def test_augmentation_rejects_three_dimensional_bias_parameters(self):
         augmentation = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
 
         with self.assertRaises(ValueError) as raised:

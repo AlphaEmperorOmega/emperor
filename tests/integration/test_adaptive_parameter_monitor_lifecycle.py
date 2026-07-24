@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AdaptiveParameterMonitorCallback,
     BankExpansionFactorOptions,
     WeightBankUtilizationMonitorCallback,
@@ -64,13 +65,14 @@ def adaptive_linear() -> torch.nn.Module:
         output_dim=2,
         bias_flag=True,
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             bias_config=WeightedBankDynamicBiasConfig(
                 decay_schedule=WeightDecayScheduleOptions.DISABLED,
                 decay_rate=0.0,
                 decay_warmup_batches=0,
                 bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO,
                 model_config=generator_config(),
-            )
+            ),
         ),
     )
     layer = layer_config.build()

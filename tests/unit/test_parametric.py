@@ -5,6 +5,7 @@ import torch
 import emperor.parametric as parametric
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.experts import (
     DroppedTokenOptions,
@@ -125,6 +126,7 @@ class ParametricPresetMixin:
         return AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,

@@ -10,6 +10,7 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
@@ -120,7 +121,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
 
     def test_runtime_tensor_validation_reports_every_exact_failure(self) -> None:
         model = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
 
         def callback(weights, bias, inputs):
@@ -233,7 +238,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 self.assert_exact_error(error_type, message, action)
 
         rectangular_model = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=5)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=5,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
         rectangular_inputs = torch.tensor(
             [
@@ -270,7 +279,10 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             with self.subTest(field_name=field_name, value=value):
                 dimensions = {"input_dim": 2, "output_dim": 3}
                 dimensions[field_name] = value
-                config = AdaptiveParameterAugmentationConfig(**dimensions)
+                config = AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    **dimensions,
+                )
                 self.assert_exact_error(
                     ValueError,
                     f"{field_name} must be a positive integer, received {value!r}.",
@@ -278,7 +290,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 )
 
         model = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
         for field_name, value in (
             ("input_dim", None),
@@ -303,7 +319,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                     setattr(model, field_name, original)
 
         unit_model = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=1, output_dim=1)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=1,
+                output_dim=1,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
         unit_inputs = torch.tensor([[2.0], [-3.0]])
         unit_weights = torch.tensor([[4.0]])
@@ -333,6 +353,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=3,
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                     model_config=wrong_model_config,
                 )
             ),
@@ -340,7 +361,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
 
     def test_each_sub_config_type_and_missing_model_error_is_exact(self) -> None:
         model = AdaptiveParameterAugmentation(
-            AdaptiveParameterAugmentationConfig(input_dim=2, output_dim=3)
+            AdaptiveParameterAugmentationConfig(
+                input_dim=2,
+                output_dim=3,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            )
         )
         wrong_config = LinearLayerConfig(
             input_dim=2,
@@ -387,6 +412,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=2,
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                     weight_config=invalid_nested_model,
                 )
             ),
@@ -403,6 +429,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 config = AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=3,
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
                     **{field_name: sub_config},
                 )
                 self.assert_exact_error(
@@ -870,7 +897,11 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                     output_dim=3,
                     bias_flag=True,
                     adaptive_augmentation_config=(
-                        AdaptiveParameterAugmentationConfig()
+                        AdaptiveParameterAugmentationConfig(
+                            grouping_scope=(
+                                AdaptiveParameterGroupingScopeOptions.DISABLED
+                            ),
+                        )
                     ),
                 )
             ),

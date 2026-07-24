@@ -6,6 +6,7 @@ import unittest
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
 )
 
 EXPECTED_EXPORTS = (
@@ -202,6 +203,7 @@ print(json.dumps({
         augmentation_config = AdaptiveParameterAugmentationConfig(
             input_dim=2,
             output_dim=3,
+            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
         )
         augmentation = augmentation_config.build()
         self.assertEqual(
@@ -213,7 +215,9 @@ print(json.dumps({
             input_dim=2,
             output_dim=3,
             bias_flag=True,
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(),
+            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            ),
         )
         linear = linear_config.build()
         self.assertEqual(
