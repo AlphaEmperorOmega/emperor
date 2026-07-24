@@ -42,6 +42,7 @@ EXPECTED_EXPORTS = (
     "WeightDecayScheduleOptions",
     "WeightNormalizationOptions",
     "WeightNormalizationPositionOptions",
+    "AdaptiveParameterGroupingScopeOptions",
     "AdaptiveParameterMonitorCallback",
     "WeightBankUtilizationMonitorCallback",
 )

@@ -1,6 +1,12 @@
 from enum import Enum
 
 
+class AdaptiveParameterGroupingScopeOptions(Enum):
+    DISABLED = 0
+    ROWS = 1
+    SEQUENCE = 2
+
+
 class WeightNormalizationOptions(Enum):
     DISABLED = 0
     CLAMP = 1

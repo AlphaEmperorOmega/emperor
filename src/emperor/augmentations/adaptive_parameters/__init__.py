@@ -29,6 +29,7 @@ from emperor.augmentations.adaptive_parameters._masks.config import (
     WeightInformedScoreAxisMaskConfig,
 )
 from emperor.augmentations.adaptive_parameters._options import (
+    AdaptiveParameterGroupingScopeOptions,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     MaskDimensionOptions,
@@ -84,6 +85,7 @@ __all__ = (
     "WeightDecayScheduleOptions",
     "WeightNormalizationOptions",
     "WeightNormalizationPositionOptions",
+    "AdaptiveParameterGroupingScopeOptions",
     "AdaptiveParameterMonitorCallback",
     "WeightBankUtilizationMonitorCallback",
 )

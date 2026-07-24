@@ -145,7 +145,7 @@ exports = [
   "PerAxisScoreMaskConfig", "TopSliceAxisMaskConfig", "OuterProductMaskConfig",
   "DiagonalAxisMaskConfig", "BankExpansionFactorOptions", "DynamicDepthOptions",
   "MaskDimensionOptions", "WeightDecayScheduleOptions", "WeightNormalizationOptions",
-  "WeightNormalizationPositionOptions", "AdaptiveParameterMonitorCallback",
+  "WeightNormalizationPositionOptions", "AdaptiveParameterGroupingScopeOptions", "AdaptiveParameterMonitorCallback",
   "WeightBankUtilizationMonitorCallback",
 ]
 owners = [
@@ -161,7 +161,7 @@ owners = [
   "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config",
   "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options",
   "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options",
-  "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters",
+  "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters",
   "emperor.augmentations.adaptive_parameters._monitoring.weight_banks",
 ]
 

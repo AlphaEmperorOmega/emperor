@@ -231,6 +231,8 @@ class AdaptiveParameterAugmentationValidator(
         "bias_config",
         "mask_config",
         "model_config",
+        "grouping_scope",
+        "group_count",
     }
 
     @classmethod
