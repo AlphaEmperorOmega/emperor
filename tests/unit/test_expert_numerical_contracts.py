@@ -592,3 +592,52 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     self.assertIsNotNone(parameter.grad)
                     self.assertTrue(torch.isfinite(parameter.grad).all())
                     self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+    def test_sparse_routing_accepts_non_contiguous_inputs_and_routing_tensors(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        model = _mixture_config().build().to(dtype=dtype)
+        affines = _asymmetric_affines(dtype)
+        _set_linear_expert_affines(model, affines)
+        input_storage = torch.tensor(
+            [[1.2, 99.0, -0.7, 99.0], [-0.4, 99.0, 2.1, 99.0]],
+            dtype=dtype,
+            requires_grad=True,
+        )
+        probability_storage = torch.tensor(
+            [[0.2, 99.0, 0.7, 99.0], [0.6, 99.0, 0.1, 99.0]],
+            dtype=dtype,
+            requires_grad=True,
+        )
+        index_storage = torch.tensor([[0, 9, 1, 9], [1, 9, 0, 9]])
+        inputs = input_storage[:, ::2]
+        probabilities = probability_storage[:, ::2]
+        indices = index_storage[:, ::2]
+        inputs.retain_grad()
+        probabilities.retain_grad()
+        self.assertFalse(inputs.is_contiguous())
+        self.assertFalse(probabilities.is_contiguous())
+        self.assertFalse(indices.is_contiguous())
+        expected = _expected_sparse_affine_mixture(
+            inputs.detach(),
+            probabilities.detach(),
+            indices,
+            affines,
+            ExpertWeightingPositionOptions.AFTER_EXPERTS,
+        )
+
+        output, _, auxiliary_loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        torch.testing.assert_close(output, expected)
+        (output.square().sum() + auxiliary_loss).backward()
+
+        self.assertIsNotNone(inputs.grad)
+        self.assertTrue(torch.isfinite(inputs.grad).all())
+        self.assertGreater(inputs.grad.abs().sum().item(), 0.0)
+        self.assertIsNotNone(probabilities.grad)
+        self.assertTrue(torch.isfinite(probabilities.grad).all())
+        self.assertGreater(probabilities.grad.abs().sum().item(), 0.0)
