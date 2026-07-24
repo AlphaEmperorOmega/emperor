@@ -97,6 +97,9 @@ class AdaptiveParameterMonitorCallback(Callback):
                 augmentation_path,
                 augmentation,
                 pl_module,
+                suppress_input_adaptivity=(
+                    augmentation.adaptive_parameter_grouping_enabled
+                ),
             )
 
     def __attach_option_hooks(
@@ -104,6 +107,8 @@ class AdaptiveParameterMonitorCallback(Callback):
         augmentation_path: str,
         augmentation: Module,
         pl_module: LightningModule,
+        *,
+        suppress_input_adaptivity: bool = False,
     ) -> None:
         for attribute_name, metric_slot in self._OPTION_SLOTS:
             option = getattr(augmentation, attribute_name, None)
@@ -115,6 +120,7 @@ class AdaptiveParameterMonitorCallback(Callback):
                         augmentation_path,
                         metric_slot,
                         pl_module,
+                        suppress_input_adaptivity=suppress_input_adaptivity,
                     )
                 )
             )
@@ -124,6 +130,8 @@ class AdaptiveParameterMonitorCallback(Callback):
         augmentation_path: str,
         slot: AdaptiveParameterSlot,
         pl_module: LightningModule,
+        *,
+        suppress_input_adaptivity: bool = False,
     ) -> Callable[[Module, tuple[object, ...], object], None]:
         def log_option_output(
             option: Module,
@@ -142,6 +150,7 @@ class AdaptiveParameterMonitorCallback(Callback):
                 slot,
                 option,
                 observation,
+                suppress_input_adaptivity=suppress_input_adaptivity,
             )
 
         return log_option_output
@@ -153,6 +162,8 @@ class AdaptiveParameterMonitorCallback(Callback):
         slot: AdaptiveParameterSlot,
         option: Module,
         observation: _AdaptiveParameterObservation,
+        *,
+        suppress_input_adaptivity: bool = False,
     ) -> None:
         context = self.__build_tracking_context(
             pl_module,
@@ -160,6 +171,7 @@ class AdaptiveParameterMonitorCallback(Callback):
             slot,
             option,
             observation,
+            suppress_input_adaptivity=suppress_input_adaptivity,
         )
         self.__track_adaptive_parameter_diagnostics(context)
 
@@ -170,6 +182,8 @@ class AdaptiveParameterMonitorCallback(Callback):
         slot: AdaptiveParameterSlot,
         option: Module,
         observation: _AdaptiveParameterObservation,
+        *,
+        suppress_input_adaptivity: bool = False,
     ) -> _AdaptiveParameterTrackingContext:
         return _AdaptiveParameterTrackingContext(
             pl_module=pl_module,
@@ -177,7 +191,11 @@ class AdaptiveParameterMonitorCallback(Callback):
             slot=slot,
             option=option,
             observation=observation,
-            input_adaptivity=self.__calculate_input_adaptivity(observation),
+            input_adaptivity=(
+                None
+                if suppress_input_adaptivity
+                else self.__calculate_input_adaptivity(observation)
+            ),
             weight_bank_values=self.__weight_bank_values(slot, option),
             effective_scale=self.__effective_bias_scale(slot, option, observation),
             experiment=getattr(

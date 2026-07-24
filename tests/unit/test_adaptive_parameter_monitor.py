@@ -4,6 +4,7 @@ import torch
 from torch import nn
 
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
     AdaptiveParameterGroupingScopeOptions,
     AdaptiveParameterMonitorCallback,
@@ -23,12 +24,16 @@ from emperor.augmentations.adaptive_parameters._augmentation import (
 from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
     MultiplicativeDynamicBias,
 )
+from emperor.augmentations.adaptive_parameters._linear_adapter import (
+    AdaptiveLinearLayer,
+)
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    RowLayout,
 )
 from emperor.linears import LinearLayerConfig
 from support.monitor import orchestration_calls
@@ -649,6 +654,45 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         names = self.scalar_names(module)
         self.assertNotIn("adaptive/weight/batch/cross_sample_std", names)
+
+    def test_grouped_owner_suppresses_only_legacy_sample_adaptivity_metrics(self):
+        adaptive = AdaptiveLinearLayer(
+            AdaptiveLinearLayerConfig(
+                input_dim=2,
+                output_dim=2,
+                bias_flag=True,
+                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                    grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
+                    group_count=2,
+                    bias_config=AdditiveDynamicBiasConfig(
+                        decay_schedule=WeightDecayScheduleOptions.DISABLED,
+                        decay_rate=0.0,
+                        decay_warmup_batches=0,
+                        model_config=self.layer_stack_config(
+                            input_dim=2,
+                            output_dim=2,
+                        ),
+                    ),
+                ),
+            )
+        )
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        adaptive(
+            torch.ones(4, 2),
+            row_layout=RowLayout.rows(
+                4,
+                context_sharing_restricted=False,
+            ),
+        )
+
+        prefix = "adaptive.adaptive_behaviour/bias/batch"
+        names = self.scalar_names(module)
+        self.assertIn(f"{prefix}/output_mean", names)
+        self.assertNotIn(f"{prefix}/cross_sample_std", names)
+        self.assertNotIn(f"{prefix}/adaptivity_ratio", names)
+        self.assertNotIn(f"{prefix}/centroid_cosine_mean", names)
 
 
 if __name__ == "__main__":
