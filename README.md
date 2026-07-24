@@ -775,7 +775,7 @@ The task maps the first argument to `tests/unit/test_<name>.py` and then passes
 any class or method name through to `python -P -m unittest -f`.
 
 Verify the protected Emperor interfaces, private-import boundaries, dependency
-direction, and zero external legacy-import ledger with:
+direction, and zero external retired-interface import ledger with:
 
 ```text
 mise run test:emperor-interfaces
