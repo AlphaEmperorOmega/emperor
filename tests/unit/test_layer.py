@@ -13,6 +13,7 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -111,6 +112,7 @@ class TestLayer(unittest.TestCase):
 
         expected_exports = {
             "ActivationOptions",
+            "AttentionResidualConfig",
             "LastLayerBiasOptions",
             "LayerNormPositionOptions",
             "LayerState",
@@ -202,6 +204,25 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(residual_connection.residual_dim, 3)
         self.assertEqual(residual_connection.model.input_dim, 6)
         self.assertEqual(residual_connection.model.output_dim, 3)
+
+    def test_attention_residual_config_declares_depth_mixing_parameters(self):
+        config = AttentionResidualConfig(
+            residual_dim=7,
+            block_size=3,
+            rms_norm_epsilon=1e-5,
+        )
+
+        self.assertEqual(
+            tuple(config_field.name for config_field in fields(type(config))),
+            ("residual_dim", "block_size", "rms_norm_epsilon"),
+        )
+        self.assertEqual(config.residual_dim, 7)
+        self.assertEqual(config.block_size, 3)
+        self.assertEqual(config.rms_norm_epsilon, 1e-5)
+        built_residual = config.build()
+        self.assertEqual(built_residual.residual_dim, 7)
+        self.assertEqual(built_residual.block_size, 3)
+        self.assertEqual(built_residual.rms_norm_epsilon, 1e-5)
 
     def test_residual_options_only_contain_enabled_composition_modes(self):
         self.assertEqual(

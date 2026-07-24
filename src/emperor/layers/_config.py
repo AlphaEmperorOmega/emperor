@@ -41,6 +41,28 @@ class GateConfig(ConfigBase):
 
 
 @dataclass
+class AttentionResidualConfig(ConfigBase):
+    residual_dim: int | None = optional_field(
+        "Residual feature dimension. ResidualConnection owners override this value "
+        "from ResidualConfig.residual_dim."
+    )
+    block_size: int | None = optional_field(
+        "Number of consecutive raw transformation outputs combined into one depth "
+        "source. Use 1 for Full Attention Residuals and values greater than 1 for "
+        "Block Attention Residuals. Defaults to 1."
+    )
+    rms_norm_epsilon: float | None = optional_field(
+        "Numerical stability epsilon used to RMS-normalize routing keys. Defaults "
+        "to 1e-6."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.layers._composition.attention_residual import AttentionResidual
+
+        return AttentionResidual
+
+
+@dataclass
 class ResidualConfig(ConfigBase):
     residual_dim: int | None = optional_field(
         "Residual feature dimension. Layer owners override this value from their "

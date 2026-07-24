@@ -1,3 +1,6 @@
+from emperor.layers._validation.attention_residual import (
+    AttentionResidualValidator,
+)
 from emperor.layers._validation.common import (
     _config_classes,
     _gate_config_class,
@@ -14,6 +17,7 @@ from emperor.layers._validation.residual import ResidualConnectionValidator
 from emperor.layers._validation.stack import LayerStackValidator
 
 __all__ = [
+    "AttentionResidualValidator",
     "LayerGateValidator",
     "LayerStackValidator",
     "LayerValidator",
@@ -22,6 +26,7 @@ __all__ = [
 ]
 
 for _validator in (
+    AttentionResidualValidator,
     LayerGateValidator,
     LayerStackValidator,
     LayerValidator,

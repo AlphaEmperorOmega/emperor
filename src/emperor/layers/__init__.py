@@ -2,6 +2,7 @@
 
 from emperor.layers._composition.residual import ResidualConnection
 from emperor.layers._config import (
+    AttentionResidualConfig,
     GateConfig,
     LayerConfig,
     LayerStackConfig,
@@ -28,6 +29,7 @@ from emperor.layers._state import LayerState
 
 __all__ = (
     "ActivationOptions",
+    "AttentionResidualConfig",
     "GateConfig",
     "LastLayerBiasOptions",
     "LayerConfig",
