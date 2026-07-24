@@ -746,3 +746,67 @@ class ExpertNumericalContractTests(unittest.TestCase):
                         rtol=1e-3,
                     )
                 )
+
+    def test_recurrent_linear_experts_match_two_step_equation_and_backpropagate(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        model = _mixture_config(
+            top_k=1,
+            num_experts=2,
+            expert_model_config=_recurrent_linear_expert(),
+        ).build()
+        model.to(dtype=dtype)
+        affines = _asymmetric_affines(dtype)[:2]
+        with torch.no_grad():
+            for recurrent_expert, (weight, bias) in zip(
+                model.expert_modules,
+                affines,
+                strict=True,
+            ):
+                linear = recurrent_expert.block_model.model
+                linear.weight_params.copy_(weight)
+                linear.bias_params.copy_(bias)
+
+        inputs = torch.tensor(
+            [[0.4, -0.6], [1.2, 0.3], [-0.8, 0.5]],
+            dtype=dtype,
+            requires_grad=True,
+        )
+        probabilities = torch.tensor(
+            [0.25, 0.7, 0.4],
+            dtype=dtype,
+            requires_grad=True,
+        )
+        indices = torch.tensor([0, 1, 0])
+        expected_rows = []
+        for sample, probability, expert_index in zip(
+            inputs.detach(),
+            probabilities.detach(),
+            indices,
+            strict=True,
+        ):
+            weight, bias = affines[int(expert_index)]
+            first_step = sample @ weight + bias
+            second_step = first_step @ weight + bias
+            expected_rows.append(probability * second_step)
+        expected = torch.stack(expected_rows)
+
+        output, _, auxiliary_loss = model(
+            inputs,
+            probabilities=probabilities,
+            indices=indices,
+        )
+        torch.testing.assert_close(output, expected)
+        (output.square().sum() + auxiliary_loss).backward()
+
+        for gradient in (inputs.grad, probabilities.grad):
+            self.assertIsNotNone(gradient)
+            self.assertTrue(torch.isfinite(gradient).all())
+            self.assertGreater(gradient.abs().sum().item(), 0.0)
+        for recurrent_expert in model.expert_modules:
+            linear = recurrent_expert.block_model.model
+            for parameter in (linear.weight_params, linear.bias_params):
+                self.assertIsNotNone(parameter.grad)
+                self.assertTrue(torch.isfinite(parameter.grad).all())
+                self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
