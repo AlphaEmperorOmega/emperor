@@ -276,3 +276,93 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     torch.testing.assert_close(output, expected)
                     self.assertIsNone(skip_mask)
                     torch.testing.assert_close(auxiliary_loss, inputs.new_zeros(()))
+
+    def test_probability_boundaries_have_exact_finite_affine_jacobians(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        probabilities_template = torch.tensor(
+            [0.0, 1e-12, 1.0],
+            dtype=dtype,
+        )
+        inputs_template = torch.tensor(
+            [[1.2, -0.7], [-0.4, 2.1], [0.8, 0.3]],
+            dtype=dtype,
+        )
+        weight, bias = _asymmetric_affines(dtype)[0]
+
+        for weighting_position in ExpertWeightingPositionOptions:
+            with self.subTest(weighting_position=weighting_position):
+                model = _mixture_config(
+                    top_k=1,
+                    num_experts=1,
+                    weighting_position=weighting_position,
+                ).build()
+                model.to(dtype=dtype)
+                _set_linear_expert_affines(model, ((weight, bias),))
+                inputs = inputs_template.clone().requires_grad_()
+                probabilities = probabilities_template.clone().requires_grad_()
+
+                output, _skip_mask, auxiliary_loss = model(
+                    inputs,
+                    probabilities=probabilities,
+                    indices=None,
+                )
+                if weighting_position == ExpertWeightingPositionOptions.BEFORE_EXPERTS:
+                    expected_output = (
+                        probabilities.detach().reshape(-1, 1) * inputs.detach()
+                    ) @ weight + bias
+                    expected_probability_gradient = (inputs.detach() @ weight).sum(
+                        dim=-1
+                    )
+                    expected_bias_gradient = torch.full_like(
+                        bias,
+                        inputs.shape[0],
+                    )
+                else:
+                    expected_output = probabilities.detach().reshape(-1, 1) * (
+                        inputs.detach() @ weight + bias
+                    )
+                    expected_probability_gradient = (
+                        inputs.detach() @ weight + bias
+                    ).sum(dim=-1)
+                    expected_bias_gradient = torch.full_like(
+                        bias,
+                        probabilities.detach().sum(),
+                    )
+
+                objective = output.sum() + auxiliary_loss
+                objective.backward()
+                expected_input_gradient = probabilities.detach().reshape(
+                    -1, 1
+                ) * weight.sum(dim=-1)
+                weighted_inputs = (
+                    probabilities.detach().reshape(-1, 1) * inputs.detach()
+                )
+                expected_weight_gradient = (
+                    weighted_inputs.sum(dim=0).reshape(-1, 1).expand_as(weight)
+                )
+                linear = model.expert_modules[0][0].model
+
+                torch.testing.assert_close(output, expected_output)
+                torch.testing.assert_close(inputs.grad, expected_input_gradient)
+                torch.testing.assert_close(
+                    probabilities.grad,
+                    expected_probability_gradient,
+                )
+                torch.testing.assert_close(
+                    linear.weight_params.grad,
+                    expected_weight_gradient,
+                )
+                torch.testing.assert_close(
+                    linear.bias_params.grad,
+                    expected_bias_gradient,
+                )
+                for value in (
+                    output,
+                    inputs.grad,
+                    probabilities.grad,
+                    linear.weight_params.grad,
+                    linear.bias_params.grad,
+                ):
+                    self.assertTrue(torch.isfinite(value).all())
