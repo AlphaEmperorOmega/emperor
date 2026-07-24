@@ -46,34 +46,19 @@ class MixerAttention(MultiHeadAttentionAbstract):
 
     def __exact_mixing_model_config(self, config):
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import RecurrentLayerConfig
 
         exact_config = deepcopy(config)
         exact_config.input_dim = self.sequence_length
         exact_config.output_dim = self.sequence_length
         if isinstance(exact_config, MixtureOfExpertsModelConfig):
-            if exact_config.stack_config is None:
-                raise ValueError(
-                    "stack_config is required for a MixerAttention "
-                    "MixtureOfExpertsModelConfig."
-                )
             exact_config.stack_config = self.__exact_mixing_model_config(
                 exact_config.stack_config
             )
         elif isinstance(exact_config, RecurrentLayerConfig):
-            if exact_config.block_config is None:
-                raise ValueError(
-                    "block_config is required for a MixerAttention "
-                    "RecurrentLayerConfig."
-                )
             exact_config.block_config = self.__exact_mixing_model_config(
                 exact_config.block_config
             )
-        elif not isinstance(exact_config, LayerStackConfig):
-            # RecurrentLayerConfig deliberately accepts any ConfigBase block with
-            # an input/output dimension contract. The outer mixer configuration
-            # has already been type-checked, so preserve that extensibility here.
-            return exact_config
         return exact_config
 
     def forward(

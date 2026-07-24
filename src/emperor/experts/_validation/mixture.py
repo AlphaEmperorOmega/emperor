@@ -1,5 +1,5 @@
 import math
-from dataclasses import replace
+from dataclasses import fields, replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
+from emperor.config import ConfigBase
 from emperor.experts._options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -15,6 +16,77 @@ from emperor.experts._options import (
 
 if TYPE_CHECKING:
     from emperor.experts._layers.mixture import MixtureOfExperts
+
+
+def _adaptive_grouping_paths(
+    config: ConfigBase,
+    *,
+    root: str,
+) -> tuple[str, ...]:
+    matches: list[str] = []
+    _collect_adaptive_grouping_paths(config, root, set(), matches)
+    return tuple(matches)
+
+
+def _collect_adaptive_grouping_paths(
+    value: object,
+    path: str,
+    visited: set[int],
+    matches: list[str],
+) -> None:
+    if isinstance(value, ConfigBase):
+        identity = id(value)
+        if identity in visited:
+            return
+        visited.add(identity)
+        try:
+            config_validator = value.registry_owner().VALIDATOR
+        except (AttributeError, NotImplementedError):
+            config_validator = None
+        grouping_is_enabled = getattr(
+            config_validator,
+            "grouping_is_enabled",
+            None,
+        )
+        if callable(grouping_is_enabled) and grouping_is_enabled(value):
+            matches.append(path)
+        for config_field in fields(value):
+            field_value = getattr(value, config_field.name)
+            field_path = f"{path}.{config_field.name}"
+            _collect_adaptive_grouping_paths(
+                field_value,
+                field_path,
+                visited,
+                matches,
+            )
+        return
+
+    if isinstance(value, dict):
+        identity = id(value)
+        if identity in visited:
+            return
+        visited.add(identity)
+        for key, item in value.items():
+            _collect_adaptive_grouping_paths(
+                item,
+                f"{path}[{key!r}]",
+                visited,
+                matches,
+            )
+        return
+
+    if isinstance(value, (list, tuple)):
+        identity = id(value)
+        if identity in visited:
+            return
+        visited.add(identity)
+        for index, item in enumerate(value):
+            _collect_adaptive_grouping_paths(
+                item,
+                f"{path}[{index}]",
+                visited,
+                matches,
+            )
 
 
 class MixtureOfExpertsValidator(ValidatorBase):
@@ -32,6 +104,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_capacity_factor_is_non_negative(model)
         cls.validate_capacity_factor_consistent_with_top_k(model)
         cls.validate_dims_match_when_capacity_enabled(model)
+        cls.validate_adaptive_grouping_is_not_routed(model)
 
     @classmethod
     def validate_config(
@@ -218,6 +291,22 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 "identity and must match the expert output shape. Got "
                 f"input_dim={model.input_dim}, output_dim={model.output_dim}"
             )
+
+    @staticmethod
+    def validate_adaptive_grouping_is_not_routed(
+        model: "MixtureOfExperts",
+    ) -> None:
+        grouping_paths = _adaptive_grouping_paths(
+            model.expert_model_config,
+            root="MixtureOfExpertsConfig.expert_model_config",
+        )
+        if not grouping_paths:
+            return
+        raise ValueError(
+            "Adaptive parameter grouping is not supported inside routed expert "
+            "models because routing changes row membership and order. Found "
+            f"grouping at {grouping_paths[0]}."
+        )
 
     @staticmethod
     def validate_sampler_is_initialized(model: "MixtureOfExperts") -> None:

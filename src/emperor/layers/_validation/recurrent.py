@@ -14,6 +14,7 @@ from emperor.layers._validation.common import (
     _MEMORY_CONFIG_FIELDS,
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
+    _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.layers._validation.residual import ResidualConnectionValidator
@@ -70,6 +71,14 @@ class RecurrentLayerValidator(ValidatorBase):
         cls._validate_gate_config(cfg.gate_config)
         cls._validate_halting_config(cfg.halting_config)
         cls._validate_memory_config(cfg.memory_config)
+        _validate_no_grouping_with_context_controllers(
+            cfg,
+            owner_name="RecurrentLayerConfig",
+            controllers=(
+                ("halting_config", cfg.halting_config),
+                ("memory_config", cfg.memory_config),
+            ),
+        )
 
     @classmethod
     def validate_state(cls, state: LayerState, expected_feature_dim: int) -> None:

@@ -206,6 +206,19 @@ class ParametricLayerValidator(ValidatorBase):
                 "AdaptiveParameterAugmentationConfig for ParametricLayer, "
                 f"got {type(model.adaptive_augmentation_config).__name__}."
             )
+        augmentation_validator = (
+            model.adaptive_augmentation_config.registry_owner().VALIDATOR
+        )
+        if augmentation_validator.grouping_is_enabled(
+            model.adaptive_augmentation_config
+        ):
+            raise ValueError(
+                "ParametricLayer does not support adaptive parameter grouping: "
+                "its primary parameters are already generated per input row."
+            )
+        augmentation_validator.validate_grouping_configuration(
+            model.adaptive_augmentation_config
+        )
         if model.bias_mixture_config is None:
             return
         if model.adaptive_augmentation_config.bias_config is not None:

@@ -10,6 +10,7 @@ from emperor.attention import (
 )
 from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._variants.mixer.layer import MixerAttention
+from emperor.attention._variants.mixer.validation import MixerAttentionValidator
 from emperor.config import ConfigBase, optional_field
 from emperor.experts import (
     DroppedTokenOptions,
@@ -548,6 +549,24 @@ class TestMixerAttention(unittest.TestCase):
         invalid_recurrent.block_config = None
         with self.assertRaisesRegex(ValueError, "block_config is required"):
             _mixer_config(mixing_model_config=invalid_recurrent).build()
+
+    def test_validator_owns_required_nested_mixing_configuration_checks(self):
+        invalid_mixture = _mixture_mixing_config()
+        invalid_mixture.stack_config = None
+        with self.assertRaisesRegex(ValueError, "stack_config is required"):
+            MixerAttentionValidator._validate_mixing_model_config(invalid_mixture)
+
+        invalid_recurrent = _recurrent_stack(3)
+        invalid_recurrent.block_config = None
+        with self.assertRaisesRegex(ValueError, "block_config is required"):
+            MixerAttentionValidator._validate_mixing_model_config(invalid_recurrent)
+
+        nested_invalid_recurrent = _recurrent_stack(3)
+        nested_invalid_recurrent.block_config = None
+        outer_recurrent = _recurrent_stack(3)
+        outer_recurrent.block_config = nested_invalid_recurrent
+        with self.assertRaisesRegex(ValueError, "block_config is required"):
+            MixerAttentionValidator._validate_mixing_model_config(outer_recurrent)
 
     def test_rejects_invalid_configuration(self):
         cases = (

@@ -2,6 +2,9 @@ import unittest
 
 import torch
 
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterGroupingScopeOptions,
+)
 from emperor.experts import RoutingInitializationMode
 from emperor.layers import (
     ActivationOptions,
@@ -570,6 +573,35 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
             TypeError,
             "adaptive_augmentation_config must be an "
             "AdaptiveParameterAugmentationConfig for ParametricLayer, got object.",
+            lambda: ParametricLayer(config),
+        )
+
+    def test_unresolved_grouping_scope_is_rejected_before_child_construction(
+        self,
+    ) -> None:
+        config = _parametric_config()
+        config.adaptive_augmentation_config.grouping_scope = None
+
+        self.assert_rejected_before_rng_consumption(
+            ValueError,
+            "grouping_scope is required for a resolved "
+            "AdaptiveParameterAugmentationConfig; use DISABLED, ROWS, or SEQUENCE.",
+            lambda: ParametricLayer(config),
+        )
+
+    def test_grouped_adaptive_augmentation_is_rejected_before_child_construction(
+        self,
+    ) -> None:
+        config = _parametric_config()
+        config.adaptive_augmentation_config.grouping_scope = (
+            AdaptiveParameterGroupingScopeOptions.ROWS
+        )
+        config.adaptive_augmentation_config.group_count = 2
+
+        self.assert_rejected_before_rng_consumption(
+            ValueError,
+            "ParametricLayer does not support adaptive parameter grouping: "
+            "its primary parameters are already generated per input row.",
             lambda: ParametricLayer(config),
         )
 

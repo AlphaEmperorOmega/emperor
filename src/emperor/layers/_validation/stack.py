@@ -10,6 +10,7 @@ from emperor.layers._validation.common import (
     _MEMORY_CONFIG_FIELDS,
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
+    _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
 
@@ -44,6 +45,16 @@ class LayerStackValidator(ValidatorBase):
         cls._validate_halting_config(cfg)
         cls._validate_memory_config(cfg)
         cls._validate_attention_residual_config(cfg)
+        _validate_no_grouping_with_context_controllers(
+            cfg,
+            owner_name="LayerStackConfig",
+            controllers=(
+                ("shared_halting_config", cfg.shared_halting_config),
+                ("shared_memory_config", cfg.shared_memory_config),
+                ("layer_config.halting_config", cfg.layer_config.halting_config),
+                ("layer_config.memory_config", cfg.layer_config.memory_config),
+            ),
+        )
 
     @staticmethod
     def _validate_attention_residual_config(cfg: LayerStackConfig) -> None:

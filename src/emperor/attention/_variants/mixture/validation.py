@@ -4,7 +4,10 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor.attention._validation import MultiHeadAttentionValidator
+from emperor.attention._validation import (
+    MultiHeadAttentionValidator,
+    _first_enabled_adaptive_grouping_path,
+)
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
@@ -105,7 +108,33 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate(cls, model: "MultiHeadAttentionAbstract") -> None:
         super().validate(model)
         cls.validate_experts_configuration(model)
+        cls.validate_adaptive_grouping_is_not_routed(model)
         cls.validate_expert_key_value_sequence_lengths(model)
+
+    @staticmethod
+    def validate_adaptive_grouping_is_not_routed(
+        model: "MultiHeadAttentionAbstract",
+    ) -> None:
+        for path, config in (
+            (
+                "MixtureOfAttentionHeadsConfig.projection_model_config",
+                model.cfg.projection_model_config,
+            ),
+            (
+                "MixtureOfAttentionHeadsConfig.experts_config",
+                model.cfg.experts_config,
+            ),
+        ):
+            grouping_path = _first_enabled_adaptive_grouping_path(
+                config,
+                root=path,
+            )
+            if grouping_path is not None:
+                raise ValueError(
+                    "Adaptive parameter grouping is not supported by mixture-of-"
+                    "attention-heads projections because expert routing changes row "
+                    f"membership and order. Found grouping at {grouping_path}."
+                )
 
     @staticmethod
     def validate_experts_configuration(

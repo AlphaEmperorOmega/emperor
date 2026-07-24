@@ -1,11 +1,13 @@
 """Private shared attention validation."""
 
+from dataclasses import fields
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
+from emperor.config import ConfigBase
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
@@ -14,6 +16,78 @@ if TYPE_CHECKING:
         AttentionMasks,
         AttentionRuntimeLayout,
     )
+
+
+def _first_enabled_adaptive_grouping_path(
+    config: ConfigBase,
+    *,
+    root: str,
+) -> str | None:
+    return _find_enabled_adaptive_grouping_path(config, root, set())
+
+
+def _find_enabled_adaptive_grouping_path(
+    value: object,
+    path: str,
+    visited: set[int],
+) -> str | None:
+    if isinstance(value, ConfigBase):
+        identity = id(value)
+        if identity in visited:
+            return None
+        visited.add(identity)
+
+        try:
+            config_validator = value.registry_owner().VALIDATOR
+        except (AttributeError, NotImplementedError):
+            config_validator = None
+        grouping_is_enabled = getattr(
+            config_validator,
+            "grouping_is_enabled",
+            None,
+        )
+        if callable(grouping_is_enabled) and grouping_is_enabled(value):
+            return path
+
+        for config_field in fields(value):
+            match = _find_enabled_adaptive_grouping_path(
+                getattr(value, config_field.name),
+                f"{path}.{config_field.name}",
+                visited,
+            )
+            if match is not None:
+                return match
+        return None
+
+    if isinstance(value, dict):
+        identity = id(value)
+        if identity in visited:
+            return None
+        visited.add(identity)
+        for key, item in value.items():
+            match = _find_enabled_adaptive_grouping_path(
+                item,
+                f"{path}[{key!r}]",
+                visited,
+            )
+            if match is not None:
+                return match
+        return None
+
+    if isinstance(value, (list, tuple)):
+        identity = id(value)
+        if identity in visited:
+            return None
+        visited.add(identity)
+        for index, item in enumerate(value):
+            match = _find_enabled_adaptive_grouping_path(
+                item,
+                f"{path}[{index}]",
+                visited,
+            )
+            if match is not None:
+                return match
+    return None
 
 
 class AttentionValidatorBase:

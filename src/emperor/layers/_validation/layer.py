@@ -10,6 +10,7 @@ from emperor.layers._validation.common import (
     _MEMORY_CONFIG_FIELDS,
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
+    _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.layers._validation.residual import ResidualConnectionValidator
@@ -54,6 +55,14 @@ class LayerValidator(ValidatorBase):
         cls._validate_memory_config(cfg.memory_config)
         cls._validate_halting_dimensions(
             cfg.input_dim, cfg.output_dim, cfg.halting_config
+        )
+        _validate_no_grouping_with_context_controllers(
+            cfg,
+            owner_name="LayerConfig",
+            controllers=(
+                ("halting_config", cfg.halting_config),
+                ("memory_config", cfg.memory_config),
+            ),
         )
 
     @staticmethod

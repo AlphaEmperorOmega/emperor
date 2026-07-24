@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import torch
 
 from emperor._validation import ValidatorBase
+from emperor.attention._validation import _first_enabled_adaptive_grouping_path
 from emperor.layers import LayerState
 
 if TYPE_CHECKING:
@@ -24,8 +25,8 @@ class MixerAttentionValidator(ValidatorBase):
         )
         cls._validate_mixing_model_config(model.mixing_model_config)
 
-    @staticmethod
-    def _validate_mixing_model_config(mixing_model_config: object) -> None:
+    @classmethod
+    def _validate_mixing_model_config(cls, mixing_model_config: object) -> None:
         from emperor.experts import MixtureOfExpertsModelConfig
         from emperor.layers import LayerStackConfig, RecurrentLayerConfig
 
@@ -43,6 +44,37 @@ class MixerAttentionValidator(ValidatorBase):
                 "MixerAttention, got "
                 f"{type(mixing_model_config).__name__}."
             )
+        grouping_path = _first_enabled_adaptive_grouping_path(
+            mixing_model_config,
+            root="MixerAttentionConfig.mixing_model_config",
+        )
+        if grouping_path is not None:
+            raise ValueError(
+                "Adaptive parameter grouping is not supported by MixerAttention "
+                "because its flattened rows represent embedding channels, not "
+                f"sequence rows. Found grouping at {grouping_path}."
+            )
+        cls._validate_required_nested_mixing_configs(mixing_model_config)
+
+    @classmethod
+    def _validate_required_nested_mixing_configs(cls, config: object) -> None:
+        from emperor.experts import MixtureOfExpertsModelConfig
+        from emperor.layers import RecurrentLayerConfig
+
+        if isinstance(config, MixtureOfExpertsModelConfig):
+            if config.stack_config is None:
+                raise ValueError(
+                    "stack_config is required for a MixerAttention "
+                    "MixtureOfExpertsModelConfig."
+                )
+            cls._validate_required_nested_mixing_configs(config.stack_config)
+        elif isinstance(config, RecurrentLayerConfig):
+            if config.block_config is None:
+                raise ValueError(
+                    "block_config is required for a MixerAttention "
+                    "RecurrentLayerConfig."
+                )
+            cls._validate_required_nested_mixing_configs(config.block_config)
 
     @classmethod
     def validate_forward_inputs(
