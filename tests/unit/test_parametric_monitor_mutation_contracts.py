@@ -15,7 +15,7 @@ from emperor.parametric._monitoring import (
     _ParametricObservation,
     _ParametricTrackingContext,
 )
-from tests.unit.test_parametric_behavioral_contracts import (
+from unit.test_parametric_behavioral_contracts import (
     _mixture_kwargs,
     _parametric_config,
 )

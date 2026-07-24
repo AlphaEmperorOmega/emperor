@@ -25,7 +25,7 @@ from emperor.parametric._handlers import (
     VectorParameterHandler,
 )
 from emperor.sampler import RouterConfig
-from tests.unit.test_parametric_behavioral_contracts import (
+from unit.test_parametric_behavioral_contracts import (
     _generator_config,
     _mixture_kwargs,
     _parametric_config,

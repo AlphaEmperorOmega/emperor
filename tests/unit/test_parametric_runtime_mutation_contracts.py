@@ -25,8 +25,8 @@ from emperor.parametric import (
 from emperor.parametric._mixtures.validation import AdaptiveMixtureValidator
 from emperor.parametric._mixtures.vector import VectorMixtureBase
 from emperor.sampler import RouterConfig
-from tests.unit.test_expert_mutation_contracts import _halting_expert_stack
-from tests.unit.test_parametric_behavioral_contracts import (
+from unit.test_expert_mutation_contracts import _halting_expert_stack
+from unit.test_parametric_behavioral_contracts import (
     _generator_config,
     _mixture_kwargs,
     _parametric_config,

@@ -27,7 +27,7 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
-from tests.unit.test_expert_behavioral_contracts import (
+from unit.test_expert_behavioral_contracts import (
     _linear_stack,
     _mixture_config,
     _mixture_model_config,

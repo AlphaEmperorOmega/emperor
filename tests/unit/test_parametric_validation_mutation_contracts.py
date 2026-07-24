@@ -32,7 +32,7 @@ from emperor.parametric._validation import (
     ParametricHandlerValidator,
     ParametricLayerValidator,
 )
-from tests.unit.test_parametric_behavioral_contracts import (
+from unit.test_parametric_behavioral_contracts import (
     _generator_config,
     _mixture_kwargs,
     _parametric_config,
