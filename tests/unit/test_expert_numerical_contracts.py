@@ -1,3 +1,4 @@
+import copy
 import unittest
 
 import torch
@@ -7,6 +8,7 @@ from emperor.experts import (
     ExpertWeightingPositionOptions,
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
+    MixtureOfExpertsLayerState,
     MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
 )
@@ -880,3 +882,113 @@ class ExpertNumericalContractTests(unittest.TestCase):
                         ),
                         0.0,
                     )
+
+    def test_model_and_momentum_optimizer_restore_exact_next_step(self) -> None:
+        dtype = torch.float64
+        config = _disabled_mixture_model_config()
+        source = config.build().to(dtype=dtype)
+        affines = _asymmetric_affines(dtype)[:2]
+        for expert_layer in source.expert_stack:
+            _set_linear_expert_affines(expert_layer.model, affines)
+        source_optimizer = torch.optim.SGD(
+            source.parameters(),
+            lr=0.03,
+            momentum=0.9,
+        )
+        probabilities = torch.tensor(
+            [[0.2, 0.7], [0.6, 0.1], [0.35, 0.55]],
+            dtype=dtype,
+        )
+
+        def take_step(model, optimizer, inputs, target):
+            optimizer.zero_grad(set_to_none=True)
+            result = model(
+                MixtureOfExpertsLayerState(
+                    hidden=inputs,
+                    probabilities=probabilities,
+                    indices=None,
+                )
+            )
+            objective = (result.hidden - target).square().mean() + result.loss
+            objective.backward()
+            optimizer.step()
+            return result.hidden.detach().clone(), objective.detach().clone()
+
+        warmup_inputs = torch.tensor(
+            [[0.5, -1.0], [1.5, 0.25], [-0.75, 0.6]],
+            dtype=dtype,
+        )
+        warmup_target = torch.tensor(
+            [[0.2, -0.4], [0.8, 0.1], [-0.3, 0.5]],
+            dtype=dtype,
+        )
+        take_step(source, source_optimizer, warmup_inputs, warmup_target)
+        checkpoint = copy.deepcopy(source.state_dict())
+        optimizer_checkpoint = copy.deepcopy(source_optimizer.state_dict())
+
+        restored = config.build().to(dtype=dtype)
+        load_result = restored.load_state_dict(checkpoint, strict=True)
+        self.assertEqual(load_result.missing_keys, [])
+        self.assertEqual(load_result.unexpected_keys, [])
+        restored_optimizer = torch.optim.SGD(
+            restored.parameters(),
+            lr=0.03,
+            momentum=0.9,
+        )
+        restored_optimizer.load_state_dict(optimizer_checkpoint)
+
+        next_inputs = torch.tensor(
+            [[-0.25, 0.9], [0.4, -1.2], [1.1, 0.35]],
+            dtype=dtype,
+        )
+        next_target = torch.tensor(
+            [[0.1, 0.3], [-0.6, 0.2], [0.7, -0.5]],
+            dtype=dtype,
+        )
+        source_output, source_objective = take_step(
+            source,
+            source_optimizer,
+            next_inputs,
+            next_target,
+        )
+        restored_output, restored_objective = take_step(
+            restored,
+            restored_optimizer,
+            next_inputs,
+            next_target,
+        )
+
+        torch.testing.assert_close(source_output, restored_output, rtol=0, atol=0)
+        torch.testing.assert_close(
+            source_objective,
+            restored_objective,
+            rtol=0,
+            atol=0,
+        )
+        for source_parameter, restored_parameter in zip(
+            source.parameters(),
+            restored.parameters(),
+            strict=True,
+        ):
+            torch.testing.assert_close(
+                source_parameter,
+                restored_parameter,
+                rtol=0,
+                atol=0,
+            )
+            source_momentum = source_optimizer.state[source_parameter][
+                "momentum_buffer"
+            ]
+            restored_momentum = restored_optimizer.state[restored_parameter][
+                "momentum_buffer"
+            ]
+            torch.testing.assert_close(
+                source_momentum,
+                restored_momentum,
+                rtol=0,
+                atol=0,
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()
