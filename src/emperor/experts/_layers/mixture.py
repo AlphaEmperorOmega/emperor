@@ -39,6 +39,8 @@ class MixtureOfExperts(Module):
         cfg: "MixtureOfExpertsConfig",
         overrides: "MixtureOfExpertsConfig | None" = None,
     ):
+        self.VALIDATOR.validate_config_type(cfg)
+        self.VALIDATOR.validate_overrides_type(overrides)
         super().__init__()
         self.cfg: MixtureOfExpertsConfig = self._override_config(cfg, overrides)
         self.main_cfg: LayerStackConfig | RecurrentLayerConfig = (

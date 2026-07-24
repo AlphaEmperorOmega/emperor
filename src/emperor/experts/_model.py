@@ -21,6 +21,8 @@ class MixtureOfExpertsModel(Module):
         cfg: MixtureOfExpertsModelConfig,
         overrides: MixtureOfExpertsModelConfig | None = None,
     ) -> None:
+        self.VALIDATOR.validate_config_type(cfg)
+        self.VALIDATOR.validate_overrides_type(overrides)
         super().__init__()
         self.cfg: MixtureOfExpertsModelConfig = self._override_config(cfg, overrides)
 

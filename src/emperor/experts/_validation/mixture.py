@@ -19,6 +19,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
     @classmethod
     def validate(cls, model: "MixtureOfExperts") -> None:
+        cls.validate_config_type(model.cfg)
         cls.validate_required_fields(model.cfg)
         cls.validate_field_types(model.cfg)
         cls.validate_forward_reference_types(model)
@@ -27,6 +28,28 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_capacity_factor_is_non_negative(model)
         cls.validate_capacity_factor_consistent_with_top_k(model)
         cls.validate_dims_match_when_capacity_enabled(model)
+
+    @staticmethod
+    def validate_config_type(cfg) -> None:
+        from emperor.experts._config import MixtureOfExpertsConfig
+
+        if not isinstance(cfg, MixtureOfExpertsConfig):
+            raise TypeError(
+                "Configuration Error: `cfg` must be of type "
+                "MixtureOfExpertsConfig, received type "
+                f"{type(cfg).__name__}"
+            )
+
+    @staticmethod
+    def validate_overrides_type(overrides) -> None:
+        from emperor.experts._config import MixtureOfExpertsConfig
+
+        if overrides is not None and not isinstance(overrides, MixtureOfExpertsConfig):
+            raise TypeError(
+                "Configuration Error: `overrides` must be of type "
+                "MixtureOfExpertsConfig or None, received type "
+                f"{type(overrides).__name__}"
+            )
 
     @staticmethod
     def validate_forward_reference_types(model: "MixtureOfExperts") -> None:

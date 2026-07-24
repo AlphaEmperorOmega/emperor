@@ -11,6 +11,8 @@ class MixtureOfExpertsMap(MixtureOfExperts):
         cfg: MixtureOfExpertsConfig,
         overrides: MixtureOfExpertsConfig | None = None,
     ):
+        self.VALIDATOR.validate_config_type(cfg)
+        self.VALIDATOR.validate_overrides_type(overrides)
         overrides = self.__update_overrides(overrides)
         super().__init__(cfg, overrides)
         self.routing_positions = None

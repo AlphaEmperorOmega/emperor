@@ -14,15 +14,32 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
         cls.validate_stack_config_type(model)
         cls.validate_shared_routing_config_when_shared(model)
 
+    @classmethod
+    def validate_cfg_type(cls, model: "MixtureOfExpertsModel") -> None:
+        cls.validate_config_type(model.cfg)
+
     @staticmethod
-    def validate_cfg_type(model: "MixtureOfExpertsModel") -> None:
+    def validate_config_type(cfg) -> None:
         from emperor.experts._config import MixtureOfExpertsModelConfig
 
-        if not isinstance(model.cfg, MixtureOfExpertsModelConfig):
+        if not isinstance(cfg, MixtureOfExpertsModelConfig):
             raise TypeError(
                 "Configuration Error: `cfg` must be of type "
                 "MixtureOfExpertsModelConfig, received type "
-                f"{type(model.cfg).__name__}"
+                f"{type(cfg).__name__}"
+            )
+
+    @staticmethod
+    def validate_overrides_type(overrides) -> None:
+        from emperor.experts._config import MixtureOfExpertsModelConfig
+
+        if overrides is not None and not isinstance(
+            overrides, MixtureOfExpertsModelConfig
+        ):
+            raise TypeError(
+                "Configuration Error: `overrides` must be of type "
+                "MixtureOfExpertsModelConfig or None, received type "
+                f"{type(overrides).__name__}"
             )
 
     @staticmethod
