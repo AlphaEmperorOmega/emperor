@@ -763,3 +763,17 @@ class ExpertValidationContractTests(unittest.TestCase):
                 probabilities=torch.tensor([0.0, 1.01]),
                 indices=torch.tensor([0, 1]),
             )
+
+    def test_model_forward_preserves_the_incoming_halting_state(self) -> None:
+        model = _model_config().build()
+        halting_state = object()
+        state = MixtureOfExpertsLayerState(
+            hidden=torch.ones(2, 2),
+            probabilities=torch.ones(2),
+            indices=torch.tensor([0, 1]),
+            halting_state=halting_state,  # type: ignore[arg-type]
+        )
+
+        result = model(state)
+
+        self.assertIs(result.halting_state, halting_state)

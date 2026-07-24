@@ -63,6 +63,7 @@ class MixtureOfExpertsModel(Module):
             indices=indices,
             skip_mask=skip_mask,
             loss=state.loss,
+            halting_state=state.halting_state,
         )
         mixture_of_experts_state = self.expert_stack(mixture_of_experts_state)
         mixture_of_experts_state.loss = self.__combine_losses(
