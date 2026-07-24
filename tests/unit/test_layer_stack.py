@@ -10,6 +10,7 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -26,6 +27,336 @@ from emperor.linears import LinearLayerConfig
 
 
 class TestLayerStack(unittest.TestCase):
+    def attention_residual_stack(
+        self,
+        scales: tuple[float, ...],
+        *,
+        block_size: int = 1,
+    ) -> LayerStack:
+        dim = 2
+        stack = LayerStack(
+            LayerStackConfig(
+                input_dim=dim,
+                hidden_dim=dim,
+                output_dim=dim,
+                num_layers=len(scales),
+                apply_output_pipeline_flag=True,
+                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                shared_gate_config=None,
+                shared_halting_config=None,
+                shared_memory_config=None,
+                layer_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    residual_config=ResidualConfig(
+                        option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+                        attention_config=AttentionResidualConfig(
+                            block_size=block_size,
+                            rms_norm_epsilon=1e-6,
+                        ),
+                    ),
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    gate_config=None,
+                    halting_config=None,
+                    memory_config=None,
+                    layer_model_config=LinearLayerConfig(bias_flag=True),
+                ),
+            )
+        )
+        with torch.no_grad():
+            for layer, scale in zip(stack, scales, strict=True):
+                layer.model.weight_params.copy_(torch.eye(dim) * scale)
+                layer.model.bias_params.zero_()
+        return stack
+
+    def test_attention_residual_stack_mixes_raw_outputs_across_depth(self):
+        scales = (2.0, 3.0, 4.0)
+        stack = self.attention_residual_stack(scales)
+
+        initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+
+        result = stack(LayerState(hidden=initial.clone()))
+
+        first_raw_output = scales[0] * initial
+        first_hidden = (initial + first_raw_output) / 2.0
+        second_raw_output = scales[1] * first_hidden
+        second_hidden = (initial + first_raw_output + second_raw_output) / 3.0
+        third_raw_output = scales[2] * second_hidden
+        expected = (
+            initial + first_raw_output + second_raw_output + third_raw_output
+        ) / 4.0
+        torch.testing.assert_close(result.hidden, expected)
+        self.assertIsNone(result.residual_state)
+
+    def test_attention_residual_stack_uses_each_outgoing_query_in_depth_order(self):
+        stack = self.attention_residual_stack((1.0, 1.0, 1.0))
+        matrices = (
+            torch.tensor([[1.2, -0.4], [0.3, 0.8]]),
+            torch.tensor([[0.7, 0.5], [-0.6, 1.1]]),
+            torch.tensor([[1.4, 0.2], [0.1, -0.9]]),
+        )
+        biases = (
+            torch.tensor([0.2, -0.3]),
+            torch.tensor([-0.1, 0.4]),
+            torch.tensor([0.3, 0.1]),
+        )
+        queries = (
+            torch.tensor([0.8, -0.3]),
+            torch.tensor([-0.5, 0.9]),
+            torch.tensor([0.25, 0.6]),
+        )
+        norm_weights = (
+            torch.tensor([1.1, 0.7]),
+            torch.tensor([0.6, 1.4]),
+            torch.tensor([1.3, 0.8]),
+        )
+        with torch.no_grad():
+            for layer, matrix, bias, query, norm_weight in zip(
+                stack,
+                matrices,
+                biases,
+                queries,
+                norm_weights,
+                strict=True,
+            ):
+                layer.model.weight_params.copy_(matrix)
+                layer.model.bias_params.copy_(bias)
+                attention_residual = layer.residual_connection.attention_residual
+                attention_residual.query.copy_(query)
+                attention_residual.key_norm.weight.copy_(norm_weight)
+
+        def mix_sources(sources, layer):
+            attention_residual = layer.residual_connection.attention_residual
+            values = torch.stack(sources, dim=0)
+            keys = torch.nn.functional.rms_norm(
+                values,
+                normalized_shape=(values.shape[-1],),
+                weight=attention_residual.key_norm.weight,
+                eps=attention_residual.rms_norm_epsilon,
+            )
+            logits = torch.sum(keys * attention_residual.query, dim=-1)
+            weights = torch.softmax(logits, dim=0)
+            return torch.sum(weights.unsqueeze(-1) * values, dim=0)
+
+        initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+        first_raw_output = stack[0].model(initial)
+        first_hidden = mix_sources((initial, first_raw_output), stack[0])
+        second_raw_output = stack[1].model(first_hidden)
+        second_hidden = mix_sources(
+            (initial, first_raw_output, second_raw_output),
+            stack[1],
+        )
+        third_raw_output = stack[2].model(second_hidden)
+        expected = mix_sources(
+            (initial, first_raw_output, second_raw_output, third_raw_output),
+            stack[2],
+        )
+
+        actual = stack(LayerState(hidden=initial.clone())).hidden
+
+        torch.testing.assert_close(actual, expected)
+
+    def test_attention_residual_stack_supports_cpu_autocast_source_promotion(self):
+        stack = self.attention_residual_stack((2.0, 3.0))
+        initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+
+        with torch.autocast(device_type="cpu", dtype=torch.bfloat16):
+            first_raw_output = stack[0].model(initial)
+            first_hidden = torch.stack((initial, first_raw_output), dim=0).mean(dim=0)
+            second_raw_output = stack[1].model(first_hidden)
+            expected = torch.stack(
+                (initial, first_raw_output, second_raw_output),
+                dim=0,
+            ).mean(dim=0)
+            actual = stack(LayerState(hidden=initial.clone())).hidden
+
+        self.assertEqual(first_raw_output.dtype, torch.bfloat16)
+        self.assertEqual(actual.dtype, torch.float32)
+        torch.testing.assert_close(actual, expected)
+
+    def test_block_attention_residual_stack_mixes_completed_and_partial_blocks(self):
+        scales = (2.0, 3.0, 4.0)
+        stack = self.attention_residual_stack(scales, block_size=2)
+        initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+
+        result = stack(LayerState(hidden=initial.clone()))
+
+        first_raw_output = scales[0] * initial
+        first_hidden = (initial + first_raw_output) / 2.0
+        second_raw_output = scales[1] * first_hidden
+        first_completed_block = first_raw_output + second_raw_output
+        second_hidden = (initial + first_completed_block) / 2.0
+        third_raw_output = scales[2] * second_hidden
+        expected = (initial + first_completed_block + third_raw_output) / 3.0
+        torch.testing.assert_close(result.hidden, expected)
+
+    def test_attention_residual_stack_rejects_adaptive_halting(self):
+        dim = 3
+        config = self.preset(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            stack_num_layers=2,
+            stack_residual_connection_option=(
+                ResidualConnectionOptions.ATTENTION_RESIDUAL
+            ),
+            stack_dropout_probability=0.0,
+            gate_enabled=False,
+            halting_config=self.halting_config(dim, threshold=0.9),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "halting.*ATTENTION_RESIDUAL|ATTENTION_RESIDUAL.*halting",
+        ):
+            LayerStack(config)
+
+    def test_attention_residual_stack_starts_fresh_history_per_forward(self):
+        scales = (2.0, 3.0, 4.0)
+        stack = self.attention_residual_stack(scales)
+        fresh_stack = self.attention_residual_stack(scales)
+        stack(LayerState(hidden=torch.tensor([[1.0, -2.0]])))
+        next_input = torch.tensor([[0.5, 3.0], [2.0, -1.0], [-4.0, 0.25]])
+
+        reused_result = stack(LayerState(hidden=next_input.clone()))
+        fresh_result = fresh_stack(LayerState(hidden=next_input.clone()))
+
+        torch.testing.assert_close(reused_result.hidden, fresh_result.hidden)
+
+    def test_attention_residual_stack_restores_enclosing_residual_state(self):
+        stack = self.attention_residual_stack((2.0, 3.0))
+        initial = torch.tensor([[1.0, -2.0]])
+        enclosing_residual_state = stack[0].residual_connection.new_state(initial)
+        state = LayerState(
+            hidden=initial.clone(),
+            residual_state=enclosing_residual_state,
+        )
+
+        result = stack(state)
+
+        self.assertIs(result, state)
+        self.assertIs(result.residual_state, enclosing_residual_state)
+        self.assertEqual(len(enclosing_residual_state.sources), 1)
+
+    def test_attention_residual_stack_restores_state_when_a_layer_fails(self):
+        class FailingModel(torch.nn.Module):
+            def forward(self, _input):
+                raise RuntimeError("deliberate layer failure")
+
+        stack = self.attention_residual_stack((2.0, 3.0))
+        stack[1].model = FailingModel()
+        initial = torch.tensor([[1.0, -2.0]])
+        enclosing_residual_state = stack[0].residual_connection.new_state(initial)
+        state = LayerState(
+            hidden=initial.clone(),
+            residual_state=enclosing_residual_state,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "deliberate layer failure"):
+            stack(state)
+
+        self.assertIs(state.residual_state, enclosing_residual_state)
+        self.assertEqual(len(enclosing_residual_state.sources), 1)
+
+    def test_attention_residual_stack_owns_one_router_per_layer(self):
+        stack = self.attention_residual_stack((2.0, 3.0, 4.0))
+
+        queries = tuple(
+            layer.residual_connection.attention_residual.query for layer in stack
+        )
+
+        self.assertEqual(len({id(query) for query in queries}), len(queries))
+        for query in queries:
+            torch.testing.assert_close(query, torch.zeros_like(query))
+
+    def test_attention_residual_stack_backpropagates_through_all_sources_and_routers(
+        self,
+    ):
+        stack = self.attention_residual_stack((1.0, 1.0, 1.0))
+        matrices = (
+            torch.tensor([[1.2, -0.4], [0.3, 0.8]]),
+            torch.tensor([[0.7, 0.5], [-0.6, 1.1]]),
+            torch.tensor([[1.4, 0.2], [0.1, -0.9]]),
+        )
+        biases = (
+            torch.tensor([0.2, -0.3]),
+            torch.tensor([-0.1, 0.4]),
+            torch.tensor([0.3, 0.1]),
+        )
+        with torch.no_grad():
+            for index, (layer, matrix, bias) in enumerate(
+                zip(stack, matrices, biases, strict=True)
+            ):
+                layer.model.weight_params.copy_(matrix)
+                layer.model.bias_params.copy_(bias)
+                layer.residual_connection.attention_residual.query.copy_(
+                    torch.tensor([0.35 + 0.1 * index, -0.2])
+                )
+        initial = torch.tensor(
+            [[1.0, -2.0], [0.5, 3.0]],
+            requires_grad=True,
+        )
+
+        result = stack(LayerState(hidden=initial))
+        result.hidden.square().sum().backward()
+
+        self.assertIsNotNone(initial.grad)
+        self.assertTrue(torch.isfinite(initial.grad).all())
+        self.assertGreater(torch.count_nonzero(initial.grad).item(), 0)
+        for layer in stack:
+            attention_residual = layer.residual_connection.attention_residual
+            parameters = (
+                layer.model.weight_params,
+                layer.model.bias_params,
+                attention_residual.query,
+                attention_residual.key_norm.weight,
+            )
+            for parameter in parameters:
+                with self.subTest(parameter_shape=tuple(parameter.shape)):
+                    self.assertIsNotNone(parameter.grad)
+                    self.assertTrue(torch.isfinite(parameter.grad).all())
+                    self.assertGreater(torch.count_nonzero(parameter.grad).item(), 0)
+
+    def test_attention_residual_stack_checkpoint_contains_no_forward_history(self):
+        scales = (2.0, 3.0, 4.0)
+        stack = self.attention_residual_stack(scales, block_size=2)
+        with torch.no_grad():
+            for index, layer in enumerate(stack):
+                layer.residual_connection.attention_residual.query.copy_(
+                    torch.tensor([0.2 + 0.1 * index, -0.15])
+                )
+        initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
+
+        expected = stack(LayerState(hidden=initial.clone())).hidden
+        checkpoint = {
+            name: value.detach().clone() for name, value in stack.state_dict().items()
+        }
+        residual_parameter_names = tuple(
+            name for name in checkpoint if ".residual_connection." in name
+        )
+        expected_residual_parameter_names = tuple(
+            parameter_name
+            for layer_index in range(len(stack))
+            for parameter_name in (
+                f"layers.{layer_index}.residual_connection.attention_residual.query",
+                "layers."
+                f"{layer_index}.residual_connection.attention_residual."
+                "key_norm.weight",
+            )
+        )
+        restored = self.attention_residual_stack(scales, block_size=2)
+
+        incompatible_keys = restored.load_state_dict(checkpoint, strict=True)
+        actual = restored(LayerState(hidden=initial.clone())).hidden
+
+        self.assertEqual(
+            residual_parameter_names,
+            expected_residual_parameter_names,
+        )
+        self.assertEqual(incompatible_keys.missing_keys, [])
+        self.assertEqual(incompatible_keys.unexpected_keys, [])
+        torch.testing.assert_close(actual, expected)
+
     def preset(
         self,
         input_dim: int = 12,

@@ -1,12 +1,18 @@
 import unittest
 
 from emperor.layers import (
+    ActivationOptions,
+    AttentionResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
+    LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
+    ResidualConfig,
+    ResidualConnectionOptions,
 )
 from emperor.layers._validation import LayerStackValidator
+from emperor.linears import LinearLayerConfig
 
 
 def make_config(**overrides) -> LayerStackConfig:
@@ -26,7 +32,54 @@ def make_config(**overrides) -> LayerStackConfig:
     return LayerStackConfig(**values)
 
 
+def attention_residual_layer_config() -> LayerConfig:
+    return LayerConfig(
+        activation=ActivationOptions.DISABLED,
+        residual_config=ResidualConfig(
+            option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+            attention_config=AttentionResidualConfig(
+                block_size=1,
+                rms_norm_epsilon=1e-6,
+            ),
+        ),
+        dropout_probability=0.0,
+        layer_norm_position=LayerNormPositionOptions.DISABLED,
+        gate_config=None,
+        halting_config=None,
+        memory_config=None,
+        layer_model_config=LinearLayerConfig(bias_flag=True),
+    )
+
+
 class TestLayerStackValidatorAdapter(unittest.TestCase):
+    def test_attention_residual_requires_the_final_output_pipeline(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "apply_output_pipeline_flag must be True",
+        ):
+            LayerStack(
+                make_config(
+                    num_layers=2,
+                    apply_output_pipeline_flag=False,
+                    layer_config=attention_residual_layer_config(),
+                )
+            )
+
+    def test_attention_residual_requires_one_stable_stack_dimension(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "input_dim, hidden_dim, and output_dim must all be equal",
+        ):
+            LayerStack(
+                make_config(
+                    input_dim=2,
+                    hidden_dim=3,
+                    output_dim=3,
+                    apply_output_pipeline_flag=True,
+                    layer_config=attention_residual_layer_config(),
+                )
+            )
+
     def test_module_exposes_validator_adapter(self):
         self.assertIs(LayerStack.VALIDATOR, LayerStackValidator)
 
