@@ -641,3 +641,68 @@ class ExpertNumericalContractTests(unittest.TestCase):
         self.assertIsNotNone(probabilities.grad)
         self.assertTrue(torch.isfinite(probabilities.grad).all())
         self.assertGreater(probabilities.grad.abs().sum().item(), 0.0)
+
+    def test_safe_large_and_small_scales_keep_outputs_and_gradients_finite(
+        self,
+    ) -> None:
+        dtype = torch.float64
+        scale_cases = (
+            ("large_inputs", 1e12, 1e-6),
+            ("small_inputs", 1e-12, 1e6),
+        )
+        base_inputs = torch.tensor(
+            [[1.0, -2.0], [0.5, 3.0]],
+            dtype=dtype,
+        )
+        base_weights = (
+            torch.tensor([[1.0, -0.25], [0.5, 0.75]], dtype=dtype),
+            torch.tensor([[-0.4, 0.9], [1.1, 0.3]], dtype=dtype),
+        )
+
+        for case_name, input_scale, weight_scale in scale_cases:
+            for weighting_position in ExpertWeightingPositionOptions:
+                with self.subTest(
+                    case_name=case_name,
+                    weighting_position=weighting_position,
+                ):
+                    model = _mixture_config(
+                        top_k=2,
+                        num_experts=2,
+                        weighting_position=weighting_position,
+                    ).build()
+                    model.to(dtype=dtype)
+                    affines = tuple(
+                        (
+                            weight_scale * weight,
+                            torch.zeros(2, dtype=dtype),
+                        )
+                        for weight in base_weights
+                    )
+                    _set_linear_expert_affines(model, affines)
+                    inputs = (input_scale * base_inputs).requires_grad_()
+                    probabilities = torch.tensor(
+                        [[0.2, 0.7], [0.6, 0.1]],
+                        dtype=dtype,
+                        requires_grad=True,
+                    )
+
+                    output, _, auxiliary_loss = model(
+                        inputs,
+                        probabilities=probabilities,
+                        indices=None,
+                    )
+                    objective = output.sum() + auxiliary_loss
+                    objective.backward()
+
+                    self.assertTrue(torch.isfinite(output).all())
+                    self.assertTrue(torch.isfinite(objective))
+                    for gradient in (inputs.grad, probabilities.grad):
+                        self.assertIsNotNone(gradient)
+                        self.assertTrue(torch.isfinite(gradient).all())
+                        self.assertGreater(gradient.abs().sum().item(), 0.0)
+                    for expert_stack in model.expert_modules:
+                        linear = expert_stack[0].model
+                        for parameter in (linear.weight_params, linear.bias_params):
+                            self.assertIsNotNone(parameter.grad)
+                            self.assertTrue(torch.isfinite(parameter.grad).all())
+                            self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
