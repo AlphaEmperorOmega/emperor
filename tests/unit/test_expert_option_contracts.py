@@ -533,3 +533,51 @@ class ExpertOptionContractTests(unittest.TestCase):
                         )
 
                         torch.testing.assert_close(output, expected)
+
+    def test_singleton_dense_vector_and_column_probabilities_are_equivalent(
+        self,
+    ) -> None:
+        inputs = torch.tensor([[2.0], [5.0]])
+        vector_probabilities = torch.tensor([0.25, 0.75])
+
+        for weighted in (False, True):
+            for weighting_position in ExpertWeightingPositionOptions:
+                for as_column in (False, True):
+                    with self.subTest(
+                        weighted=weighted,
+                        weighting_position=weighting_position,
+                        as_column=as_column,
+                    ):
+                        model = _mixture_config(
+                            top_k=1,
+                            num_experts=1,
+                            weighted=weighted,
+                            weighting_position=weighting_position,
+                        ).build()
+                        _set_affine_experts(
+                            model,
+                            weights=(2.0,),
+                            biases=(3.0,),
+                        )
+                        probabilities = (
+                            vector_probabilities.reshape(-1, 1)
+                            if as_column
+                            else vector_probabilities
+                        )
+                        if not weighted:
+                            expected = torch.tensor([[7.0], [13.0]])
+                        elif (
+                            weighting_position
+                            == ExpertWeightingPositionOptions.BEFORE_EXPERTS
+                        ):
+                            expected = torch.tensor([[4.0], [10.5]])
+                        else:
+                            expected = torch.tensor([[1.75], [9.75]])
+
+                        output, _skip_mask, _loss = model(
+                            inputs,
+                            probabilities=probabilities,
+                            indices=None,
+                        )
+
+                        torch.testing.assert_close(output, expected)

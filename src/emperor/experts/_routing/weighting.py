@@ -30,6 +30,8 @@ class ExpertWeightingHandler:
     ) -> Tensor | None:
         if self.__should_probabilities_apply_before():
             if self.top_k == self.num_experts:
+                if probabilities.dim() == 1:
+                    return probabilities
                 return probabilities[:, expert_index]
             probabilities = probabilities.flatten()
             probabilities = probabilities[indices]
