@@ -27,6 +27,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_field_types(model.cfg)
         cls.validate_forward_reference_types(model)
         cls.validate_owned_routing_config_types(model)
+        cls.validate_owned_routing_config_coherence(model)
         cls.validate_dimensions(model)
         cls.validate_capacity_factor_is_non_negative(model)
         cls.validate_capacity_factor_consistent_with_top_k(model)
@@ -141,6 +142,26 @@ class MixtureOfExpertsValidator(ValidatorBase):
                 "type RouterConfig when 'routing_initialization_mode' is LAYER, "
                 f"received type {type(model.sampler_config.router_config).__name__}"
             )
+
+    @staticmethod
+    def validate_owned_routing_config_coherence(model: "MixtureOfExperts") -> None:
+        if model.routing_initialization_mode != RoutingInitializationMode.LAYER:
+            return
+        if model.top_k != model.sampler_config.top_k:
+            raise ValueError(
+                "Configuration Error: mixture top_k must match "
+                "sampler_config.top_k, received "
+                f"top_k={model.top_k} and "
+                f"sampler_config.top_k={model.sampler_config.top_k}"
+            )
+        if model.num_experts != model.sampler_config.num_experts:
+            raise ValueError(
+                "Configuration Error: mixture num_experts must match "
+                "sampler_config.num_experts, received "
+                f"num_experts={model.num_experts} and "
+                f"sampler_config.num_experts={model.sampler_config.num_experts}"
+            )
+        model.sampler_config.validate_for_router_input_dim(model.input_dim)
 
     @classmethod
     def validate_dimensions(cls, model: "MixtureOfExperts") -> None:

@@ -473,7 +473,7 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=config_dim,
             output_dim=config_dim,
             top_k=top_k,
-            routing_initialization_mode=RoutingInitializationMode.DISABLED,
+            routing_initialization_mode=RoutingInitializationMode.LAYER,
             sampler_config=None,
             stack_config=LayerStackConfig(
                 input_dim=dim,

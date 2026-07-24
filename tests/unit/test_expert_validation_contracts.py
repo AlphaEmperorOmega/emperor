@@ -21,6 +21,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    LayerState,
     MirroredLayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -394,3 +395,172 @@ class ExpertValidationContractTests(unittest.TestCase):
 
         self.assertEqual(len(model.expert_stack), 4)
         self.assertEqual(result.hidden.shape, (2, 2))
+
+    def test_model_build_rejects_outer_and_leaf_routing_owner_mismatch(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.LAYER
+
+        with self.assertRaises(ValueError) as error:
+            config.build()
+        self.assertEqual(
+            str(error.exception),
+            "Configuration Error: model routing_initialization_mode must match "
+            "the expert leaf routing_initialization_mode for LAYER ownership, "
+            "received model mode RoutingInitializationMode.LAYER and leaf mode "
+            "RoutingInitializationMode.DISABLED",
+        )
+
+    def test_layer_owned_mixture_rejects_sampler_top_k_mismatch(self) -> None:
+        config = _mixture_config(top_k=1, num_experts=2)
+        config.routing_initialization_mode = RoutingInitializationMode.LAYER
+        config.sampler_config = _sampler_config(top_k=2, num_experts=2)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Configuration Error: mixture top_k must match sampler_config.top_k, "
+            "received top_k=1 and sampler_config.top_k=2",
+        ):
+            config.build()
+
+    def test_layer_owned_mixture_rejects_sampler_expert_count_mismatch(self) -> None:
+        config = _mixture_config(top_k=1, num_experts=2)
+        config.routing_initialization_mode = RoutingInitializationMode.LAYER
+        config.sampler_config = _sampler_config(top_k=1, num_experts=3)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Configuration Error: mixture num_experts must match "
+            "sampler_config.num_experts",
+        ):
+            config.build()
+
+    def test_layer_owned_mixture_rejects_router_expert_count_mismatch(self) -> None:
+        config = _mixture_config(top_k=1, num_experts=2)
+        config.routing_initialization_mode = RoutingInitializationMode.LAYER
+        config.sampler_config = _sampler_config(top_k=1, num_experts=2)
+        config.sampler_config.router_config.num_experts = 3
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "router_config.num_experts must match sampler_config.num_experts",
+        ):
+            config.build()
+
+    def test_layer_owned_mixture_resolves_router_input_from_outer_layer(self) -> None:
+        config = _mixture_config(top_k=1, num_experts=2)
+        config.routing_initialization_mode = RoutingInitializationMode.LAYER
+        config.sampler_config = _sampler_config(top_k=1, num_experts=2)
+        config.sampler_config.router_config.input_dim = None
+
+        model = config.build()
+
+        self.assertEqual(model.sampler.router.input_dim, config.input_dim)
+        self.assertIsNone(config.sampler_config.router_config.input_dim)
+
+    def test_shared_model_rejects_outer_sampler_top_k_mismatch(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        leaf_config = config.stack_config.layer_config.layer_model_config
+        leaf_config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        config.sampler_config = _sampler_config(top_k=2, num_experts=2)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Configuration Error: model top_k must match sampler_config.top_k, "
+            "received top_k=1 and sampler_config.top_k=2",
+        ):
+            config.build()
+
+    def test_shared_model_rejects_sampler_expert_count_mismatch(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        config.sampler_config = _sampler_config(top_k=1, num_experts=3)
+
+        with self.assertRaises(ValueError) as error:
+            config.build()
+        self.assertEqual(
+            str(error.exception),
+            "Configuration Error: expert leaf num_experts must match "
+            "sampler_config.num_experts, received leaf num_experts=2 and "
+            "sampler_config.num_experts=3",
+        )
+
+    def test_shared_model_rejects_invalid_leaf_before_rng_work(self) -> None:
+        cases = (
+            (
+                -1.0,
+                2,
+                1,
+                "Configuration Error: 'capacity_factor' must be >= 0.0, received -1.0",
+            ),
+            (
+                1.0,
+                3,
+                2,
+                "Configuration Error: 'input_dim' must equal 'output_dim' when "
+                "'capacity_factor' > 0.0, because dropped tokens pass through as "
+                "identity and must match the expert output shape. Got input_dim=2, "
+                "output_dim=3",
+            ),
+        )
+        for capacity_factor, hidden_dim, num_layers, expected_message in cases:
+            with self.subTest(
+                capacity_factor=capacity_factor,
+                hidden_dim=hidden_dim,
+                num_layers=num_layers,
+            ):
+                config = _model_config()
+                config.routing_initialization_mode = RoutingInitializationMode.SHARED
+                config.sampler_config = _sampler_config(top_k=1, num_experts=2)
+                config.stack_config.hidden_dim = hidden_dim
+                config.stack_config.num_layers = num_layers
+                leaf_config = config.stack_config.layer_config.layer_model_config
+                leaf_config.capacity_factor = capacity_factor
+                rng_state = torch.random.get_rng_state()
+
+                with self.assertRaises(ValueError) as error:
+                    config.build()
+
+                self.assertEqual(str(error.exception), expected_message)
+                self.assertTrue(torch.equal(torch.random.get_rng_state(), rng_state))
+
+    def test_shared_model_rejects_router_expert_count_mismatch(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        config.sampler_config = _sampler_config(top_k=1, num_experts=2)
+        config.sampler_config.router_config.num_experts = 3
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "router_config.num_experts must match sampler_config.num_experts",
+        ):
+            config.build()
+
+    def test_shared_model_can_route_into_disabled_external_routing_leaves(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        config.sampler_config = _sampler_config(
+            input_dim=17,
+            top_k=1,
+            num_experts=2,
+        )
+        model = config.build()
+
+        result = model(LayerState(hidden=torch.ones(2, 2)))
+
+        self.assertEqual(result.hidden.shape, (2, 2))
+        self.assertEqual(
+            model.expert_stack[0].model.routing_initialization_mode,
+            RoutingInitializationMode.DISABLED,
+        )
+
+    def test_shared_model_resolves_router_input_from_outer_model(self) -> None:
+        config = _model_config()
+        config.routing_initialization_mode = RoutingInitializationMode.SHARED
+        config.sampler_config = _sampler_config(top_k=1, num_experts=2)
+        config.sampler_config.router_config.input_dim = None
+
+        model = config.build()
+
+        self.assertEqual(model.shared_sampler.router.input_dim, 2)
+        self.assertIsNone(config.sampler_config.router_config.input_dim)

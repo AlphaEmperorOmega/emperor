@@ -23,6 +23,7 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
         cls.validate_expert_leaf_config_type(model)
         cls.validate_expert_leaf_configuration(model)
         cls.validate_top_k_coherence(model)
+        cls.validate_routing_mode_coherence(model)
         cls.validate_shared_routing_config_when_shared(model)
 
     @classmethod
@@ -179,6 +180,24 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
             )
 
     @staticmethod
+    def validate_routing_mode_coherence(model: "MixtureOfExpertsModel") -> None:
+        leaf_config = model.stack_config.layer_config.layer_model_config
+        model_owns_layer_routing = (
+            model.routing_initialization_mode == RoutingInitializationMode.LAYER
+        )
+        leaf_owns_layer_routing = (
+            leaf_config.routing_initialization_mode == RoutingInitializationMode.LAYER
+        )
+        if model_owns_layer_routing != leaf_owns_layer_routing:
+            raise ValueError(
+                "Configuration Error: model routing_initialization_mode must match "
+                "the expert leaf routing_initialization_mode for LAYER ownership, "
+                "received model mode "
+                f"{model.routing_initialization_mode} and leaf mode "
+                f"{leaf_config.routing_initialization_mode}"
+            )
+
+    @staticmethod
     def validate_shared_routing_config_when_shared(
         model: "MixtureOfExpertsModel",
     ) -> None:
@@ -198,3 +217,18 @@ class MixtureOfExpertsModelValidator(ValidatorBase):
                 "type RouterConfig when 'routing_initialization_mode' is SHARED, "
                 f"received type {type(model.sampler_config.router_config).__name__}"
             )
+        if model.top_k != model.sampler_config.top_k:
+            raise ValueError(
+                "Configuration Error: model top_k must match sampler_config.top_k, "
+                f"received top_k={model.top_k} and "
+                f"sampler_config.top_k={model.sampler_config.top_k}"
+            )
+        leaf_config = model.stack_config.layer_config.layer_model_config
+        if leaf_config.num_experts != model.sampler_config.num_experts:
+            raise ValueError(
+                "Configuration Error: expert leaf num_experts must match "
+                "sampler_config.num_experts, received leaf num_experts="
+                f"{leaf_config.num_experts} and sampler_config.num_experts="
+                f"{model.sampler_config.num_experts}"
+            )
+        model.sampler_config.validate_for_router_input_dim(model.input_dim)
