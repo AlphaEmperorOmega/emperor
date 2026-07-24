@@ -706,3 +706,43 @@ class ExpertNumericalContractTests(unittest.TestCase):
                             self.assertIsNotNone(parameter.grad)
                             self.assertTrue(torch.isfinite(parameter.grad).all())
                             self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+    def test_sparse_weighted_mixture_passes_float64_gradcheck(self) -> None:
+        dtype = torch.float64
+        indices = torch.tensor([[0, 1], [1, 0]])
+        for weighting_position in ExpertWeightingPositionOptions:
+            with self.subTest(weighting_position=weighting_position):
+                model = _mixture_config(weighting_position=weighting_position).build()
+                model.to(dtype=dtype).eval()
+                _set_linear_expert_affines(model, _asymmetric_affines(dtype))
+                inputs = torch.tensor(
+                    [[0.35, -0.2], [0.75, 0.4]],
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+                probabilities = torch.tensor(
+                    [[0.3, 0.55], [0.65, 0.15]],
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+
+                def routed_output(
+                    test_inputs: torch.Tensor,
+                    test_probabilities: torch.Tensor,
+                    test_model=model,
+                ) -> torch.Tensor:
+                    return test_model(
+                        test_inputs,
+                        probabilities=test_probabilities,
+                        indices=indices,
+                    )[0]
+
+                self.assertTrue(
+                    torch.autograd.gradcheck(
+                        routed_output,
+                        (inputs, probabilities),
+                        eps=1e-6,
+                        atol=1e-5,
+                        rtol=1e-3,
+                    )
+                )
