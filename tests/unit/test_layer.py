@@ -1,3 +1,4 @@
+import inspect
 import math
 import unittest
 from dataclasses import fields
@@ -113,24 +114,26 @@ class TestLayer(unittest.TestCase):
         expected_exports = {
             "ActivationOptions",
             "AttentionResidualConfig",
+            "GateConfig",
             "LastLayerBiasOptions",
-            "LayerNormPositionOptions",
-            "LayerState",
             "LayerConfig",
+            "LayerGateOptions",
+            "LayerNormPositionOptions",
             "LayerStackConfig",
             "MirroredLayerStackConfig",
-            "GateConfig",
             "RecurrentLayerConfig",
             "ResidualConfig",
-            "LayerGateOptions",
             "ResidualConnectionOptions",
+            "LayerState",
             "ResidualConnection",
             "Layer",
             "LayerStack",
             "MirroredLayerStack",
             "RecurrentLayer",
-            "RecurrentLayerMonitorCallback",
+            "RowLayout",
+            "RowLayoutAwareModule",
             "LayerControllerMonitorCallback",
+            "RecurrentLayerMonitorCallback",
         }
 
         self.assertEqual(set(layer_package.__all__), expected_exports)
@@ -703,12 +706,19 @@ class TestLayer(unittest.TestCase):
             ResidualConnectionOptions.RESIDUAL,
         )
 
-    def test_layer_state_contains_only_generic_fields(self):
-        state_fields = [field.name for field in fields(LayerState)]
+    def test_layer_state_contains_layer_and_stack_execution_fields(self):
+        state_fields = fields(LayerState)
 
         self.assertEqual(
-            state_fields,
-            ["hidden", "loss", "halting_state", "residual_state"],
+            [field.name for field in state_fields],
+            ["hidden", "loss", "halting_state", "residual_state", "row_layout"],
+        )
+        self.assertTrue(state_fields[-1].kw_only)
+
+    def test_layer_forward_accepts_only_layer_state(self):
+        self.assertEqual(
+            tuple(inspect.signature(Layer.forward).parameters),
+            ("self", "state"),
         )
 
     def test_shared_controller_configs_belong_to_layer_stack_config(self):

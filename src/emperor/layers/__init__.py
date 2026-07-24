@@ -24,8 +24,10 @@ from emperor.layers._options import (
     ResidualConnectionOptions,
 )
 from emperor.layers._recurrent import RecurrentLayer
+from emperor.layers._row_layout import RowLayout
 from emperor.layers._stack import LayerStack
 from emperor.layers._state import LayerState
+from emperor.layers._support import RowLayoutAwareModule
 
 __all__ = (
     "ActivationOptions",
@@ -46,6 +48,8 @@ __all__ = (
     "LayerStack",
     "MirroredLayerStack",
     "RecurrentLayer",
+    "RowLayout",
+    "RowLayoutAwareModule",
     "LayerControllerMonitorCallback",
     "RecurrentLayerMonitorCallback",
 )

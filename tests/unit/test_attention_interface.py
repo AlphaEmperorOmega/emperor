@@ -509,7 +509,15 @@ print(json.dumps({
         )
         self.assertEqual(
             tuple(field.name for field in fields(AttentionLayerState)),
-            ("hidden", "loss", "halting_state", "key_padding_mask", "attention_mask"),
+            (
+                "hidden",
+                "loss",
+                "halting_state",
+                "residual_state",
+                "row_layout",
+                "key_padding_mask",
+                "attention_mask",
+            ),
         )
         self.assertEqual(
             tuple(field.name for field in fields(QKV)),

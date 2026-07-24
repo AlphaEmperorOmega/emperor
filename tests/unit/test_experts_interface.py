@@ -101,6 +101,8 @@ STATE_FIELDS = (
     "hidden",
     "loss",
     "halting_state",
+    "residual_state",
+    "row_layout",
     "probabilities",
     "indices",
     "skip_mask",

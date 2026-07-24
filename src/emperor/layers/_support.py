@@ -11,6 +11,12 @@ if TYPE_CHECKING:
     from emperor.memory import MemoryInterface
 
 
+class RowLayoutAwareModule:
+    """Nominal capability for tensor modules accepting ``row_layout=``."""
+
+    pass
+
+
 class LayerModuleBase(Module):
     def __init__(self) -> None:
         super().__init__()

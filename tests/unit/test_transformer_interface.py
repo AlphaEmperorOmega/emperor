@@ -83,6 +83,29 @@ class TestTransformerInterface(unittest.TestCase):
                 field_names = {field.name for field in dataclasses.fields(config_type)}
                 self.assertNotIn("causal_attention_mask_flag", field_names)
 
+    def test_decoder_state_includes_generic_row_layout_transport(self):
+        self.assertEqual(
+            tuple(
+                field.name
+                for field in dataclasses.fields(
+                    transformer.TransformerDecoderLayerState
+                )
+            ),
+            (
+                "hidden",
+                "loss",
+                "halting_state",
+                "residual_state",
+                "row_layout",
+                "target_key_padding_mask",
+                "target_attention_mask",
+                "encoder_output",
+                "encoder_padding_mask",
+                "cross_attention_mask",
+                "controller_state",
+            ),
+        )
+
     def test_mirrored_stack_is_exported_from_the_layer_interface(self):
         from emperor.layers import MirroredLayerStack
 

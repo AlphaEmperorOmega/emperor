@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
     from emperor.halting import HaltingStateBase
     from emperor.layers._composition.attention_residual import AttentionResidualState
+    from emperor.layers._row_layout import RowLayout
 
 
 @dataclass
@@ -16,6 +17,12 @@ class LayerState:
     loss: Tensor | None = None
     halting_state: HaltingStateBase | None = None
     residual_state: AttentionResidualState | None = field(
+        default=None,
+        kw_only=True,
+        repr=False,
+        compare=False,
+    )
+    row_layout: RowLayout | None = field(
         default=None,
         kw_only=True,
         repr=False,
