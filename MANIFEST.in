@@ -1,11 +1,7 @@
 include LICENSE
 include README.md
-include download_logs.sh
 include env.ps1
-include env.sh
 include pyproject.toml
-include run_test.sh
-include experiment.sh
 include mise.toml
 recursive-include constraints *.txt
 recursive-include src *.py

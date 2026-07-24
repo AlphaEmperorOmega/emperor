@@ -98,6 +98,40 @@ def _implementation_files() -> tuple[Path, ...]:
 
 
 class CanonicalCutoverScannerTests(unittest.TestCase):
+    def test_retired_artifact_paths_are_absent(self) -> None:
+        retired_paths = (
+            Path("env" + ".sh"),
+            Path("run" + "_test.sh"),
+            Path("download" + "_logs.sh"),
+            Path("experiment" + ".sh"),
+            Path("src/models") / ("model" + "_metadata.py"),
+            Path("src/models") / ("dataset" + "_naming.py"),
+            Path("src/models") / ("experiment" + "_mode.py"),
+            Path("src/models") / ("log" + "_migration.py"),
+            Path("src/emperor/neuron") / ("_optimizer" + "_checkpoint.py"),
+        )
+
+        self.assertEqual(
+            [str(path) for path in retired_paths if (PROJECT_ROOT / path).exists()],
+            [],
+        )
+
+    def test_owned_text_does_not_advertise_retired_interfaces(self) -> None:
+        forbidden_fragments = (
+            "env" + ".sh",
+            "run" + "_test.sh",
+            "download" + "_logs.sh",
+            "experiment" + ".sh",
+        )
+        findings: list[str] = []
+        for path in _owned_text_files():
+            source = path.read_text(encoding="utf-8")
+            for fragment in forbidden_fragments:
+                if fragment in source:
+                    findings.append(f"{_relative(path)}: {fragment}")
+
+        self.assertEqual(findings, [])
+
     def test_implementation_text_uses_canonical_routes_and_monitor_paths(self) -> None:
         retired_route = "/models/" + "linear/"
         retired_monitor_path = re.compile(r"main_model\.(?:linears\.)?\d")

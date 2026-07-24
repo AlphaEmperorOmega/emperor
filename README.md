@@ -139,11 +139,8 @@ mise run workbench:status
 mise run workbench:stop
 ```
 
-Unix compatibility wrappers remain available as `source env.sh`,
-`source experiment.sh`, `bash run_test.sh`, and `bash download_logs.sh`. Start
-the Workbench with the CUDA 12.6 legacy profile using
-`source env.sh --legacy-profile`.
-PowerShell users can run `. .\env.ps1`, `. .\env.ps1 -WorkbenchStatus`, or
+Use the `mise` tasks shown above on Unix-like systems. PowerShell users can run
+`. .\env.ps1`, `. .\env.ps1 -WorkbenchStatus`, or
 `. .\env.ps1 -WorkbenchStop` to activate the virtualenv and manage Workbench.
 
 Default ports can be overridden with:
@@ -346,7 +343,7 @@ mise run experiment -- \
 
 ## Running Experiments
 
-Use `experiment.sh` from the repository root:
+Use the canonical `mise` task from the repository root:
 
 ```bash
 mise run experiment -- \
@@ -758,7 +755,7 @@ It discovers the external `tests/` tree with fail-fast enabled. The script adds
 only that test tree to `PYTHONPATH`; Emperor and its first-party Model Packages
 must come from the active environment's editable or regular installation. Run
 `python -m pip install --no-deps -e .` first when using an environment that was
-not created by `env.sh`.
+not created by `mise run setup`.
 
 ```text
 mise run test
@@ -774,8 +771,7 @@ mise run test -- layer TestLayer test_forward_output_shape
 ```
 
 The task maps the first argument to `tests/unit/test_<name>.py` and then passes
-any class or method name through to `python -P -m unittest -f`. The historical
-`bash run_test.sh` entry point delegates to the same implementation.
+any class or method name through to `python -P -m unittest -f`.
 
 Verify the protected Emperor interfaces, private-import boundaries, dependency
 direction, and zero external legacy-import ledger with:
