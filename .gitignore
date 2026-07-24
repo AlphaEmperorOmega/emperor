@@ -24,6 +24,7 @@ emperor.egg-info
 *.egg-info/
 .agents/
 AGENTS.md
+/CONTEXT.md
 .scratch/
 .claude/
 .codex/
