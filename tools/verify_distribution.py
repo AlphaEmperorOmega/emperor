@@ -25,7 +25,6 @@ from pathlib import Path, PurePosixPath
 from sysconfig import get_path
 
 PROJECT_FILES = (
-    "CONTEXT.md",
     "LICENSE",
     "MANIFEST.in",
     "README.md",
