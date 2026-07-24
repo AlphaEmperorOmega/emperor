@@ -18,6 +18,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    LayerState,
     RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -810,3 +811,72 @@ class ExpertNumericalContractTests(unittest.TestCase):
                 self.assertIsNotNone(parameter.grad)
                 self.assertTrue(torch.isfinite(parameter.grad).all())
                 self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
+
+    def test_layer_owned_and_shared_linear_routers_receive_gradients(self) -> None:
+        dtype = torch.float64
+        for routing_mode in (
+            RoutingInitializationMode.LAYER,
+            RoutingInitializationMode.SHARED,
+        ):
+            with self.subTest(routing_mode=routing_mode):
+                model = _routed_mixture_model_config(routing_mode).build()
+                model.to(dtype=dtype)
+                affines = _asymmetric_affines(dtype)[:2]
+                for expert_layer in model.expert_stack:
+                    _set_linear_expert_affines(expert_layer.model, affines)
+
+                if routing_mode == RoutingInitializationMode.SHARED:
+                    routers = [model.shared_sampler.router]
+                else:
+                    routers = [
+                        expert_layer.model.sampler.router
+                        for expert_layer in model.expert_stack
+                    ]
+                with torch.no_grad():
+                    for router_index, router in enumerate(routers):
+                        router_linear = router.model[0].model
+                        router_linear.weight_params.copy_(
+                            torch.tensor(
+                                [[0.6, -0.3], [-0.4, 0.8]],
+                                dtype=dtype,
+                            )
+                            + 0.1 * router_index
+                        )
+                        router_linear.bias_params.copy_(
+                            torch.tensor([0.2, -0.1], dtype=dtype)
+                        )
+
+                inputs = torch.tensor(
+                    [[0.5, -1.0], [1.5, 0.25], [-0.75, 0.6]],
+                    dtype=dtype,
+                    requires_grad=True,
+                )
+                result = model(LayerState(hidden=inputs))
+                objective = result.hidden.square().mean() + result.loss
+                objective.backward()
+
+                self.assertTrue(torch.isfinite(result.hidden).all())
+                self.assertTrue(torch.isfinite(objective))
+                self.assertIsNotNone(inputs.grad)
+                self.assertTrue(torch.isfinite(inputs.grad).all())
+                self.assertGreater(inputs.grad.abs().sum().item(), 0.0)
+                for router in routers:
+                    router_gradients = [
+                        parameter.grad for parameter in router.parameters()
+                    ]
+                    self.assertTrue(router_gradients)
+                    self.assertTrue(
+                        all(gradient is not None for gradient in router_gradients)
+                    )
+                    self.assertTrue(
+                        all(
+                            torch.isfinite(gradient).all()
+                            for gradient in router_gradients
+                        )
+                    )
+                    self.assertGreater(
+                        sum(
+                            gradient.abs().sum().item() for gradient in router_gradients
+                        ),
+                        0.0,
+                    )
