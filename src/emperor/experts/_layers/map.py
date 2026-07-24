@@ -11,8 +11,6 @@ class MixtureOfExpertsMap(MixtureOfExperts):
     ):
         overrides = self.__update_overrides(overrides)
         super().__init__(cfg, overrides)
-        self.routing_positions = []
-
         self.routing_positions = None
         self.sample_probabilities = None
 
