@@ -78,4 +78,4 @@ run = "python tools/emperor_test_family.py mutation attention"
 [tasks."logs:archive"]
 description = "Create a portable Workbench log archive"
 raw = true
-run = "python tools/emperor_dev.py logs-archive"
+run = "python tools/emperor_dev.py logs:archive"
