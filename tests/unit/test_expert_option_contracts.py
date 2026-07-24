@@ -371,3 +371,165 @@ class ExpertOptionContractTests(unittest.TestCase):
                             )
                         else:
                             self.assertIsNone(probabilities.grad)
+
+    def test_affine_weighting_and_reduction_options_match_exact_equations(
+        self,
+    ) -> None:
+        inputs = torch.tensor([[2.0], [3.0]])
+        probabilities = torch.tensor([[0.25, 0.75], [0.6, 0.4]])
+        indices = torch.tensor([[0, 2], [1, 0]])
+        unweighted_routes = torch.tensor([[5.0], [8.0], [13.0], [7.0]])
+        weighted_routes = {
+            ExpertWeightingPositionOptions.BEFORE_EXPERTS: torch.tensor(
+                [[2.0], [5.5], [9.4], [3.4]]
+            ),
+            ExpertWeightingPositionOptions.AFTER_EXPERTS: torch.tensor(
+                [[1.25], [6.0], [7.8], [2.8]]
+            ),
+        }
+
+        for weighted in (False, True):
+            for weighting_position in ExpertWeightingPositionOptions:
+                for compute_expert_mixture in (False, True):
+                    with self.subTest(
+                        weighted=weighted,
+                        weighting_position=weighting_position,
+                        compute_expert_mixture=compute_expert_mixture,
+                    ):
+                        model = _mixture_config(
+                            top_k=2,
+                            num_experts=3,
+                            compute_expert_mixture=compute_expert_mixture,
+                            weighted=weighted,
+                            weighting_position=weighting_position,
+                        ).build()
+                        _set_affine_experts(
+                            model,
+                            weights=(2.0, 3.0, 5.0),
+                            biases=(1.0, 4.0, -2.0),
+                        )
+                        expected_routes = (
+                            weighted_routes[weighting_position]
+                            if weighted
+                            else unweighted_routes
+                        )
+                        expected = (
+                            expected_routes.reshape(2, 2, 1).sum(dim=1)
+                            if compute_expert_mixture
+                            else expected_routes
+                        )
+
+                        output, _skip_mask, _loss = model(
+                            inputs,
+                            probabilities=probabilities,
+                            indices=indices,
+                        )
+
+                        torch.testing.assert_close(output, expected)
+
+    def test_dense_all_expert_routing_matches_affine_option_equations(self) -> None:
+        inputs = torch.tensor([[2.0], [3.0]])
+        probabilities = torch.tensor([[0.25, 0.75], [0.6, 0.4]])
+        unweighted_routes = torch.tensor([[5.0], [10.0], [7.0], [13.0]])
+        weighted_routes = {
+            ExpertWeightingPositionOptions.BEFORE_EXPERTS: torch.tensor(
+                [[2.0], [8.5], [4.6], [7.6]]
+            ),
+            ExpertWeightingPositionOptions.AFTER_EXPERTS: torch.tensor(
+                [[1.25], [7.5], [4.2], [5.2]]
+            ),
+        }
+
+        for weighted in (False, True):
+            for weighting_position in ExpertWeightingPositionOptions:
+                for compute_expert_mixture in (False, True):
+                    with self.subTest(
+                        weighted=weighted,
+                        weighting_position=weighting_position,
+                        compute_expert_mixture=compute_expert_mixture,
+                    ):
+                        model = _mixture_config(
+                            top_k=2,
+                            num_experts=2,
+                            compute_expert_mixture=compute_expert_mixture,
+                            weighted=weighted,
+                            weighting_position=weighting_position,
+                        ).build()
+                        _set_affine_experts(
+                            model,
+                            weights=(2.0, 3.0),
+                            biases=(1.0, 4.0),
+                        )
+                        expected_routes = (
+                            weighted_routes[weighting_position]
+                            if weighted
+                            else unweighted_routes
+                        )
+                        expected = (
+                            expected_routes.reshape(2, 2, 1).sum(dim=1)
+                            if compute_expert_mixture
+                            else expected_routes
+                        )
+
+                        output, _skip_mask, _loss = model(
+                            inputs,
+                            probabilities=probabilities,
+                            indices=None,
+                        )
+
+                        torch.testing.assert_close(output, expected)
+
+    def test_top_one_vector_and_column_routing_have_identical_equations(
+        self,
+    ) -> None:
+        inputs = torch.tensor([[2.0], [3.0]])
+        vector_probabilities = torch.tensor([0.25, 0.6])
+        vector_indices = torch.tensor([0, 1])
+
+        for weighting_position, expected in (
+            (
+                ExpertWeightingPositionOptions.BEFORE_EXPERTS,
+                torch.tensor([[2.0], [9.4]]),
+            ),
+            (
+                ExpertWeightingPositionOptions.AFTER_EXPERTS,
+                torch.tensor([[1.25], [7.8]]),
+            ),
+        ):
+            for compute_expert_mixture in (False, True):
+                for as_column in (False, True):
+                    with self.subTest(
+                        weighting_position=weighting_position,
+                        compute_expert_mixture=compute_expert_mixture,
+                        as_column=as_column,
+                    ):
+                        model = _mixture_config(
+                            top_k=1,
+                            num_experts=2,
+                            compute_expert_mixture=compute_expert_mixture,
+                            weighted=True,
+                            weighting_position=weighting_position,
+                        ).build()
+                        _set_affine_experts(
+                            model,
+                            weights=(2.0, 3.0),
+                            biases=(1.0, 4.0),
+                        )
+                        probabilities = (
+                            vector_probabilities.reshape(-1, 1)
+                            if as_column
+                            else vector_probabilities
+                        )
+                        indices = (
+                            vector_indices.reshape(-1, 1)
+                            if as_column
+                            else vector_indices
+                        )
+
+                        output, _skip_mask, _loss = model(
+                            inputs,
+                            probabilities=probabilities,
+                            indices=indices,
+                        )
+
+                        torch.testing.assert_close(output, expected)
