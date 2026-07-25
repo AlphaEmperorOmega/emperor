@@ -1,16 +1,21 @@
 """Private mixture-of-attention-heads masking implementation."""
 
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from typing import TYPE_CHECKING, cast
 
 from torch import Tensor
 
 from emperor.attention._ops.masking import Mask
+from emperor.attention._runtime import (
+    AttentionMasks,
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._variants.mixture.validation import (
     MixtureOfAttentionHeadsValidator,
 )
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeLayout
     from emperor.attention._variants.mixture.config import (
         MixtureOfAttentionHeadsConfig,
     )
@@ -49,30 +54,52 @@ class MixtureOfAttentionHeadsMask(Mask):
 
     def merge_padding_and_attention_mask(
         self,
-        key: Tensor,
-        masks: "AttentionMasks",
-        runtime_layout: "AttentionRuntimeLayout",
-    ) -> Tensor | None:
+        attention_inputs: MultiHeadAttentionInputs | Tensor,
+        masks: AttentionMasks | None = None,
+        runtime_layout: AttentionRuntimeLayout | None = None,
+    ) -> MultiHeadAttentionInputs | Tensor | None:
+        legacy_call = not isinstance(attention_inputs, MultiHeadAttentionInputs)
+        if legacy_call:
+            masks = masks if masks is not None else AttentionMasks()
+            attention_inputs = MultiHeadAttentionInputs(
+                query=attention_inputs,
+                key=attention_inputs,
+                value=attention_inputs,
+                key_padding_mask=masks.key_padding_mask,
+                attention_mask=masks.attention_mask,
+                runtime_layout=runtime_layout,
+            )
+        runtime_layout = attention_inputs.runtime_layout
+        self.VALIDATOR.validate_attention_mask_merging_runtime_layout(runtime_layout)
+        runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
         batch_size = runtime_layout.batch_size
         target_sequence_length = runtime_layout.target_sequence_length
-        source_sequence_length = key.size(-2)
+        source_sequence_length = attention_inputs.key.size(-2)
         attention_mask = self.__normalize_attention_mask(
-            masks.attention_mask,
+            attention_inputs.attention_mask,
             source_sequence_length,
             batch_size,
             target_sequence_length,
         )
         key_padding_mask = self.__normalize_key_padding_mask(
-            masks.key_padding_mask,
+            attention_inputs.key_padding_mask,
             source_sequence_length,
             batch_size,
         )
 
         if key_padding_mask is None:
-            return attention_mask
-        if attention_mask is None:
-            return key_padding_mask
-        return attention_mask + key_padding_mask
+            merged_attention_mask = attention_mask
+        elif attention_mask is None:
+            merged_attention_mask = key_padding_mask
+        else:
+            merged_attention_mask = attention_mask + key_padding_mask
+        merged_inputs = replace(
+            attention_inputs,
+            merged_attention_mask=merged_attention_mask,
+        )
+        if legacy_call:
+            return merged_inputs.merged_attention_mask
+        return merged_inputs
 
     def __normalize_attention_mask(
         self,

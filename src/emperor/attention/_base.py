@@ -129,15 +129,20 @@ class MultiHeadAttentionAbstract(Module):
         qkv, masks, runtime_layout = self.zero_attention.add_zero_attention(
             qkv, masks, runtime_layout
         )
-        merged_attention_mask = self.masks.merge_padding_and_attention_mask(
-            qkv.key, masks, runtime_layout
-        )
-        attention_output, attention_weights = self.processor.compute_attention(
-            qkv, merged_attention_mask, runtime_layout
-        )
         attention_inputs = replace(
             attention_inputs,
+            query=qkv.query,
+            key=qkv.key,
+            value=qkv.value,
+            key_padding_mask=masks.key_padding_mask,
+            attention_mask=masks.attention_mask,
             runtime_layout=runtime_layout,
+        )
+        attention_inputs = self.masks.merge_padding_and_attention_mask(attention_inputs)
+        attention_output, attention_weights = self.processor.compute_attention(
+            qkv,
+            attention_inputs.merged_attention_mask,
+            runtime_layout,
         )
         attention_output = self.batch_manager.restore_output_layout(
             attention_output, attention_inputs
