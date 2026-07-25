@@ -62,7 +62,7 @@ class StickBreakingConfig(HaltingConfig):
     DEFAULT_THRESHOLD: ClassVar[float] = 0.999
 
     def _registry_owner(self) -> "type[HaltingInterface]":
-        from emperor.halting._strategies.stick_breaking import StickBreaking
+        from emperor.halting._variants.stick_breaking import StickBreaking
 
         return StickBreaking
 
@@ -72,6 +72,6 @@ class SoftHaltingConfig(HaltingConfig):
     DEFAULT_THRESHOLD: ClassVar[float] = 0.999
 
     def _registry_owner(self) -> "type[HaltingInterface]":
-        from emperor.halting._strategies.soft import SoftHalting
+        from emperor.halting._variants.soft import SoftHalting
 
         return SoftHalting

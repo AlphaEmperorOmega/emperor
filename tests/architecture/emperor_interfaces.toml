@@ -175,7 +175,7 @@ owners = ["emperor.experts._config", "emperor.experts._config", "emperor.experts
 module = "emperor.halting"
 kind = "runtime"
 exports = ["HaltingConfig", "SoftHaltingConfig", "StickBreakingConfig", "HaltingHiddenStateModeOptions", "HaltingInterface", "HaltingBase", "HaltingStateBase", "SoftHalting", "SoftHaltingState", "StickBreaking", "StickBreakingState", "HaltingMonitorCallback", "HaltingUsageTracker", "HaltingUsageTrackerManager"]
-owners = ["emperor.halting._config", "emperor.halting._config", "emperor.halting._config", "emperor.halting._config", "emperor.halting._interface", "emperor.halting._base", "emperor.halting._base", "emperor.halting._strategies.soft", "emperor.halting._strategies.soft", "emperor.halting._strategies.stick_breaking", "emperor.halting._strategies.stick_breaking", "emperor.halting._monitoring.callback", "emperor.halting._monitoring.tracking", "emperor.halting._monitoring.tracking"]
+owners = ["emperor.halting._config", "emperor.halting._config", "emperor.halting._config", "emperor.halting._config", "emperor.halting._interface", "emperor.halting._base", "emperor.halting._base", "emperor.halting._variants.soft", "emperor.halting._variants.soft", "emperor.halting._variants.stick_breaking", "emperor.halting._variants.stick_breaking", "emperor.halting._monitoring.callback", "emperor.halting._monitoring.tracking", "emperor.halting._monitoring.tracking"]
 
 [[interfaces]]
 module = "emperor.layers"
