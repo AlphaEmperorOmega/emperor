@@ -55,14 +55,6 @@ ATTENTION_CONTRACT_MANIFEST = {
     "emperor.attention._runtime": module_contract(
         ("immutable runtime values", "runtime layout helpers"),
         "tests.unit.test_attention_runtime_values",
-        QKV=class_contract(
-            ("immutability", "tensor identity", "replacement"),
-            "tests.unit.test_attention_runtime_values",
-        ),
-        AttentionMasks=class_contract(
-            ("immutability", "optional masks", "replacement"),
-            "tests.unit.test_attention_runtime_values",
-        ),
         MultiHeadAttentionInputs=class_contract(
             (
                 "direct tensor and mask fields",
@@ -169,7 +161,11 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("projection construction", "state loss accumulation", "abstract dispatch"),
         "tests.unit.test_attention_projector",
         ProjectorBase=class_contract(
-            ("QKV dimensions", "output projection", "auxiliary loss lifecycle"),
+            (
+                "query/key/value dimensions",
+                "output projection",
+                "auxiliary loss lifecycle",
+            ),
             "tests.unit.test_attention_projector",
         ),
     ),
@@ -222,7 +218,7 @@ ATTENTION_CONTRACT_MANIFEST = {
         ),
     ),
     "emperor.attention._variants.independent.projection": module_contract(
-        ("separate QKV projections", "output projection"),
+        ("separate query/key/value projections", "output projection"),
         "tests.unit.test_attention_projector",
         IndependentProjector=class_contract(
             ("unequal QK/value widths", "projection gradients"),
@@ -256,7 +252,11 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("self-attention component wiring", "public forward"),
         "tests.unit.test_attention",
         SelfAttention=class_contract(
-            ("identity QKV", "returned weights", "source extensions"),
+            (
+                "identical query/key/value inputs",
+                "returned weights",
+                "source extensions",
+            ),
             "tests.unit.test_attention_correctness_regressions",
         ),
     ),
@@ -280,7 +280,11 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("self-attention identity", "projection constraints"),
         "tests.unit.test_attention_validator",
         SelfAttentionValidator=class_contract(
-            ("QKV identity", "equal dimensions", "recurrent restriction"),
+            (
+                "query/key/value identity",
+                "equal dimensions",
+                "recurrent restriction",
+            ),
             "tests.unit.test_attention_validator",
         ),
     ),
