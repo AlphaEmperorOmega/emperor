@@ -33,21 +33,8 @@ class Mask:
 
     def prepare_attention_masks(
         self,
-        attention_inputs: MultiHeadAttentionInputs | Tensor,
-        masks: AttentionMasks | None = None,
-        runtime_layout: AttentionRuntimeLayout | None = None,
-    ) -> MultiHeadAttentionInputs | AttentionMasks:
-        legacy_call = not isinstance(attention_inputs, MultiHeadAttentionInputs)
-        legacy_masks = masks if masks is not None else AttentionMasks()
-        if legacy_call:
-            attention_inputs = MultiHeadAttentionInputs(
-                query=attention_inputs,
-                key=attention_inputs,
-                value=attention_inputs,
-                key_padding_mask=legacy_masks.key_padding_mask,
-                attention_mask=legacy_masks.attention_mask,
-                runtime_layout=runtime_layout,
-            )
+        attention_inputs: MultiHeadAttentionInputs,
+    ) -> MultiHeadAttentionInputs:
         query = attention_inputs.query
         runtime_layout = attention_inputs.runtime_layout
         self.VALIDATOR.validate_attention_mask_preparation_runtime_layout(
@@ -68,24 +55,11 @@ class Mask:
             key_padding_mask is attention_inputs.key_padding_mask
             and attention_mask is attention_inputs.attention_mask
         ):
-            prepared_inputs = attention_inputs
-        else:
-            prepared_inputs = replace(
-                attention_inputs,
-                key_padding_mask=key_padding_mask,
-                attention_mask=attention_mask,
-            )
-        if not legacy_call:
-            return prepared_inputs
-        if (
-            prepared_inputs.key_padding_mask is legacy_masks.key_padding_mask
-            and prepared_inputs.attention_mask is legacy_masks.attention_mask
-        ):
-            return legacy_masks
+            return attention_inputs
         return replace(
-            legacy_masks,
-            key_padding_mask=prepared_inputs.key_padding_mask,
-            attention_mask=prepared_inputs.attention_mask,
+            attention_inputs,
+            key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
         )
 
     def __set_runtime_query_properties(self, query: Tensor) -> None:

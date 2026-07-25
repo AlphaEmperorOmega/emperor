@@ -619,6 +619,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         )
         standard_branch_count = cfg.batch_size * cfg.num_heads
         expert_branch_count = standard_branch_count * cfg.experts_config.top_k
+        inputs = self.input_tensor(cfg)
 
         for leading_dimension in (1, standard_branch_count, expert_branch_count):
             with self.subTest(leading_dimension=leading_dimension, dtype="bool"):
@@ -629,9 +630,13 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                 )
                 boolean_mask[:, 0, -1] = True
                 prepared = model.masks.prepare_attention_masks(
-                    self.input_tensor(cfg),
-                    AttentionMasks(attention_mask=boolean_mask),
-                    runtime_layout,
+                    MultiHeadAttentionInputs(
+                        query=inputs,
+                        key=inputs,
+                        value=inputs,
+                        attention_mask=boolean_mask,
+                        runtime_layout=runtime_layout,
+                    )
                 )
                 expected = torch.zeros_like(boolean_mask, dtype=cfg.target_dtype)
                 expected.masked_fill_(boolean_mask, -torch.inf)
@@ -644,9 +649,13 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     dtype=cfg.target_dtype,
                 )
                 prepared = model.masks.prepare_attention_masks(
-                    self.input_tensor(cfg),
-                    AttentionMasks(attention_mask=floating_mask),
-                    runtime_layout,
+                    MultiHeadAttentionInputs(
+                        query=inputs,
+                        key=inputs,
+                        value=inputs,
+                        attention_mask=floating_mask,
+                        runtime_layout=runtime_layout,
+                    )
                 )
                 self.assertIs(prepared.attention_mask, floating_mask)
 
@@ -669,10 +678,15 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         [True, False, False, True],
                     ]
                 )
-                masks = model.masks.prepare_attention_masks(
-                    self.input_tensor(cfg),
-                    AttentionMasks(key_padding_mask=padding_mask),
-                    runtime_layout,
+                inputs = self.input_tensor(cfg)
+                attention_inputs = model.masks.prepare_attention_masks(
+                    MultiHeadAttentionInputs(
+                        query=inputs,
+                        key=inputs,
+                        value=inputs,
+                        key_padding_mask=padding_mask,
+                        runtime_layout=runtime_layout,
+                    )
                 )
                 key_value_branch_count = cfg.batch_size * cfg.num_heads
                 if use_kv_expert_models_flag:
@@ -684,9 +698,9 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         query=key,
                         key=key,
                         value=value,
-                        key_padding_mask=masks.key_padding_mask,
-                        attention_mask=masks.attention_mask,
-                        runtime_layout=runtime_layout,
+                        key_padding_mask=attention_inputs.key_padding_mask,
+                        attention_mask=attention_inputs.attention_mask,
+                        runtime_layout=attention_inputs.runtime_layout,
                     )
                 )
                 attention_inputs = model.zero_attention.add_zero_attention(
@@ -817,14 +831,19 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
         )
         standard_branches = cfg.batch_size * cfg.num_heads
         expert_branches = standard_branches * cfg.experts_config.top_k
+        inputs = self.input_tensor(cfg)
 
         for leading_dimension in (1, standard_branches, expert_branches):
             with self.subTest(leading_dimension=leading_dimension):
                 attention_mask = torch.zeros(leading_dimension, *sequence_shape)
                 prepared_masks = masks.prepare_attention_masks(
-                    self.input_tensor(cfg),
-                    AttentionMasks(attention_mask=attention_mask),
-                    runtime_layout,
+                    MultiHeadAttentionInputs(
+                        query=inputs,
+                        key=inputs,
+                        value=inputs,
+                        attention_mask=attention_mask,
+                        runtime_layout=runtime_layout,
+                    )
                 )
                 self.assertIs(prepared_masks.attention_mask, attention_mask)
 
@@ -856,9 +875,13 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaises(RuntimeError) as caught:
                     masks.prepare_attention_masks(
-                        self.input_tensor(cfg),
-                        AttentionMasks(attention_mask=attention_mask),
-                        runtime_layout,
+                        MultiHeadAttentionInputs(
+                            query=inputs,
+                            key=inputs,
+                            value=inputs,
+                            attention_mask=attention_mask,
+                            runtime_layout=runtime_layout,
+                        )
                     )
                 self.assertEqual(str(caught.exception), message)
 
