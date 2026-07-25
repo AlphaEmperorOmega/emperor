@@ -8,47 +8,52 @@ from torch import Tensor
 from emperor.attention._ops.processing import ProcessorBase
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+    from emperor.attention._runtime import (
+        QKV,
+        AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
+    )
 
 
 class IndependentProcessor(ProcessorBase):
     def compute_attention(
         self,
-        qkv: "QKV",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
         merged_attention_mask: Tensor | None = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> tuple[Tensor, Tensor | None]:
-        qkv = self.reshaper.reshape_before_attention(qkv, runtime_layout)
-        weighted_values = self.__compute_weighted_values(
-            qkv, merged_attention_mask, runtime_layout
+        attention_inputs = self._coerce_attention_inputs(
+            attention_inputs,
+            merged_attention_mask,
+            runtime_layout,
         )
+        attention_inputs = self.reshaper.reshape_before_attention(attention_inputs)
+        weighted_values = self.__compute_weighted_values(attention_inputs)
         attention_output = self._compute_attention_output(
-            weighted_values, runtime_layout
+            weighted_values,
+            attention_inputs.runtime_layout,
         )
         return attention_output, None
 
     def __compute_weighted_values(
         self,
-        qkv: "QKV",
-        merged_attention_mask: Tensor | None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:
         effective_attention_mask = self.__prepare_effective_attention_mask(
-            qkv,
-            merged_attention_mask,
-            runtime_layout,
+            attention_inputs,
         )
         dropout_probability = self.dropout_probability if self.training else 0.0
         weighted_values = F.scaled_dot_product_attention(
-            qkv.query,
-            qkv.key,
-            qkv.value,
+            attention_inputs.query,
+            attention_inputs.key,
+            attention_inputs.value,
             effective_attention_mask,
             dropout_probability,
         )
 
         weighted_values = weighted_values.permute(2, 0, 1, 3)
         weighted_values = weighted_values.contiguous()
+        runtime_layout = attention_inputs.runtime_layout
         batch_size = self.__resolve_batch_size(runtime_layout)
         target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
         return weighted_values.view(
@@ -58,17 +63,14 @@ class IndependentProcessor(ProcessorBase):
 
     def __prepare_effective_attention_mask(
         self,
-        qkv: "QKV",
-        merged_attention_mask: Tensor | None,
-        runtime_layout: "AttentionRuntimeLayout | None",
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor | None:
         effective_attention_mask = self.__prepare_attention_mask(
-            merged_attention_mask,
-            runtime_layout,
+            attention_inputs.merged_attention_mask,
+            attention_inputs.runtime_layout,
         )
-        relative_position_logits = self.__compute_relative_position_logits_for_qkv(
-            qkv,
-            runtime_layout,
+        relative_position_logits = self.__compute_relative_position_logits_for_inputs(
+            attention_inputs
         )
         if relative_position_logits is None:
             return effective_attention_mask
@@ -130,15 +132,16 @@ class IndependentProcessor(ProcessorBase):
             batch_size, self.num_heads, target_sequence_length, source_sequence_length
         )
 
-    def __compute_relative_position_logits_for_qkv(
+    def __compute_relative_position_logits_for_inputs(
         self,
-        qkv: "QKV",
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor | None:
-        source_sequence_dimension = qkv.key.dim() - 2
-        source_sequence_length = qkv.key.size(source_sequence_dimension)
+        source_sequence_dimension = attention_inputs.key.dim() - 2
+        source_sequence_length = attention_inputs.key.size(source_sequence_dimension)
         return self._compute_relative_position_logits(
-            qkv.query, source_sequence_length, runtime_layout
+            attention_inputs.query,
+            source_sequence_length,
+            attention_inputs.runtime_layout,
         )
 
     def __resolve_batch_size(
