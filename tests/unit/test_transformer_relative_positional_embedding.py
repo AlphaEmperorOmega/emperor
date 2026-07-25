@@ -6,7 +6,7 @@ from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
 )
-from emperor.embedding.relative._bias import DynamicPositionalBias
+from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
 
 class TestRelativePositionalEmbeddingConfig(unittest.TestCase):

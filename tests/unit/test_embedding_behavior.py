@@ -1049,7 +1049,7 @@ print(json.dumps({
             "emperor.embedding.absolute._variants.learned",
             "emperor.embedding.absolute._variants.sinusoidal",
             "emperor.embedding.absolute._validation",
-            "emperor.embedding.relative._bias",
+            "emperor.embedding.relative._variants.bias",
             "emperor.embedding.relative._validation",
         )
     },
@@ -1127,7 +1127,7 @@ print(json.dumps({
                     "emperor.embedding.absolute._variants.learned": False,
                     "emperor.embedding.absolute._variants.sinusoidal": False,
                     "emperor.embedding.absolute._validation": False,
-                    "emperor.embedding.relative._bias": False,
+                    "emperor.embedding.relative._variants.bias": False,
                     "emperor.embedding.relative._validation": False,
                 },
                 "private_exports": {
