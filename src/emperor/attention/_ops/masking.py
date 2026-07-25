@@ -8,15 +8,12 @@ from typing import TYPE_CHECKING, cast
 import torch
 from torch import Tensor
 
-from emperor.attention._runtime import (
-    AttentionMasks,
-    AttentionRuntimeLayout,
-    MultiHeadAttentionInputs,
-)
+from emperor.attention._runtime import AttentionRuntimeLayout
 from emperor.attention._validation import AttentionValidatorBase
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
+    from emperor.attention._runtime import MultiHeadAttentionInputs
 
 
 class Mask:
@@ -160,21 +157,8 @@ class Mask:
 
     def merge_padding_and_attention_mask(
         self,
-        attention_inputs: MultiHeadAttentionInputs | Tensor,
-        masks: AttentionMasks | None = None,
-        runtime_layout: AttentionRuntimeLayout | None = None,
-    ) -> MultiHeadAttentionInputs | Tensor | None:
-        legacy_call = not isinstance(attention_inputs, MultiHeadAttentionInputs)
-        if legacy_call:
-            masks = masks if masks is not None else AttentionMasks()
-            attention_inputs = MultiHeadAttentionInputs(
-                query=attention_inputs,
-                key=attention_inputs,
-                value=attention_inputs,
-                key_padding_mask=masks.key_padding_mask,
-                attention_mask=masks.attention_mask,
-                runtime_layout=runtime_layout,
-            )
+        attention_inputs: MultiHeadAttentionInputs,
+    ) -> MultiHeadAttentionInputs:
         runtime_layout = attention_inputs.runtime_layout
         self.VALIDATOR.validate_attention_mask_merging_runtime_layout(runtime_layout)
         runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
@@ -187,13 +171,10 @@ class Mask:
             key_padding_mask,
             attention_inputs.attention_mask,
         )
-        merged_inputs = replace(
+        return replace(
             attention_inputs,
             merged_attention_mask=merged_attention_mask,
         )
-        if legacy_call:
-            return merged_inputs.merged_attention_mask
-        return merged_inputs
 
     def __expand_key_padding_mask_across_heads(
         self,
