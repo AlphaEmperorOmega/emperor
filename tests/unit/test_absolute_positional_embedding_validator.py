@@ -11,18 +11,18 @@ from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
 )
 from emperor.embedding.absolute._base import AbsolutePositionalEmbeddingBase
-from emperor.embedding.absolute._learned import (
+from emperor.embedding.absolute._validation import (
+    AbsolutePositionalEmbeddingValidator,
+)
+from emperor.embedding.absolute._variants.learned import (
     ImageLearnedPositionalEmbedding,
     LearnedPositionalEmbedding,
     TextLearnedPositionalEmbedding,
 )
-from emperor.embedding.absolute._sinusoidal import (
+from emperor.embedding.absolute._variants.sinusoidal import (
     ImageSinusoidalPositionalEmbedding,
     SinusoidalPositionalEmbedding,
     TextSinusoidalPositionalEmbedding,
-)
-from emperor.embedding.absolute._validation import (
-    AbsolutePositionalEmbeddingValidator,
 )
 
 

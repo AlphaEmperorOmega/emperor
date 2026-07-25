@@ -1,3 +1,5 @@
+"""Private sinusoidal absolute positional embedding implementation."""
+
 import math
 from typing import TYPE_CHECKING, Any
 
