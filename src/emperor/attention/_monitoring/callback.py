@@ -16,7 +16,7 @@ from emperor.attention._monitoring.diagnostics import (
     _AttentionObservation,
     _resolve_attention_monitor_adapter,
 )
-from emperor.attention._runtime import QKV
+from emperor.attention._runtime import QKV, MultiHeadAttentionInputs
 from emperor.monitoring import (
     MonitorEmissionPolicy,
     MonitorTensorHistory,
@@ -48,19 +48,19 @@ class _AttentionDiagnosticsTracker:
     def begin_observation(self) -> None:
         self._latest_observation = _AttentionObservation()
 
-    def record_projected_qkv(self, projected_qkv: object) -> None:
-        detached_qkv = self.__detach_qkv(projected_qkv)
-        if detached_qkv is not None:
-            self._latest_observation.projected_qkv = detached_qkv
+    def record_projected_inputs(self, projected_inputs: object) -> None:
+        detached_inputs = self.__detach_attention_inputs(projected_inputs)
+        if detached_inputs is not None:
+            self._latest_observation.projected_inputs = detached_inputs
 
     def record_processor_inputs(
         self,
-        processor_qkv: object,
-        merged_attention_mask: object,
+        processor_inputs: object,
+        merged_attention_mask: object = None,
     ) -> None:
-        self._latest_observation.processor_qkv = self.__detach_qkv(processor_qkv)
-        self._latest_observation.merged_attention_mask = self.__detach_tensor(
-            merged_attention_mask
+        self._latest_observation.processor_inputs = self.__detach_attention_inputs(
+            processor_inputs,
+            merged_attention_mask,
         )
 
     def record_exact_attention_weights(self, attention_weights: object) -> None:
@@ -81,13 +81,30 @@ class _AttentionDiagnosticsTracker:
         self._latest_observation.auxiliary_loss = auxiliary_loss
 
     @classmethod
-    def __detach_qkv(cls, value: object) -> QKV | None:
-        if not isinstance(value, QKV):
+    def __detach_attention_inputs(
+        cls,
+        value: object,
+        merged_attention_mask: object = None,
+    ) -> MultiHeadAttentionInputs | None:
+        if isinstance(value, QKV):
+            return MultiHeadAttentionInputs(
+                query=value.query.detach(),
+                key=value.key.detach(),
+                value=value.value.detach(),
+                merged_attention_mask=cls.__detach_tensor(merged_attention_mask),
+            )
+        if not isinstance(value, MultiHeadAttentionInputs):
             return None
-        return QKV(
+        attention_mask = (
+            merged_attention_mask
+            if merged_attention_mask is not None
+            else value.merged_attention_mask
+        )
+        return MultiHeadAttentionInputs(
             query=value.query.detach(),
             key=value.key.detach(),
             value=value.value.detach(),
+            merged_attention_mask=cls.__detach_tensor(attention_mask),
         )
 
     @staticmethod
@@ -196,20 +213,20 @@ class _AttentionDiagnosticsTrackerManager:
         if not callable(original_projection):
             return False
 
-        def capture_projected_qkv(*args: object, **kwargs: object) -> object:
+        def capture_projected_inputs(*args: object, **kwargs: object) -> object:
             capture_this_forward = should_capture()
             if capture_this_forward:
                 tracker.begin_observation()
-            projected_qkv = original_projection(*args, **kwargs)
+            projected_inputs = original_projection(*args, **kwargs)
             if capture_this_forward:
-                tracker.record_projected_qkv(projected_qkv)
-            return projected_qkv
+                tracker.record_projected_inputs(projected_inputs)
+            return projected_inputs
 
         self.__replace_method(
             projector,
             method_name,
             original_projection,
-            capture_projected_qkv,
+            capture_projected_inputs,
         )
         return True
 
@@ -232,9 +249,17 @@ class _AttentionDiagnosticsTrackerManager:
             if should_capture():
                 if begin_observation:
                     tracker.begin_observation()
+                processor_inputs = (
+                    args[0]
+                    if args
+                    else kwargs.get("attention_inputs", kwargs.get("qkv"))
+                )
+                merged_attention_mask = (
+                    args[1] if len(args) > 1 else kwargs.get("merged_attention_mask")
+                )
                 tracker.record_processor_inputs(
-                    args[0] if args else kwargs.get("qkv"),
-                    args[1] if len(args) > 1 else kwargs.get("merged_attention_mask"),
+                    processor_inputs,
+                    merged_attention_mask,
                 )
             return original_attention(*args, **kwargs)
 
