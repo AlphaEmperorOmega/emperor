@@ -13,8 +13,8 @@ from emperor.halting._monitoring.tracking import (
     HaltingUsageTracker,
     HaltingUsageTrackerManager,
 )
-from emperor.halting._strategies.soft import SoftHalting, SoftHaltingState
-from emperor.halting._strategies.stick_breaking import (
+from emperor.halting._variants.soft import SoftHalting, SoftHaltingState
+from emperor.halting._variants.stick_breaking import (
     StickBreaking,
     StickBreakingState,
 )

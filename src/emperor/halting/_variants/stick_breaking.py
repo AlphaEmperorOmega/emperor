@@ -7,7 +7,7 @@ from torch import Tensor
 
 from emperor.halting._base import HaltingBase, HaltingStateBase
 from emperor.halting._config import HaltingHiddenStateModeOptions
-from emperor.halting._strategies._initialization import zero_gate_parameters
+from emperor.halting._variants._initialization import zero_gate_parameters
 from emperor.layers import Layer, LayerStack, LayerStackConfig
 
 if TYPE_CHECKING:

@@ -178,10 +178,10 @@ modules = [
   "src/emperor/halting/_monitoring/callback.py",
   "src/emperor/halting/_monitoring/diagnostics.py",
   "src/emperor/halting/_monitoring/tracking.py",
-  "src/emperor/halting/_strategies/__init__.py",
-  "src/emperor/halting/_strategies/_initialization.py",
-  "src/emperor/halting/_strategies/soft.py",
-  "src/emperor/halting/_strategies/stick_breaking.py",
+  "src/emperor/halting/_variants/__init__.py",
+  "src/emperor/halting/_variants/_initialization.py",
+  "src/emperor/halting/_variants/soft.py",
+  "src/emperor/halting/_variants/stick_breaking.py",
   "src/emperor/halting/_validation.py",
 ]
 
