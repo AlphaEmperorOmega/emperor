@@ -80,7 +80,6 @@ class MultiHeadAttentionAbstract(Module):
             key_padding_mask=k_padding_mask,
             attention_mask=attention_mask,
         )
-        self.VALIDATOR.validate_forward_inputs(self, qkv, masks)
         attention_inputs = MultiHeadAttentionInputs(
             query=qkv.query,
             key=qkv.key,
@@ -90,6 +89,7 @@ class MultiHeadAttentionAbstract(Module):
             static_key=static_k,
             static_value=static_v,
         )
+        self.VALIDATOR.validate_forward_inputs(self, attention_inputs)
         attention_inputs = self.batch_manager.convert_inputs_to_internal_layout(
             attention_inputs
         )
@@ -106,11 +106,9 @@ class MultiHeadAttentionAbstract(Module):
             key_padding_mask=attention_inputs.key_padding_mask,
             attention_mask=attention_inputs.attention_mask,
         )
-        self.VALIDATOR.validate_runtime_tensors(self, qkv)
-        self.VALIDATOR.validate_static_key_value_inputs(
-            self, qkv, static_k, static_v, runtime_layout
-        )
-        self.VALIDATOR.validate_runtime_layout(self, runtime_layout)
+        self.VALIDATOR.validate_runtime_tensors(self, attention_inputs)
+        self.VALIDATOR.validate_static_key_value_inputs(self, attention_inputs)
+        self.VALIDATOR.validate_runtime_layout(self, attention_inputs)
         attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
         masks = AttentionMasks(
             key_padding_mask=attention_inputs.key_padding_mask,

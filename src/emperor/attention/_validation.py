@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         QKV,
         AttentionMasks,
         AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
     )
 
 
@@ -532,22 +533,33 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
-        masks: "AttentionMasks",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        masks: "AttentionMasks | None" = None,
     ) -> None:
+        key_padding_mask = (
+            attention_inputs.key_padding_mask
+            if masks is None
+            else masks.key_padding_mask
+        )
+        attention_mask = (
+            attention_inputs.attention_mask if masks is None else masks.attention_mask
+        )
         cls.validate_input_shapes(
-            qkv.query,
-            qkv.key,
-            qkv.value,
-            masks.key_padding_mask,
-            masks.attention_mask,
+            attention_inputs.query,
+            attention_inputs.key,
+            attention_inputs.value,
+            key_padding_mask,
+            attention_mask,
         )
 
     @staticmethod
     def validate_runtime_layout(
         model: "MultiHeadAttentionAbstract",
-        runtime_layout: "AttentionRuntimeLayout",
+        attention_inputs: "MultiHeadAttentionInputs | AttentionRuntimeLayout",
     ) -> None:
+        runtime_layout = getattr(attention_inputs, "runtime_layout", attention_inputs)
+        if runtime_layout is None:
+            raise RuntimeError("Attention runtime layout has not been resolved.")
         configured_and_actual = (
             ("batch_size", model.batch_size, runtime_layout.batch_size),
             (
@@ -571,13 +583,16 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     @staticmethod
     def validate_runtime_tensors(
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
     ) -> None:
-        if qkv.query.size(0) <= 0:
+        query = attention_inputs.query
+        key = attention_inputs.key
+        value = attention_inputs.value
+        if query.size(0) <= 0:
             raise RuntimeError("query sequence length must be greater than 0.")
-        if qkv.key.size(0) <= 0 or qkv.value.size(0) <= 0:
+        if key.size(0) <= 0 or value.size(0) <= 0:
             raise RuntimeError("key and value sequence lengths must be greater than 0.")
-        batch_sizes = (qkv.query.size(1), qkv.key.size(1), qkv.value.size(1))
+        batch_sizes = (query.size(1), key.size(1), value.size(1))
         if len(set(batch_sizes)) != 1:
             raise RuntimeError(
                 "query, key, and value batch sizes must match, got "
@@ -586,27 +601,24 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
         if batch_sizes[0] <= 0:
             raise RuntimeError("runtime batch size must be greater than 0.")
         for name, tensor in (
-            ("query", qkv.query),
-            ("key", qkv.key),
-            ("value", qkv.value),
+            ("query", query),
+            ("key", key),
+            ("value", value),
         ):
             if tensor.size(-1) != model.embedding_dim:
                 raise RuntimeError(
                     f"{name} embedding width must be {model.embedding_dim}, got "
                     f"{tensor.size(-1)}."
                 )
-        dtypes = (qkv.query.dtype, qkv.key.dtype, qkv.value.dtype)
+        dtypes = (query.dtype, key.dtype, value.dtype)
         if len(set(dtypes)) != 1:
             raise RuntimeError(
                 "query, key, and value dtypes must match, got "
                 f"{dtypes[0]}, {dtypes[1]}, and {dtypes[2]}."
             )
-        if not all(
-            torch.is_floating_point(tensor)
-            for tensor in (qkv.query, qkv.key, qkv.value)
-        ):
+        if not all(torch.is_floating_point(tensor) for tensor in (query, key, value)):
             raise RuntimeError("query, key, and value must be floating point tensors.")
-        devices = (qkv.query.device, qkv.key.device, qkv.value.device)
+        devices = (query.device, key.device, value.device)
         if len(set(devices)) != 1:
             raise RuntimeError(
                 "query, key, and value devices must match, got "
@@ -617,11 +629,15 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     def validate_static_key_value_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
-        static_keys: Tensor | None,
-        static_values: Tensor | None,
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        static_keys: Tensor | None = None,
+        static_values: Tensor | None = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
+        if hasattr(attention_inputs, "static_key"):
+            static_keys = attention_inputs.static_key
+            static_values = attention_inputs.static_value
+            runtime_layout = attention_inputs.runtime_layout
         cls.validate_static_projection_shapes(
             model,
             static_keys,
@@ -634,21 +650,25 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
         ):
             if tensor is None:
                 continue
-            if tensor.dtype != qkv.query.dtype:
+            if tensor.dtype != attention_inputs.query.dtype:
                 raise RuntimeError(
                     f"{name} dtype must match query dtype, got "
-                    f"{tensor.dtype} and {qkv.query.dtype}."
+                    f"{tensor.dtype} and {attention_inputs.query.dtype}."
                 )
-            if tensor.device != qkv.query.device:
+            if tensor.device != attention_inputs.query.device:
                 raise RuntimeError(
                     f"{name} device must match query device, got "
-                    f"{tensor.device} and {qkv.query.device}."
+                    f"{tensor.device} and {attention_inputs.query.device}."
                 )
         key_source_length = (
-            static_keys.size(1) if static_keys is not None else qkv.key.size(0)
+            static_keys.size(1)
+            if static_keys is not None
+            else attention_inputs.key.size(0)
         )
         value_source_length = (
-            static_values.size(1) if static_values is not None else qkv.value.size(0)
+            static_values.size(1)
+            if static_values is not None
+            else attention_inputs.value.size(0)
         )
         if key_source_length != value_source_length:
             raise RuntimeError(

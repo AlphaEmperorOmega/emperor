@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         QKV,
         AttentionMasks,
         AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
     )
 
 
@@ -220,13 +221,21 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
-        masks: "AttentionMasks",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        masks: "AttentionMasks | None" = None,
     ) -> None:
-        super().validate_forward_inputs(model, qkv, masks)
-        cls.validate_expert_key_value_inputs(model, qkv.query, qkv.key, qkv.value)
+        super().validate_forward_inputs(model, attention_inputs, masks)
+        cls.validate_expert_key_value_inputs(
+            model,
+            attention_inputs.query,
+            attention_inputs.key,
+            attention_inputs.value,
+        )
         cls.validate_attention_weights_are_not_requested(model)
-        cls.validate_key_value_projection_shapes(qkv.key, qkv.value)
+        cls.validate_key_value_projection_shapes(
+            attention_inputs.key,
+            attention_inputs.value,
+        )
 
     @staticmethod
     def validate_attention_weights_are_not_requested(
@@ -257,11 +266,14 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate_static_key_value_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
-        static_keys: Tensor | None,
-        static_values: Tensor | None,
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        static_keys: Tensor | None = None,
+        static_values: Tensor | None = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> None:
+        if hasattr(attention_inputs, "static_key"):
+            static_keys = attention_inputs.static_key
+            static_values = attention_inputs.static_value
         if model.cfg.use_kv_expert_models_flag:
             if static_keys is not None or static_values is not None:
                 raise ValueError(
@@ -271,7 +283,7 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
             return
         super().validate_static_key_value_inputs(
             model,
-            qkv,
+            attention_inputs,
             static_keys,
             static_values,
             runtime_layout,
