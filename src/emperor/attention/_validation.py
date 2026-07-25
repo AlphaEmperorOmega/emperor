@@ -92,6 +92,15 @@ def _find_enabled_adaptive_grouping_path(
 
 class AttentionValidatorBase:
     @staticmethod
+    def validate_attention_mask_preparation_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> None:
+        if runtime_layout is None:
+            raise RuntimeError(
+                "Attention mask preparation requires resolved runtime layout."
+            )
+
+    @staticmethod
     def validate_output_layout_restoration_runtime_layout(
         runtime_layout: "AttentionRuntimeLayout | None",
     ) -> None:
