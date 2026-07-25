@@ -11,7 +11,6 @@ from emperor.nn import Module
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -97,10 +96,8 @@ class ProjectorBase(Module):
 
     def compute_qkv_projections(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        *,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
         raise NotImplementedError(
             "compute_qkv_projections must be implemented by subclass."
         )
