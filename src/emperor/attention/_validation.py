@@ -111,6 +111,15 @@ class AttentionValidatorBase:
             )
 
     @staticmethod
+    def validate_projection_row_layout_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> None:
+        if runtime_layout is None:
+            raise RuntimeError(
+                "Projection row layout requires resolved attention runtime layout."
+            )
+
+    @staticmethod
     def validate_standard_relative_position_query_shape(
         query: Tensor,
         num_heads: int,
