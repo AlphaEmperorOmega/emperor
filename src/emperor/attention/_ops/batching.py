@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from torch import Tensor
 
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
+from emperor.attention._validation import AttentionValidatorBase
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
 
 
 class BatchDimensionManager:
+    VALIDATOR = AttentionValidatorBase
+
     def __init__(self, cfg: MultiHeadAttentionConfig) -> None:
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
@@ -21,28 +27,48 @@ class BatchDimensionManager:
 
     def convert_inputs_to_internal_layout(
         self,
-        qkv: QKV,
-        masks: AttentionMasks,
-        static_keys: Tensor | None = None,
-    ) -> tuple[QKV, AttentionMasks, AttentionRuntimeLayout]:
-        input_was_batched = qkv.query.dim() == 3
-        input_was_batch_first = self.__input_is_batch_first(qkv.query)
-        qkv = self.__maybe_transpose_batch_first_qkv(qkv, input_was_batch_first)
-        qkv, masks = self.__maybe_add_batch_dimension_to_unbatched_inputs(
-            qkv, masks, input_was_batched
+        attention_inputs: MultiHeadAttentionInputs,
+    ) -> MultiHeadAttentionInputs:
+        query = attention_inputs.query
+        key = attention_inputs.key
+        value = attention_inputs.value
+        key_padding_mask = attention_inputs.key_padding_mask
+        input_was_batched = query.dim() == 3
+        input_was_batch_first = self.__input_is_batch_first(query)
+        query, key, value = self.__maybe_transpose_batch_first_qkv(
+            query,
+            key,
+            value,
+            input_was_batch_first,
+        )
+        query, key, value, key_padding_mask = (
+            self.__maybe_add_batch_dimension_to_unbatched_inputs(
+                query,
+                key,
+                value,
+                key_padding_mask,
+                input_was_batched,
+            )
         )
 
         source_sequence_length = self.__resolve_source_sequence_length(
-            qkv.key, static_keys
+            key, attention_inputs.static_key
         )
         runtime_layout = AttentionRuntimeLayout(
-            batch_size=qkv.query.size(1),
-            target_sequence_length=qkv.query.size(0),
+            batch_size=query.size(1),
+            target_sequence_length=query.size(0),
             source_sequence_length=source_sequence_length,
             input_was_batched=input_was_batched,
             input_was_batch_first=input_was_batch_first,
         )
-        return qkv, masks, runtime_layout
+        return replace(
+            attention_inputs,
+            query=query,
+            key=key,
+            value=value,
+            key_padding_mask=key_padding_mask,
+            runtime_layout=runtime_layout,
+        )
 
     def __input_is_batch_first(self, query: Tensor) -> bool:
         query_has_no_explicit_batch_dimension = query.dim() != 3
@@ -57,15 +83,14 @@ class BatchDimensionManager:
 
     def __maybe_transpose_batch_first_qkv(
         self,
-        qkv: QKV,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
         input_was_batch_first: bool,
-    ) -> QKV:
+    ) -> tuple[Tensor, Tensor, Tensor]:
         if not input_was_batch_first:
-            return qkv
-        query, key, value = self.__transpose_preserving_shared_tensors(
-            qkv.query, qkv.key, qkv.value
-        )
-        return replace(qkv, query=query, key=key, value=value)
+            return query, key, value
+        return self.__transpose_preserving_shared_tensors(query, key, value)
 
     def __transpose_preserving_shared_tensors(
         self, query: Tensor, key: Tensor, value: Tensor
@@ -82,23 +107,20 @@ class BatchDimensionManager:
 
     def __maybe_add_batch_dimension_to_unbatched_inputs(
         self,
-        qkv: QKV,
-        masks: AttentionMasks,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Tensor | None,
         input_was_batched: bool,
-    ) -> tuple[QKV, AttentionMasks]:
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor | None]:
         if input_was_batched:
-            return qkv, masks
+            return query, key, value, key_padding_mask
         query, key, value = self.__unsqueeze_preserving_shared_tensors(
-            qkv.query, qkv.key, qkv.value
+            query, key, value
         )
-        qkv = replace(qkv, query=query, key=key, value=value)
-        if masks.key_padding_mask is not None:
-            key_padding_mask = masks.key_padding_mask.unsqueeze(0)
-            masks = replace(
-                masks,
-                key_padding_mask=key_padding_mask,
-            )
-        return qkv, masks
+        if key_padding_mask is not None:
+            key_padding_mask = key_padding_mask.unsqueeze(0)
+        return query, key, value, key_padding_mask
 
     def __unsqueeze_preserving_shared_tensors(
         self, query: Tensor, key: Tensor, value: Tensor
@@ -125,8 +147,11 @@ class BatchDimensionManager:
     def restore_output_layout(
         self,
         attention_output: Tensor,
-        runtime_layout: AttentionRuntimeLayout,
+        attention_inputs: MultiHeadAttentionInputs,
     ) -> Tensor:
+        runtime_layout = attention_inputs.runtime_layout
+        self.VALIDATOR.validate_output_layout_restoration_runtime_layout(runtime_layout)
+        runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
         if not runtime_layout.input_was_batched:
             attention_output_without_synthetic_batch_dimension = (
                 attention_output.squeeze(1)
