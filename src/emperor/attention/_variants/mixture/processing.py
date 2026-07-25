@@ -15,7 +15,6 @@ from emperor.attention._variants.mixture.validation import (
 if TYPE_CHECKING:
     from emperor.attention._ops.reshaping import ReshaperBase
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -42,15 +41,8 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def compute_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        merged_attention_mask: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> tuple[Tensor, Tensor | None]:
-        attention_inputs = self._coerce_attention_inputs(
-            attention_inputs,
-            merged_attention_mask,
-            runtime_layout,
-        )
         attention_inputs = self.reshaper.reshape_before_attention(attention_inputs)
         runtime_layout = attention_inputs.runtime_layout
         attention_weights = self.__compute_masked_attention_weights(attention_inputs)
