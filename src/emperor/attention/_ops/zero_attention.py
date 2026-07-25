@@ -1,7 +1,7 @@
 """Private zero-attention operations."""
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 import torch.nn.functional as F
@@ -13,6 +13,7 @@ if TYPE_CHECKING:
         QKV,
         AttentionMasks,
         AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
     )
 
 
@@ -25,27 +26,54 @@ class ZeroAttention:
 
     def add_zero_attention(
         self,
-        qkv: "QKV",
-        masks: "AttentionMasks",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        masks: "AttentionMasks | None" = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeLayout | None"]:
+    ) -> (
+        "MultiHeadAttentionInputs"
+        " | tuple[QKV, AttentionMasks, AttentionRuntimeLayout | None]"
+    ):
+        uses_unified_inputs = hasattr(attention_inputs, "runtime_layout")
+        if uses_unified_inputs:
+            runtime_layout = attention_inputs.runtime_layout
+            key_padding_mask = attention_inputs.key_padding_mask
+            attention_mask = attention_inputs.attention_mask
+        else:
+            masks = cast("AttentionMasks", masks)
+            key_padding_mask = masks.key_padding_mask
+            attention_mask = masks.attention_mask
         if not self.zero_attention_flag:
-            return qkv, masks, runtime_layout
+            if uses_unified_inputs:
+                return attention_inputs
+            return attention_inputs, masks, runtime_layout
 
-        updated_qkv = self.__append_zero_attention_to_key_value(qkv, runtime_layout)
-        updated_masks = self.__pad_masks_for_zero_attention(masks)
+        key = self.__concatenate_zeros_tensor(
+            attention_inputs.key,
+            runtime_layout,
+        )
+        value = self.__concatenate_zeros_tensor(
+            attention_inputs.value,
+            runtime_layout,
+        )
+        updated_key_padding_mask = self.__pad_mask(key_padding_mask)
+        updated_attention_mask = self.__pad_mask(attention_mask)
         updated_runtime_layout = self.__extend_runtime_layout(runtime_layout)
+        if uses_unified_inputs:
+            return replace(
+                attention_inputs,
+                key=key,
+                value=value,
+                key_padding_mask=updated_key_padding_mask,
+                attention_mask=updated_attention_mask,
+                runtime_layout=updated_runtime_layout,
+            )
+        updated_qkv = replace(attention_inputs, key=key, value=value)
+        updated_masks = replace(
+            masks,
+            key_padding_mask=updated_key_padding_mask,
+            attention_mask=updated_attention_mask,
+        )
         return updated_qkv, updated_masks, updated_runtime_layout
-
-    def __append_zero_attention_to_key_value(
-        self,
-        qkv: "QKV",
-        runtime_layout: "AttentionRuntimeLayout | None",
-    ) -> "QKV":
-        padded_key = self.__concatenate_zeros_tensor(qkv.key, runtime_layout)
-        padded_value = self.__concatenate_zeros_tensor(qkv.value, runtime_layout)
-        updated_qkv = replace(qkv, key=padded_key, value=padded_value)
-        return updated_qkv
 
     def __concatenate_zeros_tensor(
         self,
@@ -64,17 +92,6 @@ class ZeroAttention:
             runtime_layout.batch_size if runtime_layout is not None else self.batch_size
         )
         return batch_size * self.num_heads
-
-    def __pad_masks_for_zero_attention(
-        self,
-        masks: "AttentionMasks",
-    ) -> "AttentionMasks":
-        key_padding_mask = self.__pad_mask(masks.key_padding_mask)
-        attention_mask = self.__pad_mask(masks.attention_mask)
-        updated_masks = replace(
-            masks, key_padding_mask=key_padding_mask, attention_mask=attention_mask
-        )
-        return updated_masks
 
     @staticmethod
     def __pad_mask(mask: Tensor | None) -> Tensor | None:
