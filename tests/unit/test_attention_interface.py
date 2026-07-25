@@ -19,7 +19,10 @@ from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.experts import RoutingInitializationMode
 from support.attention import build_attention_config
 
@@ -406,7 +409,6 @@ print(json.dumps({
     "private_exports": {
         name: hasattr(attention, name)
         for name in (
-            "AttentionMasks",
             "AttentionMonitorCallback",
             "AttentionRuntimeLayout",
             "AttentionValidatorBase",
@@ -415,8 +417,8 @@ print(json.dumps({
             "MixtureOfAttentionHeads",
             "MixerAttention",
             "MultiHeadAttentionAbstract",
+            "MultiHeadAttentionInputs",
             "MultiHeadAttentionValidator",
-            "QKV",
             "SelfAttention",
         )
     },
@@ -520,12 +522,18 @@ print(json.dumps({
             ),
         )
         self.assertEqual(
-            tuple(field.name for field in fields(QKV)),
-            ("query", "key", "value"),
-        )
-        self.assertEqual(
-            tuple(field.name for field in fields(AttentionMasks)),
-            ("key_padding_mask", "attention_mask"),
+            tuple(field.name for field in fields(MultiHeadAttentionInputs)),
+            (
+                "query",
+                "key",
+                "value",
+                "key_padding_mask",
+                "attention_mask",
+                "static_key",
+                "static_value",
+                "runtime_layout",
+                "merged_attention_mask",
+            ),
         )
         self.assertEqual(
             tuple(field.name for field in fields(AttentionRuntimeLayout)),

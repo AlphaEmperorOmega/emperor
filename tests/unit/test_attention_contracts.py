@@ -98,13 +98,12 @@ class TestAttentionExports(unittest.TestCase):
         module = importlib.import_module("emperor.attention")
 
         for name in (
-            "AttentionMasks",
             "AttentionRuntimeLayout",
             "IndependentAttention",
             "MixtureOfAttentionHeads",
             "MixerAttention",
             "MultiHeadAttentionAbstract",
-            "QKV",
+            "MultiHeadAttentionInputs",
             "SelfAttention",
         ):
             with self.subTest(name=name):
