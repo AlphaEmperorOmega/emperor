@@ -12,7 +12,7 @@ from emperor.layers import RecurrentLayerConfig
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
-    from emperor.attention._runtime import QKV, AttentionMasks, MultiHeadAttentionInputs
+    from emperor.attention._runtime import MultiHeadAttentionInputs
 
 
 class SelfAttentionValidator(MultiHeadAttentionValidator):
@@ -63,10 +63,9 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        masks: "AttentionMasks | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        super().validate_forward_inputs(model, attention_inputs, masks)
+        super().validate_forward_inputs(model, attention_inputs)
         cls.validate_query_key_value_are_same_tensor(
             attention_inputs.query,
             attention_inputs.key,
