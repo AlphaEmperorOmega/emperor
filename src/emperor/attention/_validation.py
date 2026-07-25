@@ -12,8 +12,6 @@ from emperor.config import ConfigBase
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
     from emperor.attention._runtime import (
-        QKV,
-        AttentionMasks,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -542,31 +540,22 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        masks: "AttentionMasks | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        key_padding_mask = (
-            attention_inputs.key_padding_mask
-            if masks is None
-            else masks.key_padding_mask
-        )
-        attention_mask = (
-            attention_inputs.attention_mask if masks is None else masks.attention_mask
-        )
         cls.validate_input_shapes(
             attention_inputs.query,
             attention_inputs.key,
             attention_inputs.value,
-            key_padding_mask,
-            attention_mask,
+            attention_inputs.key_padding_mask,
+            attention_inputs.attention_mask,
         )
 
     @staticmethod
     def validate_runtime_layout(
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | AttentionRuntimeLayout",
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        runtime_layout = getattr(attention_inputs, "runtime_layout", attention_inputs)
+        runtime_layout = attention_inputs.runtime_layout
         if runtime_layout is None:
             raise RuntimeError("Attention runtime layout has not been resolved.")
         configured_and_actual = (
@@ -592,7 +581,7 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     @staticmethod
     def validate_runtime_tensors(
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
         query = attention_inputs.query
         key = attention_inputs.key
@@ -638,15 +627,11 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
     def validate_static_key_value_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        if hasattr(attention_inputs, "static_key"):
-            static_keys = attention_inputs.static_key
-            static_values = attention_inputs.static_value
-            runtime_layout = attention_inputs.runtime_layout
+        static_keys = attention_inputs.static_key
+        static_values = attention_inputs.static_value
+        runtime_layout = attention_inputs.runtime_layout
         cls.validate_static_projection_shapes(
             model,
             static_keys,

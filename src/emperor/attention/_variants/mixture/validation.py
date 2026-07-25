@@ -11,12 +11,7 @@ from emperor.attention._validation import (
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
-    from emperor.attention._runtime import (
-        QKV,
-        AttentionMasks,
-        AttentionRuntimeLayout,
-        MultiHeadAttentionInputs,
-    )
+    from emperor.attention._runtime import MultiHeadAttentionInputs
 
 
 class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
@@ -221,10 +216,9 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        masks: "AttentionMasks | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        super().validate_forward_inputs(model, attention_inputs, masks)
+        super().validate_forward_inputs(model, attention_inputs)
         cls.validate_expert_key_value_inputs(
             model,
             attention_inputs.query,
@@ -266,14 +260,10 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate_static_key_value_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> None:
-        if hasattr(attention_inputs, "static_key"):
-            static_keys = attention_inputs.static_key
-            static_values = attention_inputs.static_value
+        static_keys = attention_inputs.static_key
+        static_values = attention_inputs.static_value
         if model.cfg.use_kv_expert_models_flag:
             if static_keys is not None or static_values is not None:
                 raise ValueError(
@@ -284,7 +274,4 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
         super().validate_static_key_value_inputs(
             model,
             attention_inputs,
-            static_keys,
-            static_values,
-            runtime_layout,
         )
