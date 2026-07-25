@@ -11,7 +11,6 @@ from emperor.attention._ops.reshaping import (
     ReshaperBase,
 )
 from emperor.attention._runtime import (
-    AttentionMasks,
     AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
 )
@@ -94,7 +93,14 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
             RuntimeError,
             "substituted mask-shape validator was called",
         ):
-            model.prepare_attention_masks(query, AttentionMasks(), runtime_layout)
+            model.prepare_attention_masks(
+                MultiHeadAttentionInputs(
+                    query=query,
+                    key=query,
+                    value=query,
+                    runtime_layout=runtime_layout,
+                )
+            )
 
     def test_key_value_bias_dispatches_through_substituted_validator(self):
         class RejectingValidator(AttentionValidatorBase):
