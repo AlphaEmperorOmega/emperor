@@ -23,7 +23,7 @@ class AbsolutePositionalEmbeddingConfig(ConfigBase):
 @dataclass
 class TextLearnedPositionalEmbeddingConfig(AbsolutePositionalEmbeddingConfig):
     def _registry_owner(self) -> type:
-        from emperor.embedding.absolute._learned import (
+        from emperor.embedding.absolute._variants.learned import (
             TextLearnedPositionalEmbedding,
         )
 
@@ -37,7 +37,7 @@ class ImageLearnedPositionalEmbeddingConfig(AbsolutePositionalEmbeddingConfig):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.embedding.absolute._learned import (
+        from emperor.embedding.absolute._variants.learned import (
             ImageLearnedPositionalEmbedding,
         )
 
@@ -47,7 +47,7 @@ class ImageLearnedPositionalEmbeddingConfig(AbsolutePositionalEmbeddingConfig):
 @dataclass
 class TextSinusoidalPositionalEmbeddingConfig(AbsolutePositionalEmbeddingConfig):
     def _registry_owner(self) -> type:
-        from emperor.embedding.absolute._sinusoidal import (
+        from emperor.embedding.absolute._variants.sinusoidal import (
             TextSinusoidalPositionalEmbedding,
         )
 
@@ -61,7 +61,7 @@ class ImageSinusoidalPositionalEmbeddingConfig(AbsolutePositionalEmbeddingConfig
     )
 
     def _registry_owner(self) -> type:
-        from emperor.embedding.absolute._sinusoidal import (
+        from emperor.embedding.absolute._variants.sinusoidal import (
             ImageSinusoidalPositionalEmbedding,
         )
 

@@ -11,11 +11,11 @@ from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.embedding.absolute._learned import (
+from emperor.embedding.absolute._variants.learned import (
     ImageLearnedPositionalEmbedding,
     TextLearnedPositionalEmbedding,
 )
-from emperor.embedding.absolute._sinusoidal import (
+from emperor.embedding.absolute._variants.sinusoidal import (
     ImageSinusoidalPositionalEmbedding,
     TextSinusoidalPositionalEmbedding,
 )

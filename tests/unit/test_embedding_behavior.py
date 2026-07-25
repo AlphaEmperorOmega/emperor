@@ -18,8 +18,10 @@ from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.embedding.absolute._learned import LearnedPositionalEmbedding
-from emperor.embedding.absolute._sinusoidal import TextSinusoidalPositionalEmbedding
+from emperor.embedding.absolute._variants.learned import LearnedPositionalEmbedding
+from emperor.embedding.absolute._variants.sinusoidal import (
+    TextSinusoidalPositionalEmbedding,
+)
 from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
@@ -1044,8 +1046,8 @@ print(json.dumps({
         name: name in sys.modules
         for name in (
             "emperor.embedding.absolute._base",
-            "emperor.embedding.absolute._learned",
-            "emperor.embedding.absolute._sinusoidal",
+            "emperor.embedding.absolute._variants.learned",
+            "emperor.embedding.absolute._variants.sinusoidal",
             "emperor.embedding.absolute._validation",
             "emperor.embedding.relative._bias",
             "emperor.embedding.relative._validation",
@@ -1122,8 +1124,8 @@ print(json.dumps({
                 ],
                 "heavy_modules": {
                     "emperor.embedding.absolute._base": False,
-                    "emperor.embedding.absolute._learned": False,
-                    "emperor.embedding.absolute._sinusoidal": False,
+                    "emperor.embedding.absolute._variants.learned": False,
+                    "emperor.embedding.absolute._variants.sinusoidal": False,
                     "emperor.embedding.absolute._validation": False,
                     "emperor.embedding.relative._bias": False,
                     "emperor.embedding.relative._validation": False,
