@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.attention import SelfAttentionConfig
-from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.self_attention.layer import SelfAttention
 from emperor.attention._variants.self_attention.validation import (
     SelfAttentionValidator,
@@ -45,8 +45,7 @@ class TestSelfAttentionValidatorAdapter(unittest.TestCase):
         ):
             RejectingValidator.validate_forward_inputs(
                 model,
-                QKV(query=tensor, key=tensor, value=tensor),
-                AttentionMasks(),
+                MultiHeadAttentionInputs(query=tensor, key=tensor, value=tensor),
             )
 
 
