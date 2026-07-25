@@ -12,7 +12,10 @@ from emperor.attention import (
 )
 from emperor.attention._ops.processing import ProcessorBase
 from emperor.attention._ops.reshaping import AttentionReshaper
-from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._variants.independent.processing import IndependentProcessor
 from emperor.attention._variants.independent.projection import IndependentProjector
 from emperor.attention._variants.mixture.processing import (
@@ -36,6 +39,22 @@ from support.attention import (
 )
 
 PROJECTION_KINDS = ["base", "adaptive"]
+
+
+def attention_inputs(
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    merged_attention_mask: Tensor | None = None,
+    runtime_layout: AttentionRuntimeLayout | None = None,
+) -> MultiHeadAttentionInputs:
+    return MultiHeadAttentionInputs(
+        query=query,
+        key=key,
+        value=value,
+        merged_attention_mask=merged_attention_mask,
+        runtime_layout=runtime_layout,
+    )
 
 
 class IdentityOutputProjector:
@@ -104,7 +123,7 @@ class TestProcessorBase(unittest.TestCase):
         tensor = torch.randn(4, 2, 2)
 
         with self.assertRaises(NotImplementedError) as caught:
-            model.compute_attention(QKV(query=tensor, key=tensor, value=tensor))
+            model.compute_attention(attention_inputs(tensor, tensor, tensor))
         self.assertEqual(
             str(caught.exception),
             "compute_attention must be implemented by subclass.",
@@ -316,8 +335,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         mask = torch.tensor([[[0.0, -torch.inf], [0.0, -torch.inf]]])
 
         _, weights = model.compute_attention(
-            QKV(query=query, key=key, value=value),
-            mask,
+            attention_inputs(
+                query,
+                key,
+                value,
+                mask,
+            )
         )
 
         expected = torch.tensor([[[[1.0, 0.0], [1.0, 0.0]]]])
@@ -340,12 +363,11 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         ).train()
         query = torch.zeros(1, 2, 2)
         key = torch.zeros(1, 2, 2)
-        qkv = QKV(query=query, key=key, value=query)
+        inputs = attention_inputs(query, key, query)
 
         torch.manual_seed(37)
         actual = model._SelfAttentionProcessor__compute_masked_attention_weights(
-            qkv,
-            None,
+            inputs,
         )
         torch.manual_seed(37)
         expected = torch.nn.functional.dropout(
@@ -373,23 +395,20 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         )
         query = torch.zeros(1, 3, 2)
         key = torch.zeros(1, 3, 2)
-        qkv = QKV(query=query, key=key, value=query)
+        inputs = attention_inputs(query, key, query)
 
         model.train()
         torch.manual_seed(7)
         first = model._SelfAttentionProcessor__compute_masked_attention_weights(
-            qkv,
-            None,
+            inputs,
         )
         torch.manual_seed(7)
         second = model._SelfAttentionProcessor__compute_masked_attention_weights(
-            qkv,
-            None,
+            inputs,
         )
         model.eval()
         evaluation = model._SelfAttentionProcessor__compute_masked_attention_weights(
-            qkv,
-            None,
+            inputs,
         )
 
         torch.testing.assert_close(first, second)
@@ -467,7 +486,6 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         key = torch.randn(
             c.batch_size * c.num_heads, c.source_sequence_length, head_dim
         )
-        qkv = QKV(query=query, key=key, value=key)
 
         attention_mask = create_attention_mask(c)
         attention_mask_options = [None, attention_mask]
@@ -494,7 +512,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     m = SelfAttentionProcessor(c, projector, AttentionReshaper(c))
                     raw_masked_weights = (
                         m._SelfAttentionProcessor__compute_raw_masked_attention_weights(
-                            qkv, attention_mask_option
+                            attention_inputs(
+                                query,
+                                key,
+                                key,
+                                attention_mask_option,
+                            )
                         )
                     )
 
@@ -549,7 +572,6 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         key = torch.randn(
             c.batch_size * c.num_heads, c.source_sequence_length, head_dim
         )
-        qkv = QKV(query=query, key=key, value=key)
         attention_mask_options = [None, create_attention_mask(c)]
 
         for attention_mask_option in attention_mask_options:
@@ -557,7 +579,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                 attention_mask_type=type(attention_mask_option).__name__,
             ):
                 result = m._SelfAttentionProcessor__compute_masked_attention_weights(
-                    qkv, attention_mask_option
+                    attention_inputs(
+                        query,
+                        key,
+                        key,
+                        attention_mask_option,
+                    )
                 )
 
                 expected_shape = (
@@ -590,10 +617,10 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         values = torch.randn(
             c.batch_size * c.num_heads, c.source_sequence_length, head_dim
         )
-        qkv = QKV(query=values, key=values, value=values)
 
         weighted_values = m._SelfAttentionProcessor__compute_weighted_values(
-            qkv, attention_weights
+            attention_inputs(values, values, values),
+            attention_weights,
         )
 
         expected_shape = (c.batch_size * c.target_sequence_length, c.embedding_dim)
@@ -715,8 +742,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     m = SelfAttentionProcessor(c, projector, AttentionReshaper(c))
                     output_attention_output, output_attention_weights = (
                         m.compute_attention(
-                            QKV(query=query, key=key, value=value),
-                            attention_mask,
+                            attention_inputs(
+                                query,
+                                key,
+                                value,
+                                attention_mask,
+                            )
                         )
                     )
 
@@ -773,12 +804,11 @@ class TestIndependentProcessor(unittest.TestCase):
         query = torch.zeros(1, 1, 2, 2)
         key = torch.zeros(1, 1, 2, 2)
         value = torch.tensor([[[[2.0, 0.0], [0.0, 4.0]]]])
-        qkv = QKV(query=query, key=key, value=value)
         compute = model._IndependentProcessor__compute_weighted_values
 
         model.train()
         torch.manual_seed(43)
-        actual_training = compute(qkv, None)
+        actual_training = compute(attention_inputs(query, key, value))
         torch.manual_seed(43)
         expected_training = torch.nn.functional.scaled_dot_product_attention(
             query,
@@ -789,7 +819,7 @@ class TestIndependentProcessor(unittest.TestCase):
         expected_training = expected_training.permute(2, 0, 1, 3).reshape(2, 2)
 
         model.eval()
-        actual_evaluation = compute(qkv, None)
+        actual_evaluation = compute(attention_inputs(query, key, value))
         expected_evaluation = torch.nn.functional.scaled_dot_product_attention(
             query,
             key,
@@ -914,9 +944,13 @@ class TestIndependentProcessor(unittest.TestCase):
                     if causal_attention_mask_flag:
                         attention_mask = None
 
-                    qkv = QKV(query=query, key=key, value=value)
                     weighted_values = m._IndependentProcessor__compute_weighted_values(
-                        qkv, attention_mask
+                        attention_inputs(
+                            query,
+                            key,
+                            value,
+                            attention_mask,
+                        )
                     )
 
                     expected_shape = (
@@ -975,8 +1009,12 @@ class TestIndependentProcessor(unittest.TestCase):
                     )
 
                     output_attention_output, _ = m.compute_attention(
-                        QKV(query=query, key=key, value=value),
-                        attention_mask,
+                        attention_inputs(
+                            query,
+                            key,
+                            value,
+                            attention_mask,
+                        )
                     )
 
                     expected_shape = (
@@ -1012,13 +1050,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         ).eval()
         query = torch.zeros(1, 1, 1, 2, 2)
         key = torch.zeros(1, 1, 2, 2)
-        qkv = QKV(query=query, key=key, value=key)
         mask = torch.tensor([[[0.0, -torch.inf], [0.0, -torch.inf]]])
 
         actual = (
             model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights(
-                qkv,
-                mask,
+                attention_inputs(query, key, key, mask),
             )
         )
 
@@ -1046,13 +1082,11 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         ).train()
         query = torch.zeros(1, 1, 1, 2, 2)
         key = torch.zeros(1, 1, 2, 2)
-        qkv = QKV(query=query, key=key, value=key)
 
         torch.manual_seed(47)
         actual = (
             model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights(
-                qkv,
-                None,
+                attention_inputs(query, key, key),
             )
         )
         torch.manual_seed(47)
@@ -1084,27 +1118,18 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         )
         query = torch.zeros(1, 1, 1, 3, 2)
         key = torch.zeros(1, 1, 3, 2)
-        qkv = QKV(query=query, key=key, value=key)
+        inputs = attention_inputs(query, key, key)
         compute_weights = (
             model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights
         )
 
         model.train()
         torch.manual_seed(11)
-        first = compute_weights(
-            qkv,
-            None,
-        )
+        first = compute_weights(inputs)
         torch.manual_seed(11)
-        second = compute_weights(
-            qkv,
-            None,
-        )
+        second = compute_weights(inputs)
         model.eval()
-        evaluation = compute_weights(
-            qkv,
-            None,
-        )
+        evaluation = compute_weights(inputs)
 
         torch.testing.assert_close(first, second)
         self.assertFalse(torch.equal(first, evaluation))
@@ -1240,9 +1265,13 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                             "__compute_raw_masked_attention_weights"
                         )
                         compute_raw_masked_weights = getattr(m, method_name)
-                        qkv = QKV(query=query, key=key, value=key)
                         raw_masked_weights = compute_raw_masked_weights(
-                            qkv, attention_mask_option
+                            attention_inputs(
+                                query,
+                                key,
+                                key,
+                                attention_mask_option,
+                            )
                         )
 
                         expected_shape = (
@@ -1308,8 +1337,14 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         "__compute_masked_attention_weights"
                     )
                     compute_masked_weights = getattr(m, method_name)
-                    qkv = QKV(query=query, key=key, value=key)
-                    result = compute_masked_weights(qkv, attention_mask_option)
+                    result = compute_masked_weights(
+                        attention_inputs(
+                            query,
+                            key,
+                            key,
+                            attention_mask_option,
+                        )
+                    )
 
                     expected_shape = (
                         c.batch_size * top_k * c.num_heads,
@@ -1364,10 +1399,10 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                     )
 
                 values = torch.randn(value_shape)
-                qkv = QKV(query=values, key=values, value=values)
                 weighted_values = (
                     m._MixtureOfAttentionHeadsProcessor__compute_weighted_values(
-                        qkv, attention_weights
+                        attention_inputs(values, values, values),
+                        attention_weights,
                     )
                 )
 
@@ -1403,7 +1438,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         )
 
         projections = projector.compute_qkv_projections(
-            QKV(query=tensor, key=tensor, value=tensor)
+            attention_inputs(tensor, tensor, tensor)
         )
         projections = reshaper.reshape_qkv_for_attention(projections)
 
@@ -1461,8 +1496,12 @@ class TestProcessorDispatch(unittest.TestCase):
         attention_mask = create_attention_mask(c)
 
         output_attention_output, output_attention_weights = m.compute_attention(
-            QKV(query=query, key=key, value=value),
-            attention_mask,
+            attention_inputs(
+                query,
+                key,
+                value,
+                attention_mask,
+            )
         )
 
         expected_output_shape = (
@@ -1503,8 +1542,12 @@ class TestProcessorDispatch(unittest.TestCase):
         attention_mask = create_attention_mask(c)
 
         output_attention_output, output_attention_weights = m.compute_attention(
-            QKV(query=query, key=key, value=value),
-            attention_mask,
+            attention_inputs(
+                query,
+                key,
+                value,
+                attention_mask,
+            )
         )
 
         expected_output_shape = (
@@ -1539,7 +1582,7 @@ class TestProcessorDispatch(unittest.TestCase):
         )
 
         projections = projector.compute_qkv_projections(
-            QKV(query=tensor, key=tensor, value=tensor)
+            attention_inputs(tensor, tensor, tensor)
         )
 
         output_attention_output, output_attention_weights = m.compute_attention(

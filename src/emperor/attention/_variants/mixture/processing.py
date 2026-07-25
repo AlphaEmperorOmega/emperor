@@ -1,5 +1,6 @@
 """Private mixture-of-attention-heads processing implementation."""
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import torch
@@ -7,14 +8,17 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from emperor.attention._ops.processing import ProcessorBase
-from emperor.attention._runtime import QKV
 from emperor.attention._variants.mixture.validation import (
     MixtureOfAttentionHeadsValidator,
 )
 
 if TYPE_CHECKING:
     from emperor.attention._ops.reshaping import ReshaperBase
-    from emperor.attention._runtime import AttentionRuntimeLayout
+    from emperor.attention._runtime import (
+        QKV,
+        AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
+    )
     from emperor.attention._variants.mixture.config import (
         MixtureOfAttentionHeadsConfig,
     )
@@ -38,20 +42,21 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def compute_attention(
         self,
-        qkv: QKV,
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
         merged_attention_mask: Tensor | None = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> tuple[Tensor, Tensor | None]:
-        qkv = self.reshaper.reshape_before_attention(qkv, runtime_layout)
-        attention_weights = self.__compute_masked_attention_weights(
-            qkv,
+        attention_inputs = self._coerce_attention_inputs(
+            attention_inputs,
             merged_attention_mask,
             runtime_layout,
         )
+        attention_inputs = self.reshaper.reshape_before_attention(attention_inputs)
+        runtime_layout = attention_inputs.runtime_layout
+        attention_weights = self.__compute_masked_attention_weights(attention_inputs)
         weighted_values = self.__compute_weighted_values(
-            qkv,
+            attention_inputs,
             attention_weights,
-            runtime_layout,
         )
         attention_output = self._compute_attention_output(
             weighted_values,
@@ -62,16 +67,14 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def __compute_masked_attention_weights(
         self,
-        qkv: QKV,
-        merged_attention_mask: Tensor | None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:
-        scaled_query = self.__scale_query(qkv.query)
-        scaled_qkv = QKV(query=scaled_query, key=qkv.key, value=qkv.value)
+        scaled_inputs = replace(
+            attention_inputs,
+            query=self.__scale_query(attention_inputs.query),
+        )
         raw_attention_weights = self.__compute_raw_masked_attention_weights(
-            scaled_qkv,
-            merged_attention_mask,
-            runtime_layout,
+            scaled_inputs,
         )
         fully_masked_rows = torch.isneginf(raw_attention_weights).all(
             dim=-1,
@@ -95,58 +98,56 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def __compute_raw_masked_attention_weights(
         self,
-        qkv: QKV,
-        merged_attention_mask: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:
+        runtime_layout = attention_inputs.runtime_layout
         batch_size = self.__resolve_batch_size(runtime_layout)
         target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
         total_batch_size = batch_size * self.num_heads * self.top_k
-        source_sequence_length = qkv.key.size(-2)
+        source_sequence_length = attention_inputs.key.size(-2)
 
-        transposed_key = qkv.key.transpose(-2, -1)
+        transposed_key = attention_inputs.key.transpose(-2, -1)
         if self.use_kv_expert_models_flag:
-            attention_weights = torch.matmul(qkv.query, transposed_key)
+            attention_weights = torch.matmul(attention_inputs.query, transposed_key)
         else:
-            attention_weights = torch.matmul(qkv.query, transposed_key.unsqueeze(1))
+            attention_weights = torch.matmul(
+                attention_inputs.query,
+                transposed_key.unsqueeze(1),
+            )
         attention_weights = self.__add_relative_position_logits_if_available(
-            qkv,
+            attention_inputs,
             attention_weights,
-            runtime_layout,
         )
         attention_weights = attention_weights.contiguous().view(
             total_batch_size, target_sequence_length, source_sequence_length
         )
         return self.__add_attention_mask_if_available(
             attention_weights,
-            merged_attention_mask,
+            attention_inputs.merged_attention_mask,
         )
 
     def __add_relative_position_logits_if_available(
         self,
-        qkv: QKV,
+        attention_inputs: "MultiHeadAttentionInputs",
         attention_weights: Tensor,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        relative_position_logits = self.__compute_relative_position_logits_for_qkv(
-            qkv,
-            runtime_layout,
+        relative_position_logits = self.__compute_relative_position_logits_for_inputs(
+            attention_inputs
         )
         if relative_position_logits is not None:
             attention_weights = attention_weights + relative_position_logits
         return attention_weights
 
-    def __compute_relative_position_logits_for_qkv(
+    def __compute_relative_position_logits_for_inputs(
         self,
-        qkv: QKV,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor | None:
-        source_sequence_dimension = qkv.key.dim() - 2
-        source_sequence_length = qkv.key.size(source_sequence_dimension)
+        source_sequence_dimension = attention_inputs.key.dim() - 2
+        source_sequence_length = attention_inputs.key.size(source_sequence_dimension)
         return self._compute_relative_position_logits(
-            qkv.query,
+            attention_inputs.query,
             source_sequence_length,
-            runtime_layout,
+            attention_inputs.runtime_layout,
             query_is_scaled=True,
         )
 
@@ -197,17 +198,17 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
     def __compute_weighted_values(
         self,
-        qkv: QKV,
+        attention_inputs: "MultiHeadAttentionInputs",
         attention_weights: Tensor,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
+        runtime_layout = attention_inputs.runtime_layout
         batch_size = self.__resolve_batch_size(runtime_layout)
         target_sequence_length = self.__resolve_target_sequence_length(runtime_layout)
-        source_sequence_length = qkv.value.size(-2)
+        source_sequence_length = attention_inputs.value.size(-2)
         if self.use_kv_expert_models_flag:
-            values_for_attention = qkv.value
+            values_for_attention = attention_inputs.value
         else:
-            values_for_attention = qkv.value.unsqueeze(1)
+            values_for_attention = attention_inputs.value.unsqueeze(1)
 
         attention_weights = attention_weights.contiguous().view(
             batch_size,
