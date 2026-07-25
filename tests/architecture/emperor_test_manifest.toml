@@ -113,7 +113,8 @@ modules = [
   "src/emperor/embedding/absolute/_variants/sinusoidal.py",
   "src/emperor/embedding/absolute/_validation.py",
   "src/emperor/embedding/relative/__init__.py",
-  "src/emperor/embedding/relative/_bias.py",
+  "src/emperor/embedding/relative/_variants/__init__.py",
+  "src/emperor/embedding/relative/_variants/bias.py",
   "src/emperor/embedding/relative/_config.py",
   "src/emperor/embedding/relative/_validation.py",
 ]

@@ -26,6 +26,6 @@ class RelativePositionalEmbeddingConfig(ConfigBase):
 @dataclass
 class DynamicPositionalBiasConfig(RelativePositionalEmbeddingConfig):
     def _registry_owner(self) -> type:
-        from emperor.embedding.relative._bias import DynamicPositionalBias
+        from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
         return DynamicPositionalBias

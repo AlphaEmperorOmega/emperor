@@ -5,8 +5,8 @@ from torch import Tensor
 from emperor._validation import ValidatorBase
 
 if TYPE_CHECKING:
-    from emperor.embedding.relative._bias import DynamicPositionalBias
     from emperor.embedding.relative._config import DynamicPositionalBiasConfig
+    from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
 
 class RelativePositionalEmbeddingValidator(ValidatorBase):
