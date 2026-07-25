@@ -9,7 +9,10 @@ from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._variants.self_attention.projection import (
     SelfAttentionProjector,
 )
@@ -176,8 +179,12 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
         tensor = torch.randn(4, 2, 4)
 
         projector.compute_qkv_projections(
-            QKV(query=tensor, key=tensor, value=tensor),
-            runtime_layout=runtime_layout,
+            MultiHeadAttentionInputs(
+                query=tensor,
+                key=tensor,
+                value=tensor,
+                runtime_layout=runtime_layout,
+            )
         )
         projector.compute_output_projection(tensor, runtime_layout=runtime_layout)
 
