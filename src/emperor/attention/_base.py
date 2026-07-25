@@ -111,7 +111,11 @@ class MultiHeadAttentionAbstract(Module):
             self, qkv, static_k, static_v, runtime_layout
         )
         self.VALIDATOR.validate_runtime_layout(self, runtime_layout)
-        masks = self.masks.prepare_attention_masks(qkv.query, masks, runtime_layout)
+        attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
+        masks = AttentionMasks(
+            key_padding_mask=attention_inputs.key_padding_mask,
+            attention_mask=attention_inputs.attention_mask,
+        )
         runtime_layout = self.__attach_projection_row_layout(
             qkv, masks, runtime_layout, static_k=static_k, static_v=static_v
         )
