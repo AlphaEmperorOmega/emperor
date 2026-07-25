@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 import torch.nn.functional as F
 from torch import Tensor
 
-from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._validation import AttentionValidatorBase
 from emperor.nn import Module
 
@@ -14,8 +13,8 @@ if TYPE_CHECKING:
     from emperor.attention._ops.projection import ProjectorBase
     from emperor.attention._ops.reshaping import ReshaperBase
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
     )
 
 
@@ -176,24 +175,6 @@ class ProcessorBase(Module):
 
     def compute_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        merged_attention_mask: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
+        attention_inputs: "MultiHeadAttentionInputs",
     ) -> tuple[Tensor, Tensor | None]:
         raise NotImplementedError("compute_attention must be implemented by subclass.")
-
-    @staticmethod
-    def _coerce_attention_inputs(
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        merged_attention_mask: Tensor | None,
-        runtime_layout: "AttentionRuntimeLayout | None",
-    ) -> MultiHeadAttentionInputs:
-        if isinstance(attention_inputs, MultiHeadAttentionInputs):
-            return attention_inputs
-        return MultiHeadAttentionInputs(
-            query=attention_inputs.query,
-            key=attention_inputs.key,
-            value=attention_inputs.value,
-            merged_attention_mask=merged_attention_mask,
-            runtime_layout=runtime_layout,
-        )
