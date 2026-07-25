@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import torch
 import torch.nn.functional as F
 
-from emperor.attention._runtime import QKV
+from emperor.attention._runtime import MultiHeadAttentionInputs
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -19,9 +19,8 @@ if TYPE_CHECKING:
 
 @dataclass
 class _AttentionObservation:
-    projected_qkv: QKV | None = None
-    processor_qkv: QKV | None = None
-    merged_attention_mask: Tensor | None = None
+    projected_inputs: MultiHeadAttentionInputs | None = None
+    processor_inputs: MultiHeadAttentionInputs | None = None
     exact_attention_weights: Tensor | None = None
     restored_output: Tensor | None = None
     auxiliary_loss: Tensor | None = None
@@ -104,7 +103,8 @@ class _AttentionDiagnostics:
         configured_dropout_probability: float,
         monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> _AttentionDiagnosticMetrics:
-        projected_qkv = observation.projected_qkv
+        projected_inputs = observation.projected_inputs
+        processor_inputs = observation.processor_inputs
         exact_weights = observation.exact_attention_weights
         selected_weights = exact_weights
         weight_source: Literal["exact", "approximate"] | None = None
@@ -112,8 +112,7 @@ class _AttentionDiagnostics:
             weight_source = "exact"
         else:
             selected_weights = self.approximate_attention_weights(
-                observation.processor_qkv,
-                observation.merged_attention_mask,
+                processor_inputs,
             )
             if selected_weights is not None:
                 weight_source = "approximate"
@@ -123,15 +122,19 @@ class _AttentionDiagnostics:
             monitor_adapter,
         )
         return _AttentionDiagnosticMetrics(
-            query_norm_mean=self.__projection_norm(projected_qkv, "query"),
-            key_norm_mean=self.__projection_norm(projected_qkv, "key"),
-            value_norm_mean=self.__projection_norm(projected_qkv, "value"),
+            query_norm_mean=self.__projection_norm(projected_inputs, "query"),
+            key_norm_mean=self.__projection_norm(projected_inputs, "key"),
+            value_norm_mean=self.__projection_norm(projected_inputs, "value"),
             output_norm=self.__output_norm(observation.restored_output),
             auxiliary_loss=self.__mean(observation.auxiliary_loss),
             configured_dropout_probability=torch.tensor(
                 float(configured_dropout_probability)
             ),
-            mask_coverage=self.mask_coverage(observation.merged_attention_mask),
+            mask_coverage=self.mask_coverage(
+                processor_inputs.merged_attention_mask
+                if processor_inputs is not None
+                else None
+            ),
             per_head_entropy=per_head_entropy,
             per_head_max_probability=per_head_max_probability,
             weight_source=weight_source,
@@ -144,13 +147,12 @@ class _AttentionDiagnostics:
 
     @staticmethod
     def approximate_attention_weights(
-        processor_qkv: QKV | None,
-        attention_mask: Tensor | None,
+        processor_inputs: MultiHeadAttentionInputs | None,
     ) -> Tensor | None:
-        if processor_qkv is None:
+        if processor_inputs is None:
             return None
-        query = processor_qkv.query
-        key = processor_qkv.key
+        query = processor_inputs.query
+        key = processor_inputs.key
         if query.dim() not in (3, 4) or key.dim() not in (3, 4):
             return None
         query_values = query.detach().float()
@@ -159,8 +161,8 @@ class _AttentionDiagnostics:
             query_values * query_values.size(-1) ** -0.5,
             key_values.transpose(-2, -1),
         )
-        if attention_mask is not None:
-            detached_mask = attention_mask.detach()
+        if processor_inputs.merged_attention_mask is not None:
+            detached_mask = processor_inputs.merged_attention_mask.detach()
             try:
                 if detached_mask.dtype == torch.bool:
                     attention_scores = attention_scores.masked_fill(
@@ -223,10 +225,13 @@ class _AttentionDiagnostics:
         return (detached_mask != 0.0).float().mean()
 
     @staticmethod
-    def __projection_norm(projected_qkv: QKV | None, name: str) -> Tensor | None:
-        if projected_qkv is None:
+    def __projection_norm(
+        projected_inputs: MultiHeadAttentionInputs | None,
+        name: str,
+    ) -> Tensor | None:
+        if projected_inputs is None:
             return None
-        projection = getattr(projected_qkv, name).detach().float()
+        projection = getattr(projected_inputs, name).detach().float()
         return projection.norm(dim=-1).mean()
 
     @staticmethod
