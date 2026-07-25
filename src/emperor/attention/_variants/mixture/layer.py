@@ -1,6 +1,9 @@
 """Private mixture-of-attention-heads layer implementation."""
 
+from torch import Tensor
+
 from emperor.attention._base import MultiHeadAttentionAbstract
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.mixture.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
 )
@@ -32,6 +35,27 @@ class MixtureOfAttentionHeads(MultiHeadAttentionAbstract):
     BIAS_HANDLER = MixtureOfAttentionHeadsKeyValueBias
     ZERO_ATTENTION_HANDLER = MixtureOfAttentionHeadsZeroAttention
     _MONITOR_ADAPTER = _MixtureOfAttentionHeadsMonitorAdapter()
+
+    def forward(
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        k_padding_mask: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        static_k: Tensor | None = None,
+        static_v: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor | None, Tensor | None]:
+        attention_inputs = MultiHeadAttentionInputs(
+            query=q,
+            key=k,
+            value=v,
+            key_padding_mask=k_padding_mask,
+            attention_mask=attention_mask,
+            static_key=static_k,
+            static_value=static_v,
+        )
+        return self._run_attention(attention_inputs)
 
     def _build_attention_components(self) -> None:
         self.projector = MixtureOfAttentionHeadsProjector(self.cfg)

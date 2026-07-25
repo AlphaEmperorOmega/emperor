@@ -9,7 +9,7 @@ from torch import Tensor
 from emperor.attention._ops.batching import BatchDimensionManager
 from emperor.attention._ops.bias import KeyValueBias
 from emperor.attention._ops.zero_attention import ZeroAttention
-from emperor.attention._runtime import QKV, AttentionMasks, MultiHeadAttentionInputs
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._validation import MultiHeadAttentionValidator
 from emperor.layers import RowLayout
 from emperor.nn import Module
@@ -64,83 +64,27 @@ class MultiHeadAttentionAbstract(Module):
             "_build_attention_components must be implemented by subclass."
         )
 
-    def forward(
+    def _run_attention(
         self,
-        q: Tensor,
-        k: Tensor,
-        v: Tensor,
-        k_padding_mask: Tensor | None = None,
-        attention_mask: Tensor | None = None,
-        static_k: Tensor | None = None,
-        static_v: Tensor | None = None,
+        attention_inputs: MultiHeadAttentionInputs,
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
         self.projector.get_auxiliary_loss_and_clear()
-        qkv = QKV(query=q, key=k, value=v)
-        masks = AttentionMasks(
-            key_padding_mask=k_padding_mask,
-            attention_mask=attention_mask,
-        )
-        attention_inputs = MultiHeadAttentionInputs(
-            query=qkv.query,
-            key=qkv.key,
-            value=qkv.value,
-            key_padding_mask=masks.key_padding_mask,
-            attention_mask=masks.attention_mask,
-            static_key=static_k,
-            static_value=static_v,
-        )
         self.VALIDATOR.validate_forward_inputs(self, attention_inputs)
         attention_inputs = self.batch_manager.convert_inputs_to_internal_layout(
             attention_inputs
-        )
-        runtime_layout = cast(
-            "AttentionRuntimeLayout",
-            attention_inputs.runtime_layout,
-        )
-        qkv = QKV(
-            query=attention_inputs.query,
-            key=attention_inputs.key,
-            value=attention_inputs.value,
-        )
-        masks = AttentionMasks(
-            key_padding_mask=attention_inputs.key_padding_mask,
-            attention_mask=attention_inputs.attention_mask,
         )
         self.VALIDATOR.validate_runtime_tensors(self, attention_inputs)
         self.VALIDATOR.validate_static_key_value_inputs(self, attention_inputs)
         self.VALIDATOR.validate_runtime_layout(self, attention_inputs)
         attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
-        masks = AttentionMasks(
-            key_padding_mask=attention_inputs.key_padding_mask,
-            attention_mask=attention_inputs.attention_mask,
-        )
-        runtime_layout = self.__attach_projection_row_layout(
-            qkv, masks, runtime_layout, static_k=static_k, static_v=static_v
-        )
-        qkv = self.projector.compute_qkv_projections(qkv, runtime_layout=runtime_layout)
-        qkv = self.reshaper.reshape_qkv_for_attention(
-            qkv, static_k, static_v, runtime_layout
-        )
-        qkv, masks, runtime_layout = self.bias.add_kv_learnable_bias_vectors(
-            qkv, masks, runtime_layout
-        )
-        qkv, masks, runtime_layout = self.zero_attention.add_zero_attention(
-            qkv, masks, runtime_layout
-        )
-        attention_inputs = replace(
-            attention_inputs,
-            query=qkv.query,
-            key=qkv.key,
-            value=qkv.value,
-            key_padding_mask=masks.key_padding_mask,
-            attention_mask=masks.attention_mask,
-            runtime_layout=runtime_layout,
-        )
+        attention_inputs = self.__attach_projection_row_layout(attention_inputs)
+        attention_inputs = self.projector.compute_qkv_projections(attention_inputs)
+        attention_inputs = self.reshaper.reshape_qkv_for_attention(attention_inputs)
+        attention_inputs = self.bias.add_kv_learnable_bias_vectors(attention_inputs)
+        attention_inputs = self.zero_attention.add_zero_attention(attention_inputs)
         attention_inputs = self.masks.merge_padding_and_attention_mask(attention_inputs)
         attention_output, attention_weights = self.processor.compute_attention(
-            qkv,
-            attention_inputs.merged_attention_mask,
-            runtime_layout,
+            attention_inputs
         )
         attention_output = self.batch_manager.restore_output_layout(
             attention_output, attention_inputs
@@ -150,28 +94,29 @@ class MultiHeadAttentionAbstract(Module):
 
     def __attach_projection_row_layout(
         self,
-        qkv: QKV,
-        masks: AttentionMasks,
-        runtime_layout: "AttentionRuntimeLayout",
-        *,
-        static_k: Tensor | None,
-        static_v: Tensor | None,
-    ) -> "AttentionRuntimeLayout":
-        is_self_attention = qkv.query is qkv.key and qkv.key is qkv.value
-        static_key_is_provided = static_k is not None
-        static_value_is_provided = static_v is not None
+        attention_inputs: MultiHeadAttentionInputs,
+    ) -> MultiHeadAttentionInputs:
+        runtime_layout = attention_inputs.runtime_layout
+        self.VALIDATOR.validate_projection_row_layout_runtime_layout(runtime_layout)
+        runtime_layout = cast("AttentionRuntimeLayout", runtime_layout)
+        is_self_attention = (
+            attention_inputs.query is attention_inputs.key
+            and attention_inputs.key is attention_inputs.value
+        )
+        static_key_is_provided = attention_inputs.static_key is not None
+        static_value_is_provided = attention_inputs.static_value is not None
         static_source_is_provided = static_key_is_provided or static_value_is_provided
         valid_projection_rows = None
         if is_self_attention and not static_source_is_provided:
             valid_projection_rows = self.__flatten_valid_self_attention_rows(
-                masks.key_padding_mask,
+                attention_inputs.key_padding_mask,
                 runtime_layout,
             )
 
-        qkv_inputs_are_not_shared = not is_self_attention
-        attention_mask_is_present = masks.attention_mask is not None
+        query_key_value_inputs_are_not_shared = not is_self_attention
+        attention_mask_is_present = attention_inputs.attention_mask is not None
         context_sharing_restricted = (
-            qkv_inputs_are_not_shared
+            query_key_value_inputs_are_not_shared
             or static_key_is_provided
             or static_value_is_provided
             or attention_mask_is_present
@@ -186,7 +131,10 @@ class MultiHeadAttentionAbstract(Module):
             valid_rows=valid_projection_rows,
             context_sharing_restricted=context_sharing_restricted,
         )
-        return runtime_layout.with_row_layout(projection_row_layout)
+        return replace(
+            attention_inputs,
+            runtime_layout=runtime_layout.with_row_layout(projection_row_layout),
+        )
 
     @staticmethod
     def __flatten_valid_self_attention_rows(

@@ -308,6 +308,24 @@ class TestAttention(unittest.TestCase):
 
         self.assertIs(model.processor.reshaper, model.reshaper)
 
+    def test_projection_row_layout_validation_dispatches_through_subclass(self):
+        class RejectingValidator(IndependentAttentionValidator):
+            @staticmethod
+            def validate_projection_row_layout_runtime_layout(*args, **kwargs):
+                raise RuntimeError("substituted projection-layout validator was called")
+
+        class RejectingAttention(IndependentAttention):
+            VALIDATOR = RejectingValidator
+
+        case = FORWARD_CASES[0]
+        model = RejectingAttention(self.config(case))
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted projection-layout validator was called",
+        ):
+            model(*self.qkv(case))
+
     def test_config_build_dispatch_maps_every_leaf_to_its_layer(self):
         for config_class, expected_layer_type in EXPECTED_LAYER_TYPES.items():
             case = ForwardCase(
