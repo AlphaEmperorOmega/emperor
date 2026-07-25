@@ -10,19 +10,6 @@ from emperor.layers import RowLayout
 
 
 @dataclass(frozen=True, eq=False, kw_only=True)
-class QKV:
-    query: Tensor
-    key: Tensor
-    value: Tensor
-
-
-@dataclass(frozen=True, eq=False, kw_only=True)
-class AttentionMasks:
-    key_padding_mask: Tensor | None = None
-    attention_mask: Tensor | None = None
-
-
-@dataclass(frozen=True, eq=False, kw_only=True)
 class MultiHeadAttentionInputs:
     query: Tensor
     key: Tensor
@@ -65,7 +52,5 @@ class AttentionRuntimeLayout:
 
 __all__ = [
     "AttentionRuntimeLayout",
-    "AttentionMasks",
     "MultiHeadAttentionInputs",
-    "QKV",
 ]
