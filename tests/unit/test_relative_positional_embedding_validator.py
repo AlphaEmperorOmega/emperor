@@ -7,10 +7,10 @@ import torch
 from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
 )
-from emperor.embedding.relative._bias import DynamicPositionalBias
 from emperor.embedding.relative._validation import (
     RelativePositionalEmbeddingValidator,
 )
+from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
 
 def make_config(**overrides: object) -> DynamicPositionalBiasConfig:

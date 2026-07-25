@@ -1,3 +1,5 @@
+"""Private dynamic relative positional bias implementation."""
+
 from typing import TYPE_CHECKING
 
 import torch
