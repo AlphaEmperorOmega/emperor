@@ -9,7 +9,7 @@ from emperor.attention import (
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
 )
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import AttentionRuntimeLayout, MultiHeadAttentionInputs
 from emperor.attention._validation import (
     AttentionValidatorBase,
     MultiHeadAttentionValidator,
@@ -24,6 +24,21 @@ from emperor.attention._variants.self_attention.validation import (
     SelfAttentionValidator,
 )
 from support.attention import build_attention_config
+
+
+def attention_inputs(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    **runtime_values,
+) -> MultiHeadAttentionInputs:
+    return MultiHeadAttentionInputs(
+        query=query,
+        key=key,
+        value=value,
+        **runtime_values,
+    )
+
 
 BATCH_SIZE = 4
 NUM_HEADS = 4
@@ -229,7 +244,7 @@ class TestRuntimeDeviceValidation(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "devices must match"):
             MultiHeadAttentionValidator.validate_runtime_tensors(
                 model,
-                QKV(query=query, key=key, value=value),
+                attention_inputs(query, key, value),
             )
 
     def test_static_projection_device_must_match_query(self):
@@ -240,17 +255,19 @@ class TestRuntimeDeviceValidation(unittest.TestCase):
             value_projection_dim=4,
         )
         query = torch.empty(2, 1, 4)
-        qkv = QKV(query=query, key=query, value=query)
         static_key = torch.empty(1, 2, 4, device="meta")
         runtime_layout = AttentionRuntimeLayout(1, 2, 2)
 
         with self.assertRaisesRegex(RuntimeError, "device must match query device"):
             MultiHeadAttentionValidator.validate_static_key_value_inputs(
                 model,
-                qkv,
-                static_key,
-                None,
-                runtime_layout,
+                attention_inputs(
+                    query,
+                    query,
+                    query,
+                    static_key=static_key,
+                    runtime_layout=runtime_layout,
+                ),
             )
 
 
@@ -408,8 +425,7 @@ class TestIndependentAttentionValidator(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             IndependentAttentionValidator.validate_forward_inputs(
                 model,
-                QKV(query=query, key=key, value=value),
-                AttentionMasks(),
+                attention_inputs(query, key, value),
             )
 
 
@@ -619,9 +635,13 @@ class TestMixtureOfAttentionHeadsValidator(unittest.TestCase):
                 with self.assertRaises(ValueError) as caught:
                     MixtureOfAttentionHeadsValidator.validate_static_key_value_inputs(
                         model,
-                        object(),
-                        static_keys,
-                        static_values,
+                        attention_inputs(
+                            static,
+                            static,
+                            static,
+                            static_key=static_keys,
+                            static_value=static_values,
+                        ),
                     )
                 self.assertEqual(
                     str(caught.exception),

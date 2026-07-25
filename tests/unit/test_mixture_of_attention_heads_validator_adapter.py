@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.attention import MixtureOfAttentionHeadsConfig
-from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.mixture.layer import MixtureOfAttentionHeads
 from emperor.attention._variants.mixture.processing import (
     MixtureOfAttentionHeadsProcessor,
@@ -57,8 +57,7 @@ class TestMixtureOfAttentionHeadsValidatorAdapter(unittest.TestCase):
         ):
             RejectingValidator.validate_forward_inputs(
                 model,
-                QKV(query=tensor, key=tensor, value=tensor),
-                AttentionMasks(),
+                MultiHeadAttentionInputs(query=tensor, key=tensor, value=tensor),
             )
 
 

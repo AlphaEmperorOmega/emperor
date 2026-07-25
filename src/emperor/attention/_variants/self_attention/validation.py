@@ -12,7 +12,7 @@ from emperor.layers import RecurrentLayerConfig
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
-    from emperor.attention._runtime import QKV, AttentionMasks
+    from emperor.attention._runtime import QKV, AttentionMasks, MultiHeadAttentionInputs
 
 
 class SelfAttentionValidator(MultiHeadAttentionValidator):
@@ -63,21 +63,30 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
     def validate_forward_inputs(
         cls,
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
-        masks: "AttentionMasks",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        masks: "AttentionMasks | None" = None,
     ) -> None:
-        super().validate_forward_inputs(model, qkv, masks)
-        cls.validate_query_key_value_are_same_tensor(qkv.query, qkv.key, qkv.value)
-        cls.validate_fused_projection_inputs(model, qkv)
+        super().validate_forward_inputs(model, attention_inputs, masks)
+        cls.validate_query_key_value_are_same_tensor(
+            attention_inputs.query,
+            attention_inputs.key,
+            attention_inputs.value,
+        )
+        cls.validate_fused_projection_inputs(
+            model,
+            attention_inputs.query,
+            attention_inputs.key,
+        )
 
     @staticmethod
     def validate_fused_projection_inputs(
         model: "MultiHeadAttentionAbstract",
-        qkv: "QKV",
+        query: Tensor,
+        key: Tensor,
     ) -> None:
         if (
             model.cfg.projection_strategy == SelfAttentionProjectionStrategy.FUSED
-            and qkv.query is not qkv.key
+            and query is not key
         ):
             raise RuntimeError(
                 "SelfAttentionProjectionStrategy.FUSED requires query, key, and "

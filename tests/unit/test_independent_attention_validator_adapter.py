@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.attention import IndependentAttentionConfig
-from emperor.attention._runtime import QKV, AttentionMasks
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.independent.layer import IndependentAttention
 from emperor.attention._variants.independent.validation import (
     IndependentAttentionValidator,
@@ -35,8 +35,7 @@ class TestIndependentAttentionValidatorAdapter(unittest.TestCase):
         ):
             RejectingValidator.validate_forward_inputs(
                 model,
-                QKV(query=query, key=key, value=value),
-                AttentionMasks(),
+                MultiHeadAttentionInputs(query=query, key=key, value=value),
             )
 
 
