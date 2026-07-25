@@ -125,6 +125,15 @@ class AttentionValidatorBase:
             )
 
     @staticmethod
+    def validate_attention_mask_merging_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> None:
+        if runtime_layout is None:
+            raise RuntimeError(
+                "Attention mask merging requires resolved runtime layout."
+            )
+
+    @staticmethod
     def validate_relative_position_query_branch_count(
         branch_count: int,
         expected_branch_count: int,

@@ -5,7 +5,6 @@ import torch
 from emperor.attention import MultiHeadAttentionConfig
 from emperor.attention._ops.masking import Mask
 from emperor.attention._runtime import (
-    AttentionMasks,
     AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
 )
@@ -668,15 +667,45 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
 
 
 class TestMergePaddingAndAttentionMask(TestMask):
+    def test_requires_resolved_runtime_layout(self):
+        cfg = self.preset()
+        model = Mask(cfg)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Attention mask merging requires resolved runtime layout.",
+        ):
+            model.merge_padding_and_attention_mask(
+                self.unresolved_attention_inputs(cfg)
+            )
+
+    def test_runtime_layout_validation_dispatches_through_subclass(self):
+        class RejectingValidator(AttentionValidatorBase):
+            @staticmethod
+            def validate_attention_mask_merging_runtime_layout(*args, **kwargs):
+                raise RuntimeError("substituted mask-merging validator was called")
+
+        class RejectingMask(Mask):
+            VALIDATOR = RejectingValidator
+
+        cfg = self.preset()
+        model = RejectingMask(cfg)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted mask-merging validator was called",
+        ):
+            model.merge_padding_and_attention_mask(
+                self.unresolved_attention_inputs(cfg)
+            )
+
     def test_returns_none_when_masks_are_absent(self):
         cfg = self.preset()
         model = Mask(cfg)
 
         output = model.merge_padding_and_attention_mask(
-            self.key_tensor(cfg),
-            AttentionMasks(),
-            self.runtime_layout(cfg),
-        )
+            self.attention_inputs(cfg)
+        ).merged_attention_mask
 
         self.assertIsNone(output)
 
@@ -686,10 +715,11 @@ class TestMergePaddingAndAttentionMask(TestMask):
         attention_mask = self.float_attention_mask(cfg)
 
         output = model.merge_padding_and_attention_mask(
-            self.key_tensor(cfg),
-            AttentionMasks(attention_mask=attention_mask),
-            self.runtime_layout(cfg),
-        )
+            self.attention_inputs(
+                cfg,
+                attention_mask=attention_mask,
+            )
+        ).merged_attention_mask
 
         self.assertIs(output, attention_mask)
         torch.testing.assert_close(output, attention_mask)
@@ -703,10 +733,11 @@ class TestMergePaddingAndAttentionMask(TestMask):
         )
 
         output = model.merge_padding_and_attention_mask(
-            self.key_tensor(cfg),
-            AttentionMasks(key_padding_mask=key_padding_mask),
-            self.runtime_layout(cfg),
-        )
+            self.attention_inputs(
+                cfg,
+                key_padding_mask=key_padding_mask,
+            )
+        ).merged_attention_mask
 
         expected = self.expanded_key_padding_mask(cfg, key_padding_mask)
         self.assertEqual(
@@ -729,13 +760,12 @@ class TestMergePaddingAndAttentionMask(TestMask):
         attention_mask = self.float_attention_mask(cfg)
 
         output = model.merge_padding_and_attention_mask(
-            self.key_tensor(cfg),
-            AttentionMasks(
+            self.attention_inputs(
+                cfg,
                 key_padding_mask=key_padding_mask,
                 attention_mask=attention_mask,
-            ),
-            self.runtime_layout(cfg),
-        )
+            )
+        ).merged_attention_mask
 
         expected = attention_mask + self.expanded_key_padding_mask(
             cfg,
