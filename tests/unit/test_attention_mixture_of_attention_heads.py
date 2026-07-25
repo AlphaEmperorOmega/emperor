@@ -331,34 +331,40 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     target_sequence_length=4,
                     source_sequence_length=4,
                 )
-                output_qkv, output_masks, output_runtime_layout = (
-                    model.add_zero_attention(
-                        QKV(query=key, key=key, value=value),
-                        AttentionMasks(
-                            key_padding_mask=key_padding_mask,
-                            attention_mask=attention_mask,
-                        ),
-                        runtime_layout,
+                output_inputs = model.add_zero_attention(
+                    MultiHeadAttentionInputs(
+                        query=key,
+                        key=key,
+                        value=value,
+                        key_padding_mask=key_padding_mask,
+                        attention_mask=attention_mask,
+                        runtime_layout=runtime_layout,
                     )
                 )
 
-                self.assertEqual(output_qkv.key.shape, (branch_count, 5, 4))
-                self.assertEqual(output_qkv.value.shape, (branch_count, 5, 6))
-                self.assertEqual(output_masks.key_padding_mask.shape, (2, 5))
+                self.assertEqual(output_inputs.key.shape, (branch_count, 5, 4))
+                self.assertEqual(output_inputs.value.shape, (branch_count, 5, 6))
+                self.assertEqual(output_inputs.key_padding_mask.shape, (2, 5))
                 self.assertEqual(
-                    output_masks.attention_mask.shape,
+                    output_inputs.attention_mask.shape,
                     (attention_branch_count, 4, 5),
                 )
                 torch.testing.assert_close(
-                    output_qkv.key[:, -1],
+                    output_inputs.key[:, -1],
                     torch.zeros_like(key[:, 0]),
                 )
                 torch.testing.assert_close(
-                    output_qkv.value[:, -1],
+                    output_inputs.value[:, -1],
                     torch.zeros_like(value[:, 0]),
                 )
-                self.assertEqual(output_runtime_layout.source_sequence_length, 5)
-                self.assertEqual(output_runtime_layout.source_extension_count, 1)
+                self.assertEqual(
+                    output_inputs.runtime_layout.source_sequence_length,
+                    5,
+                )
+                self.assertEqual(
+                    output_inputs.runtime_layout.source_extension_count,
+                    1,
+                )
 
     def test_shared_and_expert_key_value_top_k_matrix_forward_backward(self):
         for use_kv_expert_models_flag in (False, True):
@@ -683,6 +689,9 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         runtime_layout=runtime_layout,
                     )
                 )
+                attention_inputs = model.zero_attention.add_zero_attention(
+                    attention_inputs
+                )
                 qkv = QKV(
                     query=attention_inputs.query,
                     key=attention_inputs.key,
@@ -693,11 +702,6 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     attention_mask=attention_inputs.attention_mask,
                 )
                 runtime_layout = attention_inputs.runtime_layout
-                qkv, masks, runtime_layout = model.zero_attention.add_zero_attention(
-                    qkv,
-                    masks,
-                    runtime_layout,
-                )
 
                 merged = model.masks.merge_padding_and_attention_mask(
                     qkv.key,
