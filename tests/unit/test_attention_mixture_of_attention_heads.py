@@ -198,49 +198,53 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         target_sequence_length=4,
                         source_sequence_length=4,
                     )
-                    output_qkv, output_masks, output_runtime_layout = (
-                        model.add_kv_learnable_bias_vectors(
-                            QKV(query=key, key=key, value=value),
-                            AttentionMasks(
-                                key_padding_mask=key_padding_mask,
-                                attention_mask=attention_mask,
-                            ),
-                            runtime_layout,
+                    output_inputs = model.add_kv_learnable_bias_vectors(
+                        MultiHeadAttentionInputs(
+                            query=key,
+                            key=key,
+                            value=value,
+                            key_padding_mask=key_padding_mask,
+                            attention_mask=attention_mask,
+                            runtime_layout=runtime_layout,
                         )
                     )
 
                     self.assertEqual(
-                        output_qkv.key.shape,
+                        output_inputs.key.shape,
                         (branch_count, 5, key_head_dim),
                     )
                     self.assertEqual(
-                        output_qkv.value.shape,
+                        output_inputs.value.shape,
                         (branch_count, 5, value_head_dim),
                     )
                     self.assertEqual(
-                        output_masks.key_padding_mask.shape,
+                        output_inputs.key_padding_mask.shape,
                         (runtime_batch_size, 5),
                     )
                     self.assertEqual(
-                        output_masks.attention_mask.shape,
+                        output_inputs.attention_mask.shape,
                         (attention_branch_count, 4, 5),
                     )
                     torch.testing.assert_close(
-                        output_qkv.key[:, -1],
+                        output_inputs.key[:, -1],
                         expected_key_bias,
                     )
                     torch.testing.assert_close(
-                        output_qkv.value[:, -1],
+                        output_inputs.value[:, -1],
                         expected_value_bias,
                     )
                     self.assertEqual(
-                        output_runtime_layout.source_sequence_length,
+                        output_inputs.runtime_layout.source_sequence_length,
                         5,
                     )
-                    self.assertEqual(output_runtime_layout.source_extension_count, 1)
+                    self.assertEqual(
+                        output_inputs.runtime_layout.source_extension_count,
+                        1,
+                    )
 
                     bias_loss = (
-                        output_qkv.key[:, -1].sum() + output_qkv.value[:, -1].sum()
+                        output_inputs.key[:, -1].sum()
+                        + output_inputs.value[:, -1].sum()
                     )
                     bias_loss.backward()
                     self.assertTrue(torch.any(model.key_bias_vector.grad != 0))
@@ -285,9 +289,12 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
 
                 with self.assertRaises(RuntimeError) as caught:
                     model.add_kv_learnable_bias_vectors(
-                        QKV(query=projection, key=projection, value=projection),
-                        AttentionMasks(),
-                        runtime_layout,
+                        MultiHeadAttentionInputs(
+                            query=projection,
+                            key=projection,
+                            value=projection,
+                            runtime_layout=runtime_layout,
+                        )
                     )
 
                 self.assertEqual(str(caught.exception), expected_message)
@@ -666,12 +673,26 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                     key_value_branch_count *= cfg.experts_config.top_k
                 key = torch.zeros(key_value_branch_count, 4, 4)
                 value = torch.zeros(key_value_branch_count, 4, 4)
-                qkv = QKV(query=key, key=key, value=value)
-                qkv, masks, runtime_layout = model.bias.add_kv_learnable_bias_vectors(
-                    qkv,
-                    masks,
-                    runtime_layout,
+                attention_inputs = model.bias.add_kv_learnable_bias_vectors(
+                    MultiHeadAttentionInputs(
+                        query=key,
+                        key=key,
+                        value=value,
+                        key_padding_mask=masks.key_padding_mask,
+                        attention_mask=masks.attention_mask,
+                        runtime_layout=runtime_layout,
+                    )
                 )
+                qkv = QKV(
+                    query=attention_inputs.query,
+                    key=attention_inputs.key,
+                    value=attention_inputs.value,
+                )
+                masks = AttentionMasks(
+                    key_padding_mask=attention_inputs.key_padding_mask,
+                    attention_mask=attention_inputs.attention_mask,
+                )
+                runtime_layout = attention_inputs.runtime_layout
                 qkv, masks, runtime_layout = model.zero_attention.add_zero_attention(
                     qkv,
                     masks,

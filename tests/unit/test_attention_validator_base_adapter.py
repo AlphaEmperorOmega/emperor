@@ -10,7 +10,11 @@ from emperor.attention._ops.reshaping import (
     AttentionReshaper,
     ReshaperBase,
 )
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionMasks,
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._validation import AttentionValidatorBase
 from support.attention import build_attention_config
 
@@ -120,8 +124,11 @@ class TestAttentionValidatorBaseAdapter(unittest.TestCase):
             "substituted branch-count validator was called",
         ):
             model.add_kv_learnable_bias_vectors(
-                QKV(query=projection, key=projection, value=projection),
-                AttentionMasks(),
+                MultiHeadAttentionInputs(
+                    query=projection,
+                    key=projection,
+                    value=projection,
+                )
             )
 
 
