@@ -9,7 +9,7 @@ from emperor.attention import (
     SelfAttentionProjectionStrategy,
 )
 from emperor.attention._ops.projection import ProjectorBase
-from emperor.attention._runtime import QKV
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.independent.projection import IndependentProjector
 from emperor.attention._variants.mixture.projection import (
     MixtureOfAttentionHeadsProjector,
@@ -22,6 +22,18 @@ from emperor.layers import Layer, LayerStack, LayerState, RecurrentLayer
 from support.attention import build_attention_config
 
 PROJECTION_KINDS = ["base", "adaptive"]
+
+
+def attention_inputs(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+) -> MultiHeadAttentionInputs:
+    return MultiHeadAttentionInputs(
+        query=query,
+        key=key,
+        value=value,
+    )
 
 
 class LossReturningModel(torch.nn.Module):
@@ -55,7 +67,7 @@ class TestProjectorBase(unittest.TestCase):
         values = torch.randn(1, 1, 2)
 
         with self.assertRaises(NotImplementedError) as caught:
-            model.compute_qkv_projections(QKV(query=values, key=values, value=values))
+            model.compute_qkv_projections(attention_inputs(values, values, values))
         self.assertEqual(
             str(caught.exception),
             "compute_qkv_projections must be implemented by subclass.",
@@ -79,9 +91,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
             AssertionError,
             "projection_strategy was validated during construction",
         ):
-            projector.compute_qkv_projections(
-                QKV(query=values, key=values, value=values)
-            )
+            projector.compute_qkv_projections(attention_inputs(values, values, values))
 
     def test_invalid_projection_strategy_is_rejected(self):
         cfg = build_attention_config(
@@ -212,10 +222,10 @@ class TestSelfAttentionProjector(unittest.TestCase):
         context = torch.randn(5, 2, embedding_dim)
 
         fused_key_value_projections = fused_key_value.compute_qkv_projections(
-            QKV(query=query, key=context, value=context)
+            attention_inputs(query, context, context)
         )
         separate_projections = separate.compute_qkv_projections(
-            QKV(query=query, key=context, value=context)
+            attention_inputs(query, context, context)
         )
 
         for projection_name in ("query", "key", "value"):
@@ -401,7 +411,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                 )
 
                 projections = m.compute_qkv_projections(
-                    QKV(query=tensor, key=tensor, value=tensor)
+                    attention_inputs(tensor, tensor, tensor)
                 )
 
                 expected_shape = (
@@ -409,7 +419,7 @@ class TestSelfAttentionProjector(unittest.TestCase):
                     c.batch_size,
                     c.embedding_dim,
                 )
-                self.assertIsInstance(projections, QKV)
+                self.assertIsInstance(projections, MultiHeadAttentionInputs)
                 self.assertEqual(projections.query.shape, expected_shape)
                 self.assertEqual(projections.key.shape, expected_shape)
                 self.assertEqual(projections.value.shape, expected_shape)
@@ -498,7 +508,7 @@ class TestIndependentProjector(unittest.TestCase):
                 )
 
                 projections = m.compute_qkv_projections(
-                    QKV(query=tensor, key=tensor, value=tensor)
+                    attention_inputs(tensor, tensor, tensor)
                 )
 
                 expected_shape = (
@@ -511,7 +521,7 @@ class TestIndependentProjector(unittest.TestCase):
                     c.batch_size,
                     m.value_projection_dim,
                 )
-                self.assertIsInstance(projections, QKV)
+                self.assertIsInstance(projections, MultiHeadAttentionInputs)
                 self.assertEqual(projections.query.shape, expected_shape)
                 self.assertEqual(projections.key.shape, expected_shape)
                 self.assertEqual(projections.value.shape, expected_value_shape)
@@ -609,7 +619,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                 )
 
                 projections = m.compute_qkv_projections(
-                    QKV(query=tensor, key=tensor, value=tensor)
+                    attention_inputs(tensor, tensor, tensor)
                 )
 
                 expected_top_k_shape = (
@@ -624,7 +634,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     m.query_key_projection_dim,
                 )
 
-                self.assertIsInstance(projections, QKV)
+                self.assertIsInstance(projections, MultiHeadAttentionInputs)
                 self.assertEqual(projections.query.shape, expected_top_k_shape)
                 if use_kv_expert_models_flag:
                     self.assertEqual(projections.key.shape, expected_top_k_shape)
@@ -643,7 +653,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
         m = MixtureOfAttentionHeadsProjector(c)
 
         tensor = torch.randn(c.target_sequence_length, c.batch_size, c.embedding_dim)
-        m.compute_qkv_projections(QKV(query=tensor, key=tensor, value=tensor))
+        m.compute_qkv_projections(attention_inputs(tensor, tensor, tensor))
         self.assertIsNotNone(m.probabilities)
         self.assertIsNotNone(m.indices)
         m.skip_mask = torch.zeros_like(m.probabilities[:, :1], dtype=torch.bool)
