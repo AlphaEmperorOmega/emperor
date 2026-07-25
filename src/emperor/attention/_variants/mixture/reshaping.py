@@ -8,7 +8,11 @@ from torch import Tensor
 from emperor.attention._ops.reshaping import ReshaperBase
 
 if TYPE_CHECKING:
-    from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+    from emperor.attention._runtime import (
+        QKV,
+        AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
+    )
     from emperor.attention._variants.mixture.config import (
         MixtureOfAttentionHeadsConfig,
     )
@@ -22,11 +26,15 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
 
     def reshape_qkv_for_attention(
         self,
-        qkv: "QKV",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
         static_keys: Tensor | None = None,
         static_values: Tensor | None = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "QKV":
+    ) -> "MultiHeadAttentionInputs | QKV":
+        if hasattr(attention_inputs, "runtime_layout"):
+            static_keys = attention_inputs.static_key
+            static_values = attention_inputs.static_value
+            runtime_layout = attention_inputs.runtime_layout
         if self.use_kv_expert_models_flag and (
             static_keys is not None or static_values is not None
         ):
@@ -39,18 +47,24 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
         )
 
         query = self.__reshape_q_projection(
-            qkv.query,
+            attention_inputs.query,
             self.qk_head_dim,
             runtime_layout,
         )
         key = self.__reshape_kv_projection(
-            qkv.key, static_keys, self.qk_head_dim, runtime_layout
+            attention_inputs.key,
+            static_keys,
+            self.qk_head_dim,
+            runtime_layout,
         )
         value = self.__reshape_kv_projection(
-            qkv.value, static_values, self.v_head_dim, runtime_layout
+            attention_inputs.value,
+            static_values,
+            self.v_head_dim,
+            runtime_layout,
         )
 
-        return replace(qkv, query=query, key=key, value=value)
+        return replace(attention_inputs, query=query, key=key, value=value)
 
     def __reshape_q_projection(
         self,
@@ -110,12 +124,17 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
 
     def reshape_before_attention(
         self,
-        qkv: "QKV",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
         runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "QKV":
-        query = self._reshape_query(qkv.query, runtime_layout)
-        key, value = self._reshape_kv(qkv.key, qkv.value, runtime_layout)
-        return replace(qkv, query=query, key=key, value=value)
+    ) -> "MultiHeadAttentionInputs | QKV":
+        runtime_layout = getattr(attention_inputs, "runtime_layout", runtime_layout)
+        query = self._reshape_query(attention_inputs.query, runtime_layout)
+        key, value = self._reshape_kv(
+            attention_inputs.key,
+            attention_inputs.value,
+            runtime_layout,
+        )
+        return replace(attention_inputs, query=query, key=key, value=value)
 
     def _reshape_query(
         self, query: Tensor, runtime_layout: "AttentionRuntimeLayout | None" = None
