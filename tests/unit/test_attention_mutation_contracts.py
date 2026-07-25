@@ -8,7 +8,11 @@ from emperor.attention import (
     SelfAttentionConfig,
 )
 from emperor.attention._ops.reshaping import AttentionReshaper
-from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    QKV,
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._validation import (
     AttentionValidatorBase,
     MultiHeadAttentionValidator,
@@ -17,6 +21,20 @@ from emperor.attention._variants.mixture.zero_attention import (
     MixtureOfAttentionHeadsZeroAttention,
 )
 from support.attention import build_attention_config
+
+
+def attention_inputs(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    **runtime_values,
+) -> MultiHeadAttentionInputs:
+    return MultiHeadAttentionInputs(
+        query=query,
+        key=key,
+        value=value,
+        **runtime_values,
+    )
 
 
 class ExactErrorMixin:
@@ -356,11 +374,9 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         )
         reshaper = AttentionReshaper(cfg)
         runtime_layout = AttentionRuntimeLayout(2, 3, 5)
-        qkv = QKV(
-            query=torch.arange(48.0).view(3, 2, 8),
-            key=torch.arange(80.0).view(5, 2, 8),
-            value=torch.arange(60.0).view(5, 2, 6),
-        )
+        query = torch.arange(48.0).view(3, 2, 8)
+        key = torch.arange(80.0).view(5, 2, 8)
+        value = torch.arange(60.0).view(5, 2, 6)
         cases = (
             (
                 torch.empty(5, 5, 4),
@@ -380,10 +396,14 @@ class TestMultiHeadAttentionValidatorMutationContracts(
                     RuntimeError,
                     message,
                     reshaper.reshape_qkv_for_attention,
-                    qkv,
-                    static_keys,
-                    static_values,
-                    runtime_layout,
+                    attention_inputs(
+                        query,
+                        key,
+                        value,
+                        static_key=static_keys,
+                        static_value=static_values,
+                        runtime_layout=runtime_layout,
+                    ),
                 )
 
     def test_attention_reshaper_uses_runtime_sized_static_projections(self):
@@ -401,14 +421,14 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         static_values = torch.arange(60.0).view(4, 5, 3)
 
         output = reshaper.reshape_qkv_for_attention(
-            QKV(
-                query=query,
-                key=torch.full((5, 2, 8), -1.0),
-                value=torch.full((5, 2, 6), -2.0),
-            ),
-            static_keys,
-            static_values,
-            runtime_layout,
+            attention_inputs(
+                query,
+                torch.full((5, 2, 8), -1.0),
+                torch.full((5, 2, 6), -2.0),
+                static_key=static_keys,
+                static_value=static_values,
+                runtime_layout=runtime_layout,
+            )
         )
 
         torch.testing.assert_close(
@@ -433,8 +453,12 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         value = torch.arange(60.0).view(5, 2, 6)
 
         output = reshaper.reshape_qkv_for_attention(
-            QKV(query=query, key=key, value=value),
-            runtime_layout=runtime_layout,
+            attention_inputs(
+                query,
+                key,
+                value,
+                runtime_layout=runtime_layout,
+            )
         )
 
         torch.testing.assert_close(
