@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 from torch import Tensor
 
+from emperor.attention._runtime import (
+    AttentionMasks,
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._validation import AttentionValidatorBase
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
-    from emperor.attention._runtime import AttentionMasks, AttentionRuntimeLayout
 
 
 class Mask:
@@ -29,19 +33,60 @@ class Mask:
 
     def prepare_attention_masks(
         self,
-        query: Tensor,
-        masks: AttentionMasks,
-        runtime_layout: AttentionRuntimeLayout,
-    ) -> AttentionMasks:
+        attention_inputs: MultiHeadAttentionInputs | Tensor,
+        masks: AttentionMasks | None = None,
+        runtime_layout: AttentionRuntimeLayout | None = None,
+    ) -> MultiHeadAttentionInputs | AttentionMasks:
+        legacy_call = not isinstance(attention_inputs, MultiHeadAttentionInputs)
+        legacy_masks = masks if masks is not None else AttentionMasks()
+        if legacy_call:
+            attention_inputs = MultiHeadAttentionInputs(
+                query=attention_inputs,
+                key=attention_inputs,
+                value=attention_inputs,
+                key_padding_mask=legacy_masks.key_padding_mask,
+                attention_mask=legacy_masks.attention_mask,
+                runtime_layout=runtime_layout,
+            )
+        query = attention_inputs.query
+        runtime_layout = attention_inputs.runtime_layout
+        self.VALIDATOR.validate_attention_mask_preparation_runtime_layout(
+            runtime_layout
+        )
+        runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
         self.__set_runtime_query_properties(query)
         attention_mask = self.__resolve_causal_attention_mask(
-            masks.attention_mask, runtime_layout
+            attention_inputs.attention_mask, runtime_layout
         )
-        if attention_mask is not masks.attention_mask:
-            masks = replace(masks, attention_mask=attention_mask)
-        prepared_masks = self.__process_attention_masks(masks, runtime_layout)
+        key_padding_mask, attention_mask = self.__process_attention_masks(
+            attention_inputs.key_padding_mask,
+            attention_mask,
+            runtime_layout,
+        )
         self.__clear_runtime_query_properties()
-        return prepared_masks
+        if (
+            key_padding_mask is attention_inputs.key_padding_mask
+            and attention_mask is attention_inputs.attention_mask
+        ):
+            prepared_inputs = attention_inputs
+        else:
+            prepared_inputs = replace(
+                attention_inputs,
+                key_padding_mask=key_padding_mask,
+                attention_mask=attention_mask,
+            )
+        if not legacy_call:
+            return prepared_inputs
+        if (
+            prepared_inputs.key_padding_mask is legacy_masks.key_padding_mask
+            and prepared_inputs.attention_mask is legacy_masks.attention_mask
+        ):
+            return legacy_masks
+        return replace(
+            legacy_masks,
+            key_padding_mask=prepared_inputs.key_padding_mask,
+            attention_mask=prepared_inputs.attention_mask,
+        )
 
     def __set_runtime_query_properties(self, query: Tensor) -> None:
         self.query_dtype = query.dtype
@@ -80,22 +125,21 @@ class Mask:
 
     def __process_attention_masks(
         self,
-        masks: AttentionMasks,
+        key_padding_mask: Tensor | None,
+        attention_mask: Tensor | None,
         runtime_layout: AttentionRuntimeLayout,
-    ) -> AttentionMasks:
+    ) -> tuple[Tensor | None, Tensor | None]:
         self._validate_mask_shapes(
-            masks.key_padding_mask, masks.attention_mask, runtime_layout
+            key_padding_mask,
+            attention_mask,
+            runtime_layout,
         )
-        key_padding_mask = self.__canonical_mask(
-            masks.key_padding_mask, "key_padding_mask"
+        prepared_key_padding_mask = self.__canonical_mask(
+            key_padding_mask,
+            "key_padding_mask",
         )
-        attention_mask = self.__validate_attention_mask(masks.attention_mask)
-        if self.__are_masks_unchanged(masks, key_padding_mask, attention_mask):
-            return masks
-        updated_masks = replace(
-            masks, key_padding_mask=key_padding_mask, attention_mask=attention_mask
-        )
-        return updated_masks
+        prepared_attention_mask = self.__validate_attention_mask(attention_mask)
+        return prepared_key_padding_mask, prepared_attention_mask
 
     def _validate_mask_shapes(
         self,
@@ -139,17 +183,6 @@ class Mask:
             attention_mask, self.causal_attention_mask_flag
         )
         return self.__canonical_mask(attention_mask, "attention_mask")
-
-    def __are_masks_unchanged(
-        self,
-        masks: AttentionMasks,
-        key_padding_mask: Tensor | None,
-        attention_mask: Tensor | None,
-    ) -> bool:
-        return (
-            key_padding_mask is masks.key_padding_mask
-            and attention_mask is masks.attention_mask
-        )
 
     def merge_padding_and_attention_mask(
         self,
