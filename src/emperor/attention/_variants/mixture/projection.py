@@ -19,7 +19,6 @@ from emperor.experts._layers.mixture import MixtureOfExperts
 
 if TYPE_CHECKING:
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -79,11 +78,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
 
     def compute_qkv_projections(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        *,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        del runtime_layout
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
         self.__compute_expert_indices(attention_inputs.query)
         q_projection = self.__compute_q_projection(
             attention_inputs.query,
