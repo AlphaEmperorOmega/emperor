@@ -8,7 +8,7 @@ from emperor.attention._monitoring.diagnostics import (
     _AttentionMonitorAdapter,
     _AttentionObservation,
 )
-from emperor.attention._runtime import QKV
+from emperor.attention._runtime import MultiHeadAttentionInputs
 
 
 class TestAttentionDiagnosticsFastContracts(unittest.TestCase):
@@ -26,19 +26,23 @@ class TestAttentionDiagnosticsFastContracts(unittest.TestCase):
         self.assertIsNone(canonical)
 
     def test_approximation_receives_the_merged_attention_mask(self):
-        processor_qkv = object()
         merged_attention_mask = object()
+        processor_inputs = MultiHeadAttentionInputs(
+            query=object(),
+            key=object(),
+            value=object(),
+            merged_attention_mask=merged_attention_mask,
+        )
         approximation_calls = []
         diagnostics = self.diagnostics()
-        diagnostics.approximate_attention_weights = lambda qkv, mask: (
-            approximation_calls.append((qkv, mask))
+        diagnostics.approximate_attention_weights = lambda inputs: (
+            approximation_calls.append(inputs)
         )
         diagnostics.mask_coverage = lambda _mask: torch.zeros(())
 
         metrics = diagnostics.calculate(
             _AttentionObservation(
-                processor_qkv=processor_qkv,
-                merged_attention_mask=merged_attention_mask,
+                processor_inputs=processor_inputs,
             ),
             num_heads=1,
             configured_dropout_probability=0.0,
@@ -46,7 +50,7 @@ class TestAttentionDiagnosticsFastContracts(unittest.TestCase):
 
         self.assertEqual(
             approximation_calls,
-            [(processor_qkv, merged_attention_mask)],
+            [processor_inputs],
         )
         self.assertIsNone(metrics.weight_source)
 
@@ -89,14 +93,14 @@ class TestAttentionDiagnosticsFastContracts(unittest.TestCase):
                     raise AssertionError(f"expected dim=-1, received {dim!r}")
                 return SimpleNamespace(mean=lambda: expected)
 
-        projected_qkv = QKV(
+        projected_inputs = MultiHeadAttentionInputs(
             query=ProjectionProbe(),
             key=object(),
             value=object(),
         )
         projection_norm = _AttentionDiagnostics._AttentionDiagnostics__projection_norm
 
-        actual = projection_norm(projected_qkv, "query")
+        actual = projection_norm(projected_inputs, "query")
 
         self.assertIs(actual, expected)
 

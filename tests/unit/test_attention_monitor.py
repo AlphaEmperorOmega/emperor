@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from types import SimpleNamespace
 
 import torch
@@ -20,7 +21,7 @@ from emperor.attention._monitoring.diagnostics import (
     _AttentionObservation,
     _resolve_attention_monitor_adapter,
 )
-from emperor.attention._runtime import QKV
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.mixture.monitoring import (
     _MixtureOfAttentionHeadsMonitorAdapter,
 )
@@ -47,10 +48,10 @@ class InstrumentedAttention(torch.nn.Module):
         if monitor_adapter is not None:
             self._MONITOR_ADAPTER = monitor_adapter
         self.projector = SimpleNamespace(
-            compute_qkv_projections=lambda *, projected: projected
+            compute_qkv_projections=lambda *, attention_inputs: attention_inputs
         )
         self.processor = SimpleNamespace(
-            compute_attention=lambda *, qkv, merged_attention_mask=None: qkv.value
+            compute_attention=lambda *, attention_inputs: attention_inputs.value
         )
         self.private_method_name = private_method_name
         self.private_weights = private_weights
@@ -64,13 +65,19 @@ class InstrumentedAttention(torch.nn.Module):
 
     def forward(
         self,
-        qkv: QKV,
+        attention_inputs: MultiHeadAttentionInputs,
         attention_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor]:
-        projected_qkv = self.projector.compute_qkv_projections(projected=qkv)
+        projected_inputs = self.projector.compute_qkv_projections(
+            attention_inputs=attention_inputs
+        )
+        if attention_mask is not None:
+            projected_inputs = replace(
+                projected_inputs,
+                merged_attention_mask=attention_mask,
+            )
         output = self.processor.compute_attention(
-            qkv=projected_qkv,
-            merged_attention_mask=attention_mask,
+            attention_inputs=projected_inputs,
         )
         if self.private_method_name is not None:
             getattr(self.processor, self.private_method_name)(scale=2.0)
@@ -81,17 +88,21 @@ class ProcessorOnlyAttention(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.processor = SimpleNamespace(
-            compute_attention=lambda *, qkv, merged_attention_mask=None: qkv.value
+            compute_attention=lambda *, attention_inputs: attention_inputs.value
         )
 
     def forward(
         self,
-        qkv: QKV,
+        attention_inputs: MultiHeadAttentionInputs,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if attention_mask is not None:
+            attention_inputs = replace(
+                attention_inputs,
+                merged_attention_mask=attention_mask,
+            )
         return self.processor.compute_attention(
-            qkv=qkv,
-            merged_attention_mask=attention_mask,
+            attention_inputs=attention_inputs,
         )
 
 
@@ -100,17 +111,20 @@ class PositionalProcessorAttention(torch.nn.Module):
         super().__init__()
         self.include_mask = include_mask
         self.processor = SimpleNamespace(
-            compute_attention=lambda qkv, merged_attention_mask=None: qkv.value
+            compute_attention=lambda attention_inputs: attention_inputs.value
         )
 
     def forward(
         self,
-        qkv: QKV,
+        attention_inputs: MultiHeadAttentionInputs,
         attention_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if self.include_mask:
-            return self.processor.compute_attention(qkv, attention_mask)
-        return self.processor.compute_attention(qkv)
+        if self.include_mask and attention_mask is not None:
+            attention_inputs = replace(
+                attention_inputs,
+                merged_attention_mask=attention_mask,
+            )
+        return self.processor.compute_attention(attention_inputs)
 
 
 class OrderedExactWeightMonitorAdapter(_AttentionMonitorAdapter):
@@ -145,40 +159,53 @@ def diagnostic_metrics(
 
 
 class TestAttentionObservationAndTracker(unittest.TestCase):
-    def qkv(self, *, requires_grad: bool = False) -> QKV:
+    def attention_inputs(
+        self,
+        *,
+        requires_grad: bool = False,
+        merged_attention_mask: torch.Tensor | None = None,
+    ) -> MultiHeadAttentionInputs:
         query = torch.tensor([[[1.0, 2.0], [3.0, 4.0]]], requires_grad=requires_grad)
         key = torch.tensor([[[2.0, 1.0], [4.0, 3.0]]], requires_grad=requires_grad)
         value = torch.tensor([[[5.0, 6.0], [7.0, 8.0]]], requires_grad=requires_grad)
-        return QKV(query=query, key=key, value=value)
+        return MultiHeadAttentionInputs(
+            query=query,
+            key=key,
+            value=value,
+            merged_attention_mask=merged_attention_mask,
+        )
 
     def test_tracker_records_detached_typed_values(self):
         tracker = _AttentionDiagnosticsTracker("attention")
-        projected_qkv = self.qkv(requires_grad=True)
-        processor_qkv = self.qkv(requires_grad=True)
         mask = torch.tensor([[0.0, -1.0]], requires_grad=True)
+        projected_inputs = self.attention_inputs(requires_grad=True)
+        processor_inputs = self.attention_inputs(
+            requires_grad=True,
+            merged_attention_mask=mask,
+        )
         private_weights = torch.tensor([[[0.2, 0.8]]], requires_grad=True)
         returned_weights = torch.tensor([[[0.7, 0.3]]], requires_grad=True)
         output = torch.tensor([3.0, 4.0], requires_grad=True)
         auxiliary_loss = torch.tensor([2.0, 4.0], requires_grad=True)
 
         tracker.begin_observation()
-        tracker.record_projected_qkv(projected_qkv)
-        tracker.record_processor_inputs(processor_qkv, mask)
+        tracker.record_projected_inputs(projected_inputs)
+        tracker.record_processor_inputs(processor_inputs)
         tracker.record_exact_attention_weights(private_weights)
         tracker.record_forward_output((output, returned_weights, auxiliary_loss))
 
         observation = tracker.latest_observation
         self.assertIsInstance(observation, _AttentionObservation)
-        self.assertIsNotNone(observation.projected_qkv)
-        self.assertIsNotNone(observation.processor_qkv)
+        self.assertIsNotNone(observation.projected_inputs)
+        self.assertIsNotNone(observation.processor_inputs)
         captured_tensors = (
-            observation.projected_qkv.query,
-            observation.projected_qkv.key,
-            observation.projected_qkv.value,
-            observation.processor_qkv.query,
-            observation.processor_qkv.key,
-            observation.processor_qkv.value,
-            observation.merged_attention_mask,
+            observation.projected_inputs.query,
+            observation.projected_inputs.key,
+            observation.projected_inputs.value,
+            observation.processor_inputs.query,
+            observation.processor_inputs.key,
+            observation.processor_inputs.value,
+            observation.processor_inputs.merged_attention_mask,
             observation.exact_attention_weights,
             observation.restored_output,
             observation.auxiliary_loss,
@@ -262,13 +289,13 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
                     )
                 self.assertIsNone(observation.auxiliary_loss)
 
-    def test_invalid_projected_qkv_and_exact_weights_are_ignored(self):
+    def test_invalid_projected_inputs_and_exact_weights_are_ignored(self):
         tracker = _AttentionDiagnosticsTracker("attention")
 
-        tracker.record_projected_qkv(object())
+        tracker.record_projected_inputs(object())
         tracker.record_exact_attention_weights(object())
 
-        self.assertIsNone(tracker.latest_observation.projected_qkv)
+        self.assertIsNone(tracker.latest_observation.projected_inputs)
         self.assertIsNone(tracker.latest_observation.exact_attention_weights)
 
 
@@ -276,8 +303,18 @@ class TestAttentionDiagnostics(unittest.TestCase):
     def diagnostics(self) -> _AttentionDiagnostics:
         return _AttentionDiagnostics()
 
-    def qkv(self, query: torch.Tensor, key: torch.Tensor) -> QKV:
-        return QKV(query=query, key=key, value=torch.ones_like(key))
+    def attention_inputs(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+    ) -> MultiHeadAttentionInputs:
+        return MultiHeadAttentionInputs(
+            query=query,
+            key=key,
+            value=torch.ones_like(key),
+            merged_attention_mask=attention_mask,
+        )
 
     def test_boolean_mask_uses_true_as_masked(self):
         query = torch.ones(1, 1, 1)
@@ -285,8 +322,7 @@ class TestAttentionDiagnostics(unittest.TestCase):
         mask = torch.tensor([[False, True]])
 
         weights = self.diagnostics().approximate_attention_weights(
-            self.qkv(query, key),
-            mask,
+            self.attention_inputs(query, key, mask),
         )
 
         torch.testing.assert_close(weights, torch.tensor([[[1.0, 0.0]]]))
@@ -325,16 +361,18 @@ class TestAttentionDiagnostics(unittest.TestCase):
         for attention_mask in (boolean_mask, additive_mask):
             with self.subTest(mask_dtype=attention_mask.dtype):
                 diagnostics = self.diagnostics()
-                processor_qkv = self.qkv(query, key)
+                processor_inputs = self.attention_inputs(
+                    query,
+                    key,
+                    attention_mask,
+                )
 
                 weights = diagnostics.approximate_attention_weights(
-                    processor_qkv,
-                    attention_mask,
+                    processor_inputs,
                 )
                 metrics = diagnostics.calculate(
                     _AttentionObservation(
-                        processor_qkv=processor_qkv,
-                        merged_attention_mask=attention_mask,
+                        processor_inputs=processor_inputs,
                     ),
                     num_heads=1,
                     configured_dropout_probability=0.0,
@@ -365,8 +403,7 @@ class TestAttentionDiagnostics(unittest.TestCase):
         )
 
         actual = self.diagnostics().approximate_attention_weights(
-            self.qkv(query, key),
-            mask,
+            self.attention_inputs(query, key, mask),
         )
         expected = torch.softmax(
             torch.matmul(query * (4**-0.5), key.transpose(-2, -1)) + mask,
@@ -381,20 +418,19 @@ class TestAttentionDiagnostics(unittest.TestCase):
         valid_key = torch.ones(1, 3, 2)
         invalid_mask = torch.zeros(4, 5)
         cases = (
-            self.qkv(valid_query.squeeze(0), valid_key),
-            self.qkv(torch.ones(1, 1, 2, 3, 4), valid_key),
-            self.qkv(valid_query, torch.ones(1, 1, 2, 3, 4)),
+            self.attention_inputs(valid_query.squeeze(0), valid_key),
+            self.attention_inputs(torch.ones(1, 1, 2, 3, 4), valid_key),
+            self.attention_inputs(valid_query, torch.ones(1, 1, 2, 3, 4)),
         )
 
-        for processor_qkv in cases:
-            with self.subTest(query_shape=processor_qkv.query.shape):
+        for processor_inputs in cases:
+            with self.subTest(query_shape=processor_inputs.query.shape):
                 self.assertIsNone(
-                    diagnostics.approximate_attention_weights(processor_qkv, None)
+                    diagnostics.approximate_attention_weights(processor_inputs)
                 )
         self.assertIsNone(
             diagnostics.approximate_attention_weights(
-                self.qkv(valid_query, valid_key),
-                invalid_mask,
+                self.attention_inputs(valid_query, valid_key, invalid_mask),
             )
         )
 
@@ -501,15 +537,19 @@ class TestAttentionDiagnostics(unittest.TestCase):
         torch.testing.assert_close(maximum, expected_maximum)
 
     def test_calculator_returns_exact_projection_output_and_mask_metrics(self):
-        projected_qkv = QKV(
+        projected_inputs = MultiHeadAttentionInputs(
             query=torch.tensor([[[3.0, 4.0]]]),
             key=torch.tensor([[[0.0, 12.0]]]),
             value=torch.tensor([[[8.0, 15.0]]]),
         )
+        processor_inputs = replace(
+            projected_inputs,
+            merged_attention_mask=torch.tensor([False, True]),
+        )
         exact_weights = torch.tensor([[[0.0, 2.0, 3.0]]])
         observation = _AttentionObservation(
-            projected_qkv=projected_qkv,
-            merged_attention_mask=torch.tensor([False, True]),
+            projected_inputs=projected_inputs,
+            processor_inputs=processor_inputs,
             exact_attention_weights=exact_weights,
             restored_output=torch.tensor([3.0, 4.0]),
             auxiliary_loss=torch.tensor([2.0, 4.0]),
@@ -539,13 +579,13 @@ class TestAttentionDiagnostics(unittest.TestCase):
         self.assertEqual(metrics.weight_source, "exact")
 
     def test_exact_weights_take_priority_over_approximation(self):
-        processor_qkv = self.qkv(
+        processor_inputs = self.attention_inputs(
             torch.tensor([[[1.0], [2.0]]]),
             torch.tensor([[[1.0], [3.0]]]),
         )
         exact_weights = torch.tensor([[[0.25, 0.75], [0.5, 0.5]]])
         observation = _AttentionObservation(
-            processor_qkv=processor_qkv,
+            processor_inputs=processor_inputs,
             exact_attention_weights=exact_weights,
         )
 
@@ -567,13 +607,13 @@ class TestAttentionDiagnostics(unittest.TestCase):
         )
 
     def test_missing_exact_weights_use_approximation_without_dropout_metric(self):
-        processor_qkv = self.qkv(
+        processor_inputs = self.attention_inputs(
             torch.tensor([[[1.0], [2.0]]]),
             torch.tensor([[[1.0], [3.0]]]),
         )
 
         metrics = self.diagnostics().calculate(
-            _AttentionObservation(processor_qkv=processor_qkv),
+            _AttentionObservation(processor_inputs=processor_inputs),
             num_heads=1,
             configured_dropout_probability=0.0,
         )
@@ -598,7 +638,7 @@ class TestAttentionDiagnostics(unittest.TestCase):
     def test_missing_processor_and_weights_produce_no_weight_metrics(self):
         diagnostics = self.diagnostics()
 
-        self.assertIsNone(diagnostics.approximate_attention_weights(None, None))
+        self.assertIsNone(diagnostics.approximate_attention_weights(None))
         self.assertEqual(
             diagnostics.per_head_statistics(None, num_heads=2),
             (None, None),
@@ -617,8 +657,8 @@ class TestAttentionDiagnostics(unittest.TestCase):
 
 
 class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
-    def qkv(self) -> QKV:
-        return QKV(
+    def attention_inputs(self) -> MultiHeadAttentionInputs:
+        return MultiHeadAttentionInputs(
             query=torch.tensor([[[1.0, 0.0], [0.0, 2.0]]]),
             key=torch.tensor([[[1.0, 0.0], [1.0, 1.0]]]),
             value=torch.ones(1, 2, 2),
@@ -641,7 +681,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                 (name, module, observation)
             ),
         )
-        attention(self.qkv(), attention_mask)
+        attention(self.attention_inputs(), attention_mask)
 
         self.assertEqual(manager.module_names, ("attention",))
         self.assertEqual(manager.hook_count, 1)
@@ -650,11 +690,11 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
         self.assertEqual(module_name, "attention")
         self.assertIs(observed_module, attention)
         torch.testing.assert_close(
-            observation.processor_qkv.query,
-            self.qkv().query,
+            observation.processor_inputs.query,
+            self.attention_inputs().query,
         )
         torch.testing.assert_close(
-            observation.merged_attention_mask,
+            observation.processor_inputs.merged_attention_mask,
             attention_mask,
         )
         torch.testing.assert_close(
@@ -709,7 +749,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                         records.append((name, module, observation))
                     ),
                 )
-                attention(self.qkv())
+                attention(self.attention_inputs())
 
                 torch.testing.assert_close(
                     observations[0][2].exact_attention_weights,
@@ -741,7 +781,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
             lambda: True,
             lambda name, module, observation: observations.append(observation),
         )
-        attention(self.qkv())
+        attention(self.attention_inputs())
 
         torch.testing.assert_close(
             observations[0].exact_attention_weights,
@@ -762,7 +802,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                 (name, module, observation)
             ),
         )
-        attention(self.qkv())
+        attention(self.attention_inputs())
 
         self.assertEqual(observations, [])
         self.assertEqual(
@@ -826,19 +866,21 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                     record_observation,
                 )
 
-                attention(self.qkv(), attention_mask)
+                attention(self.attention_inputs(), attention_mask)
 
                 self.assertEqual(len(observations), 1)
                 observation = observations[0]
                 torch.testing.assert_close(
-                    observation.processor_qkv.query,
-                    self.qkv().query,
+                    observation.processor_inputs.query,
+                    self.attention_inputs().query,
                 )
                 if expected_mask is None:
-                    self.assertIsNone(observation.merged_attention_mask)
+                    self.assertIsNone(
+                        observation.processor_inputs.merged_attention_mask
+                    )
                 else:
                     torch.testing.assert_close(
-                        observation.merged_attention_mask,
+                        observation.processor_inputs.merged_attention_mask,
                         expected_mask,
                     )
                 manager.detach()
@@ -861,7 +903,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
             lambda name, module, observation: observations.append(observation),
         )
 
-        attention(self.qkv())
+        attention(self.attention_inputs())
 
         torch.testing.assert_close(
             observations[0].exact_attention_weights,
@@ -882,11 +924,11 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
         tracker = manager.tracker_for(attention)
         tracker.record_exact_attention_weights(torch.ones(1, 1, 1))
 
-        attention(self.qkv())
+        attention(self.attention_inputs())
 
         self.assertEqual(len(observations), 1)
-        self.assertIsNotNone(observations[0].processor_qkv)
-        self.assertIsNone(observations[0].projected_qkv)
+        self.assertIsNotNone(observations[0].processor_inputs)
+        self.assertIsNone(observations[0].projected_inputs)
         self.assertIsNone(observations[0].exact_attention_weights)
         manager.detach()
 
