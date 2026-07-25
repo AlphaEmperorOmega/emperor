@@ -13,11 +13,7 @@ from emperor.attention._variants.self_attention.config import (
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
-    from emperor.attention._runtime import (
-        QKV,
-        AttentionRuntimeLayout,
-        MultiHeadAttentionInputs,
-    )
+    from emperor.attention._runtime import MultiHeadAttentionInputs
     from emperor.layers import RowLayout
 
 
@@ -68,11 +64,9 @@ class SelfAttentionProjector(ProjectorBase):
 
     def compute_qkv_projections(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        *,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        runtime_layout = getattr(attention_inputs, "runtime_layout", runtime_layout)
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
+        runtime_layout = attention_inputs.runtime_layout
         row_layout = runtime_layout.row_layout if runtime_layout is not None else None
         match self.projection_strategy:
             case SelfAttentionProjectionStrategy.FUSED:

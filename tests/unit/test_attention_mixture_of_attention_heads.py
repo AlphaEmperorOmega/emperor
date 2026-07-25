@@ -4,7 +4,12 @@ from pathlib import Path
 import torch
 
 from emperor.attention import MixtureOfAttentionHeadsConfig
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    QKV,
+    AttentionMasks,
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from emperor.attention._variants.mixture.bias import (
     MixtureOfAttentionHeadsKeyValueBias,
 )
@@ -1231,7 +1236,11 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             cfg.embedding_dim,
         )
         projections = model.projector.compute_qkv_projections(
-            QKV(query=inputs, key=inputs, value=inputs),
+            MultiHeadAttentionInputs(
+                query=inputs,
+                key=inputs,
+                value=inputs,
+            )
         )
 
         projections = model.reshaper.reshape_qkv_for_attention(projections)
