@@ -16,7 +16,7 @@ from emperor.attention._monitoring.diagnostics import (
     _AttentionObservation,
     _resolve_attention_monitor_adapter,
 )
-from emperor.attention._runtime import QKV, MultiHeadAttentionInputs
+from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.monitoring import (
     MonitorEmissionPolicy,
     MonitorTensorHistory,
@@ -53,14 +53,9 @@ class _AttentionDiagnosticsTracker:
         if detached_inputs is not None:
             self._latest_observation.projected_inputs = detached_inputs
 
-    def record_processor_inputs(
-        self,
-        processor_inputs: object,
-        merged_attention_mask: object = None,
-    ) -> None:
+    def record_processor_inputs(self, processor_inputs: object) -> None:
         self._latest_observation.processor_inputs = self.__detach_attention_inputs(
-            processor_inputs,
-            merged_attention_mask,
+            processor_inputs
         )
 
     def record_exact_attention_weights(self, attention_weights: object) -> None:
@@ -84,27 +79,14 @@ class _AttentionDiagnosticsTracker:
     def __detach_attention_inputs(
         cls,
         value: object,
-        merged_attention_mask: object = None,
     ) -> MultiHeadAttentionInputs | None:
-        if isinstance(value, QKV):
-            return MultiHeadAttentionInputs(
-                query=value.query.detach(),
-                key=value.key.detach(),
-                value=value.value.detach(),
-                merged_attention_mask=cls.__detach_tensor(merged_attention_mask),
-            )
         if not isinstance(value, MultiHeadAttentionInputs):
             return None
-        attention_mask = (
-            merged_attention_mask
-            if merged_attention_mask is not None
-            else value.merged_attention_mask
-        )
         return MultiHeadAttentionInputs(
             query=value.query.detach(),
             key=value.key.detach(),
             value=value.value.detach(),
-            merged_attention_mask=cls.__detach_tensor(attention_mask),
+            merged_attention_mask=cls.__detach_tensor(value.merged_attention_mask),
         )
 
     @staticmethod
@@ -249,18 +231,8 @@ class _AttentionDiagnosticsTrackerManager:
             if should_capture():
                 if begin_observation:
                     tracker.begin_observation()
-                processor_inputs = (
-                    args[0]
-                    if args
-                    else kwargs.get("attention_inputs", kwargs.get("qkv"))
-                )
-                merged_attention_mask = (
-                    args[1] if len(args) > 1 else kwargs.get("merged_attention_mask")
-                )
-                tracker.record_processor_inputs(
-                    processor_inputs,
-                    merged_attention_mask,
-                )
+                processor_inputs = args[0] if args else kwargs.get("attention_inputs")
+                tracker.record_processor_inputs(processor_inputs)
             return original_attention(*args, **kwargs)
 
         self.__replace_method(
