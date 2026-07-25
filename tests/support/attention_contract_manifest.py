@@ -63,6 +63,14 @@ ATTENTION_CONTRACT_MANIFEST = {
             ("immutability", "optional masks", "replacement"),
             "tests.unit.test_attention_runtime_values",
         ),
+        MultiHeadAttentionInputs=class_contract(
+            (
+                "direct tensor and mask fields",
+                "runtime value preservation",
+                "immutable stage replacement",
+            ),
+            "tests.unit.test_attention_runtime_values",
+        ),
         AttentionRuntimeLayout=class_contract(
             ("branch count", "source extension", "real source length"),
             "tests.unit.test_attention_contracts",

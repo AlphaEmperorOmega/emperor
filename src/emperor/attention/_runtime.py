@@ -22,6 +22,19 @@ class AttentionMasks:
     attention_mask: Tensor | None = None
 
 
+@dataclass(frozen=True, eq=False, kw_only=True)
+class MultiHeadAttentionInputs:
+    query: Tensor
+    key: Tensor
+    value: Tensor
+    key_padding_mask: Tensor | None = None
+    attention_mask: Tensor | None = None
+    static_key: Tensor | None = None
+    static_value: Tensor | None = None
+    runtime_layout: AttentionRuntimeLayout | None = None
+    merged_attention_mask: Tensor | None = None
+
+
 @dataclass(frozen=True)
 class AttentionRuntimeLayout:
     batch_size: int
@@ -53,5 +66,6 @@ class AttentionRuntimeLayout:
 __all__ = [
     "AttentionRuntimeLayout",
     "AttentionMasks",
+    "MultiHeadAttentionInputs",
     "QKV",
 ]
