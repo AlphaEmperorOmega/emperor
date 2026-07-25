@@ -9,7 +9,6 @@ from emperor.attention import (
 )
 from emperor.attention._ops.reshaping import AttentionReshaper
 from emperor.attention._runtime import (
-    QKV,
     AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
 )
@@ -333,11 +332,9 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         )
         model = cfg.build()
         runtime_layout = AttentionRuntimeLayout(2, 3, 5)
-        qkv = QKV(
-            query=torch.empty(3, 2, 12),
-            key=torch.empty(5, 2, 12),
-            value=torch.empty(5, 2, 12),
-        )
+        query = torch.empty(3, 2, 12)
+        key = torch.empty(5, 2, 12)
+        value = torch.empty(5, 2, 12)
         cases = (
             (
                 torch.empty(5, 5, 4),
@@ -358,10 +355,14 @@ class TestMultiHeadAttentionValidatorMutationContracts(
                     message,
                     MultiHeadAttentionValidator.validate_static_key_value_inputs,
                     model,
-                    qkv,
-                    static_keys,
-                    static_values,
-                    runtime_layout,
+                    attention_inputs(
+                        query,
+                        key,
+                        value,
+                        static_key=static_keys,
+                        static_value=static_values,
+                        runtime_layout=runtime_layout,
+                    ),
                 )
 
     def test_attention_reshaper_validates_each_static_projection_shape(self):
@@ -528,28 +529,44 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             target_sequence_length=3,
             source_sequence_length=4,
         )
+        tensor = torch.empty(1, 1, 1)
         cases = (
             (
-                AttentionRuntimeLayout(3, 3, 4),
+                attention_inputs(
+                    tensor,
+                    tensor,
+                    tensor,
+                    runtime_layout=AttentionRuntimeLayout(3, 3, 4),
+                ),
                 "Runtime batch_size (3) exceeds configured maximum (2).",
             ),
             (
-                AttentionRuntimeLayout(2, 4, 4),
+                attention_inputs(
+                    tensor,
+                    tensor,
+                    tensor,
+                    runtime_layout=AttentionRuntimeLayout(2, 4, 4),
+                ),
                 "Runtime target_sequence_length (4) exceeds configured maximum (3).",
             ),
             (
-                AttentionRuntimeLayout(2, 3, 5),
+                attention_inputs(
+                    tensor,
+                    tensor,
+                    tensor,
+                    runtime_layout=AttentionRuntimeLayout(2, 3, 5),
+                ),
                 "Runtime source_sequence_length (5) exceeds configured maximum (4).",
             ),
         )
-        for runtime_layout, message in cases:
+        for inputs, message in cases:
             with self.subTest(message=message):
                 self.assert_exact_error(
                     ValueError,
                     message,
                     MultiHeadAttentionValidator.validate_runtime_layout,
                     model,
-                    runtime_layout,
+                    inputs,
                 )
 
     def test_runtime_tensor_contract_distinguishes_each_source(self):
@@ -557,75 +574,73 @@ class TestMultiHeadAttentionValidatorMutationContracts(
         valid = torch.empty(2, 1, 4)
         cases = (
             (
-                QKV(query=torch.empty(0, 1, 4), key=valid, value=valid),
+                attention_inputs(torch.empty(0, 1, 4), valid, valid),
                 "query sequence length must be greater than 0.",
             ),
             (
-                QKV(query=valid, key=torch.empty(0, 1, 4), value=valid),
+                attention_inputs(valid, torch.empty(0, 1, 4), valid),
                 "key and value sequence lengths must be greater than 0.",
             ),
             (
-                QKV(query=valid, key=valid, value=torch.empty(0, 1, 4)),
+                attention_inputs(valid, valid, torch.empty(0, 1, 4)),
                 "key and value sequence lengths must be greater than 0.",
             ),
             (
-                QKV(
-                    query=torch.empty(2, 1, 4),
-                    key=torch.empty(2, 2, 4),
-                    value=torch.empty(2, 3, 4),
+                attention_inputs(
+                    torch.empty(2, 1, 4),
+                    torch.empty(2, 2, 4),
+                    torch.empty(2, 3, 4),
                 ),
                 "query, key, and value batch sizes must match, got 1, 2, and 3.",
             ),
             (
-                QKV(
-                    query=torch.empty(2, 1, 5),
-                    key=torch.empty(3, 1, 4),
-                    value=torch.empty(3, 1, 4),
+                attention_inputs(
+                    torch.empty(2, 1, 5),
+                    torch.empty(3, 1, 4),
+                    torch.empty(3, 1, 4),
                 ),
                 "query embedding width must be 4, got 5.",
             ),
             (
-                QKV(
-                    query=torch.empty(2, 1, 4, dtype=torch.float16),
-                    key=torch.empty(2, 1, 4, dtype=torch.float32),
-                    value=torch.empty(2, 1, 4, dtype=torch.float64),
+                attention_inputs(
+                    torch.empty(2, 1, 4, dtype=torch.float16),
+                    torch.empty(2, 1, 4, dtype=torch.float32),
+                    torch.empty(2, 1, 4, dtype=torch.float64),
                 ),
                 "query, key, and value dtypes must match, got torch.float16, "
                 "torch.float32, and torch.float64.",
             ),
             (
-                QKV(
-                    query=torch.empty(2, 1, 4, dtype=torch.int64),
-                    key=torch.empty(2, 1, 4, dtype=torch.int64),
-                    value=torch.empty(2, 1, 4, dtype=torch.int64),
+                attention_inputs(
+                    torch.empty(2, 1, 4, dtype=torch.int64),
+                    torch.empty(2, 1, 4, dtype=torch.int64),
+                    torch.empty(2, 1, 4, dtype=torch.int64),
                 ),
                 "query, key, and value must be floating point tensors.",
             ),
             (
-                QKV(
-                    query=torch.empty(2, 1, 4, device="meta"),
-                    key=torch.empty(2, 1, 4),
-                    value=torch.empty(2, 1, 4, device="meta"),
+                attention_inputs(
+                    torch.empty(2, 1, 4, device="meta"),
+                    torch.empty(2, 1, 4),
+                    torch.empty(2, 1, 4, device="meta"),
                 ),
                 "query, key, and value devices must match, got meta, cpu, and meta.",
             ),
         )
-        for qkv, message in cases:
+        for inputs, message in cases:
             with self.subTest(message=message):
                 self.assert_exact_error(
                     RuntimeError,
                     message,
                     MultiHeadAttentionValidator.validate_runtime_tensors,
                     model,
-                    qkv,
+                    inputs,
                 )
 
     def test_static_input_validation_checks_each_selected_source(self):
-        qkv = QKV(
-            query=torch.empty(2, 1, 4),
-            key=torch.empty(3, 1, 4),
-            value=torch.empty(3, 1, 4),
-        )
+        query = torch.empty(2, 1, 4)
+        key = torch.empty(3, 1, 4)
+        value = torch.empty(3, 1, 4)
         model = SimpleNamespace(
             embedding_dim=4,
             num_heads=1,
@@ -639,20 +654,26 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             "torch.float32.",
             MultiHeadAttentionValidator.validate_static_key_value_inputs,
             model,
-            qkv,
-            None,
-            torch.empty(1, 3, 4, dtype=torch.float64),
-            runtime_layout,
+            attention_inputs(
+                query,
+                key,
+                value,
+                static_value=torch.empty(1, 3, 4, dtype=torch.float64),
+                runtime_layout=runtime_layout,
+            ),
         )
         self.assert_exact_error(
             RuntimeError,
             "static_keys device must match query device, got meta and cpu.",
             MultiHeadAttentionValidator.validate_static_key_value_inputs,
             model,
-            qkv,
-            torch.empty(1, 3, 4, device="meta"),
-            None,
-            runtime_layout,
+            attention_inputs(
+                query,
+                key,
+                value,
+                static_key=torch.empty(1, 3, 4, device="meta"),
+                runtime_layout=runtime_layout,
+            ),
         )
         self.assert_exact_error(
             RuntimeError,
@@ -660,10 +681,14 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             "2 and 4.",
             MultiHeadAttentionValidator.validate_static_key_value_inputs,
             model,
-            qkv,
-            torch.empty(1, 2, 4),
-            torch.empty(1, 4, 4),
-            runtime_layout,
+            attention_inputs(
+                query,
+                key,
+                value,
+                static_key=torch.empty(1, 2, 4),
+                static_value=torch.empty(1, 4, 4),
+                runtime_layout=runtime_layout,
+            ),
         )
 
     def test_static_input_validation_is_read_only(self):
@@ -673,34 +698,37 @@ class TestMultiHeadAttentionValidatorMutationContracts(
             query_key_projection_dim=4,
             value_projection_dim=4,
         )
-        qkv = QKV(
-            query=torch.randn(2, 1, 4),
-            key=torch.randn(3, 1, 4),
-            value=torch.randn(3, 1, 4),
-        )
+        query = torch.randn(2, 1, 4)
+        key = torch.randn(3, 1, 4)
+        value = torch.randn(3, 1, 4)
         static_keys = torch.randn(1, 3, 4)
         static_values = torch.randn(1, 3, 4)
         runtime_layout = AttentionRuntimeLayout(1, 2, 3)
         original_tensors = (
-            qkv.query.clone(),
-            qkv.key.clone(),
-            qkv.value.clone(),
+            query.clone(),
+            key.clone(),
+            value.clone(),
             static_keys.clone(),
             static_values.clone(),
+        )
+        inputs = attention_inputs(
+            query,
+            key,
+            value,
+            static_key=static_keys,
+            static_value=static_values,
+            runtime_layout=runtime_layout,
         )
 
         result = MultiHeadAttentionValidator.validate_static_key_value_inputs(
             model,
-            qkv,
-            static_keys,
-            static_values,
-            runtime_layout,
+            inputs,
         )
 
         self.assertIsNone(result)
         self.assertEqual(runtime_layout.source_sequence_length, 3)
         for actual, expected in zip(
-            (qkv.query, qkv.key, qkv.value, static_keys, static_values),
+            (query, key, value, static_keys, static_values),
             original_tensors,
             strict=True,
         ):
