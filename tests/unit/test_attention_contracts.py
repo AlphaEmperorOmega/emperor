@@ -8,7 +8,10 @@ import torch
 from emperor.attention import AttentionLayerState
 from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._ops.reshaping import ReshaperBase
-from emperor.attention._runtime import QKV, AttentionRuntimeLayout
+from emperor.attention._runtime import (
+    AttentionRuntimeLayout,
+    MultiHeadAttentionInputs,
+)
 from support.attention import build_attention_config
 from support.attention_contract_manifest import ATTENTION_CONTRACT_MANIFEST
 
@@ -134,11 +137,18 @@ class TestAttentionBaseContracts(unittest.TestCase):
     def test_reshaper_base_identity_and_abstract_guard(self):
         reshaper = ReshaperBase(self.cfg)
         tensor = torch.randn(1, 2, 2)
-        qkv = QKV(query=tensor, key=tensor, value=tensor)
+        attention_inputs = MultiHeadAttentionInputs(
+            query=tensor,
+            key=tensor,
+            value=tensor,
+        )
 
-        self.assertIs(reshaper.reshape_before_attention(qkv), qkv)
+        self.assertIs(
+            reshaper.reshape_before_attention(attention_inputs),
+            attention_inputs,
+        )
         with self.assertRaises(NotImplementedError) as caught:
-            reshaper.reshape_qkv_for_attention(qkv)
+            reshaper.reshape_qkv_for_attention(attention_inputs)
         self.assertEqual(
             str(caught.exception),
             "reshape_qkv_for_attention must be implemented by subclass.",
