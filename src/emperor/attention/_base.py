@@ -1,6 +1,7 @@
 """Private base attention layer implementation."""
 
-from typing import TYPE_CHECKING
+from dataclasses import replace
+from typing import TYPE_CHECKING, cast
 
 import torch
 from torch import Tensor
@@ -8,13 +9,14 @@ from torch import Tensor
 from emperor.attention._ops.batching import BatchDimensionManager
 from emperor.attention._ops.bias import KeyValueBias
 from emperor.attention._ops.zero_attention import ZeroAttention
-from emperor.attention._runtime import QKV, AttentionMasks, AttentionRuntimeLayout
+from emperor.attention._runtime import QKV, AttentionMasks, MultiHeadAttentionInputs
 from emperor.attention._validation import MultiHeadAttentionValidator
 from emperor.layers import RowLayout
 from emperor.nn import Module
 
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
+    from emperor.attention._runtime import AttentionRuntimeLayout
     from emperor.config import ModelConfig
 
 
@@ -79,10 +81,30 @@ class MultiHeadAttentionAbstract(Module):
             attention_mask=attention_mask,
         )
         self.VALIDATOR.validate_forward_inputs(self, qkv, masks)
-        qkv, masks, runtime_layout = (
-            self.batch_manager.convert_inputs_to_internal_layout(
-                qkv, masks, static_keys=static_k
-            )
+        attention_inputs = MultiHeadAttentionInputs(
+            query=qkv.query,
+            key=qkv.key,
+            value=qkv.value,
+            key_padding_mask=masks.key_padding_mask,
+            attention_mask=masks.attention_mask,
+            static_key=static_k,
+            static_value=static_v,
+        )
+        attention_inputs = self.batch_manager.convert_inputs_to_internal_layout(
+            attention_inputs
+        )
+        runtime_layout = cast(
+            "AttentionRuntimeLayout",
+            attention_inputs.runtime_layout,
+        )
+        qkv = QKV(
+            query=attention_inputs.query,
+            key=attention_inputs.key,
+            value=attention_inputs.value,
+        )
+        masks = AttentionMasks(
+            key_padding_mask=attention_inputs.key_padding_mask,
+            attention_mask=attention_inputs.attention_mask,
         )
         self.VALIDATOR.validate_runtime_tensors(self, qkv)
         self.VALIDATOR.validate_static_key_value_inputs(
@@ -109,8 +131,12 @@ class MultiHeadAttentionAbstract(Module):
         attention_output, attention_weights = self.processor.compute_attention(
             qkv, merged_attention_mask, runtime_layout
         )
+        attention_inputs = replace(
+            attention_inputs,
+            runtime_layout=runtime_layout,
+        )
         attention_output = self.batch_manager.restore_output_layout(
-            attention_output, runtime_layout
+            attention_output, attention_inputs
         )
         auxiliary_loss = self.projector.get_auxiliary_loss_and_clear()
         return attention_output, attention_weights, auxiliary_loss
@@ -119,11 +145,11 @@ class MultiHeadAttentionAbstract(Module):
         self,
         qkv: QKV,
         masks: AttentionMasks,
-        runtime_layout: AttentionRuntimeLayout,
+        runtime_layout: "AttentionRuntimeLayout",
         *,
         static_k: Tensor | None,
         static_v: Tensor | None,
-    ) -> AttentionRuntimeLayout:
+    ) -> "AttentionRuntimeLayout":
         is_self_attention = qkv.query is qkv.key and qkv.key is qkv.value
         static_key_is_provided = static_k is not None
         static_value_is_provided = static_v is not None

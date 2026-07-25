@@ -92,6 +92,15 @@ def _find_enabled_adaptive_grouping_path(
 
 class AttentionValidatorBase:
     @staticmethod
+    def validate_output_layout_restoration_runtime_layout(
+        runtime_layout: "AttentionRuntimeLayout | None",
+    ) -> None:
+        if runtime_layout is None:
+            raise RuntimeError(
+                "Output layout restoration requires resolved attention runtime layout."
+            )
+
+    @staticmethod
     def validate_standard_relative_position_query_shape(
         query: Tensor,
         num_heads: int,
