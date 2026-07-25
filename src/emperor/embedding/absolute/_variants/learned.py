@@ -1,3 +1,5 @@
+"""Private learned absolute positional embedding implementation."""
+
 from typing import TYPE_CHECKING
 
 import torch
