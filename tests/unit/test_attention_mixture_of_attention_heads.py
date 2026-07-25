@@ -864,8 +864,12 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
 
         with self.assertRaises(ValueError) as caught:
             reshaper.reshape_qkv_for_attention(
-                QKV(query=tensor, key=tensor, value=tensor),
-                static_keys=tensor,
+                MultiHeadAttentionInputs(
+                    query=tensor,
+                    key=tensor,
+                    value=tensor,
+                    static_key=tensor,
+                )
             )
         self.assertEqual(
             str(caught.exception),

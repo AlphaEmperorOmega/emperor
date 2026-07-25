@@ -9,7 +9,6 @@ from emperor.attention._ops.reshaping import ReshaperBase
 
 if TYPE_CHECKING:
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -26,15 +25,11 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
 
     def reshape_qkv_for_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        if hasattr(attention_inputs, "runtime_layout"):
-            static_keys = attention_inputs.static_key
-            static_values = attention_inputs.static_value
-            runtime_layout = attention_inputs.runtime_layout
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
+        static_keys = attention_inputs.static_key
+        static_values = attention_inputs.static_value
+        runtime_layout = attention_inputs.runtime_layout
         if self.use_kv_expert_models_flag and (
             static_keys is not None or static_values is not None
         ):
@@ -124,10 +119,9 @@ class MixtureOfAttentionHeadsReshaper(ReshaperBase):
 
     def reshape_before_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        runtime_layout = getattr(attention_inputs, "runtime_layout", runtime_layout)
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
+        runtime_layout = attention_inputs.runtime_layout
         query = self._reshape_query(attention_inputs.query, runtime_layout)
         key, value = self._reshape_kv(
             attention_inputs.key,

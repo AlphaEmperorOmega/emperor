@@ -10,7 +10,6 @@ from emperor.attention._validation import AttentionValidatorBase
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
     from emperor.attention._runtime import (
-        QKV,
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
@@ -47,21 +46,16 @@ class ReshaperBase:
 
     def reshape_qkv_for_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
         raise NotImplementedError(
             "reshape_qkv_for_attention must be implemented by subclass."
         )
 
     def reshape_before_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        del runtime_layout
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
         return attention_inputs
 
     def _reshape_query(
@@ -104,15 +98,11 @@ class ReshaperBase:
 class AttentionReshaper(ReshaperBase):
     def reshape_qkv_for_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        static_keys: Tensor | None = None,
-        static_values: Tensor | None = None,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        if hasattr(attention_inputs, "runtime_layout"):
-            static_keys = attention_inputs.static_key
-            static_values = attention_inputs.static_value
-            runtime_layout = attention_inputs.runtime_layout
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
+        static_keys = attention_inputs.static_key
+        static_values = attention_inputs.static_value
+        runtime_layout = attention_inputs.runtime_layout
         self.VALIDATOR.validate_static_projection_shapes(
             self, static_keys, static_values, runtime_layout
         )
@@ -159,10 +149,9 @@ class AttentionReshaper(ReshaperBase):
 
     def reshape_before_attention(
         self,
-        attention_inputs: "MultiHeadAttentionInputs | QKV",
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> "MultiHeadAttentionInputs | QKV":
-        runtime_layout = getattr(attention_inputs, "runtime_layout", runtime_layout)
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> "MultiHeadAttentionInputs":
+        runtime_layout = attention_inputs.runtime_layout
         query = self._reshape_query(attention_inputs.query, runtime_layout)
         key, value = self._reshape_kv(
             attention_inputs.key,
