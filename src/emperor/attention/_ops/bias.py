@@ -1,7 +1,7 @@
 """Private attention bias operations."""
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         QKV,
         AttentionMasks,
         AttentionRuntimeLayout,
+        MultiHeadAttentionInputs,
     )
 
 
@@ -50,32 +51,55 @@ class KeyValueBias(Module):
 
     def add_kv_learnable_bias_vectors(
         self,
-        qkv: "QKV",
-        masks: "AttentionMasks",
+        attention_inputs: "MultiHeadAttentionInputs | QKV",
+        masks: "AttentionMasks | None" = None,
         runtime_layout: "AttentionRuntimeLayout | None" = None,
-    ) -> tuple["QKV", "AttentionMasks", "AttentionRuntimeLayout | None"]:
+    ) -> (
+        "MultiHeadAttentionInputs"
+        " | tuple[QKV, AttentionMasks, AttentionRuntimeLayout | None]"
+    ):
+        uses_unified_inputs = hasattr(attention_inputs, "runtime_layout")
+        if uses_unified_inputs:
+            runtime_layout = attention_inputs.runtime_layout
+            key_padding_mask = attention_inputs.key_padding_mask
+            attention_mask = attention_inputs.attention_mask
+        else:
+            masks = cast("AttentionMasks", masks)
+            key_padding_mask = masks.key_padding_mask
+            attention_mask = masks.attention_mask
         if not self.add_key_value_bias_flag:
-            return qkv, masks, runtime_layout
-        updated_qkv = self.__append_bias_vectors(qkv, runtime_layout)
-        updated_masks = self.__pad_masks_for_bias_vector(masks)
+            if uses_unified_inputs:
+                return attention_inputs
+            return attention_inputs, masks, runtime_layout
+        key = self.__append_bias_vector(
+            self.key_bias_vector,
+            attention_inputs.key,
+            runtime_layout,
+        )
+        value = self.__append_bias_vector(
+            self.value_bias_vector,
+            attention_inputs.value,
+            runtime_layout,
+        )
         updated_runtime_layout = self.__extend_runtime_layout(runtime_layout)
+        updated_key_padding_mask = self.__pad_mask(key_padding_mask)
+        updated_attention_mask = self.__pad_mask(attention_mask)
+        if uses_unified_inputs:
+            return replace(
+                attention_inputs,
+                key=key,
+                value=value,
+                key_padding_mask=updated_key_padding_mask,
+                attention_mask=updated_attention_mask,
+                runtime_layout=updated_runtime_layout,
+            )
+        updated_qkv = replace(attention_inputs, key=key, value=value)
+        updated_masks = replace(
+            masks,
+            key_padding_mask=updated_key_padding_mask,
+            attention_mask=updated_attention_mask,
+        )
         return updated_qkv, updated_masks, updated_runtime_layout
-
-    def __append_bias_vectors(
-        self,
-        qkv: "QKV",
-        runtime_layout: "AttentionRuntimeLayout | None",
-    ) -> "QKV":
-        key_with_bias_vector = self.__append_bias_vector(
-            self.key_bias_vector, qkv.key, runtime_layout
-        )
-        value_with_bias_vector = self.__append_bias_vector(
-            self.value_bias_vector, qkv.value, runtime_layout
-        )
-        updated_qkv = replace(
-            qkv, key=key_with_bias_vector, value=value_with_bias_vector
-        )
-        return updated_qkv
 
     def __append_bias_vector(
         self,
@@ -113,16 +137,6 @@ class KeyValueBias(Module):
         if runtime_layout is not None:
             return runtime_layout.batch_size
         return self.batch_size
-
-    def __pad_masks_for_bias_vector(self, masks: "AttentionMasks") -> "AttentionMasks":
-        key_padding_mask = self.__pad_mask(masks.key_padding_mask)
-        attention_mask = self.__pad_mask(masks.attention_mask)
-        updated_masks = replace(
-            masks,
-            key_padding_mask=key_padding_mask,
-            attention_mask=attention_mask,
-        )
-        return updated_masks
 
     @staticmethod
     def __pad_mask(mask: Tensor | None) -> Tensor | None:
