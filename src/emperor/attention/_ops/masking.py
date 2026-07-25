@@ -186,16 +186,40 @@ class Mask:
 
     def merge_padding_and_attention_mask(
         self,
-        key: Tensor,
-        masks: AttentionMasks,
-        runtime_layout: AttentionRuntimeLayout,
-    ) -> Tensor | None:
+        attention_inputs: MultiHeadAttentionInputs | Tensor,
+        masks: AttentionMasks | None = None,
+        runtime_layout: AttentionRuntimeLayout | None = None,
+    ) -> MultiHeadAttentionInputs | Tensor | None:
+        legacy_call = not isinstance(attention_inputs, MultiHeadAttentionInputs)
+        if legacy_call:
+            masks = masks if masks is not None else AttentionMasks()
+            attention_inputs = MultiHeadAttentionInputs(
+                query=attention_inputs,
+                key=attention_inputs,
+                value=attention_inputs,
+                key_padding_mask=masks.key_padding_mask,
+                attention_mask=masks.attention_mask,
+                runtime_layout=runtime_layout,
+            )
+        runtime_layout = attention_inputs.runtime_layout
+        self.VALIDATOR.validate_attention_mask_merging_runtime_layout(runtime_layout)
+        runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
         key_padding_mask = self.__expand_key_padding_mask_across_heads(
-            key, masks.key_padding_mask, runtime_layout
+            attention_inputs.key,
+            attention_inputs.key_padding_mask,
+            runtime_layout,
         )
-        return self.__combine_padding_and_attention_masks(
-            key_padding_mask, masks.attention_mask
+        merged_attention_mask = self.__combine_padding_and_attention_masks(
+            key_padding_mask,
+            attention_inputs.attention_mask,
         )
+        merged_inputs = replace(
+            attention_inputs,
+            merged_attention_mask=merged_attention_mask,
+        )
+        if legacy_call:
+            return merged_inputs.merged_attention_mask
+        return merged_inputs
 
     def __expand_key_padding_mask_across_heads(
         self,
