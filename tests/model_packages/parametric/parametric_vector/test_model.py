@@ -433,7 +433,7 @@ class TestParametricVectorModel(unittest.TestCase):
             "router_residual_connection_option": (
                 None
                 if router_layer_config.residual_config is None
-                else router_layer_config.residual_config.option
+                else type(router_layer_config.residual_config)
             ),
             "router_dropout_probability": router_layer_config.dropout_probability,
             "router_layer_norm_position": router_layer_config.layer_norm_position,
