@@ -14,7 +14,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from models.gpt.linear_adaptive._adaptive_hidden_model_config_factory import (
@@ -127,7 +126,7 @@ class LinearLayerConfigFactory:
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions | None = None,
+        residual_connection_option: type[ResidualConfig] | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -138,7 +137,7 @@ class LinearLayerConfigFactory:
             layer_norm_position=layer_norm_position,
             residual_config=None
             if residual_connection_option is None
-            else ResidualConfig(option=residual_connection_option),
+            else residual_connection_option(),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,
