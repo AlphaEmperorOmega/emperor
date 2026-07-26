@@ -30,7 +30,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
@@ -42,7 +42,7 @@ class ExpertsStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
@@ -56,7 +56,7 @@ class ExpertsSubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     bias_flag: bool
 
@@ -70,7 +70,7 @@ class ExpertsSubmoduleStackSource:
     apply_output_pipeline_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
-    residual_connection_option: ResidualConnectionOptions | None
+    residual_connection_option: type[ResidualConfig] | None
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -84,7 +84,7 @@ def resolve_experts_submodule_stack_options(
     apply_output_pipeline_flag: bool | None = None,
     activation: ActivationOptions | None = None,
     layer_norm_position: LayerNormPositionOptions | None = None,
-    residual_connection_option: ResidualConnectionOptions | None = None,
+    residual_connection_option: type[ResidualConfig] | None = None,
     dropout_probability: float | None = None,
     bias_flag: bool | None = None,
 ) -> ExpertsSubmoduleStackOptions:
@@ -222,7 +222,7 @@ class ExpertsAdaptiveGeneratorStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
 
 
@@ -233,7 +233,7 @@ class AdaptiveGeneratorStackSource:
     layer_norm_position: LayerNormPositionOptions | None
     num_layers: int | None
     activation: ActivationOptions | None
-    residual_connection_option: ResidualConnectionOptions | None
+    residual_connection_option: type[ResidualConfig] | None
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_pipeline_flag: bool | None
@@ -246,7 +246,7 @@ class AdaptiveGeneratorStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
