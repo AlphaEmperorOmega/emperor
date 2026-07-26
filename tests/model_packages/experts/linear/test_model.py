@@ -15,6 +15,7 @@ from emperor.experts import (
 from emperor.halting import HaltingHiddenStateModeOptions
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -22,7 +23,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -789,7 +789,7 @@ class TestLinearModel(unittest.TestCase):
         router_residual_option = (
             None
             if router_stack.layer_config.residual_config is None
-            else router_stack.layer_config.residual_config.option
+            else type(router_stack.layer_config.residual_config)
         )
         self.assertEqual(
             router_residual_option,
@@ -1287,7 +1287,7 @@ class TestLinearModel(unittest.TestCase):
             {
                 "preset": ExperimentPreset.RESIDUAL,
                 "config_role": "expert stack residual",
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
             },
             {
                 "preset": ExperimentPreset.POST_NORM,
@@ -1297,32 +1297,32 @@ class TestLinearModel(unittest.TestCase):
             {
                 "preset": ExperimentPreset.RESIDUAL_POST_NORM,
                 "config_role": "expert stack residual post norm",
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
                 "layer_norm": LayerNormPositionOptions.AFTER,
             },
             {
                 "preset": ExperimentPreset.RESIDUAL_GATING,
                 "config_role": "expert stack residual gating",
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
                 "gate": True,
             },
             {
                 "preset": ExperimentPreset.RESIDUAL_HALTING,
                 "config_role": "expert stack residual halting",
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
                 "halting": True,
             },
             {
                 "preset": ExperimentPreset.RESIDUAL_MEMORY,
                 "config_role": "expert stack residual memory",
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
                 "memory": True,
             },
             {
                 "preset": ExperimentPreset.RECURRENT_RESIDUAL,
                 "config_role": "recurrent expert stack residual",
                 "recurrent": True,
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
             },
             {
                 "preset": ExperimentPreset.RECURRENT_POST_NORM,
@@ -1353,7 +1353,7 @@ class TestLinearModel(unittest.TestCase):
                     actual_residual = (
                         None
                         if layer_cfg.residual_config is None
-                        else layer_cfg.residual_config.option
+                        else type(layer_cfg.residual_config)
                     )
                     self.assertEqual(actual_residual, case["residual"])
                 if "layer_norm" in case:
@@ -1417,7 +1417,7 @@ class TestLinearModel(unittest.TestCase):
                 "preset": ExperimentPreset.RESIDUAL_SHARED_ROUTER,
                 "config_role": "residual shared router",
                 "model_routing": RoutingInitializationMode.SHARED,
-                "residual": ResidualConnectionOptions.RESIDUAL,
+                "residual": AdditiveResidualConfig,
             },
             {
                 "preset": ExperimentPreset.POST_NORM_AFTER_WEIGHT,
@@ -1493,7 +1493,7 @@ class TestLinearModel(unittest.TestCase):
                     actual_residual = (
                         None
                         if layer_cfg.residual_config is None
-                        else layer_cfg.residual_config.option
+                        else type(layer_cfg.residual_config)
                     )
                     self.assertEqual(actual_residual, case["residual"])
                 if "layer_norm" in case:

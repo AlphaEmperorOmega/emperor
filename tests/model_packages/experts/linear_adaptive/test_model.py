@@ -45,6 +45,7 @@ from emperor.experts import (
 from emperor.halting import HaltingHiddenStateModeOptions
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -52,7 +53,7 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -816,7 +817,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         router_residual_option = (
             None
             if router_stack.layer_config.residual_config is None
-            else router_stack.layer_config.residual_config.option
+            else type(router_stack.layer_config.residual_config)
         )
         self.assertEqual(
             router_residual_option,
@@ -1414,7 +1415,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
     def test_residual_and_post_norm_presets_wire_expert_stack_config(self):
         cases = {
             ExperimentPreset.RESIDUAL: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
                 False,
                 False,
@@ -1430,7 +1431,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.RESIDUAL_POST_NORM: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 LayerNormPositionOptions.AFTER,
                 False,
                 False,
@@ -1438,7 +1439,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.RESIDUAL_GATING: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
                 True,
                 False,
@@ -1446,7 +1447,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.RESIDUAL_HALTING: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
                 False,
                 True,
@@ -1454,7 +1455,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.RESIDUAL_MEMORY: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
                 False,
                 False,
@@ -1462,7 +1463,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 False,
             ),
             ExperimentPreset.RECURRENT_RESIDUAL: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
                 False,
                 False,
@@ -1502,7 +1503,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
                 actual_residual = (
                     None
                     if layer_cfg.residual_config is None
-                    else layer_cfg.residual_config.option
+                    else type(layer_cfg.residual_config)
                 )
                 self.assertEqual(actual_residual, expected_residual)
                 self.assertEqual(layer_cfg.layer_norm_position, expected_norm)
@@ -2379,7 +2380,7 @@ class TestLinearAdaptiveExpertModel(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions | None = None,
         num_layers: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions | None = None,
+        residual_connection_option: type[ResidualConfig] | None = None,
         dropout_probability: float | None = None,
         last_layer_bias_option: LastLayerBiasOptions | None = None,
         apply_output_pipeline_flag: bool | None = None,
