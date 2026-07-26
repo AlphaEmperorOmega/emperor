@@ -9,10 +9,9 @@ from emperor.attention import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.transformer import (
     FeedForwardConfig,
@@ -149,7 +148,7 @@ class CoreConfigFactory:
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_config=None
             if (self.stack_options.residual_connection_option) is None
-            else ResidualConfig(option=(self.stack_options.residual_connection_option)),
+            else self.stack_options.residual_connection_option(),
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
             halting_config=None,
@@ -179,7 +178,7 @@ class CoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
             self_attention_config=self.__build_attention_config(),
             cross_attention_config=None,
             feed_forward_config=self.__build_feed_forward_config(),

@@ -14,7 +14,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
@@ -28,7 +28,7 @@ class SubmoduleStackSource:
     apply_output_pipeline_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
-    residual_connection_option: ResidualConnectionOptions | None
+    residual_connection_option: type[ResidualConfig] | None
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -41,7 +41,7 @@ class SubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     bias_flag: bool
 
@@ -111,7 +111,7 @@ class MainLayerStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
