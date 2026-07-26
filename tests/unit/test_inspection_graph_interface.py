@@ -11,8 +11,7 @@ from torch import nn
 
 from emperor.layers import (
     LayerConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
+    WeightedBlendResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from model_runtime.inspection import (
@@ -100,8 +99,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
     def test_layer_residual_config_preserves_flat_inspection_fields(self) -> None:
         configured_module = nn.Module()
         configured_module.cfg = LayerConfig(
-            residual_config=ResidualConfig(
-                option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_config=WeightedBlendResidualConfig(
                 model_config=LinearLayerConfig(bias_flag=True),
             )
         )
@@ -114,7 +112,7 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
         self.assertNotIn("residual_config", serialized_fields)
         self.assertEqual(
             serialized_fields["residual_connection_option"],
-            "WEIGHTED_BLEND",
+            "WeightedBlendResidualConfig",
         )
         self.assertEqual(
             serialized_fields["residual_model_config"],
