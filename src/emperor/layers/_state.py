@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from torch import Tensor
 
     from emperor.halting import HaltingStateBase
-    from emperor.layers._composition.attention_residual import AttentionResidualState
+    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._row_layout import RowLayout
 
 
@@ -16,7 +16,7 @@ class LayerState:
     hidden: Tensor
     loss: Tensor | None = None
     halting_state: HaltingStateBase | None = None
-    residual_state: AttentionResidualState | None = field(
+    residual_state: ResidualState | None = field(
         default=None,
         kw_only=True,
         repr=False,

@@ -213,6 +213,7 @@ print(json.dumps({
             {
                 "all": [
                     "ActivationOptions",
+                    "AdditiveResidualConfig",
                     "AttentionResidualConfig",
                     "GateConfig",
                     "LastLayerBiasOptions",
@@ -224,6 +225,8 @@ print(json.dumps({
                     "RecurrentLayerConfig",
                     "ResidualConfig",
                     "ResidualConnectionOptions",
+                    "WeightedBlendResidualConfig",
+                    "WeightedResidualConfig",
                     "LayerState",
                     "ResidualConnection",
                     "Layer",

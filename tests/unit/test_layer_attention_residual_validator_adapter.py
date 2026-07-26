@@ -2,18 +2,20 @@ import unittest
 
 import torch
 
-from emperor.layers._composition.attention_residual import (
+from emperor.layers._composition.residual.config import AttentionResidualConfig
+from emperor.layers._composition.residual.validation import (
+    ResidualConnectionValidator,
+)
+from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
     AttentionResidualState,
 )
-from emperor.layers._config import AttentionResidualConfig
-from emperor.layers._validation import AttentionResidualValidator
 
 
 class TestAttentionResidualValidatorAdapter(unittest.TestCase):
     def test_component_and_state_expose_validator_adapter(self):
-        self.assertIs(AttentionResidual.VALIDATOR, AttentionResidualValidator)
-        self.assertIs(AttentionResidualState.VALIDATOR, AttentionResidualValidator)
+        self.assertIs(AttentionResidual.VALIDATOR, ResidualConnectionValidator)
+        self.assertIs(AttentionResidualState.VALIDATOR, ResidualConnectionValidator)
 
     def test_successful_validations_are_check_only(self):
         residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
@@ -29,8 +31,8 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
                 name="rms_norm_epsilon",
             ),
             validator.validate_source(initial_source, residual_dim=2),
-            validator.validate_state(state, block_size=1),
-            validator.validate_forward_inputs(
+            validator.validate_attention_state(state, block_size=1),
+            validator.validate_attention_forward_inputs(
                 current,
                 state,
                 residual_dim=2,
@@ -41,7 +43,7 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
         self.assertTupleEqual(results, (None, None, None, None, None))
 
     def test_construction_dispatches_through_substituted_validator(self):
-        class RejectingValidator(AttentionResidualValidator):
+        class RejectingValidator(ResidualConnectionValidator):
             @staticmethod
             def validate_positive_integer(value, *, name):
                 raise RuntimeError("substituted construction validator was called")
@@ -56,7 +58,7 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
 
     def test_state_construction_dispatches_through_substituted_validator(self):
-        class RejectingValidator(AttentionResidualValidator):
+        class RejectingValidator(ResidualConnectionValidator):
             @staticmethod
             def validate_positive_integer(value, *, name):
                 raise RuntimeError("substituted state validator was called")
@@ -71,9 +73,9 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             RejectingState(torch.ones(1, 2), block_size=1)
 
     def test_forward_dispatches_through_substituted_validator_before_mutation(self):
-        class RejectingValidator(AttentionResidualValidator):
+        class RejectingValidator(ResidualConnectionValidator):
             @classmethod
-            def validate_forward_inputs(
+            def validate_attention_forward_inputs(
                 cls,
                 current,
                 state,
@@ -93,7 +95,11 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             RuntimeError,
             "substituted forward validator was called",
         ):
-            residual(torch.full((1, 2), 2.0), state)
+            residual(
+                torch.full((1, 2), 2.0),
+                torch.full((1, 2), 2.0),
+                residual_state=state,
+            )
 
         self.assertEqual(len(state.sources), 1)
 

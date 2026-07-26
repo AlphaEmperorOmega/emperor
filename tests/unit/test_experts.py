@@ -27,7 +27,6 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import (
@@ -57,7 +56,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions | None = None,
+        stack_residual_connection_option: type[ResidualConfig] | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> RouterConfig:
         hidden_dim = stack_width if stack_width > 0 else max(input_dim, num_experts)
@@ -78,7 +77,7 @@ class MixtureOfExpertsPresetMixin:
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     residual_config=None
                     if stack_residual_connection_option is None
-                    else ResidualConfig(option=stack_residual_connection_option),
+                    else stack_residual_connection_option(),
                     dropout_probability=stack_dropout_probability,
                     gate_config=None,
                     halting_config=None,
@@ -126,7 +125,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions | None = None,
+        stack_residual_connection_option: type[ResidualConfig] | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> LayerStackConfig:
         hidden_dim = stack_width if stack_width > 0 else max(input_dim, output_dim)
@@ -142,7 +141,7 @@ class MixtureOfExpertsPresetMixin:
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 residual_config=None
                 if stack_residual_connection_option is None
-                else ResidualConfig(option=stack_residual_connection_option),
+                else stack_residual_connection_option(),
                 dropout_probability=stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,
@@ -177,7 +176,7 @@ class MixtureOfExpertsPresetMixin:
         stack_num_layers: int = 2,
         stack_width: int = 0,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions | None = None,
+        stack_residual_connection_option: type[ResidualConfig] | None = None,
         stack_dropout_probability: float = 0.0,
     ) -> MixtureOfExpertsConfig:
         return MixtureOfExpertsConfig(
@@ -233,7 +232,7 @@ class MixtureOfExpertsPresetMixin:
         output_dim: int = 6,
         experts_stack_num_layers: int = 2,
         experts_stack_activation: ActivationOptions = ActivationOptions.RELU,
-        experts_stack_residual_connection_option: ResidualConnectionOptions
+        experts_stack_residual_connection_option: type[ResidualConfig]
         | None = None,
         experts_stack_dropout_probability: float = 0.0,
         **kwargs: object,
@@ -251,7 +250,7 @@ class MixtureOfExpertsPresetMixin:
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 residual_config=None
                 if experts_stack_residual_connection_option is None
-                else ResidualConfig(option=experts_stack_residual_connection_option),
+                else experts_stack_residual_connection_option(),
                 dropout_probability=experts_stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,

@@ -17,7 +17,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -124,7 +123,7 @@ def make_layer_config(
     input_dim: int = 4,
     output_dim: int = 4,
     activation: ActivationOptions = ActivationOptions.DISABLED,
-    residual_connection_option: ResidualConnectionOptions | None = None,
+    residual_connection_option: type[ResidualConfig] | None = None,
     dropout_probability: float = 0.0,
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
     gate_config: LayerStackConfig | None = None,
@@ -149,7 +148,7 @@ def make_layer_config(
         activation=activation,
         residual_config=None
         if residual_connection_option is None
-        else ResidualConfig(option=residual_connection_option),
+        else residual_connection_option(),
         dropout_probability=dropout_probability,
         layer_norm_position=layer_norm_position,
         gate_config=gate_config,
@@ -1446,7 +1445,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         input_dim: int = 4,
         output_dim: int = 4,
         activation: ActivationOptions = ActivationOptions.DISABLED,
-        residual_connection_option: ResidualConnectionOptions | None = None,
+        residual_connection_option: type[ResidualConfig] | None = None,
         dropout_probability: float = 0.0,
         layer_norm_position: LayerNormPositionOptions = (
             LayerNormPositionOptions.DISABLED

@@ -10,7 +10,7 @@ from emperor.layers._composition.pairwise_residual import (
     WeightedResidual,
     _PairwiseResidualParameters,
 )
-from emperor.layers._config import ResidualConfig
+from emperor.layers._composition.residual.config import ResidualConfig
 from emperor.layers._options import ResidualConnectionOptions
 from emperor.layers._support import RowLayoutAwareModule
 from emperor.layers._validation import ResidualConnectionValidator

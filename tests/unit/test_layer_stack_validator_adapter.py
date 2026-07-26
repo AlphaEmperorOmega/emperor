@@ -8,8 +8,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.layers._validation import LayerStackValidator
 from emperor.linears import LinearLayerConfig
@@ -35,12 +33,9 @@ def make_config(**overrides) -> LayerStackConfig:
 def attention_residual_layer_config() -> LayerConfig:
     return LayerConfig(
         activation=ActivationOptions.DISABLED,
-        residual_config=ResidualConfig(
-            option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
-            attention_config=AttentionResidualConfig(
-                block_size=1,
-                rms_norm_epsilon=1e-6,
-            ),
+        residual_config=AttentionResidualConfig(
+            block_size=1,
+            rms_norm_epsilon=1e-6,
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,

@@ -10,6 +10,7 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
@@ -21,7 +22,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 
@@ -47,12 +47,9 @@ class TestLayerStack(unittest.TestCase):
                 shared_memory_config=None,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
-                    residual_config=ResidualConfig(
-                        option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
-                        attention_config=AttentionResidualConfig(
-                            block_size=block_size,
-                            rms_norm_epsilon=1e-6,
-                        ),
+                    residual_config=AttentionResidualConfig(
+                        block_size=block_size,
+                        rms_norm_epsilon=1e-6,
                     ),
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -121,12 +118,12 @@ class TestLayerStack(unittest.TestCase):
             ):
                 layer.model.weight_params.copy_(matrix)
                 layer.model.bias_params.copy_(bias)
-                attention_residual = layer.residual_connection.attention_residual
+                attention_residual = layer.residual_connection
                 attention_residual.query.copy_(query)
                 attention_residual.key_norm.weight.copy_(norm_weight)
 
         def mix_sources(sources, layer):
-            attention_residual = layer.residual_connection.attention_residual
+            attention_residual = layer.residual_connection
             values = torch.stack(sources, dim=0)
             keys = torch.nn.functional.rms_norm(
                 values,
@@ -198,7 +195,7 @@ class TestLayerStack(unittest.TestCase):
             output_dim=dim,
             stack_num_layers=2,
             stack_residual_connection_option=(
-                ResidualConnectionOptions.ATTENTION_RESIDUAL
+                AttentionResidualConfig
             ),
             stack_dropout_probability=0.0,
             gate_enabled=False,
@@ -207,7 +204,7 @@ class TestLayerStack(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "halting.*ATTENTION_RESIDUAL|ATTENTION_RESIDUAL.*halting",
+            "halting.*AttentionResidualConfig|AttentionResidualConfig.*halting",
         ):
             LayerStack(config)
 
@@ -262,7 +259,7 @@ class TestLayerStack(unittest.TestCase):
         stack = self.attention_residual_stack((2.0, 3.0, 4.0))
 
         queries = tuple(
-            layer.residual_connection.attention_residual.query for layer in stack
+            layer.residual_connection.query for layer in stack
         )
 
         self.assertEqual(len({id(query) for query in queries}), len(queries))
@@ -289,7 +286,7 @@ class TestLayerStack(unittest.TestCase):
             ):
                 layer.model.weight_params.copy_(matrix)
                 layer.model.bias_params.copy_(bias)
-                layer.residual_connection.attention_residual.query.copy_(
+                layer.residual_connection.query.copy_(
                     torch.tensor([0.35 + 0.1 * index, -0.2])
                 )
         initial = torch.tensor(
@@ -304,7 +301,7 @@ class TestLayerStack(unittest.TestCase):
         self.assertTrue(torch.isfinite(initial.grad).all())
         self.assertGreater(torch.count_nonzero(initial.grad).item(), 0)
         for layer in stack:
-            attention_residual = layer.residual_connection.attention_residual
+            attention_residual = layer.residual_connection
             parameters = (
                 layer.model.weight_params,
                 layer.model.bias_params,
@@ -322,7 +319,7 @@ class TestLayerStack(unittest.TestCase):
         stack = self.attention_residual_stack(scales, block_size=2)
         with torch.no_grad():
             for index, layer in enumerate(stack):
-                layer.residual_connection.attention_residual.query.copy_(
+                layer.residual_connection.query.copy_(
                     torch.tensor([0.2 + 0.1 * index, -0.15])
                 )
         initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
@@ -338,10 +335,8 @@ class TestLayerStack(unittest.TestCase):
             parameter_name
             for layer_index in range(len(stack))
             for parameter_name in (
-                f"layers.{layer_index}.residual_connection.attention_residual.query",
-                "layers."
-                f"{layer_index}.residual_connection.attention_residual."
-                "key_norm.weight",
+                f"layers.{layer_index}.residual_connection.query",
+                f"layers.{layer_index}.residual_connection.key_norm.weight",
             )
         )
         restored = self.attention_residual_stack(scales, block_size=2)
@@ -366,7 +361,7 @@ class TestLayerStack(unittest.TestCase):
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions | None = None,
+        stack_residual_connection_option: type[ResidualConfig] | None = None,
         stack_dropout_probability: float = 0.2,
         shared_gate_config: "LayerStackConfig | GateConfig | None" = None,
         shared_halting_config: "StickBreakingConfig | None" = None,
@@ -388,7 +383,7 @@ class TestLayerStack(unittest.TestCase):
                     layer_norm_position=layer_norm_position,
                     residual_config=None
                     if stack_residual_connection_option is None
-                    else ResidualConfig(option=stack_residual_connection_option),
+                    else stack_residual_connection_option(),
                     dropout_probability=stack_dropout_probability,
                     halting_config=None,
                     gate_config=None,
@@ -419,7 +414,7 @@ class TestLayerStack(unittest.TestCase):
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
                         residual_config=None
                         if stack_residual_connection_option is None
-                        else ResidualConfig(option=stack_residual_connection_option),
+                        else stack_residual_connection_option(),
                         dropout_probability=stack_dropout_probability,
                         halting_config=None,
                         gate_config=None,
@@ -444,7 +439,7 @@ class TestLayerStack(unittest.TestCase):
                 layer_norm_position=layer_norm_position,
                 residual_config=None
                 if stack_residual_connection_option is None
-                else ResidualConfig(option=stack_residual_connection_option),
+                else stack_residual_connection_option(),
                 dropout_probability=stack_dropout_probability,
                 gate_config=self.layer_gate_config(gate_config, gate_option),
                 halting_config=halting_config,
@@ -1593,7 +1588,7 @@ class TestLayerStack(unittest.TestCase):
         output_dims = [6, 8]
         activations = [ActivationOptions.RELU, ActivationOptions.DISABLED]
         residual_options = [
-            ResidualConnectionOptions.RESIDUAL,
+            AdditiveResidualConfig,
             None,
         ]
         dropout_probabilities = [0.0, 0.2]

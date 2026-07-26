@@ -5,10 +5,9 @@ import torch
 from emperor.experts import RoutingInitializationMode
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     LayerNormPositionOptions,
     LayerState,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -74,9 +73,7 @@ class ParametricHandlerMutationContractTests(unittest.TestCase):
             output_dim=2,
             layer_model_config=_parametric_config(),
         )
-        handler_config.residual_config = ResidualConfig(
-            option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
-        )
+        handler_config.residual_config = AttentionResidualConfig()
         handler = ParametricLayerHandler(handler_config)
         identity = torch.eye(2)
         with torch.no_grad():

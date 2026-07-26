@@ -10,6 +10,7 @@ from emperor.attention import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     Layer,
     LayerConfig,
@@ -18,8 +19,6 @@ from emperor.layers import (
     LayerStackConfig,
     RecurrentLayer,
     RecurrentLayerConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import (
@@ -146,10 +145,7 @@ def encoder_stack(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.BEFORE,
         dropout_probability=0.0,
-        residual_config=ResidualConfig(
-            option=ResidualConnectionOptions.RESIDUAL,
-            model_config=None,
-        ),
+        residual_config=AdditiveResidualConfig(),
         attention_config=self_attention(embedding_dim, causal=False),
         feed_forward_config=feed_forward(embedding_dim),
     )
@@ -188,10 +184,7 @@ def decoder_stack(
         embedding_dim=embedding_dim,
         layer_norm_position=LayerNormPositionOptions.BEFORE,
         dropout_probability=0.0,
-        residual_config=ResidualConfig(
-            option=ResidualConnectionOptions.RESIDUAL,
-            model_config=None,
-        ),
+        residual_config=AdditiveResidualConfig(),
         self_attention_config=self_attention(embedding_dim, causal=True),
         cross_attention_config=(
             cross_attention(embedding_dim) if include_cross_attention else None

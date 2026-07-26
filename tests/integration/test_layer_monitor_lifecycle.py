@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from emperor.config import ConfigBase, optional_field
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -28,8 +29,6 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     RecurrentLayerMonitorCallback,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
@@ -83,7 +82,7 @@ def controlled_layer() -> Layer:
             input_dim=2,
             output_dim=2,
             activation=ActivationOptions.TANH,
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
             dropout_probability=1.0,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             gate_config=GateConfig(

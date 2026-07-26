@@ -6,6 +6,7 @@ import torch
 
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -19,7 +20,6 @@ from emperor.layers import (
     RecurrentLayerConfig,
     RecurrentLayerMonitorCallback,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.layers._monitoring.diagnostics import (
     _LayerActivationTrackingContext,
@@ -53,7 +53,7 @@ def _layer_config(
     dim: int,
     *,
     activation: ActivationOptions = ActivationOptions.DISABLED,
-    residual: ResidualConnectionOptions | None = None,
+    residual: type[ResidualConfig] | None = None,
     dropout: float = 0.0,
     norm: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED,
     gate_config: GateConfig | None = None,
@@ -62,7 +62,7 @@ def _layer_config(
         input_dim=dim,
         output_dim=dim,
         activation=activation,
-        residual_config=None if residual is None else ResidualConfig(option=residual),
+        residual_config=None if residual is None else residual(),
         dropout_probability=dropout,
         layer_norm_position=norm,
         gate_config=gate_config,
@@ -327,7 +327,7 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
             _layer_config(
                 2,
                 activation=ActivationOptions.TANH,
-                residual=ResidualConnectionOptions.RESIDUAL,
+                residual=AdditiveResidualConfig,
                 dropout=0.25,
                 norm=LayerNormPositionOptions.BEFORE,
             )

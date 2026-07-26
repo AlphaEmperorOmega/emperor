@@ -26,6 +26,7 @@ from emperor.augmentations.adaptive_parameters._linear_adapter import (
 from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -35,7 +36,6 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import (
     LinearLayer,
@@ -808,8 +808,8 @@ class TestLinearLayerStack(unittest.TestCase):
         ),
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.RESIDUAL
+        stack_residual_connection_option: type[ResidualConfig] = (
+            AdditiveResidualConfig
         ),
         stack_dropout_probability: float = 0.2,
         shared_halting_config: "StickBreakingConfig | None" = None,
@@ -830,7 +830,7 @@ class TestLinearLayerStack(unittest.TestCase):
                         layer_norm_position=layer_norm_position,
                         residual_config=None
                         if stack_residual_connection_option is None
-                        else ResidualConfig(option=stack_residual_connection_option),
+                        else stack_residual_connection_option(),
                         dropout_probability=stack_dropout_probability,
                         halting_config=None,
                         gate_config=None,
@@ -865,7 +865,7 @@ class TestLinearLayerStack(unittest.TestCase):
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
                         residual_config=None
                         if stack_residual_connection_option is None
-                        else ResidualConfig(option=stack_residual_connection_option),
+                        else stack_residual_connection_option(),
                         dropout_probability=stack_dropout_probability,
                         halting_config=None,
                         gate_config=None,
@@ -889,7 +889,7 @@ class TestLinearLayerStack(unittest.TestCase):
                 layer_norm_position=layer_norm_position,
                 residual_config=None
                 if stack_residual_connection_option is None
-                else ResidualConfig(option=stack_residual_connection_option),
+                else stack_residual_connection_option(),
                 dropout_probability=stack_dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,
@@ -1423,7 +1423,7 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
         bias_flag: bool = True,
         stack_num_layers: int = 2,
         stack_activation: ActivationOptions = ActivationOptions.RELU,
-        stack_residual_connection_option: ResidualConnectionOptions | None = None,
+        stack_residual_connection_option: type[ResidualConfig] | None = None,
         stack_dropout_probability: float = 0.0,
         layer_norm_position: LayerNormPositionOptions = (
             LayerNormPositionOptions.DISABLED
@@ -1446,7 +1446,7 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                 layer_norm_position=layer_norm_position,
                 residual_config=None
                 if stack_residual_connection_option is None
-                else ResidualConfig(option=stack_residual_connection_option),
+                else stack_residual_connection_option(),
                 dropout_probability=stack_dropout_probability,
                 gate_config=None,
                 halting_config=None,

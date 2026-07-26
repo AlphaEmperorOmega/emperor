@@ -4,6 +4,8 @@ import torch
 
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -15,7 +17,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from support.monitor import (
@@ -113,8 +114,8 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         with_gate: bool = True,
         gate_option: LayerGateOptions | None = None,
         activation: ActivationOptions = ActivationOptions.TANH,
-        residual_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.RESIDUAL
+        residual_option: type[ResidualConfig] = (
+            AdditiveResidualConfig
         ),
     ) -> Layer:
         return Layer(
@@ -122,9 +123,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 input_dim=4,
                 output_dim=4,
                 activation=activation,
-                residual_config=ResidualConfig(
-                    option=residual_option,
-                ),
+                residual_config=residual_option(),
                 dropout_probability=0.25,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
                 gate_config=(
@@ -268,7 +267,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
 
     def test_attention_residual_skips_pairwise_metrics_and_cleans_up_safely(self):
         layer = self.layer(
-            residual_option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
+            residual_option=AttentionResidualConfig,
         )
         state = self.state()
         residual_state = layer.residual_connection.new_state(state.hidden)

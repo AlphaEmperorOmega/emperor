@@ -22,6 +22,8 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -34,7 +36,8 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._recurrent import _RecurrentState
@@ -610,7 +613,7 @@ class TestRecurrentLayer(unittest.TestCase):
         gate_config: LayerStackConfig | GateConfig | None = None,
         gate_option: LayerGateOptions | None = None,
         gate_activation: ActivationOptions | None = ActivationOptions.SIGMOID,
-        residual_connection_option: ResidualConnectionOptions | None = None,
+        residual_connection_option: type[ResidualConfig] | None = None,
         halting_config: StickBreakingConfig | None = None,
         memory_config: DynamicMemoryConfig | None = None,
         recurrent_layer_norm_position: LayerNormPositionOptions = (
@@ -631,10 +634,16 @@ class TestRecurrentLayer(unittest.TestCase):
                 gate_option,
                 gate_activation,
             ),
-            residual_config=None
-            if residual_connection_option is None
-            else ResidualConfig(
-                option=residual_connection_option, model_config=residual_model_config
+            residual_config=(
+                None
+                if residual_connection_option is None
+                else residual_connection_option(
+                    **(
+                        {}
+                        if residual_model_config is None
+                        else {"model_config": residual_model_config}
+                    )
+                )
             ),
             halting_config=halting_config,
             memory_config=memory_config,
@@ -699,7 +708,7 @@ class TestRecurrentLayer(unittest.TestCase):
             max_steps=4,
             block_config=self.layer_block_config(increment=1.5),
             gate_config=self.gate_config(value=0.25),
-            residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_connection_option=WeightedBlendResidualConfig,
             halting_config=self.halting_config(dim=dim, gate_threshold=10.0),
         )
 
@@ -719,8 +728,8 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.recurrent_gate.gate_dim, cfg.output_dim)
         self.assertEqual(model.recurrent_gate.option, LayerGateOptions.MULTIPLIER)
         self.assertEqual(
-            model.residual_config.option,
-            ResidualConnectionOptions.WEIGHTED_BLEND,
+            type(model.residual_config),
+            WeightedBlendResidualConfig,
         )
         self.assertEqual(model.halting_config, cfg.halting_config)
         self.assertIsInstance(model.block_model, Layer)
@@ -873,6 +882,9 @@ class TestRecurrentLayer(unittest.TestCase):
                 self,
                 current: torch.Tensor,
                 previous: torch.Tensor,
+                *,
+                residual_state=None,
+                row_layout=None,
             ) -> torch.Tensor:
                 self.received_current = current.detach().clone()
                 self.received_previous = previous.detach().clone()
@@ -953,7 +965,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 gate_config=self.trainable_gate_config(dim),
                 gate_option=LayerGateOptions.MULTIPLIER,
                 gate_activation=None,
-                residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_connection_option=WeightedBlendResidualConfig,
             )
         )
         gate_layer = model.recurrent_gate.model[0]
@@ -1077,7 +1089,7 @@ class TestRecurrentLayer(unittest.TestCase):
             max_steps=5,
             block_config=override_block,
             gate_config=self.recurrent_gate_config(override_gate, None),
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
         )
 
         model = RecurrentLayer(cfg, overrides)
@@ -1088,8 +1100,8 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.block_config, override_block)
         self.assertEqual(model.gate_config.model_config, override_gate)
         self.assertEqual(
-            model.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(model.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(model.halting_config, cfg.halting_config)
         self.assertEqual(model.block_model.model.increment, 3.0)
@@ -1239,16 +1251,16 @@ class TestRecurrentLayer(unittest.TestCase):
                 TypeError,
             ),
             (
-                "invalid_residual_connection_option",
+                "abstract_residual_config",
                 RecurrentLayerConfig(
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
-                    residual_config=ResidualConfig(option=object()),
+                    residual_config=ResidualConfig(),
                 ),
-                TypeError,
+                ValueError,
             ),
             (
                 "nested_gate_config",
@@ -1607,12 +1619,12 @@ class TestRecurrentLayer(unittest.TestCase):
 
     def test_recurrent_rejects_attention_residual_without_a_history_bridge(self):
         config = self.recurrent_config(
-            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL),
+            residual_connection_option=(AttentionResidualConfig),
         )
 
         with self.assertRaisesRegex(
             ValueError,
-            "ATTENTION_RESIDUAL is not supported for RecurrentLayerConfig.*"
+            "AttentionResidualConfig is not supported for RecurrentLayerConfig.*"
             "distinct learned query",
         ):
             RecurrentLayer(config)
@@ -1629,27 +1641,27 @@ class TestRecurrentLayer(unittest.TestCase):
                 torch.full_like(hidden, 3.0),
             ),
             (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 None,
                 torch.full_like(hidden, 4.0),
             ),
             (
-                ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                WeightedResidualConfig,
                 None,
                 torch.full_like(hidden, 1.0),
             ),
             (
-                ResidualConnectionOptions.WEIGHTED_BLEND,
+                WeightedBlendResidualConfig,
                 None,
                 torch.full_like(hidden, 2.8),
             ),
             (
-                ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+                WeightedResidualConfig,
                 data_dependent_model_config,
                 torch.full_like(hidden, 1.0),
             ),
             (
-                ResidualConnectionOptions.WEIGHTED_BLEND,
+                WeightedBlendResidualConfig,
                 data_dependent_model_config,
                 torch.full_like(hidden, 2.8),
             ),
@@ -1685,7 +1697,7 @@ class TestRecurrentLayer(unittest.TestCase):
         model = RecurrentLayer(
             self.recurrent_config(
                 dim=dim,
-                residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+                residual_connection_option=WeightedBlendResidualConfig,
                 residual_model_config=residual_model_config,
             )
         )
@@ -1822,7 +1834,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 gate_config=self.gate_config(value=0.0),
                 gate_option=LayerGateOptions.ADDITION,
                 gate_activation=None,
-                residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+                residual_connection_option=AdditiveResidualConfig,
                 halting_config=self.halting_config(
                     dim=dim,
                     gate_threshold=3.0,
