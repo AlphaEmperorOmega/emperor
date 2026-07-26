@@ -136,6 +136,55 @@ class EmperorSourceLayoutTests(unittest.TestCase):
 
         self.assertEqual(retired_references, [])
 
+    def test_residual_composition_has_no_retired_dispatch_or_config_shape(self):
+        retired_names = {
+            "AttentionResidualOption",
+            "PAIRWISE_RESIDUAL_TYPES",
+            "RESIDUAL_OPTION_TYPES",
+            "ResidualConnection",
+            "ResidualConnectionOptions",
+            "_PairwiseResidualParameters",
+        }
+        retired_residual_config_fields = {
+            "attention_config",
+            "model_config",
+            "option",
+        }
+        violations = []
+
+        for path, syntax_tree in parsed_source_files():
+            relative_path = path.relative_to(REPOSITORY_ROOT).as_posix()
+            for node in ast.walk(syntax_tree):
+                if isinstance(node, ast.Name) and node.id in retired_names:
+                    violations.append((relative_path, node.lineno, node.id))
+                    continue
+                if isinstance(node, ast.Attribute):
+                    if node.attr in retired_names or node.attr == "attention_residual":
+                        violations.append((relative_path, node.lineno, node.attr))
+                    continue
+                if not isinstance(node, ast.Call):
+                    continue
+                function_name = (
+                    node.func.id
+                    if isinstance(node.func, ast.Name)
+                    else node.func.attr
+                    if isinstance(node.func, ast.Attribute)
+                    else None
+                )
+                if function_name != "ResidualConfig":
+                    continue
+                for keyword in node.keywords:
+                    if keyword.arg in retired_residual_config_fields:
+                        violations.append(
+                            (
+                                relative_path,
+                                node.lineno,
+                                f"ResidualConfig({keyword.arg}=...)",
+                            )
+                        )
+
+        self.assertEqual(violations, [])
+
 
 if __name__ == "__main__":
     unittest.main()

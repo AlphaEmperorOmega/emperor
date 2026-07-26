@@ -7,12 +7,11 @@ from emperor.layers._options import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig
-    from emperor.linears import LinearLayerConfig
+    from emperor.layers._composition.residual.config import ResidualConfig
     from emperor.memory import DynamicMemoryConfig
 
 
@@ -41,59 +40,6 @@ class GateConfig(ConfigBase):
 
 
 @dataclass
-class AttentionResidualConfig(ConfigBase):
-    residual_dim: int | None = optional_field(
-        "Residual feature dimension. ResidualConnection owners override this value "
-        "from ResidualConfig.residual_dim."
-    )
-    block_size: int | None = optional_field(
-        "Number of consecutive raw transformation outputs combined into one depth "
-        "source. Use 1 for Full Attention Residuals and values greater than 1 for "
-        "Block Attention Residuals. Defaults to 1."
-    )
-    rms_norm_epsilon: float | None = optional_field(
-        "Numerical stability epsilon used to RMS-normalize routing keys. Defaults "
-        "to 1e-6."
-    )
-
-    def _registry_owner(self) -> type:
-        from emperor.layers._composition.attention_residual import AttentionResidual
-
-        return AttentionResidual
-
-
-@dataclass
-class ResidualConfig(ConfigBase):
-    residual_dim: int | None = optional_field(
-        "Residual feature dimension. Layer owners override this value from their "
-        "output dimension. Required for direct construction when model_config is "
-        "provided or option is ATTENTION_RESIDUAL."
-    )
-    option: ResidualConnectionOptions | None = optional_field(
-        "Residual composition mode. Providing ResidualConfig enables the residual "
-        "connection; use residual_config=None to disable it."
-    )
-    model_config: "LinearLayerConfig | None" = optional_field(
-        "Optional data-dependent coefficient model for weighted residual modes. "
-        "When provided, the model receives the concatenated current and previous "
-        "values and produces one raw mixing coefficient per feature. When omitted, "
-        "weighted modes use a learned scalar nn.Parameter. RESIDUAL performs direct "
-        "addition and ATTENTION_RESIDUAL performs depth mixing; neither accepts a "
-        "coefficient model."
-    )
-    attention_config: "AttentionResidualConfig | None" = optional_field(
-        "Optional depth-mixing config for ATTENTION_RESIDUAL. When omitted, Full "
-        "Attention Residuals use block_size=1 and rms_norm_epsilon=1e-6. Other "
-        "residual modes do not accept this config."
-    )
-
-    def _registry_owner(self) -> type:
-        from emperor.layers._composition.residual import ResidualConnection
-
-        return ResidualConnection
-
-
-@dataclass
 class LayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
@@ -101,8 +47,8 @@ class LayerConfig(ConfigBase):
         "Activation applied to the layer output."
     )
     residual_config: "ResidualConfig | None" = optional_field(
-        "Optional residual connection config. Set to None to disable. Enabled options "
-        "require input_dim == output_dim."
+        "Optional concrete residual connection config. Set to None to disable. "
+        "Residual connections require input_dim == output_dim."
     )
     dropout_probability: float | None = optional_field(
         "Dropout probability. Use 0.0 to disable."
