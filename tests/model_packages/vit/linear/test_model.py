@@ -20,11 +20,11 @@ from emperor.experiments.classifier import ClassifierExperiment
 from emperor.halting import SoftHaltingConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import (
@@ -182,7 +182,7 @@ class TestVitLinearModel(unittest.TestCase):
     def test_encoder_stack_fields_build_through_runtime_defaults(self):
         cfg = self._build_config(
             **self._small_image_overrides(batch_size=2),
-            stack_residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            stack_residual_connection_option=AdditiveResidualConfig,
             stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             stack_apply_output_pipeline_flag=False,
             stack_bias_flag=False,
@@ -190,8 +190,8 @@ class TestVitLinearModel(unittest.TestCase):
         encoder_cfg = self._encoder_stack_config(cfg)
 
         self.assertEqual(
-            encoder_cfg.layer_config.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(encoder_cfg.layer_config.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(
             encoder_cfg.last_layer_bias_option,
@@ -304,8 +304,8 @@ class TestVitLinearModel(unittest.TestCase):
             config.STACK_DROPOUT_PROBABILITY,
         )
         self.assertEqual(
-            inner_layer_cfg.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(inner_layer_cfg.residual_config),
+            AdditiveResidualConfig,
         )
         attention_projection_layer_cfg = (
             inner_layer_cfg.attention_config.projection_model_config.layer_config
@@ -373,7 +373,7 @@ class TestVitLinearModel(unittest.TestCase):
             **self._small_image_overrides(batch_size=2),
             attn_stack_hidden_dim=29,
             attn_stack_activation=ActivationOptions.SILU,
-            attn_stack_residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+            attn_stack_residual_connection_option=(AdditiveResidualConfig),
             attn_stack_dropout_probability=0.2,
             attn_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             attn_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
@@ -387,8 +387,8 @@ class TestVitLinearModel(unittest.TestCase):
             ActivationOptions.SILU,
         )
         self.assertEqual(
-            projection_stack_cfg.layer_config.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(projection_stack_cfg.layer_config.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(projection_stack_cfg.layer_config.dropout_probability, 0.2)
         self.assertEqual(
@@ -513,7 +513,7 @@ class TestVitLinearModel(unittest.TestCase):
             **self._small_image_overrides(batch_size=2),
             ff_stack_hidden_dim=29,
             ff_stack_activation=ActivationOptions.SILU,
-            ff_stack_residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+            ff_stack_residual_connection_option=(AdditiveResidualConfig),
             ff_stack_dropout_probability=0.2,
             ff_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             ff_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
@@ -527,8 +527,8 @@ class TestVitLinearModel(unittest.TestCase):
             ActivationOptions.SILU,
         )
         self.assertEqual(
-            feed_forward_stack_cfg.layer_config.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(feed_forward_stack_cfg.layer_config.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(feed_forward_stack_cfg.layer_config.dropout_probability, 0.2)
         self.assertEqual(
@@ -766,30 +766,30 @@ class TestVitLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RESIDUAL: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
             },
             ExperimentPreset.RESIDUAL_POST_NORM: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             },
             ExperimentPreset.RESIDUAL_GATING: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_gate_flag": True,
             },
             ExperimentPreset.RESIDUAL_HALTING: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_halting_flag": True,
             },
             ExperimentPreset.RESIDUAL_MEMORY: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "memory_flag": True,
             },
@@ -832,7 +832,7 @@ class TestVitLinearModel(unittest.TestCase):
             ExperimentPreset.RECURRENT_RESIDUAL: {
                 "recurrent_flag": True,
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
             },
             ExperimentPreset.RECURRENT_POST_NORM: {
@@ -1276,8 +1276,8 @@ class TestVitLinearModel(unittest.TestCase):
 
         cfg = presets.get_config(ExperimentPreset.RESIDUAL)[0]
         self.assertEqual(
-            self._encoder_block_config(cfg).residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(self._encoder_block_config(cfg).residual_config),
+            AdditiveResidualConfig,
         )
 
         cfg = presets.get_config(ExperimentPreset.RECURRENT)[0]
