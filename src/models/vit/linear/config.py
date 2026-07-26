@@ -9,10 +9,14 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,  # noqa: F401
+    AttentionResidualConfig,  # noqa: F401
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
+    WeightedBlendResidualConfig,  # noqa: F401
+    WeightedResidualConfig,  # noqa: F401
 )
 from emperor.memory import (
     AttentionDynamicMemoryConfig,  # noqa: F401
@@ -97,7 +101,7 @@ STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.0
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
 STACK_BIAS_FLAG: bool = True
@@ -108,7 +112,7 @@ SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -127,7 +131,7 @@ GATE_STACK_HIDDEN_DIM: int | None = None
 GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 GATE_STACK_NUM_LAYERS: int | None = None
 GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
-GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
@@ -150,7 +154,7 @@ HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
 )
 HALTING_STACK_NUM_LAYERS: int | None = None
 HALTING_STACK_ACTIVATION: ActivationOptions | None = None
-HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     LastLayerBiasOptions.DISABLED
@@ -171,7 +175,7 @@ MEMORY_STACK_HIDDEN_DIM: int | None = None
 MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 MEMORY_STACK_NUM_LAYERS: int | None = None
 MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
-MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
 MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -195,7 +199,7 @@ RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
-RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RECURRENT_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -215,7 +219,7 @@ RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
-RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = (
+RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
     None
 )
 RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
@@ -234,7 +238,7 @@ ATTN_NUM_LAYERS: int = 1
 ATTN_BIAS_FLAG: bool = True
 ATTN_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 ATTN_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
-ATTN_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+ATTN_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 ATTN_STACK_DROPOUT_PROBABILITY: float = 0.0
 ATTN_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
@@ -253,7 +257,7 @@ ATTN_GATE_STACK_HIDDEN_DIM: int | None = None
 ATTN_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 ATTN_GATE_STACK_NUM_LAYERS: int | None = None
 ATTN_GATE_STACK_ACTIVATION: ActivationOptions | None = GATE_STACK_ACTIVATION
-ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 ATTN_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 ATTN_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = (
@@ -278,7 +282,7 @@ ATTN_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
 )
 ATTN_HALTING_STACK_NUM_LAYERS: int | None = None
 ATTN_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
-ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 ATTN_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 ATTN_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     HALTING_STACK_LAST_LAYER_BIAS_OPTION
@@ -303,7 +307,7 @@ ATTN_MEMORY_STACK_HIDDEN_DIM: int | None = None
 ATTN_MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 ATTN_MEMORY_STACK_NUM_LAYERS: int | None = None
 ATTN_MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
-ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 ATTN_MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
 ATTN_MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 ATTN_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -329,7 +333,7 @@ ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None =
 ATTN_RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 ATTN_RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: (
-    ResidualConnectionOptions | None
+    type[ResidualConfig] | None
 ) = None
 ATTN_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 ATTN_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
@@ -352,7 +356,7 @@ ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | Non
 ATTN_RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 ATTN_RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: (
-    ResidualConnectionOptions | None
+    type[ResidualConfig] | None
 ) = None
 ATTN_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 ATTN_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
@@ -365,7 +369,7 @@ FF_NUM_LAYERS: int = 2
 FF_BIAS_FLAG: bool = True
 FF_STACK_HIDDEN_DIM: int = HIDDEN_DIM * 4
 FF_STACK_ACTIVATION: ActivationOptions = STACK_ACTIVATION
-FF_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+FF_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 FF_STACK_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
 FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 FF_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
@@ -382,7 +386,7 @@ FF_GATE_STACK_HIDDEN_DIM: int | None = None
 FF_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 FF_GATE_STACK_NUM_LAYERS: int | None = None
 FF_GATE_STACK_ACTIVATION: ActivationOptions | None = GATE_STACK_ACTIVATION
-FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 FF_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 FF_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = (
@@ -405,7 +409,7 @@ FF_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
 )
 FF_HALTING_STACK_NUM_LAYERS: int | None = None
 FF_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
-FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 FF_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 FF_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     HALTING_STACK_LAST_LAYER_BIAS_OPTION
@@ -430,7 +434,7 @@ FF_MEMORY_STACK_HIDDEN_DIM: int | None = None
 FF_MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 FF_MEMORY_STACK_NUM_LAYERS: int | None = None
 FF_MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
-FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 FF_MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
 FF_MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 FF_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -455,7 +459,7 @@ FF_RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 FF_RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 FF_RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
-FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = (
+FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
     None
 )
 FF_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
@@ -479,7 +483,7 @@ FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None 
 FF_RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 FF_RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: (
-    ResidualConnectionOptions | None
+    type[ResidualConfig] | None
 ) = None
 FF_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
