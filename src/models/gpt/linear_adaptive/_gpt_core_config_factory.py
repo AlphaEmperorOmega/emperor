@@ -8,10 +8,9 @@ from emperor.attention import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.transformer import (
     FeedForwardConfig,
@@ -131,9 +130,7 @@ class GptCoreConfigFactory:
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_config=None
             if (self.decoder_stack_options.residual_connection_option) is None
-            else ResidualConfig(
-                option=(self.decoder_stack_options.residual_connection_option)
-            ),
+            else self.decoder_stack_options.residual_connection_option(),
             dropout_probability=0.0,
             gate_config=(
                 gate_factory.build_gate_config() if gate_factory is not None else None
@@ -180,7 +177,7 @@ class GptCoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
             self_attention_config=self._build_attention_config(),
             cross_attention_config=None,
             feed_forward_config=self._build_feed_forward_config(),
