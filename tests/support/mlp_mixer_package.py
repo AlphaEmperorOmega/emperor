@@ -13,11 +13,11 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     Layer,
     LayerNormPositionOptions,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from models.catalog import model_package
 
@@ -547,7 +547,7 @@ class MlpMixerPackageContractMixin:
             router_stack_activation=ActivationOptions.TANH,
             router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             router_stack_residual_connection_option=(
-                ResidualConnectionOptions.RESIDUAL
+                AdditiveResidualConfig
             ),
             router_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             router_stack_apply_output_pipeline_flag=True,
