@@ -3,7 +3,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.parametric import ClipParameterOptions, GeneratorBiasMixtureConfig
@@ -33,7 +33,7 @@ class _ParametricGeneratorConfigBuilderImplementation:
         output_dim: int = config.OUTPUT_DIM,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
-        stack_residual_connection_option: ResidualConnectionOptions = (
+        stack_residual_connection_option: type[ResidualConfig] = (
             config.STACK_RESIDUAL_CONNECTION_OPTION
         ),
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,

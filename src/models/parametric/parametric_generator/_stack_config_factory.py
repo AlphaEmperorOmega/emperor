@@ -5,7 +5,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -37,7 +36,7 @@ def build_linear_stack_config(
     output_dim: int,
     num_layers: int,
     activation: ActivationOptions,
-    residual_connection_option: ResidualConnectionOptions,
+    residual_connection_option: type[ResidualConfig],
     dropout_probability: float,
     apply_output_pipeline_flag: bool,
 ) -> LayerStackConfig:
@@ -50,7 +49,7 @@ def build_linear_stack_config(
         activation=activation,
         residual_config=None
         if residual_connection_option is None
-        else ResidualConfig(option=residual_connection_option),
+        else residual_connection_option(),
         dropout_probability=dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,
