@@ -13,7 +13,6 @@ from emperor.layers import (
     MirroredLayerStackConfig,
     RecurrentLayerConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.patch import LinearPatchEmbeddingConfig
@@ -33,7 +32,7 @@ class _StackOptions:
     activation: ActivationOptions
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: ResidualConnectionOptions | None
+    residual_connection_option: type[ResidualConfig] | None
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
     bias_flag: bool
@@ -54,7 +53,7 @@ def sequence_length(runtime: RuntimeOptions) -> int:
 
 
 def _residual(option):
-    return None if option is None else ResidualConfig(option=option)
+    return None if option is None else option()
 
 
 def _plain_linear_config(*, bias_flag: bool) -> LinearLayerConfig:
