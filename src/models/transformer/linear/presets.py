@@ -1,7 +1,10 @@
 from emperor.config import BaseOptions
 from emperor.datasets.text.translation import Multi30kDeEn
 from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -153,12 +156,12 @@ _PRESET_DEFINITIONS = {
         "Enable all recurrent stack controllers.",
     ),
     ExperimentPreset.RESIDUAL: _definition(
-        {"stack_residual_connection_option": (ResidualConnectionOptions.RESIDUAL)},
+        {"stack_residual_connection_option": (AdditiveResidualConfig)},
         "Add residual joins between full Transformer blocks.",
     ),
     ExperimentPreset.RESIDUAL_POST_NORM: _definition(
         {
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
             "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
         },
@@ -166,21 +169,21 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_GATING: _definition(
         {
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_gate_flag": True,
         },
         "Combine block residuals and block gates.",
     ),
     ExperimentPreset.RESIDUAL_HALTING: _definition(
         {
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_halting_flag": True,
         },
         "Combine block residuals and block halting.",
     ),
     ExperimentPreset.RESIDUAL_MEMORY: _definition(
         {
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "memory_flag": True,
         },
         "Combine block residuals and dynamic memory.",
@@ -189,7 +192,7 @@ _PRESET_DEFINITIONS = {
         {
             "recurrent_flag": True,
             "recurrent_residual_connection_option": (
-                ResidualConnectionOptions.RESIDUAL
+                AdditiveResidualConfig
             ),
         },
         "Add residual joins between recurrent applications.",

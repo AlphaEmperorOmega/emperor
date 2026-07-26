@@ -8,6 +8,7 @@ from emperor.attention import (
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -15,8 +16,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import GatedResidualDynamicMemoryConfig, MemoryPositionOptions
@@ -143,7 +142,7 @@ def _projection_stack(model_dim: int, options: TransformerAttentionOptions):
             activation=stack_options.activation,
             residual_config=None
             if (stack_options.residual_connection_option) is None
-            else ResidualConfig(option=(stack_options.residual_connection_option)),
+            else stack_options.residual_connection_option(),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -228,7 +227,7 @@ def _feed_forward(
             activation=stack_options.activation,
             residual_config=None
             if (stack_options.residual_connection_option) is None
-            else ResidualConfig(option=(stack_options.residual_connection_option)),
+            else stack_options.residual_connection_option(),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -280,7 +279,7 @@ def _controlled_stack(
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
         residual_config=None
         if options.recurrent_residual_connection_option is None
-        else ResidualConfig(option=options.recurrent_residual_connection_option),
+        else options.recurrent_residual_connection_option(),
         halting_config=_halting(
             runtime.model_dim,
             options.recurrent_stack_halting_flag,
@@ -297,7 +296,7 @@ def _encoder(runtime: RuntimeOptions):
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
-        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+        residual_config=AdditiveResidualConfig(),
         attention_config=_self_attention(
             runtime,
             runtime.encoder_attention_options,
@@ -314,7 +313,7 @@ def _encoder(runtime: RuntimeOptions):
         activation=ActivationOptions.DISABLED,
         residual_config=None
         if options.stack_residual_connection_option is None
-        else ResidualConfig(option=options.stack_residual_connection_option),
+        else options.stack_residual_connection_option(),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
@@ -336,7 +335,7 @@ def _decoder(runtime: RuntimeOptions):
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
         dropout_probability=runtime.dropout_probability,
-        residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+        residual_config=AdditiveResidualConfig(),
         self_attention_config=_self_attention(
             runtime,
             runtime.decoder_self_attention_options,
@@ -356,7 +355,7 @@ def _decoder(runtime: RuntimeOptions):
         activation=ActivationOptions.DISABLED,
         residual_config=None
         if options.stack_residual_connection_option is None
-        else ResidualConfig(option=options.stack_residual_connection_option),
+        else options.stack_residual_connection_option(),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
