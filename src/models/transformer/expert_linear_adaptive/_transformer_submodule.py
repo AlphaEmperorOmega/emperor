@@ -5,7 +5,6 @@ from emperor.layers import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 
@@ -41,7 +40,7 @@ def _controller_stack(
             residual_config=(
                 None
                 if options.residual_connection_option is None
-                else ResidualConfig(option=options.residual_connection_option)
+                else options.residual_connection_option()
             ),
             dropout_probability=options.dropout_probability,
             gate_config=None,
