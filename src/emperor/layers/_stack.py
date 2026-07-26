@@ -13,7 +13,6 @@ from emperor.layers._options import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation import LayerStackValidator
@@ -23,7 +22,7 @@ if TYPE_CHECKING:
 
     from emperor.config import ModelConfig
     from emperor.halting import HaltingConfig
-    from emperor.layers._composition.attention_residual import AttentionResidualState
+    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._state import LayerState
     from emperor.memory import DynamicMemoryConfig
 
@@ -308,15 +307,12 @@ class LayerStack(LayerModuleBase):
     def __initialize_residual_state(
         self,
         initial_source: "Tensor",
-    ) -> "AttentionResidualState | None":
+    ) -> "ResidualState | None":
         for stack_layer in self.layers:
             residual_connection = stack_layer.residual_connection
             if residual_connection is None:
                 continue
-            if (
-                residual_connection.option
-                != ResidualConnectionOptions.ATTENTION_RESIDUAL
-            ):
-                continue
-            return residual_connection.new_state(initial_source)
+            residual_state = residual_connection.new_state(initial_source)
+            if residual_state is not None:
+                return residual_state
         return None

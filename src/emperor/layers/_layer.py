@@ -5,8 +5,12 @@ from torch import Tensor
 
 from emperor.config import ConfigBase
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._composition.residual import ResidualConnection
-from emperor.layers._config import GateConfig, LayerConfig, ResidualConfig
+from emperor.layers._composition.residual.base import (
+    ResidualConnectionAbstract,
+    ResidualState,
+)
+from emperor.layers._composition.residual.config import ResidualConfig
+from emperor.layers._config import GateConfig, LayerConfig
 from emperor.layers._options import (
     ActivationOptions,
     LayerNormPositionOptions,
@@ -18,7 +22,6 @@ from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
-    from emperor.layers._composition.attention_residual import AttentionResidualState
     from emperor.layers._row_layout import RowLayout
     from emperor.memory import DynamicMemoryConfig, MemoryInterface
     from emperor.nn import Module
@@ -90,7 +93,7 @@ class Layer(LayerModuleBase):
             self.memory_config, input_dim=self.input_dim, output_dim=self.output_dim
         )
 
-    def __build_residual_connection(self) -> ResidualConnection | None:
+    def __build_residual_connection(self) -> ResidualConnectionAbstract | None:
         return self._build_from_config(
             self.residual_config,
             residual_dim=self.output_dim,
@@ -254,24 +257,17 @@ class Layer(LayerModuleBase):
         input: Tensor,
         prev_input: Tensor,
         *,
-        residual_state: "AttentionResidualState | None" = None,
+        residual_state: "ResidualState | None" = None,
         row_layout: "RowLayout | None" = None,
     ):
         residual_connection = self.residual_connection
         if residual_connection is None:
             return input
-        coefficient_model = getattr(residual_connection, "model", None)
-        if isinstance(coefficient_model, RowLayoutAwareModule):
-            return residual_connection(
-                input,
-                prev_input,
-                residual_state=residual_state,
-                row_layout=row_layout,
-            )
         return residual_connection(
             input,
             prev_input,
             residual_state=residual_state,
+            row_layout=row_layout,
         )
 
     def __maybe_apply_layer_norm_after(self, input: Tensor):

@@ -13,6 +13,7 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -24,9 +25,9 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
     RowLayout,
     RowLayoutAwareModule,
+    WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
 from emperor.linears import LinearLayerConfig
@@ -68,8 +69,7 @@ def linear_stack_config(
 
 
 def grouped_residual_config(dim: int = 2) -> ResidualConfig:
-    return ResidualConfig(
-        option=ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+    return WeightedResidualConfig(
         model_config=AdaptiveLinearLayerConfig(
             bias_flag=True,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
@@ -225,8 +225,7 @@ class RowLayoutTransportTests(unittest.TestCase):
 
     def test_layer_does_not_pass_layout_to_ordinary_residual_coefficient_model(self):
         layer = plain_layer(
-            residual_config=ResidualConfig(
-                option=ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+            residual_config=WeightedResidualConfig(
                 model_config=LinearLayerConfig(bias_flag=True),
             )
         )
@@ -246,11 +245,7 @@ class RowLayoutTransportTests(unittest.TestCase):
         self.assertEqual(received_keywords, [{}])
 
     def test_layer_layout_does_not_change_attention_residual_contract(self):
-        layer = plain_layer(
-            residual_config=ResidualConfig(
-                option=ResidualConnectionOptions.ATTENTION_RESIDUAL,
-            )
-        )
+        layer = plain_layer(residual_config=AttentionResidualConfig())
         residual_state = layer.residual_connection.new_state(self.inputs)
 
         output_state = layer(

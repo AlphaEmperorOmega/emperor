@@ -14,7 +14,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
@@ -204,7 +203,7 @@ def recurrent_config(
         residual_config=(
             None
             if residual_connection_option is None
-            else ResidualConfig(option=residual_connection_option)
+            else residual_connection_option()
         ),
         halting_config=halting_config,
         memory_config=memory_config,

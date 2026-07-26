@@ -14,6 +14,7 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -22,8 +23,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     RecurrentLayerConfig,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.layers._validation.common import _matches_config_contract
 from emperor.layers._validation.gate import LayerGateValidator
@@ -173,7 +172,7 @@ def _recurrent_config(
         recurrent_layer_norm_position=norm,
         block_config=_layer_config(dim) if block_config is None else block_config,
         gate_config=gate_config,
-        residual_config=None if residual is None else ResidualConfig(option=residual),
+        residual_config=None if residual is None else residual(),
         halting_config=halting_config,
         memory_config=memory_config,
     )
@@ -542,12 +541,12 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
         self.assert_raises_exact(
             ValueError,
             "input_dim and output_dim must be equal when "
-            "residual_config.option is ResidualConnectionOptions.RESIDUAL, "
+            "residual_config is AdditiveResidualConfig, "
             "got input_dim=2 and output_dim=3.",
             LayerValidator._validate_residual_dimensions,
             2,
             3,
-            ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            AdditiveResidualConfig(),
         )
         self.assert_raises_exact(
             ValueError,
@@ -563,9 +562,7 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
         )
 
         strided = _layer_config()
-        strided.residual_config = ResidualConfig(
-            option=ResidualConnectionOptions.RESIDUAL
-        )
+        strided.residual_config = AdditiveResidualConfig()
         strided.layer_model_config = Conv2dLayerConfig(
             input_dim=2,
             output_dim=2,
@@ -576,8 +573,8 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
         )
         self.assert_raises_exact(
             ValueError,
-            "residual_config.option cannot be "
-            "ResidualConnectionOptions.RESIDUAL when layer_model_config has "
+            "residual_config cannot be "
+            "AdditiveResidualConfig when layer_model_config has "
             "stride > 1 (received stride=2). Spatial reduction breaks the "
             "residual connection shape contract.",
             LayerValidator._validate_residual_with_strided_model,
