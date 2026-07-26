@@ -21,6 +21,7 @@ from emperor.datasets.image.classification import Cifar10, Cifar100, FashionMNIS
 from emperor.experiments import ExperimentTask
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -28,7 +29,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
@@ -258,7 +258,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
                 "submodule_stack_activation": ActivationOptions.MISH,
                 "submodule_stack_layer_norm_position": (LayerNormPositionOptions.AFTER),
                 "submodule_stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "submodule_stack_dropout_probability": 0.12,
                 "submodule_stack_last_layer_bias_option": (
@@ -724,7 +724,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
     def test_residual_and_post_norm_presets_wire_expected_layers(self):
         cases = {
             ExperimentPreset.RESIDUAL: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.POST_NORM: (
@@ -732,19 +732,19 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 LayerNormPositionOptions.AFTER,
             ),
             ExperimentPreset.RESIDUAL_POST_NORM: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 LayerNormPositionOptions.AFTER,
             ),
             ExperimentPreset.RESIDUAL_GATING: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.RESIDUAL_HALTING: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
             ),
             ExperimentPreset.RESIDUAL_MEMORY: (
-                ResidualConnectionOptions.RESIDUAL,
+                AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
             ),
         }
@@ -758,7 +758,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 actual_residual = (
                     None
                     if layer.residual_config is None
-                    else layer.residual_config.option
+                    else type(layer.residual_config)
                 )
                 self.assertIs(actual_residual, residual)
                 self.assertIs(layer.layer_norm_position, norm)
