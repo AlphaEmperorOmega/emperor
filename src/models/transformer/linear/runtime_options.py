@@ -16,7 +16,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.memory import (
     DynamicMemoryConfig,
@@ -40,8 +40,8 @@ class TransformerStackOptions:
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
-    stack_residual_connection_option: ResidualConnectionOptions | None = None
-    recurrent_residual_connection_option: ResidualConnectionOptions | None = None
+    stack_residual_connection_option: type[ResidualConfig] | None = None
+    recurrent_residual_connection_option: type[ResidualConfig] | None = None
 
 
 @dataclass(frozen=True)
@@ -52,7 +52,7 @@ class SubmoduleStackOptions:
     apply_output_pipeline_flag: bool = False
     activation: ActivationOptions = ActivationOptions.DISABLED
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
-    residual_connection_option: ResidualConnectionOptions | None = None
+    residual_connection_option: type[ResidualConfig] | None = None
     dropout_probability: float = 0.0
     bias_flag: bool = True
 
@@ -66,7 +66,7 @@ class ControllerStackOptions:
     apply_output_pipeline_flag: bool | None = None
     activation: ActivationOptions | None = None
     layer_norm_position: LayerNormPositionOptions | None = None
-    residual_connection_option: ResidualConnectionOptions | None = None
+    residual_connection_option: type[ResidualConfig] | None = None
     dropout_probability: float | None = None
     bias_flag: bool | None = None
 
