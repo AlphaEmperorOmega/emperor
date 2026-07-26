@@ -6,7 +6,10 @@ from emperor.experts import (
     ExpertWeightingPositionOptions,
     RoutingInitializationMode,
 )
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -113,7 +116,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default config with residual skip connections enabled in the "
         "expert stack.",
@@ -127,7 +130,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "layer_norm_position": LayerNormPositionOptions.AFTER,
         },
         description="Default config with residual skip connections and post-layer "
@@ -135,7 +138,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_gate_flag": True,
         },
         description="Default config with residual skip connections and per-layer "
@@ -143,7 +146,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_halting_flag": True,
         },
         description="Default config with residual skip connections and stack halting "
@@ -151,7 +154,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "memory_flag": True,
         },
         description="Default config with residual skip connections and shared stack "
@@ -234,7 +237,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_RESIDUAL: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default recurrent config using a residual expert stack at each "
         "recurrent step.",
@@ -310,7 +313,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_SHARED_ROUTER: PresetDefinition(
         preset_values={
             "routing_initialization_mode": RoutingInitializationMode.SHARED,
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default config with residual expert stack connections and shared "
         "expert routing.",
