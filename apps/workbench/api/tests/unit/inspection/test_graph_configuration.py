@@ -15,6 +15,7 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -24,7 +25,6 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from torch import nn
@@ -180,7 +180,6 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
                 "halting_config",
                 "memory_config",
                 "layer_model_config",
-                "residual_model_config",
             ],
         )
         self.assertEqual(config_fields(root)["activation"], "GELU")
@@ -189,7 +188,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
         self.assertIsNone(config_fields(root)["gate_config"])
         self.assertIsNone(config_fields(root)["halting_config"])
         self.assertIsNone(config_fields(root)["memory_config"])
-        self.assertIsNone(config_fields(root)["residual_model_config"])
+        self.assertNotIn("residual_model_config", config_fields(root))
 
     def test_graph_serializer_reports_layer_gate_option_details(self) -> None:
         gate_model_config = LayerStackConfig(
@@ -289,7 +288,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
 
     def test_graph_serializer_omits_absent_layer_residual_module(self) -> None:
         def layer_config(
-            residual_connection_option: ResidualConnectionOptions | None,
+            residual_connection_option: type[ResidualConfig] | None,
         ) -> LayerConfig:
             return LayerConfig(
                 input_dim=4,
@@ -297,7 +296,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
                 activation=ActivationOptions.DISABLED,
                 residual_config=None
                 if residual_connection_option is None
-                else ResidualConfig(option=residual_connection_option),
+                else residual_connection_option(),
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 gate_config=None,
@@ -311,18 +310,18 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             )
 
         disabled_layer = Layer(layer_config(None))
-        enabled_layer = Layer(layer_config(ResidualConnectionOptions.RESIDUAL))
+        enabled_layer = Layer(layer_config(AdditiveResidualConfig))
 
         disabled_nodes, _disabled_edges = serialize_graph(disabled_layer)
         enabled_nodes, _enabled_edges = serialize_graph(enabled_layer)
 
         self.assertIsNone(disabled_layer.residual_connection)
         self.assertNotIn(
-            "ResidualConnection",
+            "AdditiveResidual",
             {node["typeName"] for node in disabled_nodes},
         )
         self.assertIn(
-            "ResidualConnection",
+            "AdditiveResidual",
             {node["typeName"] for node in enabled_nodes},
         )
 

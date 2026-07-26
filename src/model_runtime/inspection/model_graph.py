@@ -192,13 +192,30 @@ COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
         "Configures a layer gate network and how its output is composed with "
         "the current value."
     ),
-    "ResidualConnection": (
-        "Combines the current and previous hidden values using the configured "
-        "residual composition mode."
+    "AdditiveResidual": "Adds the current and previous hidden values.",
+    "WeightedResidual": (
+        "Adds the previous hidden value to a learned tanh-weighted current value."
+    ),
+    "WeightedBlendResidual": (
+        "Convexly blends current and previous hidden values with a learned weight."
+    ),
+    "AttentionResidual": (
+        "Routes across forward-local residual-depth sources with learned attention."
     ),
     "ResidualConfig": (
-        "Configures residual composition and optionally makes weighted mixing "
-        "coefficients data-dependent."
+        "Abstract residual configuration Interface; use a concrete residual config."
+    ),
+    "AdditiveResidualConfig": "Builds direct additive residual composition.",
+    "WeightedResidualConfig": (
+        "Builds tanh-weighted residual composition with a scalar or generated "
+        "coefficient."
+    ),
+    "WeightedBlendResidualConfig": (
+        "Builds sigmoid convex residual blending with a scalar or generated "
+        "coefficient."
+    ),
+    "AttentionResidualConfig": (
+        "Builds learned attention routing across residual-depth history."
     ),
     "Halting": (
         "Controls adaptive computation by deciding when recurrent processing has "
@@ -300,10 +317,11 @@ def _metadata_help(metadata: Any) -> str | None:
 
 def _flattened_residual_configuration_fields(
     config: Any,
-) -> tuple[GraphConfigurationField, GraphConfigurationField]:
+) -> tuple[GraphConfigurationField, GraphConfigurationField | None]:
     residual_config = config.residual_config
-    option = getattr(residual_config, "option", None)
-    model_config = getattr(residual_config, "model_config", None)
+    residual_config_type = (
+        None if residual_config is None else type(residual_config)
+    )
     option_description, model_description = (
         RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME.get(
             type(config).__name__,
@@ -316,13 +334,17 @@ def _flattened_residual_configuration_fields(
     return (
         GraphConfigurationField(
             key="residual_connection_option",
-            value=_config_field_value(option),
+            value=_config_field_value(residual_config_type),
             description=option_description,
         ),
-        GraphConfigurationField(
-            key="residual_model_config",
-            value=_config_field_value(model_config),
-            description=model_description,
+        (
+            GraphConfigurationField(
+                key="residual_model_config",
+                value=_config_field_value(residual_config.model_config),
+                description=model_description,
+            )
+            if hasattr(residual_config, "model_config")
+            else None
         ),
     )
 
