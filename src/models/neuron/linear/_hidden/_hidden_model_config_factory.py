@@ -4,7 +4,6 @@ from emperor.layers import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
@@ -59,7 +58,7 @@ class HiddenModelConfigFactory:
             layer_norm_position=options.layer_norm_position,
             residual_config=None
             if options.residual_connection_option is None
-            else ResidualConfig(option=options.residual_connection_option),
+            else options.residual_connection_option(),
             dropout_probability=options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

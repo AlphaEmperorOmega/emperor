@@ -3,7 +3,10 @@
 import models.neuron.linear.config as config
 import models.neuron.linear.dataset_options as dataset_options
 from emperor.config import BaseOptions
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -103,7 +106,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default config with residual skip connections enabled between "
         "same-width hidden layers.",
@@ -117,7 +120,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "layer_norm_position": LayerNormPositionOptions.AFTER,
         },
         description="Default config with residual skip connections and post-layer "
@@ -125,7 +128,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_gate_flag": True,
         },
         description="Default config with residual skip connections and per-layer gating "
@@ -133,7 +136,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_halting_flag": True,
         },
         description="Default config with residual skip connections and stack halting "
@@ -141,7 +144,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "memory_flag": True,
         },
         description="Default config with residual skip connections and shared stack memory "
@@ -218,7 +221,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_RESIDUAL: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default recurrent config using a residual hidden stack at each "
         "recurrent step.",
