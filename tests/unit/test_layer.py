@@ -125,8 +125,6 @@ class TestLayer(unittest.TestCase):
             "MirroredLayerStackConfig",
             "RecurrentLayerConfig",
             "ResidualConfig",
-            "ResidualConnection",
-            "ResidualConnectionOptions",
             "WeightedBlendResidualConfig",
             "WeightedResidualConfig",
             "LayerState",
@@ -147,6 +145,8 @@ class TestLayer(unittest.TestCase):
         for retired_export in (
             "LayerGate",
             "RecurrentLayerValidator",
+            "ResidualConnection",
+            "ResidualConnectionOptions",
         ):
             with self.subTest(retired_export=retired_export):
                 self.assertFalse(hasattr(layer_package, retired_export))

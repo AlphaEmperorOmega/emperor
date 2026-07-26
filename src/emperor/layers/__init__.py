@@ -1,6 +1,5 @@
 """Public Interface for generic layer composition and execution."""
 
-from emperor.layers._composition.residual import ResidualConnection
 from emperor.layers._composition.residual.config import (
     AdditiveResidualConfig,
     AttentionResidualConfig,
@@ -26,7 +25,6 @@ from emperor.layers._options import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
 )
 from emperor.layers._recurrent import RecurrentLayer
 from emperor.layers._row_layout import RowLayout
@@ -47,11 +45,9 @@ __all__ = (
     "MirroredLayerStackConfig",
     "RecurrentLayerConfig",
     "ResidualConfig",
-    "ResidualConnectionOptions",
     "WeightedBlendResidualConfig",
     "WeightedResidualConfig",
     "LayerState",
-    "ResidualConnection",
     "Layer",
     "LayerStack",
     "MirroredLayerStack",

@@ -21,18 +21,6 @@ def _gate_option_field_path(owner_name: str | None = None) -> str:
     return f"{owner_name}.option" if owner_name is not None else "gate_config.option"
 
 
-def _residual_config_class():
-    from emperor.layers._composition.residual.config import ResidualConfig
-
-    return ResidualConfig
-
-
-def _linear_layer_config_class():
-    from emperor.linears import LinearLayerConfig
-
-    return LinearLayerConfig
-
-
 _HALTING_CONFIG_FIELDS = (
     "input_dim",
     "threshold",
