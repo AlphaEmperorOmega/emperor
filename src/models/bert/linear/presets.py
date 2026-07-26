@@ -5,7 +5,10 @@ from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -220,14 +223,14 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default config with residual skip connections enabled between "
         "same-width encoder stack layers.",
     ),
     ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "layer_norm_position": LayerNormPositionOptions.AFTER,
         },
         description="Default config with residual skip connections and post-layer "
@@ -235,7 +238,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_gate_flag": True,
         },
         description=(
@@ -245,7 +248,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_halting_flag": True,
         },
         description="Default config with residual skip connections and encoder stack "
@@ -253,7 +256,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
         preset_values={
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
             "memory_flag": True,
         },
         description="Default config with residual skip connections and shared encoder "
@@ -262,7 +265,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RECURRENT_RESIDUAL: PresetDefinition(
         preset_values={
             "recurrent_flag": True,
-            "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+            "stack_residual_connection_option": AdditiveResidualConfig,
         },
         description="Default recurrent config using a residual encoder stack at each "
         "recurrent step.",

@@ -21,11 +21,11 @@ from emperor.embedding.absolute import (
 from emperor.experiments.bert_pretraining import BertPretrainingExperiment
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.transformer import (
     TransformerEncoderBlockLayerConfig,
@@ -344,7 +344,7 @@ class TestBertLinearModel(unittest.TestCase):
         builder_kwargs = _default_builder_kwargs()
         builder_kwargs["stack_options"] = replace(
             builder_kwargs["stack_options"],
-            residual_connection_option=ResidualConnectionOptions.RESIDUAL,
+            residual_connection_option=AdditiveResidualConfig,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             apply_output_pipeline_flag=False,
             bias_flag=False,
@@ -356,8 +356,8 @@ class TestBertLinearModel(unittest.TestCase):
         encoder_stack = self._encoder_stack_config(cfg)
 
         self.assertEqual(
-            encoder_stack.layer_config.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(encoder_stack.layer_config.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(
             encoder_stack.last_layer_bias_option,
@@ -1008,37 +1008,37 @@ class TestBertLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RESIDUAL: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
             },
             ExperimentPreset.RESIDUAL_POST_NORM: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             },
             ExperimentPreset.RESIDUAL_GATING: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_gate_flag": True,
             },
             ExperimentPreset.RESIDUAL_HALTING: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_halting_flag": True,
             },
             ExperimentPreset.RESIDUAL_MEMORY: {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_RESIDUAL: {
                 "recurrent_flag": True,
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
             },
             ExperimentPreset.RECURRENT_POST_NORM: {
@@ -1501,8 +1501,8 @@ class TestBertLinearModel(unittest.TestCase):
                 encoder_block = encoder_stack.layer_config
 
                 self.assertEqual(
-                    encoder_block.residual_config.option,
-                    ResidualConnectionOptions.RESIDUAL,
+                    type(encoder_block.residual_config),
+                    AdditiveResidualConfig,
                 )
                 self.assertEqual(
                     isinstance(self._encoder_config(cfg), RecurrentLayerConfig),
