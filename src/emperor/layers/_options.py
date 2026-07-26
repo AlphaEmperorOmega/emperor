@@ -39,10 +39,3 @@ class LastLayerBiasOptions(BaseOptions):
 class LayerGateOptions(BaseOptions):
     MULTIPLIER = 1
     ADDITION = 2
-
-
-class ResidualConnectionOptions(BaseOptions):
-    RESIDUAL = 1
-    WEIGHTED_RESIDUAL = 2
-    WEIGHTED_BLEND = 3
-    ATTENTION_RESIDUAL = 4
