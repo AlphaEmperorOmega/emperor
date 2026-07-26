@@ -11,12 +11,15 @@ from emperor.attention import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
+    AttentionResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import (
@@ -62,9 +65,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         embedding_dim: int = 10,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
         dropout_probability: float = 0.0,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.RESIDUAL
-        ),
+        residual_connection_option: type[ResidualConfig] = (AdditiveResidualConfig),
         causal_attention_mask_flag: bool = False,
         batch_size: int = 4,
         num_heads: int = 2,
@@ -158,10 +159,16 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             embedding_dim=embedding_dim,
             layer_norm_position=layer_norm_position,
             dropout_probability=dropout_probability,
-            residual_config=None
-            if residual_connection_option is None
-            else ResidualConfig(
-                option=residual_connection_option, model_config=residual_model_config
+            residual_config=(
+                None
+                if residual_connection_option is None
+                else residual_connection_option(
+                    **(
+                        {}
+                        if residual_model_config is None
+                        else {"model_config": residual_model_config}
+                    )
+                )
             ),
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
@@ -183,30 +190,26 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         )
 
     def test_rejects_attention_residual_without_an_encoder_history_bridge(self):
-        config = self.preset(
-            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL)
-        )
+        config = self.preset(residual_connection_option=(AttentionResidualConfig))
 
         with self.assertRaisesRegex(
             ValueError,
-            "ATTENTION_RESIDUAL is not supported for "
+            "AttentionResidualConfig is not supported for "
             "TransformerEncoderLayerConfig.*history bridge",
         ):
             TransformerEncoderLayer(config)
 
     def test_weighted_residual_uses_separate_parameters_per_encoder_join(self):
-        cfg = self.preset(
-            residual_connection_option=ResidualConnectionOptions.WEIGHTED_RESIDUAL
-        )
+        cfg = self.preset(residual_connection_option=WeightedResidualConfig)
         model = TransformerEncoderLayer(cfg)
 
         self.assertEqual(
-            model.self_attention_layer.residual_connection.option,
-            ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+            type(model.self_attention_layer.residual_connection.cfg),
+            WeightedResidualConfig,
         )
         self.assertEqual(
-            model.feed_forward_layer.residual_connection.option,
-            ResidualConnectionOptions.WEIGHTED_RESIDUAL,
+            type(model.feed_forward_layer.residual_connection.cfg),
+            WeightedResidualConfig,
         )
         self.assertIsNot(
             model.self_attention_layer.residual_connection.raw_weight,
@@ -220,7 +223,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
             bias_flag=True,
         )
         cfg = self.preset(
-            residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_connection_option=WeightedBlendResidualConfig,
             residual_model_config=residual_model_config,
         )
         model = TransformerEncoderLayer(cfg)
@@ -499,9 +502,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         embedding_dim: int = 10,
         layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DEFAULT,
         dropout_probability: float = 0.0,
-        residual_connection_option: ResidualConnectionOptions = (
-            ResidualConnectionOptions.RESIDUAL
-        ),
+        residual_connection_option: type[ResidualConfig] = (AdditiveResidualConfig),
         causal_attention_mask_flag: bool = False,
         batch_size: int = 4,
         num_heads: int = 2,
@@ -615,10 +616,16 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             embedding_dim=embedding_dim,
             layer_norm_position=layer_norm_position,
             dropout_probability=dropout_probability,
-            residual_config=None
-            if residual_connection_option is None
-            else ResidualConfig(
-                option=residual_connection_option, model_config=residual_model_config
+            residual_config=(
+                None
+                if residual_connection_option is None
+                else residual_connection_option(
+                    **(
+                        {}
+                        if residual_model_config is None
+                        else {"model_config": residual_model_config}
+                    )
+                )
             ),
             self_attention_config=self_attention_config,
             cross_attention_config=cross_attention_config,
@@ -647,21 +654,17 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         )
 
     def test_rejects_attention_residual_without_a_decoder_history_bridge(self):
-        config = self.preset(
-            residual_connection_option=(ResidualConnectionOptions.ATTENTION_RESIDUAL)
-        )
+        config = self.preset(residual_connection_option=(AttentionResidualConfig))
 
         with self.assertRaisesRegex(
             ValueError,
-            "ATTENTION_RESIDUAL is not supported for "
+            "AttentionResidualConfig is not supported for "
             "TransformerDecoderLayerConfig.*history bridge",
         ):
             TransformerDecoderLayer(config)
 
     def test_weighted_residual_uses_separate_parameters_per_decoder_join(self):
-        cfg = self.preset(
-            residual_connection_option=ResidualConnectionOptions.WEIGHTED_RESIDUAL
-        )
+        cfg = self.preset(residual_connection_option=WeightedResidualConfig)
         model = TransformerDecoderLayer(cfg)
 
         residual_connections = [
@@ -672,7 +675,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
 
         self.assertTrue(
             all(
-                connection.option == ResidualConnectionOptions.WEIGHTED_RESIDUAL
+                type(connection.cfg) is WeightedResidualConfig
                 for connection in residual_connections
             )
         )
@@ -686,7 +689,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             bias_flag=True,
         )
         cfg = self.preset(
-            residual_connection_option=ResidualConnectionOptions.WEIGHTED_BLEND,
+            residual_connection_option=WeightedBlendResidualConfig,
             residual_model_config=residual_model_config,
         )
         model = TransformerDecoderLayer(cfg)

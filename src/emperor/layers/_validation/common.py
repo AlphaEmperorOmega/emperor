@@ -17,8 +17,12 @@ def _gate_config_class():
     return GateConfig
 
 
+def _gate_option_field_path(owner_name: str | None = None) -> str:
+    return f"{owner_name}.option" if owner_name is not None else "gate_config.option"
+
+
 def _residual_config_class():
-    from emperor.layers._config import ResidualConfig
+    from emperor.layers._composition.residual.config import ResidualConfig
 
     return ResidualConfig
 
@@ -27,10 +31,6 @@ def _linear_layer_config_class():
     from emperor.linears import LinearLayerConfig
 
     return LinearLayerConfig
-
-
-def _gate_option_field_path(owner_name: str | None = None) -> str:
-    return f"{owner_name}.option" if owner_name is not None else "gate_config.option"
 
 
 _HALTING_CONFIG_FIELDS = (

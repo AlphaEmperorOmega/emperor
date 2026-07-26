@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -24,8 +25,7 @@ from emperor.layers import (
     RecurrentLayerConfig,
     RecurrentLayerMonitorCallback,
     ResidualConfig,
-    ResidualConnection,
-    ResidualConnectionOptions,
+    WeightedBlendResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._monitoring.callbacks._hooks import _extract_hidden_tensor
@@ -84,9 +84,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
                         input_dim=2,
                         output_dim=2,
                         activation=ActivationOptions.TANH,
-                        residual_config=ResidualConfig(
-                            option=(ResidualConnectionOptions.WEIGHTED_BLEND)
-                        ),
+                        residual_config=WeightedBlendResidualConfig(),
                         dropout_probability=0.0,
                         layer_norm_position=LayerNormPositionOptions.AFTER,
                         gate_config=GateConfig(
@@ -135,9 +133,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
                         activation=ActivationOptions.TANH,
                         model_config=linear_stack_config(2, bias_flag=True),
                     ),
-                    residual_config=ResidualConfig(
-                        option=(ResidualConnectionOptions.WEIGHTED_BLEND)
-                    ),
+                    residual_config=WeightedBlendResidualConfig(),
                     halting_config=None,
                     memory_config=None,
                 )
@@ -399,7 +395,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
         self.assertIs(before, hidden)
         torch.testing.assert_close(after, hidden * 3.0)
 
-    def test_absent_residual_config_is_identity_and_corrupt_option_is_rejected(
+    def test_absent_residual_config_is_identity_and_abstract_config_is_rejected(
         self,
     ) -> None:
         current = torch.tensor([[1.0, 2.0]])
@@ -413,10 +409,10 @@ class LayerBehavioralContractTests(unittest.TestCase):
         self.assertIs(result, current)
 
         with self.assertRaisesRegex(
-            TypeError,
-            r"^ResidualConfig.option must be a ResidualConnectionOptions value,",
+            ValueError,
+            "ResidualConfig is abstract.*concrete residual config",
         ):
-            ResidualConnection(ResidualConfig(option=object()))
+            ResidualConfig().build()
 
     def test_layer_gate_rejects_corrupt_runtime_option_after_real_model_run(
         self,
@@ -724,9 +720,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
                 input_dim=2,
                 output_dim=2,
                 activation=ActivationOptions.TANH,
-                residual_config=ResidualConfig(
-                    option=ResidualConnectionOptions.RESIDUAL
-                ),
+                residual_config=AdditiveResidualConfig(),
                 dropout_probability=0.25,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
                 gate_config=None,

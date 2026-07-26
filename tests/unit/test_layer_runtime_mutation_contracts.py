@@ -10,6 +10,7 @@ from emperor.halting import (
 )
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     Layer,
@@ -20,8 +21,6 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     RecurrentLayer,
-    ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._recurrent import _RecurrentState
@@ -304,9 +303,7 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
                     input_dim=2,
                     output_dim=2,
                     activation=ActivationOptions.TANH,
-                    residual_config=ResidualConfig(
-                        option=(ResidualConnectionOptions.RESIDUAL)
-                    ),
+                    residual_config=AdditiveResidualConfig(),
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.AFTER,
                     gate_config=None,
@@ -326,8 +323,8 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
         self.assertIs(output_layer.last_layer_flag, True)
         self.assertEqual(first.activation_function, ActivationOptions.TANH)
         self.assertEqual(
-            first.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(first.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(
             first.layer_norm_position,

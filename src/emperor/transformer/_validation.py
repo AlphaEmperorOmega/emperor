@@ -342,14 +342,12 @@ class TransformerValidator(ValidatorBase):
 
     @staticmethod
     def _validate_residual_history_bridge(residual_config, *, owner_name: str) -> None:
-        from emperor.layers import ResidualConfig, ResidualConnectionOptions
+        from emperor.layers import AttentionResidualConfig
 
-        if not isinstance(residual_config, ResidualConfig):
-            return
-        if residual_config.option != ResidualConnectionOptions.ATTENTION_RESIDUAL:
+        if not isinstance(residual_config, AttentionResidualConfig):
             return
         raise ValueError(
-            f"ATTENTION_RESIDUAL is not supported for {owner_name} until "
+            f"AttentionResidualConfig is not supported for {owner_name} until "
             "Transformer sublayers share an explicit forward-local history bridge."
         )
 

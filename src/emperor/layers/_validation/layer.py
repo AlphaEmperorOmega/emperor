@@ -4,6 +4,9 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
+from emperor.layers._composition.residual.validation import (
+    ResidualConnectionValidator,
+)
 from emperor.layers._options import LayerNormPositionOptions
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
@@ -13,11 +16,11 @@ from emperor.layers._validation.common import (
     _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
-from emperor.layers._validation.residual import ResidualConnectionValidator
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingConfig
-    from emperor.layers._config import GateConfig, LayerConfig, ResidualConfig
+    from emperor.layers._composition.residual.config import ResidualConfig
+    from emperor.layers._config import GateConfig, LayerConfig
     from emperor.layers._layer import Layer
 
 
@@ -81,11 +84,10 @@ class LayerValidator(ValidatorBase):
     ) -> None:
         if residual_config is None:
             return
-        residual_connection_option = residual_config.option
         if input_dim != output_dim:
             raise ValueError(
                 "input_dim and output_dim must be equal when "
-                f"residual_config.option is {residual_connection_option}, "
+                f"residual_config is {type(residual_config).__name__}, "
                 f"got input_dim={input_dim} and output_dim={output_dim}."
             )
 
@@ -126,8 +128,8 @@ class LayerValidator(ValidatorBase):
         if cfg.residual_config is None:
             return
         raise ValueError(
-            f"residual_config.option cannot be "
-            f"{cfg.residual_config.option} when layer_model_config has "
+            f"residual_config cannot be {type(cfg.residual_config).__name__} "
+            "when layer_model_config has "
             f"stride > 1 (received stride={stride}). Spatial reduction "
             f"breaks the residual connection shape contract."
         )

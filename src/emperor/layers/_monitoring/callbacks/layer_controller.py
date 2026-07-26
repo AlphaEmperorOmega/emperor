@@ -418,9 +418,7 @@ class LayerControllerMonitorCallback(Callback):
         residual_connection = getattr(layer, "residual_connection", None)
         if residual_connection is None:
             return
-        from emperor.layers._options import ResidualConnectionOptions
-
-        if residual_connection.option == ResidualConnectionOptions.ATTENTION_RESIDUAL:
+        if not residual_connection.supports_pairwise_diagnostics:
             return
         original_residual = getattr(layer, method_name)
 

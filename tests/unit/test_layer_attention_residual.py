@@ -3,11 +3,11 @@ import unittest
 import torch
 import torch.nn.functional as F
 
-from emperor.layers._composition.attention_residual import (
+from emperor.layers._composition.residual.config import AttentionResidualConfig
+from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
     AttentionResidualState,
 )
-from emperor.layers._config import AttentionResidualConfig
 
 
 def _paper_attention_residual(
@@ -26,6 +26,14 @@ def _paper_attention_residual(
     logits = torch.sum(keys * query, dim=-1)
     depth_weights = torch.softmax(logits, dim=0)
     return torch.sum(depth_weights.unsqueeze(-1) * values, dim=0)
+
+
+def _apply_attention_residual(residual, current, state):
+    return residual(
+        current,
+        current,
+        residual_state=state,
+    )
 
 
 class TestAttentionResidual(unittest.TestCase):
@@ -97,8 +105,8 @@ class TestAttentionResidual(unittest.TestCase):
         second_raw_output = torch.tensor([[9.0, 3.0]])
         state = residual.new_state(initial_source)
 
-        first_hidden = residual(first_raw_output, state)
-        second_hidden = residual(second_raw_output, state)
+        first_hidden = _apply_attention_residual(residual, first_raw_output, state)
+        second_hidden = _apply_attention_residual(residual, second_raw_output, state)
 
         torch.testing.assert_close(
             first_hidden,
@@ -128,8 +136,8 @@ class TestAttentionResidual(unittest.TestCase):
             residual.key_norm.weight.copy_(norm_weight)
         state = residual.new_state(initial_source)
 
-        residual(first_raw_output, state)
-        actual = residual(second_raw_output, state)
+        _apply_attention_residual(residual, first_raw_output, state)
+        actual = _apply_attention_residual(residual, second_raw_output, state)
 
         expected = _paper_attention_residual(
             (initial_source, first_raw_output, second_raw_output),
@@ -218,9 +226,9 @@ class TestAttentionResidual(unittest.TestCase):
 
         with self.assertRaisesRegex(
             TypeError,
-            "state must be an AttentionResidualState",
+            "residual_state must be an AttentionResidualState",
         ):
-            residual(torch.ones(1, 2), object())
+            _apply_attention_residual(residual, torch.ones(1, 2), object())
 
     def test_mixer_rejects_state_from_a_different_block_variant(self):
         residual = AttentionResidual(
@@ -233,9 +241,9 @@ class TestAttentionResidual(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "state block_size 1 does not match configured block_size 2",
+            "residual_state block_size 1 does not match configured block_size 2",
         ):
-            residual(torch.ones(1, 2), mismatched_state)
+            _apply_attention_residual(residual, torch.ones(1, 2), mismatched_state)
 
     def test_mixer_validates_current_before_mutating_history(self):
         residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
@@ -246,7 +254,11 @@ class TestAttentionResidual(unittest.TestCase):
             TypeError,
             "attention residual sources must be floating-point tensors",
         ):
-            residual(torch.ones(1, 2, dtype=torch.int64), state)
+            _apply_attention_residual(
+                residual,
+                torch.ones(1, 2, dtype=torch.int64),
+                state,
+            )
 
         self.assertEqual(len(state.sources), 1)
         self.assertIs(state.sources[0], initial_source)
@@ -260,7 +272,7 @@ class TestAttentionResidual(unittest.TestCase):
             ValueError,
             r"all attention residual sources must have shape \(2, 2\)",
         ):
-            residual(torch.ones(1, 2), state)
+            _apply_attention_residual(residual, torch.ones(1, 2), state)
 
         self.assertEqual(len(state.sources), 1)
         self.assertIs(state.sources[0], initial_source)
@@ -271,7 +283,7 @@ class TestAttentionResidual(unittest.TestCase):
         current = torch.tensor([[5.0, 7.0]], dtype=torch.bfloat16)
         state = residual.new_state(initial_source)
 
-        actual = residual(current, state)
+        actual = _apply_attention_residual(residual, current, state)
 
         expected = (initial_source + current.float()) / 2.0
         self.assertEqual(actual.dtype, torch.float32)
@@ -287,7 +299,11 @@ class TestAttentionResidual(unittest.TestCase):
             ValueError,
             "all attention residual sources must be on device cpu",
         ):
-            residual(torch.ones(1, 2, device="meta"), state)
+            _apply_attention_residual(
+                residual,
+                torch.ones(1, 2, device="meta"),
+                state,
+            )
 
     def test_mixer_preserves_gradients_to_every_source_and_parameter(self):
         residual = AttentionResidual(AttentionResidualConfig(residual_dim=3))
@@ -308,8 +324,8 @@ class TestAttentionResidual(unittest.TestCase):
         )
         state = residual.new_state(initial_source)
 
-        residual(first_raw_output, state)
-        output = residual(second_raw_output, state)
+        _apply_attention_residual(residual, first_raw_output, state)
+        output = _apply_attention_residual(residual, second_raw_output, state)
         output.square().sum().backward()
 
         for tensor in (
@@ -349,7 +365,7 @@ class TestAttentionResidual(unittest.TestCase):
                 )
                 state = residual.new_state(initial_source)
 
-                actual = residual(current, state)
+                actual = _apply_attention_residual(residual, current, state)
 
                 expected = _paper_attention_residual(
                     (initial_source.float(), current.float()),
@@ -377,7 +393,7 @@ class TestAttentionResidual(unittest.TestCase):
         current = torch.tensor([[6.25, 2.5]], dtype=torch.float64)
         state = residual.new_state(initial_source)
 
-        actual = residual(current, state)
+        actual = _apply_attention_residual(residual, current, state)
 
         expected = _paper_attention_residual(
             (initial_source, current),
@@ -392,7 +408,7 @@ class TestAttentionResidual(unittest.TestCase):
         residual = AttentionResidual(AttentionResidualConfig(residual_dim=3))
         state = residual.new_state(torch.ones(2, 3))
 
-        residual(torch.full((2, 3), 2.0), state)
+        _apply_attention_residual(residual, torch.full((2, 3), 2.0), state)
 
         self.assertTupleEqual(
             tuple(residual.state_dict()),
@@ -423,9 +439,9 @@ class TestAttentionResidual(unittest.TestCase):
         )
         state = residual.new_state(initial_source)
 
-        residual(raw_outputs[0], state)
-        residual(raw_outputs[1], state)
-        actual = residual(raw_outputs[2], state)
+        _apply_attention_residual(residual, raw_outputs[0], state)
+        _apply_attention_residual(residual, raw_outputs[1], state)
+        actual = _apply_attention_residual(residual, raw_outputs[2], state)
 
         expected = _paper_attention_residual(
             (
@@ -448,8 +464,8 @@ class TestAttentionResidual(unittest.TestCase):
         second_raw_output = torch.tensor([[5.0, 6.0]], requires_grad=True)
         state = residual.new_state(initial_source)
 
-        residual(first_raw_output, state)
-        output = residual(second_raw_output, state)
+        _apply_attention_residual(residual, first_raw_output, state)
+        output = _apply_attention_residual(residual, second_raw_output, state)
         output.sum().backward()
 
         expected_gradient = torch.full((1, 2), 0.5)

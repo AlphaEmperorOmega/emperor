@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
-from emperor.layers._options import (
-    LayerNormPositionOptions,
-    ResidualConnectionOptions,
+from emperor.layers._composition.residual.config import AttentionResidualConfig
+from emperor.layers._composition.residual.validation import (
+    ResidualConnectionValidator,
 )
+from emperor.layers._options import LayerNormPositionOptions
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
     _MEMORY_CONFIG_FIELDS,
@@ -17,13 +18,13 @@ from emperor.layers._validation.common import (
     _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
-from emperor.layers._validation.residual import ResidualConnectionValidator
 
 if TYPE_CHECKING:
     from torch import Tensor
 
     from emperor.halting import HaltingConfig
-    from emperor.layers._config import GateConfig, ResidualConfig
+    from emperor.layers._composition.residual.config import ResidualConfig
+    from emperor.layers._config import GateConfig
     from emperor.layers._recurrent import RecurrentLayer
     from emperor.layers._state import LayerState
 
@@ -201,12 +202,9 @@ class RecurrentLayerValidator(ValidatorBase):
             residual_config,
             owner_name="RecurrentLayerConfig",
         )
-        if (
-            residual_config is not None
-            and residual_config.option == ResidualConnectionOptions.ATTENTION_RESIDUAL
-        ):
+        if isinstance(residual_config, AttentionResidualConfig):
             raise ValueError(
-                "ATTENTION_RESIDUAL is not supported for RecurrentLayerConfig "
+                "AttentionResidualConfig is not supported for RecurrentLayerConfig "
                 "until recurrent depth owns a distinct learned query and an "
                 "explicit forward-local history bridge."
             )

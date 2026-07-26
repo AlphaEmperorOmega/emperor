@@ -3,15 +3,15 @@ import unittest
 
 import torch
 
-from emperor.layers._composition.residual.base import (
-    ResidualConnectionAbstract,
-)
-from emperor.layers._composition.residual.config import (
+from emperor.layers import (
     AdditiveResidualConfig,
     AttentionResidualConfig,
     ResidualConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
+)
+from emperor.layers._composition.residual.base import (
+    ResidualConnectionAbstract,
 )
 from emperor.layers._composition.residual.pairwise import (
     PairwiseResidualAbstract,
