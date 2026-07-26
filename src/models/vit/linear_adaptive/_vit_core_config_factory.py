@@ -11,12 +11,12 @@ from emperor.attention import (
 from emperor.experts import MixtureOfExpertsModelConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.transformer import (
     FeedForwardConfig,
@@ -158,7 +158,7 @@ class VitCoreConfigFactory:
         residual_config = (
             None
             if stack_residual_connection_option is None
-            else ResidualConfig(option=stack_residual_connection_option)
+            else stack_residual_connection_option()
         )
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -206,7 +206,7 @@ class VitCoreConfigFactory:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
         )
@@ -412,7 +412,7 @@ class VitCoreConfigFactory:
             f"MixtureOfExpertsModelConfig, got {type(stack_config).__name__}."
         )
 
-    def _stack_residual_connection_option(self) -> ResidualConnectionOptions:
+    def _stack_residual_connection_option(self) -> type[ResidualConfig]:
         if self.encoder_stack_options is None:
             return None
         return self.encoder_stack_options.residual_connection_option

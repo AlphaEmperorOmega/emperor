@@ -16,7 +16,6 @@ from emperor.layers import (
     LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig
 from models.vit.linear_adaptive._adaptive_generator_stack_config_factory import (
@@ -463,7 +462,7 @@ class HiddenModelConfigFactory:
             layer_norm_position=self.stack_options.layer_norm_position,
             residual_config=None
             if self.stack_options.residual_connection_option is None
-            else ResidualConfig(option=self.stack_options.residual_connection_option),
+            else self.stack_options.residual_connection_option(),
             dropout_probability=self.stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
