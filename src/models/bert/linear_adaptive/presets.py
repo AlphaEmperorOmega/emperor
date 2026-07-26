@@ -30,7 +30,10 @@ from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -307,7 +310,7 @@ _PRESET_DEFINITIONS = {
     ),
     ExperimentPreset.RESIDUAL: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
-            {"stack_residual_connection_option": (ResidualConnectionOptions.RESIDUAL)}
+            {"stack_residual_connection_option": (AdditiveResidualConfig)}
         ),
         description="Default config with residual skip connections between same-width "
         "encoder stack layers.",
@@ -316,7 +319,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             }
@@ -328,7 +331,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_gate_flag": True,
             }
@@ -340,7 +343,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "stack_halting_flag": True,
             }
@@ -352,7 +355,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
                 "memory_flag": True,
             }
@@ -365,7 +368,7 @@ _PRESET_DEFINITIONS = {
             {
                 "recurrent_flag": True,
                 "stack_residual_connection_option": (
-                    ResidualConnectionOptions.RESIDUAL
+                    AdditiveResidualConfig
                 ),
             }
         ),
