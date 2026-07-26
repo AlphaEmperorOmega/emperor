@@ -19,7 +19,7 @@ from emperor.augmentations.adaptive_parameters import (
     WeightedBankDynamicBiasConfig,
     WeightInformedScoreAxisMaskConfig,
 )
-from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.layers import LayerConfig, LayerStackConfig
 from emperor.linears import LinearLayerConfig
 from models.neuron.linear_adaptive._hidden.runtime_options import (
     AdaptiveProjectionOptions,
@@ -75,7 +75,7 @@ def _stack_config(options: StackOptions) -> LayerStackConfig:
             layer_norm_position=options.layer_norm_position,
             residual_config=None
             if options.residual_connection_option is None
-            else ResidualConfig(option=options.residual_connection_option),
+            else options.residual_connection_option(),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,

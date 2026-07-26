@@ -9,7 +9,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
@@ -43,7 +43,7 @@ class NeuronSubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
     bias_flag: bool
 
