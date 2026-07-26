@@ -1,4 +1,11 @@
-from emperor.layers import ActivationOptions, ResidualConnectionOptions
+from emperor.layers import (
+    ActivationOptions,
+    AdditiveResidualConfig,  # noqa: F401
+    AttentionResidualConfig,  # noqa: F401
+    ResidualConfig,
+    WeightedBlendResidualConfig,  # noqa: F401
+    WeightedResidualConfig,  # noqa: F401
+)
 from emperor.parametric import ClipParameterOptions, GeneratorBiasMixtureConfig
 
 # Trainer
@@ -50,7 +57,7 @@ OUTPUT_DIM: int = 10
 # - hidden_dim comes from the global HIDDEN_DIM field above.
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: ResidualConnectionOptions | None = None
+STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 
 # Parametric Generator Mixture Options
