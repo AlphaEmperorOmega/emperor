@@ -24,7 +24,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -333,7 +332,7 @@ class ControlConfigFactory:
             layer_norm_position=stack_options.layer_norm_position,
             residual_config=None
             if (stack_options.residual_connection_option) is None
-            else ResidualConfig(option=(stack_options.residual_connection_option)),
+            else stack_options.residual_connection_option(),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -385,9 +384,7 @@ class ControlConfigFactory:
                 layer_norm_position=expert_stack_options.layer_norm_position,
                 residual_config=None
                 if (expert_stack_options.residual_connection_option) is None
-                else ResidualConfig(
-                    option=(expert_stack_options.residual_connection_option)
-                ),
+                else expert_stack_options.residual_connection_option(),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,
@@ -498,9 +495,7 @@ class ControlConfigFactory:
                 layer_norm_position=router_stack_options.layer_norm_position,
                 residual_config=None
                 if (router_stack_options.residual_connection_option) is None
-                else ResidualConfig(
-                    option=(router_stack_options.residual_connection_option)
-                ),
+                else router_stack_options.residual_connection_option(),
                 dropout_probability=router_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,

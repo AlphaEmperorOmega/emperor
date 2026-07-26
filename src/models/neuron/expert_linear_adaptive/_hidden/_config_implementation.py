@@ -27,7 +27,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.neuron.expert_linear_adaptive._hidden._control_config_factory import (
@@ -72,14 +72,14 @@ class _RuntimeDefaultsResolver:
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
-        stack_residual_connection_option: ResidualConnectionOptions = config.STACK_RESIDUAL_CONNECTION_OPTION,
+        stack_residual_connection_option: type[ResidualConfig] = config.STACK_RESIDUAL_CONNECTION_OPTION,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         submodule_stack_hidden_dim: int = config.SUBMODULE_STACK_HIDDEN_DIM,
         submodule_stack_num_layers: int = config.SUBMODULE_STACK_NUM_LAYERS,
         submodule_stack_activation: ActivationOptions = config.SUBMODULE_STACK_ACTIVATION,
-        submodule_stack_residual_connection_option: ResidualConnectionOptions = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        submodule_stack_residual_connection_option: type[ResidualConfig] = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
         submodule_stack_dropout_probability: float = config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         submodule_stack_layer_norm_position: LayerNormPositionOptions = config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         submodule_stack_last_layer_bias_option: LastLayerBiasOptions = config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
@@ -96,7 +96,7 @@ class _RuntimeDefaultsResolver:
         expert_stack_hidden_dim: int | None = None,
         expert_stack_num_layers: int | None = None,
         expert_stack_activation: ActivationOptions | None = None,
-        expert_stack_residual_connection_option: ResidualConnectionOptions
+        expert_stack_residual_connection_option: type[ResidualConfig]
         | None = None,
         expert_stack_dropout_probability: float | None = None,
         expert_stack_layer_norm_position: LayerNormPositionOptions
@@ -116,7 +116,7 @@ class _RuntimeDefaultsResolver:
         expert_gate_stack_num_layers: int | None = config.EXPERT_GATE_STACK_NUM_LAYERS,
         expert_gate_stack_activation: ActivationOptions
         | None = config.EXPERT_GATE_STACK_ACTIVATION,
-        expert_gate_stack_residual_connection_option: ResidualConnectionOptions
+        expert_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_gate_stack_dropout_probability: float
         | None = config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -139,7 +139,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_HALTING_STACK_NUM_LAYERS,
         expert_halting_stack_activation: ActivationOptions
         | None = config.EXPERT_HALTING_STACK_ACTIVATION,
-        expert_halting_stack_residual_connection_option: ResidualConnectionOptions
+        expert_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_halting_stack_dropout_probability: float
         | None = config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -165,7 +165,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_MEMORY_STACK_NUM_LAYERS,
         expert_memory_stack_activation: ActivationOptions
         | None = config.EXPERT_MEMORY_STACK_ACTIVATION,
-        expert_memory_stack_residual_connection_option: ResidualConnectionOptions
+        expert_memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_memory_stack_dropout_probability: float
         | None = config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -192,7 +192,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_RECURRENT_GATE_STACK_NUM_LAYERS,
         expert_recurrent_gate_stack_activation: ActivationOptions
         | None = config.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
-        expert_recurrent_gate_stack_residual_connection_option: ResidualConnectionOptions
+        expert_recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_recurrent_gate_stack_dropout_probability: float
         | None = config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -215,7 +215,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_RECURRENT_HALTING_STACK_NUM_LAYERS,
         expert_recurrent_halting_stack_activation: ActivationOptions
         | None = config.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
-        expert_recurrent_halting_stack_residual_connection_option: ResidualConnectionOptions
+        expert_recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         expert_recurrent_halting_stack_dropout_probability: float
         | None = config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -238,7 +238,7 @@ class _RuntimeDefaultsResolver:
         router_stack_hidden_dim: int = config.ROUTER_STACK_HIDDEN_DIM,
         router_stack_num_layers: int = config.ROUTER_STACK_NUM_LAYERS,
         router_stack_activation: ActivationOptions = config.ROUTER_STACK_ACTIVATION,
-        router_stack_residual_connection_option: ResidualConnectionOptions = (
+        router_stack_residual_connection_option: type[ResidualConfig] = (
             config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION
         ),
         router_stack_dropout_probability: float = (
@@ -265,7 +265,7 @@ class _RuntimeDefaultsResolver:
         router_gate_stack_num_layers: int | None = config.ROUTER_GATE_STACK_NUM_LAYERS,
         router_gate_stack_activation: ActivationOptions
         | None = config.ROUTER_GATE_STACK_ACTIVATION,
-        router_gate_stack_residual_connection_option: ResidualConnectionOptions
+        router_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         router_gate_stack_dropout_probability: float
         | None = config.ROUTER_GATE_STACK_DROPOUT_PROBABILITY,
@@ -288,7 +288,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_HALTING_STACK_NUM_LAYERS,
         router_halting_stack_activation: ActivationOptions
         | None = config.ROUTER_HALTING_STACK_ACTIVATION,
-        router_halting_stack_residual_connection_option: ResidualConnectionOptions
+        router_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         router_halting_stack_dropout_probability: float
         | None = config.ROUTER_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -314,7 +314,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_MEMORY_STACK_NUM_LAYERS,
         router_memory_stack_activation: ActivationOptions
         | None = config.ROUTER_MEMORY_STACK_ACTIVATION,
-        router_memory_stack_residual_connection_option: ResidualConnectionOptions
+        router_memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
         router_memory_stack_dropout_probability: float
         | None = config.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -341,7 +341,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_RECURRENT_GATE_STACK_NUM_LAYERS,
         router_recurrent_gate_stack_activation: ActivationOptions
         | None = config.ROUTER_RECURRENT_GATE_STACK_ACTIVATION,
-        router_recurrent_gate_stack_residual_connection_option: ResidualConnectionOptions
+        router_recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         router_recurrent_gate_stack_dropout_probability: float
         | None = config.ROUTER_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -364,7 +364,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_RECURRENT_HALTING_STACK_NUM_LAYERS,
         router_recurrent_halting_stack_activation: ActivationOptions
         | None = config.ROUTER_RECURRENT_HALTING_STACK_ACTIVATION,
-        router_recurrent_halting_stack_residual_connection_option: ResidualConnectionOptions
+        router_recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         router_recurrent_halting_stack_dropout_probability: float
         | None = config.ROUTER_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -383,7 +383,7 @@ class _RuntimeDefaultsResolver:
         | None = config.GATE_STACK_LAYER_NORM_POSITION,
         gate_stack_num_layers: int | None = config.GATE_STACK_NUM_LAYERS,
         gate_stack_activation: ActivationOptions | None = config.GATE_STACK_ACTIVATION,
-        gate_stack_residual_connection_option: ResidualConnectionOptions
+        gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         gate_stack_dropout_probability: float
         | None = config.GATE_STACK_DROPOUT_PROBABILITY,
@@ -404,7 +404,7 @@ class _RuntimeDefaultsResolver:
         halting_stack_num_layers: int | None = config.HALTING_STACK_NUM_LAYERS,
         halting_stack_activation: ActivationOptions
         | None = config.HALTING_STACK_ACTIVATION,
-        halting_stack_residual_connection_option: ResidualConnectionOptions
+        halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         halting_stack_dropout_probability: float
         | None = config.HALTING_STACK_DROPOUT_PROBABILITY,
@@ -427,7 +427,7 @@ class _RuntimeDefaultsResolver:
         memory_stack_num_layers: int | None = config.MEMORY_STACK_NUM_LAYERS,
         memory_stack_activation: ActivationOptions
         | None = config.MEMORY_STACK_ACTIVATION,
-        memory_stack_residual_connection_option: ResidualConnectionOptions
+        memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
         memory_stack_dropout_probability: float
         | None = config.MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -452,7 +452,7 @@ class _RuntimeDefaultsResolver:
         | None = config.WEIGHT_GENERATOR_STACK_NUM_LAYERS,
         weight_generator_stack_activation: ActivationOptions
         | None = config.WEIGHT_GENERATOR_STACK_ACTIVATION,
-        weight_generator_stack_residual_connection_option: ResidualConnectionOptions
+        weight_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         weight_generator_stack_dropout_probability: float
         | None = config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -481,7 +481,7 @@ class _RuntimeDefaultsResolver:
         | None = config.BIAS_GENERATOR_STACK_NUM_LAYERS,
         bias_generator_stack_activation: ActivationOptions
         | None = config.BIAS_GENERATOR_STACK_ACTIVATION,
-        bias_generator_stack_residual_connection_option: ResidualConnectionOptions
+        bias_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         bias_generator_stack_dropout_probability: float
         | None = config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -500,7 +500,7 @@ class _RuntimeDefaultsResolver:
         | None = config.DIAGONAL_GENERATOR_STACK_NUM_LAYERS,
         diagonal_generator_stack_activation: ActivationOptions
         | None = config.DIAGONAL_GENERATOR_STACK_ACTIVATION,
-        diagonal_generator_stack_residual_connection_option: ResidualConnectionOptions
+        diagonal_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         diagonal_generator_stack_dropout_probability: float
         | None = config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -526,7 +526,7 @@ class _RuntimeDefaultsResolver:
         | None = config.MASK_GENERATOR_STACK_NUM_LAYERS,
         mask_generator_stack_activation: ActivationOptions
         | None = config.MASK_GENERATOR_STACK_ACTIVATION,
-        mask_generator_stack_residual_connection_option: ResidualConnectionOptions
+        mask_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         mask_generator_stack_dropout_probability: float
         | None = config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -539,7 +539,7 @@ class _RuntimeDefaultsResolver:
         adaptive_generator_stack_num_layers: int = config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
         adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
         adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_connection_option: ResidualConnectionOptions = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        adaptive_generator_stack_residual_connection_option: type[ResidualConfig] = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
         adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
@@ -612,7 +612,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_NUM_LAYERS,
         router_weight_generator_stack_activation: ActivationOptions
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_ACTIVATION,
-        router_weight_generator_stack_residual_connection_option: ResidualConnectionOptions
+        router_weight_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         router_weight_generator_stack_dropout_probability: float
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -637,7 +637,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_BIAS_GENERATOR_STACK_NUM_LAYERS,
         router_bias_generator_stack_activation: ActivationOptions
         | None = config.ROUTER_BIAS_GENERATOR_STACK_ACTIVATION,
-        router_bias_generator_stack_residual_connection_option: ResidualConnectionOptions
+        router_bias_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         router_bias_generator_stack_dropout_probability: float
         | None = config.ROUTER_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -659,7 +659,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_NUM_LAYERS,
         router_diagonal_generator_stack_activation: ActivationOptions
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_ACTIVATION,
-        router_diagonal_generator_stack_residual_connection_option: ResidualConnectionOptions
+        router_diagonal_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         router_diagonal_generator_stack_dropout_probability: float
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -686,7 +686,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_MASK_GENERATOR_STACK_NUM_LAYERS,
         router_mask_generator_stack_activation: ActivationOptions
         | None = config.ROUTER_MASK_GENERATOR_STACK_ACTIVATION,
-        router_mask_generator_stack_residual_connection_option: ResidualConnectionOptions
+        router_mask_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
         router_mask_generator_stack_dropout_probability: float
         | None = config.ROUTER_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
@@ -712,7 +712,7 @@ class _RuntimeDefaultsResolver:
         | None = config.RECURRENT_GATE_STACK_NUM_LAYERS,
         recurrent_gate_stack_activation: ActivationOptions
         | None = config.RECURRENT_GATE_STACK_ACTIVATION,
-        recurrent_gate_stack_residual_connection_option: ResidualConnectionOptions
+        recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         recurrent_gate_stack_dropout_probability: float
         | None = config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -735,7 +735,7 @@ class _RuntimeDefaultsResolver:
         | None = config.RECURRENT_HALTING_STACK_NUM_LAYERS,
         recurrent_halting_stack_activation: ActivationOptions
         | None = config.RECURRENT_HALTING_STACK_ACTIVATION,
-        recurrent_halting_stack_residual_connection_option: ResidualConnectionOptions
+        recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         recurrent_halting_stack_dropout_probability: float
         | None = config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
