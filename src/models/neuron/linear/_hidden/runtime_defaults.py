@@ -12,7 +12,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.neuron.linear._hidden.runtime_options import (
@@ -223,6 +223,27 @@ def _optional_enum(
     return _enum(values, sources, key, expected_type)
 
 
+def _optional_residual_config_type(
+    values: Mapping[str, object],
+    sources: Mapping[str, str],
+    key: str,
+) -> type[ResidualConfig] | None:
+    value = values[key]
+    if value is None:
+        return None
+    if (
+        not isinstance(value, type)
+        or not issubclass(value, ResidualConfig)
+        or "_registry_owner" not in value.__dict__
+    ):
+        _raise_type_error(
+            sources[key],
+            value,
+            "concrete type[ResidualConfig]",
+        )
+    return value
+
+
 def _positive(key: str, value: int | float) -> None:
     if value <= 0:
         raise ValueError(f"{_PACKAGE_NAME}: {key!r} must be positive; got {value!r}")
@@ -256,11 +277,10 @@ def _main_stack(
         ),
         num_layers=num_layers,
         activation=_enum(values, sources, "stack_activation", ActivationOptions),
-        residual_connection_option=_optional_enum(
+        residual_connection_option=_optional_residual_config_type(
             values,
             sources,
             "stack_residual_connection_option",
-            ResidualConnectionOptions,
         ),
         dropout_probability=dropout,
         last_layer_bias_option=_enum(
@@ -305,11 +325,10 @@ def _submodule_stack(
             "submodule_stack_layer_norm_position",
             LayerNormPositionOptions,
         ),
-        residual_connection_option=_optional_enum(
+        residual_connection_option=_optional_residual_config_type(
             values,
             sources,
             "submodule_stack_residual_connection_option",
-            ResidualConnectionOptions,
         ),
         dropout_probability=dropout,
         bias_flag=_bool(values, sources, "submodule_stack_bias_flag"),
@@ -345,11 +364,10 @@ def _resolved_controller_stack(
         f"{prefix}_layer_norm_position",
         LayerNormPositionOptions,
     )
-    residual_connection_option = _optional_enum(
+    residual_connection_option = _optional_residual_config_type(
         values,
         sources,
         f"{prefix}_residual_connection_option",
-        ResidualConnectionOptions,
     )
     dropout = _optional_float(values, sources, f"{prefix}_dropout_probability")
     bias_flag = values[f"{prefix}_bias_flag"]
