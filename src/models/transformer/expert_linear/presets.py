@@ -1,7 +1,10 @@
 from emperor.config import BaseOptions
 from emperor.datasets.text.translation import Multi30kDeEn
 from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
-from emperor.layers import LayerNormPositionOptions, ResidualConnectionOptions
+from emperor.layers import (
+    AdditiveResidualConfig,
+    LayerNormPositionOptions,
+)
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
@@ -109,28 +112,28 @@ _PRESET_OVERRIDES = {
         "memory_flag": True,
     },
     "RESIDUAL": {
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL
+        "stack_residual_connection_option": AdditiveResidualConfig
     },
     "RESIDUAL_POST_NORM": {
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_residual_connection_option": AdditiveResidualConfig,
         "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
         "decoder_layer_norm_position": LayerNormPositionOptions.AFTER,
     },
     "RESIDUAL_GATING": {
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_residual_connection_option": AdditiveResidualConfig,
         "stack_gate_flag": True,
     },
     "RESIDUAL_HALTING": {
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_residual_connection_option": AdditiveResidualConfig,
         "stack_halting_flag": True,
     },
     "RESIDUAL_MEMORY": {
-        "stack_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "stack_residual_connection_option": AdditiveResidualConfig,
         "memory_flag": True,
     },
     "RECURRENT_RESIDUAL": {
         "recurrent_flag": True,
-        "recurrent_residual_connection_option": ResidualConnectionOptions.RESIDUAL,
+        "recurrent_residual_connection_option": AdditiveResidualConfig,
     },
     "RECURRENT_POST_NORM": {
         "recurrent_flag": True,
