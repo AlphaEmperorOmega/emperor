@@ -10,7 +10,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
-    ResidualConnectionOptions,
+    ResidualConfig,
 )
 from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from models.neuron.expert_linear._hidden.runtime_defaults import runtime_from_flat
@@ -65,7 +65,7 @@ class _NeuronExpertLinearRuntimeDefaultsResolver(NeuronConfigBuilder):
         cluster_terminal_router_layer_norm_position: LayerNormPositionOptions = (
             config.CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION
         ),
-        cluster_terminal_router_residual_connection_option: ResidualConnectionOptions = (
+        cluster_terminal_router_residual_connection_option: type[ResidualConfig] = (
             config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION
         ),
         cluster_terminal_router_dropout_probability: float = (
@@ -126,7 +126,7 @@ class _NeuronExpertLinearRuntimeDefaultsResolver(NeuronConfigBuilder):
         cluster_halting_stack_activation: ActivationOptions = (
             config.CLUSTER_HALTING_STACK_ACTIVATION
         ),
-        cluster_halting_stack_residual_connection_option: ResidualConnectionOptions = (
+        cluster_halting_stack_residual_connection_option: type[ResidualConfig] = (
             config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
         cluster_halting_stack_dropout_probability: float = (
