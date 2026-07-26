@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 
-from emperor.layers import ActivationOptions, ResidualConnectionOptions
+from emperor.layers import (
+    ActivationOptions,
+    ResidualConfig,
+)
 from emperor.parametric import ClipParameterOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
@@ -10,7 +13,7 @@ class ParametricStackOptions:
     hidden_dim: int
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: ResidualConnectionOptions
+    residual_connection_option: type[ResidualConfig]
     dropout_probability: float
 
 
