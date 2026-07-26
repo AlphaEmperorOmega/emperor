@@ -10,13 +10,13 @@ from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
 from emperor.experts import MixtureOfExpertsModelConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
     ResidualConfig,
-    ResidualConnectionOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.transformer import (
@@ -221,7 +221,7 @@ class BertBackendConfigBuilder:
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
-            residual_config=ResidualConfig(option=ResidualConnectionOptions.RESIDUAL),
+            residual_config=AdditiveResidualConfig(),
             attention_config=attention_config,
             feed_forward_config=feed_forward_config,
         )
@@ -407,7 +407,7 @@ class BertBackendConfigBuilder:
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
-        residual_connection_option: ResidualConnectionOptions | None = None,
+        residual_connection_option: type[ResidualConfig] | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -419,7 +419,7 @@ class BertBackendConfigBuilder:
             layer_norm_position=layer_norm_position,
             residual_config=None
             if residual_connection_option is None
-            else ResidualConfig(option=residual_connection_option),
+            else residual_connection_option(),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,
