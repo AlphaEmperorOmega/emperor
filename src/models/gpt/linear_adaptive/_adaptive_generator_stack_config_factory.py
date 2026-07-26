@@ -1,4 +1,4 @@
-from emperor.layers import LayerConfig, LayerStackConfig, ResidualConfig
+from emperor.layers import LayerConfig, LayerStackConfig
 from emperor.linears import LinearLayerConfig
 from models.gpt.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
@@ -70,7 +70,7 @@ class AdaptiveGeneratorStackConfigFactory:
                 layer_norm_position=options.layer_norm_position,
                 residual_config=None
                 if options.residual_connection_option is None
-                else ResidualConfig(option=options.residual_connection_option),
+                else options.residual_connection_option(),
                 dropout_probability=options.dropout_probability,
                 gate_config=None,
                 halting_config=None,
