@@ -1524,10 +1524,15 @@ describe("config section controls", () => {
       }),
       field({
         key: "expert_stack_residual_connection_option",
-        type: "enum",
+        type: "class",
         default: null,
         nullable: true,
-        choices: ["RESIDUAL", "WEIGHTED_RESIDUAL", "WEIGHTED_BLEND"],
+        choices: [
+          "AdditiveResidualConfig",
+          "AttentionResidualConfig",
+          "WeightedBlendResidualConfig",
+          "WeightedResidualConfig",
+        ],
         section: "Expert Stack Options",
       }),
       field({

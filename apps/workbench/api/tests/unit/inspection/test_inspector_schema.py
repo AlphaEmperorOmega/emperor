@@ -12,7 +12,7 @@ from pathlib import Path
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 import models.linears.linear.config as linear_config
-from emperor.layers import LayerGateOptions
+from emperor.layers import LayerGateOptions, WeightedResidualConfig
 from emperor.layers import ActivationOptions
 from emperor.memory import WeightedDynamicMemoryConfig
 from model_runtime.packages.configuration_metadata import (
@@ -603,6 +603,19 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIn(
             "WeightedDynamicMemoryConfig",
             linear_fields["memory_option"]["choices"],
+        )
+        residual_selector = linear_fields["stack_residual_connection_option"]
+        self.assertEqual(residual_selector["type"], "class")
+        self.assertIsNone(residual_selector["default"])
+        self.assertTrue(residual_selector["nullable"])
+        self.assertEqual(
+            residual_selector["choices"],
+            [
+                "AdditiveResidualConfig",
+                "AttentionResidualConfig",
+                "WeightedBlendResidualConfig",
+                "WeightedResidualConfig",
+            ],
         )
         self.assertEqual(linear_fields["memory_position_option"]["type"], "enum")
         self.assertEqual(
@@ -1830,6 +1843,22 @@ class InspectorSchemaTests(unittest.TestCase):
             ActivationOptions.TANH,
         )
         self.assertIsNone(parse_config_value(linear_config, "GATE_OPTION", "None"))
+
+    def test_parse_config_value_supports_residual_config_classes_only(self) -> None:
+        self.assertIs(
+            parse_config_value(
+                linear_config,
+                "STACK_RESIDUAL_CONNECTION_OPTION",
+                "WeightedResidualConfig",
+            ),
+            WeightedResidualConfig,
+        )
+        with self.assertRaises(ConfigValueError):
+            parse_config_value(
+                linear_config,
+                "STACK_RESIDUAL_CONNECTION_OPTION",
+                "RESIDUAL",
+            )
 
     def test_config_schema_marks_preset_owned_fields_locked(self) -> None:
         baseline_fields = _fields_by_key(config_schema("linears/linear", "baseline"))

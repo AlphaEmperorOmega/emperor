@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from emperor.layers import WeightedResidualConfig
 from model_runtime.inspection import (
     ConfigurationSchema,
     InspectionError,
@@ -181,6 +182,39 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             dict(parsed.values),
             {"hidden_dim": 128, "stack_gate_flag": True},
         )
+
+    def test_residual_override_uses_concrete_config_class_names(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+
+        fields = {field.key: field for field in configuration_schema(package).fields}
+        residual_selector = fields["STACK_RESIDUAL_CONNECTION_OPTION"]
+
+        self.assertEqual(residual_selector.value_type, "class")
+        self.assertIsNone(residual_selector.default)
+        self.assertTrue(residual_selector.nullable)
+        self.assertEqual(
+            residual_selector.choices,
+            (
+                "AdditiveResidualConfig",
+                "AttentionResidualConfig",
+                "WeightedBlendResidualConfig",
+                "WeightedResidualConfig",
+            ),
+        )
+        parsed = parse_overrides(
+            package,
+            {"stack_residual_connection_option": "WeightedResidualConfig"},
+        )
+        self.assertIs(
+            parsed.values["stack_residual_connection_option"],
+            WeightedResidualConfig,
+        )
+        with self.assertRaisesRegex(InspectionError, "unknown config class 'RESIDUAL'"):
+            parse_overrides(
+                package,
+                {"stack_residual_connection_option": "RESIDUAL"},
+            )
 
     def test_invalid_and_locked_overrides_raise_transport_neutral_error(self) -> None:
         package = model_package("linears/linear")
