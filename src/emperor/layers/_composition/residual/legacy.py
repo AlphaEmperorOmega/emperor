@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 
 
 class ResidualConnection(Module):
+    """Compatibility facade retained while callers migrate to concrete configs."""
+
     VALIDATOR = ResidualConnectionValidator
     PAIRWISE_RESIDUAL_TYPES: ClassVar[
         dict[ResidualConnectionOptions, type[PairwiseResidual]]
@@ -65,9 +67,7 @@ class ResidualConnection(Module):
         self.model = pairwise_parameters.model
         self.attention_residual = self.__initialize_attention_residual()
 
-    def __build_pairwise_parameters(
-        self,
-    ) -> _PairwiseResidualParameters:
+    def __build_pairwise_parameters(self) -> _PairwiseResidualParameters:
         pairwise_residual_type = self.__pairwise_residual_type()
         if pairwise_residual_type is None:
             if self.option != ResidualConnectionOptions.ATTENTION_RESIDUAL:
@@ -112,9 +112,7 @@ class ResidualConnection(Module):
 
     def new_state(self, initial_source: Tensor) -> "AttentionResidualState":
         attention_residual = self.attention_residual
-        self.VALIDATOR.validate_attention_residual_available(
-            attention_residual,
-        )
+        self.VALIDATOR.validate_attention_residual_available(attention_residual)
         return cast("AttentionResidual", attention_residual).new_state(initial_source)
 
     def forward(
