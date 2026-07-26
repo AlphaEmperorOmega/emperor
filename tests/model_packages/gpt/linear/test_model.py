@@ -21,11 +21,11 @@ from emperor.embedding.absolute import (
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConnectionOptions,
 )
 from emperor.transformer import (
     TransformerDecoderBlockLayerConfig,
@@ -446,7 +446,7 @@ class TestGptLinearModel(unittest.TestCase):
                     **defaults,
                     "stack_options": replace(
                         defaults["stack_options"],
-                        residual_connection_option=(ResidualConnectionOptions.RESIDUAL),
+                        residual_connection_option=(AdditiveResidualConfig),
                         last_layer_bias_option=LastLayerBiasOptions.DISABLED,
                         apply_output_pipeline_flag=False,
                         bias_flag=False,
@@ -456,8 +456,8 @@ class TestGptLinearModel(unittest.TestCase):
         ).build()
         stack = self._decoder_stack_config(cfg)
         self.assertEqual(
-            stack.layer_config.residual_config.option,
-            ResidualConnectionOptions.RESIDUAL,
+            type(stack.layer_config.residual_config),
+            AdditiveResidualConfig,
         )
         self.assertEqual(
             stack.last_layer_bias_option,
@@ -1047,8 +1047,8 @@ class TestGptLinearModel(unittest.TestCase):
                 cfg = presets.get_config(preset)[0]
                 stack = self._decoder_stack_config(cfg)
                 self.assertEqual(
-                    stack.layer_config.residual_config.option,
-                    ResidualConnectionOptions.RESIDUAL,
+                    type(stack.layer_config.residual_config),
+                    AdditiveResidualConfig,
                 )
                 self.assertEqual(
                     isinstance(
