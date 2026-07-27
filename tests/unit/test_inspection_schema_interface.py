@@ -8,6 +8,9 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from emperor.layers import (
     AdditiveResidualConfig,
+    HierarchicalReasoningModelRecurrentConfig,
+    RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
     WeightedResidualConfig,
 )
 from model_runtime.inspection import (
@@ -27,6 +30,7 @@ from model_runtime.inspection import (
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.packages import ModelIdentity, ModelPackage
 from models.catalog import model_package
+from models.transformer.linear import config as transformer_linear_config
 
 
 class _BrokenPackageAdapter:
@@ -48,6 +52,16 @@ def _broken_package() -> ModelPackage:
     return ModelPackage(
         ModelIdentity("broken", "missing"),
         _BrokenPackageAdapter(),
+    )
+
+
+def _fresh_package(catalog_key: str) -> ModelPackage:
+    catalog_package = model_package(catalog_key)
+    assert catalog_package is not None
+    return ModelPackage(
+        catalog_package.identity,
+        catalog_package._adapter,
+        catalog_package.inspection_construction_limits,
     )
 
 
@@ -151,6 +165,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         )
         self.assertTrue(fields["STACK_GATE_FLAG"].locked)
         self.assertEqual(fields["STACK_GATE_FLAG"].locked_value, True)
+        self.assertEqual(fields["HIDDEN_DIM"].applicable_when, ())
 
     def test_selected_adaptive_package_produces_search_metadata_records(self) -> None:
         package = model_package("linears/linear_adaptive")
@@ -257,6 +272,281 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             parsed.values["recurrent_residual_connection_option"],
             AdditiveResidualConfig,
         )
+
+    def test_recurrent_override_uses_concrete_config_class_names(self) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        fields = {field.key: field for field in configuration_schema(package).fields}
+        selector = fields["RECURRENT_COMPOSITION_OPTION"]
+
+        self.assertEqual(selector.value_type, "class")
+        self.assertEqual(selector.default, "RecurrentLayerConfig")
+        self.assertFalse(selector.nullable)
+        self.assertEqual(
+            selector.choices,
+            (
+                "HierarchicalReasoningModelRecurrentConfig",
+                "RecurrentLayerConfig",
+                "TinyRecursiveModelRecurrentConfig",
+            ),
+        )
+        parsed = parse_overrides(
+            package,
+            {"recurrent_composition_option": "TinyRecursiveModelRecurrentConfig"},
+        )
+        self.assertIs(
+            parsed.values["recurrent_composition_option"],
+            TinyRecursiveModelRecurrentConfig,
+        )
+        hierarchical_reasoning_model_parsed = parse_overrides(
+            package,
+            {
+                "recurrent_composition_option": "HierarchicalReasoningModelRecurrentConfig"
+            },
+        )
+        self.assertIs(
+            hierarchical_reasoning_model_parsed.values["recurrent_composition_option"],
+            HierarchicalReasoningModelRecurrentConfig,
+        )
+        self.assertEqual(
+            serialize_overrides(
+                package,
+                {"recurrent_composition_option": "TinyRecursiveModelRecurrentConfig"},
+            ),
+            {"RECURRENT_COMPOSITION_OPTION": "TinyRecursiveModelRecurrentConfig"},
+        )
+        self.assertEqual(
+            serialize_overrides(
+                package,
+                {
+                    "recurrent_composition_option": "HierarchicalReasoningModelRecurrentConfig"
+                },
+            ),
+            {
+                "RECURRENT_COMPOSITION_OPTION": "HierarchicalReasoningModelRecurrentConfig"
+            },
+        )
+        with self.assertRaisesRegex(InspectionError, "abstract"):
+            parse_overrides(
+                package,
+                {"recurrent_composition_option": "RecurrentCompositionConfig"},
+            )
+        for retired_name in ("HRMRecurrentConfig", "TRMRecurrentConfig"):
+            with self.subTest(retired_name=retired_name):
+                with self.assertRaisesRegex(InspectionError, "unknown config class"):
+                    parse_overrides(
+                        package,
+                        {"recurrent_composition_option": retired_name},
+                    )
+
+    def test_recurrent_reinjection_runtime_defaults_are_boolean_fields(self) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        fields = {field.key: field for field in configuration_schema(package).fields}
+        keys = (
+            "RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG",
+            "ATTN_RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG",
+            "FF_RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG",
+        )
+        for key in keys:
+            with self.subTest(key=key):
+                field = fields[key]
+                self.assertEqual(field.value_type, "bool")
+                self.assertIs(field.default, False)
+                self.assertFalse(field.nullable)
+                self.assertEqual(field.choices, (True, False))
+
+        parsed = parse_overrides(
+            package,
+            {
+                "recurrent_reinject_original_hidden_flag": "true",
+                "attn-recurrent-reinject-original-hidden-flag": "true",
+                "ff_recurrent_reinject_original_hidden_flag": "false",
+            },
+        )
+        self.assertEqual(
+            dict(parsed.values),
+            {
+                "recurrent_reinject_original_hidden_flag": True,
+                "attn_recurrent_reinject_original_hidden_flag": True,
+                "ff_recurrent_reinject_original_hidden_flag": False,
+            },
+        )
+
+    def test_recurrent_fields_expose_exact_sections_types_and_applicability(
+        self,
+    ) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        fields = {field.key: field for field in configuration_schema(package).fields}
+        variants = (
+            "HierarchicalReasoningModelRecurrentConfig",
+            "RecurrentLayerConfig",
+            "TinyRecursiveModelRecurrentConfig",
+        )
+        restricted_types = {
+            "RECURRENT_MAX_STEPS": "int",
+            "RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG": "bool",
+            "RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE": "int",
+            "RECURRENT_ANSWER_UPDATE_COUNT": "int",
+            "RECURRENT_HIGH_CYCLES": "int",
+            "RECURRENT_LOW_CYCLES": "int",
+            "RECURRENT_INITIALIZATION_STANDARD_DEVIATION": "float",
+        }
+        restricted_values = {
+            "RECURRENT_MAX_STEPS": ("RecurrentLayerConfig",),
+            "RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG": ("RecurrentLayerConfig",),
+            "RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE": (
+                "TinyRecursiveModelRecurrentConfig",
+            ),
+            "RECURRENT_ANSWER_UPDATE_COUNT": ("TinyRecursiveModelRecurrentConfig",),
+            "RECURRENT_HIGH_CYCLES": ("HierarchicalReasoningModelRecurrentConfig",),
+            "RECURRENT_LOW_CYCLES": ("HierarchicalReasoningModelRecurrentConfig",),
+            "RECURRENT_INITIALIZATION_STANDARD_DEVIATION": (
+                "TinyRecursiveModelRecurrentConfig",
+                "HierarchicalReasoningModelRecurrentConfig",
+            ),
+        }
+        scopes = (
+            ("", ("Controller Options", "Recurrent Layer Options")),
+            (
+                "ATTN_",
+                (
+                    "Attention Options",
+                    "Attention Projection Stack Options",
+                    "Attention Projection Recurrent Layer Options",
+                ),
+            ),
+            (
+                "FF_",
+                (
+                    "Feed-Forward Stack Options",
+                    "Feed-Forward Recurrent Layer Options",
+                ),
+            ),
+        )
+
+        for prefix, section_path in scopes:
+            with self.subTest(prefix=prefix or "top-level"):
+                selector_key = f"{prefix}RECURRENT_COMPOSITION_OPTION"
+                selector = fields[selector_key]
+                self.assertEqual(selector.section_path, section_path)
+                self.assertEqual(selector.value_type, "class")
+                self.assertEqual(selector.choices, variants)
+                self.assertEqual(selector.applicable_when, ())
+
+                for suffix, values in restricted_values.items():
+                    target = fields[f"{prefix}{suffix}"]
+                    self.assertEqual(target.section_path, section_path)
+                    self.assertEqual(target.value_type, restricted_types[suffix])
+                    self.assertEqual(len(target.applicable_when), 1)
+                    condition = target.applicable_when[0]
+                    self.assertEqual(condition.key, selector_key)
+                    self.assertEqual(condition.values, values)
+
+                shared = fields[f"{prefix}RECURRENT_NO_GRADIENT_TRANSITION_COUNT"]
+                self.assertEqual(shared.value_type, "int")
+                self.assertIsNone(shared.default)
+                self.assertTrue(shared.nullable)
+                self.assertEqual(shared.applicable_when, ())
+
+        self.assertEqual(
+            fields["RECURRENT_STACK_GATE_FLAG"].section_path,
+            (
+                "Controller Options",
+                "Recurrent Layer Options",
+                "Recurrent Gate Options",
+            ),
+        )
+        self.assertEqual(
+            fields["RECURRENT_STACK_HALTING_FLAG"].section_path,
+            (
+                "Controller Options",
+                "Recurrent Layer Options",
+                "Recurrent Halting Options",
+            ),
+        )
+        self.assertEqual(fields["RECURRENT_STACK_GATE_FLAG"].applicable_when, ())
+        self.assertEqual(
+            fields["RECURRENT_RESIDUAL_CONNECTION_OPTION"].applicable_when,
+            (),
+        )
+        self.assertEqual(
+            fields["ATTN_RECURRENT_LAYER_NORM_POSITION"].applicable_when,
+            (),
+        )
+        self.assertEqual(fields["ATTN_MEMORY_FLAG"].applicable_when, ())
+        self.assertEqual(fields["FF_RECURRENT_STACK_HALTING_FLAG"].applicable_when, ())
+
+    def test_top_level_recurrent_no_gradient_count_parses_int_and_none(self) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        count = parse_overrides(
+            package,
+            {"recurrent_no_gradient_transition_count": "7"},
+        )
+        disabled = parse_overrides(
+            package,
+            {"recurrent_no_gradient_transition_count": "null"},
+        )
+
+        self.assertEqual(count.values["recurrent_no_gradient_transition_count"], 7)
+        self.assertIsNone(disabled.values["recurrent_no_gradient_transition_count"])
+
+    def test_invalid_recurrent_applicability_metadata_is_rejected(self) -> None:
+        cases = (
+            (
+                "unknown target key",
+                {
+                    "NOT_A_RUNTIME_DEFAULT": {
+                        "RECURRENT_COMPOSITION_OPTION": (RecurrentLayerConfig,)
+                    }
+                },
+            ),
+            (
+                "unknown controller key",
+                {
+                    "RECURRENT_MAX_STEPS": {
+                        "NOT_A_RUNTIME_DEFAULT": (RecurrentLayerConfig,)
+                    }
+                },
+            ),
+            (
+                "cannot be empty",
+                {"RECURRENT_MAX_STEPS": {"RECURRENT_COMPOSITION_OPTION": ()}},
+            ),
+            (
+                "depend on itself",
+                {"RECURRENT_MAX_STEPS": {"RECURRENT_MAX_STEPS": (2,)}},
+            ),
+            (
+                "dependency cycle",
+                {
+                    "RECURRENT_MAX_STEPS": {
+                        "RECURRENT_NO_GRADIENT_TRANSITION_COUNT": (None,)
+                    },
+                    "RECURRENT_NO_GRADIENT_TRANSITION_COUNT": {
+                        "RECURRENT_MAX_STEPS": (2,)
+                    },
+                },
+            ),
+        )
+
+        for message, metadata in cases:
+            with (
+                self.subTest(message=message),
+                patch.object(
+                    transformer_linear_config,
+                    "CONFIG_FIELD_APPLICABILITY",
+                    metadata,
+                ),
+                self.assertRaisesRegex(InspectionError, message),
+            ):
+                configuration_schema(_fresh_package("transformer/linear"))
 
     def test_invalid_and_locked_overrides_raise_transport_neutral_error(self) -> None:
         package = model_package("linears/linear")
