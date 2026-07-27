@@ -15,6 +15,7 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key" | "flag
     default: overrides.default ?? "",
     nullable: overrides.nullable ?? false,
     choices: overrides.choices ?? [],
+    applicableWhen: overrides.applicableWhen ?? [],
     ...overrides,
   };
 }

@@ -19,6 +19,7 @@ function field(overrides: Partial<ConfigField> & Pick<ConfigField, "key">): Conf
     default: overrides.default ?? 0,
     nullable: overrides.nullable ?? false,
     choices: overrides.choices ?? [],
+    applicableWhen: overrides.applicableWhen ?? [],
     locked: overrides.locked ?? false,
     lockedValue: overrides.lockedValue,
     lockedReason: overrides.lockedReason,

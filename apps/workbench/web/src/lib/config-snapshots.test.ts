@@ -10,12 +10,13 @@ import {
 } from "@/lib/config-snapshots";
 import type { ConfigField } from "@/lib/api/models";
 
-type ConfigFieldFixture = Omit<ConfigField, "sectionPath"> &
-  Partial<Pick<ConfigField, "sectionPath">>;
+type ConfigFieldFixture = Omit<ConfigField, "applicableWhen" | "sectionPath"> &
+  Partial<Pick<ConfigField, "applicableWhen" | "sectionPath">>;
 
 function withSectionPaths(fields: ConfigFieldFixture[]): ConfigField[] {
   return fields.map((field) => ({
     ...field,
+    applicableWhen: field.applicableWhen ?? [],
     sectionPath: field.sectionPath ?? [field.section || "General"],
   }));
 }

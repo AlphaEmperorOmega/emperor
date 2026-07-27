@@ -27,6 +27,7 @@ const field: ConfigField = {
   default: 64,
   nullable: false,
   choices: [],
+  applicableWhen: [],
   locked: false,
 };
 

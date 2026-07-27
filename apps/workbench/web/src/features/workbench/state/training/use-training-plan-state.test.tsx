@@ -36,6 +36,7 @@ const fields: ConfigField[] = [
     default: 64,
     nullable: false,
     choices: [],
+    applicableWhen: [],
     locked: false,
   },
   {
@@ -49,6 +50,7 @@ const fields: ConfigField[] = [
     default: 10,
     nullable: false,
     choices: [],
+    applicableWhen: [],
     locked: false,
   },
 ];

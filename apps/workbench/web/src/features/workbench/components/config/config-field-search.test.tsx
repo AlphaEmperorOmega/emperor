@@ -29,6 +29,7 @@ function option(index: number): RuntimeDefaultsSearchOptionPresentation {
         default: 1,
         nullable: false,
         choices: [],
+        applicableWhen: [],
       },
       key,
       label,

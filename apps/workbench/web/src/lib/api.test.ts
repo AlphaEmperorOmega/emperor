@@ -345,6 +345,7 @@ const successfulConfigSchemaResponse = {
       locked: false,
       lockedValue: null,
       lockedReason: "",
+      applicableWhen: [],
     },
     {
       key: "checkpoint",
@@ -360,6 +361,7 @@ const successfulConfigSchemaResponse = {
       locked: true,
       lockedValue: "none",
       lockedReason: "Hosted fixture keeps checkpoint loading disabled",
+      applicableWhen: [],
     },
   ],
 };
@@ -1915,6 +1917,64 @@ describe("requestJson error handling", () => {
 });
 
 describe("URL and query construction", () => {
+  it("requires and parses config field applicability", async () => {
+    const configField = {
+      key: "RECURRENT_MAX_STEPS",
+      configKey: "RECURRENT_MAX_STEPS",
+      flag: "--recurrent-max-steps",
+      label: "recurrent max steps",
+      section: "Recurrent Layer Options",
+      sectionPath: ["Controller Options", "Recurrent Layer Options"],
+      description: "Maximum recurrent steps.",
+      type: "int",
+      default: 2,
+      nullable: false,
+      choices: [],
+      applicableWhen: [
+        {
+          key: "RECURRENT_COMPOSITION_OPTION",
+          values: ["RecurrentLayerConfig"],
+        },
+      ],
+    };
+    stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            modelType: "transformer",
+            model: "linear",
+            fields: [configField],
+          }),
+      }),
+    );
+
+    const parsed = await fetchConfigSchema({
+      modelType: "transformer",
+      model: "linear",
+    });
+    expect(parsed.fields[0]?.applicableWhen).toEqual(
+      configField.applicableWhen,
+    );
+
+    const missingApplicability = Object.fromEntries(
+      Object.entries(configField).filter(([key]) => key !== "applicableWhen"),
+    );
+    stubFetch(
+      fakeResponse({
+        json: () =>
+          Promise.resolve({
+            modelType: "transformer",
+            model: "linear",
+            fields: [missingApplicability],
+          }),
+      }),
+    );
+
+    await expect(
+      fetchConfigSchema({ modelType: "transformer", model: "linear" }),
+    ).rejects.toThrow("applicableWhen");
+  });
+
   it("fetches capabilities from the root capabilities route", async () => {
     const fetchMock = stubFetch(
       fakeResponse({ json: () => Promise.resolve(capabilitiesResponse) }),
