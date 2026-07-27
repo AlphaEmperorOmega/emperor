@@ -1,4 +1,5 @@
 from emperor_workbench.api.v1.model_packages._contracts import (
+    ConfigFieldConditionResponse,
     ConfigFieldResponse,
     ConfigSchemaResponse,
     DatasetGroupResponse,
@@ -16,6 +17,7 @@ from emperor_workbench.api.v1.model_packages._contracts import (
 from emperor_workbench.api.v1.model_packages._routes import router
 
 __all__ = [
+    "ConfigFieldConditionResponse",
     "ConfigFieldResponse",
     "ConfigSchemaResponse",
     "DatasetGroupResponse",

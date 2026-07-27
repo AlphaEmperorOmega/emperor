@@ -3,6 +3,7 @@ from __future__ import annotations
 from model_runtime.inspection import ConfigurationSchema, SearchSpace
 
 from emperor_workbench.api.v1.model_packages._contracts import (
+    ConfigFieldConditionResponse,
     ConfigFieldResponse,
     ConfigSchemaResponse,
     DatasetGroupResponse,
@@ -119,6 +120,13 @@ def config_schema_response(schema: ConfigurationSchema) -> ConfigSchemaResponse:
                 default=field.default,
                 nullable=field.nullable,
                 choices=list(field.choices),
+                applicableWhen=[
+                    ConfigFieldConditionResponse(
+                        key=condition.key,
+                        values=list(condition.values),
+                    )
+                    for condition in field.applicable_when
+                ],
                 maximum=field.maximum,
                 locked=field.locked,
                 lockedValue=field.locked_value,

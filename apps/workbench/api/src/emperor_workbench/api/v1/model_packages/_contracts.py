@@ -60,6 +60,11 @@ class MonitorsResponse(ApiResponseModel):
     monitors: list[MonitorOptionResponse]
 
 
+class ConfigFieldConditionResponse(ApiResponseModel):
+    key: str
+    values: list[ConfigValue]
+
+
 class ConfigFieldResponse(ApiResponseModel):
     key: str
     configKey: str
@@ -72,6 +77,7 @@ class ConfigFieldResponse(ApiResponseModel):
     default: ConfigValue
     nullable: bool
     choices: list[ConfigValue]
+    applicableWhen: list[ConfigFieldConditionResponse]
     maximum: int | float | None = None
     locked: bool = False
     lockedValue: ConfigValue = None
@@ -107,6 +113,7 @@ class SearchSpaceResponse(ApiResponseModel):
 
 
 __all__ = [
+    "ConfigFieldConditionResponse",
     "ConfigFieldResponse",
     "ConfigSchemaResponse",
     "DatasetGroupResponse",

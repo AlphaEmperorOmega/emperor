@@ -163,6 +163,13 @@ def config_schema(model_name: str, preset_name: str | None = None) -> dict[str, 
                 default=field.default,
                 nullable=field.nullable,
                 choices=list(field.choices),
+                applicableWhen=[
+                    {
+                        "key": condition.key,
+                        "values": list(condition.values),
+                    }
+                    for condition in field.applicable_when
+                ],
                 maximum=field.maximum,
                 locked=field.locked,
                 lockedValue=field.locked_value,
