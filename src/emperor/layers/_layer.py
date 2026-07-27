@@ -147,13 +147,11 @@ class Layer(LayerModuleBase):
         X = self.__maybe_apply_memory_after(X)
         X = self.__maybe_apply_layer_norm_default(X)
         X = self.__maybe_apply_activation(X)
-        X = self.__maybe_apply_gates(X, state)
+        X = self.__maybe_apply_gate(X, state)
         X = self.__maybe_apply_dropout(X)
+        controller_row_layout = self.__row_layout_for_controllers(state)
         X = self.__maybe_apply_residual_connection(
-            X,
-            residual,
-            residual_state=state.residual_state,
-            row_layout=self.__row_layout_for_controllers(state),
+            X, residual, state.residual_state, controller_row_layout
         )
         X = self.__maybe_apply_layer_norm_after(X)
         state = self.__maybe_apply_halting(state, X)
@@ -218,7 +216,7 @@ class Layer(LayerModuleBase):
     def __should_apply_activation(self) -> bool:
         return self.activation_function != ActivationOptions.DISABLED
 
-    def __maybe_apply_gates(
+    def __maybe_apply_gate(
         self,
         input: Tensor,
         state: LayerState | None = None,
@@ -252,7 +250,6 @@ class Layer(LayerModuleBase):
         self,
         input: Tensor,
         prev_input: Tensor,
-        *,
         residual_state: "ResidualState | None" = None,
         row_layout: "RowLayout | None" = None,
     ):
