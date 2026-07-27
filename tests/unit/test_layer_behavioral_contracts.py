@@ -765,7 +765,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
         module = CaptureLightningModule(recurrent=recurrent)
         callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
         original_forward = recurrent.forward
-        original_controllers = recurrent._RecurrentLayer__run_controllers
+        original_transition = recurrent._RecurrentLayer__run_standard_transition
         callback.on_fit_start(TrainerStub(), module)
 
         callback.on_exception(
@@ -777,8 +777,8 @@ class LayerBehavioralContractTests(unittest.TestCase):
         self.assertTrue(same_bound_method(recurrent.forward, original_forward))
         self.assertTrue(
             same_bound_method(
-                recurrent._RecurrentLayer__run_controllers,
-                original_controllers,
+                recurrent._RecurrentLayer__run_standard_transition,
+                original_transition,
             )
         )
         self.assertEqual(callback._hooks, [])

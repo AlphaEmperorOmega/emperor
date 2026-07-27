@@ -36,11 +36,11 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     ResidualConfig,
+    RowLayout,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._recurrent import _RecurrentState
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
     DynamicMemoryConfig,
@@ -153,13 +153,37 @@ class TrainableScaleFeatureLastLayer(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.scale = torch.nn.Parameter(torch.tensor(self.cfg.scale))
+        self.grad_modes: list[bool] = []
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
+        self.grad_modes.append(torch.is_grad_enabled())
         if self.input_dim != self.output_dim:
             raise ValueError(
                 "TrainableScaleFeatureLastLayer requires stable dimensions"
             )
         return X * self.scale
+
+
+@dataclass
+class IdentityStateBlockConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
+
+    def _registry_owner(self) -> type:
+        return IdentityStateBlock
+
+
+class IdentityStateBlock(Module):
+    def __init__(
+        self,
+        cfg: IdentityStateBlockConfig,
+        overrides: IdentityStateBlockConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+
+    def forward(self, state: LayerState) -> LayerState:
+        return state
 
 
 @dataclass
@@ -218,10 +242,12 @@ class StateSpyBlock(Module):
         self.increment = self.cfg.increment
         self.received_states = []
         self.received_hidden_inputs = []
+        self.grad_modes: list[bool] = []
 
     def forward(self, state: LayerState) -> LayerState:
         self.received_states.append(state)
         self.received_hidden_inputs.append(state.hidden.detach().clone())
+        self.grad_modes.append(torch.is_grad_enabled())
         if state.hidden.shape[-1] != self.input_dim:
             raise ValueError("StateSpyBlock received the wrong input dimension")
         state.hidden = state.hidden + self.increment
@@ -609,6 +635,8 @@ class TestRecurrentLayer(unittest.TestCase):
         self,
         dim: int = 4,
         max_steps: int = 3,
+        no_gradient_transition_count: int | None = None,
+        reinject_original_hidden_flag: bool | None = None,
         block_config: ConfigBase | None = None,
         gate_config: LayerStackConfig | GateConfig | None = None,
         gate_option: LayerGateOptions | None = None,
@@ -627,6 +655,8 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=dim,
             output_dim=dim,
             max_steps=max_steps,
+            no_gradient_transition_count=no_gradient_transition_count,
+            reinject_original_hidden_flag=reinject_original_hidden_flag,
             recurrent_layer_norm_position=recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=self.recurrent_gate_config(
@@ -755,6 +785,27 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIsNone(model.recurrent_layer_norm_module)
         torch.testing.assert_close(result.hidden, hidden + 2.0)
 
+    def test_omitted_recurrent_layer_norm_is_disabled(self):
+        dim = 3
+        hidden = torch.arange(6.0).view(2, dim)
+        model = RecurrentLayer(
+            RecurrentLayerConfig(
+                input_dim=dim,
+                output_dim=dim,
+                max_steps=1,
+                block_config=self.layer_block_config(increment=2.0),
+            )
+        )
+
+        result = model(LayerState(hidden=hidden.clone()))
+
+        self.assertIs(
+            model.recurrent_layer_norm_position,
+            LayerNormPositionOptions.DISABLED,
+        )
+        self.assertIsNone(model.recurrent_layer_norm_module)
+        torch.testing.assert_close(result.hidden, hidden + 2.0)
+
     def test_recurrent_layer_norm_before_normalizes_block_input(self):
         dim = 3
         hidden = torch.zeros(2, dim)
@@ -782,6 +833,51 @@ class TestRecurrentLayer(unittest.TestCase):
             hidden + 10.0,
         )
         torch.testing.assert_close(result.hidden, hidden + 11.0)
+
+    def test_reinjection_precedes_before_norm_and_memory_before_block(self):
+        dim = 3
+        hidden = torch.ones(2, dim)
+        memory_config = GatedResidualDynamicMemoryConfig(
+            input_dim=dim,
+            output_dim=dim,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+            test_time_training_learning_rate=None,
+            test_time_training_num_inner_steps=None,
+            model_config=self.trainable_gate_config(dim),
+        )
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=1,
+                reinject_original_hidden_flag=True,
+                block_config=StateSpyBlockConfig(
+                    input_dim=1,
+                    output_dim=2,
+                    increment=1.0,
+                ),
+                memory_config=memory_config,
+                recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            )
+        )
+        layer_norm = RecordingTransform(offset=10.0)
+        memory = AddConstantMemory(
+            20.0,
+            MemoryPositionOptions.BEFORE_AFFINE,
+        )
+        model.recurrent_layer_norm_module = layer_norm
+        model.memory_model = memory
+
+        result = model(LayerState(hidden=hidden))
+
+        reinjected_hidden = hidden + hidden
+        normalized_hidden = reinjected_hidden + 10.0
+        torch.testing.assert_close(layer_norm.inputs[0], reinjected_hidden)
+        torch.testing.assert_close(memory.inputs[0], normalized_hidden)
+        torch.testing.assert_close(
+            model.block_model.received_hidden_inputs[0],
+            normalized_hidden + 20.0,
+        )
+        torch.testing.assert_close(result.hidden, normalized_hidden + 21.0)
 
     def test_recurrent_layer_norm_default_normalizes_after_block_and_memory(self):
         dim = 3
@@ -840,6 +936,11 @@ class TestRecurrentLayer(unittest.TestCase):
             self.recurrent_config(
                 dim=dim,
                 max_steps=1,
+                block_config=StateSpyBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    increment=3.0,
+                ),
                 recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
             )
         )
@@ -847,17 +948,8 @@ class TestRecurrentLayer(unittest.TestCase):
         model.recurrent_layer_norm_module = transform
         previous_hidden = torch.zeros(2, dim)
         candidate_hidden = torch.full_like(previous_hidden, 3.0)
-        recurrent_state = _RecurrentState(
-            hidden=candidate_hidden,
-            loss=None,
-            context_state=LayerState(hidden=previous_hidden.clone()),
-            halting_state=None,
-        )
 
-        result = model._RecurrentLayer__run_controllers(
-            recurrent_state,
-            previous_hidden,
-        )
+        result = model(LayerState(hidden=previous_hidden.clone()))
 
         torch.testing.assert_close(transform.inputs[0], candidate_hidden)
         torch.testing.assert_close(result.hidden, candidate_hidden + 10.0)
@@ -895,6 +987,11 @@ class TestRecurrentLayer(unittest.TestCase):
             self.recurrent_config(
                 dim=dim,
                 max_steps=1,
+                block_config=StateSpyBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    increment=1.0,
+                ),
                 recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
             )
         )
@@ -904,21 +1001,17 @@ class TestRecurrentLayer(unittest.TestCase):
         model.recurrent_gate = gate
         model.residual_connection = residual
         model.recurrent_layer_norm_module = layer_norm
-        candidate_hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
         previous_hidden = torch.tensor([[10.0, 20.0], [30.0, 40.0]])
+        candidate_hidden = previous_hidden + 1.0
         previous_halting_state = DummyHaltingState(marker="previous")
         existing_loss = torch.tensor(2.5)
-        recurrent_state = _RecurrentState(
-            hidden=candidate_hidden,
+        input_state = LayerState(
+            hidden=previous_hidden.clone(),
             loss=existing_loss,
-            context_state=LayerState(hidden=previous_hidden.clone()),
             halting_state=previous_halting_state,
         )
 
-        result = model._RecurrentLayer__run_controllers(
-            recurrent_state,
-            previous_hidden,
-        )
+        result = model(input_state)
 
         gated_hidden = candidate_hidden + 2.0
         residual_hidden = gated_hidden + 3.0 * previous_hidden
@@ -1087,6 +1180,7 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=3,
             output_dim=3,
             max_steps=5,
+            reinject_original_hidden_flag=True,
             block_config=override_block,
             gate_config=self.recurrent_gate_config(override_gate, None),
             residual_config=AdditiveResidualConfig(),
@@ -1097,6 +1191,7 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.input_dim, 3)
         self.assertEqual(model.output_dim, 3)
         self.assertEqual(model.max_steps, 5)
+        self.assertTrue(model.reinject_original_hidden_flag)
         self.assertEqual(model.block_config, override_block)
         self.assertEqual(model.gate_config.model_config, override_gate)
         self.assertEqual(
@@ -1108,6 +1203,18 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.block_model.input_dim, 3)
         self.assertEqual(model.block_model.output_dim, 3)
         self.assertIsInstance(model.recurrent_gate.model, LayerStack)
+
+    def test_reinject_original_hidden_flag_rejects_non_boolean_values(self):
+        for invalid_value in (1, "true", object()):
+            with self.subTest(invalid_value=invalid_value):
+                cfg = self.recurrent_config()
+                cfg.reinject_original_hidden_flag = invalid_value
+
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "reinject_original_hidden_flag must be bool or None",
+                ):
+                    cfg.build()
 
     def test_validation_errors(self):
         dim = 4
@@ -1190,11 +1297,25 @@ class TestRecurrentLayer(unittest.TestCase):
                 TypeError,
             ),
             (
-                "mismatched_recurrent_dimensions",
+                "boolean_no_gradient_transition_count",
                 RecurrentLayerConfig(
                     input_dim=dim,
-                    output_dim=dim + 1,
-                    max_steps=1,
+                    output_dim=dim,
+                    max_steps=2,
+                    no_gradient_transition_count=True,
+                    recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    block_config=valid_block,
+                    residual_config=None,
+                ),
+                TypeError,
+            ),
+            (
+                "negative_no_gradient_transition_count",
+                RecurrentLayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    max_steps=2,
+                    no_gradient_transition_count=-1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=None,
@@ -1202,11 +1323,25 @@ class TestRecurrentLayer(unittest.TestCase):
                 ValueError,
             ),
             (
-                "missing_recurrent_layer_norm_position",
+                "no_gradient_transition_count_leaves_no_gradient_steps",
                 RecurrentLayerConfig(
                     input_dim=dim,
                     output_dim=dim,
+                    max_steps=2,
+                    no_gradient_transition_count=2,
+                    recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    block_config=valid_block,
+                    residual_config=None,
+                ),
+                ValueError,
+            ),
+            (
+                "mismatched_recurrent_dimensions",
+                RecurrentLayerConfig(
+                    input_dim=dim,
+                    output_dim=dim + 1,
                     max_steps=1,
+                    recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=None,
                 ),
@@ -1411,7 +1546,7 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(model.block_model.output_dim, dim)
         torch.testing.assert_close(result.hidden, torch.full_like(hidden, 2.5))
 
-    def test_recurrent_block_preserves_attention_state_and_gate_gets_plain_state(self):
+    def test_reinjection_preserves_attention_metadata_layout_and_loss(self):
         class SpyGate(Module):
             def __init__(self):
                 super().__init__()
@@ -1429,6 +1564,7 @@ class TestRecurrentLayer(unittest.TestCase):
             self.recurrent_config(
                 dim=dim,
                 max_steps=1,
+                reinject_original_hidden_flag=True,
                 block_config=StateSpyBlockConfig(
                     input_dim=1,
                     output_dim=2,
@@ -1439,9 +1575,13 @@ class TestRecurrentLayer(unittest.TestCase):
         )
         gate = SpyGate()
         model.recurrent_gate.model = gate
-        hidden = torch.zeros(2, dim)
+        hidden = torch.arange(6, dtype=torch.float64).reshape(2, dim)
         key_padding_mask = torch.tensor([[False, True], [False, False]])
         attention_mask = torch.zeros(2, 2)
+        row_layout = RowLayout.rows(
+            2,
+            context_sharing_restricted=False,
+        )
         existing_loss = torch.tensor(4.0)
         state = AttentionLayerState(
             hidden=hidden,
@@ -1449,6 +1589,7 @@ class TestRecurrentLayer(unittest.TestCase):
             halting_state=object(),
             key_padding_mask=key_padding_mask,
             attention_mask=attention_mask,
+            row_layout=row_layout,
         )
 
         result = model(state)
@@ -1458,9 +1599,14 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIs(result, state)
         self.assertIsInstance(block_state, AttentionLayerState)
         self.assertIs(type(gate_state), LayerState)
-        torch.testing.assert_close(gate.received_hidden, hidden + 1.0)
+        torch.testing.assert_close(gate.received_hidden, hidden + hidden + 1.0)
+        self.assertEqual(result.hidden.shape, hidden.shape)
+        self.assertEqual(result.hidden.dtype, hidden.dtype)
+        self.assertEqual(result.hidden.device, hidden.device)
         self.assertIs(block_state.key_padding_mask, key_padding_mask)
         self.assertIs(block_state.attention_mask, attention_mask)
+        self.assertIs(block_state.row_layout, row_layout)
+        self.assertIs(result.row_layout, row_layout)
         self.assertFalse(hasattr(gate_state, "key_padding_mask"))
         self.assertFalse(hasattr(gate_state, "attention_mask"))
         self.assertIs(block_state.loss, existing_loss)
@@ -1483,6 +1629,32 @@ class TestRecurrentLayer(unittest.TestCase):
 
         torch.testing.assert_close(result.hidden, torch.full_like(hidden, max_steps))
         self.assertEqual(model.block_model.model.call_count, max_steps)
+
+    def test_standard_checkpoint_keeps_direct_block_model_paths(self):
+        config = self.recurrent_config(
+            dim=2,
+            max_steps=2,
+            block_config=LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                residual_config=None,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                layer_model_config=TrainableScaleFeatureLastConfig(scale=0.5),
+            ),
+        )
+        recurrent = RecurrentLayer(config)
+        inputs = torch.ones(1, 2)
+        expected = recurrent(LayerState(hidden=inputs.clone())).hidden
+
+        checkpoint = recurrent.state_dict()
+
+        self.assertEqual(set(checkpoint), {"block_model.model.scale"})
+        restored = RecurrentLayer(config)
+        restored.load_state_dict(checkpoint, strict=True)
+        actual = restored(LayerState(hidden=inputs.clone())).hidden
+        torch.testing.assert_close(actual, expected)
 
     def test_recurrent_trainable_block_receives_gradients_across_steps(self):
         dim = 3
@@ -1509,6 +1681,191 @@ class TestRecurrentLayer(unittest.TestCase):
         scale_grad = model.block_model.model.scale.grad
         self.assertIsNotNone(scale_grad)
         self.assertTrue(torch.any(scale_grad.abs() > 0))
+
+    def test_reinjects_the_original_hidden_before_every_recurrent_block(self):
+        recurrent = RecurrentLayerConfig(
+            input_dim=1,
+            output_dim=1,
+            max_steps=3,
+            no_gradient_transition_count=None,
+            reinject_original_hidden_flag=True,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=StateSpyBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            gate_config=None,
+            residual_config=None,
+            halting_config=None,
+            memory_config=None,
+        ).build()
+
+        result = recurrent(LayerState(hidden=torch.ones(1, 1)))
+
+        recorded_inputs = recurrent.block_model.received_hidden_inputs
+        self.assertEqual(len(recorded_inputs), 3)
+        for actual, expected in zip(
+            recorded_inputs,
+            (2.0, 4.0, 6.0),
+            strict=True,
+        ):
+            torch.testing.assert_close(actual, torch.full_like(actual, expected))
+        torch.testing.assert_close(result.hidden, torch.tensor([[7.0]]))
+
+    def test_disabled_and_omitted_reinjection_preserve_identical_outputs(self):
+        hidden = torch.tensor([[1.0, 2.0]])
+        omitted = RecurrentLayer(self.recurrent_config(dim=2, max_steps=3))
+        disabled = RecurrentLayer(
+            self.recurrent_config(
+                dim=2,
+                max_steps=3,
+                reinject_original_hidden_flag=False,
+            )
+        )
+
+        omitted_result = omitted(LayerState(hidden=hidden.clone()))
+        disabled_result = disabled(LayerState(hidden=hidden.clone()))
+
+        self.assertFalse(omitted.reinject_original_hidden_flag)
+        self.assertFalse(disabled.reinject_original_hidden_flag)
+        self.assertTrue(torch.equal(omitted_result.hidden, disabled_result.hidden))
+
+    def test_reinjection_does_not_change_the_residual_reference_hidden(self):
+        recurrent = RecurrentLayer(
+            self.recurrent_config(
+                dim=1,
+                max_steps=2,
+                reinject_original_hidden_flag=True,
+                block_config=StateSpyBlockConfig(
+                    input_dim=1,
+                    output_dim=1,
+                    increment=1.0,
+                ),
+                residual_connection_option=AdditiveResidualConfig,
+            )
+        )
+
+        result = recurrent(LayerState(hidden=torch.ones(1, 1)))
+
+        recorded_inputs = recurrent.block_model.received_hidden_inputs
+        torch.testing.assert_close(recorded_inputs[0], torch.tensor([[2.0]]))
+        torch.testing.assert_close(recorded_inputs[1], torch.tensor([[5.0]]))
+        torch.testing.assert_close(result.hidden, torch.tensor([[10.0]]))
+
+    def test_no_gradient_transition_count_detaches_only_the_configured_prefix(self):
+        dim = 3
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=4,
+                no_gradient_transition_count=2,
+                reinject_original_hidden_flag=True,
+                block_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    residual_config=None,
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    gate_config=None,
+                    halting_config=None,
+                    layer_model_config=TrainableScaleFeatureLastConfig(scale=0.5),
+                ),
+            )
+        )
+
+        result = model(LayerState(hidden=torch.ones(2, dim)))
+        result.hidden.sum().backward()
+
+        self.assertEqual(
+            model.block_model.model.grad_modes,
+            [False, False, True, True],
+        )
+        self.assertIsNotNone(model.block_model.model.scale.grad)
+
+    def test_reinjection_refines_no_grad_prefix_and_reconnects_original_input(self):
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=1,
+                max_steps=3,
+                no_gradient_transition_count=2,
+                reinject_original_hidden_flag=True,
+                block_config=StateSpyBlockConfig(
+                    input_dim=1,
+                    output_dim=1,
+                    increment=1.0,
+                ),
+            )
+        )
+        original_hidden = torch.ones(1, 1, requires_grad=True)
+
+        result = model(LayerState(hidden=original_hidden))
+        result.hidden.sum().backward()
+
+        self.assertEqual(model.block_model.grad_modes, [False, False, True])
+        for actual, expected in zip(
+            model.block_model.received_hidden_inputs,
+            (2.0, 4.0, 6.0),
+            strict=True,
+        ):
+            torch.testing.assert_close(actual, torch.full_like(actual, expected))
+        torch.testing.assert_close(result.hidden, torch.tensor([[7.0]]))
+        torch.testing.assert_close(
+            original_hidden.grad, torch.ones_like(original_hidden)
+        )
+
+    def test_gradient_boundary_detaches_an_identity_block_output(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=2,
+                no_gradient_transition_count=1,
+                block_config=IdentityStateBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                ),
+            )
+        )
+        inputs = torch.ones(2, dim, requires_grad=True)
+
+        result = model(LayerState(hidden=inputs))
+
+        self.assertIsNot(result.hidden, inputs)
+        self.assertFalse(result.hidden.requires_grad)
+        self.assertIsNone(result.hidden.grad_fn)
+        self.assertTrue(inputs.requires_grad)
+
+    def test_halting_starts_after_the_detached_prefix(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                no_gradient_transition_count=2,
+                block_config=LayerConfig(
+                    activation=ActivationOptions.DISABLED,
+                    residual_config=None,
+                    dropout_probability=0.0,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    gate_config=None,
+                    halting_config=None,
+                    layer_model_config=TrainableScaleFeatureLastConfig(scale=0.5),
+                ),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                ),
+            )
+        ).eval()
+
+        result = model(LayerState(hidden=torch.ones(2, dim)))
+        result.hidden.sum().backward()
+
+        self.assertEqual(
+            model.block_model.model.grad_modes,
+            [False, False, True],
+        )
+        self.assertIsNotNone(model.block_model.model.scale.grad)
 
     def test_layer_config_block_dimensions_are_overridden(self):
         dim = 5

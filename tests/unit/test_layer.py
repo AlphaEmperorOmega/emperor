@@ -123,7 +123,10 @@ class TestLayer(unittest.TestCase):
             "LayerNormPositionOptions",
             "LayerStackConfig",
             "MirroredLayerStackConfig",
+            "HierarchicalReasoningModelRecurrentConfig",
+            "RecurrentCompositionConfig",
             "RecurrentLayerConfig",
+            "TinyRecursiveModelRecurrentConfig",
             "ResidualConfig",
             "WeightedBlendResidualConfig",
             "WeightedResidualConfig",
@@ -144,9 +147,16 @@ class TestLayer(unittest.TestCase):
                 self.assertTrue(hasattr(layer_package, name))
         for retired_export in (
             "LayerGate",
+            "RecurrentCompositionAbstract",
             "RecurrentLayerValidator",
             "ResidualConnection",
             "ResidualConnectionOptions",
+            "HRMRecurrent",
+            "HRMRecurrentConfig",
+            "HierarchicalReasoningModelRecurrent",
+            "TRMRecurrent",
+            "TRMRecurrentConfig",
+            "TinyRecursiveModelRecurrent",
         ):
             with self.subTest(retired_export=retired_export):
                 self.assertFalse(hasattr(layer_package, retired_export))

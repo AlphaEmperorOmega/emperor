@@ -1,5 +1,12 @@
 """Public Interface for generic layer composition and execution."""
 
+from emperor.layers._composition.recurrent.config import (
+    HierarchicalReasoningModelRecurrentConfig,
+    RecurrentCompositionConfig,
+    RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
+)
+from emperor.layers._composition.recurrent.variants.standard import RecurrentLayer
 from emperor.layers._composition.residual.config import (
     AdditiveResidualConfig,
     AttentionResidualConfig,
@@ -12,7 +19,6 @@ from emperor.layers._config import (
     LayerConfig,
     LayerStackConfig,
     MirroredLayerStackConfig,
-    RecurrentLayerConfig,
 )
 from emperor.layers._layer import Layer
 from emperor.layers._mirrored import MirroredLayerStack
@@ -26,7 +32,6 @@ from emperor.layers._options import (
     LayerGateOptions,
     LayerNormPositionOptions,
 )
-from emperor.layers._recurrent import RecurrentLayer
 from emperor.layers._row_layout import RowLayout
 from emperor.layers._stack import LayerStack
 from emperor.layers._state import LayerState
@@ -43,7 +48,10 @@ __all__ = (
     "LayerNormPositionOptions",
     "LayerStackConfig",
     "MirroredLayerStackConfig",
+    "HierarchicalReasoningModelRecurrentConfig",
+    "RecurrentCompositionConfig",
     "RecurrentLayerConfig",
+    "TinyRecursiveModelRecurrentConfig",
     "ResidualConfig",
     "WeightedBlendResidualConfig",
     "WeightedResidualConfig",

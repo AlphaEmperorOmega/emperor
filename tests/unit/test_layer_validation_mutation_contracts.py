@@ -24,6 +24,7 @@ from emperor.layers import (
     LayerState,
     RecurrentLayerConfig,
 )
+from emperor.layers._composition.recurrent.validation import RecurrentLayerValidator
 from emperor.layers._validation.common import (
     _adaptive_grouping_paths,
     _matches_config_contract,
@@ -32,7 +33,6 @@ from emperor.layers._validation.common import (
 )
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.layers._validation.layer import LayerValidator
-from emperor.layers._validation.recurrent import RecurrentLayerValidator
 from emperor.layers._validation.stack import LayerStackValidator
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -871,22 +871,70 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
             ValueError,
             "input_dim and output_dim must be equal for RecurrentLayerConfig, "
             "got input_dim=2 and output_dim=3.",
-            RecurrentLayerValidator._validate_stable_dimensions,
+            RecurrentLayerValidator._RecurrentLayerValidator__validate_stable_dimensions,
             2,
             3,
         )
-        self.assert_raises_exact(
-            TypeError,
-            "recurrent_layer_norm_position must be a LayerNormPositionOptions "
-            "value for RecurrentLayerConfig, got object",
-            RecurrentLayerValidator._validate_recurrent_layer_norm_position,
-            object(),
+        invalid_controller_cases = (
+            (
+                "recurrent_layer_norm_position",
+                object(),
+                TypeError,
+                "recurrent_layer_norm_position must be None or a "
+                "LayerNormPositionOptions value for RecurrentLayerConfig, got object.",
+            ),
+            (
+                "residual_config",
+                object(),
+                TypeError,
+                "residual_config must be an instance of ResidualConfig for "
+                "RecurrentLayerConfig, got object",
+            ),
+            (
+                "halting_config",
+                object(),
+                TypeError,
+                "halting_config must be an instance of HaltingConfig for "
+                "RecurrentLayerConfig, got object.",
+            ),
+            (
+                "halting_config",
+                HaltingConfig(),
+                ValueError,
+                "halting_config must be a concrete halting config for "
+                "RecurrentLayerConfig",
+            ),
+            (
+                "halting_config",
+                _soft_halting_config(),
+                ValueError,
+                "halting_config SoftHaltingConfig builds SoftHalting, which does "
+                "not implement the HaltingInterface required by "
+                "RecurrentLayerConfig",
+            ),
+            (
+                "memory_config",
+                object(),
+                TypeError,
+                "memory_config must be an instance of DynamicMemoryConfig for "
+                "RecurrentLayerConfig, got object",
+            ),
         )
+        for field_name, value, error, message in invalid_controller_cases:
+            config = _recurrent_config()
+            setattr(config, field_name, value)
+            with self.subTest(field_name=field_name, value=type(value).__name__):
+                self.assert_raises_exact(
+                    error,
+                    message,
+                    RecurrentLayerValidator.validate,
+                    SimpleNamespace(cfg=config),
+                )
         self.assert_raises_exact(
             TypeError,
             "block_config must be an instance of ConfigBase for "
             "RecurrentLayerConfig, got object",
-            RecurrentLayerValidator._validate_block_config,
+            RecurrentLayerValidator._RecurrentLayerValidator__validate_block_config,
             object(),
         )
         for block_config, missing in (
@@ -900,44 +948,9 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
                     "block_config must declare dataclass fields input_dim and "
                     "output_dim for RecurrentLayerConfig; "
                     f"{type(block_config).__name__} is missing {missing}",
-                    RecurrentLayerValidator._validate_block_config,
+                    RecurrentLayerValidator._RecurrentLayerValidator__validate_block_config,
                     block_config,
                 )
-        self.assert_raises_exact(
-            TypeError,
-            "residual_config must be an instance of ResidualConfig for "
-            "RecurrentLayerConfig, got object",
-            RecurrentLayerValidator._validate_residual_config,
-            object(),
-        )
-        self.assert_raises_exact(
-            TypeError,
-            "halting_config must be an instance of HaltingConfig for "
-            "RecurrentLayerConfig, got object",
-            RecurrentLayerValidator._validate_halting_config,
-            object(),
-        )
-        self.assert_raises_exact(
-            ValueError,
-            "halting_config must be a concrete halting config for RecurrentLayerConfig",
-            RecurrentLayerValidator._validate_halting_config,
-            HaltingConfig(),
-        )
-        self.assert_raises_exact(
-            ValueError,
-            "halting_config SoftHaltingConfig builds SoftHalting, which does not "
-            "implement the HaltingInterface required by RecurrentLayerConfig",
-            RecurrentLayerValidator._validate_halting_config,
-            _soft_halting_config(),
-        )
-        RecurrentLayerValidator._validate_halting_config(_halting_config())
-        self.assert_raises_exact(
-            TypeError,
-            "memory_config must be an instance of DynamicMemoryConfig for "
-            "RecurrentLayerConfig, got object",
-            RecurrentLayerValidator._validate_memory_config,
-            object(),
-        )
 
     def test_recurrent_state_hidden_and_candidate_errors_are_exact(self) -> None:
         self.assert_raises_exact(

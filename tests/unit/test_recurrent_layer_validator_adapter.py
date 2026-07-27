@@ -9,7 +9,11 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
 )
-from emperor.layers._validation import RecurrentLayerValidator
+from emperor.layers._composition.recurrent.validation import (
+    HierarchicalReasoningModelRecurrentValidator,
+    RecurrentLayerValidator,
+    TinyRecursiveModelRecurrentValidator,
+)
 
 
 def make_config(**overrides) -> RecurrentLayerConfig:
@@ -71,6 +75,78 @@ class TestRecurrentLayerValidatorAdapter(unittest.TestCase):
             "input_dim must be int for RecurrentLayerConfig, got float",
         ):
             RecurrentLayer(make_config(input_dim=3.0))
+
+    def test_halting_output_rejects_shape_dtype_and_device_drift(self):
+        candidate_hidden = torch.ones(2, 3)
+        cases = (
+            (torch.ones(1, 3), "preserve the candidate hidden shape"),
+            (
+                torch.ones(2, 3, dtype=torch.float64),
+                "preserve the candidate hidden dtype",
+            ),
+            (
+                torch.empty(2, 3, device="meta"),
+                "preserve the candidate hidden device",
+            ),
+        )
+
+        for output_hidden, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    RecurrentLayerValidator.validate_halting_output(
+                        output_hidden,
+                        candidate_hidden,
+                    )
+
+    def test_transition_output_rejects_type_dtype_and_device_drift(self):
+        transition_input = torch.ones(2, 3)
+        cases = (
+            (object(), TypeError, "must return LayerState"),
+            (
+                LayerState(hidden=torch.ones(2, 3, dtype=torch.float64)),
+                ValueError,
+                "preserve hidden dtype",
+            ),
+            (
+                LayerState(hidden=torch.empty(2, 3, device="meta")),
+                ValueError,
+                "preserve hidden device",
+            ),
+        )
+
+        for output_state, exception, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(exception, message):
+                    RecurrentLayerValidator.validate_transition_output(
+                        output_state,
+                        transition_input,
+                        None,
+                        expected_feature_dim=3,
+                    )
+
+    def test_variant_hidden_validation_wrappers_preserve_owner_context(self):
+        cases = (
+            (
+                TinyRecursiveModelRecurrentValidator,
+                "TinyRecursiveModelRecurrent",
+            ),
+            (
+                HierarchicalReasoningModelRecurrentValidator,
+                "HierarchicalReasoningModelRecurrent",
+            ),
+        )
+
+        for validator, owner_name in cases:
+            with self.subTest(owner_name=owner_name):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    f"last dimension must be 3 for {owner_name}",
+                ):
+                    validator.validate_hidden(
+                        torch.ones(2, 4),
+                        3,
+                        field_name="hidden",
+                    )
 
 
 if __name__ == "__main__":

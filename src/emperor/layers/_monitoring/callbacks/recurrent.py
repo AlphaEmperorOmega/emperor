@@ -44,6 +44,7 @@ class RecurrentLayerMonitorCallback(Callback):
         self.log_per_step_scalars = log_per_step_scalars
         self._hooks: list[RemovableHandle] = []
         self._wrapped_methods: list[_MethodReplacement] = []
+        self._observed_recurrent_layers: list[Module] = []
         self._observations: dict[int, _RecurrentObservation] = {}
         self._delta_history: dict[str, MonitorTensorHistory] = {}
         self._latest_gate_logits: dict[int, Tensor] = {}
@@ -55,16 +56,35 @@ class RecurrentLayerMonitorCallback(Callback):
             raise ValueError(f"{option_name} must be greater than 0.")
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        from emperor.layers._recurrent import RecurrentLayer
+        from emperor.layers._composition.recurrent.base import (
+            RecurrentCompositionAbstract,
+        )
 
         self.__cleanup()
         for module_name, recurrent_layer in pl_module.named_modules():
-            if not isinstance(recurrent_layer, RecurrentLayer):
+            if not isinstance(recurrent_layer, RecurrentCompositionAbstract):
+                continue
+            if not recurrent_layer.supports_recurrent_diagnostics:
                 continue
             self._delta_history[module_name] = MonitorTensorHistory(self.history_size)
             self.__attach_recurrent_gate_hook(recurrent_layer, pl_module)
+            self.__attach_recurrent_observer(recurrent_layer)
             self.__wrap_forward(module_name, recurrent_layer, pl_module)
-            self.__wrap_recurrent_controllers(recurrent_layer)
+
+    def __attach_recurrent_observer(self, recurrent_layer: Module) -> None:
+        def observe_step(previous_hidden: Tensor, output_hidden: Tensor) -> None:
+            observation = self._observations.get(id(recurrent_layer))
+            if observation is None:
+                return
+            self.__record_recurrent_step(
+                recurrent_layer,
+                observation,
+                previous_hidden,
+                output_hidden,
+            )
+
+        recurrent_layer._set_recurrent_diagnostic_observer(observe_step)
+        self._observed_recurrent_layers.append(recurrent_layer)
 
     def __attach_recurrent_gate_hook(
         self,
@@ -115,41 +135,6 @@ class RecurrentLayerMonitorCallback(Callback):
             "forward",
             original_forward,
             monitored_forward,
-        )
-
-    def __wrap_recurrent_controllers(self, recurrent_layer: Module) -> None:
-        method_name = "_RecurrentLayer__run_controllers"
-        original_run_controllers = getattr(recurrent_layer, method_name)
-
-        def monitored_run_controllers(
-            *args: object,
-            **kwargs: object,
-        ) -> object:
-            previous_hidden = (
-                args[1] if len(args) > 1 else kwargs.get("previous_hidden")
-            )
-            output = original_run_controllers(*args, **kwargs)
-            observation = self._observations.get(id(recurrent_layer))
-            output_hidden = getattr(output, "hidden", None)
-            if (
-                observation is not None
-                and torch.is_tensor(previous_hidden)
-                and torch.is_tensor(output_hidden)
-            ):
-                self.__record_recurrent_step(
-                    recurrent_layer,
-                    observation,
-                    previous_hidden,
-                    output_hidden,
-                )
-            return output
-
-        _install_method_replacement(
-            self._wrapped_methods,
-            recurrent_layer,
-            method_name,
-            original_run_controllers,
-            monitored_run_controllers,
         )
 
     def __record_recurrent_step(
@@ -297,7 +282,13 @@ class RecurrentLayerMonitorCallback(Callback):
         if context.metrics is None:
             return
         maximum_steps = max(
-            float(getattr(context.recurrent_layer, "max_steps", 1)),
+            float(
+                getattr(
+                    context.recurrent_layer,
+                    "recurrent_diagnostic_step_limit",
+                    1,
+                )
+            ),
             1.0,
         )
         context.pl_module.log(
@@ -400,6 +391,9 @@ class RecurrentLayerMonitorCallback(Callback):
     def __cleanup(self) -> None:
         _remove_hooks(self._hooks)
         _restore_method_replacements(self._wrapped_methods)
+        for recurrent_layer in self._observed_recurrent_layers:
+            recurrent_layer._set_recurrent_diagnostic_observer(None)
+        self._observed_recurrent_layers.clear()
         self._observations.clear()
         self._delta_history.clear()
         self._latest_gate_logits.clear()
