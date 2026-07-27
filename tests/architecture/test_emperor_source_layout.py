@@ -92,9 +92,7 @@ class EmperorSourceLayoutTests(unittest.TestCase):
     def test_source_strings_do_not_preserve_retired_emperor_paths(self):
         available_modules = emperor_modules()
         retired_references = []
-        module_reference = re.compile(
-            r"^emperor(?:\.[A-Za-z_][A-Za-z0-9_]*)*"
-        )
+        module_reference = re.compile(r"^emperor(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
         legacy_path_reference = re.compile(r"(?<!src/)emperor/(?:$|[A-Za-z_])")
 
         for path, syntax_tree in parsed_source_files():

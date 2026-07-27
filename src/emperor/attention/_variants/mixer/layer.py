@@ -72,14 +72,7 @@ class MixerAttention(MultiHeadAttentionAbstract):
         static_v: Tensor | None = None,
     ) -> tuple[Tensor, None, Tensor | None]:
         self.VALIDATOR.validate_forward_inputs(
-            self,
-            q,
-            k,
-            v,
-            k_padding_mask,
-            attention_mask,
-            static_k,
-            static_v,
+            self, q, k, v, k_padding_mask, attention_mask, static_k, static_v
         )
 
         sequence_axis = 1 if self.batch_first_flag else 0
