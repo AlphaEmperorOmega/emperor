@@ -7,7 +7,7 @@ from emperor.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
     from emperor.experts import MixtureOfExpertsModelConfig
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
 
 @dataclass
@@ -22,7 +22,7 @@ class MixerAttentionConfig(ConfigBase):
         "Explicit input layout. True selects [batch, sequence, embedding]; "
         "False selects [sequence, batch, embedding]."
     )
-    mixing_model_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None" = (  # noqa: E501
+    mixing_model_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentCompositionConfig | None" = (  # noqa: E501
         optional_field(
             "Model configuration built with sequence_length as both its input and "
             "output dimensions."

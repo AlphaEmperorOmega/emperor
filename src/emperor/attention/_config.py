@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from torch.types import _dtype as DType
 
     from emperor.embedding.relative import RelativePositionalEmbeddingConfig
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
 
 @dataclass
@@ -63,7 +63,7 @@ class MultiHeadAttentionConfig(ConfigBase):
         "embedding], False selects [sequence, batch, embedding], and None preserves "
         "legacy configured-batch-size detection."
     )
-    projection_model_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+    projection_model_config: "LayerStackConfig | RecurrentCompositionConfig | None" = (
         optional_field(
             "Projection-model configuration used to build the query/key/value/output "
             "projections."

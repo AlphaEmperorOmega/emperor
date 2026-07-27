@@ -4,7 +4,11 @@ import torch
 
 from emperor.config import ConfigBase
 from emperor.experts import MixtureOfExpertsModelConfig
-from emperor.layers import RecurrentLayerConfig, RowLayout
+from emperor.layers import (
+    HierarchicalReasoningModelRecurrentConfig,
+    RecurrentLayerConfig,
+    RowLayout,
+)
 from emperor.transformer import FeedForward, FeedForwardConfig
 from emperor.transformer._validation import FeedForwardValidator
 from support.layers import linear_stack_config
@@ -45,7 +49,8 @@ class TestFeedForwardValidatorAdapter(unittest.TestCase):
         with self.assertRaisesRegex(
             TypeError,
             "FeedForward.stack_config must be a LayerStackConfig, "
-            "MixtureOfExpertsModelConfig, or RecurrentLayerConfig, got ConfigBase",
+            "MixtureOfExpertsModelConfig, or RecurrentCompositionConfig, got "
+            "ConfigBase",
         ):
             FeedForward(cfg)
 
@@ -84,6 +89,22 @@ class TestFeedForwardValidatorAdapter(unittest.TestCase):
                     f"{type(invalid_block_config).__name__}",
                 ):
                     FeedForward(cfg)
+
+        hierarchical_reasoning_model_config = HierarchicalReasoningModelRecurrentConfig(
+            high_block_config=None,
+            low_block_config=linear_stack_config(2),
+        )
+        with self.assertRaisesRegex(
+            TypeError,
+            "FeedForward cannot mirror stack_config of type NoneType",
+        ):
+            FeedForward(
+                FeedForwardConfig(
+                    input_dim=2,
+                    output_dim=2,
+                    stack_config=hierarchical_reasoning_model_config,
+                )
+            )
 
     def test_forward_dispatches_through_substituted_validator(self):
         class TrackingValidator(FeedForwardValidator):

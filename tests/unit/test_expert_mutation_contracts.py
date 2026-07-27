@@ -770,7 +770,7 @@ class ExpertMutationContractTests(unittest.TestCase):
         self.assert_exact_error(
             TypeError,
             "Configuration Error: 'expert_model_config' must be of type "
-            "LayerStackConfig or RecurrentLayerConfig, received type object",
+            "LayerStackConfig or RecurrentCompositionConfig, received type object",
             lambda: MixtureOfExpertsValidator.validate_forward_reference_types(model),
         )
         model.expert_model_config = model.cfg.expert_model_config

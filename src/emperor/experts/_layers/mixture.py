@@ -14,7 +14,7 @@ from emperor.experts._options import (
 from emperor.experts._routing.capacity import ExpertCapacityHandler
 from emperor.experts._routing.weighting import ExpertWeightingHandler
 from emperor.experts._validation.mixture import MixtureOfExpertsValidator
-from emperor.layers import Layer, LayerStackConfig, RecurrentLayerConfig
+from emperor.layers import Layer, LayerStackConfig, RecurrentCompositionConfig
 from emperor.nn import Module
 
 if TYPE_CHECKING:
@@ -44,13 +44,13 @@ class MixtureOfExperts(Module):
         self.VALIDATOR.validate_overrides_type(overrides)
         super().__init__()
         self.cfg: MixtureOfExpertsConfig = self._override_config(cfg, overrides)
-        self.main_cfg: LayerStackConfig | RecurrentLayerConfig = (
+        self.main_cfg: LayerStackConfig | RecurrentCompositionConfig = (
             self.cfg.expert_model_config
         )
 
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.expert_model_config: LayerStackConfig | RecurrentLayerConfig = (
+        self.expert_model_config: LayerStackConfig | RecurrentCompositionConfig = (
             self.cfg.expert_model_config
         )
         self.top_k: int = self.cfg.top_k

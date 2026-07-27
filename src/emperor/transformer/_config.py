@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from emperor.layers import (
         LayerNormPositionOptions,
         LayerStackConfig,
-        RecurrentLayerConfig,
+        RecurrentCompositionConfig,
         ResidualConfig,
     )
     from emperor.transformer._feed_forward import FeedForwardConfig
@@ -102,10 +102,10 @@ class TransformerDecoderBlockLayerConfig(LayerConfig):
 
 @dataclass
 class TransformerConfig(ConfigBase):
-    encoder_stack_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+    encoder_stack_config: "LayerStackConfig | RecurrentCompositionConfig | None" = (
         optional_field("Generic encoder block-stack configuration.")
     )
-    decoder_stack_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+    decoder_stack_config: "LayerStackConfig | RecurrentCompositionConfig | None" = (
         optional_field("Generic decoder block-stack configuration.")
     )
 

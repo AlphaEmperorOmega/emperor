@@ -8,7 +8,7 @@ from emperor.attention._validation import MultiHeadAttentionValidator
 from emperor.attention._variants.self_attention.config import (
     SelfAttentionProjectionStrategy,
 )
-from emperor.layers import RecurrentLayerConfig
+from emperor.layers import RecurrentCompositionConfig
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
@@ -27,7 +27,10 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
         model: "MultiHeadAttentionAbstract",
     ) -> None:
         projection_strategy = model.cfg.projection_strategy
-        if not isinstance(model.cfg.projection_model_config, RecurrentLayerConfig):
+        if not isinstance(
+            model.cfg.projection_model_config,
+            RecurrentCompositionConfig,
+        ):
             return
         output_multipliers = {
             SelfAttentionProjectionStrategy.FUSED: 3,
@@ -36,7 +39,7 @@ class SelfAttentionValidator(MultiHeadAttentionValidator):
         output_multiplier = output_multipliers.get(projection_strategy)
         if output_multiplier is not None:
             raise ValueError(
-                "Self-attention with RecurrentLayerConfig requires "
+                "Self-attention with RecurrentCompositionConfig requires "
                 "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
                 f"the {projection_strategy.name} strategy changes embedding_dim "
                 f"to {output_multiplier} * embedding_dim."
