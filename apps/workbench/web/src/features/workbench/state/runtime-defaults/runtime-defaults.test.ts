@@ -23,6 +23,7 @@ function field(
     default: "default" in overrides ? overrides.default ?? null : 0,
     nullable: overrides.nullable ?? false,
     choices: overrides.choices ?? [],
+    applicableWhen: overrides.applicableWhen ?? [],
     locked: overrides.locked ?? false,
     lockedValue: overrides.lockedValue,
     lockedReason: overrides.lockedReason,

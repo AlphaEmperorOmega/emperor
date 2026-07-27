@@ -2327,6 +2327,7 @@ describe("WorkbenchApp Training And Preview", () => {
             default: 30,
             nullable: false,
             choices: [],
+            applicableWhen: [],
           },
         ],
       },

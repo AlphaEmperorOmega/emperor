@@ -28,6 +28,7 @@ const configOption: RuntimeDefaultsSearchOptionPresentation = {
       default: 64,
       nullable: false,
       choices: [],
+      applicableWhen: [],
     },
     key: "hidden_dim",
     label: "Hidden Dim",

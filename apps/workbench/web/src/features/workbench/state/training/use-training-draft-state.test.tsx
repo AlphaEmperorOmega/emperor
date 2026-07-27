@@ -34,6 +34,7 @@ const hiddenDim: ConfigField = {
   default: 256,
   nullable: false,
   choices: [],
+  applicableWhen: [],
   locked: false,
 };
 

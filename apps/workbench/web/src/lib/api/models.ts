@@ -32,6 +32,11 @@ export const monitorOptionSchema = z.object({
   defaultEnabled: z.boolean(),
 });
 
+export const configFieldConditionSchema = z.object({
+  key: z.string(),
+  values: z.array(configValueSchema),
+});
+
 export const configFieldSchema = z.object({
   key: z.string(),
   configKey: z.string(),
@@ -44,6 +49,7 @@ export const configFieldSchema = z.object({
   default: configValueSchema,
   nullable: z.boolean(),
   choices: z.array(configValueSchema),
+  applicableWhen: z.array(configFieldConditionSchema),
   maximum: z.number().nullable().optional(),
   locked: z.boolean().optional(),
   lockedValue: configValueSchema.optional(),
@@ -97,6 +103,7 @@ export type Preset = z.infer<typeof presetSchema>;
 export type Dataset = z.infer<typeof datasetSchema>;
 export type DatasetGroup = z.infer<typeof datasetGroupSchema>;
 export type MonitorOption = z.infer<typeof monitorOptionSchema>;
+export type ConfigFieldCondition = z.infer<typeof configFieldConditionSchema>;
 export type ConfigField = Omit<
   z.infer<typeof configFieldSchema>,
   "description"

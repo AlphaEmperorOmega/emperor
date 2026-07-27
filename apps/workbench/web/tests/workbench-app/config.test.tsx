@@ -302,6 +302,7 @@ function configFixtureField({
     default: defaultValue,
     nullable: nullable ?? defaultValue === null,
     choices: choices ?? [],
+    applicableWhen: [],
     locked,
     lockedValue,
     lockedReason,

@@ -863,6 +863,7 @@ const schemaResponse = {
       default: 256,
       nullable: false,
       choices: [],
+      applicableWhen: [],
     },
     {
       key: "stack_num_layers",
@@ -875,6 +876,7 @@ const schemaResponse = {
       default: 5,
       nullable: false,
       choices: [],
+      applicableWhen: [],
     },
     {
       key: "stack_gate_flag",
@@ -887,6 +889,7 @@ const schemaResponse = {
       default: false,
       nullable: false,
       choices: [true, false],
+      applicableWhen: [],
     },
     {
       key: "stack_activation",
@@ -899,6 +902,7 @@ const schemaResponse = {
       default: "GELU",
       nullable: false,
       choices: ["RELU", "GELU"],
+      applicableWhen: [],
     },
   ],
 };

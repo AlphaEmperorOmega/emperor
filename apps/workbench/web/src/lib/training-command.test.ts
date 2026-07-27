@@ -16,6 +16,7 @@ function field(key: string): ConfigField {
     default: false,
     nullable: false,
     choices: [true, false],
+    applicableWhen: [],
     locked: false,
   };
 }
