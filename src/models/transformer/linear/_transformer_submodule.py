@@ -4,10 +4,10 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerConfig,
     LayerStackConfig,
-    RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
 
+from ._recurrent_composition import build_recurrent_composition
 from .runtime_options import (
     ControllerStackOptions,
     SubmoduleStackOptions,
@@ -168,14 +168,28 @@ def configure_transformer_submodule(
     recurrent = path_options.recurrent_controller_options
     if not recurrent.recurrent_flag:
         return model_config
-    return RecurrentLayerConfig(
+    return build_recurrent_composition(
+        option=recurrent.recurrent_composition_option,
         input_dim=model_dim,
         output_dim=model_dim,
+        block_config=model_config,
         max_steps=recurrent.recurrent_max_steps,
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
-        block_config=model_config,
         gate_config=_gate_config(path_options, recurrent=True),
         residual_config=None,
         halting_config=_halting_config(path_options, recurrent=True),
         memory_config=None,
+        no_gradient_transition_count=(recurrent.recurrent_no_gradient_transition_count),
+        reinject_original_hidden_flag=(
+            recurrent.recurrent_reinject_original_hidden_flag
+        ),
+        latent_updates_per_answer_update=(
+            recurrent.recurrent_latent_updates_per_answer_update
+        ),
+        answer_update_count=recurrent.recurrent_answer_update_count,
+        high_cycles=recurrent.recurrent_high_cycles,
+        low_cycles=recurrent.recurrent_low_cycles,
+        initialization_standard_deviation=(
+            recurrent.recurrent_initialization_standard_deviation
+        ),
     )

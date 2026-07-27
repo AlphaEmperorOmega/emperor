@@ -10,10 +10,14 @@ from emperor.layers import (
     ActivationOptions,
     AdditiveResidualConfig,  # noqa: F401
     AttentionResidualConfig,  # noqa: F401
+    HierarchicalReasoningModelRecurrentConfig,  # noqa: F401
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    RecurrentCompositionConfig,
+    RecurrentLayerConfig,  # noqa: F401
     ResidualConfig,
+    TinyRecursiveModelRecurrentConfig,  # noqa: F401
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
 )
@@ -118,7 +122,17 @@ ATTN_MEMORY_STACK_BIAS_FLAG: bool | None = None
 
 ### Attention Projection Recurrent Layer Options
 ATTN_RECURRENT_FLAG: bool = False
+ATTN_RECURRENT_COMPOSITION_OPTION: type[RecurrentCompositionConfig] = (
+    RecurrentLayerConfig
+)
 ATTN_RECURRENT_MAX_STEPS: int = 2
+ATTN_RECURRENT_NO_GRADIENT_TRANSITION_COUNT: int | None = None
+ATTN_RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG: bool = False
+ATTN_RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE: int = 2
+ATTN_RECURRENT_ANSWER_UPDATE_COUNT: int = 2
+ATTN_RECURRENT_HIGH_CYCLES: int = 2
+ATTN_RECURRENT_LOW_CYCLES: int = 2
+ATTN_RECURRENT_INITIALIZATION_STANDARD_DEVIATION: float = 1.0
 ATTN_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
@@ -240,7 +254,15 @@ FF_MEMORY_STACK_BIAS_FLAG: bool | None = None
 
 ## Feed-Forward Recurrent Layer Options
 FF_RECURRENT_FLAG: bool = False
+FF_RECURRENT_COMPOSITION_OPTION: type[RecurrentCompositionConfig] = RecurrentLayerConfig
 FF_RECURRENT_MAX_STEPS: int = 2
+FF_RECURRENT_NO_GRADIENT_TRANSITION_COUNT: int | None = None
+FF_RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG: bool = False
+FF_RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE: int = 2
+FF_RECURRENT_ANSWER_UPDATE_COUNT: int = 2
+FF_RECURRENT_HIGH_CYCLES: int = 2
+FF_RECURRENT_LOW_CYCLES: int = 2
+FF_RECURRENT_INITIALIZATION_STANDARD_DEVIATION: float = 1.0
 FF_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
@@ -302,12 +324,26 @@ DECODER_FEED_FORWARD_NUM_LAYERS = FF_NUM_LAYERS
 STACK_GATE_FLAG = False
 STACK_HALTING_FLAG = False
 MEMORY_FLAG = False
-RECURRENT_FLAG = False
-RECURRENT_STACK_GATE_FLAG = False
-RECURRENT_STACK_HALTING_FLAG = False
-RECURRENT_MAX_STEPS = 2
 STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+
+## Recurrent Layer Options
+RECURRENT_FLAG: bool = False
+RECURRENT_COMPOSITION_OPTION: type[RecurrentCompositionConfig] = RecurrentLayerConfig
+RECURRENT_MAX_STEPS: int = 2
+RECURRENT_NO_GRADIENT_TRANSITION_COUNT: int | None = None
+RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG: bool = False
+RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE: int = 2
+RECURRENT_ANSWER_UPDATE_COUNT: int = 2
+RECURRENT_HIGH_CYCLES: int = 2
+RECURRENT_LOW_CYCLES: int = 2
+RECURRENT_INITIALIZATION_STANDARD_DEVIATION: float = 1.0
 RECURRENT_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+
+### Recurrent Gate Options
+RECURRENT_STACK_GATE_FLAG: bool = False
+
+### Recurrent Halting Options
+RECURRENT_STACK_HALTING_FLAG: bool = False
 
 # Trainer
 NUM_EPOCHS = 30

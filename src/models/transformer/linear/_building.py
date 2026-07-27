@@ -15,7 +15,6 @@ from emperor.layers import (
     LayerGateOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
-    RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import GatedResidualDynamicMemoryConfig, MemoryPositionOptions
@@ -27,6 +26,7 @@ from emperor.transformer import (
     TransformerEncoderLayerConfig,
 )
 
+from ._recurrent_composition import build_recurrent_composition
 from ._transformer_submodule import configure_transformer_submodule
 from .experiment_config import ExperimentConfig
 from .runtime_options import (
@@ -270,12 +270,13 @@ def _controlled_stack(
     )
     if not options.recurrent_flag:
         return stack
-    return RecurrentLayerConfig(
+    return build_recurrent_composition(
+        option=options.recurrent_composition_option,
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
+        block_config=stack,
         max_steps=options.recurrent_max_steps,
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
-        block_config=stack,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
         residual_config=None
         if options.recurrent_residual_connection_option is None
@@ -287,6 +288,17 @@ def _controlled_stack(
             options.recurrent_halting_threshold,
         ),
         memory_config=None,
+        no_gradient_transition_count=(options.recurrent_no_gradient_transition_count),
+        reinject_original_hidden_flag=(options.recurrent_reinject_original_hidden_flag),
+        latent_updates_per_answer_update=(
+            options.recurrent_latent_updates_per_answer_update
+        ),
+        answer_update_count=options.recurrent_answer_update_count,
+        high_cycles=options.recurrent_high_cycles,
+        low_cycles=options.recurrent_low_cycles,
+        initialization_standard_deviation=(
+            options.recurrent_initialization_standard_deviation
+        ),
     )
 
 

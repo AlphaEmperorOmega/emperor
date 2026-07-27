@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from emperor.config import ConfigBase, optional_field
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
-from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
 
 @dataclass
@@ -13,11 +13,11 @@ class ExperimentConfig(ConfigBase):
     target_positional_embedding_config: AbsolutePositionalEmbeddingConfig | None = (
         optional_field("Target positional embedding configuration.")
     )
-    encoder_config: LayerStackConfig | RecurrentLayerConfig | None = optional_field(
-        "Stateful Emperor encoder block stack."
+    encoder_config: LayerStackConfig | RecurrentCompositionConfig | None = (
+        optional_field("Stateful Emperor encoder block stack.")
     )
-    decoder_config: LayerStackConfig | RecurrentLayerConfig | None = optional_field(
-        "Stateful Emperor decoder block stack."
+    decoder_config: LayerStackConfig | RecurrentCompositionConfig | None = (
+        optional_field("Stateful Emperor decoder block stack.")
     )
     vocab_size: int | None = optional_field("Shared source/target vocabulary size.")
     model_dim: int | None = optional_field("Transformer hidden dimension.")
