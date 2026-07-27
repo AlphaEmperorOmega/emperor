@@ -1573,7 +1573,7 @@ class TestLayer(unittest.TestCase):
                     else:
                         self.assertTrue(torch.equal(result, x))
 
-    def test_maybe_apply_gates(self):
+    def test_maybe_apply_gate(self):
         batch_size = 4
         dim = 8
         cfg_with_gate = self.preset(input_dim=dim, output_dim=dim)
@@ -1591,7 +1591,7 @@ class TestLayer(unittest.TestCase):
             message = f"has_gate={has_gate}"
             with self.subTest(msg=message):
                 x = torch.randn(batch_size, dim)
-                result = layer._Layer__maybe_apply_gates(x)
+                result = layer._Layer__maybe_apply_gate(x)
 
                 self.assertEqual(result.shape, x.shape)
                 if has_gate:
@@ -1617,7 +1617,7 @@ class TestLayer(unittest.TestCase):
         layer.gate_model.model = ConstantGate(gate_values)
         x = torch.tensor([[2.0, -3.0, 4.0], [-1.0, 5.0, 0.5]])
 
-        result = layer._Layer__maybe_apply_gates(x)
+        result = layer._Layer__maybe_apply_gate(x)
 
         gate = torch.sigmoid(gate_values.expand_as(x))
         expected = gate * x
@@ -1653,7 +1653,7 @@ class TestLayer(unittest.TestCase):
         self.assertIsNone(layer.gate_model)
         x = torch.tensor([[2.0, -3.0, 4.0], [-1.0, 5.0, 0.5]])
 
-        result = layer._Layer__maybe_apply_gates(x)
+        result = layer._Layer__maybe_apply_gate(x)
 
         torch.testing.assert_close(result, x)
 
@@ -1669,7 +1669,7 @@ class TestLayer(unittest.TestCase):
         layer.gate_model.model = None
 
         with self.assertRaisesRegex(ValueError, "LayerGate requires a gate model"):
-            layer._Layer__maybe_apply_gates(torch.ones(2, dim))
+            layer._Layer__maybe_apply_gate(torch.ones(2, dim))
 
     def test_layer_gate_rejects_invalid_model_output(self):
         class ObjectGate(nn.Module):
@@ -1705,7 +1705,7 @@ class TestLayer(unittest.TestCase):
                 layer.gate_model.model = gate_model
 
                 with self.assertRaisesRegex(error_type, message):
-                    layer._Layer__maybe_apply_gates(current)
+                    layer._Layer__maybe_apply_gate(current)
 
     def test_layer_gate_options_apply_expected_formula(self):
         current = torch.tensor([[2.0, -3.0, 4.0], [-1.0, 5.0, 0.5]])
@@ -1750,7 +1750,7 @@ class TestLayer(unittest.TestCase):
                 )
                 layer.gate_model.model = ConstantGate(gate_values)
 
-                result = layer._Layer__maybe_apply_gates(current)
+                result = layer._Layer__maybe_apply_gate(current)
 
                 torch.testing.assert_close(result, expected)
 
@@ -1774,7 +1774,7 @@ class TestLayer(unittest.TestCase):
                 )
                 layer.gate_model.model = ConstantGate(gate_values)
 
-                result = layer._Layer__maybe_apply_gates(current)
+                result = layer._Layer__maybe_apply_gate(current)
 
                 torch.testing.assert_close(result, expected)
 
@@ -1855,7 +1855,7 @@ class TestLayer(unittest.TestCase):
         layer.gate_model.model = spy
         x = torch.randn(batch_size, dim)
 
-        result = layer._Layer__maybe_apply_gates(x)
+        result = layer._Layer__maybe_apply_gate(x)
 
         self.assertIs(type(spy.received_state), LayerState)
         self.assertIs(spy.received_hidden, x)
