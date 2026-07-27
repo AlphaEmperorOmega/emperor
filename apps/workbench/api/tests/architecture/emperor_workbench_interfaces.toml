@@ -314,6 +314,7 @@ exports = [
 
 [protected_interfaces."emperor_workbench.api.v1.model_packages"]
 exports = [
+  "ConfigFieldConditionResponse",
   "ConfigFieldResponse",
   "ConfigSchemaResponse",
   "DatasetGroupResponse",
