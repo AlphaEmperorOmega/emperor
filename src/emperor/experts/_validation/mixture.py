@@ -163,15 +163,15 @@ class MixtureOfExpertsValidator(ValidatorBase):
 
     @staticmethod
     def validate_forward_reference_types(model: "MixtureOfExperts") -> None:
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         if not isinstance(
             model.expert_model_config,
-            (LayerStackConfig, RecurrentLayerConfig),
+            (LayerStackConfig, RecurrentCompositionConfig),
         ):
             raise TypeError(
                 "Configuration Error: 'expert_model_config' must be of type "
-                "LayerStackConfig or RecurrentLayerConfig, received type "
+                "LayerStackConfig or RecurrentCompositionConfig, received type "
                 f"{type(model.expert_model_config).__name__}"
             )
         if not isinstance(

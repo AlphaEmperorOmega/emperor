@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from emperor.attention._variants.mixer.config import MixerAttentionConfig
     from emperor.config import ModelConfig
     from emperor.experts import MixtureOfExpertsModelConfig
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
 
 class MixerAttention(MultiHeadAttentionAbstract):
@@ -37,7 +37,7 @@ class MixerAttention(MultiHeadAttentionAbstract):
         self.sequence_length: int = self.cfg.sequence_length
         self.batch_first_flag: bool = self.cfg.batch_first_flag
         self.mixing_model_config: (
-            LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig
+            LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentCompositionConfig
         ) = self.cfg.mixing_model_config
 
         self.VALIDATOR.validate(self)
@@ -46,7 +46,7 @@ class MixerAttention(MultiHeadAttentionAbstract):
 
     def __exact_mixing_model_config(self, config):
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import RecurrentLayerConfig
+        from emperor.layers import RecurrentCompositionConfig
 
         exact_config = deepcopy(config)
         exact_config.input_dim = self.sequence_length
@@ -55,10 +55,8 @@ class MixerAttention(MultiHeadAttentionAbstract):
             exact_config.stack_config = self.__exact_mixing_model_config(
                 exact_config.stack_config
             )
-        elif isinstance(exact_config, RecurrentLayerConfig):
-            exact_config.block_config = self.__exact_mixing_model_config(
-                exact_config.block_config
-            )
+        elif isinstance(exact_config, RecurrentCompositionConfig):
+            exact_config._map_transition_configs(self.__exact_mixing_model_config)
         return exact_config
 
     def forward(

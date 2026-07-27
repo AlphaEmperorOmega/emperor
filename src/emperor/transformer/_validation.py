@@ -136,31 +136,46 @@ class TransformerValidator(ValidatorBase):
     def _validate_outer_grouped_gates(cls, config, path: str) -> None:
         if config is None:
             return
-        from emperor.layers import LayerConfig, LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import (
+            LayerConfig,
+            LayerStackConfig,
+            RecurrentCompositionConfig,
+        )
         from emperor.transformer._config import (
             TransformerDecoderLayerConfig,
             TransformerEncoderLayerConfig,
         )
 
         gate_configs: tuple[tuple[str, object | None], ...]
-        nested_config = None
-        if isinstance(config, RecurrentLayerConfig):
-            gate_configs = ((f"{path}.gate_config", config.gate_config),)
-            nested_config = config.block_config
-            nested_path = f"{path}.block_config"
+        nested_configs: tuple[tuple[str, object], ...] = ()
+        if isinstance(config, RecurrentCompositionConfig):
+            gate_configs = (
+                (f"{path}.gate_config", getattr(config, "gate_config", None)),
+            )
+            nested_configs = tuple(
+                (f"{path}.{field_name}", transition_config)
+                for field_name, transition_config in config._transition_config_items()
+            )
         elif isinstance(config, LayerStackConfig):
             layer_config = config.layer_config
             gate_configs = ((f"{path}.shared_gate_config", config.shared_gate_config),)
-            nested_path = f"{path}.layer_config.layer_model_config"
             if isinstance(layer_config, LayerConfig):
                 gate_configs += (
                     (f"{path}.layer_config.gate_config", layer_config.gate_config),
                 )
-                nested_config = layer_config.layer_model_config
+                if layer_config.layer_model_config is not None:
+                    nested_configs = (
+                        (
+                            f"{path}.layer_config.layer_model_config",
+                            layer_config.layer_model_config,
+                        ),
+                    )
         elif isinstance(config, LayerConfig):
             gate_configs = ((f"{path}.gate_config", config.gate_config),)
-            nested_config = config.layer_model_config
-            nested_path = f"{path}.layer_model_config"
+            if config.layer_model_config is not None:
+                nested_configs = (
+                    (f"{path}.layer_model_config", config.layer_model_config),
+                )
         else:
             return
 
@@ -178,24 +193,28 @@ class TransformerValidator(ValidatorBase):
                     f"token tensors. Found grouping at {grouping_path}."
                 )
 
-        if isinstance(
-            nested_config,
-            (TransformerEncoderLayerConfig, TransformerDecoderLayerConfig),
-        ):
-            return
-        cls._validate_outer_grouped_gates(nested_config, nested_path)
+        for nested_path, nested_config in nested_configs:
+            if isinstance(
+                nested_config,
+                (TransformerEncoderLayerConfig, TransformerDecoderLayerConfig),
+            ):
+                continue
+            cls._validate_outer_grouped_gates(nested_config, nested_path)
 
     @staticmethod
     def _validate_stack_config_types(*stack_configs) -> None:
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         for stack_config in stack_configs:
             if stack_config is None:
                 continue
-            if not isinstance(stack_config, (LayerStackConfig, RecurrentLayerConfig)):
+            if not isinstance(
+                stack_config,
+                (LayerStackConfig, RecurrentCompositionConfig),
+            ):
                 raise TypeError(
                     "Transformer stack configurations must be LayerStackConfig or "
-                    "RecurrentLayerConfig, got "
+                    "RecurrentCompositionConfig, got "
                     f"{type(stack_config).__name__}."
                 )
 
@@ -487,35 +506,45 @@ class FeedForwardValidator(ValidatorBase):
     @staticmethod
     def _validate_stack_config_type(stack_config: ConfigBase) -> None:
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         if not isinstance(
             stack_config,
-            (LayerStackConfig, MixtureOfExpertsModelConfig, RecurrentLayerConfig),
+            (
+                LayerStackConfig,
+                MixtureOfExpertsModelConfig,
+                RecurrentCompositionConfig,
+            ),
         ):
             raise TypeError(
                 "FeedForward.stack_config must be a LayerStackConfig, "
-                "MixtureOfExpertsModelConfig, or RecurrentLayerConfig, got "
+                "MixtureOfExpertsModelConfig, or RecurrentCompositionConfig, got "
                 f"{type(stack_config).__name__}"
             )
 
     @classmethod
     def _validate_mirrorable_stack_topology(cls, stack_config: ConfigBase) -> None:
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         if isinstance(stack_config, LayerStackConfig):
             return
         if isinstance(stack_config, MixtureOfExpertsModelConfig):
-            nested_stack_config = stack_config.stack_config
-        elif isinstance(stack_config, RecurrentLayerConfig):
-            nested_stack_config = stack_config.block_config
+            cls._validate_mirrorable_stack_topology(stack_config.stack_config)
+            return
+        elif isinstance(stack_config, RecurrentCompositionConfig):
+            if stack_config._missing_transition_config_fields():
+                raise TypeError(
+                    "FeedForward cannot mirror stack_config of type NoneType."
+                )
+            for transition_config in stack_config._transition_configs():
+                cls._validate_mirrorable_stack_topology(transition_config)
+            return
         else:
             raise TypeError(
                 "FeedForward cannot mirror stack_config of type "
                 f"{type(stack_config).__name__}."
             )
-        cls._validate_mirrorable_stack_topology(nested_stack_config)
 
     @staticmethod
     def validate_forward_inputs(

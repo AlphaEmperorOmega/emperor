@@ -14,7 +14,11 @@ if TYPE_CHECKING:
         AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig, RowLayout
+    from emperor.layers import (
+        LayerStackConfig,
+        RecurrentCompositionConfig,
+        RowLayout,
+    )
 
 
 class ProjectorBase(Module):
@@ -27,7 +31,7 @@ class ProjectorBase(Module):
         self.embedding_dim: int = self.cfg.embedding_dim
         self.query_key_projection_dim: int = self.cfg.query_key_projection_dim
         self.value_projection_dim: int = self.cfg.value_projection_dim
-        self.projection_model_config: LayerStackConfig | RecurrentLayerConfig = (
+        self.projection_model_config: LayerStackConfig | RecurrentCompositionConfig = (
             self.cfg.projection_model_config
         )
         self.__resolve_kv_dimensions()

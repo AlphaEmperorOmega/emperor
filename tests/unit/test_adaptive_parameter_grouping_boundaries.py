@@ -27,6 +27,7 @@ from emperor.experts._layers.mixture import MixtureOfExperts
 from emperor.layers import (
     ActivationOptions,
     GateConfig,
+    HierarchicalReasoningModelRecurrentConfig,
     LastLayerBiasOptions,
     Layer,
     LayerConfig,
@@ -38,6 +39,7 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     RowLayout,
+    TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -405,6 +407,41 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
         ):
             RecurrentLayer(config)
 
+    def test_reasoning_variants_reject_grouping_with_recurrent_memory(self):
+        block_config = grouped_encoder_block_config()
+        configs = (
+            TinyRecursiveModelRecurrentConfig(
+                input_dim=4,
+                output_dim=4,
+                block_config=block_config,
+                latent_updates_per_answer_update=1,
+                answer_update_count=1,
+                initialization_standard_deviation=0.0,
+                memory_config=memory_config(4),
+            ),
+            HierarchicalReasoningModelRecurrentConfig(
+                input_dim=4,
+                output_dim=4,
+                high_block_config=block_config,
+                low_block_config=block_config,
+                high_cycles=1,
+                low_cycles=1,
+                initialization_standard_deviation=0.0,
+                memory_config=memory_config(4),
+            ),
+        )
+
+        for config in configs:
+            with (
+                self.subTest(config_type=type(config).__name__),
+                self.assertRaisesRegex(
+                    ValueError,
+                    f"{type(config).__name__} cannot combine enabled adaptive "
+                    "parameter grouping",
+                ),
+            ):
+                config.build()
+
     def test_outer_transformer_rank_three_gate_rejects_grouped_adaptive_leaf(self):
         block_config = grouped_encoder_block_config()
         block_config.gate_config = GateConfig(
@@ -433,6 +470,49 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             Transformer(
                 TransformerConfig(
                     encoder_stack_config=stack_config,
+                    decoder_stack_config=None,
+                )
+            )
+
+    def test_outer_transformer_gate_scan_traverses_both_hierarchical_reasoning_model_transitions(
+        self,
+    ):
+        block_config = grouped_encoder_block_config()
+        block_config.gate_config = GateConfig(
+            gate_dim=4,
+            option=LayerGateOptions.ADDITION,
+            activation=ActivationOptions.DISABLED,
+            model_config=grouped_stack(
+                4,
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+            ),
+        )
+        transition_config = LayerStackConfig(
+            input_dim=4,
+            hidden_dim=4,
+            output_dim=4,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            shared_gate_config=None,
+            shared_halting_config=None,
+            shared_memory_config=None,
+            layer_config=block_config,
+        )
+        recurrent = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=4,
+            output_dim=4,
+            high_block_config=transition_config,
+            low_block_config=deepcopy(transition_config),
+            high_cycles=1,
+            low_cycles=1,
+            initialization_standard_deviation=0.0,
+        )
+
+        with self.assertRaisesRegex(ValueError, "outer Transformer gate"):
+            Transformer(
+                TransformerConfig(
+                    encoder_stack_config=recurrent,
                     decoder_stack_config=None,
                 )
             )

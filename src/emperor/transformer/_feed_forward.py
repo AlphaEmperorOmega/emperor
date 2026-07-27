@@ -9,7 +9,7 @@ from emperor.layers import (
     Layer,
     LayerStackConfig,
     MirroredLayerStackConfig,
-    RecurrentLayerConfig,
+    RecurrentCompositionConfig,
 )
 from emperor.nn import Module
 from emperor.transformer._validation import FeedForwardValidator
@@ -23,10 +23,11 @@ if TYPE_CHECKING:
 class FeedForwardConfig(ConfigBase):
     input_dim: int | None = optional_field("Feed-forward input feature dimension.")
     output_dim: int | None = optional_field("Feed-forward output feature dimension.")
-    stack_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentLayerConfig | None" = optional_field(  # noqa: E501
+    stack_config: "LayerStackConfig | MixtureOfExpertsModelConfig | RecurrentCompositionConfig | None" = optional_field(  # noqa: E501
         "Either a LayerStackConfig (plain feed-forward stack), a "
         "MixtureOfExpertsModelConfig (mixture-of-experts model that manages its "
-        "own routing state), or a RecurrentLayerConfig wrapping either form. "
+        "own routing state), or a concrete recurrent composition wrapping either "
+        "form. "
         "Depth lives on the inner config."
     )
 
@@ -92,14 +93,16 @@ class FeedForward(Module):
                 output_dim=output_dim,
             )
             return mirrored
-        recurrent_config = cast(RecurrentLayerConfig, stack_config)
+        recurrent_config = cast(RecurrentCompositionConfig, stack_config)
         mirrored = deepcopy(recurrent_config)
         mirrored.input_dim = input_dim
         mirrored.output_dim = output_dim
-        mirrored.block_config = self.__mirror_stack_config(
-            mirrored.block_config,
-            input_dim=output_dim,
-            output_dim=output_dim,
+        mirrored._map_transition_configs(
+            lambda transition_config: self.__mirror_stack_config(
+                transition_config,
+                input_dim=output_dim,
+                output_dim=output_dim,
+            )
         )
         return mirrored
 

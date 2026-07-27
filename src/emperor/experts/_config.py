@@ -11,7 +11,7 @@ from emperor.layers import LayerConfig
 
 if TYPE_CHECKING:
     from emperor.experts._layers.mixture import MixtureOfExperts
-    from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+    from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
     from emperor.sampler import SamplerConfig
 
 
@@ -77,7 +77,7 @@ class MixtureOfExpertsConfig(ConfigBase):
         "Sampler configuration used when the layer owns its sampler. The router "
         "lives at sampler_config.router_config."
     )
-    expert_model_config: "LayerStackConfig | RecurrentLayerConfig | None" = (
+    expert_model_config: "LayerStackConfig | RecurrentCompositionConfig | None" = (
         optional_field("Expert stack configuration used to build each expert.")
     )
 

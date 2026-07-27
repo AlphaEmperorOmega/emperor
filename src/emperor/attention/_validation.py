@@ -494,15 +494,15 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
         from emperor.embedding.relative import (
             RelativePositionalEmbeddingConfig,
         )
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         if not isinstance(
             cfg.projection_model_config,
-            (LayerStackConfig, RecurrentLayerConfig),
+            (LayerStackConfig, RecurrentCompositionConfig),
         ):
             raise TypeError(
                 "projection model configuration must be a LayerStackConfig or "
-                "RecurrentLayerConfig, received "
+                "RecurrentCompositionConfig, received "
                 f"{type(cfg.projection_model_config).__name__}."
             )
         relative_config = cfg.relative_positional_embedding_config

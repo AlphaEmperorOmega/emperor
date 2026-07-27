@@ -22,6 +22,7 @@ from emperor.experts import (
 )
 from emperor.layers import (
     ActivationOptions,
+    HierarchicalReasoningModelRecurrentConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
@@ -568,6 +569,22 @@ class TestMixerAttention(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "block_config is required"):
             MixerAttentionValidator._validate_mixing_model_config(outer_recurrent)
 
+        invalid_hierarchical_reasoning_model = (
+            HierarchicalReasoningModelRecurrentConfig(
+                input_dim=3,
+                output_dim=3,
+                high_block_config=None,
+                low_block_config=_linear_stack(3, 3),
+                high_cycles=1,
+                low_cycles=1,
+                initialization_standard_deviation=0.0,
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "high_block_config is required"):
+            MixerAttentionValidator._validate_mixing_model_config(
+                invalid_hierarchical_reasoning_model
+            )
+
     def test_rejects_invalid_configuration(self):
         cases = (
             (
@@ -613,7 +630,7 @@ class TestMixerAttention(unittest.TestCase):
                 ),
                 TypeError,
                 "mixing_model_config must be a LayerStackConfig or "
-                "RecurrentLayerConfig",
+                "RecurrentCompositionConfig",
             ),
         )
 

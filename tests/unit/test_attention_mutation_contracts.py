@@ -501,7 +501,7 @@ class TestMultiHeadAttentionValidatorMutationContracts(
                     relative_positional_embedding_config=None,
                 ),
                 "projection model configuration must be a LayerStackConfig or "
-                "RecurrentLayerConfig, received object.",
+                "RecurrentCompositionConfig, received object.",
             ),
             (
                 SimpleNamespace(

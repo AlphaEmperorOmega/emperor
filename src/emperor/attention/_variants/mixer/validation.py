@@ -28,19 +28,19 @@ class MixerAttentionValidator(ValidatorBase):
     @classmethod
     def _validate_mixing_model_config(cls, mixing_model_config: object) -> None:
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import LayerStackConfig, RecurrentLayerConfig
+        from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
         if not isinstance(
             mixing_model_config,
             (
                 LayerStackConfig,
                 MixtureOfExpertsModelConfig,
-                RecurrentLayerConfig,
+                RecurrentCompositionConfig,
             ),
         ):
             raise TypeError(
                 "mixing_model_config must be a LayerStackConfig or "
-                "RecurrentLayerConfig, or a MixtureOfExpertsModelConfig for "
+                "RecurrentCompositionConfig, or a MixtureOfExpertsModelConfig for "
                 "MixerAttention, got "
                 f"{type(mixing_model_config).__name__}."
             )
@@ -59,7 +59,7 @@ class MixerAttentionValidator(ValidatorBase):
     @classmethod
     def _validate_required_nested_mixing_configs(cls, config: object) -> None:
         from emperor.experts import MixtureOfExpertsModelConfig
-        from emperor.layers import RecurrentLayerConfig
+        from emperor.layers import RecurrentCompositionConfig
 
         if isinstance(config, MixtureOfExpertsModelConfig):
             if config.stack_config is None:
@@ -68,13 +68,16 @@ class MixerAttentionValidator(ValidatorBase):
                     "MixtureOfExpertsModelConfig."
                 )
             cls._validate_required_nested_mixing_configs(config.stack_config)
-        elif isinstance(config, RecurrentLayerConfig):
-            if config.block_config is None:
+        elif isinstance(config, RecurrentCompositionConfig):
+            missing_fields = config._missing_transition_config_fields()
+            if missing_fields:
+                missing_field_list = " and ".join(missing_fields)
                 raise ValueError(
-                    "block_config is required for a MixerAttention "
-                    "RecurrentLayerConfig."
+                    f"{missing_field_list} is required for a MixerAttention "
+                    f"{type(config).__name__}."
                 )
-            cls._validate_required_nested_mixing_configs(config.block_config)
+            for transition_config in config._transition_configs():
+                cls._validate_required_nested_mixing_configs(transition_config)
 
     @classmethod
     def validate_forward_inputs(

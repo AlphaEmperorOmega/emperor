@@ -318,7 +318,7 @@ class TestSelfAttentionValidator(unittest.TestCase):
                     cfg.build()
                 self.assertEqual(
                     str(caught.exception),
-                    "Self-attention with RecurrentLayerConfig requires "
+                    "Self-attention with RecurrentCompositionConfig requires "
                     "projection_strategy=SelfAttentionProjectionStrategy.SEPARATE; "
                     f"the {projection_strategy.name} strategy changes embedding_dim "
                     f"to {output_multiplier} * embedding_dim.",
