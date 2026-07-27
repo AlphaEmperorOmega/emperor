@@ -24,7 +24,12 @@ from emperor.layers import (
     LayerState,
     RecurrentLayerConfig,
 )
-from emperor.layers._validation.common import _matches_config_contract
+from emperor.layers._validation.common import (
+    _adaptive_grouping_paths,
+    _matches_config_contract,
+    _validate_halting_lifecycle_owner,
+    _validate_no_grouping_with_context_controllers,
+)
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.layers._validation.layer import LayerValidator
 from emperor.layers._validation.recurrent import RecurrentLayerValidator
@@ -191,6 +196,25 @@ class InputOnlyBlockConfig(ConfigBase):
 @dataclass
 class OutputOnlyBlockConfig(ConfigBase):
     output_dim: int | None = optional_field("Output dimension.")
+
+
+class _GroupingProbeValidator:
+    @staticmethod
+    def grouping_is_enabled(config) -> bool:
+        return config.grouping_enabled
+
+
+class _GroupingProbeOwner:
+    VALIDATOR = _GroupingProbeValidator
+
+
+@dataclass
+class GroupingProbeConfig(ConfigBase):
+    grouping_enabled: bool = False
+    nested: object = optional_field("Nested grouping probe value.")
+
+    def _registry_owner(self) -> type:
+        return _GroupingProbeOwner
 
 
 class TestLayerValidationMutationContracts(unittest.TestCase):
@@ -525,6 +549,45 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
         self.assertFalse(
             _matches_config_contract(all_attributes_wrong_type, required_fields)
         )
+
+    def test_grouping_path_collection_handles_nested_cycles_and_controllers(
+        self,
+    ) -> None:
+        root = GroupingProbeConfig()
+        mapping: dict[str, object] = {}
+        sequence: list[object] = [mapping]
+        root.nested = sequence
+        mapping["config_cycle"] = root
+        mapping["mapping_cycle"] = mapping
+        sequence.append(sequence)
+        sequence.append(GroupingProbeConfig(grouping_enabled=True))
+
+        self.assertEqual(
+            _adaptive_grouping_paths(root, root="Owner"),
+            ("Owner.nested[2]",),
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            "cannot combine enabled adaptive parameter grouping with halting_config",
+        ):
+            _validate_no_grouping_with_context_controllers(
+                GroupingProbeConfig(grouping_enabled=True),
+                owner_name="Owner",
+                controllers=(("halting_config", object()),),
+            )
+
+    def test_halting_lifecycle_rejects_non_type_registry_owner(self) -> None:
+        halting_config = SimpleNamespace(_registry_owner=lambda: object())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "builds object, which does not implement the HaltingInterface",
+        ):
+            _validate_halting_lifecycle_owner(
+                halting_config,
+                field_name="halting_config",
+                owner_name="Owner",
+            )
 
     def test_layer_validator_dimension_and_controller_errors_are_exact(self) -> None:
         for field_name in ("input_dim", "output_dim"):
