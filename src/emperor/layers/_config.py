@@ -46,15 +46,15 @@ class LayerConfig(ConfigBase):
     activation: ActivationOptions | None = optional_field(
         "Activation applied to the layer output."
     )
-    residual_config: "ResidualConfig | None" = optional_field(
-        "Optional concrete residual connection config. Set to None to disable. "
-        "Residual connections require input_dim == output_dim."
-    )
     dropout_probability: float | None = optional_field(
         "Dropout probability. Use 0.0 to disable."
     )
     layer_norm_position: LayerNormPositionOptions | None = optional_field(
         "Where layer normalization is applied."
+    )
+    residual_config: "ResidualConfig | None" = optional_field(
+        "Optional concrete residual connection config. Set to None to disable. "
+        "Residual connections require input_dim == output_dim."
     )
     gate_config: "GateConfig | None" = optional_field(
         "Optional layer gate config. Set to None to disable."
