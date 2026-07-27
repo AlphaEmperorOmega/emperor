@@ -109,6 +109,17 @@ class TestResidualConnectionValidatorAdapter(unittest.TestCase):
 
         self.assertTupleEqual(results, (None, None))
 
+    def test_runtime_rejects_non_residual_config(self):
+        connection = AdditiveResidual.__new__(AdditiveResidual)
+        torch.nn.Module.__init__(connection)
+        connection.cfg = object()
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "residual connection cfg must be a ResidualConfig",
+        ):
+            ResidualConnectionValidator.validate(connection)
+
     def test_construction_dispatches_through_substituted_validator(self):
         class TrackingValidator(ResidualConnectionValidator):
             @classmethod
