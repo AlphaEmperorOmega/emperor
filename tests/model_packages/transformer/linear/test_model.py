@@ -9,7 +9,11 @@ import torch
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.translation import TranslationExperiment
 from emperor.layers import (
+    HierarchicalReasoningModelRecurrentConfig,
+    LayerNormPositionOptions,
+    RecurrentCompositionConfig,
     RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
     WeightedBlendResidualConfig,
 )
 from emperor.linears import LinearLayer
@@ -206,6 +210,26 @@ class TestTransformerLinearModel(unittest.TestCase):
                 with self.assertRaisesRegex(error, field):
                     _build_config(**overrides)
 
+    def test_recurrent_composition_selector_keeps_standard_default(self):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            recurrent_flag=True,
+        )
+
+        self.assertIsInstance(
+            cfg.experiment_config.encoder_config,
+            RecurrentLayerConfig,
+        )
+
     def test_updated_residual_config_builds_for_stack_and_recurrence(self):
         cfg = _build_config(
             batch_size=2,
@@ -242,6 +266,362 @@ class TestTransformerLinearModel(unittest.TestCase):
         self.assertEqual(logits.shape, (2, 3, 32))
         self.assertTrue(torch.isfinite(logits).all())
         self.assertTrue(torch.isfinite(auxiliary_loss))
+
+    def test_standard_recurrence_reinjection_builds_for_every_transformer_scope(self):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            recurrent_flag=True,
+            recurrent_reinject_original_hidden_flag=True,
+            attn_recurrent_flag=True,
+            attn_recurrent_reinject_original_hidden_flag=True,
+            ff_recurrent_flag=True,
+            ff_recurrent_reinject_original_hidden_flag=True,
+        )
+
+        encoder = cfg.experiment_config.encoder_config
+        decoder = cfg.experiment_config.decoder_config
+        encoder_layer, decoder_layer = self._layer_configs(cfg)
+
+        for scope, recurrent_config in (
+            ("encoder", encoder),
+            ("decoder", decoder),
+            (
+                "encoder attention",
+                encoder_layer.attention_config.projection_model_config,
+            ),
+            (
+                "decoder self attention",
+                decoder_layer.self_attention_config.projection_model_config,
+            ),
+            (
+                "decoder cross attention",
+                decoder_layer.cross_attention_config.projection_model_config,
+            ),
+            (
+                "encoder feed forward",
+                encoder_layer.feed_forward_config.stack_config,
+            ),
+            (
+                "decoder feed forward",
+                decoder_layer.feed_forward_config.stack_config,
+            ),
+        ):
+            with self.subTest(scope=scope):
+                self.assertIsInstance(recurrent_config, RecurrentLayerConfig)
+                self.assertIs(recurrent_config.reinject_original_hidden_flag, True)
+
+    def test_tiny_recursive_model_is_selectable_for_stack_and_submodule_recurrence(
+        self,
+    ):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            recurrent_flag=True,
+            recurrent_composition_option=TinyRecursiveModelRecurrentConfig,
+            recurrent_stack_gate_flag=True,
+            recurrent_no_gradient_transition_count=1,
+            recurrent_latent_updates_per_answer_update=1,
+            recurrent_answer_update_count=2,
+            recurrent_initialization_standard_deviation=0.0,
+            attn_recurrent_flag=True,
+            attn_recurrent_composition_option=TinyRecursiveModelRecurrentConfig,
+            attn_recurrent_stack_gate_flag=True,
+            attn_recurrent_no_gradient_transition_count=0,
+            attn_recurrent_latent_updates_per_answer_update=1,
+            attn_recurrent_answer_update_count=1,
+            attn_recurrent_initialization_standard_deviation=0.0,
+            ff_recurrent_flag=True,
+            ff_recurrent_composition_option=TinyRecursiveModelRecurrentConfig,
+            ff_recurrent_no_gradient_transition_count=1,
+            ff_recurrent_latent_updates_per_answer_update=1,
+            ff_recurrent_answer_update_count=1,
+            ff_recurrent_initialization_standard_deviation=0.0,
+        )
+
+        encoder = cfg.experiment_config.encoder_config
+        self.assertIsInstance(encoder, TinyRecursiveModelRecurrentConfig)
+        self.assertEqual(
+            (
+                encoder.latent_updates_per_answer_update,
+                encoder.answer_update_count,
+            ),
+            (1, 2),
+        )
+        self.assertEqual(encoder.no_gradient_transition_count, 1)
+        self.assertIsNotNone(encoder.gate_config)
+        encoder_layer = encoder.block_config.layer_config.layer_model_config
+        attention_recurrence = encoder_layer.attention_config.projection_model_config
+        self.assertIsInstance(
+            attention_recurrence,
+            TinyRecursiveModelRecurrentConfig,
+        )
+        self.assertIsNotNone(attention_recurrence.gate_config)
+        feed_forward_recurrence = encoder_layer.feed_forward_config.stack_config
+        self.assertIsInstance(
+            feed_forward_recurrence,
+            TinyRecursiveModelRecurrentConfig,
+        )
+        self.assertEqual(feed_forward_recurrence.no_gradient_transition_count, 1)
+
+        model = Model(cfg).eval()
+        source, target = self._ids()
+        logits, auxiliary_loss = model(source, target)
+        (logits.square().mean() + auxiliary_loss).backward()
+
+        self.assertEqual(logits.shape, (2, 3, 32))
+        self.assertTrue(torch.isfinite(logits).all())
+        transition_parameters = tuple(model.encoder.block_model.parameters())
+        self.assertTrue(transition_parameters)
+        self.assertTrue(
+            any(parameter.grad is not None for parameter in transition_parameters)
+        )
+        self.assertIsNotNone(model.encoder.recurrent_gate)
+        self.assertTrue(
+            any(
+                parameter.grad is not None
+                for parameter in model.encoder.recurrent_gate.parameters()
+            )
+        )
+
+        checkpoint = model.state_dict()
+        self.assertIn("encoder.answer_initial", checkpoint)
+        self.assertIn("encoder.latent_initial", checkpoint)
+        self.assertFalse(any("reasoning_process" in key for key in checkpoint))
+        restored = Model(cfg).eval()
+        restored.load_state_dict(checkpoint, strict=True)
+        with torch.no_grad():
+            restored_logits, restored_auxiliary_loss = restored(source, target)
+        torch.testing.assert_close(restored_logits, logits.detach())
+        torch.testing.assert_close(restored_auxiliary_loss, auxiliary_loss.detach())
+
+    def test_hierarchical_reasoning_model_is_selectable_as_a_recurrent_stack(self):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            recurrent_flag=True,
+            recurrent_composition_option=HierarchicalReasoningModelRecurrentConfig,
+            recurrent_stack_halting_flag=True,
+            recurrent_no_gradient_transition_count=3,
+            recurrent_high_cycles=2,
+            recurrent_low_cycles=2,
+            recurrent_initialization_standard_deviation=0.0,
+        )
+
+        encoder = cfg.experiment_config.encoder_config
+        self.assertIsInstance(encoder, HierarchicalReasoningModelRecurrentConfig)
+        self.assertEqual((encoder.high_cycles, encoder.low_cycles), (2, 2))
+        self.assertEqual(encoder.no_gradient_transition_count, 3)
+        self.assertIsNotNone(encoder.halting_config)
+
+        model = Model(cfg).eval()
+        source, target = self._ids()
+        logits, auxiliary_loss = model(source, target)
+        (logits.square().mean() + auxiliary_loss).backward()
+
+        self.assertEqual(logits.shape, (2, 3, 32))
+        self.assertTrue(torch.isfinite(logits).all())
+        self.assertIsNot(model.encoder.high_model, model.encoder.low_model)
+        self.assertTrue(
+            any(
+                parameter.grad is not None
+                for parameter in model.encoder.high_model.parameters()
+            )
+        )
+        self.assertTrue(
+            any(
+                parameter.grad is not None
+                for parameter in model.encoder.low_model.parameters()
+            )
+        )
+        self.assertIsNotNone(model.encoder.halting_model)
+        self.assertTrue(
+            any(
+                parameter.grad is not None
+                for parameter in model.encoder.halting_model.parameters()
+            )
+        )
+
+        checkpoint = model.state_dict()
+        self.assertIn("encoder.high_initial", checkpoint)
+        self.assertIn("encoder.low_initial", checkpoint)
+        self.assertTrue(
+            any(key.startswith("encoder.high_model.") for key in checkpoint)
+        )
+        self.assertTrue(any(key.startswith("encoder.low_model.") for key in checkpoint))
+        self.assertFalse(any("reasoning_process" in key for key in checkpoint))
+        restored = Model(cfg).eval()
+        restored.load_state_dict(checkpoint, strict=True)
+        with torch.no_grad():
+            restored_logits, restored_auxiliary_loss = restored(source, target)
+        torch.testing.assert_close(restored_logits, logits.detach())
+        torch.testing.assert_close(restored_auxiliary_loss, auxiliary_loss.detach())
+
+    def test_hierarchical_reasoning_model_is_selectable_for_feed_forward_recurrence(
+        self,
+    ):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            ff_recurrent_flag=True,
+            ff_recurrent_composition_option=HierarchicalReasoningModelRecurrentConfig,
+            ff_recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
+            ff_recurrent_high_cycles=1,
+            ff_recurrent_low_cycles=1,
+            ff_recurrent_initialization_standard_deviation=0.0,
+        )
+
+        encoder_stack = cfg.experiment_config.encoder_config
+        encoder_layer = encoder_stack.layer_config.layer_model_config
+        feed_forward_recurrence = encoder_layer.feed_forward_config.stack_config
+        self.assertIsInstance(
+            feed_forward_recurrence, HierarchicalReasoningModelRecurrentConfig
+        )
+        self.assertIs(
+            feed_forward_recurrence.recurrent_layer_norm_position,
+            LayerNormPositionOptions.BEFORE,
+        )
+
+        model = Model(cfg).eval()
+        source, target = self._ids()
+        logits, auxiliary_loss = model(source, target)
+        (logits.square().mean() + auxiliary_loss).backward()
+
+        self.assertEqual(logits.shape, (2, 3, 32))
+        self.assertTrue(torch.isfinite(logits).all())
+
+    def test_recurrent_composition_selector_rejects_invalid_choices(self):
+        cases = (
+            (
+                {"recurrent_composition_option": object},
+                TypeError,
+                "RecurrentCompositionConfig",
+            ),
+            (
+                {"recurrent_composition_option": RecurrentCompositionConfig},
+                ValueError,
+                "concrete recurrent config",
+            ),
+            (
+                {
+                    "recurrent_composition_option": TinyRecursiveModelRecurrentConfig,
+                    "recurrent_latent_updates_per_answer_update": 0,
+                },
+                ValueError,
+                "recurrent_latent_updates_per_answer_update",
+            ),
+            (
+                {
+                    "recurrent_composition_option": TinyRecursiveModelRecurrentConfig,
+                    "recurrent_answer_update_count": True,
+                },
+                TypeError,
+                "recurrent_answer_update_count",
+            ),
+            (
+                {
+                    "recurrent_composition_option": TinyRecursiveModelRecurrentConfig,
+                    "recurrent_initialization_standard_deviation": -0.1,
+                },
+                ValueError,
+                "initialization_standard_deviation",
+            ),
+            (
+                {"recurrent_no_gradient_transition_count": True},
+                TypeError,
+                "recurrent_no_gradient_transition_count",
+            ),
+            (
+                {"recurrent_no_gradient_transition_count": -1},
+                ValueError,
+                "recurrent_no_gradient_transition_count",
+            ),
+            (
+                {"recurrent_reinject_original_hidden_flag": 1},
+                TypeError,
+                "recurrent_reinject_original_hidden_flag",
+            ),
+            (
+                {
+                    "recurrent_composition_option": TinyRecursiveModelRecurrentConfig,
+                    "recurrent_latent_updates_per_answer_update": 1,
+                    "recurrent_answer_update_count": 2,
+                    "recurrent_no_gradient_transition_count": 4,
+                },
+                ValueError,
+                "recurrent_no_gradient_transition_count",
+            ),
+            (
+                {
+                    "recurrent_composition_option": HierarchicalReasoningModelRecurrentConfig,
+                    "recurrent_high_cycles": 0,
+                },
+                ValueError,
+                "recurrent_high_cycles",
+            ),
+            (
+                {
+                    "recurrent_composition_option": HierarchicalReasoningModelRecurrentConfig,
+                    "recurrent_low_cycles": True,
+                },
+                TypeError,
+                "recurrent_low_cycles",
+            ),
+            (
+                {
+                    "recurrent_composition_option": TinyRecursiveModelRecurrentConfig,
+                    "recurrent_reinject_original_hidden_flag": True,
+                },
+                ValueError,
+                "fixed-input reinjection",
+            ),
+            (
+                {
+                    "ff_recurrent_composition_option": (
+                        HierarchicalReasoningModelRecurrentConfig
+                    ),
+                    "ff_recurrent_reinject_original_hidden_flag": True,
+                },
+                ValueError,
+                "fixed-input reinjection",
+            ),
+        )
+        for overrides, error, message in cases:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(error, message):
+                    _build_config(**overrides)
 
     def test_linear_backend_tying_independence_and_gradients(self):
         model = Model(self._config()).eval()

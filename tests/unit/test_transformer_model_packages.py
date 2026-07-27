@@ -200,6 +200,20 @@ class TestTransformerModelPackages(unittest.TestCase):
             if key.startswith(("ATTN_", "FF_"))
         }
         expected.add("ATTN_ZERO_ATTENTION_FLAG")
+        recurrent_variant_fields = {
+            f"{prefix}_RECURRENT_{suffix}"
+            for prefix in ("ATTN", "FF")
+            for suffix in (
+                "COMPOSITION_OPTION",
+                "ANSWER_UPDATE_COUNT",
+                "HIGH_CYCLES",
+                "LATENT_UPDATES_PER_ANSWER_UPDATE",
+                "LOW_CYCLES",
+                "NO_GRADIENT_TRANSITION_COUNT",
+                "REINJECT_ORIGINAL_HIDDEN_FLAG",
+                "INITIALIZATION_STANDARD_DEVIATION",
+            )
+        }
 
         for package in (
             "linear",
@@ -214,7 +228,11 @@ class TestTransformerModelPackages(unittest.TestCase):
                     for key in iter_supported_config_keys(config)
                     if key.startswith(("ATTN_", "FF_"))
                 }
-                self.assertEqual(actual, expected)
+                self.assertEqual(actual - recurrent_variant_fields, expected)
+                self.assertEqual(
+                    actual & recurrent_variant_fields,
+                    recurrent_variant_fields if package == "linear" else set(),
+                )
                 config_path = Path(config.__file__)
                 config_source = config_path.read_text()
                 self.assertIn("ATTN_RECURRENT_HALTING_STACK_BIAS_FLAG", config_source)

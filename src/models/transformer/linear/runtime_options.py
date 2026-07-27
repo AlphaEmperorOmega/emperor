@@ -16,6 +16,8 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    RecurrentCompositionConfig,
+    RecurrentLayerConfig,
     ResidualConfig,
 )
 from emperor.memory import (
@@ -40,6 +42,16 @@ class TransformerStackOptions:
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
+    recurrent_composition_option: type[RecurrentCompositionConfig] = (
+        RecurrentLayerConfig
+    )
+    recurrent_no_gradient_transition_count: int | None = None
+    recurrent_reinject_original_hidden_flag: bool = False
+    recurrent_latent_updates_per_answer_update: int = 2
+    recurrent_answer_update_count: int = 2
+    recurrent_high_cycles: int = 2
+    recurrent_low_cycles: int = 2
+    recurrent_initialization_standard_deviation: float = 1.0
     stack_residual_connection_option: type[ResidualConfig] | None = None
     recurrent_residual_connection_option: type[ResidualConfig] | None = None
 
@@ -147,6 +159,16 @@ class DynamicMemoryOptions:
 class RecurrentControllerOptions:
     recurrent_flag: bool = False
     recurrent_max_steps: int = 2
+    recurrent_composition_option: type[RecurrentCompositionConfig] = (
+        RecurrentLayerConfig
+    )
+    recurrent_no_gradient_transition_count: int | None = None
+    recurrent_reinject_original_hidden_flag: bool = False
+    recurrent_latent_updates_per_answer_update: int = 2
+    recurrent_answer_update_count: int = 2
+    recurrent_high_cycles: int = 2
+    recurrent_low_cycles: int = 2
+    recurrent_initialization_standard_deviation: float = 1.0
     recurrent_layer_norm_position: LayerNormPositionOptions = (
         LayerNormPositionOptions.DISABLED
     )

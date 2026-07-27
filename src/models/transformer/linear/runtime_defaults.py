@@ -107,6 +107,31 @@ def _recurrent_from_config(
     return RecurrentControllerOptions(
         recurrent_flag=getattr(config_module, f"{prefix}_RECURRENT_FLAG"),
         recurrent_max_steps=getattr(config_module, f"{prefix}_RECURRENT_MAX_STEPS"),
+        recurrent_composition_option=getattr(
+            config_module, f"{prefix}_RECURRENT_COMPOSITION_OPTION"
+        ),
+        recurrent_no_gradient_transition_count=getattr(
+            config_module,
+            f"{prefix}_RECURRENT_NO_GRADIENT_TRANSITION_COUNT",
+        ),
+        recurrent_reinject_original_hidden_flag=getattr(
+            config_module,
+            f"{prefix}_RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG",
+        ),
+        recurrent_latent_updates_per_answer_update=getattr(
+            config_module,
+            f"{prefix}_RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE",
+        ),
+        recurrent_answer_update_count=getattr(
+            config_module,
+            f"{prefix}_RECURRENT_ANSWER_UPDATE_COUNT",
+        ),
+        recurrent_high_cycles=getattr(config_module, f"{prefix}_RECURRENT_HIGH_CYCLES"),
+        recurrent_low_cycles=getattr(config_module, f"{prefix}_RECURRENT_LOW_CYCLES"),
+        recurrent_initialization_standard_deviation=getattr(
+            config_module,
+            f"{prefix}_RECURRENT_INITIALIZATION_STANDARD_DEVIATION",
+        ),
         recurrent_layer_norm_position=getattr(
             config_module, f"{prefix}_RECURRENT_LAYER_NORM_POSITION"
         ),
@@ -256,6 +281,32 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             ),
             "recurrent_flag": ("recurrent", "recurrent_flag"),
             "recurrent_max_steps": ("recurrent", "recurrent_max_steps"),
+            "recurrent_composition_option": (
+                "recurrent",
+                "recurrent_composition_option",
+            ),
+            "recurrent_no_gradient_transition_count": (
+                "recurrent",
+                "recurrent_no_gradient_transition_count",
+            ),
+            "recurrent_reinject_original_hidden_flag": (
+                "recurrent",
+                "recurrent_reinject_original_hidden_flag",
+            ),
+            "recurrent_latent_updates_per_answer_update": (
+                "recurrent",
+                "recurrent_latent_updates_per_answer_update",
+            ),
+            "recurrent_answer_update_count": (
+                "recurrent",
+                "recurrent_answer_update_count",
+            ),
+            "recurrent_high_cycles": ("recurrent", "recurrent_high_cycles"),
+            "recurrent_low_cycles": ("recurrent", "recurrent_low_cycles"),
+            "recurrent_initialization_standard_deviation": (
+                "recurrent",
+                "recurrent_initialization_standard_deviation",
+            ),
             "recurrent_layer_norm_position": (
                 "recurrent",
                 "recurrent_layer_norm_position",
@@ -504,6 +555,22 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
         recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
+        recurrent_composition_option=config.RECURRENT_COMPOSITION_OPTION,
+        recurrent_no_gradient_transition_count=(
+            config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
+        ),
+        recurrent_reinject_original_hidden_flag=(
+            config.RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG
+        ),
+        recurrent_latent_updates_per_answer_update=(
+            config.RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE
+        ),
+        recurrent_answer_update_count=config.RECURRENT_ANSWER_UPDATE_COUNT,
+        recurrent_high_cycles=config.RECURRENT_HIGH_CYCLES,
+        recurrent_low_cycles=config.RECURRENT_LOW_CYCLES,
+        recurrent_initialization_standard_deviation=(
+            config.RECURRENT_INITIALIZATION_STANDARD_DEVIATION
+        ),
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
         recurrent_residual_connection_option=(
             config.RECURRENT_RESIDUAL_CONNECTION_OPTION
