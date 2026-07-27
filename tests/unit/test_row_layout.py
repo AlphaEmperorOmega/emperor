@@ -54,6 +54,10 @@ class RowLayoutTests(unittest.TestCase):
     def test_rejects_invalid_structural_metadata(self):
         invalid_cases = (
             (
+                {"leading_shape": ()},
+                "leading_shape must be a non-empty tuple",
+            ),
+            (
                 {"leading_shape": (0,)},
                 "leading_shape dimensions must be positive integers",
             ),
@@ -85,6 +89,30 @@ class RowLayoutTests(unittest.TestCase):
                 },
                 "sequence layouts require exactly two leading axes",
             ),
+            (
+                {
+                    "leading_shape": (2, 4),
+                    "batch_axis": None,
+                    "sequence_axis": None,
+                },
+                "row layouts require exactly one leading axis",
+            ),
+            (
+                {
+                    "leading_shape": (2, 4),
+                    "batch_axis": 0,
+                    "sequence_axis": None,
+                },
+                "sequence layouts require both batch_axis and sequence_axis",
+            ),
+            (
+                {"batch_axis": True},
+                "batch_axis must be an integer",
+            ),
+            (
+                {"context_sharing_restricted": 0},
+                "context_sharing_restricted must be a bool",
+            ),
         )
 
         for overrides, message in invalid_cases:
@@ -101,6 +129,7 @@ class RowLayoutTests(unittest.TestCase):
 
     def test_rejects_invalid_valid_row_masks(self):
         invalid_masks = (
+            ("not-a-tensor", "valid_rows must be a Tensor"),
             (torch.ones(8), "valid_rows must be a Boolean tensor"),
             (torch.ones(2, 4, dtype=torch.bool), "valid_rows must be one-dimensional"),
             (
@@ -110,7 +139,10 @@ class RowLayoutTests(unittest.TestCase):
         )
 
         for valid_rows, message in invalid_masks:
-            with self.subTest(shape=tuple(valid_rows.shape), dtype=valid_rows.dtype):
+            with self.subTest(
+                shape=getattr(valid_rows, "shape", None),
+                dtype=getattr(valid_rows, "dtype", None),
+            ):
                 with self.assertRaisesRegex((TypeError, ValueError), message):
                     RowLayout.sequence(
                         leading_shape=(2, 4),
