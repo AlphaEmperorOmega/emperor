@@ -382,7 +382,7 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         )
         initial_scale = model.recurrent.block_model.scale.detach().clone()
         original_forward = model.recurrent.forward
-        original_controllers = model.recurrent._RecurrentLayer__run_controllers
+        original_transition = model.recurrent._RecurrentLayer__run_standard_transition
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             tensorboard_logger = TensorBoardLogger(
@@ -447,14 +447,15 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._wrapped_methods, [])
+        self.assertEqual(callback._observed_recurrent_layers, [])
         self.assertEqual(callback._observations, {})
         self.assertEqual(callback._delta_history, {})
         self.assertEqual(callback._latest_gate_logits, {})
         self.assertTrue(same_bound_method(model.recurrent.forward, original_forward))
         self.assertTrue(
             same_bound_method(
-                model.recurrent._RecurrentLayer__run_controllers,
-                original_controllers,
+                model.recurrent._RecurrentLayer__run_standard_transition,
+                original_transition,
             )
         )
 
@@ -490,8 +491,8 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         recurrent_model = RecurrentTrainingModule(fail_after_forward=True)
         recurrent_callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
         recurrent_forward = recurrent_model.recurrent.forward
-        recurrent_controllers = (
-            recurrent_model.recurrent._RecurrentLayer__run_controllers
+        recurrent_transition = (
+            recurrent_model.recurrent._RecurrentLayer__run_standard_transition
         )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -507,6 +508,7 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
 
         self.assertEqual(recurrent_callback._hooks, [])
         self.assertEqual(recurrent_callback._wrapped_methods, [])
+        self.assertEqual(recurrent_callback._observed_recurrent_layers, [])
         self.assertEqual(recurrent_callback._observations, {})
         self.assertEqual(recurrent_callback._delta_history, {})
         self.assertEqual(recurrent_callback._latest_gate_logits, {})
@@ -518,8 +520,8 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(
             same_bound_method(
-                recurrent_model.recurrent._RecurrentLayer__run_controllers,
-                recurrent_controllers,
+                recurrent_model.recurrent._RecurrentLayer__run_standard_transition,
+                recurrent_transition,
             )
         )
 

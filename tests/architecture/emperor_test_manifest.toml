@@ -267,6 +267,8 @@ modules = [
 status = "partial"
 focused_tests = [
   "tests/unit/test_layer*.py",
+  "tests/unit/test_mirrored_layer_stack.py",
+  "tests/unit/test_recurrent_composition*.py",
   "tests/unit/test_recurrent_layer*.py",
   "tests/unit/test_row_layout*.py",
 ]
@@ -291,6 +293,14 @@ modules = [
   "src/emperor/layers/_composition/residual/variants/attention.py",
   "src/emperor/layers/_composition/residual/variants/weighted.py",
   "src/emperor/layers/_composition/residual/variants/weighted_blend.py",
+  "src/emperor/layers/_composition/recurrent/__init__.py",
+  "src/emperor/layers/_composition/recurrent/base.py",
+  "src/emperor/layers/_composition/recurrent/config.py",
+  "src/emperor/layers/_composition/recurrent/validation.py",
+  "src/emperor/layers/_composition/recurrent/variants/__init__.py",
+  "src/emperor/layers/_composition/recurrent/variants/hierarchical_reasoning_model.py",
+  "src/emperor/layers/_composition/recurrent/variants/standard.py",
+  "src/emperor/layers/_composition/recurrent/variants/tiny_recursive_model.py",
   "src/emperor/layers/_config.py",
   "src/emperor/layers/_layer.py",
   "src/emperor/layers/_monitoring/__init__.py",

@@ -23,7 +23,6 @@ from emperor.layers import (
     RecurrentLayer,
 )
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._recurrent import _RecurrentState
 from emperor.layers._support import LayerModuleBase
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -253,26 +252,24 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
             recurrent.halting_model,
             hidden,
         )
-        context_state = LayerState(hidden=hidden + 10.0, loss=torch.tensor(8.0))
-        run_state = _RecurrentState(
-            hidden=hidden,
-            loss=torch.tensor(1.25),
-            context_state=context_state,
-            halting_state=internal_halting_state,
+        input_loss = torch.tensor(1.25)
+        finalized_hidden, finalized_loss = recurrent._finalize_recurrent_halting(
+            hidden,
+            input_loss,
+            internal_halting_state,
         )
 
-        finalized = recurrent._RecurrentLayer__maybe_finalize_recurrent_halting(
-            run_state
-        )
-
-        torch.testing.assert_close(finalized.hidden, hidden)
-        torch.testing.assert_close(finalized.loss, torch.tensor(1.75))
-        self.assertIs(finalized.context_state, context_state)
-        self.assertIs(finalized.halting_state, internal_halting_state)
+        torch.testing.assert_close(finalized_hidden, hidden)
+        torch.testing.assert_close(finalized_loss, torch.tensor(1.75))
 
         recurrent.halting_model = None
-        guarded = recurrent._RecurrentLayer__maybe_finalize_recurrent_halting(run_state)
-        self.assertIs(guarded, run_state)
+        guarded_hidden, guarded_loss = recurrent._finalize_recurrent_halting(
+            hidden,
+            input_loss,
+            internal_halting_state,
+        )
+        self.assertIs(guarded_hidden, hidden)
+        self.assertIs(guarded_loss, input_loss)
 
     def test_stack_accepts_real_model_config_wrapper(self) -> None:
         layer_stack_config = linear_stack_config(2)

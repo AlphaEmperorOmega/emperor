@@ -7,6 +7,7 @@ from emperor.config import ConfigBase, optional_field
 from emperor.layers import (
     ActivationOptions,
     GateConfig,
+    HierarchicalReasoningModelRecurrentConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerGateOptions,
@@ -16,6 +17,7 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     RecurrentLayerMonitorCallback,
+    TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
@@ -147,6 +149,45 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
     def state(self):
         return LayerState(hidden=torch.zeros(2, 4))
 
+    def tiny_recursive_model(self, with_gate: bool = False):
+        return TinyRecursiveModelRecurrentConfig(
+            input_dim=4,
+            output_dim=4,
+            block_config=IncrementBlockConfig(
+                input_dim=4,
+                output_dim=4,
+                increment=0.25,
+            ),
+            latent_updates_per_answer_update=2,
+            answer_update_count=2,
+            initialization_standard_deviation=0.0,
+            gate_config=(
+                GateConfig(
+                    model_config=self.gate_config(),
+                    option=LayerGateOptions.MULTIPLIER,
+                    activation=ActivationOptions.SIGMOID,
+                )
+                if with_gate
+                else None
+            ),
+        ).build()
+
+    def hierarchical_reasoning_model(self):
+        transition_config = IncrementBlockConfig(
+            input_dim=4,
+            output_dim=4,
+            increment=0.25,
+        )
+        return HierarchicalReasoningModelRecurrentConfig(
+            input_dim=4,
+            output_dim=4,
+            high_block_config=transition_config,
+            low_block_config=transition_config,
+            high_cycles=2,
+            low_cycles=2,
+            initialization_standard_deviation=0.0,
+        ).build()
+
     def test_rejects_non_positive_cadence(self):
         for bad in (0, -1):
             with self.subTest(bad=bad):
@@ -169,6 +210,27 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
 
         self.assertEqual(set(callback._delta_history), {"recurrent"})
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_respects_runtime_diagnostic_capability(self):
+        recurrent = self.recurrent()
+        recurrent.supports_recurrent_diagnostics = False
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
+
+        callback.on_fit_start(TrainerStub(), module)
+
+        self.assertEqual(callback._delta_history, {})
+        self.assertEqual(callback._observed_recurrent_layers, [])
+
+    def test_gate_value_fallback_is_sigmoid(self):
+        gate_logits = torch.tensor([-1.0, 0.0, 1.0])
+
+        effective_values = RecurrentLayerMonitorCallback._RecurrentLayerMonitorCallback__effective_recurrent_gate_values(
+            torch.nn.Identity(),
+            gate_logits,
+        )
+
+        torch.testing.assert_close(effective_values, torch.sigmoid(gate_logits))
 
     def test_respects_global_step_cadence(self):
         recurrent = self.recurrent()
@@ -195,13 +257,107 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
         callback.on_fit_start(TrainerStub(), module)
         recurrent(self.state())
 
-        self.assertEqual(len(callback._wrapped_methods), 2)
+        self.assertEqual(len(callback._wrapped_methods), 1)
+        self.assertEqual(callback._observed_recurrent_layers, [recurrent])
         self.assertEqual(
             module.logged_tags.count("recurrent/recurrent/actual_steps"),
             1,
         )
         callback.on_fit_end(TrainerStub(), module)
         self.assertTrue(same_bound_method(recurrent.forward, original_forward))
+
+    def test_tiny_recursive_model_uses_shared_recurrent_diagnostic_capability(self):
+        recurrent = self.tiny_recursive_model()
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(
+            log_every_n_steps=1,
+            log_per_step_scalars=True,
+        )
+        callback.on_fit_start(TrainerStub(), module)
+
+        hidden = torch.zeros(2, 4, requires_grad=True)
+        output = recurrent(LayerState(hidden=hidden))
+        output.hidden.sum().backward()
+
+        self.assertEqual(
+            module.logged_value("recurrent/recurrent/actual_steps"),
+            torch.tensor(6.0),
+        )
+        self.assertEqual(
+            module.logged_value("recurrent/recurrent/max_step_fraction"),
+            torch.tensor(1.0),
+        )
+        self.assertEqual(
+            len(
+                [
+                    tag
+                    for tag in module.logged_tags
+                    if "/step_" in tag and tag.endswith("/hidden_delta_mean")
+                ]
+            ),
+            6,
+        )
+        self.assertFalse(any("/gate/" in tag for tag in module.logged_tags))
+        self.assertIsNotNone(hidden.grad)
+        observation = callback._observations[id(recurrent)]
+        self.assertEqual(len(observation.step_deltas), 6)
+        for step_delta in observation.step_deltas:
+            self.assertEqual(step_delta.dtype, torch.float32)
+            self.assertFalse(step_delta.requires_grad)
+
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertIsNone(recurrent._recurrent_diagnostic_observer)
+
+    def test_tiny_recursive_model_reports_shared_recurrent_gate_metrics(self):
+        recurrent = self.tiny_recursive_model(with_gate=True)
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(TrainerStub(), module)
+
+        recurrent(self.state())
+
+        observation = callback._observations[id(recurrent)]
+        self.assertEqual(len(observation.gate_values), 6)
+        self.assertIn("recurrent/recurrent/gate/open_mean", module.logged_tags)
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertEqual(callback._observed_recurrent_layers, [])
+
+    def test_hierarchical_reasoning_model_reports_every_low_and_high_clock_through_the_shared_capability(
+        self,
+    ):
+        recurrent = self.hierarchical_reasoning_model()
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(
+            log_every_n_steps=1,
+            log_per_step_scalars=True,
+        )
+        callback.on_fit_start(TrainerStub(), module)
+
+        hidden = torch.zeros(2, 4, requires_grad=True)
+        output = recurrent(LayerState(hidden=hidden))
+        output.hidden.sum().backward()
+
+        self.assertEqual(
+            module.logged_value("recurrent/recurrent/actual_steps"),
+            torch.tensor(6.0),
+        )
+        self.assertEqual(
+            module.logged_value("recurrent/recurrent/max_step_fraction"),
+            torch.tensor(1.0),
+        )
+        observation = callback._observations[id(recurrent)]
+        self.assertEqual(len(observation.step_deltas), 6)
+        self.assertTrue(
+            all(
+                delta.dtype == torch.float32 and not delta.requires_grad
+                for delta in observation.step_deltas
+            )
+        )
+        self.assertFalse(any("/gate/" in tag for tag in module.logged_tags))
+        self.assertIsNotNone(hidden.grad)
+
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertIsNone(recurrent._recurrent_diagnostic_observer)
 
     def test_logs_expected_finite_scalars(self):
         recurrent = self.recurrent()
@@ -350,28 +506,33 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
     def test_restores_wrappers_and_clears_state_on_fit_end(self):
         recurrent = self.recurrent()
         original_forward = recurrent.forward
-        original_controller = recurrent._RecurrentLayer__run_controllers
+        original_transition = recurrent._RecurrentLayer__run_standard_transition
         module = CaptureLightningModule(recurrent=recurrent)
         callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
         self.assertIsNot(recurrent.forward, original_forward)
-        self.assertIsNot(
-            recurrent._RecurrentLayer__run_controllers,
-            original_controller,
+        self.assertTrue(
+            same_bound_method(
+                recurrent._RecurrentLayer__run_standard_transition,
+                original_transition,
+            )
         )
+        self.assertIsNotNone(recurrent._recurrent_diagnostic_observer)
 
         callback.on_fit_end(TrainerStub(), module)
 
         self.assertTrue(same_bound_method(recurrent.forward, original_forward))
         self.assertTrue(
             same_bound_method(
-                recurrent._RecurrentLayer__run_controllers,
-                original_controller,
+                recurrent._RecurrentLayer__run_standard_transition,
+                original_transition,
             )
         )
         self.assertEqual(callback._wrapped_methods, [])
         self.assertEqual(callback._observations, {})
+        self.assertEqual(callback._observed_recurrent_layers, [])
+        self.assertIsNone(recurrent._recurrent_diagnostic_observer)
 
 
 if __name__ == "__main__":
