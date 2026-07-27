@@ -319,9 +319,7 @@ def _flattened_residual_configuration_fields(
     config: Any,
 ) -> tuple[GraphConfigurationField, GraphConfigurationField | None]:
     residual_config = config.residual_config
-    residual_config_type = (
-        None if residual_config is None else type(residual_config)
-    )
+    residual_config_type = None if residual_config is None else type(residual_config)
     option_description, model_description = (
         RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME.get(
             type(config).__name__,

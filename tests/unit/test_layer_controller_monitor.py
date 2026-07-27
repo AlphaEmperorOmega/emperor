@@ -114,9 +114,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
         with_gate: bool = True,
         gate_option: LayerGateOptions | None = None,
         activation: ActivationOptions = ActivationOptions.TANH,
-        residual_option: type[ResidualConfig] = (
-            AdditiveResidualConfig
-        ),
+        residual_option: type[ResidualConfig] = (AdditiveResidualConfig),
     ) -> Layer:
         return Layer(
             LayerConfig(

@@ -132,11 +132,7 @@ class Layer(LayerModuleBase):
         *,
         row_layout: "RowLayout | None" = None,
     ) -> Tensor:
-        return Layer.run_model_returning_state(
-            model,
-            X,
-            row_layout=row_layout,
-        ).hidden
+        return Layer.run_model_returning_state(model, X, row_layout=row_layout).hidden
 
     def forward(
         self,
