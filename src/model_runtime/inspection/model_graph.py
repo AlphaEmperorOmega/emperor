@@ -156,6 +156,24 @@ COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
         "Builds a recurrent block that can run for multiple steps with optional "
         "gating, normalization, halting, or memory."
     ),
+    "RecurrentCompositionConfig": (
+        "Abstract recurrent composition Interface; use a concrete recurrent config."
+    ),
+    "TinyRecursiveModelRecurrent": (
+        "Reuses one transition block for Tiny Recursive Model latent and answer "
+        "updates across a fixed answer-update schedule."
+    ),
+    "TinyRecursiveModelRecurrentConfig": (
+        "Builds Tiny Recursive Model recurrence with one shared transition, a "
+        "latent-update count per answer update, and an answer-update count."
+    ),
+    "HierarchicalReasoningModelRecurrent": (
+        "Runs distinct low- and high-level transitions on nested recurrent clocks."
+    ),
+    "HierarchicalReasoningModelRecurrentConfig": (
+        "Builds Hierarchical Reasoning Model recurrence with separate low- and "
+        "high-level transitions and clock counts."
+    ),
     "MixtureOfExperts": (
         "Routes inputs across a set of expert modules using sampler probabilities "
         "and combines or maps the selected expert outputs."
@@ -607,6 +625,8 @@ def _recurrent_details(
     cluster: dict[str, Any] | None,
 ) -> dict[str, Any]:
     max_steps = getattr(module, "max_steps", None)
+    if max_steps is None:
+        max_steps = getattr(module, "recurrent_diagnostic_step_limit", None)
     if max_steps is None or cluster is not None:
         return {}
     recurrent_gate = getattr(module, "recurrent_gate", None)
@@ -621,13 +641,37 @@ def _recurrent_details(
     )
     recurrent: dict[str, Any] = {
         "maxSteps": max_steps,
+        "diagnostics": bool(getattr(module, "supports_recurrent_diagnostics", False)),
         "gate": gate,
         "gateOption": gate_option_name,
         "halting": bool(getattr(module, "halting_model", None) is not None),
     }
+    no_gradient_transition_count = getattr(
+        module,
+        "no_gradient_transition_count",
+        None,
+    )
+    if no_gradient_transition_count is not None:
+        recurrent["noGradientTransitionCount"] = no_gradient_transition_count
     recurrent_layer_norm = getattr(module, "recurrent_layer_norm_position", None)
     if recurrent_layer_norm is not None:
         recurrent["layerNorm"] = _display_value(recurrent_layer_norm)
+    answer_update_count = getattr(module, "answer_update_count", None)
+    if answer_update_count is not None:
+        recurrent["answerUpdateCount"] = answer_update_count
+    latent_updates_per_answer_update = getattr(
+        module,
+        "latent_updates_per_answer_update",
+        None,
+    )
+    if latent_updates_per_answer_update is not None:
+        recurrent["latentUpdatesPerAnswerUpdate"] = latent_updates_per_answer_update
+    high_cycles = getattr(module, "high_cycles", None)
+    if high_cycles is not None:
+        recurrent["highCycles"] = high_cycles
+    low_cycles = getattr(module, "low_cycles", None)
+    if low_cycles is not None:
+        recurrent["lowCycles"] = low_cycles
     return {
         "recurrent": recurrent,
     }

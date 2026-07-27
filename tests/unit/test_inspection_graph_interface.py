@@ -10,7 +10,11 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from torch import nn
 
 from emperor.layers import (
+    HierarchicalReasoningModelRecurrentConfig,
     LayerConfig,
+    LayerNormPositionOptions,
+    RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
     WeightedBlendResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -118,6 +122,116 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
             serialized_fields["residual_model_config"],
             "LinearLayerConfig",
         )
+
+    def test_standard_recurrent_diagnostics_are_exposed_as_graph_capability(
+        self,
+    ) -> None:
+        recurrent = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            block_config=LinearLayerConfig(
+                input_dim=4,
+                output_dim=4,
+                bias_flag=False,
+            ),
+            max_steps=2,
+        ).build()
+
+        root = inspect_model_graph(recurrent).nodes[0]
+
+        self.assertEqual(root.type_name, "RecurrentLayer")
+        self.assertIs(root.details["recurrent"]["diagnostics"], True)
+
+    def test_tiny_recursive_model_is_discovered_through_generic_graph_inspection(
+        self,
+    ) -> None:
+        recurrent = TinyRecursiveModelRecurrentConfig(
+            input_dim=4,
+            output_dim=4,
+            block_config=LinearLayerConfig(
+                input_dim=4,
+                output_dim=4,
+                bias_flag=False,
+            ),
+            latent_updates_per_answer_update=2,
+            answer_update_count=3,
+            initialization_standard_deviation=0.0,
+            recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
+        ).build()
+
+        graph = inspect_model_graph(recurrent)
+        root = graph.nodes[0]
+
+        self.assertEqual(root.type_name, "TinyRecursiveModelRecurrent")
+        self.assertIs(root.details["recurrent"]["diagnostics"], True)
+        self.assertEqual(root.details["recurrent"]["max_steps"], 9)
+        self.assertEqual(
+            root.details["recurrent"]["no_gradient_transition_count"],
+            6,
+        )
+        self.assertEqual(root.details["recurrent"]["answer_update_count"], 3)
+        self.assertEqual(root.details["recurrent"]["layer_norm"], "BEFORE")
+        self.assertEqual(
+            root.details["recurrent"]["latent_updates_per_answer_update"],
+            2,
+        )
+        self.assertIsNotNone(root.configuration)
+        assert root.configuration is not None
+        self.assertEqual(
+            root.configuration.type_name, "TinyRecursiveModelRecurrentConfig"
+        )
+        configuration = {field.key: field.value for field in root.configuration.fields}
+        self.assertEqual(configuration["block_config"], "LinearLayerConfig")
+        self.assertEqual(configuration["latent_updates_per_answer_update"], 2)
+        self.assertEqual(configuration["answer_update_count"], 3)
+        self.assertEqual(
+            [node.path for node in graph.nodes[1:] if node.path == "block_model"],
+            ["block_model"],
+        )
+
+    def test_hierarchical_reasoning_model_is_discovered_through_generic_graph_inspection(
+        self,
+    ) -> None:
+        transition_config = LinearLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            bias_flag=False,
+        )
+        recurrent = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=4,
+            output_dim=4,
+            high_block_config=transition_config,
+            low_block_config=transition_config,
+            high_cycles=2,
+            low_cycles=3,
+            initialization_standard_deviation=0.0,
+            recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
+        ).build()
+
+        graph = inspect_model_graph(recurrent)
+        root = graph.nodes[0]
+
+        self.assertEqual(root.type_name, "HierarchicalReasoningModelRecurrent")
+        self.assertIs(root.details["recurrent"]["diagnostics"], True)
+        self.assertEqual(root.details["recurrent"]["max_steps"], 8)
+        self.assertEqual(
+            root.details["recurrent"]["no_gradient_transition_count"],
+            6,
+        )
+        self.assertEqual(root.details["recurrent"]["high_cycles"], 2)
+        self.assertEqual(root.details["recurrent"]["low_cycles"], 3)
+        self.assertEqual(root.details["recurrent"]["layer_norm"], "AFTER")
+        self.assertIsNotNone(root.configuration)
+        assert root.configuration is not None
+        self.assertEqual(
+            root.configuration.type_name, "HierarchicalReasoningModelRecurrentConfig"
+        )
+        configuration = {field.key: field.value for field in root.configuration.fields}
+        self.assertEqual(configuration["high_block_config"], "LinearLayerConfig")
+        self.assertEqual(configuration["low_block_config"], "LinearLayerConfig")
+        child_paths = {node.path for node in graph.nodes[1:]}
+        self.assertIn("high_model", child_paths)
+        self.assertIn("low_model", child_paths)
 
     def test_semantic_graph_preserves_stable_paths_and_referential_integrity(
         self,
