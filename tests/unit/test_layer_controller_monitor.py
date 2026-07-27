@@ -18,6 +18,7 @@ from emperor.layers import (
     LayerState,
     ResidualConfig,
 )
+from emperor.layers._monitoring.diagnostics import _LayerGateTrackingContext
 from emperor.linears import LinearLayerConfig
 from support.monitor import (
     CaptureLightningModule,
@@ -312,6 +313,38 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
             torch.tensor(0.5),
         )
         callback.on_fit_end(TrainerStub(), module)
+
+    def test_gate_diagnostics_tolerate_missing_effective_values(self):
+        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+        raw_values = torch.tensor([-1.0, 1.0])
+        layer = self.layer(with_gate=False)
+        effective_values = (
+            callback._LayerControllerMonitorCallback__effective_layer_gate_values(
+                layer,
+                raw_values,
+            )
+        )
+        self.assertIs(effective_values, raw_values)
+
+        module = CaptureLightningModule()
+        callback._LayerControllerMonitorCallback__track_gate_diagnostics(
+            _LayerGateTrackingContext(
+                pl_module=module,
+                module_name="layer",
+                raw_values=raw_values,
+                effective_values=None,
+            )
+        )
+
+        self.assertEqual(
+            set(module.logged_tags),
+            {
+                "layer/gate/output_mean",
+                "layer/gate/output_var",
+                "layer/gate/positive_fraction",
+                "layer/gate/saturation_fraction",
+            },
+        )
 
     def test_runs_without_visual_experiment(self):
         layer = self.layer()
