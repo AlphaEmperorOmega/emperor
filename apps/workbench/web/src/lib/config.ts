@@ -206,13 +206,6 @@ const CONTROLLED_SECTION_FLAG_KEYS_BY_TITLE = new Map([
   ],
 ]);
 
-const FALLBACK_CONTROLLED_SECTION_FLAG_KEYS = new Set([
-  "stack_gate_flag",
-  "stack_halting_flag",
-  "memory_flag",
-  "recurrent_flag",
-]);
-
 const INHERITED_STACK_SECTIONS_BY_TITLE = new Map([
   [
     "Gate Stack Options",
@@ -875,10 +868,7 @@ export function controlledSectionFlagField(
   if (controlFieldKey) {
     return section.fields.find((field) => configFieldMatchesKey(field, controlFieldKey));
   }
-
-  return section.fields.find((field) =>
-    FALLBACK_CONTROLLED_SECTION_FLAG_KEYS.has(configKeyToken(field.key)),
-  );
+  return undefined;
 }
 
 export function controlledSectionDisabledReason(

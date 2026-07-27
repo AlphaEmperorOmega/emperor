@@ -631,6 +631,59 @@ describe("override digest", () => {
 });
 
 describe("config section controls", () => {
+  it("does not let a false stack gate control Controller Options", () => {
+    const sections: ConfigSection[] = [
+      {
+        title: "Controller Options",
+        fields: [
+          field({
+            key: "stack_gate_flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Controller Options",
+            sectionPath: ["Controller Options"],
+          }),
+        ],
+      },
+      {
+        title: "Recurrent Layer Options",
+        fields: [
+          field({
+            key: "recurrent_flag",
+            label: "recurrent flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+            section: "Recurrent Layer Options",
+            sectionPath: ["Controller Options", "Recurrent Layer Options"],
+          }),
+          field({
+            key: "recurrent_composition_option",
+            type: "class",
+            default: "RecurrentLayerConfig",
+            choices: ["RecurrentLayerConfig"],
+            section: "Recurrent Layer Options",
+            sectionPath: ["Controller Options", "Recurrent Layer Options"],
+          }),
+        ],
+      },
+    ];
+
+    const [controller] = deriveNestedConfigSections(sections);
+    const recurrent = controller.children?.[0];
+    const disabled = disabledConfigFieldReasons(sections, {
+      stack_gate_flag: "false",
+    });
+
+    expect(controller.controlFieldKey).toBeUndefined();
+    expect(recurrent?.controlFieldKey).toBe("recurrent_flag");
+    expect(disabled.has("recurrent_flag")).toBe(false);
+    expect(disabled.get("recurrent_composition_option")).toContain(
+      "recurrent flag",
+    );
+  });
+
   it("reports controller stack inheritance while its independent flag is off", () => {
     const section = inheritedStackHintSection(
       "Gate Stack Options",
