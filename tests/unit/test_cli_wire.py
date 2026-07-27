@@ -35,6 +35,7 @@ from model_runtime.cli import (
 )
 from model_runtime.inspection import (
     ConfigurationField,
+    ConfigurationFieldCondition,
     ConfigurationSchema,
     GraphConfiguration,
     GraphConfigurationField,
@@ -77,6 +78,12 @@ def _configuration_schema() -> ConfigurationSchema:
                 default=128,
                 nullable=False,
                 choices=(64, 128),
+                applicable_when=(
+                    ConfigurationFieldCondition(
+                        key="MODEL_OPTION",
+                        values=("StandardConfig", "AlternateConfig"),
+                    ),
+                ),
                 maximum=4096,
                 locked=True,
                 locked_value=128,
@@ -243,11 +250,21 @@ class CliWireRoundTripTests(unittest.TestCase):
                 "default",
                 "nullable",
                 "choices",
+                "applicableWhen",
                 "maximum",
                 "locked",
                 "locked_value",
                 "locked_reason",
             },
+        )
+        self.assertEqual(
+            schema_payload["fields"][0]["applicableWhen"],
+            [
+                {
+                    "key": "MODEL_OPTION",
+                    "values": ["StandardConfig", "AlternateConfig"],
+                }
+            ],
         )
 
     def test_runs_records_budgets_and_random_state_roundtrip(self) -> None:
@@ -311,6 +328,20 @@ class CliWireRoundTripTests(unittest.TestCase):
                     "fields": [{**schema_payload["fields"][0], "nullable": 1}],
                 },
                 "nullable must be a boolean",
+            ),
+            (
+                configuration_schema_from_wire,
+                {
+                    **schema_payload,
+                    "fields": [
+                        {
+                            key: value
+                            for key, value in schema_payload["fields"][0].items()
+                            if key != "applicableWhen"
+                        }
+                    ],
+                },
+                "missing required field 'applicableWhen'",
             ),
             (
                 inspection_result_from_wire,

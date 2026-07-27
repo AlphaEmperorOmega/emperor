@@ -23,6 +23,7 @@ from model_runtime.cli._wire_shared import (
 )
 from model_runtime.inspection import (
     ConfigurationField,
+    ConfigurationFieldCondition,
     ConfigurationSchema,
     GraphConfiguration,
     GraphConfigurationField,
@@ -86,6 +87,19 @@ def configuration_schema_to_wire(schema: ConfigurationSchema) -> dict[str, Any]:
                     _scalar_to_wire(choice, "$.fields[].choices[]")
                     for choice in field.choices
                 ],
+                "applicableWhen": [
+                    {
+                        "key": condition.key,
+                        "values": [
+                            _scalar_to_wire(
+                                value,
+                                "$.fields[].applicableWhen[].values[]",
+                            )
+                            for value in condition.values
+                        ],
+                    }
+                    for condition in field.applicable_when
+                ],
                 "maximum": field.maximum,
                 "locked": field.locked,
                 "locked_value": _scalar_to_wire(
@@ -122,12 +136,32 @@ def configuration_schema_from_wire(payload: object) -> ConfigurationSchema:
                 "default",
                 "nullable",
                 "choices",
+                "applicableWhen",
                 "maximum",
                 "locked",
                 "locked_value",
                 "locked_reason",
             ),
         )
+        applicable_when: list[ConfigurationFieldCondition] = []
+        for condition_index, item in enumerate(
+            wire_list(field["applicableWhen"], f"{path}.applicableWhen")
+        ):
+            condition_path = f"{path}.applicableWhen[{condition_index}]"
+            condition = wire_fields(
+                item,
+                path=condition_path,
+                required=("key", "values"),
+            )
+            applicable_when.append(
+                ConfigurationFieldCondition(
+                    key=wire_string(condition["key"], f"{condition_path}.key"),
+                    values=wire_scalar_list(
+                        condition["values"],
+                        f"{condition_path}.values",
+                    ),
+                )
+            )
         decoded_fields.append(
             ConfigurationField(
                 key=wire_string(field["key"], f"{path}.key"),
@@ -147,6 +181,7 @@ def configuration_schema_from_wire(payload: object) -> ConfigurationSchema:
                 default=wire_scalar(field["default"], f"{path}.default"),
                 nullable=wire_bool(field["nullable"], f"{path}.nullable"),
                 choices=wire_scalar_list(field["choices"], f"{path}.choices"),
+                applicable_when=tuple(applicable_when),
                 maximum=wire_optional_number(
                     field["maximum"],
                     f"{path}.maximum",

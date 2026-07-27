@@ -10,6 +10,7 @@ from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.field_descriptions import config_field_description
 from model_runtime.inspection.records import (
     ConfigurationField,
+    ConfigurationFieldCondition,
     ConfigurationSchema,
     SearchAxis,
     SearchSpace,
@@ -254,6 +255,97 @@ def _shared_locked_value(
     return first if all(value == first for value in values) else None
 
 
+def _configuration_field_applicability(
+    spec: RuntimeDefaultsSpec,
+    supported_keys: Sequence[str],
+) -> dict[str, tuple[ConfigurationFieldCondition, ...]]:
+    raw_applicability = getattr(
+        spec.config_module,
+        "CONFIG_FIELD_APPLICABILITY",
+        {},
+    )
+    if not isinstance(raw_applicability, Mapping):
+        raise InspectionError(
+            f"Model {spec.package.catalog_key!r} CONFIG_FIELD_APPLICABILITY must "
+            "be a mapping."
+        )
+
+    known_keys = set(supported_keys)
+    dependencies: dict[str, tuple[str, ...]] = {}
+    applicability: dict[str, tuple[ConfigurationFieldCondition, ...]] = {}
+    for target_key, raw_conditions in raw_applicability.items():
+        if not isinstance(target_key, str) or target_key not in known_keys:
+            raise InspectionError(
+                f"Model {spec.package.catalog_key!r} CONFIG_FIELD_APPLICABILITY "
+                f"contains unknown target key {target_key!r}."
+            )
+        if not isinstance(raw_conditions, Mapping):
+            raise InspectionError(
+                f"Applicability metadata for Runtime Defaults field "
+                f"{target_key!r} must be a mapping of controller keys to values."
+            )
+
+        conditions: list[ConfigurationFieldCondition] = []
+        controller_keys: list[str] = []
+        for controller_key, raw_values in raw_conditions.items():
+            if not isinstance(controller_key, str) or controller_key not in known_keys:
+                raise InspectionError(
+                    f"Applicability metadata for Runtime Defaults field "
+                    f"{target_key!r} contains unknown controller key "
+                    f"{controller_key!r}."
+                )
+            if controller_key == target_key:
+                raise InspectionError(
+                    f"Runtime Defaults field {target_key!r} cannot make its "
+                    "applicability depend on itself."
+                )
+            if not isinstance(raw_values, (list, tuple)):
+                raise InspectionError(
+                    f"Applicability values for Runtime Defaults field "
+                    f"{target_key!r} controlled by {controller_key!r} must be a "
+                    "list or tuple."
+                )
+            if not raw_values:
+                raise InspectionError(
+                    f"Applicability values for Runtime Defaults field "
+                    f"{target_key!r} controlled by {controller_key!r} cannot be "
+                    "empty."
+                )
+            conditions.append(
+                ConfigurationFieldCondition(
+                    key=controller_key,
+                    values=tuple(spec.serialize_value(value) for value in raw_values),
+                )
+            )
+            controller_keys.append(controller_key)
+        applicability[target_key] = tuple(conditions)
+        dependencies[target_key] = tuple(controller_keys)
+
+    visiting: list[str] = []
+    visited: set[str] = set()
+
+    def visit(key: str) -> None:
+        if key in visited:
+            return
+        if key in visiting:
+            cycle_start = visiting.index(key)
+            cycle = [*visiting[cycle_start:], key]
+            raise InspectionError(
+                "CONFIG_FIELD_APPLICABILITY contains a dependency cycle: "
+                + " -> ".join(cycle)
+                + "."
+            )
+        visiting.append(key)
+        for controller_key in dependencies.get(key, ()):
+            visit(controller_key)
+        visiting.pop()
+        visited.add(key)
+
+    for target_key in dependencies:
+        visit(target_key)
+    return applicability
+
+
 def configuration_schema(
     package: ModelPackage,
     preset: str | None = None,
@@ -271,6 +363,7 @@ def _configuration_schema(
     supported_keys = [
         key for key in spec.supported_keys if key not in spec.skipped_schema_keys
     ]
+    applicability = _configuration_field_applicability(spec, supported_keys)
     missing = [key for key in supported_keys if key not in metadata]
     if missing:
         raise InspectionError(
@@ -314,6 +407,7 @@ def _configuration_schema(
                         key,
                     )
                 ),
+                applicable_when=applicability.get(key, ()),
                 maximum=spec.maximum_for(key),
                 locked=lock is not None,
                 locked_value=(

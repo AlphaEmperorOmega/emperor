@@ -30,6 +30,7 @@ FAKE_SCHEMA = ConfigurationSchema(
             default=0.001,
             nullable=False,
             choices=(),
+            applicable_when=(),
         ),
         ConfigurationField(
             key="BATCH_SIZE",
@@ -40,6 +41,7 @@ FAKE_SCHEMA = ConfigurationSchema(
             default=64,
             nullable=False,
             choices=(),
+            applicable_when=(),
         ),
         ConfigurationField(
             key="SEED",
@@ -50,6 +52,7 @@ FAKE_SCHEMA = ConfigurationSchema(
             default=42,
             nullable=False,
             choices=(),
+            applicable_when=(),
             locked=True,
         ),
     ),

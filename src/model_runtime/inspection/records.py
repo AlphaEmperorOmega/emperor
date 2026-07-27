@@ -44,6 +44,12 @@ SerializedConfigValue = bool | int | float | str | None
 
 
 @dataclass(frozen=True)
+class ConfigurationFieldCondition:
+    key: str
+    values: tuple[SerializedConfigValue, ...]
+
+
+@dataclass(frozen=True)
 class ConfigurationField:
     key: str
     flag: str
@@ -53,6 +59,7 @@ class ConfigurationField:
     default: SerializedConfigValue
     nullable: bool
     choices: tuple[SerializedConfigValue, ...]
+    applicable_when: tuple[ConfigurationFieldCondition, ...]
     maximum: int | float | None = None
     locked: bool = False
     locked_value: SerializedConfigValue = None
@@ -140,6 +147,7 @@ class InspectionResult:
 
 __all__ = [
     "ConfigurationField",
+    "ConfigurationFieldCondition",
     "ConfigurationSchema",
     "GraphConfiguration",
     "GraphConfigurationField",

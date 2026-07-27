@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     )
     from model_runtime.inspection.records import (
         ConfigurationField,
+        ConfigurationFieldCondition,
         ConfigurationSchema,
         GraphConfiguration,
         GraphConfigurationField,
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ConfigurationField",
+    "ConfigurationFieldCondition",
     "ConfigurationSchema",
     "GraphConfiguration",
     "GraphConfigurationField",
@@ -90,6 +92,7 @@ def __getattr__(name: str) -> Any:
         return InspectionError
     if name in {
         "ConfigurationField",
+        "ConfigurationFieldCondition",
         "ConfigurationSchema",
         "GraphConfiguration",
         "GraphConfigurationField",
