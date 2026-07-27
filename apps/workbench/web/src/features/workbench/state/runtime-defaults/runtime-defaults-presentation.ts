@@ -19,12 +19,14 @@ import {
   fieldValue,
   filterConfigSectionsForSearch,
   flattenConfigSearchOptions,
+  groupConfigFieldsBySectionPath,
   hasOverride,
   inheritedHiddenModelFieldHint,
   inheritedStackSectionHint,
   sectionElementId,
 } from "@/lib/config";
 import {
+  applicableConfigFields,
   isEnabledRuntimeDefaultValue,
   runtimeDefaultsMetrics,
   type RuntimeDefaultsMetrics,
@@ -366,19 +368,29 @@ export function presentRuntimeDefaultsSchema({
   overrides: OverrideValues;
   search: ConfigSearchState;
 }): RuntimeDefaultsSchemaPresentation {
-  const schemaFields = configSectionsFields(sections);
+  const allSchemaFields = configSectionsFields(sections);
+  const schemaFields = applicableConfigFields(allSchemaFields, overrides);
+  const applicableSections = deriveNestedConfigSections(
+    groupConfigFieldsBySectionPath(schemaFields),
+  );
   const schemaMetrics = runtimeDefaultsMetrics(schemaFields, overrides);
-  const sourceSections = deriveNestedConfigSections(sections);
+  const sourceSections = applicableSections;
   const sourceSectionsByTitle = indexSectionsByTitle(sourceSections);
   const rootTitleBySectionTitle = indexRootTitlesBySectionTitle(sourceSections);
-  const disabledFieldReasonByKey = disabledConfigFieldReasons(sections, overrides);
+  const disabledFieldReasonByKey = disabledConfigFieldReasons(
+    applicableSections,
+    overrides,
+  );
   const selectedFieldKey = search.selectedFieldKey ?? null;
   const isSearchActive = search.query.trim().length > 0 || selectedFieldKey !== null;
-  const filteredSections = filterConfigSectionsForSearch(sections, {
+  const filteredSections = filterConfigSectionsForSearch(applicableSections, {
     query: search.query,
     selectedFieldKey,
   });
-  const visibleSections = deriveNestedConfigSections(filteredSections, sections);
+  const visibleSections = deriveNestedConfigSections(
+    filteredSections,
+    applicableSections,
+  );
   const sectionPresentations = visibleSections.map((section, index) =>
     presentSection({
       section,
@@ -395,7 +407,7 @@ export function presentRuntimeDefaultsSchema({
     : sectionPresentations
         .filter((section, index) => index === 0 || section.treeMetrics.overrideCount > 0)
         .map((section) => section.title);
-  const searchOptions = flattenConfigSearchOptions(sections).map((option) => ({
+  const searchOptions = flattenConfigSearchOptions(applicableSections).map((option) => ({
     sectionTitle: option.sectionTitle,
     rootSectionTitle:
       rootTitleBySectionTitle.get(option.sectionTitle) ?? option.sectionTitle,

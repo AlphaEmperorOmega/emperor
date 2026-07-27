@@ -37,6 +37,58 @@ function fieldByKey(fields: ConfigField[], key: string) {
   return fields.find((field) => fieldMatchesKey(field, key));
 }
 
+function createApplicabilityEvaluator(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+) {
+  const fieldsByKey = new Map<string, ConfigField>();
+  for (const field of fields) {
+    fieldsByKey.set(configKeyToken(field.key), field);
+    fieldsByKey.set(configKeyToken(field.configKey), field);
+  }
+  const results = new Map<string, boolean>();
+  const visiting = new Set<string>();
+
+  function isApplicable(field: ConfigField): boolean {
+    const token = configKeyToken(field.key);
+    const existing = results.get(token);
+    if (existing !== undefined) {
+      return existing;
+    }
+    if (visiting.has(token)) {
+      return false;
+    }
+    visiting.add(token);
+    const applicable = field.applicableWhen.every((condition) => {
+      const controller = fieldsByKey.get(configKeyToken(condition.key));
+      if (!controller || !isApplicable(controller)) {
+        return false;
+      }
+      const rawValue = controller.locked
+        ? controller.lockedValue
+        : (overrideValue(overrides, controller.key) ?? controller.default);
+      const value = normalizeConfigFieldValue(controller, rawValue ?? null);
+      return condition.values.some(
+        (allowedValue) =>
+          normalizeConfigFieldValue(controller, allowedValue) === value,
+      );
+    });
+    visiting.delete(token);
+    results.set(token, applicable);
+    return applicable;
+  }
+
+  return isApplicable;
+}
+
+export function applicableConfigFields(
+  fields: ConfigField[],
+  overrides: OverrideValues,
+) {
+  const isApplicable = createApplicabilityEvaluator(fields, overrides);
+  return fields.filter(isApplicable);
+}
+
 function canonicalizeOverrideKeys(
   fields: ConfigField[],
   overrides: OverrideValues,
@@ -120,10 +172,21 @@ function normalizedOverrides(
   fields: ConfigField[],
   overrides: OverrideValues,
 ) {
-  return normalizeAdaptiveOptionOverrides(
+  const normalized = normalizeAdaptiveOptionOverrides(
     fields,
     canonicalizeOverrideKeys(fields, overrides),
   );
+  const applicableKeys = new Set(
+    applicableConfigFields(fields, normalized).map((field) =>
+      configKeyToken(field.key),
+    ),
+  );
+  for (const field of fields) {
+    if (!applicableKeys.has(configKeyToken(field.key))) {
+      deleteOverrideByKey(normalized, field.key);
+    }
+  }
+  return normalized;
 }
 
 function preserveIdentity(current: OverrideValues, next: OverrideValues) {
@@ -194,14 +257,15 @@ export function effectivePresetOverrides(
   fields: ConfigField[],
   overrides: OverrideValues,
 ): OverrideValues {
+  const normalized = normalizedOverrides(fields, overrides);
   const inactiveKeys = new Set(
-    inactivePresetOwnedOverrideKeys(fields, overrides),
+    inactivePresetOwnedOverrideKeys(fields, normalized),
   );
   if (inactiveKeys.size === 0) {
-    return { ...overrides };
+    return { ...normalized };
   }
   return Object.fromEntries(
-    Object.entries(overrides).filter(([key]) => !inactiveKeys.has(key)),
+    Object.entries(normalized).filter(([key]) => !inactiveKeys.has(key)),
   );
 }
 

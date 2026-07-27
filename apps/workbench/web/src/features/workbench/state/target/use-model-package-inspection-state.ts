@@ -7,8 +7,10 @@ import {
 } from "react";
 import type { LogRun } from "@/lib/api/logs";
 import {
+  applicableConfigFields,
   effectivePresetOverrides,
   inactivePresetOwnedOverrideKeys,
+  presetOwnedRuntimeDefaultCount,
   runtimeDefaultsEditor,
 } from "@/features/workbench/state/runtime-defaults/runtime-defaults";
 import { validateConfigSnapshotName } from "@/lib/config-snapshots";
@@ -283,8 +285,6 @@ export function useModelPackageInspectionState({
     configFields,
     modelConfigSnapshots,
     modelConfigSnapshotGroups,
-    presetOwnedFieldCount,
-    fieldCount,
   } = targetSelectionState;
   useEffect(() => {
     if (configFields.length === 0) {
@@ -362,6 +362,12 @@ export function useModelPackageInspectionState({
     [configFields, presetOverrides],
   );
   const activeOverrides = targetLifecycle.runtimeDefaults.active;
+  const applicableFields = useMemo(
+    () => applicableConfigFields(configFields, activeOverrides),
+    [activeOverrides, configFields],
+  );
+  const fieldCount = applicableFields.length;
+  const presetOwnedFieldCount = presetOwnedRuntimeDefaultCount(applicableFields);
   const overrideCount = Object.keys(activeOverrides).length;
   const inactiveLockedOverrideCount = inactiveLockedOverrideKeys.length;
   const currentInspectionRequest = useMemo<InspectionPreviewRequest | null>(() => {
