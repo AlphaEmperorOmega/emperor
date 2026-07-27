@@ -6,8 +6,8 @@
   },
   "graphs": {
     "simple-baseline": {
-      "sha256": "9eb2b6b7f5184f851c481588308df1bda4d318bb96ce03d8c37a5537ab1ba7be",
-      "bytes": 27169,
+      "sha256": "9339ad3254634ca19574a54e8afbc6e3a0aa0d8595ba46d5c0e60ca3d6058b26",
+      "bytes": 25706,
       "model": "linears/linear",
       "preset": "baseline",
       "dataset": "Mnist",
@@ -16,8 +16,8 @@
       "edgeCount": 28
     },
     "simple-gating": {
-      "sha256": "c6995b05e29f58568d7253313aa2daabcd1122a6865b48be63e19f2437adcc6e",
-      "bytes": 74483,
+      "sha256": "90417046c305dae678938197a20426604757512411cf87c6a59ad2510c6dd421",
+      "bytes": 70930,
       "model": "linears/linear",
       "preset": "gating",
       "dataset": "FashionMNIST",
@@ -26,8 +26,8 @@
       "edgeCount": 63
     },
     "adaptive-full-stack": {
-      "sha256": "45fb757905dc855a3bda89a03181a7135d2a8b46f5166f820bf57331ea7cebcf",
-      "bytes": 376980,
+      "sha256": "afc344edbb6512ce4cd081f83964ac2d82294c7e90577a0eead4e9393b7cba90",
+      "bytes": 364942,
       "model": "linears/linear_adaptive",
       "preset": "full-stack",
       "dataset": "Cifar10",
@@ -36,8 +36,8 @@
       "edgeCount": 253
     },
     "bert-task": {
-      "sha256": "444831bc02eb184b029636791ccca68d9f906033ee6f927ac81afe09660b027c",
-      "bytes": 288797,
+      "sha256": "110b5ceffaf962fb16027ca544de8039b1c42c44c020866299d8b6ac56f7c5dc",
+      "bytes": 272422,
       "model": "bert/linear",
       "preset": "baseline",
       "dataset": "PennTreebankBertPretraining",
@@ -46,8 +46,8 @@
       "edgeCount": 173
     },
     "gpt-task": {
-      "sha256": "6ff64c5f374b24711855f74533482595379a3b7ce4ecd270d84c545601e9d6d9",
-      "bytes": 286793,
+      "sha256": "50ae23b954f9d28dcffd7b1f85d0706a07adafe7fc99044433bc7822f920058f",
+      "bytes": 270418,
       "model": "gpt/linear",
       "preset": "baseline",
       "dataset": "WikiText2",
@@ -56,8 +56,8 @@
       "edgeCount": 165
     },
     "translation-task": {
-      "sha256": "8cd67d1321f28b93a9cded1e684a0de5b6d57f670698981fa697d4c3759196cd",
-      "bytes": 468315,
+      "sha256": "630ac4ac759feb72c4dd391dfc0df2a5dcddc3d09ac31119ba18090735590d81",
+      "bytes": 443598,
       "model": "transformer/linear",
       "preset": "baseline",
       "dataset": "Multi30kDeEn",
@@ -71,8 +71,8 @@
       "model": "linears/linear",
       "preset": "baseline",
       "presets": null,
-      "configSha256": "acf095c8486a290eec0a0c4af907ceacdf300bac8ba95a52ddf4fbd0689a1bcc",
-      "configBytes": 68968,
+      "configSha256": "78bba85c273472be076851adf056f1e3a9ba35cd1d5dbb22dafb713f0cebb2ad",
+      "configBytes": 71901,
       "fieldCount": 126,
       "searchSha256": "6bd6aebeda5fdb2addd4024bb85682ec874428f44f2297e7baddebc8043dcebf",
       "searchBytes": 1864,
@@ -82,8 +82,8 @@
       "model": "linears/linear",
       "preset": "gating",
       "presets": null,
-      "configSha256": "d0716984f9643d1e5d67938b6400ab3bdfad0c54760d388bfbaf5eaa2fe955ad",
-      "configBytes": 69039,
+      "configSha256": "11669082b9fcd8643b27acb197d3098090b95e6b04ad2f9ce7b1041682b2df54",
+      "configBytes": 71972,
       "fieldCount": 126,
       "searchSha256": "0da0dd9f8b6836a242bb2ccfc62c0131800e04d534886373dbeb5d979eb812f3",
       "searchBytes": 1862,
@@ -93,8 +93,8 @@
       "model": "linears/linear_adaptive",
       "preset": "full-stack",
       "presets": null,
-      "configSha256": "41cf1f26c852e0c73aa59c62df17a82e75c11a79b6318df342ec32cde351eacb",
-      "configBytes": 137253,
+      "configSha256": "0380cbba5a2628e540da508b5c2d3c8be39d75c7f48d8182ba19b929b2b77fef",
+      "configBytes": 142741,
       "fieldCount": 239,
       "searchSha256": "13d65d1ca3044646e0c78c93e2cb9c3057522eaccc3fd6c3c499f5f86bb068de",
       "searchBytes": 11732,
@@ -104,8 +104,8 @@
       "model": "linears/linear_adaptive",
       "preset": "baseline",
       "presets": ["full-stack", "dual-weight-gating"],
-      "configSha256": "47260fd3fb54b7ce59b9180fe6f06d6c56974e8d21cc21b8f86c77ac6f2764bd",
-      "configBytes": 136542,
+      "configSha256": "c3873e4c624a59d39acd546dc67bbe0c95703de47b80317319def5fb501c7390",
+      "configBytes": 142030,
       "fieldCount": 239,
       "searchSha256": "0c202f161aee4d1d9f0c5c0867c1535c6c60239c2b26eaac07a2e85d1f30a17d",
       "searchBytes": 11919,
@@ -119,7 +119,7 @@
     "gpt/linear": ["ecf4a4fdc30723bac70745ce15cacfb8c71182e1cce9b4565b8cd56155edd40b", 5210, 27, 1, 4],
     "transformer/linear": ["ea42fa102fc245bd6b7a77c9d65073128eb125c79175835c479b57f5e5aca389", 4181, 27, 1, 4]
   },
-  "catalog": ["9853ef8f18efc9fd03072c12fa5dba703f269e26c2298f1fd607d9f6abf862c7", 651, 27],
+  "catalog": ["e29a170d3b663c97390f5fb93e0ff0ceba38b7a39f726eb4547dea66cd2baeeb", 759, 31],
   "errors": {
     "unknown-model": ["Unknown model: unknown/model", 400],
     "unknown-override": ["Unknown override 'NO_SUCH_FIELD'.", 400],
