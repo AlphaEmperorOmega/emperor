@@ -7,21 +7,18 @@ from emperor.layers._validation.common import (
 )
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.layers._validation.layer import LayerValidator
-from emperor.layers._validation.recurrent import RecurrentLayerValidator
 from emperor.layers._validation.stack import LayerStackValidator
 
 __all__ = [
     "LayerGateValidator",
     "LayerStackValidator",
     "LayerValidator",
-    "RecurrentLayerValidator",
 ]
 
 for _validator in (
     LayerGateValidator,
     LayerStackValidator,
     LayerValidator,
-    RecurrentLayerValidator,
 ):
     _validator.__module__ = __name__
 

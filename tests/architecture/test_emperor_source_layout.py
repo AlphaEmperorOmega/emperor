@@ -183,6 +183,57 @@ class EmperorSourceLayoutTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_recurrent_composition_has_no_standalone_reasoning_boundary(self):
+        retired_modules = (
+            "emperor.layers._recurrent",
+            "emperor.layers._validation.recurrent",
+            "emperor.layers._composition.recurrent.variants.hrm",
+            "emperor.layers._composition.recurrent.variants.trm",
+            "emperor.reasoning",
+            "models.reasoning",
+        )
+        retired_names = {
+            "HRMRecurrent",
+            "HRMRecurrentConfig",
+            "ReasoningProcess",
+            "STRUCTURED_REASONING",
+            "TRMRecurrent",
+            "TRMRecurrentConfig",
+        }
+        recurrent_root = (
+            SOURCE_ROOT / "emperor" / "layers" / "_composition" / "recurrent"
+        )
+        violations = []
+
+        for path, syntax_tree in parsed_source_files():
+            relative_path = path.relative_to(REPOSITORY_ROOT).as_posix()
+            for node in ast.walk(syntax_tree):
+                referenced_modules = []
+                if isinstance(node, ast.Import):
+                    referenced_modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    referenced_modules.append(node.module)
+                for referenced_module in referenced_modules:
+                    if referenced_module.startswith(retired_modules):
+                        violations.append(
+                            (relative_path, node.lineno, referenced_module)
+                        )
+                    if path.is_relative_to(recurrent_root) and (
+                        referenced_module == "models"
+                        or referenced_module.startswith("models.")
+                    ):
+                        violations.append(
+                            (relative_path, node.lineno, referenced_module)
+                        )
+                if isinstance(node, ast.Name) and node.id in retired_names:
+                    violations.append((relative_path, node.lineno, node.id))
+                elif isinstance(node, ast.Attribute) and node.attr in retired_names:
+                    violations.append((relative_path, node.lineno, node.attr))
+
+        self.assertFalse((SOURCE_ROOT / "emperor" / "reasoning").exists())
+        self.assertFalse((SOURCE_ROOT / "models" / "reasoning").exists())
+        self.assertEqual(violations, [])
+
 
 if __name__ == "__main__":
     unittest.main()

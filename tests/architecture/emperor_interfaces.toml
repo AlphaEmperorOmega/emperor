@@ -33,12 +33,17 @@ retired_modules = [
   "emperor.layers.state",
   "emperor.layers.monitoring",
   "emperor.layers.execution",
+  "emperor.layers._recurrent",
   "emperor.layers._composition.attention_residual",
   "emperor.layers._composition.pairwise_residual",
   "emperor.layers._composition.residual.connection",
   "emperor.layers._composition.residual.attention",
   "emperor.layers._validation.attention_residual",
   "emperor.layers._validation.residual",
+  "emperor.layers._validation.recurrent",
+  "emperor.layers._composition.recurrent.variants.hrm",
+  "emperor.layers._composition.recurrent.variants.trm",
+  "emperor.reasoning",
   "emperor.linears.layer",
   "emperor.linears.monitoring",
   "emperor.halting.base",
@@ -85,6 +90,10 @@ retired_symbol_imports = [
   { module = "emperor.layers._composition.residual.pairwise", name = "WeightedResidual" },
   { module = "emperor.layers._validation", name = "AttentionResidualValidator" },
   { module = "emperor.layers._validation", name = "ResidualConnectionValidator" },
+  { module = "emperor.layers._config", name = "RecurrentLayerConfig" },
+  { module = "emperor.layers._validation", name = "RecurrentLayerValidator" },
+  { module = "emperor.layers", name = "HRMRecurrentConfig" },
+  { module = "emperor.layers", name = "TRMRecurrentConfig" },
 ]
 
 retired_members = []

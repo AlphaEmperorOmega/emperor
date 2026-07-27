@@ -114,37 +114,3 @@ class MirroredLayerStackConfig(LayerStackConfig):
         from emperor.layers._mirrored import MirroredLayerStack
 
         return MirroredLayerStack
-
-
-@dataclass
-class RecurrentLayerConfig(ConfigBase):
-    input_dim: int | None = optional_field("Input feature dimension.")
-    output_dim: int | None = optional_field("Output feature dimension.")
-    max_steps: int | None = optional_field("Maximum recurrent applications.")
-    recurrent_layer_norm_position: LayerNormPositionOptions | None = optional_field(
-        "Where layer normalization is applied within each recurrent step."
-    )
-    block_config: ConfigBase | None = optional_field(
-        "ConfigBase block reused at every recurrent step. The built module must "
-        "consume and return LayerState-compatible values and declare input_dim and "
-        "output_dim fields."
-    )
-    gate_config: "GateConfig | None" = optional_field(
-        "Optional recurrent gate config. Set to None to disable."
-    )
-    residual_config: "ResidualConfig | None" = optional_field(
-        "Optional residual connection config applied between recurrent steps. Set to "
-        "None to disable recurrent residuals."
-    )
-    halting_config: "HaltingConfig | None" = optional_field(
-        "Optional recurrent adaptive computation module. Set to None to disable."
-    )
-    memory_config: "DynamicMemoryConfig | None" = optional_field(
-        "Optional dynamic memory module applied around the recurrent block. "
-        "Set to None to disable memory."
-    )
-
-    def _registry_owner(self) -> type:
-        from emperor.layers._recurrent import RecurrentLayer
-
-        return RecurrentLayer

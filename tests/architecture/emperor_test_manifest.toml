@@ -311,7 +311,6 @@ modules = [
   "src/emperor/layers/_monitoring/diagnostics.py",
   "src/emperor/layers/_mirrored.py",
   "src/emperor/layers/_options.py",
-  "src/emperor/layers/_recurrent.py",
   "src/emperor/layers/_row_layout.py",
   "src/emperor/layers/_stack.py",
   "src/emperor/layers/_state.py",
@@ -320,7 +319,6 @@ modules = [
   "src/emperor/layers/_validation/common.py",
   "src/emperor/layers/_validation/gate.py",
   "src/emperor/layers/_validation/layer.py",
-  "src/emperor/layers/_validation/recurrent.py",
   "src/emperor/layers/_validation/stack.py",
 ]
 

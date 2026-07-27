@@ -1,3 +1,4 @@
+import importlib
 import unittest
 from dataclasses import fields
 
@@ -141,6 +142,19 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                     _declared_protected_method_names(owner),
                     expected_method_names,
                 )
+
+    def test_old_private_runtime_and_validator_modules_are_retired(self) -> None:
+        for module_name in (
+            "emperor.layers._recurrent",
+            "emperor.layers._validation.recurrent",
+            "emperor.layers._composition.recurrent.variants.hrm",
+            "emperor.layers._composition.recurrent.variants.trm",
+        ):
+            with (
+                self.subTest(module_name=module_name),
+                self.assertRaises(ModuleNotFoundError),
+            ):
+                importlib.import_module(module_name)
 
 
 if __name__ == "__main__":
