@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { ModelIdentity } from "@/lib/api/model-catalog";
 import { type OverrideValues } from "@/lib/config";
 import {
+  applicableConfigFields,
   effectivePresetOverrides,
   inactivePresetOwnedOverrideKeys,
   runtimeDefaultsEditor,
@@ -212,7 +213,6 @@ export function useTrainingDraftState({
     datasetNames,
     configSections,
     configFields,
-    fieldCount,
     modelConfigSnapshots,
   } = selectionState;
   const selectedDatasets = useMemo(
@@ -225,6 +225,10 @@ export function useTrainingDraftState({
       : bulkOverrideDraft;
   const effectiveBulkOverrides = useMemo(
     () => effectivePresetOverrides(configFields, bulkOverrides),
+    [bulkOverrides, configFields],
+  );
+  const fieldCount = useMemo(
+    () => applicableConfigFields(configFields, bulkOverrides).length,
     [bulkOverrides, configFields],
   );
   const inactiveLockedOverrideCount = useMemo(

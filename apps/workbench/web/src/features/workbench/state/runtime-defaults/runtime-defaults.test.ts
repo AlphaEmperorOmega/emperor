@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type ConfigField } from "@/lib/api/models";
 import {
+  applicableConfigFields,
   effectivePresetOverrides,
   inactivePresetOwnedOverrideKeys,
   isEnabledRuntimeDefaultValue,
@@ -56,7 +57,203 @@ const adaptiveOptionFields = [
   }),
 ];
 
+const recurrentVariantFields = [
+  field({
+    key: "recurrent_composition_option",
+    configKey: "RECURRENT_COMPOSITION_OPTION",
+    type: "class",
+    default: "RecurrentLayerConfig",
+    choices: [
+      "HierarchicalReasoningModelRecurrentConfig",
+      "RecurrentLayerConfig",
+      "TinyRecursiveModelRecurrentConfig",
+    ],
+  }),
+  field({
+    key: "recurrent_no_gradient_transition_count",
+    default: null,
+    nullable: true,
+  }),
+  field({
+    key: "recurrent_max_steps",
+    default: 2,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["RecurrentLayerConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_reinject_original_hidden_flag",
+    type: "bool",
+    default: false,
+    choices: [true, false],
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["RecurrentLayerConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_latent_updates_per_answer_update",
+    default: 2,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["TinyRecursiveModelRecurrentConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_answer_update_count",
+    default: 2,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["TinyRecursiveModelRecurrentConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_high_cycles",
+    default: 2,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["HierarchicalReasoningModelRecurrentConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_low_cycles",
+    default: 2,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: ["HierarchicalReasoningModelRecurrentConfig"],
+      },
+    ],
+  }),
+  field({
+    key: "recurrent_initialization_standard_deviation",
+    type: "float",
+    default: 1,
+    applicableWhen: [
+      {
+        key: "RECURRENT_COMPOSITION_OPTION",
+        values: [
+          "TinyRecursiveModelRecurrentConfig",
+          "HierarchicalReasoningModelRecurrentConfig",
+        ],
+      },
+    ],
+  }),
+];
+
 describe("Runtime Defaults", () => {
+  it("selects recurrent fields generically for Standard, TRM, and HRM", () => {
+    const keysFor = (overrides: Record<string, string>) =>
+      applicableConfigFields(recurrentVariantFields, overrides).map(
+        (item) => item.key,
+      );
+
+    expect(keysFor({})).toEqual([
+      "recurrent_composition_option",
+      "recurrent_no_gradient_transition_count",
+      "recurrent_max_steps",
+      "recurrent_reinject_original_hidden_flag",
+    ]);
+    expect(
+      keysFor({
+        recurrent_composition_option: "TinyRecursiveModelRecurrentConfig",
+      }),
+    ).toEqual([
+      "recurrent_composition_option",
+      "recurrent_no_gradient_transition_count",
+      "recurrent_latent_updates_per_answer_update",
+      "recurrent_answer_update_count",
+      "recurrent_initialization_standard_deviation",
+    ]);
+    expect(
+      keysFor({
+        recurrent_composition_option:
+          "HierarchicalReasoningModelRecurrentConfig",
+      }),
+    ).toEqual([
+      "recurrent_composition_option",
+      "recurrent_no_gradient_transition_count",
+      "recurrent_high_cycles",
+      "recurrent_low_cycles",
+      "recurrent_initialization_standard_deviation",
+    ]);
+  });
+
+  it("discards incompatible recurrent overrides as variants change", () => {
+    const standard = runtimeDefaultsEditor.replace(recurrentVariantFields, {
+      recurrent_max_steps: "5",
+      recurrent_latent_updates_per_answer_update: "4",
+    });
+    expect(standard).toEqual({ recurrent_max_steps: "5" });
+
+    const trm = runtimeDefaultsEditor.edit(
+      recurrentVariantFields,
+      standard,
+      "RECURRENT_COMPOSITION_OPTION",
+      "TinyRecursiveModelRecurrentConfig",
+    );
+    expect(trm).toEqual({
+      recurrent_composition_option: "TinyRecursiveModelRecurrentConfig",
+    });
+    const configuredTrm = runtimeDefaultsEditor.edit(
+      recurrentVariantFields,
+      trm,
+      "recurrent_latent_updates_per_answer_update",
+      "4",
+    );
+
+    const hrm = runtimeDefaultsEditor.edit(
+      recurrentVariantFields,
+      configuredTrm,
+      "recurrent_composition_option",
+      "HierarchicalReasoningModelRecurrentConfig",
+    );
+    expect(hrm).toEqual({
+      recurrent_composition_option:
+        "HierarchicalReasoningModelRecurrentConfig",
+    });
+    expect(
+      runtimeDefaultsEditor.edit(
+        recurrentVariantFields,
+        hrm,
+        "recurrent_composition_option",
+        "RecurrentLayerConfig",
+      ),
+    ).toEqual({});
+  });
+
+  it("uses a locked controller value before an override or default", () => {
+    const lockedFields = recurrentVariantFields.map((item) =>
+      item.key === "recurrent_composition_option"
+        ? {
+            ...item,
+            locked: true,
+            lockedValue: "HierarchicalReasoningModelRecurrentConfig",
+          }
+        : item,
+    );
+
+    const applicableKeys = applicableConfigFields(lockedFields, {
+      recurrent_composition_option: "TinyRecursiveModelRecurrentConfig",
+    }).map((item) => item.key);
+
+    expect(applicableKeys).toContain("recurrent_high_cycles");
+    expect(applicableKeys).not.toContain(
+      "recurrent_latent_updates_per_answer_update",
+    );
+  });
+
   it("canonicalizes replacement keys while retaining inactive preset-owned values", () => {
     const presetOwnedLayerWidth = field({
       key: "layer_width",

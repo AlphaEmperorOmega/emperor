@@ -113,6 +113,89 @@ function schemaSections(): ConfigSection[] {
 }
 
 describe("Runtime Defaults schema presentation", () => {
+  it("removes inapplicable fields, empty sections, search entries, and counts", () => {
+    const selector = field({
+      key: "recurrent_composition_option",
+      section: "Recurrent Layer Options",
+      sectionPath: ["Recurrent Layer Options"],
+      type: "class",
+      default: "RecurrentLayerConfig",
+      choices: [
+        "RecurrentLayerConfig",
+        "TinyRecursiveModelRecurrentConfig",
+      ],
+    });
+    const shared = field({
+      key: "recurrent_no_gradient_transition_count",
+      section: "Recurrent Layer Options",
+      sectionPath: ["Recurrent Layer Options"],
+      default: null,
+      nullable: true,
+    });
+    const standard = field({
+      key: "recurrent_max_steps",
+      section: "Standard Recurrent Options",
+      sectionPath: ["Standard Recurrent Options"],
+      applicableWhen: [
+        {
+          key: "RECURRENT_COMPOSITION_OPTION",
+          values: ["RecurrentLayerConfig"],
+        },
+      ],
+    });
+    const trm = field({
+      key: "recurrent_answer_update_count",
+      section: "TRM Recurrent Options",
+      sectionPath: ["TRM Recurrent Options"],
+      applicableWhen: [
+        {
+          key: "RECURRENT_COMPOSITION_OPTION",
+          values: ["TinyRecursiveModelRecurrentConfig"],
+        },
+      ],
+    });
+    const sections = [
+      { title: "Recurrent Layer Options", fields: [selector, shared] },
+      { title: "Standard Recurrent Options", fields: [standard] },
+      { title: "TRM Recurrent Options", fields: [trm] },
+    ];
+
+    const standardPresentation = presentRuntimeDefaultsSchema({
+      sections,
+      overrides: {},
+      search: { query: "" },
+    });
+    expect(standardPresentation.fieldCount).toBe(3);
+    expect(standardPresentation.sections.map((item) => item.title)).toEqual([
+      "Recurrent Layer Options",
+      "Standard Recurrent Options",
+    ]);
+    expect(standardPresentation.search.options.map((item) => item.key))
+      .not.toContain("recurrent_answer_update_count");
+
+    const trmPresentation = presentRuntimeDefaultsSchema({
+      sections,
+      overrides: {
+        recurrent_composition_option: "TinyRecursiveModelRecurrentConfig",
+        recurrent_max_steps: "9",
+        recurrent_answer_update_count: "3",
+      },
+      search: { query: "" },
+    });
+    expect(trmPresentation.fieldCount).toBe(3);
+    expect(trmPresentation.sections.map((item) => item.title)).toEqual([
+      "Recurrent Layer Options",
+      "TRM Recurrent Options",
+    ]);
+    expect(
+      trmPresentation.sections.find(
+        (item) => item.title === "TRM Recurrent Options",
+      )?.treeMetrics.overrideCount,
+    ).toBe(1);
+    expect(trmPresentation.search.options.map((item) => item.key))
+      .not.toContain("recurrent_max_steps");
+  });
+
   it("assembles navigation counts, nested disablement, inheritance, and field groups", () => {
     const presentation = presentRuntimeDefaultsSchema({
       sections: schemaSections(),

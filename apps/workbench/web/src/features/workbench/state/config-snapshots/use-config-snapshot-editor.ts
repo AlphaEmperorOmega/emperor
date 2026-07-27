@@ -12,7 +12,10 @@ import {
   validateConfigSnapshotName,
 } from "@/lib/config-snapshots";
 import { useRuntimeDefaultsSchema } from "@/features/workbench/state/model-package/use-model-package-metadata";
-import { runtimeDefaultsEditor } from "@/features/workbench/state/runtime-defaults/runtime-defaults";
+import {
+  applicableConfigFields,
+  runtimeDefaultsEditor,
+} from "@/features/workbench/state/runtime-defaults/runtime-defaults";
 import { useConfigSnapshotRecords } from "@/features/workbench/state/config-snapshots/use-config-snapshot-records";
 import { type ConfigSnapshotEditorSessionState } from "@/features/workbench/state/config-snapshots/use-config-snapshot-editor-session";
 
@@ -311,7 +314,7 @@ export function useConfigSnapshotEditorState({
         records: snapshotRecords.records,
         recordGroups: snapshotGroups,
         configSections,
-        fieldCount: configFields.length,
+        fieldCount: applicableConfigFields(configFields, draft).length,
         draft,
         status: {
           isLoading:
@@ -341,7 +344,7 @@ export function useConfigSnapshotEditorState({
       clearOverride,
       clearForConnectionChange,
       close,
-      configFields.length,
+      configFields,
       configSections,
       draft,
       model,
