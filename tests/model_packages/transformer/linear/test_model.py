@@ -8,6 +8,10 @@ import torch
 
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experiments.translation import TranslationExperiment
+from emperor.layers import (
+    RecurrentLayerConfig,
+    WeightedBlendResidualConfig,
+)
 from emperor.linears import LinearLayer
 from model_runtime.packages import PresetLock
 from models.catalog import model_package
@@ -201,6 +205,43 @@ class TestTransformerLinearModel(unittest.TestCase):
             with self.subTest(field=field, overrides=overrides):
                 with self.assertRaisesRegex(error, field):
                     _build_config(**overrides)
+
+    def test_updated_residual_config_builds_for_stack_and_recurrence(self):
+        cfg = _build_config(
+            batch_size=2,
+            vocab_size=32,
+            model_dim=8,
+            source_sequence_length=4,
+            target_sequence_length=4,
+            encoder_num_layers=1,
+            decoder_num_layers=1,
+            attn_num_heads=2,
+            ff_stack_hidden_dim=8,
+            dropout_probability=0.0,
+            recurrent_flag=True,
+            stack_residual_connection_option=WeightedBlendResidualConfig,
+            recurrent_residual_connection_option=WeightedBlendResidualConfig,
+        )
+
+        encoder = cfg.experiment_config.encoder_config
+        self.assertIsInstance(encoder, RecurrentLayerConfig)
+        self.assertIsInstance(
+            encoder.residual_config,
+            WeightedBlendResidualConfig,
+        )
+        self.assertIsInstance(
+            encoder.block_config.layer_config.residual_config,
+            WeightedBlendResidualConfig,
+        )
+
+        model = Model(cfg).eval()
+        source, target = self._ids()
+        with torch.no_grad():
+            logits, auxiliary_loss = model(source, target)
+
+        self.assertEqual(logits.shape, (2, 3, 32))
+        self.assertTrue(torch.isfinite(logits).all())
+        self.assertTrue(torch.isfinite(auxiliary_loss))
 
     def test_linear_backend_tying_independence_and_gradients(self):
         model = Model(self._config()).eval()

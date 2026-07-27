@@ -6,7 +6,10 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from emperor.layers import WeightedResidualConfig
+from emperor.layers import (
+    AdditiveResidualConfig,
+    WeightedResidualConfig,
+)
 from model_runtime.inspection import (
     ConfigurationSchema,
     InspectionError,
@@ -215,6 +218,45 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 package,
                 {"stack_residual_connection_option": "RESIDUAL"},
             )
+
+    def test_transformer_residual_selectors_use_updated_public_configs(self) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        fields = {field.key: field for field in configuration_schema(package).fields}
+        expected_choices = (
+            "AdditiveResidualConfig",
+            "AttentionResidualConfig",
+            "WeightedBlendResidualConfig",
+            "WeightedResidualConfig",
+        )
+
+        for key in (
+            "STACK_RESIDUAL_CONNECTION_OPTION",
+            "RECURRENT_RESIDUAL_CONNECTION_OPTION",
+        ):
+            with self.subTest(key=key):
+                selector = fields[key]
+                self.assertEqual(selector.value_type, "class")
+                self.assertIsNone(selector.default)
+                self.assertTrue(selector.nullable)
+                self.assertEqual(selector.choices, expected_choices)
+
+        parsed = parse_overrides(
+            package,
+            {
+                "stack_residual_connection_option": "WeightedResidualConfig",
+                "recurrent_residual_connection_option": "AdditiveResidualConfig",
+            },
+        )
+        self.assertIs(
+            parsed.values["stack_residual_connection_option"],
+            WeightedResidualConfig,
+        )
+        self.assertIs(
+            parsed.values["recurrent_residual_connection_option"],
+            AdditiveResidualConfig,
+        )
 
     def test_invalid_and_locked_overrides_raise_transport_neutral_error(self) -> None:
         package = model_package("linears/linear")
