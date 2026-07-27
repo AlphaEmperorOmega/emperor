@@ -7,14 +7,13 @@ const MONITOR_TARGET_TYPES = {
     "IndependentAttention",
     "MixtureOfAttentionHeads",
   ]),
-  "recurrent-layer": new Set(["RecurrentLayer"]),
   "layer-controller": new Set(["Layer"]),
   parametric: new Set(["ParametricLayer"]),
 } as const;
 
 const NUMERIC_STACK_ENTRY = /^\d+$/;
 
-export type MonitorName = keyof typeof MONITOR_TARGET_TYPES;
+export type MonitorName = keyof typeof MONITOR_TARGET_TYPES | "recurrent-layer";
 export type MonitorComparisonScope = "same-stack" | "all-layers";
 export type LinearMonitorComparisonScope = MonitorComparisonScope;
 
@@ -78,6 +77,15 @@ function hasRuntimeOrInternalAncestor(
 }
 
 function isDirectMonitorType(node: GraphNode, monitorName: MonitorName) {
+  if (monitorName === "recurrent-layer") {
+    const recurrent = node.details.recurrent;
+    return (
+      typeof recurrent === "object" &&
+      recurrent !== null &&
+      !Array.isArray(recurrent) &&
+      recurrent.diagnostics === true
+    );
+  }
   return (MONITOR_TARGET_TYPES[monitorName] as ReadonlySet<string>).has(
     node.typeName,
   );

@@ -687,6 +687,7 @@ describe("resolveMonitorTarget", () => {
       node("recurrent.0", {
         typeName: "RecurrentLayer",
         path: "recurrent.0",
+        details: { recurrent: { diagnostics: true } },
       }),
       node("main_model.layers.0", { typeName: "Layer", path: "main_model.layers.0" }),
       node("main_model.layers.0.model", {
@@ -724,6 +725,50 @@ describe("resolveMonitorTarget", () => {
       monitorName: "parametric",
       node: byId.get("main_model.layers.0.model"),
     });
+  });
+
+  it("resolves every recurrent variant through diagnostic capability", () => {
+    for (const typeName of [
+      "RecurrentLayer",
+      "TinyRecursiveModelRecurrent",
+      "HierarchicalReasoningModelRecurrent",
+    ]) {
+      const variantGraph = graph(
+        [
+          node("model", { typeName: "Model", path: "model" }),
+          node("recurrent", {
+            typeName,
+            path: "recurrent",
+            details: { recurrent: { diagnostics: true } },
+          }),
+        ],
+        [["model", "recurrent"]],
+      );
+
+      expect(
+        resolveMonitorTarget(variantGraph, variantGraph.nodes[1]),
+      ).toMatchObject({
+        monitorName: "recurrent-layer",
+        node: variantGraph.nodes[1],
+      });
+    }
+  });
+
+  it("does not infer recurrent monitoring from a class name", () => {
+    const unsupported = graph(
+      [
+        node("model", { typeName: "Model", path: "model" }),
+        node("recurrent", {
+          typeName: "RecurrentLayer",
+          path: "recurrent",
+          details: { recurrent: { diagnostics: false } },
+        }),
+      ],
+      [["model", "recurrent"]],
+    );
+
+    expect(resolveMonitorTarget(unsupported, unsupported.nodes[1]))
+      .toBeUndefined();
   });
 
   it("selects the first available monitor target for multi-monitor Layer nodes", () => {
