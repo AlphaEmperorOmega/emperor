@@ -1,6 +1,6 @@
 {
   "canonicalization": "UTF-8 JSON; object keys sorted; compact separators; array order preserved",
-  "documentSha256": "363c26b3e18f30a78228f9f393833c6a1b4ac94cb9333ca23230dfe8e971e375",
+  "documentSha256": "51e0603551f00c2b594d33e13352bc465f9371cc5fcf2b51e2ee87e8d12b65f1",
   "info": {
     "title": "Emperor Model Workbench API",
     "version": "1.0.0"
@@ -194,15 +194,19 @@
       "sha256": "ae61f64d7d5eff3e98ae263af86b41bb536dedce60d738d1f946a5f09eb44d94"
     }
   ],
-  "schemaCount": 105,
+  "schemaCount": 106,
   "schemas": [
     {
       "name": "CapabilitiesResponse",
       "sha256": "be2b4576dded384fa8e50be6cc9b3bb081846356778b43193882503f24d8be5b"
     },
     {
+      "name": "ConfigFieldConditionResponse",
+      "sha256": "9547324fe17a80e6c96e0dbd28ef62c94b3263fe415302c3fe6d3680e2a5ef67"
+    },
+    {
       "name": "ConfigFieldResponse",
-      "sha256": "3f6dde7aea1a5b4ce3c5eb27678f57f96f4992b35c9c4197e43957af3c058daa"
+      "sha256": "adc0ead435b70b93de37acae4e5eb86469133597885927348b5dbae00a379df3"
     },
     {
       "name": "ConfigSchemaResponse",

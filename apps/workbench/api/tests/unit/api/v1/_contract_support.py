@@ -374,6 +374,8 @@ CAPABILITIES_REQUIRED_FIELDS = (
     "trainingJobProcessLimit",
 )
 
+CONFIG_FIELD_CONDITION_FIELDS = ("key", "values")
+CONFIG_FIELD_CONDITION_REQUIRED_FIELDS = CONFIG_FIELD_CONDITION_FIELDS
 CONFIG_FIELD_FIELDS = (
     "key",
     "configKey",
@@ -386,6 +388,7 @@ CONFIG_FIELD_FIELDS = (
     "default",
     "nullable",
     "choices",
+    "applicableWhen",
     "maximum",
     "locked",
     "lockedValue",
@@ -402,6 +405,7 @@ CONFIG_FIELD_REQUIRED_FIELDS = (
     "default",
     "nullable",
     "choices",
+    "applicableWhen",
 )
 SEARCH_AXIS_FIELDS = (
     "key",
@@ -844,6 +848,12 @@ SCHEMA_PARITY_CASES = (
         "monitorsSchema",
         ("modelType", "model", "monitors"),
         ("modelType", "model", "monitors"),
+    ),
+    SchemaParityCase(
+        schemas.ConfigFieldConditionResponse,
+        "configFieldConditionSchema",
+        CONFIG_FIELD_CONDITION_FIELDS,
+        CONFIG_FIELD_CONDITION_REQUIRED_FIELDS,
     ),
     SchemaParityCase(
         schemas.ConfigFieldResponse,
@@ -1440,6 +1450,7 @@ HIGH_RISK_SCHEMA_PARITY_GROUPS = {
         schemas.ConfigSnapshotUpdateRequest,
     ),
     "model config/search": (
+        schemas.ConfigFieldConditionResponse,
         schemas.ConfigFieldResponse,
         schemas.ConfigSchemaResponse,
         schemas.SearchAxisResponse,

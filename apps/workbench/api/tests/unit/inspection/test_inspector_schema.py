@@ -91,6 +91,43 @@ class InspectorSchemaTests(unittest.TestCase):
             self.assertEqual(field["key"], field["configKey"])
             self.assertTrue(field["key"].isupper())
 
+    def test_config_schema_transports_recurrent_applicability(self) -> None:
+        fields = _fields_by_key(config_schema("transformer/linear"))
+
+        self.assertEqual(
+            fields["recurrent_max_steps"]["applicableWhen"],
+            [
+                {
+                    "key": "RECURRENT_COMPOSITION_OPTION",
+                    "values": ["RecurrentLayerConfig"],
+                }
+            ],
+        )
+        self.assertEqual(
+            fields["attn_recurrent_initialization_standard_deviation"][
+                "applicableWhen"
+            ],
+            [
+                {
+                    "key": "ATTN_RECURRENT_COMPOSITION_OPTION",
+                    "values": [
+                        "TinyRecursiveModelRecurrentConfig",
+                        "HierarchicalReasoningModelRecurrentConfig",
+                    ],
+                }
+            ],
+        )
+        self.assertEqual(
+            fields["ff_recurrent_no_gradient_transition_count"]["applicableWhen"],
+            [],
+        )
+        self.assertEqual(
+            _fields_by_key(config_schema("linears/linear"))["hidden_dim"][
+                "applicableWhen"
+            ],
+            [],
+        )
+
     def test_search_schema_emits_uppercase_axis_keys(self) -> None:
         axes = search_space_schema("linears/linear", "baseline")["axes"]
 
