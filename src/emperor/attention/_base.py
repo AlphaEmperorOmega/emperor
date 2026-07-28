@@ -70,32 +70,36 @@ class MultiHeadAttentionAbstract(Module):
     ) -> tuple[Tensor, Tensor | None, Tensor | None]:
         self.projector._clear_transient_state()
         try:
-            self.VALIDATOR.validate_forward_inputs(self, attention_inputs)
-            attention_inputs = self.batch_manager.convert_inputs_to_internal_layout(
-                attention_inputs
-            )
-            self.VALIDATOR.validate_runtime_tensors(self, attention_inputs)
-            self.VALIDATOR.validate_static_key_value_inputs(self, attention_inputs)
-            self.VALIDATOR.validate_runtime_layout(self, attention_inputs)
-            attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
-            attention_inputs = self.__attach_projection_row_layout(attention_inputs)
-            attention_inputs = self.projector.compute_qkv_projections(attention_inputs)
-            attention_inputs = self.reshaper.reshape_qkv_for_attention(attention_inputs)
-            attention_inputs = self.bias.add_kv_learnable_bias_vectors(attention_inputs)
-            attention_inputs = self.zero_attention.add_zero_attention(attention_inputs)
-            attention_inputs = self.masks.merge_padding_and_attention_mask(
-                attention_inputs
-            )
-            attention_output, attention_weights = self.processor.compute_attention(
-                attention_inputs
-            )
-            attention_output = self.batch_manager.restore_output_layout(
-                attention_output, attention_inputs
-            )
-            auxiliary_loss = self.projector._get_auxiliary_loss()
-            return attention_output, attention_weights, auxiliary_loss
+            return self.__execute_attention_pipeline(attention_inputs)
         finally:
             self.projector._clear_transient_state()
+
+    def __execute_attention_pipeline(
+        self,
+        attention_inputs: MultiHeadAttentionInputs,
+    ) -> tuple[Tensor, Tensor | None, Tensor | None]:
+        self.VALIDATOR.validate_forward_inputs(self, attention_inputs)
+        attention_inputs = self.batch_manager.convert_inputs_to_internal_layout(
+            attention_inputs
+        )
+        self.VALIDATOR.validate_runtime_tensors(self, attention_inputs)
+        self.VALIDATOR.validate_static_key_value_inputs(self, attention_inputs)
+        self.VALIDATOR.validate_runtime_layout(self, attention_inputs)
+        attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
+        attention_inputs = self.__attach_projection_row_layout(attention_inputs)
+        attention_inputs = self.projector.compute_qkv_projections(attention_inputs)
+        attention_inputs = self.reshaper.reshape_qkv_for_attention(attention_inputs)
+        attention_inputs = self.bias.add_kv_learnable_bias_vectors(attention_inputs)
+        attention_inputs = self.zero_attention.add_zero_attention(attention_inputs)
+        attention_inputs = self.masks.merge_padding_and_attention_mask(attention_inputs)
+        attention_output, attention_weights = self.processor.compute_attention(
+            attention_inputs
+        )
+        attention_output = self.batch_manager.restore_output_layout(
+            attention_output, attention_inputs
+        )
+        auxiliary_loss = self.projector._get_auxiliary_loss()
+        return attention_output, attention_weights, auxiliary_loss
 
     def __attach_projection_row_layout(
         self,
