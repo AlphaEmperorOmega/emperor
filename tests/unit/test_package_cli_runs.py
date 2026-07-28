@@ -13,14 +13,17 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 from emperor.augmentations.adaptive_parameters import (
     LowRankDynamicWeightConfig,
 )
+from emperor.layers import LayerControllerMonitorCallback
 from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
     RunRequest,
     plan_runs,
 )
+from model_runtime.runs.experiment import ExperimentBase
 from models.catalog import model_package
 from models.experiment_cli_parser import get_experiment_parser
+from models.linears.linear.runtime_defaults import runtime_from_flat
 from models.linears.linear_adaptive.presets import ExperimentPreset
 from models.package_cli import _search_spec, run_model_package_cli
 
@@ -40,6 +43,74 @@ def _linears_linear_adaptive():
 
 
 class PackageCliRunsTests(unittest.TestCase):
+    def test_explicit_monitor_cadence_survives_run_materialization(self) -> None:
+        for requested_cadence in (37, 100):
+            with self.subTest(requested_cadence=requested_cadence):
+                with (
+                    patch(
+                        "models.linears.linear.presets.runtime_from_flat",
+                        wraps=runtime_from_flat,
+                    ) as bind_runtime,
+                    patch.object(
+                        ExperimentBase,
+                        "execute_training_run",
+                        autospec=True,
+                        return_value=({}, "logs/dry-run"),
+                    ) as execute_training,
+                ):
+                    status = run_model_package_cli(
+                        "linears/linear",
+                        argv=[
+                            "--presets",
+                            "baseline",
+                            "gating",
+                            "--datasets",
+                            "mnist",
+                            "fashion-mnist",
+                            "cifar10",
+                            "cifar100",
+                            "--monitors",
+                            "layer-controller",
+                            "--config",
+                            "--num-epochs",
+                            "1",
+                            "--monitor-log-every-n-steps",
+                            str(requested_cadence),
+                        ],
+                    )
+
+                materialized_runs = [
+                    call.args[1] for call in execute_training.call_args_list
+                ]
+                callback_groups = [
+                    tuple(call.kwargs["callbacks"])
+                    for call in execute_training.call_args_list
+                ]
+                self.assertEqual(status, 0)
+                self.assertEqual(len(materialized_runs), 8)
+                self.assertEqual({run.run_total for run in materialized_runs}, {8})
+                self.assertEqual(bind_runtime.call_count, 8)
+                for call in bind_runtime.call_args_list:
+                    self.assertNotIn("monitor_log_every_n_steps", call.args[0])
+                for training_run, callbacks in zip(
+                    materialized_runs,
+                    callback_groups,
+                    strict=True,
+                ):
+                    self.assertEqual(
+                        training_run.config_overrides["monitor_log_every_n_steps"],
+                        requested_cadence,
+                    )
+                    self.assertEqual(len(callbacks), 1)
+                    self.assertIsInstance(
+                        callbacks[0],
+                        LayerControllerMonitorCallback,
+                    )
+                    self.assertEqual(
+                        callbacks[0].log_every_n_steps,
+                        requested_cadence,
+                    )
+
     def test_parser_accepts_checkpoint_path(self) -> None:
         args = get_experiment_parser(_linears_linear_adaptive()).parse_args(
             ["--preset", "baseline", "--resume-checkpoint", "last.ckpt"]

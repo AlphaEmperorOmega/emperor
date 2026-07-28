@@ -109,7 +109,7 @@ class ExperimentPresetsBase:
         }
 
     def _model_config_overrides(self, config_overrides: dict | None = None) -> dict:
-        ignored_prefixes = ("trainer_", "callback_", "data_", "run_")
+        ignored_prefixes = ("trainer_", "callback_", "data_", "run_", "monitor_")
         ignored_keys = {"num_epochs"}
         return {
             key: value
