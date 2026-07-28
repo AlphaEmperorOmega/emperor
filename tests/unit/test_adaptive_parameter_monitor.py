@@ -36,7 +36,6 @@ from emperor.layers import (
     RowLayout,
 )
 from emperor.linears import LinearLayerConfig
-from support.monitor import orchestration_calls
 
 
 class FakeExperiment:
@@ -130,45 +129,33 @@ class BatchedDiverseOption(nn.Module):
 
 
 class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
-    def test_tracking_orchestration_lists_each_tracked_fact(self):
-        cls = AdaptiveParameterMonitorCallback
-        orchestration = (
-            cls._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics
-        )
+    def test_tracking_emits_scalar_facts_in_stable_order(self):
+        adaptive = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(adaptive)
+        self.primed_callback(module, log_every_n_steps=1)
 
+        self.feed_adaptive(adaptive)
+
+        prefix = "adaptive/weight/batch"
         self.assertEqual(
-            orchestration_calls(orchestration),
-            (
-                "__track_output_mean",
-                "__track_output_variance",
-                "__track_output_minimum",
-                "__track_output_maximum",
-                "__track_output_l2_norm",
-                "__track_output_maximum_absolute_value",
-                "__track_base_mean",
-                "__track_base_variance",
-                "__track_delta_mean",
-                "__track_delta_variance",
-                "__track_delta_l2_norm",
-                "__track_relative_delta_norm",
-                "__track_cross_sample_standard_deviation",
-                "__track_adaptivity_ratio",
-                "__track_centroid_cosine_mean",
-                "__track_decay_step",
-                "__track_warmup_step",
-                "__track_scale",
-                "__track_clamp_limit",
-                "__track_weight_bank_mean",
-                "__track_weight_bank_variance",
-                "__track_weight_bank_l2_norm",
-                "__track_effective_scale_mean",
-                "__track_effective_scale_variance",
-                "__track_mask_relative_output_norm",
-                "__track_mask_attenuated_fraction",
-                "__track_mask_near_zero_fraction",
-                "__track_output_histogram",
-                "__track_delta_histogram",
-            ),
+            [name for name, _ in module.logged_scalars],
+            [
+                f"{prefix}/output_mean",
+                f"{prefix}/output_var",
+                f"{prefix}/output_min",
+                f"{prefix}/output_max",
+                f"{prefix}/output_l2_norm",
+                f"{prefix}/output_max_abs",
+                f"{prefix}/base_mean",
+                f"{prefix}/base_var",
+                f"{prefix}/delta_mean",
+                f"{prefix}/delta_var",
+                f"{prefix}/delta_l2_norm",
+                f"{prefix}/relative_delta_norm",
+                f"{prefix}/cross_sample_std",
+                f"{prefix}/adaptivity_ratio",
+                f"{prefix}/centroid_cosine_mean",
+            ],
         )
 
     def build_adaptive(
@@ -328,6 +315,89 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         ]
         self.assertEqual(len(output_mean_logs), 1)
 
+    def test_multiple_augmentations_keep_hooks_and_metric_paths_isolated(self):
+        first = self.build_adaptive(weight_model=AdditiveOption())
+        second = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(first)
+        module.second_adaptive = second
+        callback = self.primed_callback(module, log_every_n_steps=1)
+
+        self.feed_adaptive(first)
+        self.feed_adaptive(second)
+
+        self.assertEqual(len(callback._hooks), 2)
+        output_mean_tags = [
+            name for name, _ in module.logged_scalars if name.endswith("/output_mean")
+        ]
+        self.assertEqual(
+            output_mean_tags,
+            [
+                "adaptive/weight/batch/output_mean",
+                "second_adaptive/weight/batch/output_mean",
+            ],
+        )
+
+    def test_same_step_repeated_slot_calls_repeat_scalars_and_deduplicate_media(
+        self,
+    ):
+        experiment = FakeExperiment()
+        adaptive = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(adaptive, experiment=experiment, global_step=7)
+        self.primed_callback(
+            module,
+            log_every_n_steps=1,
+            log_histograms=True,
+        )
+
+        self.feed_adaptive(adaptive)
+        self.feed_adaptive(adaptive)
+
+        output_mean_tags = [
+            name for name, _ in module.logged_scalars if name.endswith("/output_mean")
+        ]
+        self.assertEqual(
+            output_mean_tags,
+            [
+                "adaptive/weight/batch/output_mean",
+                "adaptive/weight/batch/output_mean",
+            ],
+        )
+        self.assertEqual(
+            [tag for tag, _, _ in experiment.histograms],
+            [
+                "adaptive/weight/batch/output",
+                "adaptive/weight/batch/delta",
+            ],
+        )
+        self.assertEqual([step for _, _, step in experiment.histograms], [7, 7])
+
+    def test_callback_reuse_clears_media_claims_between_fits(self):
+        callback = AdaptiveParameterMonitorCallback(
+            log_every_n_steps=1,
+            log_histograms=True,
+        )
+        experiments = (FakeExperiment(), FakeExperiment())
+
+        for experiment in experiments:
+            adaptive = self.build_adaptive(weight_model=AdditiveOption())
+            module = FakeLightningModule(
+                adaptive,
+                experiment=experiment,
+                global_step=0,
+            )
+            callback.on_fit_start(trainer=None, pl_module=module)
+            self.feed_adaptive(adaptive)
+            callback.on_fit_end(trainer=None, pl_module=module)
+
+        for experiment in experiments:
+            self.assertEqual(
+                [tag for tag, _, _ in experiment.histograms],
+                [
+                    "adaptive/weight/batch/output",
+                    "adaptive/weight/batch/delta",
+                ],
+            )
+
     def test_forward_hook_skips_when_not_at_logging_interval(self):
         adaptive = self.build_adaptive(weight_model=AdditiveOption())
         module = FakeLightningModule(adaptive, global_step=3)
@@ -344,6 +414,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             "adaptive",
             "weight",
             module,
+            suppress_input_adaptivity=False,
         )
 
         hook(nn.Identity(), (torch.ones(2, 3),), object())
@@ -357,6 +428,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             "adaptive",
             "weight",
             module,
+            suppress_input_adaptivity=False,
         )
 
         hook(
@@ -431,6 +503,66 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         self.assertIn("adaptive/mask/batch/relative_output_norm", names)
         self.assertIn("adaptive/mask/batch/attenuated_fraction", names)
         self.assertIn("adaptive/mask/batch/near_zero_fraction", names)
+
+    def test_weight_counter_metrics_observe_post_forward_decay_policy_state(self):
+        config = self.real_adaptive_config()
+        config.weight_config.decay_schedule = WeightDecayScheduleOptions.EXPONENTIAL
+        config.weight_config.decay_rate = 0.1
+        config.weight_config.decay_warmup_batches = 1
+        adaptive = AdaptiveParameterAugmentation(config)
+        module = FakeLightningModule(adaptive, global_step=0)
+        self.primed_callback(module, log_every_n_steps=1)
+
+        expected_counter_values = (
+            (0.0, 1.0),
+            (1.0, 1.0),
+        )
+        for expected_decay_step, expected_warmup_step in expected_counter_values:
+            module.logged_scalars.clear()
+            self.feed_adaptive(adaptive)
+            logged = dict(module.logged_scalars)
+            self.assertEqual(
+                logged["adaptive/weight/batch/decay_step"].item(),
+                expected_decay_step,
+            )
+            self.assertEqual(
+                logged["adaptive/weight/batch/warmup_step"].item(),
+                expected_warmup_step,
+            )
+            self.assertNotIn("adaptive/bias/batch/decay_step", logged)
+            self.assertNotIn("adaptive/bias/batch/warmup_step", logged)
+
+        adaptive.eval()
+        module.logged_scalars.clear()
+        self.feed_adaptive(adaptive)
+        evaluation_logs = dict(module.logged_scalars)
+        self.assertEqual(
+            evaluation_logs["adaptive/weight/batch/decay_step"].item(),
+            1.0,
+        )
+        self.assertEqual(
+            evaluation_logs["adaptive/weight/batch/warmup_step"].item(),
+            1.0,
+        )
+
+    def test_diagnostic_values_are_detached_without_changing_source_gradients(self):
+        module = FakeLightningModule(self.build_adaptive())
+        callback = AdaptiveParameterMonitorCallback(log_every_n_steps=1)
+        hook = callback._AdaptiveParameterMonitorCallback__make_forward_hook(
+            "adaptive",
+            "weight",
+            module,
+            suppress_input_adaptivity=False,
+        )
+        base = torch.tensor([[1.0, -2.0], [0.5, 3.0]], requires_grad=True)
+        output = base * 2.0
+
+        hook(nn.Identity(), (base,), output)
+
+        for _, value in module.logged_scalars:
+            self.assertIsNone(value.grad_fn)
+        output.sum().backward()
+        torch.testing.assert_close(base.grad, torch.full_like(base, 2.0))
 
     def test_bank_stats_are_logged_for_weight_and_bias_options(self):
         adaptive = self.build_adaptive(
@@ -545,6 +677,17 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         self.assertIn("adaptive/weight/batch/delta", histogram_tags)
         for _, _, step in experiment.histograms:
             self.assertEqual(step, 7)
+
+    def test_histograms_are_not_logged_when_disabled_with_supported_experiment(self):
+        experiment = FakeExperiment()
+        adaptive = self.build_adaptive(weight_model=AdditiveOption())
+        module = FakeLightningModule(adaptive, experiment=experiment, global_step=7)
+        self.primed_callback(module, log_every_n_steps=1, log_histograms=False)
+
+        self.feed_adaptive(adaptive)
+
+        self.assertGreater(len(module.logged_scalars), 0)
+        self.assertEqual(experiment.histograms, [])
 
     def test_histogram_logging_skips_without_compatible_experiment(self):
         adaptive = self.build_adaptive(weight_model=AdditiveOption())
