@@ -39,24 +39,273 @@ class _AdaptiveParameterObservation:
 
 
 @dataclass(frozen=True)
-class _InputAdaptivityMetrics:
-    cross_sample_standard_deviation: Tensor
-    adaptivity_ratio: Tensor
-    centroid_cosine_mean: Tensor
+class _AdaptiveParameterMetric:
+    suffix: str
+    value: Tensor
 
 
 @dataclass(frozen=True)
-class _AdaptiveParameterTrackingContext:
-    pl_module: LightningModule
-    metric_prefix: str
-    slot: AdaptiveParameterSlot
-    option: Module
-    observation: _AdaptiveParameterObservation
-    input_adaptivity: _InputAdaptivityMetrics | None
-    weight_bank_values: Tensor | None
-    effective_scale: Tensor | None
-    experiment: object | None
-    global_step: int
+class _AdaptiveParameterDiagnosticFacts:
+    scalars: tuple[_AdaptiveParameterMetric, ...]
+    histograms: tuple[_AdaptiveParameterMetric, ...]
+
+
+class _AdaptiveParameterDiagnostics:
+    """Collect ordered adaptive-parameter facts without delivery concerns."""
+
+    __slots__ = ()
+
+    def collect(
+        self,
+        slot: AdaptiveParameterSlot,
+        option: Module,
+        observation: _AdaptiveParameterObservation,
+        *,
+        include_internal_stats: bool,
+        include_histograms: bool,
+        suppress_input_adaptivity: bool = False,
+    ) -> _AdaptiveParameterDiagnosticFacts:
+        scalar_metrics = [
+            *self.__collect_output_metrics(observation),
+            *self.__collect_base_and_delta_metrics(observation),
+        ]
+        if not suppress_input_adaptivity:
+            scalar_metrics.extend(self.__collect_input_adaptivity_metrics(observation))
+        if include_internal_stats:
+            scalar_metrics.extend(
+                self.__collect_internal_metrics(slot, option, observation)
+            )
+        histogram_metrics = (
+            self.__collect_histogram_metrics(observation)
+            if include_histograms
+            else ()
+        )
+        return _AdaptiveParameterDiagnosticFacts(
+            scalars=tuple(scalar_metrics),
+            histograms=histogram_metrics,
+        )
+
+    @staticmethod
+    def __collect_output_metrics(
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        output = observation.output.float()
+        return (
+            _AdaptiveParameterMetric("output_mean", output.mean()),
+            _AdaptiveParameterMetric("output_var", output.var(unbiased=False)),
+            _AdaptiveParameterMetric("output_min", output.min()),
+            _AdaptiveParameterMetric("output_max", output.max()),
+            _AdaptiveParameterMetric("output_l2_norm", output.norm()),
+            _AdaptiveParameterMetric("output_max_abs", output.abs().max()),
+        )
+
+    @staticmethod
+    def __collect_base_and_delta_metrics(
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        metrics: list[_AdaptiveParameterMetric] = []
+        base = observation.base.float() if observation.base is not None else None
+        delta = observation.delta.float() if observation.delta is not None else None
+        if base is not None:
+            metrics.extend(
+                (
+                    _AdaptiveParameterMetric("base_mean", base.mean()),
+                    _AdaptiveParameterMetric("base_var", base.var(unbiased=False)),
+                )
+            )
+        if delta is not None:
+            metrics.extend(
+                (
+                    _AdaptiveParameterMetric("delta_mean", delta.mean()),
+                    _AdaptiveParameterMetric("delta_var", delta.var(unbiased=False)),
+                    _AdaptiveParameterMetric("delta_l2_norm", delta.norm()),
+                )
+            )
+        if base is not None and delta is not None:
+            metrics.append(
+                _AdaptiveParameterMetric(
+                    "relative_delta_norm",
+                    delta.norm() / base.norm().clamp_min(1e-6),
+                )
+            )
+        return tuple(metrics)
+
+    def __collect_input_adaptivity_metrics(
+        self,
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        adaptivity_values = (
+            observation.delta if observation.delta is not None else observation.output
+        )
+        if adaptivity_values.dim() == 0 or adaptivity_values.shape[0] < 2:
+            return ()
+        batch_size = adaptivity_values.shape[0]
+        per_sample_values = adaptivity_values.float().reshape(batch_size, -1)
+        centroid = per_sample_values.mean(dim=0)
+        centered_values = per_sample_values - centroid
+        return (
+            _AdaptiveParameterMetric(
+                "cross_sample_std",
+                centered_values.pow(2).mean().sqrt(),
+            ),
+            _AdaptiveParameterMetric(
+                "adaptivity_ratio",
+                centered_values.norm() / per_sample_values.norm().clamp_min(1e-12),
+            ),
+            _AdaptiveParameterMetric(
+                "centroid_cosine_mean",
+                self.__mean_cosine_to_centroid(per_sample_values, centroid),
+            ),
+        )
+
+    @staticmethod
+    def __mean_cosine_to_centroid(
+        per_sample_values: Tensor,
+        centroid: Tensor,
+    ) -> Tensor:
+        normalized_samples = F.normalize(per_sample_values, dim=1)
+        normalized_centroid = F.normalize(centroid, dim=0)
+        return (normalized_samples @ normalized_centroid).mean()
+
+    def __collect_internal_metrics(
+        self,
+        slot: AdaptiveParameterSlot,
+        option: Module,
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        return (
+            *self.__collect_weight_internal_metrics(slot, option),
+            *self.__collect_weight_bank_metrics(slot, option),
+            *self.__collect_effective_scale_metrics(slot, option, observation),
+            *self.__collect_mask_metrics(slot, observation),
+        )
+
+    @staticmethod
+    def __collect_weight_internal_metrics(
+        slot: AdaptiveParameterSlot,
+        option: Module,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        if slot != "weight":
+            return ()
+        metrics: list[_AdaptiveParameterMetric] = []
+        for attribute_name in (
+            "decay_step",
+            "warmup_step",
+            "scale",
+            "clamp_limit",
+        ):
+            value = getattr(option, attribute_name, None)
+            if torch.is_tensor(value):
+                metrics.append(
+                    _AdaptiveParameterMetric(
+                        attribute_name,
+                        value.detach().float().mean(),
+                    )
+                )
+        return tuple(metrics)
+
+    @staticmethod
+    def __collect_weight_bank_metrics(
+        slot: AdaptiveParameterSlot,
+        option: Module,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        if slot not in ("weight", "bias"):
+            return ()
+        weight_bank = getattr(option, "weight_bank", None)
+        if not torch.is_tensor(weight_bank):
+            return ()
+        weight_bank_values = weight_bank.detach().float()
+        return (
+            _AdaptiveParameterMetric("weight_bank_mean", weight_bank_values.mean()),
+            _AdaptiveParameterMetric(
+                "weight_bank_var",
+                weight_bank_values.var(unbiased=False),
+            ),
+            _AdaptiveParameterMetric(
+                "weight_bank_l2_norm",
+                weight_bank_values.norm(),
+            ),
+        )
+
+    def __collect_effective_scale_metrics(
+        self,
+        slot: AdaptiveParameterSlot,
+        option: Module,
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        if (
+            slot != "bias"
+            or observation.base is None
+            or not self.__uses_multiplicative_bias_scale(option)
+        ):
+            return ()
+        base_values = observation.base.float()
+        if torch.any(base_values.abs() <= 1e-6):
+            return ()
+        effective_scale = observation.output.float() / base_values
+        return (
+            _AdaptiveParameterMetric("effective_scale_mean", effective_scale.mean()),
+            _AdaptiveParameterMetric(
+                "effective_scale_var",
+                effective_scale.var(unbiased=False),
+            ),
+        )
+
+    @staticmethod
+    def __uses_multiplicative_bias_scale(option: Module) -> bool:
+        from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
+            AffineTransformDynamicBias,
+        )
+        from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
+            SigmoidGatedDynamicBias,
+            TanhGatedDynamicBias,
+        )
+        from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
+            MultiplicativeDynamicBias,
+        )
+
+        return isinstance(
+            option,
+            (
+                AffineTransformDynamicBias,
+                MultiplicativeDynamicBias,
+                SigmoidGatedDynamicBias,
+                TanhGatedDynamicBias,
+            ),
+        )
+
+    @staticmethod
+    def __collect_mask_metrics(
+        slot: AdaptiveParameterSlot,
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        if slot != "mask" or observation.base is None:
+            return ()
+        output = observation.output.float()
+        base = observation.base.float()
+        return (
+            _AdaptiveParameterMetric(
+                "relative_output_norm",
+                output.norm() / base.norm().clamp_min(1e-6),
+            ),
+            _AdaptiveParameterMetric(
+                "attenuated_fraction",
+                (output.abs() < base.abs()).float().mean(),
+            ),
+            _AdaptiveParameterMetric(
+                "near_zero_fraction",
+                (output.abs() <= 1e-6).float().mean(),
+            ),
+        )
+
+    @staticmethod
+    def __collect_histogram_metrics(
+        observation: _AdaptiveParameterObservation,
+    ) -> tuple[_AdaptiveParameterMetric, ...]:
+        metrics = [_AdaptiveParameterMetric("output", observation.output)]
+        if observation.delta is not None:
+            metrics.append(_AdaptiveParameterMetric("delta", observation.delta))
+        return tuple(metrics)
 
 
 class AdaptiveParameterMonitorCallback(Callback):
@@ -83,6 +332,7 @@ class AdaptiveParameterMonitorCallback(Callback):
         self.log_internal_stats = log_internal_stats
         self._hooks: list[RemovableHandle] = []
         self._emission_policy = MonitorEmissionPolicy()
+        self._diagnostics = _AdaptiveParameterDiagnostics()
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.augmentations.adaptive_parameters._augmentation import (
@@ -108,10 +358,10 @@ class AdaptiveParameterMonitorCallback(Callback):
         augmentation: Module,
         pl_module: LightningModule,
         *,
-        suppress_input_adaptivity: bool = False,
+        suppress_input_adaptivity: bool,
     ) -> None:
         for attribute_name, metric_slot in self._OPTION_SLOTS:
-            option = getattr(augmentation, attribute_name, None)
+            option = getattr(augmentation, attribute_name)
             if option is None:
                 continue
             self._hooks.append(
@@ -131,14 +381,14 @@ class AdaptiveParameterMonitorCallback(Callback):
         slot: AdaptiveParameterSlot,
         pl_module: LightningModule,
         *,
-        suppress_input_adaptivity: bool = False,
+        suppress_input_adaptivity: bool,
     ) -> Callable[[Module, tuple[object, ...], object], None]:
         def log_option_output(
             option: Module,
             inputs: tuple[object, ...],
             output: object,
         ) -> None:
-            global_step = getattr(pl_module, "global_step", 0)
+            global_step = pl_module.global_step
             if global_step % self.log_every_n_steps != 0:
                 return
             if not torch.is_tensor(output):
@@ -163,454 +413,30 @@ class AdaptiveParameterMonitorCallback(Callback):
         option: Module,
         observation: _AdaptiveParameterObservation,
         *,
-        suppress_input_adaptivity: bool = False,
+        suppress_input_adaptivity: bool,
     ) -> None:
-        context = self.__build_tracking_context(
-            pl_module,
-            augmentation_path,
+        metric_prefix = f"{augmentation_path}/{slot}/batch"
+        experiment = getattr(pl_module.logger, "experiment", None)
+        diagnostic_facts = self._diagnostics.collect(
             slot,
             option,
             observation,
+            include_internal_stats=self.log_internal_stats,
+            include_histograms=self.log_histograms and experiment is not None,
             suppress_input_adaptivity=suppress_input_adaptivity,
         )
-        self.__track_adaptive_parameter_diagnostics(context)
-
-    def __build_tracking_context(
-        self,
-        pl_module: LightningModule,
-        augmentation_path: str,
-        slot: AdaptiveParameterSlot,
-        option: Module,
-        observation: _AdaptiveParameterObservation,
-        *,
-        suppress_input_adaptivity: bool = False,
-    ) -> _AdaptiveParameterTrackingContext:
-        return _AdaptiveParameterTrackingContext(
-            pl_module=pl_module,
-            metric_prefix=f"{augmentation_path}/{slot}/batch",
-            slot=slot,
-            option=option,
-            observation=observation,
-            input_adaptivity=(
-                None
-                if suppress_input_adaptivity
-                else self.__calculate_input_adaptivity(observation)
-            ),
-            weight_bank_values=self.__weight_bank_values(slot, option),
-            effective_scale=self.__effective_bias_scale(slot, option, observation),
-            experiment=getattr(
-                getattr(pl_module, "logger", None),
-                "experiment",
-                None,
-            ),
-            global_step=getattr(pl_module, "global_step", 0),
-        )
-
-    def __track_adaptive_parameter_diagnostics(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        self.__track_output_mean(context)
-        self.__track_output_variance(context)
-        self.__track_output_minimum(context)
-        self.__track_output_maximum(context)
-        self.__track_output_l2_norm(context)
-        self.__track_output_maximum_absolute_value(context)
-        self.__track_base_mean(context)
-        self.__track_base_variance(context)
-        self.__track_delta_mean(context)
-        self.__track_delta_variance(context)
-        self.__track_delta_l2_norm(context)
-        self.__track_relative_delta_norm(context)
-        self.__track_cross_sample_standard_deviation(context)
-        self.__track_adaptivity_ratio(context)
-        self.__track_centroid_cosine_mean(context)
-        self.__track_decay_step(context)
-        self.__track_warmup_step(context)
-        self.__track_scale(context)
-        self.__track_clamp_limit(context)
-        self.__track_weight_bank_mean(context)
-        self.__track_weight_bank_variance(context)
-        self.__track_weight_bank_l2_norm(context)
-        self.__track_effective_scale_mean(context)
-        self.__track_effective_scale_variance(context)
-        self.__track_mask_relative_output_norm(context)
-        self.__track_mask_attenuated_fraction(context)
-        self.__track_mask_near_zero_fraction(context)
-        self.__track_output_histogram(context)
-        self.__track_delta_histogram(context)
-
-    @staticmethod
-    def __track_output_mean(context: _AdaptiveParameterTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_mean",
-            context.observation.output.float().mean(),
-        )
-
-    @staticmethod
-    def __track_output_variance(context: _AdaptiveParameterTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_var",
-            context.observation.output.float().var(unbiased=False),
-        )
-
-    @staticmethod
-    def __track_output_minimum(context: _AdaptiveParameterTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_min",
-            context.observation.output.float().min(),
-        )
-
-    @staticmethod
-    def __track_output_maximum(context: _AdaptiveParameterTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_max",
-            context.observation.output.float().max(),
-        )
-
-    @staticmethod
-    def __track_output_l2_norm(context: _AdaptiveParameterTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_l2_norm",
-            context.observation.output.float().norm(),
-        )
-
-    @staticmethod
-    def __track_output_maximum_absolute_value(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        context.pl_module.log(
-            f"{context.metric_prefix}/output_max_abs",
-            context.observation.output.float().abs().max(),
-        )
-
-    @staticmethod
-    def __track_base_mean(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.observation.base is None:
+        for metric in diagnostic_facts.scalars:
+            pl_module.log(f"{metric_prefix}/{metric.suffix}", metric.value)
+        if experiment is None:
             return
-        context.pl_module.log(
-            f"{context.metric_prefix}/base_mean",
-            context.observation.base.float().mean(),
-        )
-
-    @staticmethod
-    def __track_base_variance(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.observation.base is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/base_var",
-            context.observation.base.float().var(unbiased=False),
-        )
-
-    @staticmethod
-    def __track_delta_mean(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.observation.delta is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/delta_mean",
-            context.observation.delta.float().mean(),
-        )
-
-    @staticmethod
-    def __track_delta_variance(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.observation.delta is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/delta_var",
-            context.observation.delta.float().var(unbiased=False),
-        )
-
-    @staticmethod
-    def __track_delta_l2_norm(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.observation.delta is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/delta_l2_norm",
-            context.observation.delta.float().norm(),
-        )
-
-    @staticmethod
-    def __track_relative_delta_norm(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.observation.base is None or context.observation.delta is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/relative_delta_norm",
-            context.observation.delta.float().norm()
-            / context.observation.base.float().norm().clamp_min(1e-6),
-        )
-
-    @staticmethod
-    def __calculate_input_adaptivity(
-        observation: _AdaptiveParameterObservation,
-    ) -> _InputAdaptivityMetrics | None:
-        adaptivity_values = (
-            observation.delta if observation.delta is not None else observation.output
-        )
-        if adaptivity_values.dim() == 0 or adaptivity_values.shape[0] < 2:
-            return None
-        batch_size = adaptivity_values.shape[0]
-        per_sample_values = adaptivity_values.float().reshape(batch_size, -1)
-        centroid = per_sample_values.mean(dim=0)
-        centered_values = per_sample_values - centroid
-        return _InputAdaptivityMetrics(
-            cross_sample_standard_deviation=centered_values.pow(2).mean().sqrt(),
-            adaptivity_ratio=(
-                centered_values.norm() / per_sample_values.norm().clamp_min(1e-12)
-            ),
-            centroid_cosine_mean=(
-                AdaptiveParameterMonitorCallback.__mean_cosine_to_centroid(
-                    per_sample_values,
-                    centroid,
-                )
-            ),
-        )
-
-    @staticmethod
-    def __track_cross_sample_standard_deviation(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.input_adaptivity is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/cross_sample_std",
-            context.input_adaptivity.cross_sample_standard_deviation,
-        )
-
-    @staticmethod
-    def __track_adaptivity_ratio(context: _AdaptiveParameterTrackingContext) -> None:
-        if context.input_adaptivity is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/adaptivity_ratio",
-            context.input_adaptivity.adaptivity_ratio,
-        )
-
-    @staticmethod
-    def __track_centroid_cosine_mean(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.input_adaptivity is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/centroid_cosine_mean",
-            context.input_adaptivity.centroid_cosine_mean,
-        )
-
-    @staticmethod
-    def __mean_cosine_to_centroid(
-        per_sample_values: Tensor,
-        centroid: Tensor,
-    ) -> Tensor:
-        normalized_samples = F.normalize(per_sample_values, dim=1)
-        normalized_centroid = F.normalize(centroid, dim=0)
-        return (normalized_samples @ normalized_centroid).mean()
-
-    def __track_decay_step(self, context: _AdaptiveParameterTrackingContext) -> None:
-        self.__track_weight_internal_value(context, "decay_step")
-
-    def __track_warmup_step(self, context: _AdaptiveParameterTrackingContext) -> None:
-        self.__track_weight_internal_value(context, "warmup_step")
-
-    def __track_scale(self, context: _AdaptiveParameterTrackingContext) -> None:
-        self.__track_weight_internal_value(context, "scale")
-
-    def __track_clamp_limit(self, context: _AdaptiveParameterTrackingContext) -> None:
-        self.__track_weight_internal_value(context, "clamp_limit")
-
-    def __track_weight_internal_value(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-        attribute_name: str,
-    ) -> None:
-        if not self.log_internal_stats or context.slot != "weight":
-            return
-        value = getattr(context.option, attribute_name, None)
-        if torch.is_tensor(value):
-            context.pl_module.log(
-                f"{context.metric_prefix}/{attribute_name}",
-                value.detach().float().mean(),
+        global_step = pl_module.global_step
+        for histogram in diagnostic_facts.histograms:
+            self._emission_policy.emit_histogram(
+                experiment,
+                f"{metric_prefix}/{histogram.suffix}",
+                histogram.value,
+                global_step,
             )
-
-    def __weight_bank_values(
-        self,
-        slot: AdaptiveParameterSlot,
-        option: Module,
-    ) -> Tensor | None:
-        if not self.log_internal_stats or slot not in ("weight", "bias"):
-            return None
-        weight_bank = getattr(option, "weight_bank", None)
-        return weight_bank.detach().float() if torch.is_tensor(weight_bank) else None
-
-    def __effective_bias_scale(
-        self,
-        slot: AdaptiveParameterSlot,
-        option: Module,
-        observation: _AdaptiveParameterObservation,
-    ) -> Tensor | None:
-        if (
-            not self.log_internal_stats
-            or slot != "bias"
-            or observation.base is None
-            or not self.__uses_multiplicative_bias_scale(option)
-        ):
-            return None
-        base_values = observation.base.float()
-        if torch.any(base_values.abs() <= 1e-6):
-            return None
-        return observation.output.float() / base_values
-
-    @staticmethod
-    def __uses_multiplicative_bias_scale(option: Module) -> bool:
-        from emperor.augmentations.adaptive_parameters._biases.variants.affine import (
-            AffineTransformDynamicBias,
-        )
-        from emperor.augmentations.adaptive_parameters._biases.variants.gated import (
-            SigmoidGatedDynamicBias,
-            TanhGatedDynamicBias,
-        )
-        from emperor.augmentations.adaptive_parameters._biases.variants.multiplicative import (
-            MultiplicativeDynamicBias,
-        )
-
-        return isinstance(
-            option,
-            (
-                AffineTransformDynamicBias,
-                MultiplicativeDynamicBias,
-                SigmoidGatedDynamicBias,
-                TanhGatedDynamicBias,
-            ),
-        )
-
-    @staticmethod
-    def __track_weight_bank_mean(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.weight_bank_values is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/weight_bank_mean",
-            context.weight_bank_values.mean(),
-        )
-
-    @staticmethod
-    def __track_weight_bank_variance(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.weight_bank_values is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/weight_bank_var",
-            context.weight_bank_values.var(unbiased=False),
-        )
-
-    @staticmethod
-    def __track_weight_bank_l2_norm(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.weight_bank_values is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/weight_bank_l2_norm",
-            context.weight_bank_values.norm(),
-        )
-
-    @staticmethod
-    def __track_effective_scale_mean(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.effective_scale is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/effective_scale_mean",
-            context.effective_scale.mean(),
-        )
-
-    @staticmethod
-    def __track_effective_scale_variance(
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if context.effective_scale is None:
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/effective_scale_var",
-            context.effective_scale.var(unbiased=False),
-        )
-
-    @staticmethod
-    def __can_track_mask(context: _AdaptiveParameterTrackingContext) -> bool:
-        return context.slot == "mask" and context.observation.base is not None
-
-    def __track_mask_relative_output_norm(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if not self.log_internal_stats or not self.__can_track_mask(context):
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/relative_output_norm",
-            context.observation.output.float().norm()
-            / context.observation.base.float().norm().clamp_min(1e-6),
-        )
-
-    def __track_mask_attenuated_fraction(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if not self.log_internal_stats or not self.__can_track_mask(context):
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/attenuated_fraction",
-            (
-                context.observation.output.float().abs()
-                < context.observation.base.float().abs()
-            )
-            .float()
-            .mean(),
-        )
-
-    def __track_mask_near_zero_fraction(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if not self.log_internal_stats or not self.__can_track_mask(context):
-            return
-        context.pl_module.log(
-            f"{context.metric_prefix}/near_zero_fraction",
-            (context.observation.output.float().abs() <= 1e-6).float().mean(),
-        )
-
-    def __track_output_histogram(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if not self.log_histograms or context.experiment is None:
-            return
-        self._emission_policy.emit_histogram(
-            context.experiment,
-            f"{context.metric_prefix}/output",
-            context.observation.output,
-            context.global_step,
-        )
-
-    def __track_delta_histogram(
-        self,
-        context: _AdaptiveParameterTrackingContext,
-    ) -> None:
-        if (
-            not self.log_histograms
-            or context.experiment is None
-            or context.observation.delta is None
-        ):
-            return
-        self._emission_policy.emit_histogram(
-            context.experiment,
-            f"{context.metric_prefix}/delta",
-            context.observation.delta,
-            context.global_step,
-        )
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__cleanup()
