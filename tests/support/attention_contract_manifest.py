@@ -37,7 +37,7 @@ ATTENTION_CONTRACT_MANIFEST = {
         ),
     ),
     "emperor.attention._base": module_contract(
-        ("attention pipeline", "source topology", "public output contract"),
+        ("attention pipeline", "transactional execution", "public output contract"),
         "tests.unit.test_attention",
         MultiHeadAttentionAbstract=class_contract(
             ("construction", "validation", "forward orchestration", "abstract guard"),
@@ -167,6 +167,22 @@ ATTENTION_CONTRACT_MANIFEST = {
                 "auxiliary loss lifecycle",
             ),
             "tests.unit.test_attention_projector",
+        ),
+    ),
+    "emperor.attention._ops.projection_layout": module_contract(
+        (
+            "projection row topology",
+            "valid-row derivation",
+            "context-sharing restrictions",
+        ),
+        "tests.unit.test_attention_projection_row_layout",
+        ProjectionRowLayoutManager=class_contract(
+            (
+                "runtime-layout validation",
+                "sequence-major row layout",
+                "context-sharing restrictions",
+            ),
+            "tests.unit.test_attention_projection_row_layout",
         ),
     ),
     "emperor.attention._ops.reshaping": module_contract(
