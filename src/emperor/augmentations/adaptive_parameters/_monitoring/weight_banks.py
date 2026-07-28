@@ -38,18 +38,69 @@ class _BankUtilizationMetrics:
 
 
 @dataclass(frozen=True)
-class _WeightBankTrackingContext:
-    pl_module: LightningModule
-    module_name: str
-    metrics: _BankUtilizationMetrics
-    experiment: object | None
-    global_step: int
+class _WeightBankMetric:
+    suffix: str
+    value: Tensor
+
+
+@dataclass(frozen=True)
+class _WeightBankDiagnosticFacts:
+    scalars: tuple[_WeightBankMetric, ...]
+    per_slot_utilization: Tensor
 
 
 class _WeightBankDiagnostics:
-    @classmethod
-    def summarize(
-        cls,
+    """Collect ordered weight-bank facts without delivery concerns."""
+
+    __slots__ = ()
+
+    def collect(
+        self,
+        bank_module: Module,
+        bank_logits: Tensor,
+        *,
+        dead_slot_utilization_floor: float,
+        include_per_slot_scalars: bool,
+    ) -> _WeightBankDiagnosticFacts | None:
+        distribution_summary = self.__summarize(bank_module, bank_logits)
+        if distribution_summary is None:
+            return None
+        metrics = self.__calculate_utilization(
+            distribution_summary,
+            dead_slot_utilization_floor,
+        )
+        scalar_facts = [
+            _WeightBankMetric(
+                "selection_entropy_marginal",
+                metrics.marginal_entropy,
+            ),
+            _WeightBankMetric(
+                "selection_entropy_mean",
+                metrics.mean_per_sample_entropy,
+            ),
+            _WeightBankMetric(
+                "utilization_coefficient_of_variation",
+                metrics.coefficient_of_variation,
+            ),
+            _WeightBankMetric("active_slots", metrics.active_slots),
+            _WeightBankMetric("dead_slot_fraction", metrics.dead_slot_fraction),
+            _WeightBankMetric("max_utilization", metrics.maximum_utilization),
+            _WeightBankMetric("min_utilization", metrics.minimum_utilization),
+        ]
+        if include_per_slot_scalars:
+            scalar_facts.extend(
+                _WeightBankMetric(f"slot_{slot_index}/utilization", utilization)
+                for slot_index, utilization in enumerate(
+                    metrics.per_slot_utilization
+                )
+            )
+        return _WeightBankDiagnosticFacts(
+            scalars=tuple(scalar_facts),
+            per_slot_utilization=metrics.per_slot_utilization,
+        )
+
+    def __summarize(
+        self,
         bank_module: Module,
         bank_logits: Tensor,
     ) -> _BankDistributionSummary | None:
@@ -65,20 +116,20 @@ class _WeightBankDiagnostics:
         )
 
         if isinstance(bank_module, SoftWeightedBankDynamicWeight):
-            return cls.summarize_soft_weighted_bank(bank_module, bank_logits)
+            return self.__summarize_soft_weighted_bank(bank_module, bank_logits)
         if isinstance(bank_module, LayeredWeightedBankDynamicWeight):
-            return cls.summarize_layered_weighted_bank(bank_module, bank_logits)
+            return self.__summarize_layered_weighted_bank(bank_module, bank_logits)
         if isinstance(bank_module, WeightedBankDynamicBias):
-            return cls.summarize_weighted_bank_bias(bank_module, bank_logits)
+            return self.__summarize_weighted_bank_bias(bank_module, bank_logits)
         return None
 
     @staticmethod
-    def distribution_entropy(distribution: Tensor, dimension: int) -> Tensor:
+    def __distribution_entropy(distribution: Tensor, dimension: int) -> Tensor:
         safe_distribution = distribution.clamp_min(1e-9)
         return -(safe_distribution.log() * distribution).sum(dim=dimension)
 
     @classmethod
-    def summarize_soft_weighted_bank(
+    def __summarize_soft_weighted_bank(
         cls,
         bank_module: Module,
         bank_logits: Tensor,
@@ -92,14 +143,14 @@ class _WeightBankDiagnostics:
         bank_distribution = torch.softmax(reshaped_logits, dim=-1)
         return _BankDistributionSummary(
             per_slot_utilization=bank_distribution.mean(dim=(0, 1, 2)),
-            mean_per_sample_entropy=cls.distribution_entropy(
+            mean_per_sample_entropy=cls.__distribution_entropy(
                 bank_distribution,
                 dimension=-1,
             ).mean(),
         )
 
     @classmethod
-    def summarize_layered_weighted_bank(
+    def __summarize_layered_weighted_bank(
         cls,
         bank_module: Module,
         bank_logits: Tensor,
@@ -113,14 +164,14 @@ class _WeightBankDiagnostics:
         )
         return _BankDistributionSummary(
             per_slot_utilization=reshaped_distribution.sum(dim=2).mean(dim=(0, 1)),
-            mean_per_sample_entropy=cls.distribution_entropy(
+            mean_per_sample_entropy=cls.__distribution_entropy(
                 bank_distribution,
                 dimension=-1,
             ).mean(),
         )
 
     @classmethod
-    def summarize_weighted_bank_bias(
+    def __summarize_weighted_bank_bias(
         cls,
         bank_module: Module,
         bank_logits: Tensor,
@@ -132,14 +183,14 @@ class _WeightBankDiagnostics:
         )
         return _BankDistributionSummary(
             per_slot_utilization=flat_distribution.mean(dim=0),
-            mean_per_sample_entropy=cls.distribution_entropy(
+            mean_per_sample_entropy=cls.__distribution_entropy(
                 flat_distribution,
                 dimension=-1,
             ).mean(),
         )
 
     @classmethod
-    def calculate_utilization(
+    def __calculate_utilization(
         cls,
         distribution_summary: _BankDistributionSummary,
         dead_slot_utilization_floor: float,
@@ -151,7 +202,7 @@ class _WeightBankDiagnostics:
                 1e-6
             )
         return _BankUtilizationMetrics(
-            marginal_entropy=cls.distribution_entropy(utilization, dimension=-1),
+            marginal_entropy=cls.__distribution_entropy(utilization, dimension=-1),
             mean_per_sample_entropy=(distribution_summary.mean_per_sample_entropy),
             coefficient_of_variation=coefficient_of_variation,
             active_slots=(utilization > dead_slot_utilization_floor).sum().float(),
@@ -186,6 +237,7 @@ class WeightBankUtilizationMonitorCallback(Callback):
         self._utilization_history: dict[str, MonitorTensorHistory] = {}
         self._last_bank_logits: dict[str, Tensor] = {}
         self._emission_policy = MonitorEmissionPolicy()
+        self._diagnostics = _WeightBankDiagnostics()
 
     @staticmethod
     def __validate_positive(option_name: str, value: int) -> None:
@@ -269,158 +321,47 @@ class WeightBankUtilizationMonitorCallback(Callback):
                 continue
             if bank_logits.numel() == 0:
                 continue
-            distribution_summary = _WeightBankDiagnostics.summarize(
+            diagnostic_facts = self._diagnostics.collect(
                 bank_module,
                 bank_logits,
+                dead_slot_utilization_floor=self.DEAD_SLOT_UTILIZATION_FLOOR,
+                include_per_slot_scalars=self.log_per_slot_scalars,
             )
-            if distribution_summary is None:
+            if diagnostic_facts is None:
                 continue
-            metrics = _WeightBankDiagnostics.calculate_utilization(
-                distribution_summary,
-                self.DEAD_SLOT_UTILIZATION_FLOOR,
-            )
-            context = self.__build_tracking_context(
+            self.__emit_diagnostic_facts(
                 pl_module,
                 module_name,
-                metrics,
+                diagnostic_facts,
             )
-            self.__track_weight_bank_utilization(context)
 
-    @staticmethod
-    def __build_tracking_context(
+    def __emit_diagnostic_facts(
+        self,
         pl_module: LightningModule,
         module_name: str,
-        metrics: _BankUtilizationMetrics,
-    ) -> _WeightBankTrackingContext:
-        return _WeightBankTrackingContext(
-            pl_module=pl_module,
-            module_name=module_name,
-            metrics=metrics,
-            experiment=getattr(
-                getattr(pl_module, "logger", None),
-                "experiment",
-                None,
-            ),
-            global_step=getattr(pl_module, "global_step", 0),
-        )
-
-    def __track_weight_bank_utilization(
-        self,
-        context: _WeightBankTrackingContext,
+        diagnostic_facts: _WeightBankDiagnosticFacts,
     ) -> None:
-        self.__track_marginal_selection_entropy(context)
-        self.__track_mean_per_sample_selection_entropy(context)
-        self.__track_utilization_coefficient_of_variation(context)
-        self.__track_active_slots(context)
-        self.__track_dead_slot_fraction(context)
-        self.__track_maximum_utilization(context)
-        self.__track_minimum_utilization(context)
-        self.__track_per_slot_utilization(context)
-        self.__track_utilization_history(context)
-        self.__track_utilization_histogram(context)
-        self.__track_utilization_heatmap(context)
-
-    @staticmethod
-    def __track_marginal_selection_entropy(
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/selection_entropy_marginal",
-            context.metrics.marginal_entropy,
-        )
-
-    @staticmethod
-    def __track_mean_per_sample_selection_entropy(
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/selection_entropy_mean",
-            context.metrics.mean_per_sample_entropy,
-        )
-
-    @staticmethod
-    def __track_utilization_coefficient_of_variation(
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/utilization_coefficient_of_variation",
-            context.metrics.coefficient_of_variation,
-        )
-
-    @staticmethod
-    def __track_active_slots(context: _WeightBankTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/active_slots",
-            context.metrics.active_slots,
-        )
-
-    @staticmethod
-    def __track_dead_slot_fraction(context: _WeightBankTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/dead_slot_fraction",
-            context.metrics.dead_slot_fraction,
-        )
-
-    @staticmethod
-    def __track_maximum_utilization(context: _WeightBankTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/max_utilization",
-            context.metrics.maximum_utilization,
-        )
-
-    @staticmethod
-    def __track_minimum_utilization(context: _WeightBankTrackingContext) -> None:
-        context.pl_module.log(
-            f"{context.module_name}/bank/min_utilization",
-            context.metrics.minimum_utilization,
-        )
-
-    def __track_per_slot_utilization(
-        self,
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        if not self.log_per_slot_scalars:
+        metric_prefix = f"{module_name}/bank"
+        for metric in diagnostic_facts.scalars:
+            pl_module.log(f"{metric_prefix}/{metric.suffix}", metric.value)
+        experiment = getattr(pl_module.logger, "experiment", None)
+        if experiment is None:
             return
-        for slot_index, utilization in enumerate(context.metrics.per_slot_utilization):
-            context.pl_module.log(
-                f"{context.module_name}/bank/slot_{slot_index}/utilization",
-                utilization,
-            )
-
-    def __track_utilization_history(
-        self,
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        if context.experiment is None:
-            return
-        self._utilization_history[context.module_name].append(
-            context.metrics.per_slot_utilization
+        global_step = pl_module.global_step
+        self._utilization_history[module_name].append(
+            diagnostic_facts.per_slot_utilization
         )
-
-    def __track_utilization_histogram(
-        self,
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        if context.experiment is None:
-            return
         self._emission_policy.emit_histogram(
-            context.experiment,
-            f"{context.module_name}/bank/histogram/utilization",
-            context.metrics.per_slot_utilization,
-            context.global_step,
+            experiment,
+            f"{metric_prefix}/histogram/utilization",
+            diagnostic_facts.per_slot_utilization,
+            global_step,
         )
-
-    def __track_utilization_heatmap(
-        self,
-        context: _WeightBankTrackingContext,
-    ) -> None:
-        if context.experiment is None:
-            return
         self._emission_policy.emit_history_heatmap(
-            context.experiment,
-            f"{context.module_name}/bank/heatmap/utilization",
-            self._utilization_history[context.module_name],
-            context.global_step,
+            experiment,
+            f"{metric_prefix}/heatmap/utilization",
+            self._utilization_history[module_name],
+            global_step,
         )
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
