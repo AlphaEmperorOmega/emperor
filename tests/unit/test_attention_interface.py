@@ -370,6 +370,7 @@ heavy_modules = (
     "emperor.attention._ops.masking",
     "emperor.attention._ops.processing",
     "emperor.attention._ops.projection",
+    "emperor.attention._ops.projection_layout",
     "emperor.attention._ops.reshaping",
     "emperor.attention._ops.zero_attention",
     "emperor.attention._variants.independent.layer",

@@ -519,6 +519,7 @@ modules = [
   "src/emperor/attention/_ops/masking.py",
   "src/emperor/attention/_ops/processing.py",
   "src/emperor/attention/_ops/projection.py",
+  "src/emperor/attention/_ops/projection_layout.py",
   "src/emperor/attention/_ops/reshaping.py",
   "src/emperor/attention/_ops/zero_attention.py",
   "src/emperor/attention/_runtime.py",
