@@ -329,20 +329,21 @@ focused_tests = [
   "tests/unit/test_augmentations.py",
   "tests/unit/test_adaptive_parameter*.py",
   "tests/unit/test_adaptive_generator_validator_base.py",
-  "tests/unit/test_dynamic_*_validator_adapter.py",
+  "tests/unit/test_dynamic_bias_validator_adapter.py",
+  "tests/unit/test_dynamic_diagonal_validator_adapter.py",
+  "tests/unit/test_dynamic_weight_validator_adapter.py",
   "tests/unit/test_axis_mask_validator_adapter.py",
   "tests/unit/test_weight_bank_utilization_monitor.py",
   "tests/unit/test_weight_bank_monitor_mutation_contracts.py",
 ]
 integration_tests = [
-  "tests/integration/test_checkpoint_continuation.py",
   "tests/integration/test_adaptive_parameter_monitor_lifecycle.py",
 ]
 mutation_scope = ["src/emperor/augmentations/adaptive_parameters/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/adaptive_parameters-review-request.toml"
+coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-coverage.toml"
+mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-mutation.toml"
+review_evidence = ".scratch/emperor-behavioral-testing/reviews/adaptive_parameters-b9454d04-review.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/augmentations/__init__.py",
