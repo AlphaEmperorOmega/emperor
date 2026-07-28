@@ -279,7 +279,7 @@ class AdaptiveParameterBiasDiagonalMutationContractTests(unittest.TestCase):
         model = AdditiveDynamicBias(
             AdditiveDynamicBiasConfig(**common_bias_arguments(2, 3))
         )
-        model.decay_schedule_option = "invalid"
+        model._decay_policy.decay_schedule_option = "invalid"
 
         with self.assertRaisesRegex(
             ValueError,
