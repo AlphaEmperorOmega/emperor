@@ -4,7 +4,6 @@ import unittest
 
 import torch
 import torch.nn.functional as F
-from lightning import LightningModule
 
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
@@ -27,8 +26,9 @@ from emperor.augmentations.adaptive_parameters._masks.variants.per_axis import (
 )
 from emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters import (
     AdaptiveParameterMonitorCallback,
+    _AdaptiveParameterDiagnosticFacts,
+    _AdaptiveParameterDiagnostics,
     _AdaptiveParameterObservation,
-    _AdaptiveParameterTrackingContext,
 )
 from emperor.augmentations.adaptive_parameters._weights.variants.soft_weighted_bank import (  # noqa: E501
     SoftWeightedBankDynamicWeight,
@@ -41,34 +41,6 @@ from emperor.layers import (
     LayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
-
-
-class RecordingExperiment:
-    def __init__(self) -> None:
-        self.histograms: list[tuple[str, torch.Tensor, int]] = []
-
-    def add_histogram(
-        self,
-        tag: str,
-        values: torch.Tensor,
-        step: int,
-    ) -> None:
-        self.histograms.append((tag, values.detach().clone(), step))
-
-
-class RecordingLightningModule(LightningModule):
-    def __init__(self) -> None:
-        super().__init__()
-        self.logged_values: list[tuple[str | None, object]] = []
-
-    def log(
-        self,
-        name: str,
-        value: object,
-        *args: object,
-        **kwargs: object,
-    ) -> None:
-        self.logged_values.append((name, value))
 
 
 def generator_config(
@@ -159,18 +131,35 @@ def per_axis_mask() -> PerAxisScoreMask:
     )
 
 
-def logged_map(module: RecordingLightningModule) -> dict[str | None, object]:
-    return dict(module.logged_values)
+def collect_facts(
+    slot: str,
+    option: torch.nn.Module,
+    observation: _AdaptiveParameterObservation,
+    *,
+    include_internal_stats: bool = True,
+    include_histograms: bool = False,
+) -> _AdaptiveParameterDiagnosticFacts:
+    return _AdaptiveParameterDiagnostics().collect(
+        slot,  # type: ignore[arg-type]
+        option,
+        observation,
+        include_internal_stats=include_internal_stats,
+        include_histograms=include_histograms,
+    )
+
+
+def scalar_map(facts: _AdaptiveParameterDiagnosticFacts) -> dict[str, torch.Tensor]:
+    return {metric.suffix: metric.value for metric in facts.scalars}
 
 
 class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
-    PREFIX = "adaptive/weight/batch"
-
     def test_defaults_and_validation_message_are_exact(self) -> None:
         callback = AdaptiveParameterMonitorCallback()
         self.assertEqual(callback.log_every_n_steps, 100)
         self.assertFalse(callback.log_histograms)
         self.assertTrue(callback.log_internal_stats)
+        self.assertEqual(callback.state_key, "AdaptiveParameterMonitorCallback")
+        self.assertEqual(callback.state_dict(), {})
 
         with self.assertRaisesRegex(
             ValueError,
@@ -178,11 +167,9 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         ):
             AdaptiveParameterMonitorCallback(log_every_n_steps=0)
 
-    def test_weight_context_logs_exact_common_adaptivity_and_internal_values(
+    def test_weight_facts_preserve_exact_common_adaptivity_and_internal_values(
         self,
     ) -> None:
-        callback = AdaptiveParameterMonitorCallback()
-        module = RecordingLightningModule()
         option = soft_weight_bank()
         bank_values = torch.tensor(
             [
@@ -209,21 +196,9 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         )
         output = base + requested_delta
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
-        context = callback._AdaptiveParameterMonitorCallback__build_tracking_context(
-            module,
-            "adaptive",
-            "weight",
-            option,
-            observation,
-        )
+        facts = collect_facts("weight", option, observation)
+        actual = scalar_map(facts)
 
-        self.assertIs(context.option, option)
-        self.assertEqual(context.global_step, 0)
-        callback._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            context
-        )
-
-        actual = logged_map(module)
         delta = observation.delta
         self.assertIsNotNone(delta)
         common_expected = {
@@ -242,12 +217,6 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
                 delta.float().norm() / base.float().norm().clamp_min(1.0e-6)
             ),
         }
-        for suffix, expected in common_expected.items():
-            with self.subTest(suffix=suffix):
-                value = actual[f"{self.PREFIX}/{suffix}"]
-                self.assertIsInstance(value, torch.Tensor)
-                torch.testing.assert_close(value, expected)
-
         per_sample = delta.float().reshape(2, -1)
         centroid = per_sample.mean(dim=0)
         centered = per_sample - centroid
@@ -260,11 +229,6 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
                 F.normalize(per_sample, dim=1) @ F.normalize(centroid, dim=0)
             ).mean(),
         }
-        for suffix, expected in adaptivity_expected.items():
-            value = actual[f"{self.PREFIX}/{suffix}"]
-            self.assertIsInstance(value, torch.Tensor)
-            torch.testing.assert_close(value, expected)
-
         internal_expected = {
             "decay_step": torch.tensor(2.0),
             "warmup_step": torch.tensor(3.0),
@@ -274,27 +238,43 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             "weight_bank_var": bank_values.var(unbiased=False),
             "weight_bank_l2_norm": bank_values.norm(),
         }
-        for suffix, expected in internal_expected.items():
-            value = actual[f"{self.PREFIX}/{suffix}"]
-            self.assertIsInstance(value, torch.Tensor)
-            torch.testing.assert_close(value, expected)
+        for suffix, expected in {
+            **common_expected,
+            **adaptivity_expected,
+            **internal_expected,
+        }.items():
+            with self.subTest(suffix=suffix):
+                torch.testing.assert_close(actual[suffix], expected)
 
+        self.assertEqual(
+            [metric.suffix for metric in facts.scalars],
+            [
+                *common_expected,
+                *adaptivity_expected,
+                *internal_expected,
+            ],
+        )
         for forbidden_suffix in (
             "relative_output_norm",
             "attenuated_fraction",
             "near_zero_fraction",
         ):
-            self.assertNotIn(f"{self.PREFIX}/{forbidden_suffix}", actual)
-        self.assertNotIn(None, actual)
+            self.assertNotIn(forbidden_suffix, actual)
 
     def test_adaptivity_handles_scalar_rank_one_and_two_sample_boundary(self) -> None:
-        calculate = AdaptiveParameterMonitorCallback._AdaptiveParameterMonitorCallback__calculate_input_adaptivity
+        option = soft_weight_bank()
         scalar = _AdaptiveParameterObservation(
             output=torch.tensor(2.0),
             base=None,
             delta=None,
         )
-        self.assertIsNone(calculate(scalar))
+        scalar_facts = collect_facts(
+            "weight",
+            option,
+            scalar,
+            include_internal_stats=False,
+        )
+        self.assertNotIn("cross_sample_std", scalar_map(scalar_facts))
 
         rank_one_values = torch.tensor([0.1, 0.3])
         rank_one = _AdaptiveParameterObservation(
@@ -302,52 +282,68 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             base=None,
             delta=None,
         )
-        metrics = calculate(rank_one)
-        self.assertIsNotNone(metrics)
+        actual = scalar_map(
+            collect_facts(
+                "weight",
+                option,
+                rank_one,
+                include_internal_stats=False,
+            )
+        )
         samples = rank_one_values.reshape(2, 1)
         centroid = samples.mean(dim=0)
         centered = samples - centroid
         torch.testing.assert_close(
-            metrics.cross_sample_standard_deviation,
+            actual["cross_sample_std"],
             centered.pow(2).mean().sqrt(),
         )
         torch.testing.assert_close(
-            metrics.adaptivity_ratio,
+            actual["adaptivity_ratio"],
             centered.norm() / samples.norm().clamp_min(1.0e-12),
         )
         torch.testing.assert_close(
-            metrics.centroid_cosine_mean,
+            actual["centroid_cosine_mean"],
             (F.normalize(samples, dim=1) @ F.normalize(centroid, dim=0)).mean(),
         )
 
     def test_effective_bias_scale_requires_every_guard_and_includes_boundary(
         self,
     ) -> None:
-        callback = AdaptiveParameterMonitorCallback()
-        method = callback._AdaptiveParameterMonitorCallback__effective_bias_scale
         base = torch.tensor([0.25, -0.5])
         output = torch.tensor([0.5, 1.5])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
         multiplicative = multiplicative_bias()
 
-        actual = method("bias", multiplicative, observation)
-        self.assertIsNotNone(actual)
-        torch.testing.assert_close(actual, output / base)
-        self.assertIsNone(method("weight", multiplicative, observation))
-        self.assertIsNone(method("bias", additive_bias(), observation))
+        actual = scalar_map(collect_facts("bias", multiplicative, observation))
+        torch.testing.assert_close(actual["effective_scale_mean"], (output / base).mean())
+        torch.testing.assert_close(
+            actual["effective_scale_var"],
+            (output / base).var(unbiased=False),
+        )
+        self.assertNotIn(
+            "effective_scale_mean",
+            scalar_map(collect_facts("weight", multiplicative, observation)),
+        )
+        self.assertNotIn(
+            "effective_scale_mean",
+            scalar_map(collect_facts("bias", additive_bias(), observation)),
+        )
 
         threshold_base = torch.tensor([1.0e-6, 0.5])
         threshold_observation = _AdaptiveParameterObservation.from_forward(
             (threshold_base,),
             torch.ones(2),
         )
-        self.assertIsNone(method("bias", multiplicative, threshold_observation))
+        self.assertNotIn(
+            "effective_scale_mean",
+            scalar_map(
+                collect_facts("bias", multiplicative, threshold_observation)
+            ),
+        )
 
-    def test_bias_context_logs_exact_effective_scale_without_weight_internals(
+    def test_bias_facts_preserve_effective_scale_without_weight_internals(
         self,
     ) -> None:
-        callback = AdaptiveParameterMonitorCallback()
-        module = RecordingLightningModule()
         option = multiplicative_bias()
         with torch.no_grad():
             option.decay_step.fill_(8.0)
@@ -355,26 +351,15 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         base = torch.tensor([0.25, -0.5])
         output = torch.tensor([[0.5, 1.5], [1.0, -0.25]])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
-        context = callback._AdaptiveParameterMonitorCallback__build_tracking_context(
-            module,
-            "adaptive",
-            "bias",
-            option,
-            observation,
-        )
+        actual = scalar_map(collect_facts("bias", option, observation))
 
-        callback._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            context
-        )
-
-        actual = logged_map(module)
         effective_scale = output / base
         torch.testing.assert_close(
-            actual["adaptive/bias/batch/effective_scale_mean"],
+            actual["effective_scale_mean"],
             effective_scale.mean(),
         )
         torch.testing.assert_close(
-            actual["adaptive/bias/batch/effective_scale_var"],
+            actual["effective_scale_var"],
             effective_scale.var(unbiased=False),
         )
         for forbidden in (
@@ -383,7 +368,7 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             "scale",
             "clamp_limit",
         ):
-            self.assertNotIn(f"adaptive/bias/batch/{forbidden}", actual)
+            self.assertNotIn(forbidden, actual)
 
     def test_mask_metrics_use_exact_thresholds_and_respect_disabled_stats(
         self,
@@ -391,126 +376,69 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         base = torch.tensor([[0.1, 0.2], [0.3, 0.4]])
         output = torch.tensor([[0.1, 1.0e-6], [0.15, 0.8]])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
-        module = RecordingLightningModule()
-        context = _AdaptiveParameterTrackingContext(
-            pl_module=module,
-            metric_prefix="adaptive/mask/batch",
-            slot="mask",
-            option=per_axis_mask(),
-            observation=observation,
-            input_adaptivity=None,
-            weight_bank_values=None,
-            effective_scale=None,
-            experiment=None,
-            global_step=0,
-        )
-        callback = AdaptiveParameterMonitorCallback()
+        option = per_axis_mask()
+        actual = scalar_map(collect_facts("mask", option, observation))
 
-        callback._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            context
-        )
-
-        actual = logged_map(module)
         torch.testing.assert_close(
-            actual["adaptive/mask/batch/relative_output_norm"],
+            actual["relative_output_norm"],
             output.norm() / base.norm().clamp_min(1.0e-6),
         )
         torch.testing.assert_close(
-            actual["adaptive/mask/batch/attenuated_fraction"],
+            actual["attenuated_fraction"],
             torch.tensor(0.5),
         )
         torch.testing.assert_close(
-            actual["adaptive/mask/batch/near_zero_fraction"],
+            actual["near_zero_fraction"],
             torch.tensor(0.25),
         )
 
-        disabled_module = RecordingLightningModule()
-        disabled_context = _AdaptiveParameterTrackingContext(
-            **{
-                **context.__dict__,
-                "pl_module": disabled_module,
-            }
+        disabled = scalar_map(
+            collect_facts(
+                "mask",
+                option,
+                observation,
+                include_internal_stats=False,
+            )
         )
-        disabled = AdaptiveParameterMonitorCallback(log_internal_stats=False)
-        disabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            disabled_context
-        )
-        disabled_names = set(logged_map(disabled_module))
         for suffix in (
             "relative_output_norm",
             "attenuated_fraction",
             "near_zero_fraction",
         ):
-            self.assertNotIn(f"adaptive/mask/batch/{suffix}", disabled_names)
+            self.assertNotIn(suffix, disabled)
 
-    def test_histogram_flags_gate_real_emission_and_preserve_payloads(self) -> None:
-        experiment = RecordingExperiment()
+    def test_histogram_flags_gate_facts_and_preserve_payloads(self) -> None:
         base = torch.tensor([0.1, 0.2])
         output = torch.tensor([[0.4, -0.1], [0.2, 0.5]])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)
-        context = _AdaptiveParameterTrackingContext(
-            pl_module=RecordingLightningModule(),
-            metric_prefix=self.PREFIX,
-            slot="weight",
-            option=soft_weight_bank(),
-            observation=observation,
-            input_adaptivity=None,
-            weight_bank_values=None,
-            effective_scale=None,
-            experiment=experiment,
-            global_step=7,
-        )
+        option = soft_weight_bank()
 
-        disabled = AdaptiveParameterMonitorCallback(log_histograms=False)
-        disabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            context
-        )
-        self.assertEqual(experiment.histograms, [])
+        disabled = collect_facts("weight", option, observation)
+        self.assertEqual(disabled.histograms, ())
 
-        enabled = AdaptiveParameterMonitorCallback(log_histograms=True)
-        enabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            context
+        enabled = collect_facts(
+            "weight",
+            option,
+            observation,
+            include_histograms=True,
         )
         self.assertEqual(
-            [tag for tag, _, _ in experiment.histograms],
-            [f"{self.PREFIX}/output", f"{self.PREFIX}/delta"],
+            [metric.suffix for metric in enabled.histograms],
+            ["output", "delta"],
         )
-        torch.testing.assert_close(
-            experiment.histograms[0][1],
-            output.reshape(-1),
-        )
-        torch.testing.assert_close(
-            experiment.histograms[1][1],
-            observation.delta.reshape(-1),
-        )
-        self.assertEqual(
-            [step for _, _, step in experiment.histograms],
-            [7, 7],
-        )
+        torch.testing.assert_close(enabled.histograms[0].value, output)
+        torch.testing.assert_close(enabled.histograms[1].value, observation.delta)
 
-        no_base_experiment = RecordingExperiment()
-        no_base_observation = _AdaptiveParameterObservation.from_forward(
-            (),
-            output,
-        )
-        no_base_context = _AdaptiveParameterTrackingContext(
-            pl_module=RecordingLightningModule(),
-            metric_prefix="adaptive/no_base/batch",
-            slot="weight",
-            option=soft_weight_bank(),
-            observation=no_base_observation,
-            input_adaptivity=None,
-            weight_bank_values=None,
-            effective_scale=None,
-            experiment=no_base_experiment,
-            global_step=8,
-        )
-        enabled._AdaptiveParameterMonitorCallback__track_adaptive_parameter_diagnostics(
-            no_base_context
+        no_base_observation = _AdaptiveParameterObservation.from_forward((), output)
+        no_base = collect_facts(
+            "weight",
+            option,
+            no_base_observation,
+            include_histograms=True,
         )
         self.assertEqual(
-            [tag for tag, _, _ in no_base_experiment.histograms],
-            ["adaptive/no_base/batch/output"],
+            [metric.suffix for metric in no_base.histograms],
+            ["output"],
         )
 
 
