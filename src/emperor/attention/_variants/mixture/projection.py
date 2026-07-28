@@ -47,7 +47,8 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         self.indices = None
         self.skip_mask = None
 
-    def clear_routing_state(self) -> None:
+    def _clear_transient_state(self) -> None:
+        super()._clear_transient_state()
         self.probabilities = None
         self.indices = None
         self.skip_mask = None
@@ -157,6 +158,4 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
         runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
         del runtime_layout
-        output_projection = self._compute_projection(weighted_values, self.output_model)
-        self.clear_routing_state()
-        return output_projection
+        return self._compute_projection(weighted_values, self.output_model)

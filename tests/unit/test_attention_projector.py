@@ -643,7 +643,7 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
                     self.assertEqual(projections.key.shape, expected_shape)
                     self.assertEqual(projections.value.shape, expected_shape)
 
-    def test_compute_output_projection_clears_routing_state(self):
+    def test_compute_output_projection(self):
         c = build_attention_config(
             config_class=MixtureOfAttentionHeadsConfig,
             embedding_dim=12,
@@ -673,6 +673,18 @@ class TestMixtureOfAttentionHeadsProjector(unittest.TestCase):
         )
         self.assertIsInstance(attention_output, torch.Tensor)
         self.assertEqual(attention_output.shape, expected_shape)
+
+    def test_clear_transient_state_clears_all_projector_owned_state(self):
+        m = self.model()
+        m.auxiliary_loss = torch.tensor(1.0, requires_grad=True)
+        m.probabilities = torch.ones(2, 2)
+        m.indices = torch.zeros(2, 2, dtype=torch.long)
+        m.skip_mask = torch.ones(2, 1, dtype=torch.bool)
+
+        m._clear_transient_state()
+        m._clear_transient_state()
+
+        self.assertIsNone(m.auxiliary_loss)
         self.assertIsNone(m.probabilities)
         self.assertIsNone(m.indices)
         self.assertIsNone(m.skip_mask)
