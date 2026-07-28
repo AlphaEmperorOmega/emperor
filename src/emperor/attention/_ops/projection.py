@@ -112,7 +112,8 @@ class ProjectorBase(Module):
         else:
             self.auxiliary_loss = self.auxiliary_loss + loss
 
-    def get_auxiliary_loss_and_clear(self) -> "Tensor | None":
-        accumulated_loss = self.auxiliary_loss
+    def _clear_transient_state(self) -> None:
         self.auxiliary_loss = None
-        return accumulated_loss
+
+    def _get_auxiliary_loss(self) -> "Tensor | None":
+        return self.auxiliary_loss

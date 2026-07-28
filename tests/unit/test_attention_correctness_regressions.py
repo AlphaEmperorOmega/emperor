@@ -834,6 +834,151 @@ class TestMixtureOfAttentionHeadsSourceExtensions(unittest.TestCase):
 
 
 class TestMixtureRoutingStateLifecycle(unittest.TestCase):
+    def assert_projector_transient_state_is_clear(self, model) -> None:
+        self.assertIsNone(model.projector.auxiliary_loss)
+        self.assertIsNone(model.projector.probabilities)
+        self.assertIsNone(model.projector.indices)
+        self.assertIsNone(model.projector.skip_mask)
+
+    def assert_persistent_state_is_unchanged(
+        self,
+        model,
+        expected_state,
+        expected_parameter_names,
+        expected_buffer_names,
+    ) -> None:
+        self.assertEqual(
+            tuple(dict(model.named_parameters())), expected_parameter_names
+        )
+        self.assertEqual(tuple(dict(model.named_buffers())), expected_buffer_names)
+        self.assertEqual(tuple(model.state_dict()), tuple(expected_state))
+        for name, expected_value in expected_state.items():
+            torch.testing.assert_close(model.state_dict()[name], expected_value)
+
+    def assert_retry_matches_fresh_model(
+        self,
+        model,
+        fresh_model,
+        *,
+        use_kv_expert_models_flag=False,
+    ) -> None:
+        if use_kv_expert_models_flag:
+            inputs = (
+                torch.arange(12.0).reshape(3, 2, 2).div_(7.0).sub_(0.5).requires_grad_()
+            )
+            query = key = value = inputs
+            fresh_inputs = inputs.detach().clone().requires_grad_()
+            fresh_query = fresh_key = fresh_value = fresh_inputs
+        else:
+            query = (
+                torch.arange(12.0).reshape(3, 2, 2).div_(7.0).sub_(0.5).requires_grad_()
+            )
+            key = torch.arange(16.0).reshape(4, 2, 2).flip(0).div_(9.0).requires_grad_()
+            value = (
+                torch.arange(16.0).roll(3).reshape(4, 2, 2).div_(11.0).requires_grad_()
+            )
+            fresh_query = query.detach().clone().requires_grad_()
+            fresh_key = key.detach().clone().requires_grad_()
+            fresh_value = value.detach().clone().requires_grad_()
+        model_optimizer = torch.optim.SGD(model.parameters(), lr=0.05)
+        fresh_optimizer = torch.optim.SGD(fresh_model.parameters(), lr=0.05)
+        retry_rng_state = torch.random.get_rng_state().clone()
+
+        model_output, model_weights, model_auxiliary_loss = model(query, key, value)
+        model_rng_state = torch.random.get_rng_state().clone()
+        torch.random.set_rng_state(retry_rng_state)
+        fresh_output, fresh_weights, fresh_auxiliary_loss = fresh_model(
+            fresh_query,
+            fresh_key,
+            fresh_value,
+        )
+        fresh_rng_state = torch.random.get_rng_state().clone()
+
+        torch.testing.assert_close(model_output, fresh_output)
+        self.assertIsNone(model_weights)
+        self.assertIsNone(fresh_weights)
+        self.assertIsNotNone(model_auxiliary_loss)
+        self.assertIsNotNone(fresh_auxiliary_loss)
+        torch.testing.assert_close(model_auxiliary_loss, fresh_auxiliary_loss)
+        self.assertTrue(model_auxiliary_loss.requires_grad)
+        torch.testing.assert_close(model_rng_state, fresh_rng_state, rtol=0, atol=0)
+        self.assert_projector_transient_state_is_clear(model)
+        self.assert_projector_transient_state_is_clear(fresh_model)
+
+        (model_output.square().sum() + model_auxiliary_loss).backward()
+        (fresh_output.square().sum() + fresh_auxiliary_loss).backward()
+        for model_input, fresh_input in zip(
+            (query, key, value),
+            (fresh_query, fresh_key, fresh_value),
+            strict=True,
+        ):
+            torch.testing.assert_close(model_input.grad, fresh_input.grad)
+
+        model_parameters = dict(model.named_parameters())
+        fresh_parameters = dict(fresh_model.named_parameters())
+        self.assertEqual(tuple(model_parameters), tuple(fresh_parameters))
+        for name, model_parameter in model_parameters.items():
+            fresh_parameter = fresh_parameters[name]
+            self.assertEqual(model_parameter.grad is None, fresh_parameter.grad is None)
+            if model_parameter.grad is not None:
+                torch.testing.assert_close(
+                    model_parameter.grad,
+                    fresh_parameter.grad,
+                )
+
+        model_optimizer.step()
+        fresh_optimizer.step()
+        for name, model_value in model.state_dict().items():
+            torch.testing.assert_close(model_value, fresh_model.state_dict()[name])
+
+    @staticmethod
+    def fail_once(operation, failure, *, after_call):
+        has_failed = False
+
+        def operation_with_fault(*args, **kwargs):
+            nonlocal has_failed
+            if not after_call and not has_failed:
+                has_failed = True
+                raise failure
+            result = operation(*args, **kwargs)
+            if after_call and not has_failed:
+                has_failed = True
+                raise failure
+            return result
+
+        return operation_with_fault
+
+    def install_failure(self, model, stage, failure) -> None:
+        if stage == "query_projection":
+            owner = model.projector.query_model
+            method_name = "forward"
+            after_call = True
+        elif stage == "key_projection":
+            owner = model.projector.key_model
+            method_name = "forward"
+            after_call = True
+        elif stage == "value_projection":
+            owner = model.projector.value_model
+            method_name = "forward"
+            after_call = True
+        elif stage == "output_projection":
+            owner = model.projector.output_model
+            method_name = "forward"
+            after_call = True
+        elif stage == "output_layout_restoration":
+            owner = model.batch_manager
+            method_name = "restore_output_layout"
+            after_call = True
+        else:
+            raise ValueError(f"Unknown failure stage: {stage}.")
+
+        operation = getattr(owner, method_name)
+        setattr(
+            owner,
+            method_name,
+            self.fail_once(operation, failure, after_call=after_call),
+        )
+
     def test_invalid_padding_mask_is_rejected_before_noisy_routing_uses_rng(
         self,
     ) -> None:
@@ -889,6 +1034,184 @@ class TestMixtureRoutingStateLifecycle(unittest.TestCase):
             rtol=0,
             atol=0,
         )
+
+    def test_public_forward_clears_transient_state_after_processor_failure(
+        self,
+    ) -> None:
+        config = build_attention_config(
+            config_class=MixtureOfAttentionHeadsConfig,
+            batch_size=2,
+            num_heads=1,
+            embedding_dim=2,
+            target_sequence_length=3,
+            source_sequence_length=4,
+            experts_top_k=1,
+            experts_num_experts=2,
+            experts_stack_num_layers=1,
+        )
+        experts_config = config.experts_config
+        config = replace(
+            config,
+            batch_first_flag=False,
+            experts_config=replace(
+                experts_config,
+                sampler_config=replace(
+                    experts_config.sampler_config,
+                    coefficient_of_variation_loss_weight=0.1,
+                    noisy_topk_flag=True,
+                    router_config=make_router_config(
+                        input_dim=2,
+                        num_experts=2,
+                        noisy_topk_flag=True,
+                    ),
+                ),
+            ),
+        )
+        model = config.build().train()
+        expected_state = {
+            name: value.detach().clone() for name, value in model.state_dict().items()
+        }
+        expected_parameter_names = tuple(dict(model.named_parameters()))
+        expected_buffer_names = tuple(dict(model.named_buffers()))
+        fresh_model = config.build().train()
+        load_result = fresh_model.load_state_dict(expected_state, strict=True)
+        self.assertEqual(load_result.missing_keys, [])
+        self.assertEqual(load_result.unexpected_keys, [])
+        inputs = torch.tensor(
+            [[[1.0, -0.5]], [[2.0, 3.0]]],
+            requires_grad=True,
+        )
+        failure = RuntimeError("injected processor failure")
+        sampler_skip_masks = []
+        replace_skip_mask = True
+        original_sample = model.projector.sampler.sample_probabilities_and_indices
+        original_compute_attention = model.processor.compute_attention
+
+        def sample_with_one_nonempty_skip_mask(input_matrix, skip_mask=None):
+            nonlocal replace_skip_mask
+            sampler_skip_masks.append(skip_mask)
+            probabilities, indices, updated_skip_mask, loss = original_sample(
+                input_matrix,
+                skip_mask,
+            )
+            if replace_skip_mask:
+                replace_skip_mask = False
+                updated_skip_mask = torch.ones(
+                    input_matrix.shape[0],
+                    1,
+                    dtype=torch.bool,
+                    device=input_matrix.device,
+                )
+            return probabilities, indices, updated_skip_mask, loss
+
+        def compute_attention_with_fault(_attention_inputs):
+            self.assertIsNotNone(model.projector.auxiliary_loss)
+            self.assertIsNotNone(model.projector.probabilities)
+            self.assertIsNotNone(model.projector.indices)
+            self.assertIsNotNone(model.projector.skip_mask)
+            raise failure
+
+        model.projector.sampler.sample_probabilities_and_indices = (
+            sample_with_one_nonempty_skip_mask
+        )
+        model.processor.compute_attention = compute_attention_with_fault
+
+        with self.assertRaises(RuntimeError) as caught:
+            model(inputs, inputs, inputs)
+
+        self.assertIs(caught.exception, failure)
+        self.assert_projector_transient_state_is_clear(model)
+        self.assert_persistent_state_is_unchanged(
+            model,
+            expected_state,
+            expected_parameter_names,
+            expected_buffer_names,
+        )
+
+        model.processor.compute_attention = original_compute_attention
+        self.assert_retry_matches_fresh_model(model, fresh_model)
+        self.assertEqual(sampler_skip_masks, [None, None])
+
+    def test_public_forward_clears_transient_state_at_each_mutating_stage(
+        self,
+    ) -> None:
+        cases = (
+            ("query_projection", False),
+            ("key_projection", False),
+            ("value_projection", False),
+            ("key_projection", True),
+            ("value_projection", True),
+            ("output_projection", False),
+            ("output_layout_restoration", False),
+        )
+        for stage, use_kv_expert_models_flag in cases:
+            with (
+                self.subTest(
+                    stage=stage,
+                    use_kv_expert_models_flag=use_kv_expert_models_flag,
+                ),
+                torch.random.fork_rng(),
+            ):
+                torch.manual_seed(1200 + len(stage) + use_kv_expert_models_flag)
+                source_sequence_length = 3 if use_kv_expert_models_flag else 4
+                config = build_attention_config(
+                    config_class=MixtureOfAttentionHeadsConfig,
+                    batch_size=2,
+                    num_heads=1,
+                    embedding_dim=2,
+                    target_sequence_length=3,
+                    source_sequence_length=source_sequence_length,
+                    use_kv_expert_models_flag=use_kv_expert_models_flag,
+                    experts_top_k=1,
+                    experts_num_experts=2,
+                    experts_stack_num_layers=1,
+                )
+                experts_config = config.experts_config
+                config = replace(
+                    config,
+                    batch_first_flag=False,
+                    experts_config=replace(
+                        experts_config,
+                        sampler_config=replace(
+                            experts_config.sampler_config,
+                            coefficient_of_variation_loss_weight=0.1,
+                        ),
+                    ),
+                )
+                model = config.build().eval()
+                expected_state = {
+                    name: value.detach().clone()
+                    for name, value in model.state_dict().items()
+                }
+                expected_parameter_names = tuple(dict(model.named_parameters()))
+                expected_buffer_names = tuple(dict(model.named_buffers()))
+                fresh_model = config.build().eval()
+                load_result = fresh_model.load_state_dict(expected_state, strict=True)
+                self.assertEqual(load_result.missing_keys, [])
+                self.assertEqual(load_result.unexpected_keys, [])
+                failure = RuntimeError(f"injected {stage} failure")
+                self.install_failure(model, stage, failure)
+                failure_inputs = torch.tensor(
+                    [[[1.0, -0.5]], [[2.0, 3.0]]],
+                    requires_grad=True,
+                )
+
+                with self.assertRaises(RuntimeError) as caught:
+                    model(failure_inputs, failure_inputs, failure_inputs)
+
+                self.assertIs(caught.exception, failure)
+                self.assert_projector_transient_state_is_clear(model)
+                self.assert_persistent_state_is_unchanged(
+                    model,
+                    expected_state,
+                    expected_parameter_names,
+                    expected_buffer_names,
+                )
+                self.assert_retry_matches_fresh_model(
+                    model,
+                    fresh_model,
+                    use_kv_expert_models_flag=use_kv_expert_models_flag,
+                )
 
     def test_public_forward_clears_routing_graph_after_successful_calls(
         self,
