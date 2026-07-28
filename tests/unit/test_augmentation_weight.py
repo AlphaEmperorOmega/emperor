@@ -1147,7 +1147,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             decay_rate=0.1,
         )
         model = cfg.build()
-        model.decay_schedule_option = "invalid_schedule"
+        model._decay_policy.decay_schedule_option = "invalid_schedule"
         weight_params = Module()._init_parameter_bank((input_dim, output_dim))
         with self.assertRaises(ValueError):
             model._maybe_apply_weight_decay(weight_params)

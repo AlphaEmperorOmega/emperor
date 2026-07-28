@@ -360,6 +360,7 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_biases/validation.py",
   "src/emperor/augmentations/adaptive_parameters/_biases/variants/weighted_bank.py",
   "src/emperor/augmentations/adaptive_parameters/_config.py",
+  "src/emperor/augmentations/adaptive_parameters/_decay.py",
   "src/emperor/augmentations/adaptive_parameters/_grouping.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/__init__.py",

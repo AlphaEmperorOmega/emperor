@@ -375,8 +375,13 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
             "Unsupported normalization_option value: 'invalid'.",
         )
 
+        model.normalization_position_option = (
+            WeightNormalizationPositionOptions.DISABLED
+        )
+        model.normalization_option = WeightNormalizationOptions.DISABLED
+        model._decay_policy.decay_schedule_option = "invalid"
         with self.assertRaises(ValueError) as decay_error:
-            model._DynamicWeightAbstract__compute_decay_factor_by_schedule("invalid")
+            model(torch.ones(2, 2), torch.ones(1, 2))
         self.assertEqual(
             str(decay_error.exception),
             "Unsupported decay_schedule value: 'invalid'.",
