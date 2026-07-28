@@ -32,7 +32,6 @@ from emperor.layers import (
     LayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
-from support.monitor import orchestration_calls
 
 
 class FakeExperiment:
@@ -67,27 +66,32 @@ class FakeLightningModule(nn.Module):
 class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
     BANK_MODULE_PATH = "dynamic_bank"
 
-    def test_tracking_orchestration_lists_each_tracked_fact(self):
-        cls = WeightBankUtilizationMonitorCallback
-        orchestration = (
-            cls._WeightBankUtilizationMonitorCallback__track_weight_bank_utilization
+    def test_tracking_emits_scalar_facts_in_stable_order(self):
+        bank = self.build_soft_weighted_bank_weight()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        self.feed_bank(bank)
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
         )
 
+        prefix = f"{self.BANK_MODULE_PATH}/bank"
         self.assertEqual(
-            orchestration_calls(orchestration),
-            (
-                "__track_marginal_selection_entropy",
-                "__track_mean_per_sample_selection_entropy",
-                "__track_utilization_coefficient_of_variation",
-                "__track_active_slots",
-                "__track_dead_slot_fraction",
-                "__track_maximum_utilization",
-                "__track_minimum_utilization",
-                "__track_per_slot_utilization",
-                "__track_utilization_history",
-                "__track_utilization_histogram",
-                "__track_utilization_heatmap",
-            ),
+            [name for name, _ in module.logged_scalars],
+            [
+                f"{prefix}/selection_entropy_marginal",
+                f"{prefix}/selection_entropy_mean",
+                f"{prefix}/utilization_coefficient_of_variation",
+                f"{prefix}/active_slots",
+                f"{prefix}/dead_slot_fraction",
+                f"{prefix}/max_utilization",
+                f"{prefix}/min_utilization",
+            ],
         )
 
     def layer_stack_config(
@@ -302,6 +306,27 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
         self.assertEqual(module.logged_scalars, [])
 
+    def test_multiple_generator_calls_keep_only_the_last_detached_capture(self):
+        bank = self.build_soft_weighted_bank_weight()
+        module = self.build_module(bank)
+        callback = self.primed_callback(module, log_every_n_steps=1)
+        observed_generator_outputs = []
+
+        def record_generator_output(_generator, _inputs, output):
+            hidden = output if torch.is_tensor(output) else output.hidden
+            observed_generator_outputs.append(hidden.detach().clone())
+
+        observer = bank.model.register_forward_hook(record_generator_output)
+        try:
+            self.feed_bank(bank)
+            self.feed_bank(bank)
+        finally:
+            observer.remove()
+
+        captured_logits = callback._last_bank_logits[self.BANK_MODULE_PATH]
+        torch.testing.assert_close(captured_logits, observed_generator_outputs[-1])
+        self.assertIsNone(captured_logits.grad_fn)
+
     def test_logs_bank_scalars_for_each_bank_type(self):
         builders = (
             self.build_soft_weighted_bank_weight,
@@ -370,6 +395,28 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
         ]
         self.assertTrue(torch.isfinite(coefficient_of_variation))
         torch.testing.assert_close(coefficient_of_variation, torch.zeros(()))
+
+    def test_two_slot_bank_logs_exact_nonzero_coefficient_of_variation(self):
+        bank = self.build_weighted_bank_bias(
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+        )
+        logits = torch.tensor([[torch.log(torch.tensor(3.0)), 0.0]])
+
+        facts = _WeightBankDiagnostics().collect(
+            bank,
+            logits,
+            dead_slot_utilization_floor=1e-4,
+            include_per_slot_scalars=False,
+        )
+
+        self.assertIsNotNone(facts)
+        utilization = torch.tensor([0.75, 0.25])
+        expected = utilization.std() / utilization.mean()
+        scalar_facts = {metric.suffix: metric.value for metric in facts.scalars}
+        torch.testing.assert_close(
+            scalar_facts["utilization_coefficient_of_variation"],
+            expected,
+        )
 
     def test_empty_bank_logits_do_not_emit_undefined_metrics(self):
         bank = self.build_weighted_bank_bias()
@@ -464,9 +511,16 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
             ),
         ]
 
+        diagnostics = _WeightBankDiagnostics()
         for bank, logits, distribution, entropy_distribution, utilization_fn in cases:
             with self.subTest(bank=type(bank).__name__):
-                summary = _WeightBankDiagnostics.summarize(bank, logits)
+                facts = diagnostics.collect(
+                    bank,
+                    logits,
+                    dead_slot_utilization_floor=1e-4,
+                    include_per_slot_scalars=False,
+                )
+                self.assertIsNotNone(facts)
                 expected_utilization = utilization_fn(distribution)
                 expected_entropy = (
                     -(entropy_distribution.clamp_min(1e-9).log() * entropy_distribution)
@@ -475,18 +529,22 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
                 )
 
                 torch.testing.assert_close(
-                    summary.per_slot_utilization, expected_utilization
+                    facts.per_slot_utilization,
+                    expected_utilization,
                 )
+                scalar_facts = {metric.suffix: metric.value for metric in facts.scalars}
                 torch.testing.assert_close(
-                    summary.mean_per_sample_entropy,
+                    scalar_facts["selection_entropy_mean"],
                     expected_entropy,
                 )
 
     def test_distribution_summary_ignores_non_bank_modules(self):
         self.assertIsNone(
-            _WeightBankDiagnostics.summarize(
+            _WeightBankDiagnostics().collect(
                 nn.Identity(),
                 torch.ones(2, 3),
+                dead_slot_utilization_floor=1e-4,
+                include_per_slot_scalars=False,
             )
         )
 
@@ -516,6 +574,67 @@ class TestWeightBankUtilizationMonitorCallback(unittest.TestCase):
 
         self.assertEqual(module.logged_scalars, [])
         self.assertEqual(callback._last_bank_logits, {})
+
+    def test_empty_bank_does_not_prevent_later_bank_metrics(self):
+        empty_bank = self.build_weighted_bank_bias(
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+        )
+        valid_bank = self.build_weighted_bank_bias(
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+        )
+        module = self.build_module(valid_bank)
+        callback = WeightBankUtilizationMonitorCallback(log_every_n_steps=1)
+        callback._bank_modules.extend(
+            [("empty_bank", empty_bank), (self.BANK_MODULE_PATH, valid_bank)]
+        )
+        callback._last_bank_logits.update(
+            {
+                "empty_bank": torch.empty(0, 2),
+                self.BANK_MODULE_PATH: torch.zeros(2, 2),
+            }
+        )
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertIn(
+            f"{self.BANK_MODULE_PATH}/bank/selection_entropy_marginal",
+            self.scalar_names(module),
+        )
+
+    def test_unrecognized_bank_does_not_prevent_later_bank_metrics(self):
+        valid_bank = self.build_weighted_bank_bias(
+            bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_TWO
+        )
+        module = self.build_module(valid_bank)
+        callback = WeightBankUtilizationMonitorCallback(log_every_n_steps=1)
+        callback._bank_modules.extend(
+            [("unknown", nn.Identity()), (self.BANK_MODULE_PATH, valid_bank)]
+        )
+        callback._last_bank_logits.update(
+            {
+                "unknown": torch.ones(2, 2),
+                self.BANK_MODULE_PATH: torch.zeros(2, 2),
+            }
+        )
+
+        callback.on_train_batch_end(
+            trainer=None,
+            pl_module=module,
+            outputs=None,
+            batch=None,
+            batch_idx=0,
+        )
+
+        self.assertIn(
+            f"{self.BANK_MODULE_PATH}/bank/selection_entropy_marginal",
+            self.scalar_names(module),
+        )
 
     def test_per_slot_scalars_logged_when_enabled(self):
         bank = self.build_soft_weighted_bank_weight(
