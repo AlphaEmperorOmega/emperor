@@ -659,6 +659,7 @@ focused_tests = [
   "tests/unit/test_dataset*.py",
   "tests/unit/test_*dataset.py",
   "tests/unit/test_*collator.py",
+  "tests/unit/test_image_classification_datasets.py",
   "tests/unit/test_multi30k_translation.py",
   "tests/unit/test_rl_dataset_lifecycle.py",
 ]
