@@ -5,6 +5,7 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 from emperor.datasets._base import DataModule
+from emperor.datasets.text.question_answering._answer_spans import _AnswerSpanAligner
 
 
 def _yield_tokens(samples, tokenizer):
@@ -26,6 +27,7 @@ class _QADataset(torch.utils.data.Dataset):
         self.vocab = vocab
         self.context_length = context_length
         self.question_length = question_length
+        self._answer_span_aligner = _AnswerSpanAligner(tokenizer, context_length)
 
     def __len__(self):
         return len(self.samples)
@@ -42,15 +44,15 @@ class _QADataset(torch.utils.data.Dataset):
             ),
             dtype=torch.long,
         )
-        # unanswerable questions (SQuAD v2) have empty answers — represented as (-1, -1)
-        if sample["answers"]["answer_start"]:
-            start = min(sample["answers"]["answer_start"][0], self.context_length - 1)
-            end = min(
-                start + len(self.tokenizer(sample["answers"]["text"][0])) - 1,
-                self.context_length - 1,
-            )
-        else:
+        span = self._answer_span_aligner.first_in_window(
+            sample["context"],
+            sample["answers"]["answer_start"],
+            sample["answers"]["text"],
+        )
+        if span is None:
             start, end = -1, -1
+        else:
+            start, end = span.start, span.end
         return (
             context,
             question,

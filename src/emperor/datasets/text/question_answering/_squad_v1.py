@@ -5,6 +5,10 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 from emperor.datasets._base import DataModule
+from emperor.datasets.text.question_answering._answer_spans import (
+    _AnswerSpanAligner,
+    _TokenSpan,
+)
 
 
 def _yield_tokens(samples, tokenizer):
@@ -26,12 +30,23 @@ class _QADataset(torch.utils.data.Dataset):
         self.vocab = vocab
         self.context_length = context_length
         self.question_length = question_length
+        aligner = _AnswerSpanAligner(tokenizer, context_length)
+        self._sample_spans: list[tuple[int, _TokenSpan]] = []
+        for sample_index, sample in enumerate(samples):
+            span = aligner.first_in_window(
+                sample["context"],
+                sample["answers"]["answer_start"],
+                sample["answers"]["text"],
+            )
+            if span is not None:
+                self._sample_spans.append((sample_index, span))
 
     def __len__(self):
-        return len(self.samples)
+        return len(self._sample_spans)
 
     def __getitem__(self, idx):
-        sample = self.samples[idx]
+        sample_index, span = self._sample_spans[idx]
+        sample = self.samples[sample_index]
         context = torch.tensor(
             _encode(sample["context"], self.tokenizer, self.vocab, self.context_length),
             dtype=torch.long,
@@ -42,26 +57,11 @@ class _QADataset(torch.utils.data.Dataset):
             ),
             dtype=torch.long,
         )
-        # Answer span: start/end token indices within the context,
-        # clamped to context_length.
-        start = (
-            min(sample["answers"]["answer_start"][0], self.context_length - 1)
-            if sample["answers"]["answer_start"]
-            else 0
-        )
-        end = (
-            min(
-                start + len(self.tokenizer(sample["answers"]["text"][0])) - 1,
-                self.context_length - 1,
-            )
-            if sample["answers"]["text"]
-            else 0
-        )
         return (
             context,
             question,
-            torch.tensor(start, dtype=torch.long),
-            torch.tensor(end, dtype=torch.long),
+            torch.tensor(span.start, dtype=torch.long),
+            torch.tensor(span.end, dtype=torch.long),
         )
 
 
