@@ -732,6 +732,7 @@ modules = [
   "src/emperor/datasets/text/nli/_multi_nli.py",
   "src/emperor/datasets/text/nli/_snli.py",
   "src/emperor/datasets/text/question_answering/__init__.py",
+  "src/emperor/datasets/text/question_answering/_adapter.py",
   "src/emperor/datasets/text/question_answering/_answer_spans.py",
   "src/emperor/datasets/text/question_answering/_squad_v1.py",
   "src/emperor/datasets/text/question_answering/_squad_v2.py",
