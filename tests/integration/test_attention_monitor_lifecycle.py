@@ -232,7 +232,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
                     )
 
         self.assertEqual(monitor._tracker_manager.hook_count, 0)
-        self.assertEqual(monitor._tracker_manager.replacement_count, 0)
+        self.assertEqual(monitor._tracker_manager.subscription_count, 0)
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
 
@@ -319,7 +319,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(query_layer.weight_params).all())
         self.assertEqual(monitor._tracker_manager.hook_count, 0)
-        self.assertEqual(monitor._tracker_manager.replacement_count, 0)
+        self.assertEqual(monitor._tracker_manager.subscription_count, 0)
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
 
@@ -377,7 +377,9 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         monitor = AttentionMonitorCallback(log_every_n_steps=1)
         original_projection = model.attention.projector.compute_qkv_projections
         original_attention = model.attention.processor.compute_attention
-        original_exact_weights = model.attention.processor._SelfAttentionProcessor__compute_masked_attention_weights
+        original_exact_weights = (
+            model.attention.processor._compute_masked_attention_weights
+        )
         trainer = Trainer(
             max_epochs=1,
             accelerator="cpu",
@@ -442,7 +444,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             )
 
         self.assertEqual(monitor._tracker_manager.hook_count, 0)
-        self.assertEqual(monitor._tracker_manager.replacement_count, 0)
+        self.assertEqual(monitor._tracker_manager.subscription_count, 0)
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
         self.assertTrue(
@@ -459,9 +461,18 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(
             _same_bound_method(
-                model.attention.processor._SelfAttentionProcessor__compute_masked_attention_weights,
+                model.attention.processor._compute_masked_attention_weights,
                 original_exact_weights,
             )
+        )
+        self.assertNotIn(
+            "compute_qkv_projections",
+            vars(model.attention.projector),
+        )
+        self.assertNotIn("compute_attention", vars(model.attention.processor))
+        self.assertNotIn(
+            "_compute_masked_attention_weights",
+            vars(model.attention.processor),
         )
 
     def test_real_trainer_exception_restores_instrumented_attention_methods(
@@ -471,7 +482,9 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         monitor = AttentionMonitorCallback(log_every_n_steps=1)
         original_projection = model.attention.projector.compute_qkv_projections
         original_attention = model.attention.processor.compute_attention
-        original_exact_weights = model.attention.processor._SelfAttentionProcessor__compute_masked_attention_weights
+        original_exact_weights = (
+            model.attention.processor._compute_masked_attention_weights
+        )
         trainer = Trainer(
             max_epochs=1,
             accelerator="cpu",
@@ -498,7 +511,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             )
 
         self.assertEqual(monitor._tracker_manager.hook_count, 0)
-        self.assertEqual(monitor._tracker_manager.replacement_count, 0)
+        self.assertEqual(monitor._tracker_manager.subscription_count, 0)
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
         self.assertTrue(
@@ -515,9 +528,18 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(
             _same_bound_method(
-                model.attention.processor._SelfAttentionProcessor__compute_masked_attention_weights,
+                model.attention.processor._compute_masked_attention_weights,
                 original_exact_weights,
             )
+        )
+        self.assertNotIn(
+            "compute_qkv_projections",
+            vars(model.attention.projector),
+        )
+        self.assertNotIn("compute_attention", vars(model.attention.processor))
+        self.assertNotIn(
+            "_compute_masked_attention_weights",
+            vars(model.attention.processor),
         )
 
 

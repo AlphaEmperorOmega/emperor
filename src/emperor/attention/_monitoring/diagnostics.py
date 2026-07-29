@@ -45,8 +45,8 @@ class _AttentionMonitorAdapter:
     """Capture and canonicalize standard attention weights."""
 
     @property
-    def exact_weight_method_names(self) -> tuple[str, ...]:
-        return ("_SelfAttentionProcessor__compute_masked_attention_weights",)
+    def exact_weight_method_name(self) -> str | None:
+        return None
 
     @staticmethod
     def canonicalize(attention_weights: Tensor, num_heads: int) -> Tensor | None:
@@ -68,19 +68,37 @@ class _AttentionMonitorAdapter:
         return None
 
 
+class _SelfAttentionMonitorAdapter(_AttentionMonitorAdapter):
+    """Describe Self exact-weight capture and standard canonicalization."""
+
+    @property
+    def exact_weight_method_name(self) -> str:
+        return "_compute_masked_attention_weights"
+
+
 _DEFAULT_ATTENTION_MONITOR_ADAPTER = _AttentionMonitorAdapter()
+_SELF_ATTENTION_MONITOR_ADAPTER = _SelfAttentionMonitorAdapter()
 
 
 def _resolve_attention_monitor_adapter(
     attention_module: Module,
 ) -> _AttentionMonitorAdapter:
-    monitor_adapter = getattr(
-        attention_module,
-        "_MONITOR_ADAPTER",
-        _DEFAULT_ATTENTION_MONITOR_ADAPTER,
+    from emperor.attention._variants.mixture.processing import (
+        MixtureOfAttentionHeadsProcessor,
     )
-    if isinstance(monitor_adapter, _AttentionMonitorAdapter):
-        return monitor_adapter
+    from emperor.attention._variants.self_attention.processing import (
+        SelfAttentionProcessor,
+    )
+
+    processor = getattr(attention_module, "processor", None)
+    if isinstance(processor, MixtureOfAttentionHeadsProcessor):
+        from emperor.attention._variants.mixture.monitoring import (
+            _MixtureOfAttentionHeadsMonitorAdapter,
+        )
+
+        return _MixtureOfAttentionHeadsMonitorAdapter()
+    if isinstance(processor, SelfAttentionProcessor):
+        return _SELF_ATTENTION_MONITOR_ADAPTER
     return _DEFAULT_ATTENTION_MONITOR_ADAPTER
 
 
