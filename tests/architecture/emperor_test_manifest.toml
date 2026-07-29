@@ -726,6 +726,7 @@ modules = [
   "src/emperor/datasets/text/masked_language_modeling/_windows.py",
   "src/emperor/datasets/text/ner/__init__.py",
   "src/emperor/datasets/text/ner/_conll2003.py",
+  "src/emperor/datasets/text/ner/_schema.py",
   "src/emperor/datasets/text/nli/__init__.py",
   "src/emperor/datasets/text/nli/_multi_nli.py",
   "src/emperor/datasets/text/nli/_snli.py",
