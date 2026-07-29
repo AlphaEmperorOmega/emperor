@@ -4,6 +4,9 @@ from pathlib import Path
 import torch
 
 from emperor.attention import MixtureOfAttentionHeadsConfig
+from emperor.attention._monitoring.diagnostics import (
+    _resolve_attention_monitor_adapter,
+)
 from emperor.attention._runtime import (
     AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
@@ -120,9 +123,10 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
             MixtureOfAttentionHeadsZeroAttention,
         )
         self.assertIsInstance(
-            model._MONITOR_ADAPTER,
+            _resolve_attention_monitor_adapter(model),
             _MixtureOfAttentionHeadsMonitorAdapter,
         )
+        self.assertFalse(hasattr(model, "_MONITOR_ADAPTER"))
 
     def test_key_value_bias_supports_shared_and_expert_projection_ranks(self):
         for use_kv_expert_models_flag in (False, True):
@@ -1491,7 +1495,6 @@ class TestMixtureOfAttentionHeadsLocality(unittest.TestCase):
             root / "src/emperor/attention/_validation.py",
             root / "src/emperor/attention/_runtime.py",
             root / "src/emperor/attention/_monitoring/callback.py",
-            root / "src/emperor/attention/_monitoring/diagnostics.py",
         )
         forbidden_tokens = (
             "top_k",

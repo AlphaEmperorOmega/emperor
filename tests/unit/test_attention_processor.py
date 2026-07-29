@@ -366,7 +366,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
         inputs = attention_inputs(query, key, query)
 
         torch.manual_seed(37)
-        actual = model._SelfAttentionProcessor__compute_masked_attention_weights(
+        actual = model._compute_masked_attention_weights(
             inputs,
         )
         torch.manual_seed(37)
@@ -399,15 +399,15 @@ class TestSelfAttentionProcessor(unittest.TestCase):
 
         model.train()
         torch.manual_seed(7)
-        first = model._SelfAttentionProcessor__compute_masked_attention_weights(
+        first = model._compute_masked_attention_weights(
             inputs,
         )
         torch.manual_seed(7)
-        second = model._SelfAttentionProcessor__compute_masked_attention_weights(
+        second = model._compute_masked_attention_weights(
             inputs,
         )
         model.eval()
-        evaluation = model._SelfAttentionProcessor__compute_masked_attention_weights(
+        evaluation = model._compute_masked_attention_weights(
             inputs,
         )
 
@@ -578,7 +578,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
             with self.subTest(
                 attention_mask_type=type(attention_mask_option).__name__,
             ):
-                result = m._SelfAttentionProcessor__compute_masked_attention_weights(
+                result = m._compute_masked_attention_weights(
                     attention_inputs(
                         query,
                         key,
@@ -1052,10 +1052,8 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         key = torch.zeros(1, 1, 2, 2)
         mask = torch.tensor([[[0.0, -torch.inf], [0.0, -torch.inf]]])
 
-        actual = (
-            model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights(
-                attention_inputs(query, key, key, mask),
-            )
+        actual = model._compute_masked_attention_weights(
+            attention_inputs(query, key, key, mask),
         )
 
         expected = torch.tensor([[[1.0, 0.0], [1.0, 0.0]]])
@@ -1084,10 +1082,8 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         key = torch.zeros(1, 1, 2, 2)
 
         torch.manual_seed(47)
-        actual = (
-            model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights(
-                attention_inputs(query, key, key),
-            )
+        actual = model._compute_masked_attention_weights(
+            attention_inputs(query, key, key),
         )
         torch.manual_seed(47)
         expected = torch.nn.functional.dropout(
@@ -1119,9 +1115,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
         query = torch.zeros(1, 1, 1, 3, 2)
         key = torch.zeros(1, 1, 3, 2)
         inputs = attention_inputs(query, key, key)
-        compute_weights = (
-            model._MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights
-        )
+        compute_weights = model._compute_masked_attention_weights
 
         model.train()
         torch.manual_seed(11)
@@ -1332,12 +1326,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         )
 
                     key = torch.randn(key_shape)
-                    method_name = (
-                        "_MixtureOfAttentionHeadsProcessor"
-                        "__compute_masked_attention_weights"
-                    )
-                    compute_masked_weights = getattr(m, method_name)
-                    result = compute_masked_weights(
+                    result = m._compute_masked_attention_weights(
                         attention_inputs(
                             query,
                             key,

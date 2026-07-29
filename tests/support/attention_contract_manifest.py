@@ -81,10 +81,22 @@ ATTENTION_CONTRACT_MANIFEST = {
         ),
     ),
     "emperor.attention._monitoring.callback": module_contract(
-        ("instrumentation lifecycle", "logging fallbacks", "bounded history"),
+        (
+            "transactional instrumentation lifecycle",
+            "logging fallbacks",
+            "bounded history",
+        ),
         "tests.unit.test_attention_monitor",
-        _AttentionMethodReplacement=class_contract(
-            ("typed reversible method replacement",),
+        _AttentionMethodObserver=class_contract(
+            ("before-call state", "after-call observation"),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionMethodProbe=class_contract(
+            ("single method wrapper", "observer dispatch", "attribute provenance"),
+            "tests.unit.test_attention_monitor",
+        ),
+        _AttentionMethodInstrumentation=class_contract(
+            ("shared probes", "independent removal", "last-subscriber restoration"),
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnosticsTracker=class_contract(
@@ -116,7 +128,11 @@ ATTENTION_CONTRACT_MANIFEST = {
             "tests.unit.test_attention_monitor",
         ),
         _AttentionMonitorAdapter=class_contract(
-            ("standard exact-weight capture", "rank-3/rank-4 canonicalization"),
+            ("conservative capture profile", "rank-3/rank-4 canonicalization"),
+            "tests.unit.test_attention_monitor",
+        ),
+        _SelfAttentionMonitorAdapter=class_contract(
+            ("self exact-weight capture", "standard canonicalization"),
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnostics=class_contract(

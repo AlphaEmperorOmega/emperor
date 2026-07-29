@@ -762,7 +762,7 @@ class TestMixerAttention(unittest.TestCase):
         model(values, values, values)
 
         self.assertEqual(monitor._tracker_manager.module_names, ("attention",))
-        self.assertEqual(monitor._tracker_manager.replacement_count, 0)
+        self.assertEqual(monitor._tracker_manager.subscription_count, 0)
         self.assertIn("attention/attention/output_norm", host.logged)
         self.assertNotIn("attention/attention/q_norm_mean", host.logged)
         self.assertNotIn("attention/attention/entropy_mean", host.logged)

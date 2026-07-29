@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 
@@ -12,6 +13,8 @@ from emperor.attention import (
 from emperor.attention._monitoring.callback import (
     _AttentionDiagnosticsTracker,
     _AttentionDiagnosticsTrackerManager,
+    _AttentionMethodInstrumentation,
+    _AttentionMethodObserver,
     _AttentionTrackingContext,
 )
 from emperor.attention._monitoring.diagnostics import (
@@ -20,6 +23,7 @@ from emperor.attention._monitoring.diagnostics import (
     _AttentionMonitorAdapter,
     _AttentionObservation,
     _resolve_attention_monitor_adapter,
+    _SelfAttentionMonitorAdapter,
 )
 from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._variants.mixture.monitoring import (
@@ -42,11 +46,8 @@ class InstrumentedAttention(torch.nn.Module):
         private_method_name: str | None = None,
         private_weights: torch.Tensor | None = None,
         returned_weights: torch.Tensor | None = None,
-        monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> None:
         super().__init__()
-        if monitor_adapter is not None:
-            self._MONITOR_ADAPTER = monitor_adapter
         self.projector = SimpleNamespace(
             compute_qkv_projections=lambda *, attention_inputs: attention_inputs
         )
@@ -127,13 +128,106 @@ class PositionalProcessorAttention(torch.nn.Module):
         return self.processor.compute_attention(attention_inputs)
 
 
-class OrderedExactWeightMonitorAdapter(_AttentionMonitorAdapter):
+class ExactWeightMonitorAdapter(_AttentionMonitorAdapter):
     @property
-    def exact_weight_method_names(self) -> tuple[str, ...]:
-        return (
-            "_MissingProcessor__compute_masked_attention_weights",
-            "_CaptureProcessor__compute_masked_attention_weights",
+    def exact_weight_method_name(self) -> str:
+        return "_compute_masked_attention_weights"
+
+
+class MethodOwner:
+    def compute(self, value, *, scale=1):
+        return value * scale
+
+
+class TestAttentionMethodInstrumentation(unittest.TestCase):
+    def observer(self, label, records):
+        return _AttentionMethodObserver(
+            before_call=lambda args, kwargs: (label, args, kwargs),
+            after_call=lambda call, result: records.append((*call, result)),
         )
+
+    def test_last_subscription_restores_exact_attribute_provenance(self):
+        instrumentation = _AttentionMethodInstrumentation()
+        owner = MethodOwner()
+        original_method = owner.compute
+        records = []
+
+        remove = instrumentation.subscribe(
+            owner,
+            "compute",
+            self.observer("first", records),
+        )
+
+        self.assertIn("compute", vars(owner))
+        self.assertEqual(owner.compute(3, scale=2), 6)
+        remove()
+
+        self.assertNotIn("compute", vars(owner))
+        self.assertTrue(same_bound_method(owner.compute, original_method))
+        self.assertEqual(records, [("first", (3,), {"scale": 2}, 6)])
+        self.assertEqual(instrumentation.probe_count, 0)
+
+    def test_subscriptions_can_be_removed_in_either_order(self):
+        for removal_order in ((0, 1), (1, 0)):
+            with self.subTest(removal_order=removal_order):
+                instrumentation = _AttentionMethodInstrumentation()
+                owner = MethodOwner()
+                original_method = owner.compute
+                records = []
+                removers = [
+                    instrumentation.subscribe(
+                        owner,
+                        "compute",
+                        self.observer(label, records),
+                    )
+                    for label in ("first", "second")
+                ]
+
+                self.assertEqual(owner.compute(2), 2)
+                removers[removal_order[0]]()
+                self.assertEqual(owner.compute(3), 3)
+                removers[removal_order[1]]()
+
+                first_label = ("first", "second")[removal_order[0]]
+                surviving_label = ("first", "second")[removal_order[1]]
+                self.assertEqual(
+                    [record[0] for record in records],
+                    ["first", "second", surviving_label],
+                )
+                self.assertNotEqual(first_label, surviving_label)
+                self.assertNotIn("compute", vars(owner))
+                self.assertTrue(same_bound_method(owner.compute, original_method))
+                self.assertEqual(instrumentation.probe_count, 0)
+
+    def test_probe_preserves_result_identity_and_original_exception(self):
+        class IdentityOwner:
+            @staticmethod
+            def compute(value):
+                if isinstance(value, BaseException):
+                    raise value
+                return value
+
+        instrumentation = _AttentionMethodInstrumentation()
+        owner = IdentityOwner()
+        result = object()
+        failure = RuntimeError("deliberate method failure")
+        observed_results = []
+        remove = instrumentation.subscribe(
+            owner,
+            "compute",
+            _AttentionMethodObserver(
+                before_call=lambda _args, _kwargs: None,
+                after_call=lambda _call, observed: observed_results.append(observed),
+            ),
+        )
+
+        self.assertIs(owner.compute(result), result)
+        with self.assertRaises(RuntimeError) as raised:
+            owner.compute(failure)
+
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(observed_results, [result])
+        remove()
 
 
 def diagnostic_metrics(
@@ -490,13 +584,23 @@ class TestAttentionDiagnostics(unittest.TestCase):
             flattened.view(2, 2, 2, 3),
         )
 
-    def test_monitor_adapter_resolution_falls_back_for_invalid_layer_selection(self):
+    def test_monitor_adapter_resolution_is_owned_by_monitoring(self):
         attention = InstrumentedAttention()
-        attention._MONITOR_ADAPTER = object()
+        self_attention = build_attention_config(
+            config_class=SelfAttentionConfig,
+            batch_size=1,
+            num_heads=1,
+            embedding_dim=2,
+            target_sequence_length=1,
+            source_sequence_length=1,
+        ).build()
 
-        adapter = _resolve_attention_monitor_adapter(attention)
+        default_adapter = _resolve_attention_monitor_adapter(attention)
+        self_adapter = _resolve_attention_monitor_adapter(self_attention)
 
-        self.assertIs(type(adapter), _AttentionMonitorAdapter)
+        self.assertIs(type(default_adapter), _AttentionMonitorAdapter)
+        self.assertIsInstance(self_adapter, _SelfAttentionMonitorAdapter)
+        self.assertFalse(hasattr(self_attention, "_MONITOR_ADAPTER"))
 
     def test_diagnostics_use_the_selected_mixture_adapter(self):
         weights = torch.tensor([0.25, 0.75, 0.5, 0.5, 0.1, 0.9, 0.8, 0.2]).view(
@@ -711,31 +815,24 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
         self.assertIs(attention.processor.compute_attention, original_attention)
         self.assertEqual(manager.module_names, ())
         self.assertEqual(manager.hook_count, 0)
-        self.assertEqual(manager.replacement_count, 0)
+        self.assertEqual(manager.subscription_count, 0)
 
     def test_manager_captures_exact_weights_through_selected_variant_adapter(self):
-        adapter_cases = (
-            (
-                "_SelfAttentionProcessor__compute_masked_attention_weights",
-                None,
-            ),
-            (
-                "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights",
-                _MixtureOfAttentionHeadsMonitorAdapter(),
-            ),
+        method_name = "_compute_masked_attention_weights"
+        monitor_adapters = (
+            _SelfAttentionMonitorAdapter(),
+            _MixtureOfAttentionHeadsMonitorAdapter(),
         )
         private_weights = torch.tensor([[[0.2, 0.8]]])
 
-        for method_name, monitor_adapter in adapter_cases:
+        for monitor_adapter in monitor_adapters:
             with self.subTest(
-                method_name=method_name,
                 monitor_adapter=type(monitor_adapter).__name__,
             ):
                 attention = InstrumentedAttention(
                     private_method_name=method_name,
                     private_weights=private_weights,
                     returned_weights=torch.tensor([[[0.9, 0.1]]]),
-                    monitor_adapter=monitor_adapter,
                 )
                 original_private_method = getattr(attention.processor, method_name)
                 observations = []
@@ -748,6 +845,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                     lambda name, module, observation, records=observations: (
                         records.append((name, module, observation))
                     ),
+                    monitor_adapter=monitor_adapter,
                 )
                 attention(self.attention_inputs())
 
@@ -761,10 +859,8 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                     original_private_method,
                 )
 
-    def test_standard_adapter_does_not_capture_mixture_private_method(self):
-        method_name = (
-            "_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights"
-        )
+    def test_default_adapter_does_not_claim_an_exact_weight_seam(self):
+        method_name = "_compute_masked_attention_weights"
         private_weights = torch.tensor([[[0.2, 0.8]]])
         returned_weights = torch.tensor([[[0.9, 0.1]]])
         attention = InstrumentedAttention(
@@ -831,7 +927,7 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
         attention(output)
 
         self.assertEqual(manager.hook_count, 1)
-        self.assertEqual(manager.replacement_count, 0)
+        self.assertEqual(manager.subscription_count, 0)
         self.assertFalse(observations[0][2].restored_output.requires_grad)
         self.assertIsNone(observations[0][2].exact_attention_weights)
         manager.detach()
@@ -885,31 +981,32 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                     )
                 manager.detach()
 
-    def test_exact_weight_attachment_continues_after_an_absent_adapter_method(self):
-        method_name = "_CaptureProcessor__compute_masked_attention_weights"
-        private_weights = torch.tensor([[[0.2, 0.8]]])
-        attention = InstrumentedAttention(
-            private_method_name=method_name,
-            private_weights=private_weights,
-            returned_weights=None,
-            monitor_adapter=OrderedExactWeightMonitorAdapter(),
-        )
-        observations = []
+    def test_missing_declared_exact_weight_seam_rolls_back_attachment(self):
+        attention = InstrumentedAttention(returned_weights=None)
+        original_projection = attention.projector.compute_qkv_projections
+        original_attention = attention.processor.compute_attention
         manager = _AttentionDiagnosticsTrackerManager()
-        manager.attach(
-            "attention",
-            attention,
-            lambda: True,
-            lambda name, module, observation: observations.append(observation),
-        )
 
-        attention(self.attention_inputs())
+        with self.assertRaisesRegex(
+            AttributeError,
+            "_compute_masked_attention_weights must be callable",
+        ):
+            manager.attach(
+                "attention",
+                attention,
+                lambda: True,
+                lambda _name, _module, _observation: None,
+                monitor_adapter=ExactWeightMonitorAdapter(),
+            )
 
-        torch.testing.assert_close(
-            observations[0].exact_attention_weights,
-            private_weights * 2.0,
+        self.assertEqual(manager.module_names, ())
+        self.assertEqual(manager.hook_count, 0)
+        self.assertEqual(manager.subscription_count, 0)
+        self.assertIs(
+            attention.projector.compute_qkv_projections,
+            original_projection,
         )
-        manager.detach()
+        self.assertIs(attention.processor.compute_attention, original_attention)
 
     def test_processor_starts_observation_when_projector_is_absent(self):
         attention = ProcessorOnlyAttention()
@@ -1515,10 +1612,14 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         attention = self.attention()
         original_projection = attention.projector.compute_qkv_projections
         original_attention = attention.processor.compute_attention
+        original_exact_weights = attention.processor._compute_masked_attention_weights
         module = CaptureLightningModule(attn=attention)
         callback = AttentionMonitorCallback(log_every_n_steps=1)
 
         callback.on_fit_start(TrainerStub(), module)
+        self.assertIn("compute_qkv_projections", vars(attention.projector))
+        self.assertIn("compute_attention", vars(attention.processor))
+        self.assertIn("_compute_masked_attention_weights", vars(attention.processor))
         self.assertFalse(
             same_bound_method(
                 attention.projector.compute_qkv_projections,
@@ -1546,9 +1647,153 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                 original_attention,
             )
         )
+        self.assertTrue(
+            same_bound_method(
+                attention.processor._compute_masked_attention_weights,
+                original_exact_weights,
+            )
+        )
+        self.assertNotIn("compute_qkv_projections", vars(attention.projector))
+        self.assertNotIn("compute_attention", vars(attention.processor))
+        self.assertNotIn("_compute_masked_attention_weights", vars(attention.processor))
         self.assertEqual(callback._tracker_manager.module_names, ())
         self.assertEqual(callback._entropy_history, {})
         self.assertEqual(callback._max_probability_history, {})
+
+    def test_duplicate_callbacks_can_cleanup_in_either_order(self):
+        for cleanup_order in ((0, 1), (1, 0)):
+            with self.subTest(cleanup_order=cleanup_order):
+                attention = self.attention()
+                module = CaptureLightningModule(attn=attention)
+                callbacks = (
+                    AttentionMonitorCallback(log_every_n_steps=1),
+                    AttentionMonitorCallback(log_every_n_steps=1),
+                )
+                original_projection = attention.projector.compute_qkv_projections
+                original_attention = attention.processor.compute_attention
+                original_exact_weights = (
+                    attention.processor._compute_masked_attention_weights
+                )
+
+                for callback in callbacks:
+                    callback.on_fit_start(TrainerStub(), module)
+                attention(*self.qkv())
+
+                self.assertEqual(
+                    module.logged_tags.count("attn/attention/q_norm_mean"),
+                    2,
+                )
+                callbacks[cleanup_order[0]].on_fit_end(TrainerStub(), module)
+                module.logged.clear()
+                attention(*self.qkv())
+
+                self.assertEqual(
+                    module.logged_tags.count("attn/attention/q_norm_mean"),
+                    1,
+                )
+                callbacks[cleanup_order[1]].on_fit_end(TrainerStub(), module)
+
+                self.assertTrue(
+                    same_bound_method(
+                        attention.projector.compute_qkv_projections,
+                        original_projection,
+                    )
+                )
+                self.assertTrue(
+                    same_bound_method(
+                        attention.processor.compute_attention,
+                        original_attention,
+                    )
+                )
+                self.assertTrue(
+                    same_bound_method(
+                        attention.processor._compute_masked_attention_weights,
+                        original_exact_weights,
+                    )
+                )
+                self.assertNotIn(
+                    "compute_qkv_projections",
+                    vars(attention.projector),
+                )
+                self.assertNotIn("compute_attention", vars(attention.processor))
+                self.assertNotIn(
+                    "_compute_masked_attention_weights",
+                    vars(attention.processor),
+                )
+
+    def test_fit_start_rolls_back_every_module_when_later_attachment_fails(self):
+        first_attention = self.attention()
+        second_attention = self.attention()
+        module = CaptureLightningModule(
+            first=first_attention,
+            second=second_attention,
+        )
+        callback = AttentionMonitorCallback(log_every_n_steps=1)
+        original_methods = {
+            attention: (
+                attention.projector.compute_qkv_projections,
+                attention.processor.compute_attention,
+                attention.processor._compute_masked_attention_weights,
+            )
+            for attention in (first_attention, second_attention)
+        }
+        original_register_forward_hook = torch.nn.Module.register_forward_hook
+
+        def fail_second_registration(attention_module, hook, *args, **kwargs):
+            if attention_module is second_attention:
+                raise RuntimeError("deliberate second attachment failure")
+            return original_register_forward_hook(
+                attention_module,
+                hook,
+                *args,
+                **kwargs,
+            )
+
+        with patch.object(
+            torch.nn.Module,
+            "register_forward_hook",
+            new=fail_second_registration,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "deliberate second attachment failure",
+            ):
+                callback.on_fit_start(TrainerStub(), module)
+
+        self.assertEqual(callback._tracker_manager.module_names, ())
+        self.assertEqual(callback._tracker_manager.hook_count, 0)
+        self.assertEqual(callback._tracker_manager.subscription_count, 0)
+        self.assertEqual(callback._entropy_history, {})
+        self.assertEqual(callback._max_probability_history, {})
+        for attention, expected_methods in original_methods.items():
+            self.assertTrue(
+                same_bound_method(
+                    attention.projector.compute_qkv_projections,
+                    expected_methods[0],
+                )
+            )
+            self.assertTrue(
+                same_bound_method(
+                    attention.processor.compute_attention,
+                    expected_methods[1],
+                )
+            )
+            self.assertTrue(
+                same_bound_method(
+                    attention.processor._compute_masked_attention_weights,
+                    expected_methods[2],
+                )
+            )
+            self.assertNotIn("compute_qkv_projections", vars(attention.projector))
+            self.assertNotIn("compute_attention", vars(attention.processor))
+            self.assertNotIn(
+                "_compute_masked_attention_weights",
+                vars(attention.processor),
+            )
+
+        callback.on_fit_start(TrainerStub(), module)
+        self.assertEqual(callback._tracker_manager.module_names, ("first", "second"))
+        callback.on_fit_end(TrainerStub(), module)
 
     def test_repeated_fit_start_does_not_accumulate_instrumentation(self):
         attention = self.attention()
@@ -1557,13 +1802,13 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(TrainerStub(), module)
         first_hook_count = callback._tracker_manager.hook_count
-        first_replacement_count = callback._tracker_manager.replacement_count
+        first_subscription_count = callback._tracker_manager.subscription_count
         callback.on_fit_start(TrainerStub(), module)
 
         self.assertEqual(callback._tracker_manager.hook_count, first_hook_count)
         self.assertEqual(
-            callback._tracker_manager.replacement_count,
-            first_replacement_count,
+            callback._tracker_manager.subscription_count,
+            first_subscription_count,
         )
         self.assertEqual(callback._tracker_manager.module_names, ("attn",))
         callback.on_fit_end(TrainerStub(), module)

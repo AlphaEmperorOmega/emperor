@@ -10,9 +10,6 @@ from emperor.attention._variants.mixture.bias import (
 from emperor.attention._variants.mixture.masking import (
     MixtureOfAttentionHeadsMask,
 )
-from emperor.attention._variants.mixture.monitoring import (
-    _MixtureOfAttentionHeadsMonitorAdapter,
-)
 from emperor.attention._variants.mixture.processing import (
     MixtureOfAttentionHeadsProcessor,
 )
@@ -34,7 +31,6 @@ class MixtureOfAttentionHeads(MultiHeadAttentionAbstract):
     VALIDATOR = MixtureOfAttentionHeadsValidator
     BIAS_HANDLER = MixtureOfAttentionHeadsKeyValueBias
     ZERO_ATTENTION_HANDLER = MixtureOfAttentionHeadsZeroAttention
-    _MONITOR_ADAPTER = _MixtureOfAttentionHeadsMonitorAdapter()
 
     def forward(
         self,

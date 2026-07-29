@@ -45,7 +45,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
     ) -> tuple[Tensor, Tensor | None]:
         attention_inputs = self.reshaper.reshape_before_attention(attention_inputs)
         runtime_layout = attention_inputs.runtime_layout
-        attention_weights = self.__compute_masked_attention_weights(attention_inputs)
+        attention_weights = self._compute_masked_attention_weights(attention_inputs)
         weighted_values = self.__compute_weighted_values(
             attention_inputs,
             attention_weights,
@@ -57,7 +57,7 @@ class MixtureOfAttentionHeadsProcessor(ProcessorBase):
 
         return attention_output, None
 
-    def __compute_masked_attention_weights(
+    def _compute_masked_attention_weights(
         self,
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:
