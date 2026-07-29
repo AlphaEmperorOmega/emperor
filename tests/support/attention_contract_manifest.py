@@ -100,7 +100,11 @@ ATTENTION_CONTRACT_MANIFEST = {
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnosticsTracker=class_contract(
-            ("observation capture", "exact-weight priority", "detachment"),
+            (
+                "staged attention observation capture",
+                "exact-weight priority",
+                "detachment",
+            ),
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnosticsTrackerManager=class_contract(
@@ -128,11 +132,17 @@ ATTENTION_CONTRACT_MANIFEST = {
             "tests.unit.test_attention_monitor",
         ),
         _AttentionMonitorAdapter=class_contract(
-            ("conservative capture profile", "rank-3/rank-4 canonicalization"),
+            (
+                "conservative stage-capture profile",
+                "rank-3/rank-4 canonicalization",
+            ),
             "tests.unit.test_attention_monitor",
         ),
         _SelfAttentionMonitorAdapter=class_contract(
-            ("self exact-weight capture", "standard canonicalization"),
+            (
+                "self logit and weight-stage capture",
+                "standard canonicalization",
+            ),
             "tests.unit.test_attention_monitor",
         ),
         _AttentionDiagnostics=class_contract(
@@ -362,7 +372,7 @@ ATTENTION_CONTRACT_MANIFEST = {
         ),
     ),
     "emperor.attention._variants.mixture.monitoring": module_contract(
-        ("mixture exact-weight capture", "rank-5 canonicalization"),
+        ("mixture attention-stage capture", "rank-5 canonicalization"),
         "tests.unit.test_attention_monitor",
         _MixtureOfAttentionHeadsMonitorAdapter=class_contract(
             ("mixture capture method", "expert-axis flattening"),
