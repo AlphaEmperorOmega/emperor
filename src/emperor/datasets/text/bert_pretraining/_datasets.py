@@ -137,6 +137,11 @@ class _TorchTextBertPretraining(DataModule):
         )
         self.special_token_ids = get_bert_special_token_ids(self.tokenizer)
         self.actual_vocab_size = self.tokenizer.get_vocab_size(with_added_tokens=True)
+        self._resolve_metadata(
+            vocab_size=self.actual_vocab_size,
+            flattened_input_dim=self.actual_vocab_size,
+            num_classes=self.actual_vocab_size,
+        )
         self.collator = BertPretrainingCollator(
             special_token_ids=self.special_token_ids,
             vocab_size=self.actual_vocab_size,

@@ -235,23 +235,15 @@ def offline_dataset_metadata(
 
     if dataset_type in (PennTreebank, WikiText2):
         module, source_name = _causal_source_module(dataset_type)
-        original_metadata = {
-            name: getattr(dataset_type, name)
-            for name in ("vocab_size", "flattened_input_dim", "num_classes")
-        }
         with patch.object(module, source_name, _offline_modern_text_source):
-            try:
-                yield dataset_type(
-                    batch_size=2,
-                    sequence_length=4,
-                    root=str(root),
-                    num_workers=0,
-                    drop_last=False,
-                    seed=seed,
-                )
-            finally:
-                for name, value in original_metadata.items():
-                    setattr(dataset_type, name, value)
+            yield dataset_type(
+                batch_size=2,
+                sequence_length=4,
+                root=str(root),
+                num_workers=0,
+                drop_last=False,
+                seed=seed,
+            )
         return
 
     if dataset_type in (

@@ -111,8 +111,11 @@ class XSum(DataModule):
             specials=["<unk>", "<pad>", "<bos>", "<eos>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        XSum.vocab_size = len(self.vocab)
-        XSum.num_classes = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            num_classes=resolved_vocab_size,
+        )
 
     def get_dataloader(self, train: bool):
         data = self.train if train else self.val

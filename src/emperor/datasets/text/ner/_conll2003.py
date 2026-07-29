@@ -79,6 +79,10 @@ class CoNLL2003(DataModule):
     def _build_schema(self, train_data: list) -> _NERSchema:
         if self.schema is None:
             self.schema = _NERSchema(train_data)
+            self._resolve_metadata(
+                vocab_size=self.schema.vocab_size,
+                num_classes=self.num_classes,
+            )
         return self.schema
 
     def get_dataloader(self, train: bool):

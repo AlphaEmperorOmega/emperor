@@ -98,7 +98,10 @@ class MultiNLI(DataModule):
             specials=["<unk>", "<pad>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        MultiNLI.vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=len(self.vocab),
+            num_classes=self.num_classes,
+        )
 
     def get_dataloader(self, train: bool):
         data = self.train if train else self.val

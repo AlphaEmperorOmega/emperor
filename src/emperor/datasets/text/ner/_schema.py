@@ -24,6 +24,10 @@ class _NERSchema:
     def fingerprint(self) -> tuple[str, ...]:
         return self._tokens
 
+    @property
+    def vocab_size(self) -> int:
+        return len(self._tokens)
+
     def encode(self, tokens: Sequence[str], sequence_length: int) -> list[int]:
         encoded = [
             self._token_to_index.get(token, self._UNKNOWN_INDEX)

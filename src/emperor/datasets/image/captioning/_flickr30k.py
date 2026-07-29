@@ -109,8 +109,11 @@ class Flickr30k(DataModule):
             specials=["<unk>", "<pad>", "<bos>", "<eos>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        Flickr30k.vocab_size = len(self.vocab)
-        Flickr30k.num_classes = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            num_classes=resolved_vocab_size,
+        )
 
     def _get_transforms(self) -> Compose:
         return transforms.Compose(

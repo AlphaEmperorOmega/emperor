@@ -130,9 +130,12 @@ class WikiText2(DataModule):
         train_iter = self._dataset("train")
         self.vocab = _build_compatible_vocab(_yield_tokens(train_iter, self.tokenizer))
         _set_unknown_default(self.vocab)
-        type(self).vocab_size = len(self.vocab)
-        type(self).flattened_input_dim = len(self.vocab)
-        type(self).num_classes = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            flattened_input_dim=resolved_vocab_size,
+            num_classes=resolved_vocab_size,
+        )
 
     def _build_dataset(
         self,
