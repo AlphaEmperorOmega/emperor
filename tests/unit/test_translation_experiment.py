@@ -73,6 +73,27 @@ class TestTranslationExperiment(unittest.TestCase):
         self.assertTrue(torch.isfinite(output.total_loss))
         self.assertGreater(output.total_loss.item(), output.nll.item())
 
+    def test_model_step_rejects_non_scalar_or_non_tensor_auxiliary_loss(self):
+        model = self.preset()
+        source_ids, target_ids = self.batch()
+        logits = torch.zeros(
+            source_ids.size(0),
+            target_ids.size(1) - 1,
+            model.vocab_size,
+        )
+
+        for auxiliary_loss in (torch.ones(2), 0.5):
+            with (
+                self.subTest(auxiliary_loss=auxiliary_loss),
+                patch.object(
+                    model,
+                    "forward",
+                    return_value=(logits, auxiliary_loss),
+                ),
+                self.assertRaisesRegex(ValueError, "auxiliary loss"),
+            ):
+                model._model_step_outputs((source_ids, target_ids))
+
     def test_metric_logging_exposes_canonical_translation_metrics(self):
         model = self.preset()
         output = model._model_step_outputs(self.batch())

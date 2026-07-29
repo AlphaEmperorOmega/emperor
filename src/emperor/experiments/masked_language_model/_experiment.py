@@ -5,6 +5,8 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+
 from ._metrics import MaskedLanguageModelMetricsLogger
 
 if TYPE_CHECKING:
@@ -27,6 +29,7 @@ class MaskedLanguageModelExperiment(LightningModule):
         self.vocab_size = self.cfg.output_dim
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
         self.metrics = MaskedLanguageModelMetricsLogger()
+        self._auxiliary_loss = AuxiliaryLoss("Masked-language-model")
 
     def training_step(self, batch: MaskedLanguageModelBatch, batch_idx: int) -> Tensor:
         loss, logits, labels, auxiliary_loss = self._model_step_outputs(batch)
@@ -87,9 +90,13 @@ class MaskedLanguageModelExperiment(LightningModule):
         else:
             logits = output
 
-        loss = self.loss_fn(logits.transpose(1, 2), labels)
-        if auxiliary_loss is not None and auxiliary_loss.item() != 0.0:
-            loss = loss + auxiliary_loss
+        task_loss = self.loss_fn(logits.transpose(1, 2), labels)
+        loss = task_loss
+        if auxiliary_loss is not None:
+            loss = task_loss + self._auxiliary_loss.resolve(
+                auxiliary_loss,
+                reference=task_loss,
+            )
         return loss, logits, labels, auxiliary_loss
 
     def _unpack_batch(

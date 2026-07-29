@@ -5,6 +5,8 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+
 from ._metrics import BertPretrainingMetricsLogger
 from ._records import BertPretrainingBatch, BertPretrainingStepOutput
 
@@ -21,6 +23,7 @@ class BertPretrainingExperiment(LightningModule):
         self.mlm_loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
         self.nsp_loss_fn = nn.CrossEntropyLoss()
         self.metrics = BertPretrainingMetricsLogger()
+        self._auxiliary_loss = AuxiliaryLoss("BERT-pretraining")
 
     def training_step(self, batch: BertPretrainingBatch, batch_idx: int) -> Tensor:
         step_output = self._model_step_outputs(batch)
@@ -64,11 +67,13 @@ class BertPretrainingExperiment(LightningModule):
         )
         mlm_loss = self.mlm_loss_fn(mlm_logits.transpose(1, 2), mlm_labels)
         nsp_loss = self.nsp_loss_fn(nsp_logits, next_sentence_labels)
-        total_loss = mlm_loss + nsp_loss
-        if auxiliary_loss is not None and bool(
-            torch.any(auxiliary_loss.detach() != 0.0).item()
-        ):
-            total_loss = total_loss + auxiliary_loss
+        task_loss = mlm_loss + nsp_loss
+        total_loss = task_loss
+        if auxiliary_loss is not None:
+            total_loss = task_loss + self._auxiliary_loss.resolve(
+                auxiliary_loss,
+                reference=task_loss,
+            )
         return BertPretrainingStepOutput(
             total_loss=total_loss,
             mlm_loss=mlm_loss,
