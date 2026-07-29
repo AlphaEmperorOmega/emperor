@@ -9,8 +9,8 @@ class _MixtureOfAttentionHeadsMonitorAdapter(_AttentionMonitorAdapter):
     """Capture and canonicalize mixture attention weights."""
 
     @property
-    def exact_weight_method_names(self) -> tuple[str, ...]:
-        return ("_MixtureOfAttentionHeadsProcessor__compute_masked_attention_weights",)
+    def exact_weight_method_name(self) -> str:
+        return "_compute_masked_attention_weights"
 
     @staticmethod
     def canonicalize(attention_weights: Tensor, num_heads: int) -> Tensor | None:

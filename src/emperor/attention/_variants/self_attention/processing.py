@@ -22,7 +22,7 @@ class SelfAttentionProcessor(ProcessorBase):
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> tuple[Tensor, Tensor | None]:
         runtime_layout = attention_inputs.runtime_layout
-        attention_weights = self.__compute_masked_attention_weights(attention_inputs)
+        attention_weights = self._compute_masked_attention_weights(attention_inputs)
         weighted_values = self.__compute_weighted_values(
             attention_inputs,
             attention_weights,
@@ -36,7 +36,7 @@ class SelfAttentionProcessor(ProcessorBase):
 
         return attention_output, attention_weights
 
-    def __compute_masked_attention_weights(
+    def _compute_masked_attention_weights(
         self,
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:

@@ -30,10 +30,114 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class _AttentionMethodReplacement:
-    owner: object
-    method_name: str
-    original_method: Callable[..., object]
+class _AttentionMethodObserver:
+    """Observe one method call without changing its arguments or result."""
+
+    before_call: Callable[[tuple[object, ...], dict[str, object]], object]
+    after_call: Callable[[object, object], None]
+
+
+class _AttentionMethodProbe:
+    """Own one installed method wrapper and all of its observers."""
+
+    def __init__(self, owner: object, method_name: str) -> None:
+        original_method = getattr(owner, method_name, None)
+        if not callable(original_method):
+            raise AttributeError(
+                f"{type(owner).__name__}.{method_name} must be callable for "
+                "attention monitoring."
+            )
+
+        local_attributes = vars(owner)
+        self.owner = owner
+        self.method_name = method_name
+        self._original_method = original_method
+        self._had_local_attribute = method_name in local_attributes
+        self._original_local_attribute = local_attributes.get(method_name)
+        self._observers: dict[int, _AttentionMethodObserver] = {}
+        self._next_observer_id = 0
+        setattr(owner, method_name, self.__call_original_and_notify_observers)
+
+    @property
+    def observer_count(self) -> int:
+        return len(self._observers)
+
+    def add_observer(self, observer: _AttentionMethodObserver) -> int:
+        observer_id = self._next_observer_id
+        self._next_observer_id += 1
+        self._observers[observer_id] = observer
+        return observer_id
+
+    def remove_observer(self, observer_id: int) -> None:
+        self._observers.pop(observer_id, None)
+
+    def restore_original_method(self) -> None:
+        if self._had_local_attribute:
+            setattr(
+                self.owner,
+                self.method_name,
+                self._original_local_attribute,
+            )
+            return
+        delattr(self.owner, self.method_name)
+
+    def __call_original_and_notify_observers(
+        self,
+        *args: object,
+        **kwargs: object,
+    ) -> object:
+        observer_calls = tuple(
+            (observer, observer.before_call(args, kwargs))
+            for observer in tuple(self._observers.values())
+        )
+        result = self._original_method(*args, **kwargs)
+        for observer, call in observer_calls:
+            observer.after_call(call, result)
+        return result
+
+
+class _AttentionMethodInstrumentation:
+    """Share method probes and restore them after their final subscription."""
+
+    def __init__(self) -> None:
+        self._probes: dict[tuple[int, str], _AttentionMethodProbe] = {}
+
+    @property
+    def probe_count(self) -> int:
+        return len(self._probes)
+
+    def subscribe(
+        self,
+        owner: object,
+        method_name: str,
+        observer: _AttentionMethodObserver,
+    ) -> Callable[[], None]:
+        probe_key = (id(owner), method_name)
+        probe = self._probes.get(probe_key)
+        if probe is None:
+            probe = _AttentionMethodProbe(owner, method_name)
+            self._probes[probe_key] = probe
+        elif probe.owner is not owner:
+            raise RuntimeError("Attention method instrumentation owner collision.")
+
+        observer_id = probe.add_observer(observer)
+        removed = False
+
+        def remove_subscription() -> None:
+            nonlocal removed
+            if removed:
+                return
+            removed = True
+            probe.remove_observer(observer_id)
+            if probe.observer_count > 0:
+                return
+            probe.restore_original_method()
+            self._probes.pop(probe_key, None)
+
+        return remove_subscription
+
+
+_ATTENTION_METHOD_INSTRUMENTATION = _AttentionMethodInstrumentation()
 
 
 class _AttentionDiagnosticsTracker:
@@ -113,10 +217,16 @@ class _AttentionDiagnosticsTracker:
 class _AttentionDiagnosticsTrackerManager:
     """Attach, restore, and own attention diagnostic instrumentation."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        method_instrumentation: _AttentionMethodInstrumentation = (
+            _ATTENTION_METHOD_INSTRUMENTATION
+        ),
+    ) -> None:
+        self._method_instrumentation = method_instrumentation
         self._trackers: dict[int, _AttentionDiagnosticsTracker] = {}
         self._hook_handles: list[RemovableHandle] = []
-        self._method_replacements: list[_AttentionMethodReplacement] = []
+        self._method_subscriptions: list[Callable[[], None]] = []
 
     @property
     def module_names(self) -> tuple[str, ...]:
@@ -127,8 +237,8 @@ class _AttentionDiagnosticsTrackerManager:
         return len(self._hook_handles)
 
     @property
-    def replacement_count(self) -> int:
-        return len(self._method_replacements)
+    def subscription_count(self) -> int:
+        return len(self._method_subscriptions)
 
     def tracker_for(self, attention_module: Module) -> _AttentionDiagnosticsTracker:
         return self._trackers[id(attention_module)]
@@ -142,45 +252,57 @@ class _AttentionDiagnosticsTrackerManager:
             [str, Module, _AttentionObservation],
             None,
         ],
+        monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> None:
+        tracker_key = id(attention_module)
+        initial_hook_count = len(self._hook_handles)
+        initial_subscription_count = len(self._method_subscriptions)
         tracker = _AttentionDiagnosticsTracker(module_name)
-        self._trackers[id(attention_module)] = tracker
-        monitor_adapter = _resolve_attention_monitor_adapter(attention_module)
-        projector_attached = self.__attach_projector(
-            attention_module,
-            tracker,
-            should_capture,
-        )
-        processor_attached = self.__attach_processor(
-            attention_module,
-            tracker,
-            should_capture,
-            monitor_adapter,
-            begin_observation=not projector_attached,
-        )
-        self._hook_handles.append(
-            attention_module.register_forward_hook(
-                self.__make_forward_hook(
-                    attention_module,
-                    tracker,
-                    should_capture,
-                    observation_recorder,
-                    begin_observation=not projector_attached and not processor_attached,
+        self._trackers[tracker_key] = tracker
+        try:
+            resolved_monitor_adapter = (
+                monitor_adapter or _resolve_attention_monitor_adapter(attention_module)
+            )
+            projector_attached = self.__attach_projector(
+                attention_module,
+                tracker,
+                should_capture,
+            )
+            processor_attached = self.__attach_processor(
+                attention_module,
+                tracker,
+                should_capture,
+                resolved_monitor_adapter,
+                begin_observation=not projector_attached,
+            )
+            self._hook_handles.append(
+                attention_module.register_forward_hook(
+                    self.__make_forward_hook(
+                        attention_module,
+                        tracker,
+                        should_capture,
+                        observation_recorder,
+                        begin_observation=(
+                            not projector_attached and not processor_attached
+                        ),
+                    )
                 )
             )
-        )
+        except BaseException:
+            self.__rollback_attachment(
+                tracker_key,
+                initial_hook_count,
+                initial_subscription_count,
+            )
+            raise
 
     def detach(self) -> None:
         for hook_handle in self._hook_handles:
             hook_handle.remove()
         self._hook_handles.clear()
-        for replacement in reversed(self._method_replacements):
-            setattr(
-                replacement.owner,
-                replacement.method_name,
-                replacement.original_method,
-            )
-        self._method_replacements.clear()
+        for remove_subscription in reversed(self._method_subscriptions):
+            remove_subscription()
+        self._method_subscriptions.clear()
         self._trackers.clear()
 
     def __attach_projector(
@@ -191,24 +313,32 @@ class _AttentionDiagnosticsTrackerManager:
     ) -> bool:
         projector = getattr(attention_module, "projector", None)
         method_name = "compute_qkv_projections"
-        original_projection = getattr(projector, method_name, None)
-        if not callable(original_projection):
+        if not callable(getattr(projector, method_name, None)):
             return False
 
-        def capture_projected_inputs(*args: object, **kwargs: object) -> object:
+        def begin_projected_input_capture(
+            _args: tuple[object, ...],
+            _kwargs: dict[str, object],
+        ) -> bool:
             capture_this_forward = should_capture()
             if capture_this_forward:
                 tracker.begin_observation()
-            projected_inputs = original_projection(*args, **kwargs)
+            return capture_this_forward
+
+        def capture_projected_inputs(
+            capture_this_forward: object,
+            projected_inputs: object,
+        ) -> None:
             if capture_this_forward:
                 tracker.record_projected_inputs(projected_inputs)
-            return projected_inputs
 
-        self.__replace_method(
+        self.__observe_method(
             projector,
             method_name,
-            original_projection,
-            capture_projected_inputs,
+            _AttentionMethodObserver(
+                before_call=begin_projected_input_capture,
+                after_call=capture_projected_inputs,
+            ),
         )
         return True
 
@@ -223,25 +353,28 @@ class _AttentionDiagnosticsTrackerManager:
     ) -> bool:
         processor = getattr(attention_module, "processor", None)
         method_name = "compute_attention"
-        original_attention = getattr(processor, method_name, None)
-        if not callable(original_attention):
+        if not callable(getattr(processor, method_name, None)):
             return False
 
-        def capture_processor_inputs(*args: object, **kwargs: object) -> object:
+        def capture_processor_inputs(
+            args: tuple[object, ...],
+            kwargs: dict[str, object],
+        ) -> None:
             if should_capture():
                 if begin_observation:
                     tracker.begin_observation()
                 processor_inputs = args[0] if args else kwargs.get("attention_inputs")
                 tracker.record_processor_inputs(processor_inputs)
-            return original_attention(*args, **kwargs)
 
-        self.__replace_method(
+        self.__observe_method(
             processor,
             method_name,
-            original_attention,
-            capture_processor_inputs,
+            _AttentionMethodObserver(
+                before_call=capture_processor_inputs,
+                after_call=self.__ignore_method_result,
+            ),
         )
-        self.__attach_exact_weight_methods(
+        self.__attach_exact_weight_method(
             processor,
             tracker,
             should_capture,
@@ -249,41 +382,36 @@ class _AttentionDiagnosticsTrackerManager:
         )
         return True
 
-    def __attach_exact_weight_methods(
+    def __attach_exact_weight_method(
         self,
         processor: object,
         tracker: _AttentionDiagnosticsTracker,
         should_capture: Callable[[], bool],
         monitor_adapter: _AttentionMonitorAdapter,
     ) -> None:
-        for method_name in monitor_adapter.exact_weight_method_names:
-            original_weight_method = getattr(processor, method_name, None)
-            if not callable(original_weight_method):
-                continue
-            self.__replace_method(
-                processor,
-                method_name,
-                original_weight_method,
-                self.__make_exact_weight_wrapper(
-                    tracker,
-                    should_capture,
-                    original_weight_method,
-                ),
-            )
+        method_name = monitor_adapter.exact_weight_method_name
+        if method_name is None:
+            return
+
+        def capture_exact_attention_weights(
+            capture_this_forward: object,
+            attention_weights: object,
+        ) -> None:
+            if capture_this_forward:
+                tracker.record_exact_attention_weights(attention_weights)
+
+        self.__observe_method(
+            processor,
+            method_name,
+            _AttentionMethodObserver(
+                before_call=lambda _args, _kwargs: should_capture(),
+                after_call=capture_exact_attention_weights,
+            ),
+        )
 
     @staticmethod
-    def __make_exact_weight_wrapper(
-        tracker: _AttentionDiagnosticsTracker,
-        should_capture: Callable[[], bool],
-        original_weight_method: Callable[..., object],
-    ) -> Callable[..., object]:
-        def capture_exact_weights(*args: object, **kwargs: object) -> object:
-            attention_weights = original_weight_method(*args, **kwargs)
-            if should_capture():
-                tracker.record_exact_attention_weights(attention_weights)
-            return attention_weights
-
-        return capture_exact_weights
+    def __ignore_method_result(_call: object, _result: object) -> None:
+        return None
 
     @staticmethod
     def __make_forward_hook(
@@ -315,17 +443,31 @@ class _AttentionDiagnosticsTrackerManager:
 
         return record_forward_diagnostics
 
-    def __replace_method(
+    def __observe_method(
         self,
         owner: object,
         method_name: str,
-        original_method: Callable[..., object],
-        replacement_method: Callable[..., object],
+        observer: _AttentionMethodObserver,
     ) -> None:
-        setattr(owner, method_name, replacement_method)
-        self._method_replacements.append(
-            _AttentionMethodReplacement(owner, method_name, original_method)
+        self._method_subscriptions.append(
+            self._method_instrumentation.subscribe(owner, method_name, observer)
         )
+
+    def __rollback_attachment(
+        self,
+        tracker_key: int,
+        initial_hook_count: int,
+        initial_subscription_count: int,
+    ) -> None:
+        for hook_handle in self._hook_handles[initial_hook_count:]:
+            hook_handle.remove()
+        del self._hook_handles[initial_hook_count:]
+        for remove_subscription in reversed(
+            self._method_subscriptions[initial_subscription_count:]
+        ):
+            remove_subscription()
+        del self._method_subscriptions[initial_subscription_count:]
+        self._trackers.pop(tracker_key, None)
 
 
 @dataclass(frozen=True)
@@ -370,13 +512,17 @@ class AttentionMonitorCallback(Callback):
         attention_runtime_types = (MultiHeadAttentionAbstract, MixerAttention)
 
         self.__cleanup()
-        for module_name, attention_module in pl_module.named_modules():
-            if isinstance(attention_module, attention_runtime_types):
-                self.__attach_attention_module(
-                    module_name,
-                    attention_module,
-                    pl_module,
-                )
+        try:
+            for module_name, attention_module in pl_module.named_modules():
+                if isinstance(attention_module, attention_runtime_types):
+                    self.__attach_attention_module(
+                        module_name,
+                        attention_module,
+                        pl_module,
+                    )
+        except BaseException:
+            self.__cleanup()
+            raise
 
     def __attach_attention_module(
         self,
