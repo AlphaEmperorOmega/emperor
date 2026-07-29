@@ -1,4 +1,3 @@
-import math
 import unittest
 from unittest.mock import patch
 
@@ -122,6 +121,10 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
 
         torch.testing.assert_close(loss, expected)
 
+        total_loss, token_loss, *_ = model._model_step_outputs((input_ids, labels))
+        self.assertIs(total_loss, token_loss)
+        torch.testing.assert_close(token_loss, expected)
+
     def test_ignore_index_labels_do_not_contribute_to_loss(self):
         cfg = self.preset(output_dim=3)
         logits = torch.tensor([[[6.0, 0.0, 0.0], [-20.0, 20.0, 0.0]]])
@@ -175,6 +178,15 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         )
 
         torch.testing.assert_close(loss, expected)
+
+        with patch.object(model.metrics, "log_training_step") as log_training_step:
+            observed_loss = model.training_step((input_ids, labels), 0)
+
+        logged_loss = log_training_step.call_args.args[1]
+        logged_token_loss = log_training_step.call_args.args[2]
+        self.assertIs(observed_loss, logged_loss)
+        torch.testing.assert_close(logged_token_loss, expected - auxiliary_loss)
+        torch.testing.assert_close(logged_loss, logged_token_loss + auxiliary_loss)
 
     def test_zero_tuple_output_auxiliary_loss_is_not_added(self):
         cfg = self.preset(output_dim=3)
@@ -285,8 +297,9 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
 
     def test_metrics_logger_matches_language_model_logging_shape(self):
         logger = MaskedLanguageModelMetricsLogger()
-        loss = torch.tensor(0.25)
-        auxiliary_loss = torch.tensor(0.1)
+        token_loss = torch.tensor(0.25)
+        auxiliary_loss = torch.tensor(1.0)
+        loss = token_loss + auxiliary_loss
         logits = torch.tensor(
             [
                 [
@@ -302,12 +315,36 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
-        logger.log_training_step(log_fn, loss, logits, labels, auxiliary_loss)
-        logger.log_validation_step(log_fn, loss, logits, labels, auxiliary_loss)
-        logger.log_test_step(log_fn, loss, logits, labels, auxiliary_loss)
+        logger.log_training_step(
+            log_fn,
+            loss,
+            token_loss,
+            logits,
+            labels,
+            auxiliary_loss,
+        )
+        logger.log_validation_step(
+            log_fn,
+            loss,
+            token_loss,
+            logits,
+            labels,
+            auxiliary_loss,
+        )
+        logger.log_test_step(
+            log_fn,
+            loss,
+            token_loss,
+            logits,
+            labels,
+            auxiliary_loss,
+        )
 
         self.assertIs(calls[0][0]["train/loss"], loss)
-        self.assertEqual(calls[0][0]["train/perplexity"], math.exp(loss.item()))
+        torch.testing.assert_close(
+            calls[0][0]["train/perplexity"],
+            torch.exp(token_loss),
+        )
         torch.testing.assert_close(
             calls[0][0]["train/masked/accuracy"],
             torch.tensor(0.5),
@@ -319,9 +356,9 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         self.assertIs(calls[0][0]["train/auxiliary/loss"], auxiliary_loss)
         self.assertEqual(calls[0][1], {"prog_bar": True})
         self.assertIs(calls[1][0]["validation/loss"], loss)
-        self.assertEqual(
+        torch.testing.assert_close(
             calls[1][0]["validation/perplexity"],
-            math.exp(loss.item()),
+            torch.exp(token_loss),
         )
         torch.testing.assert_close(
             calls[1][0]["validation/masked/accuracy"],
@@ -334,7 +371,10 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         self.assertIs(calls[1][0]["validation/auxiliary/loss"], auxiliary_loss)
         self.assertEqual(calls[1][1], {"prog_bar": True})
         self.assertIs(calls[2][0]["test/loss"], loss)
-        self.assertEqual(calls[2][0]["test/perplexity"], math.exp(loss.item()))
+        torch.testing.assert_close(
+            calls[2][0]["test/perplexity"],
+            torch.exp(token_loss),
+        )
         torch.testing.assert_close(
             calls[2][0]["test/masked/accuracy"],
             torch.tensor(0.5),
@@ -356,7 +396,7 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
-        logger.log_training_step(log_fn, loss, logits, labels)
+        logger.log_training_step(log_fn, loss, loss, logits, labels)
 
         self.assertNotIn("train/auxiliary/loss", calls[0][0])
 
@@ -370,7 +410,7 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
-        logger.log_training_step(log_fn, loss, logits, labels)
+        logger.log_training_step(log_fn, loss, loss, logits, labels)
 
         torch.testing.assert_close(
             calls[0][0]["train/masked/accuracy"],

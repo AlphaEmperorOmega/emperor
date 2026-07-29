@@ -1,24 +1,34 @@
-import math
 from collections.abc import Callable
 
 import torch.nn as nn
 from torch import Tensor
 
+from emperor.experiments._perplexity import Perplexity
+
 
 class MaskedLanguageModelMetricsLogger(nn.Module):
     def __init__(self):
         super().__init__()
+        self._perplexity = Perplexity()
 
     def log_training_step(
         self,
         log_fn: Callable,
         loss: Tensor,
+        token_loss: Tensor,
         logits: Tensor,
         labels: Tensor,
         auxiliary_loss: Tensor | None = None,
     ) -> None:
         log_fn(
-            self._payload("train", loss, logits, labels, auxiliary_loss),
+            self._payload(
+                "train",
+                loss,
+                token_loss,
+                logits,
+                labels,
+                auxiliary_loss,
+            ),
             prog_bar=True,
         )
 
@@ -26,12 +36,20 @@ class MaskedLanguageModelMetricsLogger(nn.Module):
         self,
         log_fn: Callable,
         loss: Tensor,
+        token_loss: Tensor,
         logits: Tensor,
         labels: Tensor,
         auxiliary_loss: Tensor | None = None,
     ) -> None:
         log_fn(
-            self._payload("validation", loss, logits, labels, auxiliary_loss),
+            self._payload(
+                "validation",
+                loss,
+                token_loss,
+                logits,
+                labels,
+                auxiliary_loss,
+            ),
             prog_bar=True,
         )
 
@@ -39,25 +57,34 @@ class MaskedLanguageModelMetricsLogger(nn.Module):
         self,
         log_fn: Callable,
         loss: Tensor,
+        token_loss: Tensor,
         logits: Tensor,
         labels: Tensor,
         auxiliary_loss: Tensor | None = None,
     ) -> None:
         log_fn(
-            self._payload("test", loss, logits, labels, auxiliary_loss),
+            self._payload(
+                "test",
+                loss,
+                token_loss,
+                logits,
+                labels,
+                auxiliary_loss,
+            ),
         )
 
     def _payload(
         self,
         stage: str,
         loss: Tensor,
+        token_loss: Tensor,
         logits: Tensor,
         labels: Tensor,
         auxiliary_loss: Tensor | None,
-    ) -> dict[str, Tensor | float]:
-        payload: dict[str, Tensor | float] = {
+    ) -> dict[str, Tensor]:
+        payload: dict[str, Tensor] = {
             f"{stage}/loss": loss,
-            f"{stage}/perplexity": math.exp(loss.item()),
+            f"{stage}/perplexity": self._perplexity.from_token_loss(token_loss),
             f"{stage}/masked/accuracy": self._masked_accuracy(logits, labels),
             f"{stage}/masked/top_5_accuracy": self._masked_top_k_accuracy(
                 logits,

@@ -1,8 +1,9 @@
 from collections.abc import Callable
 
-import torch
 import torch.nn as nn
 from torch import Tensor
+
+from emperor.experiments._perplexity import Perplexity
 
 from ._records import LanguageModelStepOutput
 
@@ -10,6 +11,7 @@ from ._records import LanguageModelStepOutput
 class LanguageModelMetricsLogger(nn.Module):
     def __init__(self) -> None:
         super().__init__()
+        self._perplexity = Perplexity()
 
     def log_training_step(
         self,
@@ -32,8 +34,8 @@ class LanguageModelMetricsLogger(nn.Module):
     ) -> None:
         log_fn(self._payload("test", output))
 
-    @staticmethod
     def _payload(
+        self,
         stage: str,
         output: LanguageModelStepOutput | Tensor,
     ) -> dict[str, Tensor]:
@@ -45,7 +47,7 @@ class LanguageModelMetricsLogger(nn.Module):
             total_loss = output
             cross_entropy = output
             auxiliary_loss = output.new_zeros(())
-        perplexity = torch.exp(cross_entropy.detach().clamp(max=20.0))
+        perplexity = self._perplexity.from_token_loss(cross_entropy)
         return {
             f"{stage}/loss": total_loss,
             f"{stage}/cross_entropy": cross_entropy,

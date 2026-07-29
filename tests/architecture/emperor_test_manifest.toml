@@ -763,6 +763,7 @@ blocked_reason = ""
 modules = [
   "src/emperor/experiments/__init__.py",
   "src/emperor/experiments/_auxiliary_loss.py",
+  "src/emperor/experiments/_perplexity.py",
   "src/emperor/experiments/_tasks.py",
   "src/emperor/experiments/bert_pretraining/__init__.py",
   "src/emperor/experiments/bert_pretraining/_experiment.py",
