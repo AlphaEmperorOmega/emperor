@@ -1260,8 +1260,7 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         )
                     )
                     routed_skip_masks = [
-                        records[forward_index][2]
-                        for records in routing_inputs.values()
+                        records[forward_index][2] for records in routing_inputs.values()
                     ]
                     self.assertTrue(
                         all(
