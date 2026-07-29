@@ -1,10 +1,11 @@
-import math
-
-import torch
 from torch import Tensor
 from torchmetrics.text import SacreBLEUScore
 
+from emperor.experiments._perplexity import Perplexity
+
 from ._records import TranslationStepOutput
+
+_PERPLEXITY = Perplexity()
 
 
 def _translation_step_metrics(
@@ -20,7 +21,7 @@ def _translation_step_metrics(
         )
     else:
         token_accuracy = output.logits.new_zeros(())
-    perplexity = torch.exp(output.nll.detach().clamp(max=math.log(1e9)))
+    perplexity = _PERPLEXITY.from_token_loss(output.nll)
     return {
         f"{stage}/loss": output.total_loss,
         f"{stage}/nll": output.nll,

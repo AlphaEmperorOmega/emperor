@@ -1,8 +1,9 @@
-import math
 from collections.abc import Callable
 
 import torch.nn as nn
 from torch import Tensor
+
+from emperor.experiments._perplexity import Perplexity
 
 from ._records import BertPretrainingStepOutput
 
@@ -10,6 +11,7 @@ from ._records import BertPretrainingStepOutput
 class BertPretrainingMetricsLogger(nn.Module):
     def __init__(self):
         super().__init__()
+        self._perplexity = Perplexity()
 
     def log_training_step(
         self,
@@ -74,11 +76,13 @@ class BertPretrainingMetricsLogger(nn.Module):
         self,
         stage: str,
         step_output: BertPretrainingStepOutput,
-    ) -> dict[str, Tensor | float]:
-        payload: dict[str, Tensor | float] = {
+    ) -> dict[str, Tensor]:
+        payload: dict[str, Tensor] = {
             f"{stage}/loss": step_output.total_loss,
             f"{stage}/mlm/loss": step_output.mlm_loss,
-            f"{stage}/mlm/perplexity": math.exp(step_output.mlm_loss.item()),
+            f"{stage}/mlm/perplexity": self._perplexity.from_token_loss(
+                step_output.mlm_loss
+            ),
             f"{stage}/mlm/masked_accuracy": self._masked_accuracy(
                 step_output.mlm_logits,
                 step_output.mlm_labels,
