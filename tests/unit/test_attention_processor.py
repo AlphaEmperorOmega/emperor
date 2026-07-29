@@ -378,6 +378,27 @@ class TestSelfAttentionProcessor(unittest.TestCase):
 
         torch.testing.assert_close(actual, expected)
 
+    def test_normalized_weight_stage_zeroes_fully_masked_rows(self):
+        cfg = build_attention_config(
+            config_class=SelfAttentionConfig,
+            batch_size=1,
+            num_heads=1,
+            embedding_dim=2,
+        )
+        model = SelfAttentionProcessor(
+            cfg,
+            SelfAttentionProjector(cfg),
+            AttentionReshaper(cfg),
+        )
+        raw_logits = torch.tensor([[[0.0, -torch.inf], [-torch.inf, -torch.inf]]])
+
+        actual = model._compute_normalized_attention_weights(raw_logits)
+
+        torch.testing.assert_close(
+            actual,
+            torch.tensor([[[1.0, 0.0], [0.0, 0.0]]]),
+        )
+
     def test_seeded_dropout_changes_training_weights_only(self):
         cfg = build_attention_config(
             config_class=SelfAttentionConfig,
@@ -463,7 +484,7 @@ class TestSelfAttentionProcessor(unittest.TestCase):
             torch.allclose(scaled_query_tensor, expected_result, atol=1e-6, rtol=1e-5)
         )
 
-    def test__compute_raw_masked_attention_weights(self):
+    def test__compute_raw_masked_attention_logits(self):
         source_sequence_length = 8
         target_sequence_length = 8
         embedding_dim = 12
@@ -510,14 +531,12 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                     )
                     projector = SelfAttentionProjector(c)
                     m = SelfAttentionProcessor(c, projector, AttentionReshaper(c))
-                    raw_masked_weights = (
-                        m._SelfAttentionProcessor__compute_raw_masked_attention_weights(
-                            attention_inputs(
-                                query,
-                                key,
-                                key,
-                                attention_mask_option,
-                            )
+                    raw_masked_weights = m._compute_raw_masked_attention_logits(
+                        attention_inputs(
+                            query,
+                            key,
+                            key,
+                            attention_mask_option,
                         )
                     )
 
@@ -538,7 +557,8 @@ class TestSelfAttentionProcessor(unittest.TestCase):
                             q = query[idx]
                             k = transposed_keys[idx]
                             single_head_qk_attention_weights = torch.mm(
-                                q, k
+                                q * head_dim**-0.5,
+                                k,
                             ).masked_fill(
                                 (attention_mask[idx] == float("-inf")),
                                 torch.tensor(float("-inf")),
@@ -1094,6 +1114,29 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
 
         torch.testing.assert_close(actual, expected)
 
+    def test_normalized_weight_stage_zeroes_fully_masked_rows(self):
+        cfg = build_attention_config(
+            config_class=MixtureOfAttentionHeadsConfig,
+            batch_size=1,
+            num_heads=1,
+            embedding_dim=2,
+            experts_top_k=1,
+            experts_num_experts=2,
+        )
+        model = MixtureOfAttentionHeadsProcessor(
+            cfg,
+            MixtureOfAttentionHeadsProjector(cfg),
+            MixtureOfAttentionHeadsReshaper(cfg),
+        )
+        raw_logits = torch.tensor([[[0.0, -torch.inf], [-torch.inf, -torch.inf]]])
+
+        actual = model._compute_normalized_attention_weights(raw_logits)
+
+        torch.testing.assert_close(
+            actual,
+            torch.tensor([[[1.0, 0.0], [0.0, 0.0]]]),
+        )
+
     def test_seeded_dropout_changes_training_weights_only(self):
         cfg = build_attention_config(
             config_class=MixtureOfAttentionHeadsConfig,
@@ -1183,7 +1226,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
             torch.allclose(scaled_query_tensor, expected_result, atol=1e-6, rtol=1e-5)
         )
 
-    def test__compute_raw_masked_attention_weights(self):
+    def test__compute_raw_masked_attention_logits(self):
         top_k = 3
         source_sequence_length = 8
         target_sequence_length = 8
@@ -1254,12 +1297,7 @@ class TestMixtureOfAttentionHeadsProcessor(unittest.TestCase):
                         m = MixtureOfAttentionHeadsProcessor(
                             c, projector, MixtureOfAttentionHeadsReshaper(c)
                         )
-                        method_name = (
-                            "_MixtureOfAttentionHeadsProcessor"
-                            "__compute_raw_masked_attention_weights"
-                        )
-                        compute_raw_masked_weights = getattr(m, method_name)
-                        raw_masked_weights = compute_raw_masked_weights(
+                        raw_masked_weights = m._compute_raw_masked_attention_logits(
                             attention_inputs(
                                 query,
                                 key,

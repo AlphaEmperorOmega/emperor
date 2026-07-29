@@ -40,44 +40,55 @@ class SelfAttentionProcessor(ProcessorBase):
         self,
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> Tensor:
+        raw_attention_logits = self._compute_raw_masked_attention_logits(
+            attention_inputs
+        )
+        normalized_attention_weights = self._compute_normalized_attention_weights(
+            raw_attention_logits
+        )
+        return F.dropout(
+            normalized_attention_weights,
+            p=self.dropout_probability,
+            training=self.training,
+        )
+
+    def _compute_raw_masked_attention_logits(
+        self,
+        attention_inputs: "MultiHeadAttentionInputs",
+    ) -> Tensor:
         scaled_inputs = replace(
             attention_inputs,
             query=self.__scale_query(attention_inputs.query),
         )
-        raw_attention_weights = self.__compute_raw_masked_attention_weights(
-            scaled_inputs
+        transposed_key = scaled_inputs.key.transpose(-2, -1)
+        attention_logits = torch.bmm(scaled_inputs.query, transposed_key)
+        attention_logits = self.__add_relative_position_logits_if_available(
+            scaled_inputs,
+            attention_logits,
         )
-        fully_masked_rows = torch.isneginf(raw_attention_weights).all(
+        masked_attention_logits = self.__add_attention_mask_if_available(
+            attention_logits,
+            scaled_inputs.merged_attention_mask,
+        )
+        return masked_attention_logits
+
+    def _compute_normalized_attention_weights(
+        self,
+        raw_attention_logits: Tensor,
+    ) -> Tensor:
+        fully_masked_rows = torch.isneginf(raw_attention_logits).all(
             dim=-1, keepdim=True
         )
-        safe_raw_attention_weights = raw_attention_weights.masked_fill(
-            fully_masked_rows, 0.0
+        safe_attention_logits = raw_attention_logits.masked_fill(fully_masked_rows, 0.0)
+        normalized_attention_weights = F.softmax(safe_attention_logits, dim=-1)
+        normalized_attention_weights_with_zeroed_masked_rows = (
+            normalized_attention_weights.masked_fill(fully_masked_rows, 0.0)
         )
-        attention_weights = F.softmax(safe_raw_attention_weights, dim=-1)
-        attention_weights = attention_weights.masked_fill(fully_masked_rows, 0.0)
-        return F.dropout(
-            attention_weights, p=self.dropout_probability, training=self.training
-        )
+        return normalized_attention_weights_with_zeroed_masked_rows
 
     def __scale_query(self, query: Tensor) -> Tensor:
         head_dim = query.size(-1)
         return query * head_dim**-0.5
-
-    def __compute_raw_masked_attention_weights(
-        self,
-        attention_inputs: "MultiHeadAttentionInputs",
-    ) -> Tensor:
-        transposed_key = attention_inputs.key.transpose(-2, -1)
-        attention_weights = torch.bmm(attention_inputs.query, transposed_key)
-        attention_weights = self.__add_relative_position_logits_if_available(
-            attention_inputs,
-            attention_weights,
-        )
-        attention_weights = self.__add_attention_mask_if_available(
-            attention_weights,
-            attention_inputs.merged_attention_mask,
-        )
-        return attention_weights
 
     def __add_relative_position_logits_if_available(
         self,
