@@ -660,6 +660,7 @@ focused_tests = [
   "tests/unit/test_*dataset.py",
   "tests/unit/test_*collator.py",
   "tests/unit/test_multi30k_translation.py",
+  "tests/unit/test_rl_dataset_lifecycle.py",
 ]
 integration_tests = ["tests/integration/datasets/test_dataset_downloads.py"]
 mutation_scope = ["src/emperor/datasets/*"]

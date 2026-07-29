@@ -1,7 +1,6 @@
-import numpy as np
 import torch
 
-from emperor.datasets.rl._base import GymEnvironment, _TransitionDataset
+from emperor.datasets.rl._base import GymEnvironment
 
 
 class Pendulum(GymEnvironment):
@@ -21,31 +20,4 @@ class Pendulum(GymEnvironment):
     num_actions: int = 0  # continuous action space
     num_classes: int = 0
     flattened_input_dim: int = observation_dim
-
-    def __init__(self, batch_size: int = 64, num_episodes: int = 500):
-        super().__init__(batch_size=batch_size, num_episodes=num_episodes)
-
-    def _collect_transitions(self, num_episodes: int) -> _TransitionDataset:
-        states, actions, rewards, next_states, dones = [], [], [], [], []
-        for _ in range(num_episodes):
-            state, _ = self.env.reset()
-            done = False
-            while not done:
-                action = self.env.action_space.sample()  # shape (1,)
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                done = terminated or truncated
-                states.append(state)
-                actions.append(action)
-                rewards.append(reward)
-                next_states.append(next_state)
-                dones.append(float(done))
-                state = next_state
-        return _TransitionDataset(
-            torch.tensor(np.array(states), dtype=torch.float32),
-            torch.tensor(
-                np.array(actions), dtype=torch.float32
-            ),  # float for continuous
-            torch.tensor(np.array(rewards), dtype=torch.float32),
-            torch.tensor(np.array(next_states), dtype=torch.float32),
-            torch.tensor(np.array(dones), dtype=torch.float32),
-        )
+    _action_dtype = torch.float32

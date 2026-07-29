@@ -15,6 +15,3 @@ class CartPole(GymEnvironment):
     num_actions: int = 2
     num_classes: int = num_actions
     flattened_input_dim: int = observation_dim
-
-    def __init__(self, batch_size: int = 64, num_episodes: int = 500):
-        super().__init__(batch_size=batch_size, num_episodes=num_episodes)
