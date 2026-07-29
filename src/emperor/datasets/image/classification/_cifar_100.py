@@ -24,6 +24,17 @@ class Cifar100(DataModule):
         self.batch_size = batch_size
         self.resize = resize
         self.seed = None if seed is None else int(seed)
+        if isinstance(resize, int):
+            self.default_height = self.default_width = resize
+        else:
+            self.default_height, self.default_width = resize
+        self.flattened_input_dim = (
+            self.default_height * self.default_width * self.num_channels
+        )
+        self._resolve_metadata(
+            flattened_input_dim=self.flattened_input_dim,
+            num_classes=self.num_classes,
+        )
 
     def prepare_data(self) -> None:
         datasets.CIFAR100(root=self.root, train=True, download=True)
@@ -39,7 +50,7 @@ class Cifar100(DataModule):
         )
         val_size = int(len(full_train) * self.val_split)
         train_size = len(full_train) - val_size
-        self.train, self.val = torch.utils.data.random_split(
+        self.train, validation_subset = torch.utils.data.random_split(
             full_train,
             [train_size, val_size],
             generator=(
@@ -47,6 +58,15 @@ class Cifar100(DataModule):
                 if self.seed is not None
                 else None
             ),
+        )
+        validation_data = datasets.CIFAR100(
+            root=self.root,
+            train=True,
+            transform=self.__get_test_transforms(),
+        )
+        self.val = torch.utils.data.Subset(
+            validation_data,
+            validation_subset.indices,
         )
 
     def _setup_validate(self) -> None:
@@ -211,7 +231,7 @@ class Cifar100(DataModule):
             batch_size=self.batch_size,
             shuffle=train,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=train,
             generator=(
                 torch.Generator().manual_seed(self.seed)
                 if train and self.seed is not None
@@ -225,5 +245,5 @@ class Cifar100(DataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
