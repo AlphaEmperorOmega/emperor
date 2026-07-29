@@ -15,6 +15,7 @@ from emperor.datasets.image.classification import (
     FashionMNIST,
     Mnist,
 )
+from emperor.datasets.image.classification._svhn import SVHN
 
 
 @dataclass(frozen=True)
@@ -284,6 +285,73 @@ class ImageClassificationDatasetTests(unittest.TestCase):
                 )
                 self.assertEqual(tuple(normalize.mean), case.normalization[0])
                 self.assertEqual(tuple(normalize.std), case.normalization[1])
+
+
+class _TinySVHN(Dataset):
+    def __init__(self, *, split: str, transform) -> None:
+        self.split = split
+        self.transform = transform
+
+    def __len__(self) -> int:
+        return 4
+
+    def __getitem__(self, index: int):
+        image = Image.new("RGB", (32, 32), color=(index, 32, 64))
+        if self.transform is not None:
+            image = self.transform(image)
+        return image, index % 10
+
+
+class _SVHNFactory:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def __call__(self, *_args, split: str, transform=None, **kwargs):
+        self.calls.append({"split": split, "transform": transform, **kwargs})
+        return _TinySVHN(split=split, transform=transform)
+
+
+class SVHNDatasetTests(unittest.TestCase):
+    patch_target = "emperor.datasets.image.classification._svhn.datasets.SVHN"
+
+    def test_prepare_and_fit_preserve_split_and_batch_contracts(self) -> None:
+        factory = _SVHNFactory()
+        dataset = SVHN(batch_size=2, resize=(6, 10))
+        dataset.num_workers = 0
+
+        with patch(self.patch_target, side_effect=factory):
+            dataset.prepare_data()
+            dataset.setup("fit")
+
+        self.assertEqual(
+            [(call["split"], call.get("download", False)) for call in factory.calls],
+            [("train", True), ("test", True), ("train", False), ("test", False)],
+        )
+        train_images, train_labels = next(iter(dataset.train_dataloader()))
+        validation_images, validation_labels = next(iter(dataset.val_dataloader()))
+        self.assertEqual(train_images.shape, torch.Size([2, 3, 6, 10]))
+        self.assertEqual(validation_images.shape, torch.Size([2, 3, 6, 10]))
+        self.assertEqual(train_images.dtype, torch.float32)
+        self.assertEqual(train_labels.dtype, torch.long)
+        self.assertEqual(validation_labels.dtype, torch.long)
+        self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
+        self.assertIsInstance(dataset.val_dataloader().sampler, SequentialSampler)
+        self.assertEqual(dataset._text_labels([0, 9]), ["0", "9"])
+
+    def test_validation_uses_only_the_test_source_and_propagates_errors(self) -> None:
+        factory = _SVHNFactory()
+        dataset = SVHN(batch_size=2)
+        with patch(self.patch_target, side_effect=factory):
+            dataset.setup("validate")
+
+        self.assertEqual([call["split"] for call in factory.calls], ["test"])
+        self.assertEqual(dataset.val.split, "test")
+
+        with (
+            patch(self.patch_target, side_effect=RuntimeError("source unavailable")),
+            self.assertRaisesRegex(RuntimeError, "source unavailable"),
+        ):
+            SVHN(batch_size=2).setup("validate")
 
 
 if __name__ == "__main__":
