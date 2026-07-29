@@ -52,7 +52,13 @@ class InstrumentedAttention(torch.nn.Module):
             compute_qkv_projections=lambda *, attention_inputs: attention_inputs
         )
         self.processor = SimpleNamespace(
-            compute_attention=lambda *, attention_inputs: attention_inputs.value
+            compute_attention=lambda *, attention_inputs: attention_inputs.value,
+            _compute_raw_masked_attention_logits=(
+                lambda *, scale: private_weights * scale
+            ),
+            _compute_normalized_attention_weights=(
+                lambda *, scale: private_weights * scale
+            ),
         )
         self.private_method_name = private_method_name
         self.private_weights = private_weights
@@ -81,6 +87,8 @@ class InstrumentedAttention(torch.nn.Module):
             attention_inputs=projected_inputs,
         )
         if self.private_method_name is not None:
+            self.processor._compute_raw_masked_attention_logits(scale=0.5)
+            self.processor._compute_normalized_attention_weights(scale=1.0)
             getattr(self.processor, self.private_method_name)(scale=2.0)
         return output, self.returned_weights, torch.tensor(3.0, requires_grad=True)
 
@@ -278,6 +286,14 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
             merged_attention_mask=mask,
         )
         private_weights = torch.tensor([[[0.2, 0.8]]], requires_grad=True)
+        raw_attention_logits = torch.tensor(
+            [[[1.0, -torch.inf]]],
+            requires_grad=True,
+        )
+        normalized_attention_weights = torch.tensor(
+            [[[1.0, 0.0]]],
+            requires_grad=True,
+        )
         returned_weights = torch.tensor([[[0.7, 0.3]]], requires_grad=True)
         output = torch.tensor([3.0, 4.0], requires_grad=True)
         auxiliary_loss = torch.tensor([2.0, 4.0], requires_grad=True)
@@ -285,6 +301,8 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
         tracker.begin_observation()
         tracker.record_projected_inputs(projected_inputs)
         tracker.record_processor_inputs(processor_inputs)
+        tracker.record_raw_attention_logits(raw_attention_logits)
+        tracker.record_normalized_attention_weights(normalized_attention_weights)
         tracker.record_exact_attention_weights(private_weights)
         tracker.record_forward_output((output, returned_weights, auxiliary_loss))
 
@@ -300,6 +318,8 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
             observation.processor_inputs.key,
             observation.processor_inputs.value,
             observation.processor_inputs.merged_attention_mask,
+            observation.raw_attention_logits,
+            observation.normalized_attention_weights,
             observation.exact_attention_weights,
             observation.restored_output,
             observation.auxiliary_loss,
@@ -307,6 +327,14 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
         for captured_tensor in captured_tensors:
             self.assertIsInstance(captured_tensor, torch.Tensor)
             self.assertFalse(captured_tensor.requires_grad)
+        self.assertEqual(
+            observation.raw_attention_logits.data_ptr(),
+            raw_attention_logits.data_ptr(),
+        )
+        self.assertEqual(
+            observation.normalized_attention_weights.data_ptr(),
+            normalized_attention_weights.data_ptr(),
+        )
         self.assertEqual(
             observation.exact_attention_weights.data_ptr(),
             private_weights.data_ptr(),
@@ -651,9 +679,13 @@ class TestAttentionDiagnostics(unittest.TestCase):
             merged_attention_mask=torch.tensor([False, True]),
         )
         exact_weights = torch.tensor([[[0.0, 2.0, 3.0]]])
+        raw_attention_logits = torch.tensor([[[1.0, -torch.inf, 3.0]]])
+        normalized_attention_weights = torch.tensor([[[0.2, 0.3, 0.5]]])
         observation = _AttentionObservation(
             projected_inputs=projected_inputs,
             processor_inputs=processor_inputs,
+            raw_attention_logits=raw_attention_logits,
+            normalized_attention_weights=normalized_attention_weights,
             exact_attention_weights=exact_weights,
             restored_output=torch.tensor([3.0, 4.0]),
             auxiliary_loss=torch.tensor([2.0, 4.0]),
@@ -680,7 +712,44 @@ class TestAttentionDiagnostics(unittest.TestCase):
             metrics.dropout_zero_fraction,
             torch.tensor(1 / 3),
         )
+        torch.testing.assert_close(
+            metrics.finite_raw_attention_logit_mean,
+            torch.tensor(2.0),
+        )
+        torch.testing.assert_close(
+            metrics.finite_raw_attention_logit_std,
+            torch.tensor(1.0),
+        )
+        expected_pre_dropout_entropy, expected_pre_dropout_maximum = (
+            self.diagnostics().per_head_statistics(
+                normalized_attention_weights,
+                1,
+            )
+        )
+        torch.testing.assert_close(
+            metrics.pre_dropout_per_head_entropy,
+            expected_pre_dropout_entropy,
+        )
+        torch.testing.assert_close(
+            metrics.pre_dropout_per_head_max_probability,
+            expected_pre_dropout_maximum,
+        )
         self.assertEqual(metrics.weight_source, "exact")
+
+    def test_raw_logit_statistics_ignore_non_finite_values(self):
+        diagnostics = self.diagnostics()
+
+        mean, standard_deviation = diagnostics.finite_tensor_statistics(
+            torch.tensor([-torch.inf, 1.0, 3.0, torch.inf, torch.nan])
+        )
+
+        torch.testing.assert_close(mean, torch.tensor(2.0))
+        torch.testing.assert_close(standard_deviation, torch.tensor(1.0))
+        self.assertEqual(diagnostics.finite_tensor_statistics(None), (None, None))
+        self.assertEqual(
+            diagnostics.finite_tensor_statistics(torch.tensor([-torch.inf])),
+            (None, None),
+        )
 
     def test_exact_weights_take_priority_over_approximation(self):
         processor_inputs = self.attention_inputs(
@@ -849,6 +918,14 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
                 )
                 attention(self.attention_inputs())
 
+                torch.testing.assert_close(
+                    observations[0][2].raw_attention_logits,
+                    private_weights * 0.5,
+                )
+                torch.testing.assert_close(
+                    observations[0][2].normalized_attention_weights,
+                    private_weights,
+                )
                 torch.testing.assert_close(
                     observations[0][2].exact_attention_weights,
                     private_weights * 2.0,
@@ -1045,6 +1122,10 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                 "__track_auxiliary_loss",
                 "__track_configured_dropout_probability",
                 "__track_mask_coverage",
+                "__track_finite_raw_attention_logit_mean",
+                "__track_finite_raw_attention_logit_std",
+                "__track_pre_dropout_entropy_mean",
+                "__track_pre_dropout_max_probability_mean",
                 "__track_entropy_mean",
                 "__track_max_probability_mean",
                 "__track_dead_head_fraction",
@@ -1204,6 +1285,10 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             "attn/attention/mask_coverage",
             "attn/attention/configured_dropout_probability",
             "attn/attention/dropout_zero_fraction",
+            "attn/attention/finite_raw_logit_mean",
+            "attn/attention/finite_raw_logit_std",
+            "attn/attention/pre_dropout_entropy_mean",
+            "attn/attention/pre_dropout_max_probability_mean",
         }
         self.assertTrue(expected_tags.issubset(set(module.logged_tags)))
         for tag in expected_tags:
@@ -1234,6 +1319,11 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             module.logged_tags,
         )
         self.assertNotIn("attn/attention/dropout_zero_fraction", module.logged_tags)
+        self.assertNotIn("attn/attention/finite_raw_logit_mean", module.logged_tags)
+        self.assertNotIn(
+            "attn/attention/pre_dropout_entropy_mean",
+            module.logged_tags,
+        )
         callback.on_fit_end(TrainerStub(), module)
 
     def test_per_head_scalars_preserve_exact_tags(self):
@@ -1369,6 +1459,10 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             per_head_max_probability=torch.tensor([0.7, 0.6]),
             weight_source="approximate",
             dropout_zero_fraction=torch.tensor(0.5),
+            finite_raw_attention_logit_mean=torch.tensor(0.6),
+            finite_raw_attention_logit_std=torch.tensor(0.7),
+            pre_dropout_per_head_entropy=torch.tensor([0.2, 0.3]),
+            pre_dropout_per_head_max_probability=torch.tensor([0.8, 0.7]),
         )
         present_context = _AttentionTrackingContext(
             pl_module=module,
@@ -1391,6 +1485,10 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             "attn/attention/approximate_max_probability_mean",
             "attn/attention/approximate_dead_head_fraction",
             "attn/attention/dropout_zero_fraction",
+            "attn/attention/finite_raw_logit_mean",
+            "attn/attention/finite_raw_logit_std",
+            "attn/attention/pre_dropout_entropy_mean",
+            "attn/attention/pre_dropout_max_probability_mean",
         }
         self.assertTrue(expected_optional_tags.issubset(set(module.logged_tags)))
         torch.testing.assert_close(
@@ -1612,6 +1710,10 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         attention = self.attention()
         original_projection = attention.projector.compute_qkv_projections
         original_attention = attention.processor.compute_attention
+        original_raw_logits = attention.processor._compute_raw_masked_attention_logits
+        original_normalized_weights = (
+            attention.processor._compute_normalized_attention_weights
+        )
         original_exact_weights = attention.processor._compute_masked_attention_weights
         module = CaptureLightningModule(attn=attention)
         callback = AttentionMonitorCallback(log_every_n_steps=1)
@@ -1619,6 +1721,14 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         callback.on_fit_start(TrainerStub(), module)
         self.assertIn("compute_qkv_projections", vars(attention.projector))
         self.assertIn("compute_attention", vars(attention.processor))
+        self.assertIn(
+            "_compute_raw_masked_attention_logits",
+            vars(attention.processor),
+        )
+        self.assertIn(
+            "_compute_normalized_attention_weights",
+            vars(attention.processor),
+        )
         self.assertIn("_compute_masked_attention_weights", vars(attention.processor))
         self.assertFalse(
             same_bound_method(
@@ -1635,6 +1745,18 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
         callback.on_fit_end(TrainerStub(), module)
 
+        self.assertTrue(
+            same_bound_method(
+                attention.processor._compute_raw_masked_attention_logits,
+                original_raw_logits,
+            )
+        )
+        self.assertTrue(
+            same_bound_method(
+                attention.processor._compute_normalized_attention_weights,
+                original_normalized_weights,
+            )
+        )
         self.assertTrue(
             same_bound_method(
                 attention.projector.compute_qkv_projections,
@@ -1655,6 +1777,14 @@ class TestAttentionMonitorCallback(unittest.TestCase):
         )
         self.assertNotIn("compute_qkv_projections", vars(attention.projector))
         self.assertNotIn("compute_attention", vars(attention.processor))
+        self.assertNotIn(
+            "_compute_raw_masked_attention_logits",
+            vars(attention.processor),
+        )
+        self.assertNotIn(
+            "_compute_normalized_attention_weights",
+            vars(attention.processor),
+        )
         self.assertNotIn("_compute_masked_attention_weights", vars(attention.processor))
         self.assertEqual(callback._tracker_manager.module_names, ())
         self.assertEqual(callback._entropy_history, {})
@@ -1671,6 +1801,12 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                 )
                 original_projection = attention.projector.compute_qkv_projections
                 original_attention = attention.processor.compute_attention
+                original_raw_logits = (
+                    attention.processor._compute_raw_masked_attention_logits
+                )
+                original_normalized_weights = (
+                    attention.processor._compute_normalized_attention_weights
+                )
                 original_exact_weights = (
                     attention.processor._compute_masked_attention_weights
                 )
@@ -1695,6 +1831,18 @@ class TestAttentionMonitorCallback(unittest.TestCase):
 
                 self.assertTrue(
                     same_bound_method(
+                        attention.processor._compute_raw_masked_attention_logits,
+                        original_raw_logits,
+                    )
+                )
+                self.assertTrue(
+                    same_bound_method(
+                        attention.processor._compute_normalized_attention_weights,
+                        original_normalized_weights,
+                    )
+                )
+                self.assertTrue(
+                    same_bound_method(
                         attention.projector.compute_qkv_projections,
                         original_projection,
                     )
@@ -1717,6 +1865,14 @@ class TestAttentionMonitorCallback(unittest.TestCase):
                 )
                 self.assertNotIn("compute_attention", vars(attention.processor))
                 self.assertNotIn(
+                    "_compute_raw_masked_attention_logits",
+                    vars(attention.processor),
+                )
+                self.assertNotIn(
+                    "_compute_normalized_attention_weights",
+                    vars(attention.processor),
+                )
+                self.assertNotIn(
                     "_compute_masked_attention_weights",
                     vars(attention.processor),
                 )
@@ -1733,6 +1889,8 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             attention: (
                 attention.projector.compute_qkv_projections,
                 attention.processor.compute_attention,
+                attention.processor._compute_raw_masked_attention_logits,
+                attention.processor._compute_normalized_attention_weights,
                 attention.processor._compute_masked_attention_weights,
             )
             for attention in (first_attention, second_attention)
@@ -1780,12 +1938,32 @@ class TestAttentionMonitorCallback(unittest.TestCase):
             )
             self.assertTrue(
                 same_bound_method(
-                    attention.processor._compute_masked_attention_weights,
+                    attention.processor._compute_raw_masked_attention_logits,
                     expected_methods[2],
+                )
+            )
+            self.assertTrue(
+                same_bound_method(
+                    attention.processor._compute_normalized_attention_weights,
+                    expected_methods[3],
+                )
+            )
+            self.assertTrue(
+                same_bound_method(
+                    attention.processor._compute_masked_attention_weights,
+                    expected_methods[4],
                 )
             )
             self.assertNotIn("compute_qkv_projections", vars(attention.projector))
             self.assertNotIn("compute_attention", vars(attention.processor))
+            self.assertNotIn(
+                "_compute_raw_masked_attention_logits",
+                vars(attention.processor),
+            )
+            self.assertNotIn(
+                "_compute_normalized_attention_weights",
+                vars(attention.processor),
+            )
             self.assertNotIn(
                 "_compute_masked_attention_weights",
                 vars(attention.processor),

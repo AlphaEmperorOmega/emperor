@@ -162,6 +162,19 @@ class _AttentionDiagnosticsTracker:
             processor_inputs
         )
 
+    def record_raw_attention_logits(self, raw_attention_logits: object) -> None:
+        detached_logits = self.__detach_tensor(raw_attention_logits)
+        if detached_logits is not None:
+            self._latest_observation.raw_attention_logits = detached_logits
+
+    def record_normalized_attention_weights(
+        self,
+        normalized_attention_weights: object,
+    ) -> None:
+        detached_weights = self.__detach_tensor(normalized_attention_weights)
+        if detached_weights is not None:
+            self._latest_observation.normalized_attention_weights = detached_weights
+
     def record_exact_attention_weights(self, attention_weights: object) -> None:
         detached_weights = self.__detach_tensor(attention_weights)
         if detached_weights is not None:
@@ -374,7 +387,7 @@ class _AttentionDiagnosticsTrackerManager:
                 after_call=self.__ignore_method_result,
             ),
         )
-        self.__attach_exact_weight_method(
+        self.__attach_attention_weight_methods(
             processor,
             tracker,
             should_capture,
@@ -382,30 +395,58 @@ class _AttentionDiagnosticsTrackerManager:
         )
         return True
 
-    def __attach_exact_weight_method(
+    def __attach_attention_weight_methods(
         self,
         processor: object,
         tracker: _AttentionDiagnosticsTracker,
         should_capture: Callable[[], bool],
         monitor_adapter: _AttentionMonitorAdapter,
     ) -> None:
-        method_name = monitor_adapter.exact_weight_method_name
+        observed_results = (
+            (
+                monitor_adapter.raw_attention_logit_method_name,
+                tracker.record_raw_attention_logits,
+            ),
+            (
+                monitor_adapter.normalized_attention_weight_method_name,
+                tracker.record_normalized_attention_weights,
+            ),
+            (
+                monitor_adapter.exact_weight_method_name,
+                tracker.record_exact_attention_weights,
+            ),
+        )
+        for method_name, record_result in observed_results:
+            self.__attach_tensor_result_method(
+                processor,
+                method_name,
+                should_capture,
+                record_result,
+            )
+
+    def __attach_tensor_result_method(
+        self,
+        processor: object,
+        method_name: str | None,
+        should_capture: Callable[[], bool],
+        record_result: Callable[[object], None],
+    ) -> None:
         if method_name is None:
             return
 
-        def capture_exact_attention_weights(
+        def capture_tensor_result(
             capture_this_forward: object,
-            attention_weights: object,
+            result: object,
         ) -> None:
             if capture_this_forward:
-                tracker.record_exact_attention_weights(attention_weights)
+                record_result(result)
 
         self.__observe_method(
             processor,
             method_name,
             _AttentionMethodObserver(
                 before_call=lambda _args, _kwargs: should_capture(),
-                after_call=capture_exact_attention_weights,
+                after_call=capture_tensor_result,
             ),
         )
 
@@ -611,6 +652,10 @@ class AttentionMonitorCallback(Callback):
         self.__track_auxiliary_loss(context)
         self.__track_configured_dropout_probability(context)
         self.__track_mask_coverage(context)
+        self.__track_finite_raw_attention_logit_mean(context)
+        self.__track_finite_raw_attention_logit_std(context)
+        self.__track_pre_dropout_entropy_mean(context)
+        self.__track_pre_dropout_max_probability_mean(context)
         self.__track_entropy_mean(context)
         self.__track_max_probability_mean(context)
         self.__track_dead_head_fraction(context)
@@ -681,6 +726,50 @@ class AttentionMonitorCallback(Callback):
             f"{context.metric_prefix}/mask_coverage",
             context.metrics.mask_coverage,
         )
+
+    @staticmethod
+    def __track_finite_raw_attention_logit_mean(
+        context: _AttentionTrackingContext,
+    ) -> None:
+        mean = context.metrics.finite_raw_attention_logit_mean
+        if mean is not None:
+            context.pl_module.log(
+                f"{context.metric_prefix}/finite_raw_logit_mean",
+                mean,
+            )
+
+    @staticmethod
+    def __track_finite_raw_attention_logit_std(
+        context: _AttentionTrackingContext,
+    ) -> None:
+        standard_deviation = context.metrics.finite_raw_attention_logit_std
+        if standard_deviation is not None:
+            context.pl_module.log(
+                f"{context.metric_prefix}/finite_raw_logit_std",
+                standard_deviation,
+            )
+
+    @staticmethod
+    def __track_pre_dropout_entropy_mean(
+        context: _AttentionTrackingContext,
+    ) -> None:
+        per_head_entropy = context.metrics.pre_dropout_per_head_entropy
+        if per_head_entropy is not None:
+            context.pl_module.log(
+                f"{context.metric_prefix}/pre_dropout_entropy_mean",
+                per_head_entropy.mean(),
+            )
+
+    @staticmethod
+    def __track_pre_dropout_max_probability_mean(
+        context: _AttentionTrackingContext,
+    ) -> None:
+        per_head_maximum = context.metrics.pre_dropout_per_head_max_probability
+        if per_head_maximum is not None:
+            context.pl_module.log(
+                f"{context.metric_prefix}/pre_dropout_max_probability_mean",
+                per_head_maximum.mean(),
+            )
 
     @staticmethod
     def __track_entropy_mean(context: _AttentionTrackingContext) -> None:

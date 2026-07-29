@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 class _AttentionObservation:
     projected_inputs: MultiHeadAttentionInputs | None = None
     processor_inputs: MultiHeadAttentionInputs | None = None
+    raw_attention_logits: Tensor | None = None
+    normalized_attention_weights: Tensor | None = None
     exact_attention_weights: Tensor | None = None
     restored_output: Tensor | None = None
     auxiliary_loss: Tensor | None = None
@@ -39,10 +41,22 @@ class _AttentionDiagnosticMetrics:
     per_head_max_probability: Tensor | None
     weight_source: Literal["exact", "approximate"] | None
     dropout_zero_fraction: Tensor | None
+    finite_raw_attention_logit_mean: Tensor | None = None
+    finite_raw_attention_logit_std: Tensor | None = None
+    pre_dropout_per_head_entropy: Tensor | None = None
+    pre_dropout_per_head_max_probability: Tensor | None = None
 
 
 class _AttentionMonitorAdapter:
     """Capture and canonicalize standard attention weights."""
+
+    @property
+    def raw_attention_logit_method_name(self) -> str | None:
+        return None
+
+    @property
+    def normalized_attention_weight_method_name(self) -> str | None:
+        return None
 
     @property
     def exact_weight_method_name(self) -> str | None:
@@ -70,6 +84,14 @@ class _AttentionMonitorAdapter:
 
 class _SelfAttentionMonitorAdapter(_AttentionMonitorAdapter):
     """Describe Self exact-weight capture and standard canonicalization."""
+
+    @property
+    def raw_attention_logit_method_name(self) -> str:
+        return "_compute_raw_masked_attention_logits"
+
+    @property
+    def normalized_attention_weight_method_name(self) -> str:
+        return "_compute_normalized_attention_weights"
 
     @property
     def exact_weight_method_name(self) -> str:
@@ -139,6 +161,14 @@ class _AttentionDiagnostics:
             num_heads,
             monitor_adapter,
         )
+        pre_dropout_entropy, pre_dropout_max_probability = self.per_head_statistics(
+            observation.normalized_attention_weights,
+            num_heads,
+            monitor_adapter,
+        )
+        raw_logit_mean, raw_logit_std = self.finite_tensor_statistics(
+            observation.raw_attention_logits
+        )
         return _AttentionDiagnosticMetrics(
             query_norm_mean=self.__projection_norm(projected_inputs, "query"),
             key_norm_mean=self.__projection_norm(projected_inputs, "key"),
@@ -161,7 +191,23 @@ class _AttentionDiagnostics:
                 if exact_weights is not None
                 else None
             ),
+            finite_raw_attention_logit_mean=raw_logit_mean,
+            finite_raw_attention_logit_std=raw_logit_std,
+            pre_dropout_per_head_entropy=pre_dropout_entropy,
+            pre_dropout_per_head_max_probability=pre_dropout_max_probability,
         )
+
+    @staticmethod
+    def finite_tensor_statistics(
+        values: Tensor | None,
+    ) -> tuple[Tensor | None, Tensor | None]:
+        if values is None or values.numel() == 0:
+            return None, None
+        detached_values = values.detach().float()
+        finite_values = detached_values[torch.isfinite(detached_values)]
+        if finite_values.numel() == 0:
+            return None, None
+        return finite_values.mean(), finite_values.std(unbiased=False)
 
     @staticmethod
     def approximate_attention_weights(
