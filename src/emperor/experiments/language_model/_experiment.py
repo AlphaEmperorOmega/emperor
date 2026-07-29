@@ -97,7 +97,12 @@ class LanguageModelExperiment(LightningModule):
                 "LanguageModelExperiment batches must contain (input_ids, labels)."
             )
         tokens, targets = batch
-        if tokens.ndim != 2 or targets.ndim != 2:
+        if (
+            not isinstance(tokens, Tensor)
+            or not isinstance(targets, Tensor)
+            or tokens.ndim != 2
+            or targets.ndim != 2
+        ):
             raise ValueError(
                 "Language-model input IDs and labels must be rank-2 tensors."
             )

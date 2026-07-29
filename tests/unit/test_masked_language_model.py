@@ -1,5 +1,6 @@
 import math
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -215,6 +216,56 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
                 )
                 with self.assertRaisesRegex(ValueError, "auxiliary loss"):
                     model._model_step(batch)
+
+    def test_invalid_model_output_contract_is_rejected_at_the_mlm_seam(self) -> None:
+        cfg = self.preset(output_dim=3)
+        logits = torch.zeros(2, 3, cfg.output_dim)
+        input_ids = torch.tensor([[1, 2, 3], [3, 2, 1]])
+        labels = torch.tensor([[0, 1, 2], [2, 1, 0]])
+        model = StaticMaskedLanguageModel(cfg, logits)
+        invalid_outputs = (
+            ((logits,), "two-item tuple"),
+            ((logits, torch.tensor(0.0), torch.tensor(0.0)), "two-item tuple"),
+            ("not logits", "MLM logits"),
+            ((logits[:, 0], torch.ones(2)), "rank-3 tensor"),
+            (logits[:1], "logits and labels"),
+            (logits[..., :-1], "vocabulary dimension"),
+        )
+
+        for output, message in invalid_outputs:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", return_value=output),
+                patch.object(
+                    model.loss_fn,
+                    "forward",
+                    wraps=model.loss_fn.forward,
+                ) as loss,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step((input_ids, labels))
+            loss.assert_not_called()
+
+    def test_invalid_mlm_batch_geometry_is_rejected_before_forward(self) -> None:
+        cfg = self.preset(output_dim=3)
+        logits = torch.zeros(2, 3, cfg.output_dim)
+        model = StaticMaskedLanguageModel(cfg, logits)
+        input_ids = torch.tensor([[1, 2, 3], [3, 2, 1]])
+        labels = torch.tensor([[0, 1, 2], [2, 1, 0]])
+        invalid_batches = (
+            (("not input IDs", labels), "rank-2 tensors"),
+            ((input_ids, labels[:, :2]), "equal shapes"),
+            ((input_ids, labels, torch.ones(2, 2)), "attention mask"),
+        )
+
+        for batch, message in invalid_batches:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", wraps=model.forward) as forward,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step(batch)
+            forward.assert_not_called()
 
     def test_configure_optimizers_returns_adam_for_model_parameters(self):
         cfg = self.preset(learning_rate=3e-4, output_dim=3)

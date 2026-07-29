@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -431,6 +432,56 @@ class TestClassifierMetricsLogger(unittest.TestCase):
                 model = InvalidAuxiliaryClassifier(auxiliary_loss)
                 with self.assertRaisesRegex(ValueError, "auxiliary loss"):
                     model._model_step(batch)
+
+    def test_invalid_model_output_contract_is_rejected_at_the_classifier_seam(
+        self,
+    ) -> None:
+        model = HealthProbeClassifier()
+        inputs = torch.ones(2, 1)
+        labels = torch.tensor([0, 1])
+        logits = torch.zeros(2, 2)
+        invalid_outputs = (
+            ((logits,), "two-item tuple"),
+            ((logits, torch.tensor(0.0), torch.tensor(0.0)), "two-item tuple"),
+            ("not logits", "rank-2 tensor"),
+            ((logits.unsqueeze(0), torch.ones(2)), "rank-2 tensor"),
+            (logits[:1], "batch dimension"),
+            (torch.zeros(2, 3), "class dimension"),
+        )
+
+        for output, message in invalid_outputs:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", return_value=output),
+                patch.object(
+                    model.loss_fn,
+                    "forward",
+                    wraps=model.loss_fn.forward,
+                ) as loss,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step((inputs, labels))
+            loss.assert_not_called()
+
+    def test_invalid_classifier_batch_geometry_is_rejected_before_forward(self) -> None:
+        model = HealthProbeClassifier()
+        inputs = torch.ones(2, 1)
+        labels = torch.tensor([0, 1])
+        invalid_batches = (
+            ((inputs,), "must contain"),
+            (("not inputs", labels), "input must be a tensor"),
+            ((inputs, labels.unsqueeze(1)), "rank-1 tensor"),
+            ((inputs[:1], labels), "batch dimension"),
+        )
+
+        for batch, message in invalid_batches:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", wraps=model.forward) as forward,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step(batch)
+            forward.assert_not_called()
 
     def _discard_log(self, payload, **kwargs):
         pass
