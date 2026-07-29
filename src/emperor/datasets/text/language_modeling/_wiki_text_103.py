@@ -55,9 +55,12 @@ class WikiText103(DataModule):
             specials=["<unk>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        WikiText103.vocab_size = len(self.vocab)
-        WikiText103.flattened_input_dim = len(self.vocab)
-        WikiText103.num_classes = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            flattened_input_dim=resolved_vocab_size,
+            num_classes=resolved_vocab_size,
+        )
 
     def _build_dataset(self, data_iter) -> torch.utils.data.TensorDataset:
         tokens = [self.vocab[t] for text in data_iter for t in self.tokenizer(text)]

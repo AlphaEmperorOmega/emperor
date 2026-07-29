@@ -88,9 +88,12 @@ class _TorchTextMaskedLanguageModeling(DataModule):
             specials=BERT_SPECIAL_TOKENS,
         )
         self.special_token_ids = set_bert_default_index(self.vocab)
-        type(self).vocab_size = len(self.vocab)
-        type(self).flattened_input_dim = len(self.vocab)
-        type(self).num_classes = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            flattened_input_dim=resolved_vocab_size,
+            num_classes=resolved_vocab_size,
+        )
         self.collator = MaskedLanguageModelingCollator(
             special_token_ids=self.special_token_ids,
             vocab_size=len(self.vocab),

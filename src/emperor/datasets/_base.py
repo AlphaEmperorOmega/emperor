@@ -1,6 +1,7 @@
 import torch
 from lightning import LightningDataModule
 
+from emperor.datasets._metadata import _ResolvedDatasetMetadata
 from emperor.datasets._visualization import show_images
 
 
@@ -22,6 +23,24 @@ class DataModule(LightningDataModule):
         super().__init__()
         self.root = root
         self.num_workers = num_workers
+        self._resolved_metadata = _ResolvedDatasetMetadata()
+
+    @property
+    def resolved_metadata(self) -> _ResolvedDatasetMetadata:
+        return self._resolved_metadata
+
+    def _resolve_metadata(
+        self,
+        *,
+        vocab_size: int | None = None,
+        num_classes: int | None = None,
+        flattened_input_dim: int | None = None,
+    ) -> None:
+        self._resolved_metadata = self._resolved_metadata.resolve(
+            vocab_size=vocab_size,
+            num_classes=num_classes,
+            flattened_input_dim=flattened_input_dim,
+        )
 
     def setup(self, stage: str | None = None) -> None:
         if stage is None:

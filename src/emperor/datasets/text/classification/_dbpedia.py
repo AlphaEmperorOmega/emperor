@@ -62,8 +62,12 @@ class DBpedia(DataModule):
             specials=["<unk>", "<pad>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        DBpedia.vocab_size = len(self.vocab)
-        DBpedia.flattened_input_dim = len(self.vocab)
+        resolved_vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=resolved_vocab_size,
+            flattened_input_dim=resolved_vocab_size,
+            num_classes=self.num_classes,
+        )
 
     def _build_dataset(self, data_iter) -> torch.utils.data.TensorDataset:
         inputs, labels = [], []

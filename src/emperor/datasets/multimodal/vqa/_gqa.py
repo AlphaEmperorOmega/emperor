@@ -111,14 +111,16 @@ class GQA(DataModule):
             specials=["<unk>", "<pad>"],
         )
         self.question_vocab.set_default_index(self.question_vocab["<unk>"])
-        GQA.vocab_size = len(self.question_vocab)
         # answer vocab — top-N most common answers
         answer_counts = Counter(q["answer"] for q in questions.values())
         top_answers = [
             ans for ans, _ in answer_counts.most_common(self.num_answer_classes)
         ]
         self.answer_vocab = {ans: idx for idx, ans in enumerate(top_answers)}
-        GQA.num_classes = len(self.answer_vocab)
+        self._resolve_metadata(
+            vocab_size=len(self.question_vocab),
+            num_classes=len(self.answer_vocab),
+        )
 
     def _build_samples(self, questions: dict) -> list:
         samples = []

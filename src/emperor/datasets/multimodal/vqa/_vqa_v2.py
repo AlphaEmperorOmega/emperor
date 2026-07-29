@@ -141,7 +141,6 @@ class VQAv2(DataModule):
             specials=["<unk>", "<pad>"],
         )
         self.question_vocab.set_default_index(self.question_vocab["<unk>"])
-        VQAv2.vocab_size = len(self.question_vocab)
         # answer vocab — top-N most common answers
         answer_counts = Counter(
             a["multiple_choice_answer"] for a in annotations.values()
@@ -150,7 +149,10 @@ class VQAv2(DataModule):
             ans for ans, _ in answer_counts.most_common(self.num_answer_classes)
         ]
         self.answer_vocab = {ans: idx for idx, ans in enumerate(top_answers)}
-        VQAv2.num_classes = len(self.answer_vocab)
+        self._resolve_metadata(
+            vocab_size=len(self.question_vocab),
+            num_classes=len(self.answer_vocab),
+        )
 
     def _build_samples(
         self,
