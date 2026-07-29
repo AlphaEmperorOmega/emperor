@@ -7,6 +7,8 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+
 from ._metrics import _corpus_bleu, _translation_step_metrics
 from ._records import TranslationBatch, TranslationStepOutput
 
@@ -44,6 +46,7 @@ class TranslationExperiment(LightningModule):
         self._validation_references: list[str] = []
         self._test_predictions: list[str] = []
         self._test_references: list[str] = []
+        self._auxiliary_loss = AuxiliaryLoss("Translation")
 
     def training_step(self, batch: TranslationBatch, batch_idx: int) -> Tensor:
         output = self._model_step_outputs(batch)
@@ -94,8 +97,10 @@ class TranslationExperiment(LightningModule):
         target_input_ids = target_ids[:, :-1]
         labels = target_ids[:, 1:]
         logits, auxiliary_loss = self(source_ids, target_input_ids)
-        if auxiliary_loss is None:
-            auxiliary_loss = logits.new_zeros(())
+        auxiliary_loss = self._auxiliary_loss.resolve(
+            auxiliary_loss,
+            reference=logits,
+        )
         flat_logits = logits.reshape(-1, logits.size(-1))
         flat_labels = labels.reshape(-1)
         smoothed_loss = self.loss_fn(flat_logits, flat_labels)

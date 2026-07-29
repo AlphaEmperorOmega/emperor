@@ -53,6 +53,58 @@ class StaticBertPretrainingExperiment(BertPretrainingExperiment):
         )
 
 
+class GraphAuxiliaryBertPretrainingExperiment(StaticBertPretrainingExperiment):
+    def __init__(
+        self,
+        cfg: ModelConfig,
+        mlm_logits: torch.Tensor,
+        nsp_logits: torch.Tensor,
+    ) -> None:
+        super().__init__(cfg, mlm_logits, nsp_logits, None)
+        self.auxiliary_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor,
+    ):
+        mlm_logits, nsp_logits, _auxiliary_loss = super().forward(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
+        auxiliary_loss = self.auxiliary_scale - self.auxiliary_scale.detach()
+        return mlm_logits, nsp_logits, auxiliary_loss
+
+
+class InvalidAuxiliaryBertPretrainingExperiment(StaticBertPretrainingExperiment):
+    def __init__(
+        self,
+        cfg: ModelConfig,
+        mlm_logits: torch.Tensor,
+        nsp_logits: torch.Tensor,
+        auxiliary_loss: object,
+    ) -> None:
+        super().__init__(cfg, mlm_logits, nsp_logits, None)
+        self.invalid_auxiliary_loss = auxiliary_loss
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        *,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor,
+    ):
+        mlm_logits, nsp_logits, _auxiliary_loss = super().forward(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )
+        return mlm_logits, nsp_logits, self.invalid_auxiliary_loss
+
+
 class TestBertPretrainingExperiment(unittest.TestCase):
     def preset(self, output_dim: int = 6) -> ModelConfig:
         return ModelConfig(learning_rate=2e-4, output_dim=output_dim)
@@ -218,6 +270,31 @@ class TestBertPretrainingExperiment(unittest.TestCase):
                 )
                 output = model._model_step_outputs(batch)
                 torch.testing.assert_close(output.total_loss, expected)
+
+    def test_zero_valued_auxiliary_loss_preserves_its_gradient_path(self) -> None:
+        mlm_logits, nsp_logits, batch = self.deterministic_inputs()
+        model = GraphAuxiliaryBertPretrainingExperiment(
+            self.preset(),
+            mlm_logits,
+            nsp_logits,
+        )
+
+        model._model_step(batch).backward()
+
+        torch.testing.assert_close(model.auxiliary_scale.grad, torch.tensor(1.0))
+
+    def test_non_scalar_or_non_tensor_auxiliary_loss_is_rejected(self) -> None:
+        mlm_logits, nsp_logits, batch = self.deterministic_inputs()
+        for auxiliary_loss in (torch.ones(2), 0.5):
+            with self.subTest(auxiliary_loss=auxiliary_loss):
+                model = InvalidAuxiliaryBertPretrainingExperiment(
+                    self.preset(),
+                    mlm_logits,
+                    nsp_logits,
+                    auxiliary_loss,
+                )
+                with self.assertRaisesRegex(ValueError, "auxiliary loss"):
+                    model._model_step(batch)
 
     def test_gradient_and_optimizer_cover_trainable_model_state(self) -> None:
         mlm_logits, nsp_logits, batch = self.deterministic_inputs()

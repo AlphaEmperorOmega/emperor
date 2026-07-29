@@ -5,6 +5,8 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+
 from ._metrics import ClassifierMetricsLogger
 
 if TYPE_CHECKING:
@@ -19,6 +21,7 @@ class ClassifierExperiment(LightningModule):
         self.num_classes = self.cfg.output_dim
         self.loss_fn = nn.CrossEntropyLoss()
         self.metrics = ClassifierMetricsLogger(self.num_classes)
+        self._auxiliary_loss = AuxiliaryLoss("Classifier")
 
     def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:
         loss, logits, Y = self._model_step(batch)
@@ -66,12 +69,16 @@ class ClassifierExperiment(LightningModule):
         output = self(X)
         if isinstance(output, tuple):
             logits, auxiliary_loss = output[0], output[-1]
-            loss = self.loss_fn(logits, Y)
-            if auxiliary_loss is not None:
-                loss = loss + auxiliary_loss
         else:
             logits = output
-            loss = self.loss_fn(logits, Y)
+            auxiliary_loss = None
+        task_loss = self.loss_fn(logits, Y)
+        loss = task_loss
+        if auxiliary_loss is not None:
+            loss = task_loss + self._auxiliary_loss.resolve(
+                auxiliary_loss,
+                reference=task_loss,
+            )
         return loss, logits, Y
 
     def configure_optimizers(self):
