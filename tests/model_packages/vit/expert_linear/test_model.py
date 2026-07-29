@@ -224,7 +224,7 @@ class TestVitExpertLinearModel(unittest.TestCase):
         )
 
         try:
-            loss, logits, returned_labels = model._model_step((images, labels))
+            output = model._model_step((images, labels))
         finally:
             hook.remove()
 
@@ -233,10 +233,10 @@ class TestVitExpertLinearModel(unittest.TestCase):
         auxiliary_loss = captured_outputs[0][-1]
         self.assertGreater(auxiliary_loss.item(), 0.0)
         torch.testing.assert_close(
-            loss,
-            model.loss_fn(logits, labels) + auxiliary_loss,
+            output.total_loss,
+            model.loss_fn(output.logits, labels) + auxiliary_loss,
         )
-        torch.testing.assert_close(returned_labels, labels)
+        torch.testing.assert_close(output.labels, labels)
 
     def test_attention_kv_modes_forward_backward(self):
         cases = (
