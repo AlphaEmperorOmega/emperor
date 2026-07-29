@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import patch
 
 import torch
@@ -11,6 +12,9 @@ from emperor.experiments.sequence_classifier import (
 )
 from emperor.experiments.sequence_classifier._metrics import (
     SequenceClassifierMetricsLogger,
+)
+from emperor.experiments.sequence_classifier._records import (
+    SequenceClassifierStepOutput,
 )
 
 
@@ -66,6 +70,23 @@ class InvalidAuxiliarySequenceClassifier(StaticSequenceClassifier):
 class TestSequenceClassifierExperiment(unittest.TestCase):
     def preset(self, output_dim: int = 3) -> ModelConfig:
         return ModelConfig(learning_rate=3e-4, output_dim=output_dim)
+
+    def test_step_output_is_a_frozen_named_record_of_current_step_facts(self) -> None:
+        total_loss = torch.tensor(1.0, requires_grad=True)
+        logits = torch.randn(2, 3, requires_grad=True)
+        labels = torch.tensor([0, 2])
+
+        output = SequenceClassifierStepOutput(total_loss, logits, labels)
+
+        self.assertEqual(
+            tuple(field.name for field in fields(output)),
+            ("total_loss", "logits", "labels"),
+        )
+        self.assertIs(output.total_loss, total_loss)
+        self.assertIs(output.logits, logits)
+        self.assertIs(output.labels, labels)
+        with self.assertRaises(FrozenInstanceError):
+            output.total_loss = torch.tensor(2.0)
 
     def deterministic_batch(self):
         logits = torch.tensor(
@@ -157,13 +178,11 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
                     auxiliary_loss,
                     tuple_output=tuple_output,
                 )
-                loss, observed_logits, observed_labels = model._model_step(
-                    (tokens, labels)
-                )
+                output = model._model_step((tokens, labels))
 
-                torch.testing.assert_close(loss, expected_loss)
-                torch.testing.assert_close(observed_logits, logits)
-                torch.testing.assert_close(observed_labels, labels)
+                torch.testing.assert_close(output.total_loss, expected_loss)
+                torch.testing.assert_close(output.logits, logits)
+                torch.testing.assert_close(output.labels, labels)
                 torch.testing.assert_close(model.forward_calls[0], tokens)
 
     def test_gradient_and_optimizer_cover_trainable_model_state(self) -> None:
@@ -174,8 +193,8 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
             torch.tensor(0.1),
         )
 
-        loss, _logits, _labels = model._model_step((tokens, labels))
-        loss.backward()
+        output = model._model_step((tokens, labels))
+        output.total_loss.backward()
         optimizer = model.configure_optimizers()
 
         self.assertIsNotNone(model.scale.grad)
@@ -191,8 +210,8 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
         logits, tokens, labels = self.deterministic_batch()
         model = GraphAuxiliarySequenceClassifier(self.preset(), logits)
 
-        loss, _logits, _labels = model._model_step((tokens, labels))
-        loss.backward()
+        output = model._model_step((tokens, labels))
+        output.total_loss.backward()
 
         torch.testing.assert_close(model.auxiliary_scale.grad, torch.tensor(1.0))
 
@@ -259,6 +278,7 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
         logits, tokens, labels = self.deterministic_batch()
         model = StaticSequenceClassifier(self.preset(), logits)
         loss = torch.tensor(0.5)
+        output = SequenceClassifierStepOutput(loss, logits, labels)
 
         for step_name, log_name in (
             ("training_step", "log_training_step"),
@@ -270,7 +290,7 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
                 patch.object(
                     model,
                     "_model_step",
-                    return_value=(loss, logits, labels),
+                    return_value=output,
                 ),
                 patch.object(model.metrics, log_name) as log_method,
             ):
@@ -278,16 +298,12 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
 
                 self.assertIs(result, loss)
                 log_method.assert_called_once()
-                logged_loss, logged_logits, logged_labels = log_method.call_args.args[
-                    1:
-                ]
-                self.assertIs(logged_loss, loss)
-                self.assertIs(logged_logits, logits)
-                self.assertIs(logged_labels, labels)
+                self.assertIs(log_method.call_args.args[1], output)
 
     def test_metric_payloads_have_exact_stage_keys_and_values(self) -> None:
         logits, _tokens, labels = self.deterministic_batch()
         loss = torch.tensor(0.5)
+        output = SequenceClassifierStepOutput(loss, logits, labels)
 
         for stage, method_name, expected_kwargs in (
             ("train", "log_training_step", {"prog_bar": True}),
@@ -301,9 +317,7 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
                     lambda payload, calls=calls, **kwargs: calls.append(
                         (payload, kwargs)
                     ),
-                    loss,
-                    logits,
-                    labels,
+                    output,
                 )
 
                 payload, kwargs = calls[0]

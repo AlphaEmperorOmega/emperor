@@ -2,7 +2,8 @@ from collections.abc import Callable
 
 import torch.nn as nn
 import torchmetrics
-from torch import Tensor
+
+from ._records import SequenceClassifierStepOutput
 
 
 class SequenceClassifierMetricsLogger(nn.Module):
@@ -27,23 +28,27 @@ class SequenceClassifierMetricsLogger(nn.Module):
         )
 
     def log_training_step(
-        self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
+        self, log_fn: Callable, output: SequenceClassifierStepOutput
     ) -> None:
-        accuracy = self.train_accuracy(logits, Y)
-        f1score = self.train_f1_score(logits, Y)
+        accuracy = self.train_accuracy(output.logits, output.labels)
+        f1score = self.train_f1_score(output.logits, output.labels)
         log_fn(
-            {"train/loss": loss, "train/accuracy": accuracy, "train/f1_score": f1score},
+            {
+                "train/loss": output.total_loss,
+                "train/accuracy": accuracy,
+                "train/f1_score": f1score,
+            },
             prog_bar=True,
         )
 
     def log_validation_step(
-        self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
+        self, log_fn: Callable, output: SequenceClassifierStepOutput
     ) -> None:
-        accuracy = self.validation_accuracy(logits, Y)
-        f1score = self.validation_f1_score(logits, Y)
+        accuracy = self.validation_accuracy(output.logits, output.labels)
+        f1score = self.validation_f1_score(output.logits, output.labels)
         log_fn(
             {
-                "validation/loss": loss,
+                "validation/loss": output.total_loss,
                 "validation/accuracy": accuracy,
                 "validation/f1_score": f1score,
             },
@@ -51,10 +56,14 @@ class SequenceClassifierMetricsLogger(nn.Module):
         )
 
     def log_test_step(
-        self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
+        self, log_fn: Callable, output: SequenceClassifierStepOutput
     ) -> None:
-        accuracy = self.test_accuracy(logits, Y)
-        f1score = self.test_f1_score(logits, Y)
+        accuracy = self.test_accuracy(output.logits, output.labels)
+        f1score = self.test_f1_score(output.logits, output.labels)
         log_fn(
-            {"test/loss": loss, "test/accuracy": accuracy, "test/f1_score": f1score},
+            {
+                "test/loss": output.total_loss,
+                "test/accuracy": accuracy,
+                "test/f1_score": f1score,
+            },
         )

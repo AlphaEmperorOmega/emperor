@@ -24,8 +24,7 @@ def _optimize_fixed_batch(model, batch, steps: int) -> tuple[float, float]:
 
 
 def _classifier_loss(model, batch) -> torch.Tensor:
-    result = model._model_step(batch)
-    return result[0] if isinstance(result, tuple) else result
+    return model._model_step(batch).total_loss
 
 
 class TestModelLearningAcceptance(unittest.TestCase):

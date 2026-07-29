@@ -5,6 +5,8 @@ from torch import Tensor
 
 from emperor.experiments._perplexity import Perplexity
 
+from ._records import MaskedLanguageModelStepOutput
+
 
 class MaskedLanguageModelMetricsLogger(nn.Module):
     def __init__(self):
@@ -14,86 +16,52 @@ class MaskedLanguageModelMetricsLogger(nn.Module):
     def log_training_step(
         self,
         log_fn: Callable,
-        loss: Tensor,
-        token_loss: Tensor,
-        logits: Tensor,
-        labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        output: MaskedLanguageModelStepOutput,
     ) -> None:
         log_fn(
-            self._payload(
-                "train",
-                loss,
-                token_loss,
-                logits,
-                labels,
-                auxiliary_loss,
-            ),
+            self._payload("train", output),
             prog_bar=True,
         )
 
     def log_validation_step(
         self,
         log_fn: Callable,
-        loss: Tensor,
-        token_loss: Tensor,
-        logits: Tensor,
-        labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        output: MaskedLanguageModelStepOutput,
     ) -> None:
         log_fn(
-            self._payload(
-                "validation",
-                loss,
-                token_loss,
-                logits,
-                labels,
-                auxiliary_loss,
-            ),
+            self._payload("validation", output),
             prog_bar=True,
         )
 
     def log_test_step(
         self,
         log_fn: Callable,
-        loss: Tensor,
-        token_loss: Tensor,
-        logits: Tensor,
-        labels: Tensor,
-        auxiliary_loss: Tensor | None = None,
+        output: MaskedLanguageModelStepOutput,
     ) -> None:
-        log_fn(
-            self._payload(
-                "test",
-                loss,
-                token_loss,
-                logits,
-                labels,
-                auxiliary_loss,
-            ),
-        )
+        log_fn(self._payload("test", output))
 
     def _payload(
         self,
         stage: str,
-        loss: Tensor,
-        token_loss: Tensor,
-        logits: Tensor,
-        labels: Tensor,
-        auxiliary_loss: Tensor | None,
+        output: MaskedLanguageModelStepOutput,
     ) -> dict[str, Tensor]:
         payload: dict[str, Tensor] = {
-            f"{stage}/loss": loss,
-            f"{stage}/perplexity": self._perplexity.from_token_loss(token_loss),
-            f"{stage}/masked/accuracy": self._masked_accuracy(logits, labels),
+            f"{stage}/loss": output.total_loss,
+            f"{stage}/perplexity": self._perplexity.from_token_loss(
+                output.cross_entropy
+            ),
+            f"{stage}/masked/accuracy": self._masked_accuracy(
+                output.logits,
+                output.labels,
+            ),
             f"{stage}/masked/top_5_accuracy": self._masked_top_k_accuracy(
-                logits,
-                labels,
+                output.logits,
+                output.labels,
                 k=5,
             ),
         }
-        if auxiliary_loss is not None:
-            payload[f"{stage}/auxiliary/loss"] = auxiliary_loss
+        if output.auxiliary_loss is not None:
+            payload[f"{stage}/auxiliary/loss"] = output.auxiliary_loss
         return payload
 
     def _masked_accuracy(self, logits: Tensor, labels: Tensor) -> Tensor:

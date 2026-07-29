@@ -8,6 +8,7 @@ from torch import Tensor
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
 
 from ._metrics import SequenceClassifierMetricsLogger
+from ._records import SequenceClassifierBatch, SequenceClassifierStepOutput
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -23,38 +24,40 @@ class SequenceClassifierExperiment(LightningModule):
         self.metrics = SequenceClassifierMetricsLogger(self.num_classes)
         self._auxiliary_loss = AuxiliaryLoss("Sequence-classifier")
 
-    def training_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
-        loss, logits, Y = self._model_step(batch)
-        self.metrics.log_training_step(self.log_dict, loss, logits, Y)
-        return loss
+    def training_step(self, batch: SequenceClassifierBatch, batch_idx: int) -> Tensor:
+        output = self._model_step(batch)
+        self.metrics.log_training_step(self.log_dict, output)
+        return output.total_loss
 
-    def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
-        loss, logits, Y = self._model_step(batch)
-        self.metrics.log_validation_step(self.log_dict, loss, logits, Y)
-        return loss
+    def validation_step(
+        self, batch: SequenceClassifierBatch, batch_idx: int
+    ) -> Tensor:
+        output = self._model_step(batch)
+        self.metrics.log_validation_step(self.log_dict, output)
+        return output.total_loss
 
-    def test_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
-        loss, logits, Y = self._model_step(batch)
-        self.metrics.log_test_step(self.log_dict, loss, logits, Y)
-        return loss
+    def test_step(self, batch: SequenceClassifierBatch, batch_idx: int) -> Tensor:
+        output = self._model_step(batch)
+        self.metrics.log_test_step(self.log_dict, output)
+        return output.total_loss
 
     def _model_step(
-        self, batch: tuple[Tensor, Tensor]
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        tokens, Y = self._unpack_batch(batch)
+        self, batch: SequenceClassifierBatch
+    ) -> SequenceClassifierStepOutput:
+        tokens, labels = self._unpack_batch(batch)
         tokens = tokens.to(self.device)
         logits, resolved_auxiliary_loss = self._validate_model_output(
             self(tokens),
-            Y,
+            labels,
         )
-        task_loss = self.loss_fn(logits, Y)
+        task_loss = self.loss_fn(logits, labels)
         loss = task_loss
         if resolved_auxiliary_loss is not None:
             loss = task_loss + resolved_auxiliary_loss
-        return loss, logits, Y
+        return SequenceClassifierStepOutput(loss, logits, labels)
 
     @staticmethod
-    def _unpack_batch(batch: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+    def _unpack_batch(batch: SequenceClassifierBatch) -> SequenceClassifierBatch:
         if len(batch) != 2:
             raise ValueError(
                 "SequenceClassifierExperiment batches must contain (tokens, labels)."
