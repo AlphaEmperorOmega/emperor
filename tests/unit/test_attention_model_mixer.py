@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 from dataclasses import dataclass, fields
 
@@ -7,6 +8,8 @@ from emperor.attention import (
     AttentionMonitorCallback,
     IndependentAttentionConfig,
     MixerAttentionConfig,
+    MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
 )
 from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._variants.mixer.layer import MixerAttention
@@ -308,12 +311,64 @@ class TestMixerAttention(unittest.TestCase):
         model = config.build()
 
         self.assertIsInstance(model, MixerAttention)
-        self.assertIsInstance(model, MultiHeadAttentionAbstract)
+        self.assertIsInstance(model, Module)
+        self.assertNotIsInstance(model, MultiHeadAttentionAbstract)
+        self.assertIs(MixerAttention.__base__, Module)
         self.assertIs(config._registry_owner(), MixerAttention)
         self.assertEqual(model.mixing_model.input_dim, 3)
         self.assertEqual(model.mixing_model.output_dim, 3)
         self.assertFalse(hasattr(model, "projector"))
         self.assertFalse(hasattr(model, "processor"))
+
+    def test_construction_preserves_exact_module_and_state_fingerprint(self):
+        with torch.random.fork_rng():
+            torch.manual_seed(1501)
+            model = _mixer_config(embedding_dim=2, sequence_length=3).build()
+            rng_digest = hashlib.sha256(
+                torch.random.get_rng_state().numpy().tobytes()
+            ).hexdigest()
+
+        self.assertEqual(
+            tuple(name for name, _module in model.named_modules()),
+            (
+                "",
+                "mixing_model",
+                "mixing_model.layers",
+                "mixing_model.layers.0",
+                "mixing_model.layers.0.model",
+            ),
+        )
+        expected_state_topology = (
+            (
+                "mixing_model.layers.0.model.weight_params",
+                (3, 3),
+                torch.float32,
+            ),
+            (
+                "mixing_model.layers.0.model.bias_params",
+                (3,),
+                torch.float32,
+            ),
+        )
+        self.assertEqual(
+            tuple(
+                (name, tuple(parameter.shape), parameter.dtype)
+                for name, parameter in model.named_parameters()
+            ),
+            expected_state_topology,
+        )
+        self.assertEqual(tuple(model.named_buffers()), ())
+        self.assertEqual(
+            tuple(
+                (name, tuple(value.shape), value.dtype)
+                for name, value in model.state_dict().items()
+            ),
+            expected_state_topology,
+        )
+        self.assertEqual(
+            rng_digest,
+            "93a4e3e6d1d4e9801db1130f979631d567d712187ffdbbfb0a6779324a13374c",
+        )
 
     def test_batch_and_sequence_first_match_direct_token_axis_reference(self):
         weight = torch.tensor(
@@ -711,6 +766,64 @@ class TestMixerAttention(unittest.TestCase):
         self.assertIn("attention/attention/output_norm", host.logged)
         self.assertNotIn("attention/attention/q_norm_mean", host.logged)
         self.assertNotIn("attention/attention/entropy_mean", host.logged)
+        monitor.on_fit_end(object(), host)
+
+    def test_attention_monitor_discovers_every_supported_family_member_once(self):
+        attention_config_kwargs = {
+            "batch_size": 1,
+            "num_heads": 1,
+            "embedding_dim": 2,
+            "target_sequence_length": 2,
+            "source_sequence_length": 2,
+            "experts_top_k": 1,
+            "experts_num_experts": 2,
+            "experts_stack_num_layers": 1,
+        }
+        host = torch.nn.Module()
+        host.self_attention = build_attention_config(
+            config_class=SelfAttentionConfig,
+            **attention_config_kwargs,
+        ).build()
+        host.independent_attention = build_attention_config(
+            config_class=IndependentAttentionConfig,
+            **attention_config_kwargs,
+        ).build()
+        host.mixture_attention = build_attention_config(
+            config_class=MixtureOfAttentionHeadsConfig,
+            **attention_config_kwargs,
+        ).build()
+        host.mixer_attention = _mixer_config(
+            embedding_dim=2,
+            sequence_length=2,
+        ).build()
+        host.unrelated = torch.nn.Linear(2, 2)
+        monitor = AttentionMonitorCallback(log_every_n_steps=1)
+
+        for multi_head_attention in (
+            host.self_attention,
+            host.independent_attention,
+            host.mixture_attention,
+        ):
+            self.assertIsInstance(
+                multi_head_attention,
+                MultiHeadAttentionAbstract,
+            )
+        self.assertNotIsInstance(
+            host.mixer_attention,
+            MultiHeadAttentionAbstract,
+        )
+
+        monitor.on_fit_start(object(), host)
+
+        self.assertEqual(
+            monitor._tracker_manager.module_names,
+            (
+                "self_attention",
+                "independent_attention",
+                "mixture_attention",
+                "mixer_attention",
+            ),
+        )
         monitor.on_fit_end(object(), host)
 
 
