@@ -8,6 +8,8 @@ from emperor.datasets.text._bert_vocabulary import (
     get_bert_special_token_ids,
     set_bert_default_index,
 )
+from emperor.datasets.text._masked_token_policy import _MaskedTokenPolicy
+from emperor.datasets.text.bert_pretraining._collation import BertPretrainingCollator
 from emperor.datasets.text.masked_language_modeling._collation import (
     MaskedLanguageModelingCollator,
 )
@@ -234,8 +236,118 @@ class TestMaskedLanguageModelingCollator(unittest.TestCase):
         self.assertTrue(torch.all(labels == -100))
 
     def test_rejects_invalid_probability_configuration(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"mask_replace_probability \+ random_replace_probability must be <= 1.0",
+        ):
             self.collator(mask_replace_probability=0.8, random_replace_probability=0.3)
+
+        for field in (
+            "mlm_probability",
+            "mask_replace_probability",
+            "random_replace_probability",
+        ):
+            for value in (-0.1, 1.1):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"{field} must be between 0.0 and 1.0",
+                    ):
+                        MaskedLanguageModelingCollator(
+                            special_token_ids=self.preset(),
+                            vocab_size=12,
+                            **{field: value},
+                        )
+
+    def test_rejects_vocab_without_non_special_range(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "vocab_size must be greater than every BERT special token id",
+        ):
+            MaskedLanguageModelingCollator(
+                special_token_ids=self.preset(),
+                vocab_size=4,
+            )
+
+    def test_standalone_input_coercion_and_errors_remain_local(self):
+        tokens = torch.tensor([5, 6, 7])
+        for sample in (tokens, [tokens], [(tokens,)]):
+            with self.subTest(sample_type=type(sample).__name__):
+                input_ids, labels, attention_mask = self.collator()(sample)
+                self.assertEqual(input_ids.shape, torch.Size([1, 3]))
+                self.assertEqual(labels.shape, torch.Size([1, 3]))
+                self.assertEqual(attention_mask.shape, torch.Size([1, 3]))
+
+        with self.assertRaisesRegex(ValueError, "received no samples"):
+            self.collator()([])
+        with self.assertRaisesRegex(TypeError, "expects tensors"):
+            self.collator()([[5, 6, 7]])
+        with self.assertRaisesRegex(ValueError, "expects a 2D token tensor"):
+            self.collator()(torch.ones((1, 2, 3), dtype=torch.long))
+
+    def test_standalone_and_bert_callers_share_exact_rng_and_output_policy(self):
+        token_ids = torch.tensor(
+            [
+                [2, 5, 6, 3, 0, 7],
+                [2, 8, 9, 10, 3, 0],
+            ]
+        )
+        standalone_generator = torch.Generator().manual_seed(19)
+        bert_generator = torch.Generator().manual_seed(19)
+        standalone = self.collator(
+            mlm_probability=0.5,
+            mask_replace_probability=0.6,
+            random_replace_probability=0.2,
+            generator=standalone_generator,
+        )
+        bert = BertPretrainingCollator(
+            special_token_ids=self.preset(),
+            vocab_size=12,
+            mlm_probability=0.5,
+            mask_replace_probability=0.6,
+            random_replace_probability=0.2,
+            generator=bert_generator,
+        )
+        bert_batch = [
+            (row, torch.zeros_like(row), torch.tensor(index % 2))
+            for index, row in enumerate(token_ids)
+        ]
+
+        self.assertIsInstance(standalone.masked_token_policy, _MaskedTokenPolicy)
+        self.assertIsInstance(bert.masked_token_policy, _MaskedTokenPolicy)
+        for _ in range(2):
+            standalone_output = standalone(token_ids)
+            bert_output = bert(bert_batch)
+
+            for expected, actual in zip(
+                standalone_output,
+                bert_output[:3],
+                strict=True,
+            ):
+                torch.testing.assert_close(actual, expected)
+            self.assertTrue(
+                torch.equal(
+                    standalone_generator.get_state(),
+                    bert_generator.get_state(),
+                )
+            )
+
+    def test_policy_preserves_non_contiguous_input_and_original_values(self):
+        collator = self.collator(
+            mlm_probability=0.5,
+            generator=torch.Generator().manual_seed(23),
+        )
+        contiguous = torch.tensor([[5, 6], [7, 8], [9, 10]])
+        token_ids = contiguous.transpose(0, 1)
+        original = token_ids.clone()
+
+        input_ids, labels, attention_mask = collator(token_ids)
+
+        torch.testing.assert_close(token_ids, original)
+        self.assertEqual(input_ids.shape, token_ids.shape)
+        self.assertEqual(labels.shape, token_ids.shape)
+        self.assertEqual(attention_mask.shape, token_ids.shape)
+        self.assertEqual(input_ids.dtype, torch.long)
 
 
 class TestMaskedLanguageModelingDatasetPath(unittest.TestCase):
