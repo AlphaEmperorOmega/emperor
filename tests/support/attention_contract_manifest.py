@@ -296,7 +296,13 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("scaled dot-product math", "weights", "relative logits", "dropout"),
         "tests.unit.test_attention_processor",
         SelfAttentionProcessor=class_contract(
-            ("exact math", "weight formatting", "relative source topology"),
+            (
+                "raw masked logits",
+                "normalized weights",
+                "post-dropout weights",
+                "weight formatting",
+                "relative source topology",
+            ),
             "tests.unit.test_attention_processor",
         ),
     ),
@@ -367,7 +373,13 @@ ATTENTION_CONTRACT_MANIFEST = {
         ("expert attention equations", "relative logits", "dropout"),
         "tests.unit.test_attention_processor",
         MixtureOfAttentionHeadsProcessor=class_contract(
-            ("shared K/V math", "expert K/V math", "relative source topology"),
+            (
+                "shared K/V raw logits",
+                "expert K/V raw logits",
+                "normalized weights",
+                "post-dropout weights",
+                "relative source topology",
+            ),
             "tests.unit.test_attention_mixture_of_attention_heads",
         ),
     ),
