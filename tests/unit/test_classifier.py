@@ -7,8 +7,13 @@ import torch.nn as nn
 
 from emperor.config import ModelConfig
 from emperor.experiments.classifier import ClassifierExperiment
+from emperor.experiments.classifier._diagnostics import _ClassifierDiagnostics
+from emperor.experiments.classifier._epoch_metrics import _ClassifierEpochMetrics
 from emperor.experiments.classifier._metrics import ClassifierMetricsLogger
 from emperor.experiments.classifier._records import ClassifierStepOutput
+from emperor.experiments.classifier._validation_examples import (
+    _ClassifierValidationExamples,
+)
 
 
 class HealthProbeClassifier(ClassifierExperiment):
@@ -64,6 +69,14 @@ class FakeLogger:
         self.experiment = FakeTensorBoardExperiment()
 
 
+class TextOnlyExperiment:
+    def __init__(self):
+        self.text = []
+
+    def add_text(self, tag, text_string, global_step):
+        self.text.append((tag, text_string, global_step))
+
+
 class TestClassifierMetricsLogger(unittest.TestCase):
     @staticmethod
     def _step_output(
@@ -89,6 +102,78 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         self.assertIs(output.labels, labels)
         with self.assertRaises(FrozenInstanceError):
             output.total_loss = torch.tensor(2.0)
+
+    def test_private_metric_owners_preserve_registered_state_topology(self) -> None:
+        logger = ClassifierMetricsLogger(num_classes=3)
+        epoch_suffixes = (
+            "loss_total",
+            "correct",
+            "count",
+            "confidence_total",
+            "confidence_count",
+            "calibration_bin_confidence",
+            "calibration_bin_correct",
+            "calibration_bin_count",
+            "confusion_matrix",
+        )
+        expected_buffers = tuple(
+            f"_{stage}_{suffix}"
+            for stage in ("train", "validation")
+            for suffix in epoch_suffixes
+        ) + (
+            "_best_validation_accuracy",
+            "_best_validation_loss",
+            "_best_validation_accuracy_epoch",
+            "_best_validation_loss_epoch",
+        )
+
+        self.assertIsInstance(logger._epoch_metrics_owner, _ClassifierEpochMetrics)
+        self.assertIsInstance(logger._diagnostics_owner, _ClassifierDiagnostics)
+        self.assertIsInstance(
+            logger._validation_examples_owner,
+            _ClassifierValidationExamples,
+        )
+        self.assertNotIsInstance(logger._epoch_metrics_owner, nn.Module)
+        self.assertNotIsInstance(logger._diagnostics_owner, nn.Module)
+        self.assertNotIsInstance(logger._validation_examples_owner, nn.Module)
+        self.assertEqual(
+            tuple(dict(logger.named_children())),
+            (
+                "train_accuracy",
+                "train_f1_score",
+                "validation_accuracy",
+                "validation_f1_score",
+                "test_accuracy",
+                "test_f1_score",
+            ),
+        )
+        self.assertEqual(tuple(dict(logger.named_buffers())), expected_buffers)
+        self.assertEqual(logger._non_persistent_buffers_set, set(expected_buffers))
+        self.assertEqual(tuple(logger.state_dict()), ())
+
+    def test_epoch_owner_uses_current_buffers_after_dtype_conversion(self) -> None:
+        logger = ClassifierMetricsLogger(num_classes=2).to(dtype=torch.float64)
+        output = self._step_output(
+            torch.tensor(0.5, dtype=torch.float64),
+            torch.tensor([[4.0, 0.0], [0.0, 4.0]], dtype=torch.float64),
+            torch.tensor([0, 1]),
+        )
+
+        logger.log_training_step(self._discard_log, output)
+
+        state = logger._epoch_state("train")
+        diagnostic_state = logger._diagnostic_state("train")
+        self.assertIs(state.loss_total, logger._train_loss_total)
+        self.assertIs(
+            diagnostic_state.confusion_matrix,
+            logger._train_confusion_matrix,
+        )
+        self.assertEqual(state.loss_total.dtype, torch.float64)
+        self.assertEqual(diagnostic_state.confusion_matrix.dtype, torch.float64)
+        metrics = logger.train_epoch_metrics()
+        self.assertEqual(metrics["train/loss_epoch"].dtype, torch.float64)
+        self.assertEqual(metrics["train/accuracy_epoch"].dtype, torch.float64)
+        self.assertEqual(tuple(logger.state_dict()), ())
 
     def test_stage_steps_pass_the_owned_result_to_metrics_and_return_loss(self) -> None:
         model = HealthProbeClassifier()
@@ -447,6 +532,32 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         self.assertEqual(text_step, 7)
         self.assertIn("true=0 predicted=1 confidence=0.9500", text)
         self.assertIn("true=0 predicted=1 confidence=0.7000", text)
+
+    def test_validation_example_lifecycle_handles_partial_or_absent_loggers(self):
+        logger = ClassifierMetricsLogger(num_classes=2, validation_example_limit=1)
+        examples = torch.arange(8, dtype=torch.float32).reshape(2, 1, 2, 2)
+        output = self._step_output(
+            torch.tensor(0.5),
+            torch.tensor([[0.1, 0.9], [0.2, 0.8]]),
+            torch.tensor([0, 0]),
+        )
+        logger.log_validation_step(self._discard_log, output, examples)
+
+        logger.log_validation_examples(None, epoch=4)
+        text_only_experiment = TextOnlyExperiment()
+        text_only_logger = type(
+            "TextOnlyLogger",
+            (),
+            {"experiment": text_only_experiment},
+        )()
+        logger.log_validation_examples(text_only_logger, epoch=4)
+
+        self.assertEqual(len(text_only_experiment.text), 1)
+        self.assertIn("true=0 predicted=1", text_only_experiment.text[0][1])
+
+        logger.reset_validation_epoch()
+        logger.log_validation_examples(text_only_logger, epoch=5)
+        self.assertEqual(len(text_only_experiment.text), 1)
 
     def test_optimizer_health_metrics_report_norm_ratio_and_bad_gradient_counts(self):
         model = HealthProbeClassifier()
