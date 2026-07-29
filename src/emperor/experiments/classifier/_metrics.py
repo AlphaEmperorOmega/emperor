@@ -7,6 +7,8 @@ from torch import Tensor
 
 from emperor.monitoring import MonitorEmissionPolicy
 
+from ._records import ClassifierStepOutput
+
 DEFAULT_FULL_CONFUSION_MATRIX_CLASS_LIMIT = 20
 DEFAULT_TOP_CONFUSED_PAIR_LIMIT = 50
 
@@ -106,31 +108,37 @@ class ClassifierMetricsLogger(nn.Module):
         )
 
     def log_training_step(
-        self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
+        self, log_fn: Callable, output: ClassifierStepOutput
     ) -> None:
-        accuracy = self.train_accuracy(logits, Y)
-        f1score = self.train_f1_score(logits, Y)
-        self.update_train_epoch(loss, logits, Y)
+        accuracy = self.train_accuracy(output.logits, output.labels)
+        f1score = self.train_f1_score(output.logits, output.labels)
+        self.update_train_epoch(output.total_loss, output.logits, output.labels)
         log_fn(
-            {"train/loss": loss, "train/accuracy": accuracy, "train/f1_score": f1score},
+            {
+                "train/loss": output.total_loss,
+                "train/accuracy": accuracy,
+                "train/f1_score": f1score,
+            },
             prog_bar=True,
         )
 
     def log_validation_step(
         self,
         log_fn: Callable,
-        loss: Tensor,
-        logits: Tensor,
-        Y: Tensor,
+        output: ClassifierStepOutput,
         examples: Tensor | None = None,
     ) -> None:
-        accuracy = self.validation_accuracy(logits, Y)
-        f1score = self.validation_f1_score(logits, Y)
-        self.update_validation_epoch(loss, logits, Y)
-        self.update_validation_examples(examples, logits, Y)
+        accuracy = self.validation_accuracy(output.logits, output.labels)
+        f1score = self.validation_f1_score(output.logits, output.labels)
+        self.update_validation_epoch(
+            output.total_loss,
+            output.logits,
+            output.labels,
+        )
+        self.update_validation_examples(examples, output.logits, output.labels)
         log_fn(
             {
-                "validation/loss": loss,
+                "validation/loss": output.total_loss,
                 "validation/accuracy": accuracy,
                 "validation/f1_score": f1score,
             },
@@ -138,12 +146,16 @@ class ClassifierMetricsLogger(nn.Module):
         )
 
     def log_test_step(
-        self, log_fn: Callable, loss: Tensor, logits: Tensor, Y: Tensor
+        self, log_fn: Callable, output: ClassifierStepOutput
     ) -> None:
-        accuracy = self.test_accuracy(logits, Y)
-        f1score = self.test_f1_score(logits, Y)
+        accuracy = self.test_accuracy(output.logits, output.labels)
+        f1score = self.test_f1_score(output.logits, output.labels)
         log_fn(
-            {"test/loss": loss, "test/accuracy": accuracy, "test/f1_score": f1score},
+            {
+                "test/loss": output.total_loss,
+                "test/accuracy": accuracy,
+                "test/f1_score": f1score,
+            },
         )
 
     def update_train_epoch(self, loss: Tensor, logits: Tensor, Y: Tensor) -> None:

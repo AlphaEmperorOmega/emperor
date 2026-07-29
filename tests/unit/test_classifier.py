@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import patch
 
 import torch
@@ -7,6 +8,7 @@ import torch.nn as nn
 from emperor.config import ModelConfig
 from emperor.experiments.classifier import ClassifierExperiment
 from emperor.experiments.classifier._metrics import ClassifierMetricsLogger
+from emperor.experiments.classifier._records import ClassifierStepOutput
 
 
 class HealthProbeClassifier(ClassifierExperiment):
@@ -63,26 +65,84 @@ class FakeLogger:
 
 
 class TestClassifierMetricsLogger(unittest.TestCase):
+    @staticmethod
+    def _step_output(
+        total_loss: torch.Tensor,
+        logits: torch.Tensor,
+        labels: torch.Tensor,
+    ) -> ClassifierStepOutput:
+        return ClassifierStepOutput(total_loss, logits, labels)
+
+    def test_step_output_is_a_frozen_named_record_of_current_step_facts(self) -> None:
+        total_loss = torch.tensor(1.0, requires_grad=True)
+        logits = torch.randn(2, 3, requires_grad=True)
+        labels = torch.tensor([0, 2])
+
+        output = ClassifierStepOutput(total_loss, logits, labels)
+
+        self.assertEqual(
+            tuple(field.name for field in fields(output)),
+            ("total_loss", "logits", "labels"),
+        )
+        self.assertIs(output.total_loss, total_loss)
+        self.assertIs(output.logits, logits)
+        self.assertIs(output.labels, labels)
+        with self.assertRaises(FrozenInstanceError):
+            output.total_loss = torch.tensor(2.0)
+
+    def test_stage_steps_pass_the_owned_result_to_metrics_and_return_loss(self) -> None:
+        model = HealthProbeClassifier()
+        inputs = torch.ones(2, 1)
+        labels = torch.tensor([0, 1])
+        output = ClassifierStepOutput(
+            total_loss=torch.tensor(0.5),
+            logits=torch.zeros(2, 2),
+            labels=labels,
+        )
+
+        for step_name, log_name in (
+            ("training_step", "log_training_step"),
+            ("validation_step", "log_validation_step"),
+            ("test_step", "log_test_step"),
+        ):
+            with (
+                self.subTest(step=step_name),
+                patch.object(model, "_model_step", return_value=output),
+                patch.object(model.metrics, log_name) as log_method,
+            ):
+                result = getattr(model, step_name)((inputs, labels), 0)
+
+                self.assertIs(result, output.total_loss)
+                self.assertIs(log_method.call_args.args[1], output)
+                if step_name == "validation_step":
+                    self.assertIs(log_method.call_args.args[2], inputs)
+
     def test_epoch_metrics_and_gap_are_sample_weighted(self):
         logger = ClassifierMetricsLogger(num_classes=2)
 
         logger.log_training_step(
             self._discard_log,
-            torch.tensor(0.2),
-            torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.2),
+                torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
         logger.log_training_step(
             self._discard_log,
-            torch.tensor(0.6),
-            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.6),
+                torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.7),
-            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.7),
+                torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
 
         train_metrics = logger.train_epoch_metrics()
@@ -113,9 +173,11 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.7),
-            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.7),
+                torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
 
         self.assertEqual(logger.train_validation_gap_metrics(), {})
@@ -125,15 +187,19 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_training_step(
             self._discard_log,
-            torch.tensor(0.2),
-            torch.tensor([[4.0, 0.0]]),
-            torch.tensor([0]),
+            self._step_output(
+                torch.tensor(0.2),
+                torch.tensor([[4.0, 0.0]]),
+                torch.tensor([0]),
+            ),
         )
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.7),
-            torch.tensor([[4.0, 0.0]]),
-            torch.tensor([1]),
+            self._step_output(
+                torch.tensor(0.7),
+                torch.tensor([[4.0, 0.0]]),
+                torch.tensor([1]),
+            ),
         )
         self.assertIn("gap/loss", logger.train_validation_gap_metrics())
 
@@ -151,15 +217,19 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_training_step(
             self._discard_log,
-            torch.tensor(0.2),
-            torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.2),
+                torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.7),
-            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.7),
+                torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
 
         logger.log_train_epoch(log_fn)
@@ -216,9 +286,7 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.5),
-            logits,
-            targets,
+            self._step_output(torch.tensor(0.5), logits, targets),
         )
 
         per_class = logger.validation_per_class_epoch_metrics()
@@ -285,9 +353,7 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.5),
-            logits,
-            targets,
+            self._step_output(torch.tensor(0.5), logits, targets),
         )
 
         confusion = logger.validation_confusion_matrix_epoch_metrics()
@@ -309,17 +375,21 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.8),
-            torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.8),
+                torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
         first_best = logger.update_best_validation_metrics(epoch=3)
         logger.reset_validation_epoch()
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.4),
-            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
-            torch.tensor([0, 1]),
+            self._step_output(
+                torch.tensor(0.4),
+                torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+                torch.tensor([0, 1]),
+            ),
         )
         second_best = logger.update_best_validation_metrics(epoch=4)
 
@@ -359,9 +429,7 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
         logger.log_validation_step(
             self._discard_log,
-            torch.tensor(0.5),
-            logits,
-            targets,
+            self._step_output(torch.tensor(0.5), logits, targets),
             examples,
         )
         logger.log_validation_examples(tensorboard_logger, epoch=7)
@@ -411,7 +479,7 @@ class TestClassifierMetricsLogger(unittest.TestCase):
 
     def test_model_step_adds_auxiliary_loss_without_scalar_sync(self):
         model = AuxiliaryLossProbeClassifier()
-        loss, logits, targets = model._model_step(
+        output = model._model_step(
             (
                 torch.ones(2, 1),
                 torch.tensor([0, 1]),
@@ -419,11 +487,11 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         )
 
         torch.testing.assert_close(
-            loss,
+            output.total_loss,
             torch.tensor(0.9431471824645996),
         )
-        torch.testing.assert_close(logits, torch.zeros(2, 2))
-        torch.testing.assert_close(targets, torch.tensor([0, 1]))
+        torch.testing.assert_close(output.logits, torch.zeros(2, 2))
+        torch.testing.assert_close(output.labels, torch.tensor([0, 1]))
 
     def test_model_step_rejects_non_scalar_or_non_tensor_auxiliary_loss(self):
         batch = torch.ones(2, 1), torch.tensor([0, 1])

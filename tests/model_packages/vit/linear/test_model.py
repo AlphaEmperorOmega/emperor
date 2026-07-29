@@ -1175,12 +1175,12 @@ class TestVitLinearModel(unittest.TestCase):
         images = self._fake_batch(dataset, batch_size)
         labels = torch.randint(0, dataset.num_classes, (batch_size,))
 
-        loss, logits, returned_labels = model._model_step((images, labels))
+        output = model._model_step((images, labels))
 
-        self.assertEqual(loss.dim(), 0)
-        self.assertTrue(torch.isfinite(loss))
-        self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
-        torch.testing.assert_close(returned_labels, labels)
+        self.assertEqual(output.total_loss.dim(), 0)
+        self.assertTrue(torch.isfinite(output.total_loss))
+        self.assertEqual(output.logits.shape, (batch_size, dataset.num_classes))
+        torch.testing.assert_close(output.labels, labels)
 
     def test_auxiliary_loss_from_encoder_is_included_by_classifier_experiment(self):
         batch_size = 2
@@ -1195,10 +1195,12 @@ class TestVitLinearModel(unittest.TestCase):
         images = self._fake_batch(dataset, batch_size)
         labels = torch.randint(0, dataset.num_classes, (batch_size,))
 
-        loss, logits, _labels = model._model_step((images, labels))
+        output = model._model_step((images, labels))
 
-        expected_loss = model.loss_fn(logits, labels) + logits.new_tensor(0.25)
-        torch.testing.assert_close(loss, expected_loss)
+        expected_loss = model.loss_fn(output.logits, labels) + output.logits.new_tensor(
+            0.25
+        )
+        torch.testing.assert_close(output.total_loss, expected_loss)
 
     def test_dataset_metadata_drives_channels_classes_and_sequence_length(self):
         presets = model_package("vit/linear").presets

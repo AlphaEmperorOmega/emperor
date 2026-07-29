@@ -8,17 +8,10 @@ from torch import Tensor
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
 
 from ._metrics import MaskedLanguageModelMetricsLogger
+from ._records import MaskedLanguageModelBatch, MaskedLanguageModelStepOutput
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-MaskedLanguageModelBatch = (
-    tuple[Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor]
-    | tuple[Tensor, Tensor, Tensor, Tensor]
-)
-MaskedLanguageModelStepOutput = tuple[Tensor, Tensor, Tensor, Tensor, Tensor | None]
 
 
 class MaskedLanguageModelExperiment(LightningModule):
@@ -32,52 +25,24 @@ class MaskedLanguageModelExperiment(LightningModule):
         self._auxiliary_loss = AuxiliaryLoss("Masked-language-model")
 
     def training_step(self, batch: MaskedLanguageModelBatch, batch_idx: int) -> Tensor:
-        loss, token_loss, logits, labels, auxiliary_loss = self._model_step_outputs(
-            batch
-        )
-        self.metrics.log_training_step(
-            self.log_dict,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
-        )
-        return loss
+        output = self._model_step_outputs(batch)
+        self.metrics.log_training_step(self.log_dict, output)
+        return output.total_loss
 
     def validation_step(
         self, batch: MaskedLanguageModelBatch, batch_idx: int
     ) -> Tensor:
-        loss, token_loss, logits, labels, auxiliary_loss = self._model_step_outputs(
-            batch
-        )
-        self.metrics.log_validation_step(
-            self.log_dict,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
-        )
-        return loss
+        output = self._model_step_outputs(batch)
+        self.metrics.log_validation_step(self.log_dict, output)
+        return output.total_loss
 
     def test_step(self, batch: MaskedLanguageModelBatch, batch_idx: int) -> Tensor:
-        loss, token_loss, logits, labels, auxiliary_loss = self._model_step_outputs(
-            batch
-        )
-        self.metrics.log_test_step(
-            self.log_dict,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
-        )
-        return loss
+        output = self._model_step_outputs(batch)
+        self.metrics.log_test_step(self.log_dict, output)
+        return output.total_loss
 
     def _model_step(self, batch: MaskedLanguageModelBatch) -> Tensor:
-        loss, _, _, _, _ = self._model_step_outputs(batch)
-        return loss
+        return self._model_step_outputs(batch).total_loss
 
     def _model_step_outputs(
         self, batch: MaskedLanguageModelBatch
@@ -101,7 +66,13 @@ class MaskedLanguageModelExperiment(LightningModule):
         loss = task_loss
         if resolved_auxiliary_loss is not None:
             loss = task_loss + resolved_auxiliary_loss
-        return loss, task_loss, logits, labels, auxiliary_loss
+        return MaskedLanguageModelStepOutput(
+            total_loss=loss,
+            cross_entropy=task_loss,
+            logits=logits,
+            labels=labels,
+            auxiliary_loss=auxiliary_loss,
+        )
 
     def _unpack_batch(
         self, batch: MaskedLanguageModelBatch

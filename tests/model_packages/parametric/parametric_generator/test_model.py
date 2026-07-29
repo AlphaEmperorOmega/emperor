@@ -439,11 +439,11 @@ class TestParametricGeneratorModel(unittest.TestCase):
         X = torch.randn(batch_size, 1, 2, 4)
         y = torch.tensor([0, 2])
 
-        loss, logits, labels = model._model_step((X, y))
+        output = model._model_step((X, y))
 
-        self.assertEqual(loss.shape, torch.Size([]))
-        self.assertEqual(logits.shape, (batch_size, 3))
-        self.assertEqual(labels.shape, (batch_size,))
+        self.assertEqual(output.total_loss.shape, torch.Size([]))
+        self.assertEqual(output.logits.shape, (batch_size, 3))
+        self.assertEqual(output.labels.shape, (batch_size,))
 
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(

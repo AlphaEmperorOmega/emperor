@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import FrozenInstanceError, fields
 from unittest.mock import patch
 
 import torch
@@ -11,6 +12,9 @@ from emperor.experiments.masked_language_model import (
 )
 from emperor.experiments.masked_language_model._metrics import (
     MaskedLanguageModelMetricsLogger,
+)
+from emperor.experiments.masked_language_model._records import (
+    MaskedLanguageModelStepOutput,
 )
 
 
@@ -88,6 +92,39 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
     ) -> ModelConfig:
         return ModelConfig(learning_rate=learning_rate, output_dim=output_dim)
 
+    def test_step_output_is_a_frozen_named_record_of_current_step_facts(self) -> None:
+        total_loss = torch.tensor(1.0, requires_grad=True)
+        cross_entropy = torch.tensor(0.75, requires_grad=True)
+        logits = torch.randn(2, 3, 4, requires_grad=True)
+        labels = torch.randint(0, 4, (2, 3))
+        auxiliary_loss = torch.tensor(0.25, requires_grad=True)
+
+        output = MaskedLanguageModelStepOutput(
+            total_loss=total_loss,
+            cross_entropy=cross_entropy,
+            logits=logits,
+            labels=labels,
+            auxiliary_loss=auxiliary_loss,
+        )
+
+        self.assertEqual(
+            tuple(field.name for field in fields(output)),
+            (
+                "total_loss",
+                "cross_entropy",
+                "logits",
+                "labels",
+                "auxiliary_loss",
+            ),
+        )
+        self.assertIs(output.total_loss, total_loss)
+        self.assertIs(output.cross_entropy, cross_entropy)
+        self.assertIs(output.logits, logits)
+        self.assertIs(output.labels, labels)
+        self.assertIs(output.auxiliary_loss, auxiliary_loss)
+        with self.assertRaises(FrozenInstanceError):
+            output.total_loss = torch.tensor(2.0)
+
     def test_initialization_stores_config_and_loss_settings(self):
         cfg = self.preset(learning_rate=2e-4, output_dim=7)
         logits = torch.zeros(2, 3, cfg.output_dim)
@@ -121,9 +158,9 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
 
         torch.testing.assert_close(loss, expected)
 
-        total_loss, token_loss, *_ = model._model_step_outputs((input_ids, labels))
-        self.assertIs(total_loss, token_loss)
-        torch.testing.assert_close(token_loss, expected)
+        output = model._model_step_outputs((input_ids, labels))
+        self.assertIs(output.total_loss, output.cross_entropy)
+        torch.testing.assert_close(output.cross_entropy, expected)
 
     def test_ignore_index_labels_do_not_contribute_to_loss(self):
         cfg = self.preset(output_dim=3)
@@ -182,11 +219,16 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         with patch.object(model.metrics, "log_training_step") as log_training_step:
             observed_loss = model.training_step((input_ids, labels), 0)
 
-        logged_loss = log_training_step.call_args.args[1]
-        logged_token_loss = log_training_step.call_args.args[2]
-        self.assertIs(observed_loss, logged_loss)
-        torch.testing.assert_close(logged_token_loss, expected - auxiliary_loss)
-        torch.testing.assert_close(logged_loss, logged_token_loss + auxiliary_loss)
+        output = log_training_step.call_args.args[1]
+        self.assertIs(observed_loss, output.total_loss)
+        torch.testing.assert_close(
+            output.cross_entropy,
+            expected - auxiliary_loss,
+        )
+        torch.testing.assert_close(
+            output.total_loss,
+            output.cross_entropy + auxiliary_loss,
+        )
 
     def test_zero_tuple_output_auxiliary_loss_is_not_added(self):
         cfg = self.preset(output_dim=3)
@@ -315,29 +357,24 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
+        output = MaskedLanguageModelStepOutput(
+            total_loss=loss,
+            cross_entropy=token_loss,
+            logits=logits,
+            labels=labels,
+            auxiliary_loss=auxiliary_loss,
+        )
         logger.log_training_step(
             log_fn,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
+            output,
         )
         logger.log_validation_step(
             log_fn,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
+            output,
         )
         logger.log_test_step(
             log_fn,
-            loss,
-            token_loss,
-            logits,
-            labels,
-            auxiliary_loss,
+            output,
         )
 
         self.assertIs(calls[0][0]["train/loss"], loss)
@@ -396,7 +433,10 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
-        logger.log_training_step(log_fn, loss, loss, logits, labels)
+        logger.log_training_step(
+            log_fn,
+            MaskedLanguageModelStepOutput(loss, loss, logits, labels),
+        )
 
         self.assertNotIn("train/auxiliary/loss", calls[0][0])
 
@@ -410,7 +450,10 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         def log_fn(payload, **kwargs):
             calls.append((payload, kwargs))
 
-        logger.log_training_step(log_fn, loss, loss, logits, labels)
+        logger.log_training_step(
+            log_fn,
+            MaskedLanguageModelStepOutput(loss, loss, logits, labels),
+        )
 
         torch.testing.assert_close(
             calls[0][0]["train/masked/accuracy"],
