@@ -1,14 +1,19 @@
 import unittest
+from unittest.mock import call, patch
 
 import torch
+from torch.utils.data import RandomSampler, SequentialSampler
 from torchtext.data.utils import get_tokenizer
 
-from emperor.datasets.text.question_answering._squad_v1 import (
-    _QADataset as SQuADv1Dataset,
+from emperor.datasets.text.question_answering._adapter import (
+    _QuestionAnswerEncoder,
+    _QuestionAnsweringAdapter,
+    _SQuADv1Dataset,
+    _SQuADv2Dataset,
 )
-from emperor.datasets.text.question_answering._squad_v2 import (
-    _QADataset as SQuADv2Dataset,
-)
+from emperor.datasets.text.question_answering._answer_spans import _AnswerSpanAligner
+from emperor.datasets.text.question_answering._squad_v1 import SQuADv1
+from emperor.datasets.text.question_answering._squad_v2 import SQuADv2
 
 
 class _Vocabulary:
@@ -27,9 +32,20 @@ class _Vocabulary:
     def lookup_token(self, index: int) -> str:
         return self._tokens[index]
 
+    def __len__(self) -> int:
+        return len(self._tokens)
+
+    def set_default_index(self, index: int) -> None:
+        self.default_index = index
+
+
+def _build_vocabulary(token_sequences, *, specials):
+    del specials
+    return _Vocabulary(token_sequences)
+
 
 class SQuADDatasetTestCase(unittest.TestCase):
-    dataset_type = SQuADv1Dataset
+    dataset_type = _SQuADv1Dataset
 
     def setUp(self) -> None:
         self.tokenizer = get_tokenizer("basic_english")
@@ -66,10 +82,13 @@ class SQuADDatasetTestCase(unittest.TestCase):
         vocab = _Vocabulary(token_sequences)
         return self.dataset_type(
             samples,
-            self.tokenizer,
-            vocab,
-            context_length,
-            question_length,
+            _QuestionAnswerEncoder(
+                self.tokenizer,
+                vocab,
+                context_length,
+                question_length,
+            ),
+            _AnswerSpanAligner(self.tokenizer, context_length),
         )
 
     def assert_span(
@@ -205,7 +224,7 @@ class TestSQuADv1Dataset(SQuADDatasetTestCase):
 
 
 class TestSQuADv2Dataset(SQuADDatasetTestCase):
-    dataset_type = SQuADv2Dataset
+    dataset_type = _SQuADv2Dataset
 
     def test_answerable_example_uses_character_anchored_token_span(self) -> None:
         context = "Before: answer, after."
@@ -252,6 +271,111 @@ class TestSQuADv2Dataset(SQuADDatasetTestCase):
 
         self.assertEqual((start.item(), end.item()), (-1, -1))
 
+
+class TestQuestionAnsweringAdapter(unittest.TestCase):
+    cases = (
+        (SQuADv1, "squad", _SQuADv1Dataset),
+        (SQuADv2, "squad_v2", _SQuADv2Dataset),
+    )
+
+    def sample(self, context: str, answer: str) -> dict[str, object]:
+        return {
+            "context": context,
+            "question": "Which token?",
+            "answers": {
+                "answer_start": [context.index(answer)],
+                "text": [answer],
+            },
+        }
+
+    def test_leaves_declare_only_source_and_answer_policy_variation(self) -> None:
+        for dataset_type, source_name, item_dataset_type in self.cases:
+            with self.subTest(dataset=dataset_type.__name__):
+                self.assertTrue(issubclass(dataset_type, _QuestionAnsweringAdapter))
+                self.assertEqual(dataset_type._source_name, source_name)
+                self.assertIs(dataset_type._item_dataset_type, item_dataset_type)
+
+    def test_prepare_and_fit_preserve_source_schema_and_loader_policy(self) -> None:
+        train_samples = [self.sample("train answer", "answer")]
+        validation_samples = [self.sample("validation answer", "answer")]
+
+        for dataset_type, source_name, item_dataset_type in self.cases:
+            with self.subTest(dataset=dataset_type.__name__):
+                def source(
+                    name: str,
+                    *,
+                    split: str,
+                    expected_source_name: str = source_name,
+                ):
+                    self.assertEqual(name, expected_source_name)
+                    return train_samples if split == "train" else validation_samples
+
+                dataset = dataset_type(
+                    batch_size=1,
+                    context_length=4,
+                    question_length=4,
+                )
+                with (
+                    patch(
+                        "emperor.datasets.text.question_answering._adapter.load_dataset",
+                        side_effect=source,
+                    ) as load_dataset,
+                    patch(
+                        "emperor.datasets.text.question_answering._adapter."
+                        "build_vocab_from_iterator",
+                        side_effect=_build_vocabulary,
+                    ),
+                ):
+                    dataset.prepare_data()
+                    dataset.setup("fit")
+
+                self.assertEqual(
+                    load_dataset.call_args_list,
+                    [
+                        call(source_name, split="train"),
+                        call(source_name, split="validation"),
+                        call(source_name, split="train"),
+                        call(source_name, split="validation"),
+                    ],
+                )
+                self.assertIsInstance(dataset.train, item_dataset_type)
+                self.assertIsInstance(dataset.val, item_dataset_type)
+                self.assertEqual(
+                    dataset.resolved_metadata.vocab_size,
+                    len(dataset.vocab),
+                )
+                self.assertEqual(dataset.resolved_metadata.num_classes, 2)
+                validation_context, _, _, _ = dataset.val[0]
+                self.assertEqual(int(validation_context[0]), 0)
+                self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
+                self.assertIsInstance(dataset.val_dataloader().sampler, SequentialSampler)
+                self.assertTrue(dataset.train_dataloader().drop_last)
+                self.assertTrue(dataset.val_dataloader().drop_last)
+
+    def test_fresh_validation_preserves_validation_owned_vocabulary(self) -> None:
+        validation_samples = [self.sample("validation answer", "answer")]
+
+        for dataset_type, source_name, _ in self.cases:
+            with self.subTest(dataset=dataset_type.__name__):
+                dataset = dataset_type(context_length=4, question_length=4)
+                with (
+                    patch(
+                        "emperor.datasets.text.question_answering._adapter.load_dataset",
+                        return_value=validation_samples,
+                    ) as load_dataset,
+                    patch(
+                        "emperor.datasets.text.question_answering._adapter."
+                        "build_vocab_from_iterator",
+                        side_effect=_build_vocabulary,
+                    ),
+                ):
+                    dataset.setup("validate")
+
+                load_dataset.assert_called_once_with(
+                    source_name,
+                    split="validation",
+                )
+                self.assertEqual(dataset._text_labels([0, 1]), ["<unk>", "<pad>"])
 
 if __name__ == "__main__":
     unittest.main()
