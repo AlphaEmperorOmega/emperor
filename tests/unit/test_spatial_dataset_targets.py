@@ -4,6 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import torch
 from PIL import Image
+from torch.utils.data import RandomSampler, SequentialSampler
 
 from emperor.datasets.image.detection._coco import (
     CocoDetection,
@@ -253,6 +254,119 @@ class TestSegmentationSpatialTargets(unittest.TestCase):
             mask,
             torch.tensor([[0, 1, 2], [255, 18, 255]]),
         )
+
+
+class TestSpatialAdapterLifecycle(unittest.TestCase):
+    def test_detection_fit_and_loader_contracts_are_offline(self) -> None:
+        coco_source = _FakeCocoDataset(
+            _image(),
+            [{"bbox": [0, 0, 2, 2], "category_id": 7}],
+            category_ids=[7],
+        )
+        voc_source = _FakePairDataset(
+            _image(),
+            {
+                "annotation": {
+                    "size": {"width": "6", "height": "4"},
+                    "object": [],
+                }
+            },
+        )
+        cases = (
+            (
+                CocoDetection(batch_size=1, resize=(4, 6)),
+                "emperor.datasets.image.detection._coco.datasets.CocoDetection",
+                coco_source,
+                0,
+            ),
+            (
+                VOCDetection(batch_size=1, resize=(4, 6)),
+                "emperor.datasets.image.detection._voc.datasets.VOCDetection",
+                voc_source,
+                2,
+            ),
+        )
+
+        for dataset, patch_target, source, expected_prepare_calls in cases:
+            with self.subTest(dataset=type(dataset).__name__):
+                dataset.num_workers = 0
+                with patch(patch_target, return_value=source) as source_factory:
+                    dataset.prepare_data()
+                    self.assertEqual(source_factory.call_count, expected_prepare_calls)
+                    dataset.setup("fit")
+
+                train_images, train_targets = next(iter(dataset.train_dataloader()))
+                validation_images, validation_targets = next(
+                    iter(dataset.val_dataloader())
+                )
+                self.assertEqual(len(train_images), 1)
+                self.assertEqual(len(train_targets), 1)
+                self.assertEqual(len(validation_images), 1)
+                self.assertEqual(len(validation_targets), 1)
+                self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
+                self.assertIsInstance(
+                    dataset.val_dataloader().sampler,
+                    SequentialSampler,
+                )
+
+    def test_segmentation_fit_and_loader_contracts_are_offline(self) -> None:
+        coco_mask = np.ones((4, 6), dtype=np.uint8)
+        coco_source = _FakeCocoDataset(
+            _image(),
+            [
+                {
+                    "category_id": 7,
+                    "segmentation": [[0, 0, 5, 0, 5, 3]],
+                    "segmentation_mask": coco_mask,
+                }
+            ],
+            category_ids=[7],
+        )
+        voc_mask = Image.fromarray(np.ones((4, 6), dtype=np.uint8))
+        city_mask = Image.fromarray(np.full((4, 6), 7, dtype=np.uint8))
+        cases = (
+            (
+                CocoSegmentation(batch_size=1, resize=(4, 6)),
+                "emperor.datasets.image.segmentation._coco.datasets.CocoDetection",
+                coco_source,
+                0,
+            ),
+            (
+                VOCSegmentation(batch_size=1, resize=(4, 6)),
+                "emperor.datasets.image.segmentation._voc.datasets.VOCSegmentation",
+                _FakePairDataset(_image(), voc_mask),
+                2,
+            ),
+            (
+                Cityscapes(batch_size=1, resize=(4, 6)),
+                "emperor.datasets.image.segmentation._cityscapes.datasets.Cityscapes",
+                _FakePairDataset(_image(), city_mask),
+                0,
+            ),
+        )
+
+        for dataset, patch_target, source, expected_prepare_calls in cases:
+            with self.subTest(dataset=type(dataset).__name__):
+                dataset.num_workers = 0
+                with patch(patch_target, return_value=source) as source_factory:
+                    dataset.prepare_data()
+                    self.assertEqual(source_factory.call_count, expected_prepare_calls)
+                    dataset.setup("fit")
+
+                train_images, train_masks = next(iter(dataset.train_dataloader()))
+                validation_images, validation_masks = next(
+                    iter(dataset.val_dataloader())
+                )
+                self.assertEqual(train_images.shape, torch.Size([1, 3, 4, 6]))
+                self.assertEqual(train_masks.shape, torch.Size([1, 4, 6]))
+                self.assertEqual(validation_images.shape, torch.Size([1, 3, 4, 6]))
+                self.assertEqual(validation_masks.shape, torch.Size([1, 4, 6]))
+                self.assertEqual(train_masks.dtype, torch.long)
+                self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
+                self.assertIsInstance(
+                    dataset.val_dataloader().sampler,
+                    SequentialSampler,
+                )
 
 
 if __name__ == "__main__":
