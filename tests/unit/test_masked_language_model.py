@@ -45,6 +45,41 @@ class StaticMaskedLanguageModel(MaskedLanguageModelExperiment):
         return self.logits, self.auxiliary_loss
 
 
+class GraphAuxiliaryMaskedLanguageModel(StaticMaskedLanguageModel):
+    def __init__(self, cfg: ModelConfig, logits: torch.Tensor) -> None:
+        super().__init__(cfg, logits)
+        self.auxiliary_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+    ):
+        logits = super().forward(input_ids, attention_mask, token_type_ids)
+        auxiliary_loss = self.auxiliary_scale - self.auxiliary_scale.detach()
+        return logits, auxiliary_loss
+
+
+class InvalidAuxiliaryMaskedLanguageModel(StaticMaskedLanguageModel):
+    def __init__(
+        self,
+        cfg: ModelConfig,
+        logits: torch.Tensor,
+        auxiliary_loss: object,
+    ) -> None:
+        super().__init__(cfg, logits)
+        self.invalid_auxiliary_loss = auxiliary_loss
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+    ):
+        return self.logits, self.invalid_auxiliary_loss
+
+
 class TestMaskedLanguageModelExperiment(unittest.TestCase):
     def preset(
         self,
@@ -155,6 +190,31 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
         )
 
         torch.testing.assert_close(loss, expected)
+
+    def test_zero_valued_auxiliary_loss_preserves_its_gradient_path(self) -> None:
+        cfg = self.preset(output_dim=3)
+        logits = torch.tensor([[[1.0, 0.0, -1.0], [0.0, 2.0, -2.0]]])
+        labels = torch.tensor([[0, 1]])
+        input_ids = torch.tensor([[1, 2]])
+        model = GraphAuxiliaryMaskedLanguageModel(cfg, logits)
+
+        model._model_step((input_ids, labels)).backward()
+
+        torch.testing.assert_close(model.auxiliary_scale.grad, torch.tensor(1.0))
+
+    def test_non_scalar_or_non_tensor_auxiliary_loss_is_rejected(self) -> None:
+        cfg = self.preset(output_dim=3)
+        logits = torch.zeros(1, 2, cfg.output_dim)
+        batch = torch.tensor([[1, 2]]), torch.tensor([[0, 1]])
+        for auxiliary_loss in (torch.ones(2), 0.5):
+            with self.subTest(auxiliary_loss=auxiliary_loss):
+                model = InvalidAuxiliaryMaskedLanguageModel(
+                    cfg,
+                    logits,
+                    auxiliary_loss,
+                )
+                with self.assertRaisesRegex(ValueError, "auxiliary loss"):
+                    model._model_step(batch)
 
     def test_configure_optimizers_returns_adam_for_model_parameters(self):
         cfg = self.preset(learning_rate=3e-4, output_dim=3)

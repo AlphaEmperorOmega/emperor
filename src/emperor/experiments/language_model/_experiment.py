@@ -5,6 +5,8 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+
 from ._metrics import LanguageModelMetricsLogger
 from ._records import LanguageModelBatch, LanguageModelStepOutput
 
@@ -20,6 +22,7 @@ class LanguageModelExperiment(LightningModule):
         self.vocab_size = self.cfg.output_dim
         self.loss_fn = nn.CrossEntropyLoss()
         self.metrics = LanguageModelMetricsLogger()
+        self._auxiliary_loss = AuxiliaryLoss("Language-model")
 
     def training_step(self, batch: LanguageModelBatch, batch_idx: int) -> Tensor:
         output = self._model_step_outputs(batch)
@@ -74,12 +77,10 @@ class LanguageModelExperiment(LightningModule):
                 f"config.output_dim ({self.vocab_size}), received "
                 f"{logits.size(-1)}."
             )
-        if auxiliary_loss is None:
-            auxiliary_loss = logits.new_zeros(())
-        elif not isinstance(auxiliary_loss, Tensor) or auxiliary_loss.numel() != 1:
-            raise ValueError("Language-model auxiliary loss must be a scalar tensor.")
-        else:
-            auxiliary_loss = auxiliary_loss.reshape(())
+        auxiliary_loss = self._auxiliary_loss.resolve(
+            auxiliary_loss,
+            reference=logits,
+        )
         cross_entropy = self.loss_fn(logits.transpose(1, 2), targets)
         return LanguageModelStepOutput(
             total_loss=cross_entropy + auxiliary_loss,

@@ -35,6 +35,15 @@ class AuxiliaryLossProbeClassifier(ClassifierExperiment):
         )
 
 
+class InvalidAuxiliaryClassifier(ClassifierExperiment):
+    def __init__(self, auxiliary_loss: object) -> None:
+        super().__init__(ModelConfig(input_dim=1, output_dim=2))
+        self.auxiliary_loss = auxiliary_loss
+
+    def forward(self, X):
+        return torch.zeros(X.size(0), self.num_classes), self.auxiliary_loss
+
+
 class FakeTensorBoardExperiment:
     def __init__(self):
         self.images = []
@@ -414,6 +423,14 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         )
         torch.testing.assert_close(logits, torch.zeros(2, 2))
         torch.testing.assert_close(targets, torch.tensor([0, 1]))
+
+    def test_model_step_rejects_non_scalar_or_non_tensor_auxiliary_loss(self):
+        batch = torch.ones(2, 1), torch.tensor([0, 1])
+        for auxiliary_loss in (torch.ones(2), 0.5):
+            with self.subTest(auxiliary_loss=auxiliary_loss):
+                model = InvalidAuxiliaryClassifier(auxiliary_loss)
+                with self.assertRaisesRegex(ValueError, "auxiliary loss"):
+                    model._model_step(batch)
 
     def _discard_log(self, payload, **kwargs):
         pass

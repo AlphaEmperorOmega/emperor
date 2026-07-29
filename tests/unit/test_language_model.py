@@ -36,6 +36,31 @@ class InvalidTupleLanguageModel(StaticLanguageModel):
         return self.fixed_logits, torch.tensor(0.0), torch.tensor(0.0)
 
 
+class GraphAuxiliaryLanguageModel(StaticLanguageModel):
+    def __init__(self, cfg: ModelConfig, logits: torch.Tensor) -> None:
+        super().__init__(cfg, logits, None)
+        self.auxiliary_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, input_ids: torch.Tensor):
+        logits = self.fixed_logits * self.scale
+        auxiliary_loss = self.auxiliary_scale - self.auxiliary_scale.detach()
+        return logits, auxiliary_loss
+
+
+class InvalidAuxiliaryLanguageModel(StaticLanguageModel):
+    def __init__(
+        self,
+        cfg: ModelConfig,
+        logits: torch.Tensor,
+        auxiliary_loss: object,
+    ) -> None:
+        super().__init__(cfg, logits, None)
+        self.invalid_auxiliary_loss = auxiliary_loss
+
+    def forward(self, input_ids: torch.Tensor):
+        return self.fixed_logits * self.scale, self.invalid_auxiliary_loss
+
+
 class TestLanguageModelExperiment(unittest.TestCase):
     def preset(self, output_dim: int = 3) -> ModelConfig:
         return ModelConfig(
@@ -87,6 +112,21 @@ class TestLanguageModelExperiment(unittest.TestCase):
             expected_cross_entropy + auxiliary_loss,
         )
 
+    def test_one_element_auxiliary_loss_keeps_dtype_and_becomes_scalar(self) -> None:
+        logits, input_ids, labels = self.deterministic_batch()
+        auxiliary_loss = torch.tensor([0.75], dtype=torch.float64)
+        model = StaticLanguageModel(
+            self.preset(),
+            logits.to(torch.float64),
+            auxiliary_loss,
+        )
+
+        output = model._model_step_outputs((input_ids, labels))
+
+        self.assertEqual(output.auxiliary_loss.shape, ())
+        self.assertEqual(output.auxiliary_loss.dtype, torch.float64)
+        self.assertEqual(output.total_loss.dtype, torch.float64)
+
     def test_gradient_reaches_model_parameters(self):
         logits, input_ids, labels = self.deterministic_batch()
         model = StaticLanguageModel(self.preset(), logits, torch.tensor(0.1))
@@ -94,6 +134,14 @@ class TestLanguageModelExperiment(unittest.TestCase):
         loss.backward()
         self.assertIsNotNone(model.scale.grad)
         self.assertTrue(torch.any(model.scale.grad.abs() > 0))
+
+    def test_zero_valued_auxiliary_loss_preserves_its_gradient_path(self) -> None:
+        logits, input_ids, labels = self.deterministic_batch()
+        model = GraphAuxiliaryLanguageModel(self.preset(), logits)
+
+        model._model_step((input_ids, labels)).backward()
+
+        torch.testing.assert_close(model.auxiliary_scale.grad, torch.tensor(1.0))
 
     def test_metrics_use_cross_entropy_for_perplexity(self):
         logger = LanguageModelMetricsLogger()
@@ -156,6 +204,13 @@ class TestLanguageModelExperiment(unittest.TestCase):
             ):
                 with self.assertRaises(ValueError):
                     model._model_step((input_ids, labels))
+
+    def test_non_tensor_auxiliary_loss_is_rejected(self) -> None:
+        logits, input_ids, labels = self.deterministic_batch()
+        model = InvalidAuxiliaryLanguageModel(self.preset(), logits, 0.5)
+
+        with self.assertRaisesRegex(ValueError, "auxiliary loss"):
+            model._model_step((input_ids, labels))
 
     def test_configure_optimizers_returns_adam(self):
         logits, _input_ids, _labels = self.deterministic_batch()

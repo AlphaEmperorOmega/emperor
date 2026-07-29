@@ -38,6 +38,31 @@ class StaticSequenceClassifier(SequenceClassifierExperiment):
         return logits, self.fixed_auxiliary_loss
 
 
+class GraphAuxiliarySequenceClassifier(StaticSequenceClassifier):
+    def __init__(self, cfg: ModelConfig, logits: torch.Tensor) -> None:
+        super().__init__(cfg, logits, None)
+        self.auxiliary_scale = nn.Parameter(torch.tensor(1.0))
+
+    def forward(self, tokens: torch.Tensor):
+        logits = self.fixed_logits * self.scale
+        auxiliary_loss = self.auxiliary_scale - self.auxiliary_scale.detach()
+        return logits, auxiliary_loss
+
+
+class InvalidAuxiliarySequenceClassifier(StaticSequenceClassifier):
+    def __init__(
+        self,
+        cfg: ModelConfig,
+        logits: torch.Tensor,
+        auxiliary_loss: object,
+    ) -> None:
+        super().__init__(cfg, logits, None)
+        self.invalid_auxiliary_loss = auxiliary_loss
+
+    def forward(self, tokens: torch.Tensor):
+        return self.fixed_logits * self.scale, self.invalid_auxiliary_loss
+
+
 class TestSequenceClassifierExperiment(unittest.TestCase):
     def preset(self, output_dim: int = 3) -> ModelConfig:
         return ModelConfig(learning_rate=3e-4, output_dim=output_dim)
@@ -161,6 +186,27 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
             [id(parameter) for parameter in optimizer.param_groups[0]["params"]],
             [id(parameter) for parameter in model.parameters()],
         )
+
+    def test_zero_valued_auxiliary_loss_preserves_its_gradient_path(self) -> None:
+        logits, tokens, labels = self.deterministic_batch()
+        model = GraphAuxiliarySequenceClassifier(self.preset(), logits)
+
+        loss, _logits, _labels = model._model_step((tokens, labels))
+        loss.backward()
+
+        torch.testing.assert_close(model.auxiliary_scale.grad, torch.tensor(1.0))
+
+    def test_non_scalar_or_non_tensor_auxiliary_loss_is_rejected(self) -> None:
+        logits, tokens, labels = self.deterministic_batch()
+        for auxiliary_loss in (torch.ones(2), 0.5):
+            with self.subTest(auxiliary_loss=auxiliary_loss):
+                model = InvalidAuxiliarySequenceClassifier(
+                    self.preset(),
+                    logits,
+                    auxiliary_loss,
+                )
+                with self.assertRaisesRegex(ValueError, "auxiliary loss"):
+                    model._model_step((tokens, labels))
 
     def test_stage_steps_delegate_to_private_metrics_logger(self) -> None:
         logits, tokens, labels = self.deterministic_batch()
