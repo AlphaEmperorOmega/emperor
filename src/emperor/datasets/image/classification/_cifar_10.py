@@ -24,8 +24,17 @@ class Cifar10(DataModule):
         self.batch_size = batch_size
         self.resize = resize
         self.seed = None if seed is None else int(seed)
-        width, height = resize
-        self.flattened_input_dim: int = width * height * 3
+        if isinstance(resize, int):
+            self.default_height = self.default_width = resize
+        else:
+            self.default_height, self.default_width = resize
+        self.flattened_input_dim = (
+            self.default_height * self.default_width * self.num_channels
+        )
+        self._resolve_metadata(
+            flattened_input_dim=self.flattened_input_dim,
+            num_classes=self.num_classes,
+        )
 
     def prepare_data(self) -> None:
         datasets.CIFAR10(root=self.root, train=True, download=True)
@@ -120,7 +129,7 @@ class Cifar10(DataModule):
             batch_size=self.batch_size,
             shuffle=train,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=train,
             generator=(
                 torch.Generator().manual_seed(self.seed)
                 if train and self.seed is not None
@@ -134,5 +143,5 @@ class Cifar10(DataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
