@@ -671,6 +671,7 @@ blocked_reason = ""
 modules = [
   "src/emperor/datasets/__init__.py",
   "src/emperor/datasets/_base.py",
+  "src/emperor/datasets/_metadata.py",
   "src/emperor/datasets/_visualization.py",
   "src/emperor/datasets/image/__init__.py",
   "src/emperor/datasets/image/captioning/__init__.py",

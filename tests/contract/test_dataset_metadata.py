@@ -27,7 +27,7 @@ def declared_dataset_tasks() -> dict[type, set[ExperimentTask]]:
 
 
 class DatasetMetadataContractTests(unittest.TestCase):
-    def test_a_offline_fixture_restores_dataset_class_metadata(self) -> None:
+    def test_a_setup_does_not_mutate_dataset_class_metadata(self) -> None:
         metadata_names = ("vocab_size", "flattened_input_dim", "num_classes")
         for dataset_type in (PennTreebank, WikiText2):
             with self.subTest(dataset=dataset_type.__name__):
@@ -42,13 +42,10 @@ class DatasetMetadataContractTests(unittest.TestCase):
                     ) as dataset:
                         dataset.prepare_data()
                         dataset.setup("fit")
-                        self.assertNotEqual(
-                            dataset_type.vocab_size,
-                            expected["vocab_size"],
-                        )
-
-                actual = {name: getattr(dataset_type, name) for name in metadata_names}
-                self.assertEqual(actual, expected)
+                        actual = {
+                            name: getattr(dataset_type, name) for name in metadata_names
+                        }
+                        self.assertEqual(actual, expected)
 
     def test_every_declared_dataset_seed_is_optional_by_default(self) -> None:
         for dataset_type in DATASET_TASKS:

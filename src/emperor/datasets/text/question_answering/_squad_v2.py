@@ -122,7 +122,10 @@ class SQuADv2(DataModule):
             specials=["<unk>", "<pad>"],
         )
         self.vocab.set_default_index(self.vocab["<unk>"])
-        SQuADv2.vocab_size = len(self.vocab)
+        self._resolve_metadata(
+            vocab_size=len(self.vocab),
+            num_classes=self.num_classes,
+        )
 
     def get_dataloader(self, train: bool):
         data = self.train if train else self.val
