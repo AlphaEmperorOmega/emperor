@@ -96,10 +96,9 @@ class TranslationExperiment(LightningModule):
         target_ids = target_ids.to(self.device)
         target_input_ids = target_ids[:, :-1]
         labels = target_ids[:, 1:]
-        logits, auxiliary_loss = self(source_ids, target_input_ids)
-        auxiliary_loss = self._auxiliary_loss.resolve(
-            auxiliary_loss,
-            reference=logits,
+        logits, auxiliary_loss = self._validate_model_output(
+            self(source_ids, target_input_ids),
+            labels,
         )
         flat_logits = logits.reshape(-1, logits.size(-1))
         flat_labels = labels.reshape(-1)
@@ -120,7 +119,12 @@ class TranslationExperiment(LightningModule):
                 "TranslationExperiment batches must contain (source_ids, target_ids)."
             )
         source_ids, target_ids = batch
-        if source_ids.ndim != 2 or target_ids.ndim != 2:
+        if (
+            not isinstance(source_ids, Tensor)
+            or not isinstance(target_ids, Tensor)
+            or source_ids.ndim != 2
+            or target_ids.ndim != 2
+        ):
             raise ValueError(
                 "Translation source and target IDs must be rank-2 tensors."
             )
@@ -128,7 +132,44 @@ class TranslationExperiment(LightningModule):
             raise ValueError(
                 "Translation target sequences must contain at least 2 IDs."
             )
+        if source_ids.size(0) != target_ids.size(0):
+            raise ValueError(
+                "Translation source and target IDs must share the batch dimension."
+            )
         return source_ids, target_ids
+
+    def _validate_model_output(
+        self,
+        output: object,
+        labels: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        if not isinstance(output, tuple) or len(output) != 2:
+            raise ValueError(
+                "Translation outputs must be a two-item tuple containing "
+                "(logits, auxiliary_loss)."
+            )
+        logits, auxiliary_loss = output
+        if not isinstance(logits, Tensor) or logits.ndim != 3:
+            raise ValueError(
+                "Translation logits must be a rank-3 tensor with shape "
+                "[batch, target sequence, vocabulary]."
+            )
+        if logits.shape[:2] != labels.shape:
+            raise ValueError(
+                "Translation logits and labels must share batch and target "
+                "sequence dimensions."
+            )
+        if logits.size(-1) != self.vocab_size:
+            raise ValueError(
+                "Translation logits vocabulary dimension must equal "
+                f"config.output_dim ({self.vocab_size}), received "
+                f"{logits.size(-1)}."
+            )
+        resolved_auxiliary_loss = self._auxiliary_loss.resolve(
+            auxiliary_loss,
+            reference=logits,
+        )
+        return logits, resolved_auxiliary_loss
 
     def _log_step(
         self,
