@@ -1,4 +1,3 @@
-import math
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -163,7 +162,7 @@ class TestTranslationExperiment(unittest.TestCase):
         )
         torch.testing.assert_close(
             metrics["validation/perplexity"],
-            torch.exp(output.nll.detach().clamp(max=math.log(1e9))),
+            torch.exp(output.nll.detach().clamp(max=20.0)),
         )
 
     def test_corpus_sacrebleu_and_generation_disable_switch(self):

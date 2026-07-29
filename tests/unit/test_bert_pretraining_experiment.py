@@ -1,4 +1,3 @@
-import math
 import unittest
 from dataclasses import FrozenInstanceError, fields, replace
 from unittest.mock import patch
@@ -482,9 +481,10 @@ class TestBertPretrainingExperiment(unittest.TestCase):
                     payload[f"{stage}/nsp/accuracy"],
                     torch.tensor(0.5),
                 )
-                self.assertEqual(
+                self.assertIsInstance(payload[f"{stage}/mlm/perplexity"], torch.Tensor)
+                torch.testing.assert_close(
                     payload[f"{stage}/mlm/perplexity"],
-                    math.exp(output.mlm_loss.item()),
+                    torch.exp(output.mlm_loss),
                 )
                 self.assertIs(payload[f"{stage}/loss"], output.total_loss)
                 self.assertIs(
@@ -492,6 +492,20 @@ class TestBertPretrainingExperiment(unittest.TestCase):
                     output.auxiliary_loss,
                 )
                 self.assertEqual(kwargs, expected_kwargs)
+
+    def test_mlm_perplexity_is_bounded_and_does_not_retain_the_loss_graph(
+        self,
+    ) -> None:
+        logger = BertPretrainingMetricsLogger()
+        mlm_loss = torch.tensor(100.0, requires_grad=True)
+        output = replace(self._step_output(), mlm_loss=mlm_loss)
+
+        perplexity = logger._payload("validation", output)[
+            "validation/mlm/perplexity"
+        ]
+
+        torch.testing.assert_close(perplexity, torch.exp(torch.tensor(20.0)))
+        self.assertFalse(perplexity.requires_grad)
 
     def test_metrics_handle_empty_masks_small_vocabularies_and_absent_auxiliary_loss(
         self,

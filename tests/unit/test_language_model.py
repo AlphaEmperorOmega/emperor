@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from emperor.config import ModelConfig
+from emperor.experiments._perplexity import Perplexity
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.experiments.language_model._metrics import LanguageModelMetricsLogger
 from emperor.experiments.language_model._records import LanguageModelStepOutput
@@ -168,6 +169,48 @@ class TestLanguageModelExperiment(unittest.TestCase):
         )
         self.assertIs(payload["validation/auxiliary_loss"], output.auxiliary_loss)
         self.assertEqual(kwargs, {"prog_bar": True})
+
+    def test_perplexity_policy_is_tensor_native_bounded_and_detached(self) -> None:
+        policy = Perplexity()
+
+        for dtype in (torch.float32, torch.float64):
+            with self.subTest(dtype=dtype):
+                token_loss = torch.tensor(1.0, dtype=dtype, requires_grad=True)
+                perplexity = policy.from_token_loss(token_loss)
+
+                torch.testing.assert_close(
+                    perplexity,
+                    torch.exp(token_loss.detach()),
+                )
+                self.assertEqual(perplexity.dtype, dtype)
+                self.assertEqual(perplexity.device, token_loss.device)
+                self.assertFalse(perplexity.requires_grad)
+
+        for dtype in (torch.float16, torch.bfloat16):
+            with self.subTest(dtype=dtype):
+                perplexity = policy.from_token_loss(
+                    torch.tensor(100.0, dtype=dtype)
+                )
+                self.assertEqual(perplexity.dtype, torch.float32)
+                self.assertTrue(torch.isfinite(perplexity))
+                torch.testing.assert_close(perplexity, torch.exp(torch.tensor(20.0)))
+
+        positive_infinity = policy.from_token_loss(torch.tensor(float("inf")))
+        negative_infinity = policy.from_token_loss(torch.tensor(float("-inf")))
+        not_a_number = policy.from_token_loss(torch.tensor(float("nan")))
+        torch.testing.assert_close(positive_infinity, torch.exp(torch.tensor(20.0)))
+        torch.testing.assert_close(negative_infinity, torch.tensor(0.0))
+        self.assertTrue(torch.isnan(not_a_number))
+
+    def test_perplexity_policy_rejects_non_scalar_or_non_floating_values(self) -> None:
+        policy = Perplexity()
+
+        for token_loss in (torch.ones(2), torch.tensor(1)):
+            with (
+                self.subTest(token_loss=token_loss),
+                self.assertRaisesRegex(ValueError, "scalar floating-point tensor"),
+            ):
+                policy.from_token_loss(token_loss)
 
     def test_invalid_batches_and_outputs_are_rejected(self):
         logits, input_ids, labels = self.deterministic_batch()
