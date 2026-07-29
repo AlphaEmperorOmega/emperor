@@ -23,7 +23,7 @@ class ClassifierExperiment(LightningModule):
         self.metrics = ClassifierMetricsLogger(self.num_classes)
         self._auxiliary_loss = AuxiliaryLoss("Classifier")
 
-    def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+    def training_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         loss, logits, Y = self._model_step(batch)
         self.metrics.log_training_step(self.log_dict, loss, logits, Y)
         return loss
@@ -34,7 +34,7 @@ class ClassifierExperiment(LightningModule):
     def on_train_epoch_end(self) -> None:
         self.metrics.log_train_epoch(self.log_dict)
 
-    def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+    def validation_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         X, _ = batch
         loss, logits, Y = self._model_step(batch)
         self.metrics.log_validation_step(self.log_dict, loss, logits, Y, X)
@@ -49,7 +49,7 @@ class ClassifierExperiment(LightningModule):
             self.metrics.log_best_validation(self.log_dict, self.current_epoch)
             self.metrics.log_validation_examples(self.logger, self.current_epoch)
 
-    def test_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+    def test_step(self, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         loss, logits, Y = self._model_step(batch)
         self.metrics.log_test_step(self.log_dict, loss, logits, Y)
         return loss
@@ -64,22 +64,71 @@ class ClassifierExperiment(LightningModule):
                 on_epoch=False,
             )
 
-    def _model_step(self, batch: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        X, Y = batch
-        output = self(X)
+    def _model_step(
+        self,
+        batch: tuple[Tensor, Tensor],
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        X, Y = self._unpack_batch(batch)
+        logits, resolved_auxiliary_loss = self._validate_model_output(self(X), Y)
+        task_loss = self.loss_fn(logits, Y)
+        loss = task_loss
+        if resolved_auxiliary_loss is not None:
+            loss = task_loss + resolved_auxiliary_loss
+        return loss, logits, Y
+
+    @staticmethod
+    def _unpack_batch(batch: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+        if len(batch) != 2:
+            raise ValueError(
+                "ClassifierExperiment batches must contain (inputs, labels)."
+            )
+        inputs, labels = batch
+        if not isinstance(inputs, Tensor) or inputs.ndim < 1:
+            raise ValueError("Classifier input must be a tensor with a batch dimension.")
+        if not isinstance(labels, Tensor) or labels.ndim != 1:
+            raise ValueError("Classifier labels must be a rank-1 tensor.")
+        if inputs.size(0) != labels.size(0):
+            raise ValueError(
+                "Classifier inputs and labels must share the batch dimension."
+            )
+        return inputs, labels
+
+    def _validate_model_output(
+        self,
+        output: object,
+        labels: Tensor,
+    ) -> tuple[Tensor, Tensor | None]:
         if isinstance(output, tuple):
-            logits, auxiliary_loss = output[0], output[-1]
+            if len(output) != 2:
+                raise ValueError(
+                    "Classifier tuple outputs must be a two-item tuple containing "
+                    "(logits, auxiliary_loss)."
+                )
+            logits, auxiliary_loss = output
         else:
             logits = output
             auxiliary_loss = None
-        task_loss = self.loss_fn(logits, Y)
-        loss = task_loss
-        if auxiliary_loss is not None:
-            loss = task_loss + self._auxiliary_loss.resolve(
-                auxiliary_loss,
-                reference=task_loss,
+        if not isinstance(logits, Tensor) or logits.ndim != 2:
+            raise ValueError(
+                "Classifier logits must be a rank-2 tensor with shape "
+                "[batch, classes]."
             )
-        return loss, logits, Y
+        if logits.size(0) != labels.size(0):
+            raise ValueError(
+                "Classifier logits and labels must share the batch dimension."
+            )
+        if logits.size(1) != self.num_classes:
+            raise ValueError(
+                "Classifier logits class dimension must equal config.output_dim "
+                f"({self.num_classes}), received {logits.size(1)}."
+            )
+        resolved_auxiliary_loss = None
+        if auxiliary_loss is not None:
+            resolved_auxiliary_loss = self._auxiliary_loss.resolve(
+                auxiliary_loss,
+                reference=logits,
+            )
+        return logits, resolved_auxiliary_loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

@@ -330,6 +330,69 @@ class TestBertPretrainingExperiment(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must contain"):
             model._model_step(batch[:4])
 
+    def test_invalid_model_output_contract_is_rejected_at_the_bert_seam(self) -> None:
+        mlm_logits, nsp_logits, batch = self.deterministic_inputs()
+        model = StaticBertPretrainingExperiment(
+            self.preset(),
+            mlm_logits,
+            nsp_logits,
+            None,
+        )
+        invalid_outputs = (
+            ((mlm_logits, nsp_logits), "three-item tuple"),
+            ((mlm_logits, nsp_logits, None, None), "three-item tuple"),
+            (("not logits", nsp_logits, None), "MLM logits"),
+            ((mlm_logits[:, 0], nsp_logits, torch.ones(2)), "MLM logits"),
+            ((mlm_logits[:1], nsp_logits, None), "MLM logits and labels"),
+            ((mlm_logits[..., :-1], nsp_logits, None), "vocabulary dimension"),
+            ((mlm_logits, "not logits", None), "NSP logits"),
+            ((mlm_logits, nsp_logits.unsqueeze(0), None), "NSP logits"),
+            ((mlm_logits, torch.zeros(2, 3), None), "2 classes"),
+        )
+
+        for output, message in invalid_outputs:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", return_value=output),
+                patch.object(
+                    model.mlm_loss_fn,
+                    "forward",
+                    wraps=model.mlm_loss_fn.forward,
+                ) as mlm_loss,
+                patch.object(
+                    model.nsp_loss_fn,
+                    "forward",
+                    wraps=model.nsp_loss_fn.forward,
+                ) as nsp_loss,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step(batch)
+            mlm_loss.assert_not_called()
+            nsp_loss.assert_not_called()
+
+    def test_invalid_bert_batch_geometry_is_rejected_before_forward(self) -> None:
+        mlm_logits, nsp_logits, batch = self.deterministic_inputs()
+        model = StaticBertPretrainingExperiment(
+            self.preset(),
+            mlm_logits,
+            nsp_logits,
+            None,
+        )
+        invalid_batches = (
+            (("not input IDs", *batch[1:]), "rank-2 tensors"),
+            ((batch[0], batch[1][:, :1], *batch[2:]), "equal shapes"),
+            ((*batch[:4], batch[4].unsqueeze(1)), "rank-1 tensor"),
+        )
+
+        for invalid_batch, message in invalid_batches:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", wraps=model.forward) as forward,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step(invalid_batch)
+            forward.assert_not_called()
+
     def test_stage_steps_delegate_to_private_metrics_logger(self) -> None:
         mlm_logits, nsp_logits, batch = self.deterministic_inputs()
         model = StaticBertPretrainingExperiment(

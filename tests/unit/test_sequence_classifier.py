@@ -208,6 +208,53 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "auxiliary loss"):
                     model._model_step((tokens, labels))
 
+    def test_invalid_model_output_contract_is_rejected_at_the_sequence_seam(
+        self,
+    ) -> None:
+        logits, tokens, labels = self.deterministic_batch()
+        model = StaticSequenceClassifier(self.preset(), logits)
+        invalid_outputs = (
+            ((logits,), "two-item tuple"),
+            ((logits, torch.tensor(0.0), torch.tensor(0.0)), "two-item tuple"),
+            ("not logits", "rank-2 tensor"),
+            ((logits.unsqueeze(0), torch.ones(2)), "rank-2 tensor"),
+            (logits[:2], "batch dimension"),
+            (logits[:, :2], "class dimension"),
+        )
+
+        for output, message in invalid_outputs:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", return_value=output),
+                patch.object(
+                    model.loss_fn,
+                    "forward",
+                    wraps=model.loss_fn.forward,
+                ) as loss,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step((tokens, labels))
+            loss.assert_not_called()
+
+    def test_invalid_sequence_batch_geometry_is_rejected_before_forward(self) -> None:
+        logits, tokens, labels = self.deterministic_batch()
+        model = StaticSequenceClassifier(self.preset(), logits)
+        invalid_batches = (
+            ((tokens,), "must contain"),
+            (("not tokens", labels), "rank-2 tensor"),
+            ((tokens, labels.unsqueeze(1)), "rank-1 tensor"),
+            ((tokens[:2], labels), "batch dimension"),
+        )
+
+        for batch, message in invalid_batches:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", wraps=model.forward) as forward,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step(batch)
+            forward.assert_not_called()
+
     def test_stage_steps_delegate_to_private_metrics_logger(self) -> None:
         logits, tokens, labels = self.deterministic_batch()
         model = StaticSequenceClassifier(self.preset(), logits)

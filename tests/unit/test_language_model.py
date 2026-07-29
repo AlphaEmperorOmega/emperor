@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -211,6 +212,35 @@ class TestLanguageModelExperiment(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "auxiliary loss"):
             model._model_step((input_ids, labels))
+
+    def test_non_tensor_logits_and_batch_values_raise_task_errors(self) -> None:
+        logits, input_ids, labels = self.deterministic_batch()
+        model = StaticLanguageModel(self.preset(), logits)
+
+        with (
+            patch.object(model, "forward", return_value="not logits"),
+            patch.object(
+                model.loss_fn,
+                "forward",
+                wraps=model.loss_fn.forward,
+            ) as loss,
+            self.assertRaisesRegex(ValueError, "rank-3 tensor"),
+        ):
+            model._model_step((input_ids, labels))
+        loss.assert_not_called()
+
+        with (
+            patch.object(
+                model,
+                "forward",
+                return_value=(logits[:, 0], torch.ones(2)),
+            ),
+            self.assertRaisesRegex(ValueError, "rank-3 tensor"),
+        ):
+            model._model_step((input_ids, labels))
+
+        with self.assertRaisesRegex(ValueError, "rank-2 tensors"):
+            model._model_step(("not input IDs", labels))
 
     def test_configure_optimizers_returns_adam(self):
         logits, _input_ids, _labels = self.deterministic_batch()

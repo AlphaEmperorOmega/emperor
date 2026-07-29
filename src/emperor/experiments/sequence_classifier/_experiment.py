@@ -41,22 +41,78 @@ class SequenceClassifierExperiment(LightningModule):
     def _model_step(
         self, batch: tuple[Tensor, Tensor]
     ) -> tuple[Tensor, Tensor, Tensor]:
-        tokens, Y = batch
+        tokens, Y = self._unpack_batch(batch)
         tokens = tokens.to(self.device)
-        output = self(tokens)
+        logits, resolved_auxiliary_loss = self._validate_model_output(
+            self(tokens),
+            Y,
+        )
+        task_loss = self.loss_fn(logits, Y)
+        loss = task_loss
+        if resolved_auxiliary_loss is not None:
+            loss = task_loss + resolved_auxiliary_loss
+        return loss, logits, Y
+
+    @staticmethod
+    def _unpack_batch(batch: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+        if len(batch) != 2:
+            raise ValueError(
+                "SequenceClassifierExperiment batches must contain (tokens, labels)."
+            )
+        tokens, labels = batch
+        if not isinstance(tokens, Tensor) or tokens.ndim != 2:
+            raise ValueError(
+                "Sequence-classifier tokens must be a rank-2 tensor."
+            )
+        if not isinstance(labels, Tensor) or labels.ndim != 1:
+            raise ValueError(
+                "Sequence-classifier labels must be a rank-1 tensor."
+            )
+        if tokens.size(0) != labels.size(0):
+            raise ValueError(
+                "Sequence-classifier tokens and labels must share the batch "
+                "dimension."
+            )
+        return tokens, labels
+
+    def _validate_model_output(
+        self,
+        output: object,
+        labels: Tensor,
+    ) -> tuple[Tensor, Tensor | None]:
         if isinstance(output, tuple):
-            logits, auxiliary_loss = output[0], output[-1]
+            if len(output) != 2:
+                raise ValueError(
+                    "Sequence-classifier tuple outputs must be a two-item tuple "
+                    "containing (logits, auxiliary_loss)."
+                )
+            logits, auxiliary_loss = output
         else:
             logits = output
             auxiliary_loss = None
-        task_loss = self.loss_fn(logits, Y)
-        loss = task_loss
-        if auxiliary_loss is not None:
-            loss = task_loss + self._auxiliary_loss.resolve(
-                auxiliary_loss,
-                reference=task_loss,
+        if not isinstance(logits, Tensor) or logits.ndim != 2:
+            raise ValueError(
+                "Sequence-classifier logits must be a rank-2 tensor with shape "
+                "[batch, classes]."
             )
-        return loss, logits, Y
+        if logits.size(0) != labels.size(0):
+            raise ValueError(
+                "Sequence-classifier logits and labels must share the batch "
+                "dimension."
+            )
+        if logits.size(1) != self.num_classes:
+            raise ValueError(
+                "Sequence-classifier logits class dimension must equal "
+                f"config.output_dim ({self.num_classes}), received "
+                f"{logits.size(1)}."
+            )
+        resolved_auxiliary_loss = None
+        if auxiliary_loss is not None:
+            resolved_auxiliary_loss = self._auxiliary_loss.resolve(
+                auxiliary_loss,
+                reference=logits,
+            )
+        return logits, resolved_auxiliary_loss
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate)

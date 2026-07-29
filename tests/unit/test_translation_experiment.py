@@ -94,6 +94,55 @@ class TestTranslationExperiment(unittest.TestCase):
             ):
                 model._model_step_outputs((source_ids, target_ids))
 
+    def test_invalid_model_output_contract_is_rejected_at_translation_seam(self):
+        model = self.preset()
+        source_ids, target_ids = self.batch()
+        logits = torch.zeros(
+            source_ids.size(0),
+            target_ids.size(1) - 1,
+            model.vocab_size,
+        )
+        invalid_outputs = (
+            ((logits,), "two-item tuple"),
+            ((logits, None, None), "two-item tuple"),
+            (("not logits", None), "rank-3 tensor"),
+            ((logits[:, 0], torch.ones(2)), "rank-3 tensor"),
+            ((logits[:1], None), "logits and labels"),
+            ((logits[:, :-1], None), "logits and labels"),
+            ((logits[..., :-1], None), "vocabulary dimension"),
+        )
+
+        for output, message in invalid_outputs:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", return_value=output),
+                patch.object(
+                    model.loss_fn,
+                    "forward",
+                    wraps=model.loss_fn.forward,
+                ) as loss,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step_outputs((source_ids, target_ids))
+            loss.assert_not_called()
+
+    def test_invalid_translation_batch_geometry_is_rejected_before_forward(self):
+        model = self.preset()
+        source_ids, target_ids = self.batch()
+        invalid_batches = (
+            (("not source IDs", target_ids), "rank-2 tensors"),
+            ((source_ids[:1], target_ids), "batch dimension"),
+        )
+
+        for batch, message in invalid_batches:
+            with (
+                self.subTest(message=message),
+                patch.object(model, "forward", wraps=model.forward) as forward,
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                model._model_step_outputs(batch)
+            forward.assert_not_called()
+
     def test_metric_logging_exposes_canonical_translation_metrics(self):
         model = self.preset()
         output = model._model_step_outputs(self.batch())
