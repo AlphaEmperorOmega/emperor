@@ -12,6 +12,9 @@ from torchvision.transforms.transforms import Compose
 
 from emperor.datasets._base import DataModule
 
+_TRAIN_IMAGE_PREFIX = "COCO_train2014"
+_VALIDATION_IMAGE_PREFIX = "COCO_val2014"
+
 
 def _yield_question_tokens(questions, tokenizer):
     for question in questions.values():
@@ -88,13 +91,19 @@ class VQAv2(DataModule):
         self._build_vocabs(train_questions, train_annotations)
         self.train = _VQADataset(
             self._build_samples(
-                train_questions, train_annotations, self.train_image_root
+                train_questions,
+                train_annotations,
+                _TRAIN_IMAGE_PREFIX,
             ),
             self.train_image_root,
             self._get_transforms(),
         )
         self.val = _VQADataset(
-            self._build_samples(val_questions, val_annotations, self.val_image_root),
+            self._build_samples(
+                val_questions,
+                val_annotations,
+                _VALIDATION_IMAGE_PREFIX,
+            ),
             self.val_image_root,
             self._get_transforms(),
         )
@@ -104,7 +113,11 @@ class VQAv2(DataModule):
         val_annotations = self._load_json(self.val_annotations_file)
         self._build_vocabs(val_questions, val_annotations)
         self.val = _VQADataset(
-            self._build_samples(val_questions, val_annotations, self.val_image_root),
+            self._build_samples(
+                val_questions,
+                val_annotations,
+                _VALIDATION_IMAGE_PREFIX,
+            ),
             self.val_image_root,
             self._get_transforms(),
         )
@@ -140,7 +153,10 @@ class VQAv2(DataModule):
         VQAv2.num_classes = len(self.answer_vocab)
 
     def _build_samples(
-        self, questions: dict, annotations: dict, image_root: str
+        self,
+        questions: dict,
+        annotations: dict,
+        image_prefix: str,
     ) -> list:
         samples = []
         for qid, question in questions.items():
@@ -150,7 +166,7 @@ class VQAv2(DataModule):
             if answer not in self.answer_vocab:
                 continue
             image_id = question["image_id"]
-            image_path = f"COCO_train2014_{image_id:012d}.jpg"
+            image_path = f"{image_prefix}_{image_id:012d}.jpg"
             question_tokens = torch.tensor(
                 _encode(
                     question["question"],
