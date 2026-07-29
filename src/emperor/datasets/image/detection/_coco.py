@@ -26,9 +26,38 @@ class _DetectionDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         image, annotations = self.dataset[idx]
+        source_width, source_height = image.size
         image = self.image_transform(image)
         target = self._build_target(annotations)
+        target["boxes"] = self._resize_boxes(
+            target["boxes"],
+            source_width=source_width,
+            source_height=source_height,
+            target_width=image.shape[-1],
+            target_height=image.shape[-2],
+        )
         return image, target
+
+    @staticmethod
+    def _resize_boxes(
+        boxes: torch.Tensor,
+        *,
+        source_width: int,
+        source_height: int,
+        target_width: int,
+        target_height: int,
+    ) -> torch.Tensor:
+        if boxes.numel() == 0:
+            return boxes
+        scale = boxes.new_tensor(
+            [
+                target_width / source_width,
+                target_height / source_height,
+                target_width / source_width,
+                target_height / source_height,
+            ]
+        )
+        return boxes * scale
 
     def _build_target(self, annotations: list) -> dict:
         boxes, labels = [], []

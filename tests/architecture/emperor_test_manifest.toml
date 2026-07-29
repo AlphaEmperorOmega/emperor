@@ -689,6 +689,7 @@ modules = [
   "src/emperor/datasets/image/segmentation/__init__.py",
   "src/emperor/datasets/image/segmentation/_cityscapes.py",
   "src/emperor/datasets/image/segmentation/_coco.py",
+  "src/emperor/datasets/image/segmentation/_geometry.py",
   "src/emperor/datasets/image/segmentation/_voc.py",
   "src/emperor/datasets/multimodal/__init__.py",
   "src/emperor/datasets/multimodal/vqa/__init__.py",
