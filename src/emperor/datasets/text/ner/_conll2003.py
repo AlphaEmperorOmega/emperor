@@ -3,6 +3,7 @@ import torch.utils.data
 from datasets import load_dataset
 
 from emperor.datasets._base import DataModule
+from emperor.datasets.text.ner._schema import _NERSchema
 
 # CoNLL-2003 NER tag set (BIO scheme)
 _NER_TAGS = [
@@ -19,28 +20,18 @@ _NER_TAGS = [
 
 
 class _NERDataset(torch.utils.data.Dataset):
-    def __init__(self, samples, sequence_length):
+    def __init__(self, samples, sequence_length, schema: _NERSchema):
         self.samples = samples
         self.sequence_length = sequence_length
-        # build word vocab from token lists
-        all_tokens = [tok for sample in samples for tok in sample["tokens"]]
-        unique_tokens = sorted(set(all_tokens))
-        self.token_to_idx = {"<pad>": 0, "<unk>": 1}
-        self.token_to_idx.update(
-            {tok: idx + 2 for idx, tok in enumerate(unique_tokens)}
-        )
+        self.schema = schema
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
-        tokens = [self.token_to_idx.get(t, 1) for t in sample["tokens"]]
+        tokens = self.schema.encode(sample["tokens"], self.sequence_length)
         labels = sample["ner_tags"]
-        # truncate or pad to sequence_length
-        tokens = tokens[: self.sequence_length] + [0] * max(
-            0, self.sequence_length - len(tokens)
-        )
         labels = labels[: self.sequence_length] + [0] * max(
             0, self.sequence_length - len(labels)
         )
@@ -63,6 +54,7 @@ class CoNLL2003(DataModule):
         super().__init__()
         self.batch_size = batch_size
         self.sequence_length = sequence_length
+        self.schema: _NERSchema | None = None
 
     def prepare_data(self) -> None:
         load_dataset("conll2003", split="train")
@@ -71,12 +63,23 @@ class CoNLL2003(DataModule):
     def _setup_fit(self) -> None:
         train_data = list(load_dataset("conll2003", split="train"))
         val_data = list(load_dataset("conll2003", split="validation"))
-        self.train = _NERDataset(train_data, self.sequence_length)
-        self.val = _NERDataset(val_data, self.sequence_length)
+        schema = self._build_schema(train_data)
+        self.train = _NERDataset(train_data, self.sequence_length, schema)
+        self.val = _NERDataset(val_data, self.sequence_length, schema)
 
     def _setup_validate(self) -> None:
+        if self.schema is None:
+            train_data = list(load_dataset("conll2003", split="train"))
+            schema = self._build_schema(train_data)
+        else:
+            schema = self.schema
         val_data = list(load_dataset("conll2003", split="validation"))
-        self.val = _NERDataset(val_data, self.sequence_length)
+        self.val = _NERDataset(val_data, self.sequence_length, schema)
+
+    def _build_schema(self, train_data: list) -> _NERSchema:
+        if self.schema is None:
+            self.schema = _NERSchema(train_data)
+        return self.schema
 
     def get_dataloader(self, train: bool):
         data = self.train if train else self.val
