@@ -9,14 +9,12 @@ from torch import Tensor
 
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
 
+from ._config_validation import _TranslationConfigValidator
 from ._metrics import _corpus_bleu, _translation_step_metrics
 from ._records import TranslationBatch, TranslationStepOutput
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
-
-
-_DEFAULT_PAD_TOKEN_ID = 0
 
 
 class TranslationExperiment(LightningModule):
@@ -25,18 +23,14 @@ class TranslationExperiment(LightningModule):
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
         self.cfg = cfg
-        experiment_config = cfg.experiment_config
-        self.learning_rate = float(cfg.learning_rate)
-        self.vocab_size = int(cfg.output_dim)
-        self.model_dim = int(cfg.hidden_dim)
-        self.pad_token_id = int(
-            getattr(experiment_config, "pad_token_id", _DEFAULT_PAD_TOKEN_ID)
-        )
-        self.label_smoothing = float(getattr(experiment_config, "label_smoothing", 0.1))
-        self.warmup_steps = int(getattr(experiment_config, "warmup_steps", 4_000))
-        self.generation_metrics_flag = bool(
-            getattr(experiment_config, "generation_metrics_flag", True)
-        )
+        resolved_config = _TranslationConfigValidator().resolve(cfg)
+        self.learning_rate = resolved_config.learning_rate
+        self.vocab_size = resolved_config.vocab_size
+        self.model_dim = resolved_config.model_dim
+        self.pad_token_id = resolved_config.pad_token_id
+        self.label_smoothing = resolved_config.label_smoothing
+        self.warmup_steps = resolved_config.warmup_steps
+        self.generation_metrics_flag = resolved_config.generation_metrics_flag
         self.loss_fn = nn.CrossEntropyLoss(
             ignore_index=self.pad_token_id,
             label_smoothing=self.label_smoothing,

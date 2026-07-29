@@ -763,6 +763,7 @@ blocked_reason = ""
 modules = [
   "src/emperor/experiments/__init__.py",
   "src/emperor/experiments/_auxiliary_loss.py",
+  "src/emperor/experiments/_config_validation.py",
   "src/emperor/experiments/_perplexity.py",
   "src/emperor/experiments/_tasks.py",
   "src/emperor/experiments/bert_pretraining/__init__.py",
@@ -789,6 +790,7 @@ modules = [
   "src/emperor/experiments/sequence_classifier/_metrics.py",
   "src/emperor/experiments/sequence_classifier/_records.py",
   "src/emperor/experiments/translation/__init__.py",
+  "src/emperor/experiments/translation/_config_validation.py",
   "src/emperor/experiments/translation/_experiment.py",
   "src/emperor/experiments/translation/_metrics.py",
   "src/emperor/experiments/translation/_records.py",

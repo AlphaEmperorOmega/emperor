@@ -6,6 +6,7 @@ from lightning import LightningModule
 from torch import Tensor
 
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+from emperor.experiments._config_validation import _ExperimentConfigValidator
 
 from ._metrics import ClassifierMetricsLogger
 from ._records import ClassifierBatch, ClassifierStepOutput
@@ -18,8 +19,12 @@ class ClassifierExperiment(LightningModule):
     def __init__(self, cfg: "ModelConfig"):
         super().__init__()
         self.cfg = cfg
-        self.learning_rate = self.cfg.learning_rate
-        self.num_classes = self.cfg.output_dim
+        resolved_config = _ExperimentConfigValidator(
+            "Classifier",
+            minimum_output_dim=2,
+        ).resolve(cfg)
+        self.learning_rate = resolved_config.learning_rate
+        self.num_classes = resolved_config.output_dim
         self.loss_fn = nn.CrossEntropyLoss()
         self.metrics = ClassifierMetricsLogger(self.num_classes)
         self._auxiliary_loss = AuxiliaryLoss("Classifier")
