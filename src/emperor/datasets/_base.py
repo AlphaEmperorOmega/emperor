@@ -7,6 +7,13 @@ from emperor.datasets._visualization import show_images
 class DataModule(LightningDataModule):
     """The base class of data."""
 
+    _SETUP_HOOKS = {
+        "fit": "_setup_fit",
+        "validate": "_setup_validate",
+        "test": "_setup_test",
+    }
+    _SUPPORTED_STAGES: frozenset[str] | None = None
+
     def __init__(
         self,
         root="data",
@@ -16,14 +23,43 @@ class DataModule(LightningDataModule):
         self.root = root
         self.num_workers = num_workers
 
-    def setup(self, stage: str) -> None:
-        match stage:
-            case "fit":
-                self._setup_fit()
-            case "validate":
-                self._setup_validate()
-            case "test":
-                self._setup_test()
+    def setup(self, stage: str | None = None) -> None:
+        if stage is None:
+            self._setup_all_supported_stages()
+            return
+        if stage not in self._SETUP_HOOKS:
+            raise ValueError(f"Unsupported dataset setup stage: {stage!r}")
+        self._setup_stage(stage)
+
+    def _setup_all_supported_stages(self) -> None:
+        supported_stages = self._supported_stages()
+        if "fit" in supported_stages:
+            self._setup_stage("fit")
+        elif "validate" in supported_stages:
+            self._setup_stage("validate")
+        if "test" in supported_stages:
+            self._setup_stage("test")
+        if not supported_stages:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not implement a dataset setup stage"
+            )
+
+    def _setup_stage(self, stage: str) -> None:
+        if stage not in self._supported_stages():
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support the {stage!r} stage"
+            )
+        getattr(self, self._SETUP_HOOKS[stage])()
+
+    def _supported_stages(self) -> frozenset[str]:
+        declared_stages = type(self)._SUPPORTED_STAGES
+        if declared_stages is not None:
+            return declared_stages
+        return frozenset(
+            stage
+            for stage, hook_name in self._SETUP_HOOKS.items()
+            if getattr(type(self), hook_name) is not getattr(DataModule, hook_name)
+        )
 
     def _setup_fit(self) -> None:
         raise NotImplementedError(
@@ -44,13 +80,43 @@ class DataModule(LightningDataModule):
         raise NotImplementedError
 
     def train_dataloader(self):
+        self._require_stage_support("fit")
+        self._require_dataset("train", "call setup('fit')")
         return self.get_dataloader(train=True)
 
     def val_dataloader(self):
+        if not self._supported_stages().intersection({"fit", "validate"}):
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support validation data"
+            )
+        self._require_dataset(
+            "val",
+            "call setup('fit') or setup('validate')",
+        )
         return self.get_dataloader(train=False)
 
     def test_dataloader(self):
+        self._require_stage_support("test")
+        self._require_dataset("test", "call setup('test')")
         return self._get_test_dataloader()
+
+    def _get_test_dataloader(self):
+        raise NotImplementedError(
+            f"{type(self).__name__} must implement '_get_test_dataloader'"
+        )
+
+    def _require_stage_support(self, stage: str) -> None:
+        if stage not in self._supported_stages():
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support the {stage!r} stage"
+            )
+
+    def _require_dataset(self, attribute: str, setup_hint: str) -> None:
+        if not hasattr(self, attribute) or getattr(self, attribute) is None:
+            raise RuntimeError(
+                f"{type(self).__name__} {attribute} data is not ready; "
+                f"{setup_hint} before requesting its loader"
+            )
 
     def get_tensorloader(  # noqa: B008 - preserves the historical public default
         self,

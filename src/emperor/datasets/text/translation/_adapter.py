@@ -60,6 +60,8 @@ class _TranslationDataset(torch.utils.data.Dataset):
 class _Multi30k(_DownloadSupport, _TokenizerSupport, DataModule):
     """Pinned, shared-vocabulary Multi30k translation data module."""
 
+    _SUPPORTED_STAGES = frozenset({"fit", "validate", "test"})
+
     source_language = "de"
     target_language = "en"
     language_pair = (source_language, target_language)
