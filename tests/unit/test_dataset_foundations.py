@@ -16,18 +16,22 @@ class _ExampleDataModule(DataModule):
 
     def _setup_fit(self) -> None:
         self.setup_calls.append("fit")
+        self.train = "train"
+        self.val = "validate"
 
     def _setup_validate(self) -> None:
         self.setup_calls.append("validate")
+        self.val = "validate"
 
     def _setup_test(self) -> None:
         self.setup_calls.append("test")
+        self.test = "test"
 
     def get_dataloader(self, train):
-        return "train" if train else "validate"
+        return self.train if train else self.val
 
     def _get_test_dataloader(self):
-        return "test"
+        return self.test
 
     def _text_labels(self, indices) -> list[str]:
         return [str(index.item()) for index in indices]
