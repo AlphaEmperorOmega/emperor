@@ -3,16 +3,17 @@ import torch
 import torch.utils.data
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
+from PIL import Image
 from torchvision.transforms.transforms import Compose
 
 from emperor.datasets._base import DataModule
+from emperor.datasets.image.segmentation._geometry import _SegmentationGeometry
 
 
 class _SegmentationDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, image_transform, mask_size):
+    def __init__(self, dataset, geometry):
         self.dataset = dataset
-        self.image_transform = image_transform
-        self.mask_size = mask_size
+        self.geometry = geometry
         self.cat_ids = sorted(dataset.coco.getCatIds())
         self.cat_id_to_label = {
             cat_id: idx + 1 for idx, cat_id in enumerate(self.cat_ids)
@@ -23,20 +24,33 @@ class _SegmentationDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         image, annotations = self.dataset[idx]
-        image = self.image_transform(image)
-        mask = self._build_mask(annotations)
-        return image, mask
+        source_width, source_height = image.size
+        mask = self._build_mask(
+            annotations,
+            source_height=source_height,
+            source_width=source_width,
+        )
+        return self.geometry.transform(image, mask)
 
-    def _build_mask(self, annotations: list) -> torch.Tensor:
-        mask = np.zeros(self.mask_size, dtype=np.int64)
+    def _build_mask(
+        self,
+        annotations: list,
+        *,
+        source_height: int,
+        source_width: int,
+    ) -> Image.Image:
+        mask = np.zeros((source_height, source_width), dtype=np.uint8)
         for ann in annotations:
             if "segmentation" not in ann:
                 continue
             cat_label = self.cat_id_to_label.get(ann["category_id"], 0)
-            seg_mask = self.dataset.coco.annToMask(ann)
-            seg_mask = torch.as_tensor(seg_mask, dtype=torch.uint8).numpy()
+            seg_mask = np.asarray(self.dataset.coco.annToMask(ann), dtype=np.uint8)
+            if seg_mask.shape != mask.shape:
+                raise ValueError(
+                    "COCO segmentation mask dimensions must match the source image"
+                )
             mask[seg_mask > 0] = cat_label
-        return torch.as_tensor(mask, dtype=torch.long)
+        return Image.fromarray(mask)
 
 
 class CocoSegmentation(DataModule):
@@ -69,20 +83,17 @@ class CocoSegmentation(DataModule):
     def _setup_fit(self) -> None:
         self.train = _SegmentationDataset(
             datasets.CocoDetection(root=self.train_root, annFile=self.train_ann_file),
-            self._get_image_transforms(),
-            self.resize,
+            _SegmentationGeometry(self._get_image_transforms()),
         )
         self.val = _SegmentationDataset(
             datasets.CocoDetection(root=self.val_root, annFile=self.val_ann_file),
-            self._get_image_transforms(),
-            self.resize,
+            _SegmentationGeometry(self._get_image_transforms()),
         )
 
     def _setup_validate(self) -> None:
         self.val = _SegmentationDataset(
             datasets.CocoDetection(root=self.val_root, annFile=self.val_ann_file),
-            self._get_image_transforms(),
-            self.resize,
+            _SegmentationGeometry(self._get_image_transforms()),
         )
 
     def _get_image_transforms(self) -> Compose:
