@@ -6,6 +6,7 @@ from lightning import LightningModule
 from torch import Tensor
 
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
+from emperor.experiments._config_validation import _ExperimentConfigValidator
 
 from ._metrics import MaskedLanguageModelMetricsLogger
 from ._records import MaskedLanguageModelBatch, MaskedLanguageModelStepOutput
@@ -18,8 +19,11 @@ class MaskedLanguageModelExperiment(LightningModule):
     def __init__(self, cfg: "ModelConfig"):
         super().__init__()
         self.cfg = cfg
-        self.learning_rate = self.cfg.learning_rate
-        self.vocab_size = self.cfg.output_dim
+        resolved_config = _ExperimentConfigValidator("Masked-language-model").resolve(
+            cfg
+        )
+        self.learning_rate = resolved_config.learning_rate
+        self.vocab_size = resolved_config.output_dim
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
         self.metrics = MaskedLanguageModelMetricsLogger()
         self._auxiliary_loss = AuxiliaryLoss("Masked-language-model")

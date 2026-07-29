@@ -18,7 +18,7 @@ from emperor.experiments.classifier._validation_examples import (
 
 class HealthProbeClassifier(ClassifierExperiment):
     def __init__(self):
-        super().__init__(ModelConfig(input_dim=1, output_dim=2))
+        super().__init__(ModelConfig(input_dim=1, output_dim=2, learning_rate=1e-3))
         self.probe = nn.Parameter(torch.tensor([3.0, 4.0]))
         self.bad_probe = nn.Parameter(torch.tensor([0.0, 0.0]))
 
@@ -28,7 +28,7 @@ class HealthProbeClassifier(ClassifierExperiment):
 
 class AuxiliaryLossProbeClassifier(ClassifierExperiment):
     def __init__(self):
-        super().__init__(ModelConfig(input_dim=1, output_dim=2))
+        super().__init__(ModelConfig(input_dim=1, output_dim=2, learning_rate=1e-3))
         self.auxiliary_loss = torch.tensor(0.25)
 
         def fail_item():
@@ -45,7 +45,7 @@ class AuxiliaryLossProbeClassifier(ClassifierExperiment):
 
 class InvalidAuxiliaryClassifier(ClassifierExperiment):
     def __init__(self, auxiliary_loss: object) -> None:
-        super().__init__(ModelConfig(input_dim=1, output_dim=2))
+        super().__init__(ModelConfig(input_dim=1, output_dim=2, learning_rate=1e-3))
         self.auxiliary_loss = auxiliary_loss
 
     def forward(self, X):

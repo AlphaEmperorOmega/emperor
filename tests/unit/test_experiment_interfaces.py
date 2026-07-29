@@ -37,6 +37,7 @@ TASK_NAMESPACES = tuple(TASK_EXPORTS)
 EXPECTED_SOURCE_TREE = (
     "__init__.py",
     "_auxiliary_loss.py",
+    "_config_validation.py",
     "_perplexity.py",
     "_tasks.py",
     "bert_pretraining/__init__.py",
@@ -63,6 +64,7 @@ EXPECTED_SOURCE_TREE = (
     "sequence_classifier/_metrics.py",
     "sequence_classifier/_records.py",
     "translation/__init__.py",
+    "translation/_config_validation.py",
     "translation/_experiment.py",
     "translation/_metrics.py",
     "translation/_records.py",
