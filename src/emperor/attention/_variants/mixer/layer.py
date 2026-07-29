@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor.attention._base import MultiHeadAttentionAbstract
 from emperor.attention._variants.mixer.validation import (
     MixerAttentionValidator,
 )
@@ -19,7 +18,7 @@ if TYPE_CHECKING:
     from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
 
 
-class MixerAttention(MultiHeadAttentionAbstract):
+class MixerAttention(Module):
     """Apply one shared configured model across every token-axis vector."""
 
     VALIDATOR = MixerAttentionValidator
@@ -29,7 +28,7 @@ class MixerAttention(MultiHeadAttentionAbstract):
         cfg: "MixerAttentionConfig | ModelConfig",
         overrides: "MixerAttentionConfig | None" = None,
     ) -> None:
-        Module.__init__(self)
+        super().__init__()
         config = getattr(cfg, "mixer_attention_config", cfg)
         self.cfg: MixerAttentionConfig = self._override_config(config, overrides)
 

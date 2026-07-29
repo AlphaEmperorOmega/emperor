@@ -365,10 +365,13 @@ class AttentionMonitorCallback(Callback):
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.attention._base import MultiHeadAttentionAbstract
+        from emperor.attention._variants.mixer.layer import MixerAttention
+
+        attention_runtime_types = (MultiHeadAttentionAbstract, MixerAttention)
 
         self.__cleanup()
         for module_name, attention_module in pl_module.named_modules():
-            if isinstance(attention_module, MultiHeadAttentionAbstract):
+            if isinstance(attention_module, attention_runtime_types):
                 self.__attach_attention_module(
                     module_name,
                     attention_module,
