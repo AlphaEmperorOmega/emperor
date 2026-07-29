@@ -9,6 +9,14 @@ class _MixtureOfAttentionHeadsMonitorAdapter(_AttentionMonitorAdapter):
     """Capture and canonicalize mixture attention weights."""
 
     @property
+    def raw_attention_logit_method_name(self) -> str:
+        return "_compute_raw_masked_attention_logits"
+
+    @property
+    def normalized_attention_weight_method_name(self) -> str:
+        return "_compute_normalized_attention_weights"
+
+    @property
     def exact_weight_method_name(self) -> str:
         return "_compute_masked_attention_weights"
 

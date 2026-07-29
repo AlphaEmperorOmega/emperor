@@ -377,6 +377,12 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         monitor = AttentionMonitorCallback(log_every_n_steps=1)
         original_projection = model.attention.projector.compute_qkv_projections
         original_attention = model.attention.processor.compute_attention
+        original_raw_logits = (
+            model.attention.processor._compute_raw_masked_attention_logits
+        )
+        original_normalized_weights = (
+            model.attention.processor._compute_normalized_attention_weights
+        )
         original_exact_weights = (
             model.attention.processor._compute_masked_attention_weights
         )
@@ -433,6 +439,10 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             "attention/attention/max_probability_mean": probability,
             "attention/attention/dead_head_fraction": 0.0,
             "attention/attention/dropout_zero_fraction": 0.0,
+            "attention/attention/finite_raw_logit_mean": 2**-1.5,
+            "attention/attention/finite_raw_logit_std": 2**-1.5,
+            "attention/attention/pre_dropout_entropy_mean": entropy,
+            "attention/attention/pre_dropout_max_probability_mean": probability,
         }
         self.assertEqual(set(trainer.logged_metrics), set(expected_metrics))
         for metric_name, expected_value in expected_metrics.items():
@@ -461,6 +471,18 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(
             _same_bound_method(
+                model.attention.processor._compute_raw_masked_attention_logits,
+                original_raw_logits,
+            )
+        )
+        self.assertTrue(
+            _same_bound_method(
+                model.attention.processor._compute_normalized_attention_weights,
+                original_normalized_weights,
+            )
+        )
+        self.assertTrue(
+            _same_bound_method(
                 model.attention.processor._compute_masked_attention_weights,
                 original_exact_weights,
             )
@@ -470,6 +492,14 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             vars(model.attention.projector),
         )
         self.assertNotIn("compute_attention", vars(model.attention.processor))
+        self.assertNotIn(
+            "_compute_raw_masked_attention_logits",
+            vars(model.attention.processor),
+        )
+        self.assertNotIn(
+            "_compute_normalized_attention_weights",
+            vars(model.attention.processor),
+        )
         self.assertNotIn(
             "_compute_masked_attention_weights",
             vars(model.attention.processor),
@@ -482,6 +512,12 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         monitor = AttentionMonitorCallback(log_every_n_steps=1)
         original_projection = model.attention.projector.compute_qkv_projections
         original_attention = model.attention.processor.compute_attention
+        original_raw_logits = (
+            model.attention.processor._compute_raw_masked_attention_logits
+        )
+        original_normalized_weights = (
+            model.attention.processor._compute_normalized_attention_weights
+        )
         original_exact_weights = (
             model.attention.processor._compute_masked_attention_weights
         )
@@ -516,6 +552,18 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._max_probability_history, {})
         self.assertTrue(
             _same_bound_method(
+                model.attention.processor._compute_raw_masked_attention_logits,
+                original_raw_logits,
+            )
+        )
+        self.assertTrue(
+            _same_bound_method(
+                model.attention.processor._compute_normalized_attention_weights,
+                original_normalized_weights,
+            )
+        )
+        self.assertTrue(
+            _same_bound_method(
                 model.attention.projector.compute_qkv_projections,
                 original_projection,
             )
@@ -537,6 +585,14 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             vars(model.attention.projector),
         )
         self.assertNotIn("compute_attention", vars(model.attention.processor))
+        self.assertNotIn(
+            "_compute_raw_masked_attention_logits",
+            vars(model.attention.processor),
+        )
+        self.assertNotIn(
+            "_compute_normalized_attention_weights",
+            vars(model.attention.processor),
+        )
         self.assertNotIn(
             "_compute_masked_attention_weights",
             vars(model.attention.processor),
