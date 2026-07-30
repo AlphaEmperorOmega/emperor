@@ -20,9 +20,7 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
-            auto_expand_flag=False,
         ).build()
         tokens = torch.ones(2, 3, dtype=torch.long)
 
@@ -66,9 +64,7 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
-            auto_expand_flag=False,
         ).build()
         tokens = torch.empty((2, 0), dtype=torch.long)
         positions = torch.empty((2, 0), dtype=torch.int32)
@@ -88,18 +84,14 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
             ImageSinusoidalPositionalEmbeddingConfig,
         ):
             with self.subTest(config_type=config_type.__name__):
-                model = config_type(
-                    num_embeddings=3,
-                    embedding_dim=2,
-                    init_size=3,
-                    padding_idx=(
-                        None
-                        if config_type is ImageSinusoidalPositionalEmbeddingConfig
-                        else 0
-                    ),
-                    auto_expand_flag=False,
-                    class_token_flag=False,
-                ).build()
+                config_values = {
+                    "num_embeddings": 3,
+                    "embedding_dim": 2,
+                    "class_token_flag": False,
+                }
+                if config_type is ImageLearnedPositionalEmbeddingConfig:
+                    config_values["padding_idx"] = 0
+                model = config_type(**config_values).build()
 
                 with self.assertRaises(ValueError) as sequence_error:
                     model(torch.zeros(2, 4, 2))
@@ -121,9 +113,7 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         config = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=3,
             embedding_dim=2,
-            init_size=3,
             padding_idx=2,
-            auto_expand_flag=False,
         )
         model = config.build()
         expected_weights = torch.tensor(
@@ -180,9 +170,7 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         zero_padding_model = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=3,
             embedding_dim=2,
-            init_size=3,
             padding_idx=0,
-            auto_expand_flag=False,
         ).build()
         zero_padding_weights = torch.tensor(
             [
@@ -213,9 +201,7 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=None,
-            auto_expand_flag=False,
         ).build()
         weights = torch.tensor([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0]])
         with torch.no_grad():
@@ -239,14 +225,11 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
             TextLearnedPositionalEmbeddingConfig(
                 num_embeddings=4,
                 embedding_dim=2,
-                init_size=4,
                 padding_idx=0,
-                auto_expand_flag=False,
             ),
             TextSinusoidalPositionalEmbeddingConfig(
                 num_embeddings=4,
                 embedding_dim=2,
-                init_size=4,
                 padding_idx=0,
                 auto_expand_flag=False,
             ),
@@ -270,7 +253,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=None,
             auto_expand_flag=False,
         ).build()
@@ -297,9 +279,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=3,
             embedding_dim=2,
-            init_size=3,
-            padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=False,
         ).build()
         patches = torch.zeros(2, 3, 2)
@@ -317,7 +296,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=4,
-            init_size=2,
             padding_idx=0,
             auto_expand_flag=True,
         ).build()
@@ -344,7 +322,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
             auto_expand_flag=False,
         ).build()
@@ -368,7 +345,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
             auto_expand_flag=False,
         ).build()
@@ -392,7 +368,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
             auto_expand_flag=True,
         ).build()
@@ -413,7 +388,6 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
             auto_expand_flag=True,
         ).build()
@@ -464,13 +438,8 @@ class AbsoluteEmbeddingRegressionTests(unittest.TestCase):
 class RelativeEmbeddingRegressionTests(unittest.TestCase):
     def test_relative_forward_validates_modes_and_query_dimensions(self) -> None:
         model = DynamicPositionalBiasConfig(
-            text_processing_flag=True,
             num_heads=2,
-            num_embeddings=5,
             embedding_dim=4,
-            init_size=5,
-            padding_idx=None,
-            auto_expand_flag=False,
             max_positions=2,
         ).build()
         valid_query = torch.ones(1, 2, 3, 2)
@@ -533,13 +502,8 @@ class RelativeEmbeddingRegressionTests(unittest.TestCase):
 
     def test_relative_distance_clamping_uses_both_endpoint_bins(self) -> None:
         model = DynamicPositionalBiasConfig(
-            text_processing_flag=True,
             num_heads=1,
-            num_embeddings=5,
             embedding_dim=1,
-            init_size=5,
-            padding_idx=None,
-            auto_expand_flag=False,
             max_positions=2,
         ).build()
         with torch.no_grad():

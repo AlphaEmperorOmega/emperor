@@ -10,18 +10,19 @@ from emperor.embedding.absolute._base import AbsolutePositionalEmbeddingBase
 
 if TYPE_CHECKING:
     from emperor.embedding.absolute._config import (
-        AbsolutePositionalEmbeddingConfig,
         ImageLearnedPositionalEmbeddingConfig,
+        TextLearnedPositionalEmbeddingConfig,
     )
 
 
 class LearnedPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     def __init__(
         self,
-        cfg: "AbsolutePositionalEmbeddingConfig",
-        overrides: "AbsolutePositionalEmbeddingConfig | None" = None,
+        cfg: "TextLearnedPositionalEmbeddingConfig | ImageLearnedPositionalEmbeddingConfig",
+        overrides: "TextLearnedPositionalEmbeddingConfig | ImageLearnedPositionalEmbeddingConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
+        self.padding_idx: int | None = self.cfg.padding_idx
         self.num_embeddings = self._get_num_embeddings()
         self.VALIDATOR.validate_padding_idx_bounds(
             padding_idx=self.padding_idx,
@@ -80,7 +81,7 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
             return positions
         if incremental_state is not None:
             return self.__make_incremental_position(input_tokens)
-        return self._make_positions(input_tokens)
+        return self._make_positions(input_tokens, self.padding_idx)
 
     def __make_incremental_position(self, input_tokens: Tensor) -> Tensor:
         batch_size = input_tokens.size(0)

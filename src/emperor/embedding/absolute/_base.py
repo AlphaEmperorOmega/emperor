@@ -29,13 +29,14 @@ class AbsolutePositionalEmbeddingBase(Module):
         self.VALIDATOR.validate(self)
 
         self.embedding_dim: int = self.cfg.embedding_dim
-        self.padding_idx: int | None = self.cfg.padding_idx
         self.num_embeddings: int = self.cfg.num_embeddings
-        self.init_size: int = self.cfg.init_size
-        self.auto_expand_flag: bool = self.cfg.auto_expand_flag
 
-    def _make_positions(self, input_tokens: Tensor) -> Tensor:
-        if self.padding_idx is None:
+    def _make_positions(
+        self,
+        input_tokens: Tensor,
+        padding_idx: int | None,
+    ) -> Tensor:
+        if padding_idx is None:
             return (
                 torch.arange(
                     input_tokens.size(1),
@@ -44,9 +45,9 @@ class AbsolutePositionalEmbeddingBase(Module):
                 .unsqueeze(0)
                 .expand_as(input_tokens)
             )
-        non_padding_mask = input_tokens.ne(self.padding_idx).int()
+        non_padding_mask = input_tokens.ne(padding_idx).int()
         cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(
             non_padding_mask
         )
         cumulative_positions = cumulative_positions * non_padding_mask
-        return cumulative_positions.long() + self.padding_idx
+        return cumulative_positions.long() + padding_idx

@@ -26,9 +26,6 @@ class TestAbsolutePositionalEmbeddingConfig(unittest.TestCase):
         cfg = AbsolutePositionalEmbeddingConfig(
             num_embeddings=8,
             embedding_dim=6,
-            init_size=8,
-            padding_idx=0,
-            auto_expand_flag=False,
         )
 
         with self.assertRaises(NotImplementedError):
@@ -40,16 +37,12 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
         self,
         num_embeddings: int = 8,
         embedding_dim: int = 6,
-        init_size: int = 8,
         padding_idx: int | None = 0,
-        auto_expand_flag: bool = False,
     ) -> TextLearnedPositionalEmbeddingConfig:
         return TextLearnedPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            init_size=init_size,
             padding_idx=padding_idx,
-            auto_expand_flag=auto_expand_flag,
         )
 
     def test_init(self):
@@ -59,8 +52,6 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
         self.assertEqual(model.embedding_dim, cfg.embedding_dim)
         self.assertEqual(model.padding_idx, cfg.padding_idx)
         self.assertEqual(model.num_embeddings, cfg.num_embeddings + 1)
-        self.assertEqual(model.init_size, cfg.init_size)
-        self.assertEqual(model.auto_expand_flag, cfg.auto_expand_flag)
         self.assertIsInstance(model.embedding_model, nn.Embedding)
 
     def test_forward(self):
@@ -114,15 +105,12 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
         overrides = TextLearnedPositionalEmbeddingConfig(
             num_embeddings=12,
             embedding_dim=6,
-            init_size=12,
             padding_idx=0,
-            auto_expand_flag=True,
         )
         model = cfg.build(overrides)
 
         self.assertEqual(model.embedding_dim, overrides.embedding_dim)
         self.assertEqual(model.num_embeddings, overrides.num_embeddings + 1)
-        self.assertEqual(model.auto_expand_flag, overrides.auto_expand_flag)
 
     def test_init_raises_on_missing_or_invalid_fields(self):
         invalid_cases = [
@@ -130,9 +118,7 @@ class TestTextLearnedPositionalEmbedding(unittest.TestCase):
                 "missing_num_embeddings",
                 TextLearnedPositionalEmbeddingConfig(
                     embedding_dim=4,
-                    init_size=8,
                     padding_idx=0,
-                    auto_expand_flag=False,
                 ),
             ),
             ("zero_embedding_dim", self.preset(embedding_dim=0)),
@@ -150,17 +136,13 @@ class TestImageLearnedPositionalEmbedding(unittest.TestCase):
         self,
         num_embeddings: int = 4,
         embedding_dim: int = 6,
-        init_size: int = 4,
         padding_idx: int | None = 0,
-        auto_expand_flag: bool = False,
         class_token_flag: bool = True,
     ) -> ImageLearnedPositionalEmbeddingConfig:
         return ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            init_size=init_size,
             padding_idx=padding_idx,
-            auto_expand_flag=auto_expand_flag,
             class_token_flag=class_token_flag,
         )
 
@@ -189,9 +171,7 @@ class TestImageLearnedPositionalEmbedding(unittest.TestCase):
         cfg = ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=6,
-            init_size=4,
             padding_idx=0,
-            auto_expand_flag=False,
         )
 
         with self.assertRaises(ValueError):
@@ -203,14 +183,12 @@ class TestTextSinusoidalPositionalEmbedding(unittest.TestCase):
         self,
         num_embeddings: int = 8,
         embedding_dim: int = 6,
-        init_size: int = 8,
         padding_idx: int | None = 0,
         auto_expand_flag: bool = False,
     ) -> TextSinusoidalPositionalEmbeddingConfig:
         return TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            init_size=init_size,
             padding_idx=padding_idx,
             auto_expand_flag=auto_expand_flag,
         )
@@ -336,17 +314,11 @@ class TestImageSinusoidalPositionalEmbedding(unittest.TestCase):
         self,
         num_embeddings: int = 4,
         embedding_dim: int = 6,
-        init_size: int = 4,
-        padding_idx: int | None = None,
-        auto_expand_flag: bool = False,
         class_token_flag: bool = True,
     ) -> ImageSinusoidalPositionalEmbeddingConfig:
         return ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            init_size=init_size,
-            padding_idx=padding_idx,
-            auto_expand_flag=auto_expand_flag,
             class_token_flag=class_token_flag,
         )
 

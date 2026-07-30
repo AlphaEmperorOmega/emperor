@@ -5,13 +5,10 @@ from torch import Tensor
 from emperor._validation import ValidatorBase
 
 if TYPE_CHECKING:
-    from emperor.embedding.relative._config import DynamicPositionalBiasConfig
     from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
 
 class RelativePositionalEmbeddingValidator(ValidatorBase):
-    OPTIONAL_FIELDS = {"override_config", "padding_idx"}
-
     @classmethod
     def validate(cls, model: "DynamicPositionalBias") -> None:
         cfg = model.cfg
@@ -19,30 +16,10 @@ class RelativePositionalEmbeddingValidator(ValidatorBase):
         cls.validate_field_types(cfg)
         cls.validate_dimensions(
             num_heads=cfg.num_heads,
-            num_embeddings=cfg.num_embeddings,
             embedding_dim=cfg.embedding_dim,
-            init_size=cfg.init_size,
             max_positions=cfg.max_positions,
         )
-        cls._validate_padding_idx(cfg)
         cls._validate_head_dimensions(cfg.embedding_dim, cfg.num_heads)
-
-    @staticmethod
-    def _validate_padding_idx(
-        cfg: "DynamicPositionalBiasConfig",
-    ) -> None:
-        padding_idx = cfg.padding_idx
-        if padding_idx is not None and (
-            not isinstance(padding_idx, int) or isinstance(padding_idx, bool)
-        ):
-            raise TypeError(
-                f"padding_idx must be int for {type(cfg).__name__}, "
-                f"got {type(padding_idx).__name__}"
-            )
-        if padding_idx is not None and padding_idx < 0:
-            raise ValueError(
-                f"padding_idx must be >= 0 when provided, received {padding_idx}"
-            )
 
     @staticmethod
     def _validate_head_dimensions(embedding_dim: int, num_heads: int) -> None:

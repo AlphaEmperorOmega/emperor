@@ -15,13 +15,8 @@ from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 
 def make_config(**overrides: object) -> DynamicPositionalBiasConfig:
     values: dict[str, object] = {
-        "text_processing_flag": True,
         "num_heads": 2,
-        "num_embeddings": 8,
         "embedding_dim": 4,
-        "init_size": 8,
-        "padding_idx": None,
-        "auto_expand_flag": False,
         "max_positions": 4,
     }
     values.update(overrides)
@@ -37,12 +32,8 @@ class RelativePositionalEmbeddingValidationTests(unittest.TestCase):
 
     def test_every_non_optional_configuration_field_is_required(self) -> None:
         for field_name in (
-            "text_processing_flag",
             "num_heads",
-            "num_embeddings",
             "embedding_dim",
-            "init_size",
-            "auto_expand_flag",
             "max_positions",
         ):
             with self.subTest(field_name=field_name):
@@ -53,30 +44,15 @@ class RelativePositionalEmbeddingValidationTests(unittest.TestCase):
                     f"{field_name} is required for "
                     "DynamicPositionalBiasConfig, received None",
                 )
-
-        model = DynamicPositionalBias(make_config(padding_idx=None))
-        self.assertIsNone(model.padding_idx)
-        self.assertEqual(model.num_embeddings, 8)
-
     def test_configuration_rejects_exact_wrong_types(self) -> None:
         invalid_values = {
-            "text_processing_flag": 1,
             "num_heads": False,
-            "num_embeddings": 8.0,
             "embedding_dim": "4",
-            "init_size": 8.0,
-            "padding_idx": 0.0,
-            "auto_expand_flag": 0,
             "max_positions": 4.0,
         }
         expected_types = {
-            "text_processing_flag": "bool",
             "num_heads": "int",
-            "num_embeddings": "int",
             "embedding_dim": "int",
-            "init_size": "int",
-            "padding_idx": "int",
-            "auto_expand_flag": "bool",
             "max_positions": "int",
         }
 
@@ -95,10 +71,7 @@ class RelativePositionalEmbeddingValidationTests(unittest.TestCase):
         valid = DynamicPositionalBias(
             make_config(
                 num_heads=1,
-                num_embeddings=1,
                 embedding_dim=1,
-                init_size=1,
-                padding_idx=0,
                 max_positions=1,
             )
         )
@@ -106,7 +79,6 @@ class RelativePositionalEmbeddingValidationTests(unittest.TestCase):
             valid.relative_positional_embeddings.shape,
             (1, 1, 3),
         )
-        self.assertEqual(valid.num_embeddings, 2)
 
         invalid_cases = (
             (
@@ -115,29 +87,14 @@ class RelativePositionalEmbeddingValidationTests(unittest.TestCase):
                 "num_heads must be greater than 0, received 0",
             ),
             (
-                "num_embeddings",
-                -1,
-                "num_embeddings must be greater than 0, received -1",
-            ),
-            (
                 "embedding_dim",
                 0,
                 "embedding_dim must be greater than 0, received 0",
             ),
             (
-                "init_size",
-                0,
-                "init_size must be greater than 0, received 0",
-            ),
-            (
                 "max_positions",
                 0,
                 "max_positions must be greater than 0, received 0",
-            ),
-            (
-                "padding_idx",
-                -1,
-                "padding_idx must be >= 0 when provided, received -1",
             ),
         )
         for field_name, value, message in invalid_cases:
