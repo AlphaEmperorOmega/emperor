@@ -10,21 +10,25 @@ from emperor.embedding.absolute._base import AbsolutePositionalEmbeddingBase
 
 if TYPE_CHECKING:
     from emperor.embedding.absolute._config import (
-        AbsolutePositionalEmbeddingConfig,
         ImageSinusoidalPositionalEmbeddingConfig,
+        TextSinusoidalPositionalEmbeddingConfig,
     )
 
 
 class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
     def __init__(
         self,
-        cfg: "AbsolutePositionalEmbeddingConfig",
-        overrides: "AbsolutePositionalEmbeddingConfig | None" = None,
+        cfg: "TextSinusoidalPositionalEmbeddingConfig | ImageSinusoidalPositionalEmbeddingConfig",
+        overrides: "TextSinusoidalPositionalEmbeddingConfig | ImageSinusoidalPositionalEmbeddingConfig | None" = None,
     ):
         super().__init__(cfg, overrides)
+        self.padding_idx = self._get_configured_padding_idx()
         self.position_offset = self._get_padding_idx()
         self.init_size = self._get_init_size()
         self._register_positional_embedding_tensor()
+
+    def _get_configured_padding_idx(self) -> int | None:
+        raise NotImplementedError
 
     def _get_padding_idx(self) -> int:
         return self.padding_idx or 0
@@ -79,6 +83,17 @@ class SinusoidalPositionalEmbedding(AbsolutePositionalEmbeddingBase):
 
 
 class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
+    def __init__(
+        self,
+        cfg: "TextSinusoidalPositionalEmbeddingConfig",
+        overrides: "TextSinusoidalPositionalEmbeddingConfig | None" = None,
+    ):
+        super().__init__(cfg, overrides)
+        self.auto_expand_flag: bool = self.cfg.auto_expand_flag
+
+    def _get_configured_padding_idx(self) -> int | None:
+        return self.cfg.padding_idx
+
     def forward(
         self,
         input_tokens: Tensor,
@@ -131,7 +146,7 @@ class TextSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     def __forward_full_sequence(
         self, input_tokens: Tensor, batch_size: int, sequence_length: int
     ) -> Tensor:
-        positions = self._make_positions(input_tokens)
+        positions = self._make_positions(input_tokens, self.padding_idx)
         selected_weights = self.weights.index_select(0, positions.reshape(-1))
         return selected_weights.view(
             batch_size,
@@ -148,6 +163,9 @@ class ImageSinusoidalPositionalEmbedding(SinusoidalPositionalEmbedding):
     ):
         super().__init__(cfg, overrides)
         self.class_token_flag: bool = self.cfg.class_token_flag
+
+    def _get_configured_padding_idx(self) -> int | None:
+        return None
 
     def _get_init_size(self) -> int:
         return self.num_embeddings + int(self.cfg.class_token_flag)

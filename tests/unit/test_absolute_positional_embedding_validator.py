@@ -5,7 +5,6 @@ import unittest
 import torch
 
 from emperor.embedding.absolute import (
-    AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbeddingConfig,
     ImageSinusoidalPositionalEmbeddingConfig,
     TextLearnedPositionalEmbeddingConfig,
@@ -30,9 +29,7 @@ def make_text_config(**overrides: object) -> TextLearnedPositionalEmbeddingConfi
     values: dict[str, object] = {
         "num_embeddings": 8,
         "embedding_dim": 4,
-        "init_size": 8,
         "padding_idx": None,
-        "auto_expand_flag": False,
     }
     values.update(overrides)
     return TextLearnedPositionalEmbeddingConfig(**values)
@@ -47,13 +44,10 @@ def make_image_config(
     values: dict[str, object] = {
         "num_embeddings": 4,
         "embedding_dim": 4,
-        "init_size": 4,
-        "padding_idx": (
-            None if config_type is ImageSinusoidalPositionalEmbeddingConfig else 0
-        ),
-        "auto_expand_flag": False,
         "class_token_flag": True,
     }
+    if config_type is ImageLearnedPositionalEmbeddingConfig:
+        values["padding_idx"] = 0
     values.update(overrides)
     return config_type(**values)
 
@@ -83,8 +77,6 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
         for field_name in (
             "num_embeddings",
             "embedding_dim",
-            "init_size",
-            "auto_expand_flag",
         ):
             with self.subTest(field_name=field_name):
                 with self.assertRaises(ValueError) as error:
@@ -104,16 +96,12 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
         invalid_values = {
             "num_embeddings": False,
             "embedding_dim": 4.0,
-            "init_size": "8",
             "padding_idx": 0.0,
-            "auto_expand_flag": 1,
         }
         expected_types = {
             "num_embeddings": "int",
             "embedding_dim": "int",
-            "init_size": "int",
             "padding_idx": "int",
-            "auto_expand_flag": "bool",
         }
 
         for field_name, value in invalid_values.items():
@@ -134,7 +122,6 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
             make_text_config(
                 num_embeddings=1,
                 embedding_dim=1,
-                init_size=1,
                 padding_idx=0,
             )
         )
@@ -150,11 +137,6 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
                 "embedding_dim",
                 -1,
                 "embedding_dim must be greater than 0, received -1",
-            ),
-            (
-                "init_size",
-                0,
-                "init_size must be greater than 0, received 0",
             ),
             (
                 "padding_idx",
@@ -174,19 +156,6 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
         self,
     ) -> None:
         invalid_cases = (
-            (
-                lambda: LearnedPositionalEmbedding(
-                    AbsolutePositionalEmbeddingConfig(
-                        num_embeddings=3,
-                        embedding_dim=2,
-                        init_size=3,
-                        padding_idx=3,
-                        auto_expand_flag=False,
-                    )
-                ),
-                "padding_idx must be in [0, 3) for "
-                "LearnedPositionalEmbedding, received 3",
-            ),
             (
                 lambda: ImageLearnedPositionalEmbedding(
                     make_image_config(
@@ -256,23 +225,6 @@ class AbsolutePositionalEmbeddingValidationTests(unittest.TestCase):
                     str(type_error.exception),
                     f"class_token_flag must be bool for "
                     f"{config_type.__name__}, got int",
-                )
-
-    def test_image_sinusoidal_rejects_numeric_padding_indices(self) -> None:
-        for padding_idx in (0, 2):
-            with self.subTest(padding_idx=padding_idx):
-                with self.assertRaises(ValueError) as error:
-                    ImageSinusoidalPositionalEmbedding(
-                        make_image_config(
-                            ImageSinusoidalPositionalEmbeddingConfig,
-                            padding_idx=padding_idx,
-                        )
-                    )
-                self.assertEqual(
-                    str(error.exception),
-                    "padding_idx must be None for "
-                    "ImageSinusoidalPositionalEmbeddingConfig because image patch "
-                    "sequences do not contain padding tokens.",
                 )
 
     def test_text_token_validation_rejects_type_rank_and_fractional_values(

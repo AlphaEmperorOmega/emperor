@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import models.gpt.linear_adaptive.config as config
 from models.gpt.linear_adaptive import _config_defaults as config_defaults
@@ -36,10 +36,17 @@ class PositionalEmbeddingConfigFactory:
     def build_positional_embedding_config(self):
         options = self.positional_embedding_options
         positional_embedding_config = options.option
+        available_values = {
+            "num_embeddings": self.sequence_length,
+            "embedding_dim": self.hidden_dim,
+            "padding_idx": options.padding_idx,
+            "auto_expand_flag": options.auto_expand_flag,
+        }
+        active_fields = {field.name for field in fields(positional_embedding_config)}
         return positional_embedding_config(
-            num_embeddings=self.sequence_length,
-            embedding_dim=self.hidden_dim,
-            init_size=self.sequence_length,
-            padding_idx=options.padding_idx,
-            auto_expand_flag=options.auto_expand_flag,
+            **{
+                name: value
+                for name, value in available_values.items()
+                if name in active_fields
+            }
         )

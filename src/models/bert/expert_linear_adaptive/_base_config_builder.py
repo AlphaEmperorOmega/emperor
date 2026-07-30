@@ -1,3 +1,4 @@
+from dataclasses import fields
 from typing import TYPE_CHECKING
 
 import torch
@@ -165,12 +166,19 @@ class BertBackendConfigBuilder:
     ) -> AbsolutePositionalEmbeddingConfig:
         options = self.positional_embedding_options
         positional_embedding_config = options.option
+        available_values = {
+            "num_embeddings": self.sequence_length,
+            "embedding_dim": self.hidden_dim,
+            "padding_idx": options.padding_idx,
+            "auto_expand_flag": options.auto_expand_flag,
+        }
+        active_fields = {field.name for field in fields(positional_embedding_config)}
         return positional_embedding_config(
-            num_embeddings=self.sequence_length,
-            embedding_dim=self.hidden_dim,
-            init_size=self.sequence_length,
-            padding_idx=options.padding_idx,
-            auto_expand_flag=options.auto_expand_flag,
+            **{
+                name: value
+                for name, value in available_values.items()
+                if name in active_fields
+            }
         )
 
     def _build_encoder_config(self) -> "ConfigBase":
