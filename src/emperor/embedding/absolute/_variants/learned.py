@@ -58,16 +58,12 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
         incremental_state: dict[str, dict[str, Tensor | None]] | None = None,
         positions: Tensor | None = None,
     ) -> Tensor:
-        self.VALIDATOR.validate_text_tokens(input_tokens)
-        sequence_length = input_tokens.size(1)
-        if incremental_state is not None:
-            self.VALIDATOR.validate_incremental_sequence_length(sequence_length)
-        if positions is not None:
-            self.VALIDATOR.validate_positions(
-                positions,
-                expected_shape=tuple(input_tokens.shape),
-                num_embeddings=self.embedding_model.num_embeddings,
-            )
+        self.VALIDATOR.validate_text_learned_forward_inputs(
+            input_tokens,
+            incremental_state=incremental_state,
+            positions=positions,
+            num_embeddings=self.embedding_model.num_embeddings,
+        )
         positions = self.__resolve_positions(input_tokens, incremental_state, positions)
         return self.embedding_model(positions)
 
