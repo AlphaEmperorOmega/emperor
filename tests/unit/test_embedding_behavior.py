@@ -4,13 +4,11 @@ import json
 import subprocess
 import sys
 import unittest
-from dataclasses import dataclass, fields
+from dataclasses import fields
 
 import torch
 import torch.nn as nn
 
-from emperor.attention import MultiHeadAttentionConfig
-from emperor.config import ConfigBase, optional_field
 from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
     ImageLearnedPositionalEmbeddingConfig,
@@ -26,20 +24,6 @@ from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
     RelativePositionalEmbeddingConfig,
 )
-
-
-@dataclass
-class _InnerPositionalConfig(ConfigBase):
-    positional_embedding_config: ConfigBase | None = optional_field(
-        "Nested positional embedding configuration."
-    )
-
-
-@dataclass
-class _OuterAbsoluteConfig(ConfigBase):
-    absolute_positional_embedding_config: ConfigBase | None = optional_field(
-        "Nested absolute positional embedding configuration."
-    )
 
 
 def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingConfig:
@@ -163,17 +147,6 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
             (2, None),
         )
 
-    def test_absolute_nested_config_adapters_resolve_real_config(self) -> None:
-        concrete = text_learned_config(embedding_dim=3)
-        inner = _InnerPositionalConfig(positional_embedding_config=concrete)
-        outer = _OuterAbsoluteConfig(absolute_positional_embedding_config=inner)
-
-        model = concrete.registry_owner()(outer)
-
-        self.assertIs(model.cfg, concrete)
-        self.assertEqual(model.embedding_dim, 3)
-        self.assertEqual(model.padding_idx, 0)
-
     def test_absolute_preserves_false_and_zero_overrides(self) -> None:
         concrete = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
@@ -191,7 +164,7 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         self.assertEqual(model.padding_idx, 0)
         self.assertFalse(model.auto_expand_flag)
 
-    def test_image_nested_configs_and_partial_overrides_reach_base_models(
+    def test_image_partial_overrides_reach_base_models(
         self,
     ) -> None:
         learned_config = ImageLearnedPositionalEmbeddingConfig(
@@ -200,20 +173,12 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
             padding_idx=0,
             class_token_flag=True,
         )
-        learned_wrapper = _OuterAbsoluteConfig(
-            absolute_positional_embedding_config=_InnerPositionalConfig(
-                positional_embedding_config=learned_config
-            )
-        )
         learned_override = ImageLearnedPositionalEmbeddingConfig(
             embedding_dim=4,
             class_token_flag=False,
         )
 
-        learned = learned_config.registry_owner()(
-            learned_wrapper,
-            learned_override,
-        )
+        learned = learned_config.build(learned_override)
 
         self.assertEqual(
             (
@@ -231,21 +196,13 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
             embedding_dim=2,
             class_token_flag=True,
         )
-        sinusoidal_wrapper = _OuterAbsoluteConfig(
-            absolute_positional_embedding_config=_InnerPositionalConfig(
-                positional_embedding_config=sinusoidal_config
-            )
-        )
         sinusoidal_override = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=3,
             embedding_dim=4,
             class_token_flag=False,
         )
 
-        sinusoidal = sinusoidal_config.registry_owner()(
-            sinusoidal_wrapper,
-            sinusoidal_override,
-        )
+        sinusoidal = sinusoidal_config.build(sinusoidal_override)
 
         self.assertEqual(
             (
@@ -279,18 +236,6 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         self.assertEqual(concrete.num_heads, 2)
         self.assertEqual(concrete.embedding_dim, 4)
         self.assertEqual(concrete.max_positions, 2)
-
-    def test_relative_attention_wrapper_resolves_real_config(self) -> None:
-        concrete = relative_config()
-        wrapper = MultiHeadAttentionConfig(
-            relative_positional_embedding_config=concrete
-        )
-
-        model = concrete.registry_owner()(wrapper)
-
-        self.assertIs(model.cfg, concrete)
-        self.assertEqual(model.num_heads, 2)
-        self.assertEqual(model.embedding_dim, 4)
 
     def test_all_concrete_absolute_config_types_dispatch_correctly(self) -> None:
         configs = (

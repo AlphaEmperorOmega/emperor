@@ -21,10 +21,8 @@ class AbsolutePositionalEmbeddingBase(Module):
         overrides: "AbsolutePositionalEmbeddingConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "absolute_positional_embedding_config", cfg)
-        config = getattr(config, "positional_embedding_config", config)
         self.cfg: AbsolutePositionalEmbeddingConfig = self._override_config(
-            config, overrides
+            cfg, overrides
         )
         self.VALIDATOR.validate(self)
 
