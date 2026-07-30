@@ -28,7 +28,7 @@ class Conv2dLayerValidator(ValidatorBase):
             raise ValueError(f"padding must be >= 0, received {model.padding}")
 
     @staticmethod
-    def validate_forward_inputs(X: Tensor) -> None:
+    def validate_forward_inputs(X: Tensor, expected_input_channels: int) -> None:
         if not isinstance(X, Tensor):
             raise TypeError(
                 f"Input Error: forward input must be a Tensor, "
@@ -39,4 +39,11 @@ class Conv2dLayerValidator(ValidatorBase):
                 f"Input Error: Conv2dLayer expects a 4D input tensor "
                 f"(batch, channels, height, width), received a "
                 f"{X.dim()}D tensor with shape {tuple(X.shape)}."
+            )
+        actual_input_channels = X.size(1)
+        if actual_input_channels != expected_input_channels:
+            raise ValueError(
+                "Input Error: Conv2dLayer input channel dimension is invalid, "
+                f"expected {expected_input_channels}, received "
+                f"{actual_input_channels} for input shape {tuple(X.shape)}."
             )

@@ -37,5 +37,5 @@ class Conv2dLayer(Module):
         )
 
     def forward(self, X: Tensor) -> Tensor:
-        self.VALIDATOR.validate_forward_inputs(X)
+        self.VALIDATOR.validate_forward_inputs(X, self.input_dim)
         return self.model(X)

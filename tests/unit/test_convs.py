@@ -429,10 +429,20 @@ class Conv2dBehaviorTests(unittest.TestCase):
                     f"{tuple(invalid.shape)}.",
                 )
 
-        with self.assertRaises(RuntimeError) as channel_error:
-            model(torch.ones(1, 1, 4, 5))
-        self.assertIn("expected input", str(channel_error.exception))
-        self.assertIn("to have 2 channels", str(channel_error.exception))
+        channel_mismatches = (
+            (torch.ones(1, 1, 4, 5), 1),
+            (torch.ones(3, 4, 4, 5), 4),
+        )
+        for invalid, actual_input_channels in channel_mismatches:
+            with self.subTest(shape=tuple(invalid.shape)):
+                with self.assertRaises(ValueError) as channel_error:
+                    model(invalid)
+                self.assertEqual(
+                    str(channel_error.exception),
+                    "Input Error: Conv2dLayer input channel dimension is invalid, "
+                    f"expected 2, received {actual_input_channels} for input shape "
+                    f"{tuple(invalid.shape)}.",
+                )
 
         with self.assertRaises(RuntimeError) as geometry_error:
             model(torch.ones(1, 2, 2, 4))
