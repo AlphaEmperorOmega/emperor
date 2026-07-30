@@ -86,11 +86,9 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
     def __make_incremental_position(self, input_tokens: Tensor) -> Tensor:
         batch_size = input_tokens.size(0)
         sequence_length = input_tokens.size(1)
-        padding_idx = self.embedding_model.padding_idx
-        if padding_idx is None:
-            current_decoding_step = sequence_length - 1
-        else:
-            current_decoding_step = padding_idx + sequence_length
+        current_decoding_step = self.__calculate_current_decoding_step(
+            sequence_length
+        )
         single_step_position_shape = (batch_size, 1)
         single_step_position = input_tokens.new_full(
             single_step_position_shape,
@@ -98,6 +96,12 @@ class TextLearnedPositionalEmbedding(LearnedPositionalEmbedding):
             dtype=torch.long,
         )
         return single_step_position
+
+    def __calculate_current_decoding_step(self, sequence_length: int) -> int:
+        padding_idx = self.embedding_model.padding_idx
+        if padding_idx is None:
+            return sequence_length - 1
+        return padding_idx + sequence_length
 
 
 class ImageLearnedPositionalEmbedding(LearnedPositionalEmbedding):

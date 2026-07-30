@@ -35,14 +35,23 @@ class AbsolutePositionalEmbeddingBase(Module):
         padding_idx: int | None,
     ) -> Tensor:
         if padding_idx is None:
-            return (
-                torch.arange(
-                    input_tokens.size(1),
-                    device=input_tokens.device,
-                )
-                .unsqueeze(0)
-                .expand_as(input_tokens)
-            )
+            return self.__make_unpadded_positions(input_tokens)
+        return self.__make_padding_aware_positions(input_tokens, padding_idx)
+
+    def __make_unpadded_positions(self, input_tokens: Tensor) -> Tensor:
+        sequence_length = input_tokens.size(1)
+        position_indices = torch.arange(
+            sequence_length,
+            device=input_tokens.device,
+        )
+        single_sequence_positions = position_indices.unsqueeze(0)
+        return single_sequence_positions.expand_as(input_tokens)
+
+    def __make_padding_aware_positions(
+        self,
+        input_tokens: Tensor,
+        padding_idx: int,
+    ) -> Tensor:
         non_padding_mask = input_tokens.ne(padding_idx).int()
         cumulative_positions = torch.cumsum(non_padding_mask, dim=1).type_as(
             non_padding_mask
