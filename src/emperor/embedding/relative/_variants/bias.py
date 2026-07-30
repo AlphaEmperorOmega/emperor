@@ -23,8 +23,7 @@ class DynamicPositionalBias(Module):
         overrides: "DynamicPositionalBiasConfig | None" = None,
     ):
         super().__init__()
-        config = getattr(cfg, "relative_positional_embedding_config", cfg)
-        self.cfg: DynamicPositionalBiasConfig = self._override_config(config, overrides)
+        self.cfg: DynamicPositionalBiasConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
 
         self.embedding_dim: int = self.cfg.embedding_dim
