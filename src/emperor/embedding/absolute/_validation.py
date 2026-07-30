@@ -56,6 +56,25 @@ class AbsolutePositionalEmbeddingValidator(ValidatorBase):
                 f"{model_name}, received {padding_idx}"
             )
 
+    @classmethod
+    def validate_text_learned_forward_inputs(
+        cls,
+        input_tokens: Tensor,
+        *,
+        incremental_state: dict[str, dict[str, Tensor | None]] | None,
+        positions: Tensor | None,
+        num_embeddings: int,
+    ) -> None:
+        cls.validate_text_tokens(input_tokens)
+        if incremental_state is not None:
+            cls.validate_incremental_sequence_length(input_tokens.size(1))
+        if positions is not None:
+            cls.validate_positions(
+                positions,
+                expected_shape=tuple(input_tokens.shape),
+                num_embeddings=num_embeddings,
+            )
+
     @staticmethod
     def validate_text_tokens(input_tokens: Tensor) -> None:
         if not isinstance(input_tokens, Tensor):
