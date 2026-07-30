@@ -27,23 +27,13 @@ class DynamicPositionalBias(Module):
         self.cfg: DynamicPositionalBiasConfig = self._override_config(config, overrides)
         self.VALIDATOR.validate(self)
 
-        self.text_processing_flag: bool = self.cfg.text_processing_flag
         self.embedding_dim: int = self.cfg.embedding_dim
-        self.padding_idx: int | None = self.cfg.padding_idx
-        self.num_embeddings: int = self.__get_num_embeddings()
-        self.init_size: int = self.cfg.init_size
-        self.auto_expand_flag: bool = self.cfg.auto_expand_flag
         self.max_positions: int = self.cfg.max_positions
         self.num_heads: int = self.cfg.num_heads
         self.head_dim: int = self.embedding_dim // self.num_heads
 
         embedding_shape = (self.num_heads, self.head_dim, self.max_positions * 2 + 1)
         self.relative_positional_embeddings = self._init_parameter_bank(embedding_shape)
-
-    def __get_num_embeddings(self) -> int:
-        if self.padding_idx is None:
-            return self.cfg.num_embeddings
-        return self.cfg.num_embeddings + self.padding_idx + 1
 
     def forward(
         self,

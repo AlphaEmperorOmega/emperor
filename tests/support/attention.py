@@ -268,12 +268,7 @@ def make_relative_positional_embedding_config(
     return config_cls(
         num_heads=num_heads,
         embedding_dim=embedding_dim,
-        num_embeddings=64,
         max_positions=32,
-        padding_idx=0,
-        init_size=64,
-        auto_expand_flag=False,
-        text_processing_flag=False,
     )
 
 

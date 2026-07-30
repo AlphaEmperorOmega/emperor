@@ -529,20 +529,24 @@ def _decoder(runtime: RuntimeOptions):
 
 def build_experiment_config(runtime: RuntimeOptions) -> ExperimentConfig:
     positional = runtime.positional_embedding_option
-    position_kwargs = {
+    available_values = {
         "embedding_dim": runtime.model_dim,
         "padding_idx": 0,
         "auto_expand_flag": False,
     }
+    active_fields = {field.name for field in fields(positional)}
+    position_kwargs = {
+        name: value
+        for name, value in available_values.items()
+        if name in active_fields
+    }
     return ExperimentConfig(
         source_positional_embedding_config=positional(
             num_embeddings=runtime.source_sequence_length,
-            init_size=runtime.source_sequence_length,
             **position_kwargs,
         ),
         target_positional_embedding_config=positional(
             num_embeddings=runtime.target_sequence_length,
-            init_size=runtime.target_sequence_length,
             **position_kwargs,
         ),
         encoder_config=_encoder(runtime),

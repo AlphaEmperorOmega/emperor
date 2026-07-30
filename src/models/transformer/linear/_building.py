@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import fields
+
 from emperor.attention import (
     IndependentAttentionConfig,
     SelfAttentionConfig,
@@ -385,19 +387,24 @@ def _decoder(runtime: RuntimeOptions):
 
 def build_experiment_config(runtime: RuntimeOptions) -> ExperimentConfig:
     positional = runtime.positional_embedding_option
+    available_values = {
+        "embedding_dim": runtime.model_dim,
+        "padding_idx": 0,
+        "auto_expand_flag": False,
+    }
+    active_fields = {field.name for field in fields(positional)}
+    position_kwargs = {
+        name: value
+        for name, value in available_values.items()
+        if name in active_fields
+    }
     source_position = positional(
         num_embeddings=runtime.source_sequence_length,
-        embedding_dim=runtime.model_dim,
-        init_size=runtime.source_sequence_length,
-        padding_idx=0,
-        auto_expand_flag=False,
+        **position_kwargs,
     )
     target_position = positional(
         num_embeddings=runtime.target_sequence_length,
-        embedding_dim=runtime.model_dim,
-        init_size=runtime.target_sequence_length,
-        padding_idx=0,
-        auto_expand_flag=False,
+        **position_kwargs,
     )
     return ExperimentConfig(
         source_positional_embedding_config=source_position,

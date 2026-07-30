@@ -12,13 +12,8 @@ from emperor.embedding.relative._variants.bias import DynamicPositionalBias
 class TestRelativePositionalEmbeddingConfig(unittest.TestCase):
     def test_base_config_cannot_build(self):
         cfg = RelativePositionalEmbeddingConfig(
-            text_processing_flag=False,
             num_heads=2,
-            num_embeddings=16,
             embedding_dim=8,
-            init_size=16,
-            padding_idx=0,
-            auto_expand_flag=False,
             max_positions=8,
         )
 
@@ -29,46 +24,26 @@ class TestRelativePositionalEmbeddingConfig(unittest.TestCase):
 class TestDynamicPositionalBias(unittest.TestCase):
     def preset(
         self,
-        text_processing_flag: bool = False,
         num_heads: int = 2,
-        num_embeddings: int = 16,
         embedding_dim: int = 8,
-        init_size: int = 16,
-        padding_idx: int | None = 0,
-        auto_expand_flag: bool = False,
         max_positions: int = 8,
     ) -> DynamicPositionalBiasConfig:
         return DynamicPositionalBiasConfig(
-            text_processing_flag=text_processing_flag,
             num_heads=num_heads,
-            num_embeddings=num_embeddings,
             embedding_dim=embedding_dim,
-            init_size=init_size,
-            padding_idx=padding_idx,
-            auto_expand_flag=auto_expand_flag,
             max_positions=max_positions,
         )
 
     def test_init(self):
         cfg = self.preset(
-            text_processing_flag=True,
             num_heads=4,
-            num_embeddings=16,
             embedding_dim=12,
-            init_size=19,
-            padding_idx=2,
-            auto_expand_flag=True,
             max_positions=6,
         )
         model = DynamicPositionalBias(cfg)
 
         self.assertIsInstance(model, DynamicPositionalBias)
-        self.assertEqual(model.text_processing_flag, cfg.text_processing_flag)
         self.assertEqual(model.embedding_dim, cfg.embedding_dim)
-        self.assertEqual(model.padding_idx, cfg.padding_idx)
-        self.assertEqual(model.num_embeddings, 19)
-        self.assertEqual(model.init_size, cfg.init_size)
-        self.assertEqual(model.auto_expand_flag, cfg.auto_expand_flag)
         self.assertEqual(model.num_heads, cfg.num_heads)
         self.assertEqual(model.head_dim, cfg.embedding_dim // cfg.num_heads)
         self.assertEqual(model.max_positions, cfg.max_positions)
@@ -168,18 +143,12 @@ class TestDynamicPositionalBias(unittest.TestCase):
     def test_config_build_applies_overrides(self):
         cfg = self.preset(num_heads=2, embedding_dim=8)
         overrides = DynamicPositionalBiasConfig(
-            text_processing_flag=True,
             num_heads=4,
-            num_embeddings=32,
             embedding_dim=12,
-            init_size=32,
-            padding_idx=0,
-            auto_expand_flag=True,
             max_positions=6,
         )
         model = cfg.build(overrides)
 
-        self.assertEqual(model.text_processing_flag, overrides.text_processing_flag)
         self.assertEqual(model.num_heads, overrides.num_heads)
         self.assertEqual(model.embedding_dim, overrides.embedding_dim)
         self.assertEqual(model.max_positions, overrides.max_positions)
@@ -189,18 +158,12 @@ class TestDynamicPositionalBias(unittest.TestCase):
             (
                 "missing_num_heads",
                 DynamicPositionalBiasConfig(
-                    text_processing_flag=False,
-                    num_embeddings=16,
                     embedding_dim=8,
-                    init_size=16,
-                    padding_idx=0,
-                    auto_expand_flag=False,
                     max_positions=8,
                 ),
             ),
             ("zero_max_positions", self.preset(max_positions=0)),
             ("non_divisible_heads", self.preset(num_heads=3, embedding_dim=8)),
-            ("negative_padding_idx", self.preset(padding_idx=-1)),
         ]
 
         for case, cfg in invalid_cases:

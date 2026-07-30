@@ -4,7 +4,7 @@ import json
 import subprocess
 import sys
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import torch
 import torch.nn as nn
@@ -46,9 +46,7 @@ def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingCo
     values: dict[str, object] = {
         "num_embeddings": 4,
         "embedding_dim": 2,
-        "init_size": 4,
         "padding_idx": 0,
-        "auto_expand_flag": False,
     }
     values.update(overrides)
     return TextLearnedPositionalEmbeddingConfig(**values)
@@ -56,13 +54,8 @@ def text_learned_config(**overrides: object) -> TextLearnedPositionalEmbeddingCo
 
 def relative_config(**overrides: object) -> DynamicPositionalBiasConfig:
     values: dict[str, object] = {
-        "text_processing_flag": True,
         "num_heads": 2,
-        "num_embeddings": 5,
         "embedding_dim": 4,
-        "init_size": 5,
-        "padding_idx": None,
-        "auto_expand_flag": False,
         "max_positions": 2,
     }
     values.update(overrides)
@@ -70,6 +63,46 @@ def relative_config(**overrides: object) -> DynamicPositionalBiasConfig:
 
 
 class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
+    def test_absolute_configs_expose_only_variant_active_inputs(self) -> None:
+        expected_fields = {
+            AbsolutePositionalEmbeddingConfig: ("num_embeddings", "embedding_dim"),
+            TextLearnedPositionalEmbeddingConfig: (
+                "num_embeddings",
+                "embedding_dim",
+                "padding_idx",
+            ),
+            ImageLearnedPositionalEmbeddingConfig: (
+                "num_embeddings",
+                "embedding_dim",
+                "padding_idx",
+                "class_token_flag",
+            ),
+            TextSinusoidalPositionalEmbeddingConfig: (
+                "num_embeddings",
+                "embedding_dim",
+                "padding_idx",
+                "auto_expand_flag",
+            ),
+            ImageSinusoidalPositionalEmbeddingConfig: (
+                "num_embeddings",
+                "embedding_dim",
+                "class_token_flag",
+            ),
+        }
+
+        for config_type, expected in expected_fields.items():
+            with self.subTest(config_type=config_type.__name__):
+                self.assertEqual(
+                    tuple(field.name for field in fields(config_type)),
+                    expected,
+                )
+
+    def test_dynamic_relative_bias_config_exposes_only_active_inputs(self) -> None:
+        self.assertEqual(
+            tuple(field.name for field in fields(DynamicPositionalBiasConfig)),
+            ("num_heads", "embedding_dim", "max_positions"),
+        )
+
     def test_base_configs_have_exact_defaults_and_cannot_build(self) -> None:
         absolute = AbsolutePositionalEmbeddingConfig()
         relative = RelativePositionalEmbeddingConfig()
@@ -78,24 +111,16 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
             (
                 absolute.num_embeddings,
                 absolute.embedding_dim,
-                absolute.init_size,
-                absolute.padding_idx,
-                absolute.auto_expand_flag,
             ),
-            (None, None, None, None, None),
+            (None, None),
         )
         self.assertEqual(
             (
-                relative.text_processing_flag,
                 relative.num_heads,
-                relative.num_embeddings,
                 relative.embedding_dim,
-                relative.init_size,
-                relative.padding_idx,
-                relative.auto_expand_flag,
                 relative.max_positions,
             ),
-            (None, None, None, None, None, None, None, None),
+            (None, None, None),
         )
         self.assertEqual(absolute.get_custom_parameters(), {})
         self.assertEqual(relative.get_custom_parameters(), {})
@@ -115,11 +140,9 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         base = text_learned_config(
             embedding_dim=3,
             padding_idx=1,
-            auto_expand_flag=True,
         )
         override = TextLearnedPositionalEmbeddingConfig(
             embedding_dim=2,
-            auto_expand_flag=False,
         )
 
         model = base.build(override)
@@ -127,19 +150,17 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         self.assertIsInstance(model, base.registry_owner())
         self.assertEqual(model.embedding_dim, 2)
         self.assertEqual(model.padding_idx, 1)
-        self.assertFalse(model.auto_expand_flag)
         self.assertEqual(model.embedding_model.num_embeddings, 6)
         self.assertEqual(
-            (base.embedding_dim, base.padding_idx, base.auto_expand_flag),
-            (3, 1, True),
+            (base.embedding_dim, base.padding_idx),
+            (3, 1),
         )
         self.assertEqual(
             (
                 override.embedding_dim,
                 override.padding_idx,
-                override.auto_expand_flag,
             ),
-            (2, None, False),
+            (2, None),
         )
 
     def test_absolute_nested_config_adapters_resolve_real_config(self) -> None:
@@ -151,6 +172,24 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
 
         self.assertIs(model.cfg, concrete)
         self.assertEqual(model.embedding_dim, 3)
+        self.assertEqual(model.padding_idx, 0)
+
+    def test_absolute_preserves_false_and_zero_overrides(self) -> None:
+        concrete = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            padding_idx=1,
+            auto_expand_flag=True,
+        )
+        overrides = TextSinusoidalPositionalEmbeddingConfig(
+            padding_idx=0,
+            auto_expand_flag=False,
+        )
+
+        model = concrete.build(overrides)
+
+        self.assertEqual(model.padding_idx, 0)
+        self.assertFalse(model.auto_expand_flag)
 
     def test_image_nested_configs_and_partial_overrides_reach_base_models(
         self,
@@ -158,9 +197,7 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         learned_config = ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
             padding_idx=0,
-            auto_expand_flag=False,
             class_token_flag=True,
         )
         learned_wrapper = _OuterAbsoluteConfig(
@@ -183,19 +220,15 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
                 learned.cfg.num_embeddings,
                 learned.embedding_dim,
                 learned.padding_idx,
-                learned.auto_expand_flag,
                 learned.class_token_flag,
             ),
-            (2, 4, 0, False, False),
+            (2, 4, 0, False),
         )
         self.assertEqual(learned.embedding_model.weight.shape, (2, 4))
 
         sinusoidal_config = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
-            padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=True,
         )
         sinusoidal_wrapper = _OuterAbsoluteConfig(
@@ -206,7 +239,6 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
         sinusoidal_override = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=3,
             embedding_dim=4,
-            auto_expand_flag=True,
             class_token_flag=False,
         )
 
@@ -220,39 +252,45 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
                 sinusoidal.cfg.num_embeddings,
                 sinusoidal.embedding_dim,
                 sinusoidal.padding_idx,
-                sinusoidal.auto_expand_flag,
                 sinusoidal.class_token_flag,
                 sinusoidal.position_offset,
                 sinusoidal.init_size,
             ),
-            (3, 4, None, True, False, 0, 3),
+            (3, 4, None, False, 0, 3),
         )
         self.assertEqual(sinusoidal.weights.shape, (3, 4))
 
-    def test_relative_attention_wrapper_and_false_overrides_are_preserved(
+    def test_relative_active_overrides_are_preserved(
         self,
     ) -> None:
-        concrete = relative_config(
-            text_processing_flag=True,
-            auto_expand_flag=True,
-        )
-        wrapper = MultiHeadAttentionConfig(
-            relative_positional_embedding_config=concrete
-        )
-        wrapped_model = concrete.registry_owner()(wrapper)
+        concrete = relative_config()
+        direct_model = concrete.build()
         override = DynamicPositionalBiasConfig(
-            text_processing_flag=False,
-            auto_expand_flag=False,
+            num_heads=1,
+            embedding_dim=2,
+            max_positions=4,
         )
         overridden_model = concrete.build(override)
 
-        self.assertIs(wrapped_model.cfg, concrete)
-        self.assertTrue(wrapped_model.text_processing_flag)
-        self.assertTrue(wrapped_model.auto_expand_flag)
-        self.assertFalse(overridden_model.text_processing_flag)
-        self.assertFalse(overridden_model.auto_expand_flag)
-        self.assertTrue(concrete.text_processing_flag)
-        self.assertTrue(concrete.auto_expand_flag)
+        self.assertIs(direct_model.cfg, concrete)
+        self.assertEqual(overridden_model.num_heads, 1)
+        self.assertEqual(overridden_model.embedding_dim, 2)
+        self.assertEqual(overridden_model.max_positions, 4)
+        self.assertEqual(concrete.num_heads, 2)
+        self.assertEqual(concrete.embedding_dim, 4)
+        self.assertEqual(concrete.max_positions, 2)
+
+    def test_relative_attention_wrapper_resolves_real_config(self) -> None:
+        concrete = relative_config()
+        wrapper = MultiHeadAttentionConfig(
+            relative_positional_embedding_config=concrete
+        )
+
+        model = concrete.registry_owner()(wrapper)
+
+        self.assertIs(model.cfg, concrete)
+        self.assertEqual(model.num_heads, 2)
+        self.assertEqual(model.embedding_dim, 4)
 
     def test_all_concrete_absolute_config_types_dispatch_correctly(self) -> None:
         configs = (
@@ -260,24 +298,18 @@ class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
             ImageLearnedPositionalEmbeddingConfig(
                 num_embeddings=3,
                 embedding_dim=2,
-                init_size=3,
                 padding_idx=0,
-                auto_expand_flag=False,
                 class_token_flag=True,
             ),
             TextSinusoidalPositionalEmbeddingConfig(
                 num_embeddings=3,
                 embedding_dim=2,
-                init_size=3,
                 padding_idx=0,
                 auto_expand_flag=False,
             ),
             ImageSinusoidalPositionalEmbeddingConfig(
                 num_embeddings=3,
                 embedding_dim=2,
-                init_size=3,
-                padding_idx=None,
-                auto_expand_flag=False,
                 class_token_flag=True,
             ),
         )
@@ -353,7 +385,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
             dtype=torch.long,
             device="meta",
         )
-        meta_positions = model._make_positions(meta_tokens)
+        meta_positions = model._make_positions(meta_tokens, model.padding_idx)
         self.assertEqual(meta_positions.device.type, "meta")
         self.assertEqual(meta_positions.dtype, torch.long)
         self.assertEqual(meta_positions.shape, meta_tokens.shape)
@@ -458,9 +490,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         config = ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
             padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=True,
         )
         model = config.build()
@@ -503,9 +533,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         model = ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
             padding_idx=0,
-            auto_expand_flag=False,
             class_token_flag=True,
         ).build()
         initial_weights = torch.tensor([[0.0, 0.0], [1.0, 2.0], [3.0, 4.0]])
@@ -545,9 +573,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         model = ImageLearnedPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
             padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=True,
         ).build()
         weights = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
@@ -580,7 +606,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         config = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=2,
-            init_size=4,
             padding_idx=0,
             auto_expand_flag=False,
         )
@@ -602,7 +627,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
             model = TextSinusoidalPositionalEmbeddingConfig(
                 num_embeddings=3,
                 embedding_dim=4,
-                init_size=3,
                 padding_idx=None,
                 auto_expand_flag=False,
             ).build()
@@ -635,14 +659,12 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         no_padding = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=4,
-            init_size=4,
             padding_idx=None,
             auto_expand_flag=False,
         ).build()
         nonzero_padding = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=4,
             embedding_dim=4,
-            init_size=4,
             padding_idx=2,
             auto_expand_flag=False,
         ).build()
@@ -676,7 +698,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=5,
             embedding_dim=2,
-            init_size=5,
             padding_idx=0,
             auto_expand_flag=False,
         ).build()
@@ -703,9 +724,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         model = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=3,
-            init_size=2,
-            padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=True,
         ).build()
         patches = (
@@ -741,9 +759,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         model = ImageSinusoidalPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
-            padding_idx=None,
-            auto_expand_flag=False,
             class_token_flag=True,
         ).build()
         patches = torch.tensor([[[10.0, 20.0], [30.0, 40.0], [50.0, 60.0]]])
@@ -769,7 +784,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         boundary_model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=5,
             embedding_dim=2,
-            init_size=5,
             padding_idx=0,
             auto_expand_flag=True,
         ).build()
@@ -795,7 +809,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
         disabled_model = TextSinusoidalPositionalEmbeddingConfig(
             num_embeddings=2,
             embedding_dim=2,
-            init_size=2,
             padding_idx=0,
             auto_expand_flag=False,
         ).build()
@@ -809,7 +822,6 @@ class SinusoidalEmbeddingBehaviorTests(unittest.TestCase):
             TextSinusoidalPositionalEmbeddingConfig(
                 num_embeddings=2,
                 embedding_dim=2,
-                init_size=2,
                 padding_idx=0,
                 auto_expand_flag=True,
             )
