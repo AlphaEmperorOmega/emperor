@@ -168,6 +168,40 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                     f"received {type(bad).__name__}.",
                 )
 
+    def test_monitoring_wraps_existing_methods_without_a_layer_observation_interface(
+        self,
+    ):
+        layer = self.layer(with_gate=False)
+        layer.eval()
+        original_activation = layer._Layer__maybe_apply_activation
+        original_residual = layer._Layer__maybe_apply_residual_connection
+        module = CaptureLightningModule(layer=layer)
+        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+        self.assertFalse(hasattr(layer, "_install_controller_observation"))
+
+        callback.on_fit_start(TrainerStub(), module)
+        hidden = torch.randn(3, 4, requires_grad=True)
+        result = layer(LayerState(hidden=hidden))
+        result.hidden.sum().backward()
+
+        self.assertIn("layer/activation/zero_fraction", module.logged_tags)
+        self.assertIn("layer/residual/contribution_ratio", module.logged_tags)
+        self.assertIsNotNone(hidden.grad)
+
+        callback.on_fit_end(TrainerStub(), module)
+        self.assertTrue(
+            same_bound_method(
+                layer._Layer__maybe_apply_activation,
+                original_activation,
+            )
+        )
+        self.assertTrue(
+            same_bound_method(
+                layer._Layer__maybe_apply_residual_connection,
+                original_residual,
+            )
+        )
+
     def test_discovers_only_layer_modules(self):
         module = CaptureLightningModule(layer=self.layer(), other=torch.nn.Linear(4, 4))
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)
