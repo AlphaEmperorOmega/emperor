@@ -53,15 +53,19 @@ class LayerControllerMonitorCallback(Callback):
         from emperor.layers._layer import Layer
 
         self.__cleanup()
-        for module_name, layer in pl_module.named_modules():
-            if not isinstance(layer, Layer):
-                continue
-            self.__attach_gate_hook(module_name, layer, pl_module)
-            self.__attach_dropout_hook(module_name, layer, pl_module)
-            self.__attach_layer_norm_hook(module_name, layer, pl_module)
-            if self.__should_track_activation(layer):
-                self.__wrap_activation(module_name, layer, pl_module)
-            self.__wrap_residual(module_name, layer, pl_module)
+        try:
+            for module_name, layer in pl_module.named_modules():
+                if not isinstance(layer, Layer):
+                    continue
+                self.__attach_gate_hook(module_name, layer, pl_module)
+                self.__attach_dropout_hook(module_name, layer, pl_module)
+                self.__attach_layer_norm_hook(module_name, layer, pl_module)
+                if self.__should_track_activation(layer):
+                    self.__wrap_activation(module_name, layer, pl_module)
+                self.__wrap_residual(module_name, layer, pl_module)
+        except BaseException:
+            self.__cleanup()
+            raise
 
     @staticmethod
     def __should_track_activation(layer: Module) -> bool:

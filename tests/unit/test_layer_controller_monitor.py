@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -17,6 +18,9 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     ResidualConfig,
+)
+from emperor.layers._monitoring.callbacks._hooks import (
+    _install_method_replacement,
 )
 from emperor.layers._monitoring.diagnostics import _LayerGateTrackingContext
 from emperor.linears import LinearLayerConfig
@@ -211,6 +215,41 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 original_activation,
             )
         )
+
+    def test_partial_setup_failure_restores_installed_wrappers(self):
+        first_layer = self.layer()
+        failing_layer = self.layer()
+        original_activation = first_layer._Layer__maybe_apply_activation
+        module = CaptureLightningModule(first=first_layer, second=failing_layer)
+        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+        replacement_count = 0
+
+        def fail_during_second_layer_setup(*args, **kwargs):
+            nonlocal replacement_count
+            replacement_count += 1
+            if replacement_count == 3:
+                raise RuntimeError("deliberate wrapper setup failure")
+            return _install_method_replacement(*args, **kwargs)
+
+        with patch(
+            "emperor.layers._monitoring.callbacks.layer_controller."
+            "_install_method_replacement",
+            side_effect=fail_during_second_layer_setup,
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "deliberate wrapper setup failure",
+            ):
+                callback.on_fit_start(TrainerStub(), module)
+
+        self.assertTrue(
+            same_bound_method(
+                first_layer._Layer__maybe_apply_activation,
+                original_activation,
+            )
+        )
+        self.assertEqual(callback._hooks, [])
+        self.assertEqual(callback._wrapped_methods, [])
 
     def test_logs_expected_finite_scalar_tags(self):
         layer = self.layer()
