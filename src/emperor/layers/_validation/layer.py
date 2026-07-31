@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from math import isfinite
 from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
@@ -70,7 +71,11 @@ class LayerValidator(ValidatorBase):
 
     @staticmethod
     def _validate_dropout_probability(dropout_probability: float) -> None:
-        if dropout_probability < 0.0 or dropout_probability > 1.0:
+        if (
+            not isfinite(dropout_probability)
+            or dropout_probability < 0.0
+            or dropout_probability > 1.0
+        ):
             raise ValueError(
                 "dropout_probability must be between 0.0 and 1.0, "
                 f"received {dropout_probability}"
