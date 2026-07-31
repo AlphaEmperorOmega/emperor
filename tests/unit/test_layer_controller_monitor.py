@@ -153,6 +153,17 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     LayerControllerMonitorCallback(log_every_n_steps=bad)
 
+    def test_rejects_non_integer_cadence(self):
+        for bad in (True, 1.5, "1"):
+            with self.subTest(bad=bad):
+                with self.assertRaises(TypeError) as error:
+                    LayerControllerMonitorCallback(log_every_n_steps=bad)
+                self.assertEqual(
+                    str(error.exception),
+                    "log_every_n_steps must be a positive integer, "
+                    f"received {type(bad).__name__}.",
+                )
+
     def test_discovers_only_layer_modules(self):
         module = CaptureLightningModule(layer=self.layer(), other=torch.nn.Linear(4, 4))
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)

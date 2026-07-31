@@ -52,6 +52,11 @@ class RecurrentLayerMonitorCallback(Callback):
 
     @staticmethod
     def __validate_positive(option_name: str, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"{option_name} must be a positive integer, "
+                f"received {type(value).__name__}."
+            )
         if value <= 0:
             raise ValueError(f"{option_name} must be greater than 0.")
 

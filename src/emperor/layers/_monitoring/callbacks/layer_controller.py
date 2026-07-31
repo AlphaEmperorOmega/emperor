@@ -33,12 +33,21 @@ class LayerControllerMonitorCallback(Callback):
 
     def __init__(self, log_every_n_steps: int = 100) -> None:
         super().__init__()
-        if log_every_n_steps <= 0:
-            raise ValueError("log_every_n_steps must be greater than 0.")
+        self.__validate_positive("log_every_n_steps", log_every_n_steps)
         self.log_every_n_steps = log_every_n_steps
         self._hooks: list[RemovableHandle] = []
         self._wrapped_methods: list[_MethodReplacement] = []
         self._hooked_gate_model_ids: set[int] = set()
+
+    @staticmethod
+    def __validate_positive(option_name: str, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(
+                f"{option_name} must be a positive integer, "
+                f"received {type(value).__name__}."
+            )
+        if value <= 0:
+            raise ValueError(f"{option_name} must be greater than 0.")
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         from emperor.layers._layer import Layer

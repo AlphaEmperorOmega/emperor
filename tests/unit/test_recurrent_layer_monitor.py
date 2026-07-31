@@ -200,6 +200,18 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     RecurrentLayerMonitorCallback(history_size=bad)
 
+    def test_rejects_non_integer_options(self):
+        for option_name in ("log_every_n_steps", "history_size"):
+            for bad in (True, 1.5, "1"):
+                with self.subTest(option_name=option_name, bad=bad):
+                    with self.assertRaises(TypeError) as error:
+                        RecurrentLayerMonitorCallback(**{option_name: bad})
+                    self.assertEqual(
+                        str(error.exception),
+                        f"{option_name} must be a positive integer, "
+                        f"received {type(bad).__name__}.",
+                    )
+
     def test_discovers_only_recurrent_layers(self):
         module = CaptureLightningModule(
             recurrent=self.recurrent(), other=torch.nn.Linear(4, 4)
