@@ -402,7 +402,11 @@ class LayerBehavioralContractTests(unittest.TestCase):
         previous = torch.tensor([[3.0, 4.0]])
         layer = Layer(base_layer_config())
 
-        result = layer._Layer__maybe_apply_residual_connection(current, previous)
+        result = layer._Layer__maybe_apply_residual_connection(
+            current,
+            previous,
+            LayerState(hidden=current),
+        )
 
         self.assertIsNone(layer.residual_config)
         self.assertIsNone(layer.residual_connection)

@@ -348,9 +348,11 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
 
         current = torch.tensor([[3.0, 1.0]], requires_grad=True)
         previous = torch.tensor([[6.0, 8.0]], requires_grad=True)
+        state = LayerState(hidden=current)
         residual_output = layer._Layer__maybe_apply_residual_connection(
             input=current,
             prev_input=previous,
+            state=state,
         )
         torch.testing.assert_close(residual_output, current + previous)
         self.assert_logged_close(
@@ -366,11 +368,13 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
         positional_output = layer._Layer__maybe_apply_residual_connection(
             current,
             previous,
+            state,
         )
         torch.testing.assert_close(positional_output, current + previous)
         mixed_output = layer._Layer__maybe_apply_residual_connection(
             current,
             prev_input=previous,
+            state=state,
         )
         torch.testing.assert_close(mixed_output, current + previous)
 
