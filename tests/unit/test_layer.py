@@ -1112,7 +1112,11 @@ class TestLayer(unittest.TestCase):
                 layer = Layer(cfg)
                 x = torch.randn(batch_size, dim)
                 model_output = torch.randn(batch_size, dim)
-                result = layer._Layer__maybe_apply_residual_connection(model_output, x)
+                result = layer._Layer__maybe_apply_residual_connection(
+                    model_output,
+                    x,
+                    LayerState(hidden=model_output),
+                )
                 expected = expected_fn(model_output, x)
 
                 torch.testing.assert_close(result, expected)
@@ -1427,7 +1431,11 @@ class TestLayer(unittest.TestCase):
         current = torch.full((2, dim), 3.0)
         previous = torch.full((2, dim), 2.0)
 
-        result = layer._Layer__maybe_apply_residual_connection(current, previous)
+        result = layer._Layer__maybe_apply_residual_connection(
+            current,
+            previous,
+            LayerState(hidden=current),
+        )
 
         expected = previous + torch.tanh(torch.tensor(0.5)) * current
         torch.testing.assert_close(result, expected)

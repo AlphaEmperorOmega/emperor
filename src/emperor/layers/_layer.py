@@ -5,10 +5,7 @@ from torch import Tensor
 
 from emperor.config import ConfigBase
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._composition.residual.base import (
-    ResidualConnectionAbstract,
-    ResidualState,
-)
+from emperor.layers._composition.residual.base import ResidualConnectionAbstract
 from emperor.layers._composition.residual.config import ResidualConfig
 from emperor.layers._config import GateConfig, LayerConfig
 from emperor.layers._options import (
@@ -149,10 +146,7 @@ class Layer(LayerModuleBase):
         X = self.__maybe_apply_activation(X)
         X = self.__maybe_apply_gate(X, state)
         X = self.__maybe_apply_dropout(X)
-        controller_row_layout = self.__row_layout_for_controllers(state)
-        X = self.__maybe_apply_residual_connection(
-            X, residual, state.residual_state, controller_row_layout
-        )
+        X = self.__maybe_apply_residual_connection(X, residual, state)
         X = self.__maybe_apply_layer_norm_after(X)
         state = self.__maybe_apply_halting(state, X)
         return self._handle_model_output(state)
@@ -250,8 +244,7 @@ class Layer(LayerModuleBase):
         self,
         input: Tensor,
         prev_input: Tensor,
-        residual_state: "ResidualState | None" = None,
-        row_layout: "RowLayout | None" = None,
+        state: LayerState,
     ):
         residual_connection = self.residual_connection
         if residual_connection is None:
@@ -259,8 +252,8 @@ class Layer(LayerModuleBase):
         return residual_connection(
             input,
             prev_input,
-            residual_state=residual_state,
-            row_layout=row_layout,
+            residual_state=state.residual_state,
+            row_layout=self.__row_layout_for_controllers(state),
         )
 
     def __maybe_apply_layer_norm_after(self, input: Tensor):
