@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
-
+from emperor._validation import _adaptive_grouping_paths
 from emperor.config import ConfigBase
 
 
@@ -67,77 +66,6 @@ def _matches_config_contract(config: object, field_names: tuple[str, ...]) -> bo
     return isinstance(config, ConfigBase) and all(
         hasattr(config, field_name) for field_name in field_names
     )
-
-
-def _adaptive_grouping_paths(
-    config: ConfigBase,
-    *,
-    root: str,
-) -> tuple[str, ...]:
-    matches: list[str] = []
-    _collect_adaptive_grouping_paths(config, root, set(), matches)
-    return tuple(matches)
-
-
-def _collect_adaptive_grouping_paths(
-    value: object,
-    path: str,
-    visited: set[int],
-    matches: list[str],
-) -> None:
-    if isinstance(value, ConfigBase):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        try:
-            config_validator = value.registry_owner().VALIDATOR
-        except (AttributeError, NotImplementedError):
-            config_validator = None
-        grouping_is_enabled = getattr(
-            config_validator,
-            "grouping_is_enabled",
-            None,
-        )
-        if callable(grouping_is_enabled) and grouping_is_enabled(value):
-            matches.append(path)
-        for config_field in fields(value):
-            field_value = getattr(value, config_field.name)
-            field_path = f"{path}.{config_field.name}"
-            _collect_adaptive_grouping_paths(
-                field_value,
-                field_path,
-                visited,
-                matches,
-            )
-        return
-
-    if isinstance(value, dict):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        for key, item in value.items():
-            _collect_adaptive_grouping_paths(
-                item,
-                f"{path}[{key!r}]",
-                visited,
-                matches,
-            )
-        return
-
-    if isinstance(value, (list, tuple)):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        for index, item in enumerate(value):
-            _collect_adaptive_grouping_paths(
-                item,
-                f"{path}[{index}]",
-                visited,
-                matches,
-            )
 
 
 def _validate_no_grouping_with_context_controllers(

@@ -248,16 +248,30 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             memory_config=memory_config(2),
             layer_model_config=grouped_model,
         )
-        with self.assertRaisesRegex(ValueError, "context sharing is restricted"):
+        with self.assertRaises(ValueError) as layer_error:
             Layer(layer_config)
+        self.assertEqual(
+            str(layer_error.exception),
+            "LayerConfig cannot combine enabled adaptive parameter grouping with "
+            "memory_config: context sharing is restricted inside halting or memory "
+            "owners. Found grouping at "
+            "LayerConfig.layer_model_config.adaptive_augmentation_config.",
+        )
 
         stack_config = grouped_stack(
             2,
             AdaptiveParameterGroupingScopeOptions.ROWS,
         )
         stack_config.shared_memory_config = memory_config(2)
-        with self.assertRaisesRegex(ValueError, "context sharing is restricted"):
+        with self.assertRaises(ValueError) as stack_error:
             LayerStack(stack_config)
+        self.assertEqual(
+            str(stack_error.exception),
+            "LayerStackConfig cannot combine enabled adaptive parameter grouping "
+            "with shared_memory_config: context sharing is restricted inside "
+            "halting or memory owners. Found grouping at LayerStackConfig."
+            "layer_config.layer_model_config.adaptive_augmentation_config.",
+        )
 
     def test_rank_two_layer_main_and_gate_both_support_explicit_row_grouping(self):
         gate_config = GateConfig(
@@ -539,7 +553,22 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
                 )
             )
 
-    def test_routed_expert_config_rejects_grouped_adaptive_leaves(self):
+    def test_routed_expert_config_reports_first_grouping_through_cycles(self):
+        first_grouping = grouped_linear_config(
+            2,
+            AdaptiveParameterGroupingScopeOptions.ROWS,
+        ).adaptive_augmentation_config
+        second_grouping = grouped_linear_config(
+            2,
+            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+        ).adaptive_augmentation_config
+        nested: dict[str, object] = {}
+        nested["cycle"] = nested
+        nested["matches"] = [first_grouping, second_grouping]
+        expert_model_config = linear_stack(2, 2)
+        expert_model_config.layer_config.layer_model_config = _NestedConfig(
+            nested=nested,
+        )
         config = MixtureOfExpertsConfig(
             input_dim=2,
             output_dim=2,
@@ -552,14 +581,20 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             weighting_position_option=(ExpertWeightingPositionOptions.AFTER_EXPERTS),
             routing_initialization_mode=RoutingInitializationMode.DISABLED,
             sampler_config=None,
-            expert_model_config=grouped_stack(
-                2,
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-            ),
+            expert_model_config=expert_model_config,
         )
+        rng_state = torch.random.get_rng_state()
 
-        with self.assertRaisesRegex(ValueError, "inside routed expert models"):
+        with self.assertRaises(ValueError) as error:
             MixtureOfExperts(config)
+        self.assertEqual(
+            str(error.exception),
+            "Adaptive parameter grouping is not supported inside routed expert "
+            "models because routing changes row membership and order. Found "
+            "grouping at MixtureOfExpertsConfig.expert_model_config.layer_config."
+            "layer_model_config.nested['matches'][0].",
+        )
+        self.assertTrue(torch.equal(torch.random.get_rng_state(), rng_state))
 
     def test_mixer_attention_rejects_grouping_before_building_mixing_model(self):
         config = MixerAttentionConfig(

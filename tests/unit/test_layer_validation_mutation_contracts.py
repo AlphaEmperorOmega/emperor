@@ -26,7 +26,6 @@ from emperor.layers import (
 )
 from emperor.layers._composition.recurrent.validation import RecurrentLayerValidator
 from emperor.layers._validation.common import (
-    _adaptive_grouping_paths,
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
     _validate_no_grouping_with_context_controllers,
@@ -562,19 +561,18 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
         sequence.append(sequence)
         sequence.append(GroupingProbeConfig(grouping_enabled=True))
 
-        self.assertEqual(
-            _adaptive_grouping_paths(root, root="Owner"),
-            ("Owner.nested[2]",),
-        )
-        with self.assertRaisesRegex(
-            ValueError,
-            "cannot combine enabled adaptive parameter grouping with halting_config",
-        ):
+        with self.assertRaises(ValueError) as error:
             _validate_no_grouping_with_context_controllers(
-                GroupingProbeConfig(grouping_enabled=True),
+                root,
                 owner_name="Owner",
                 controllers=(("halting_config", object()),),
             )
+        self.assertEqual(
+            str(error.exception),
+            "Owner cannot combine enabled adaptive parameter grouping with "
+            "halting_config: context sharing is restricted inside halting or "
+            "memory owners. Found grouping at Owner.nested[2].",
+        )
 
     def test_halting_lifecycle_rejects_non_type_registry_owner(self) -> None:
         halting_config = SimpleNamespace(_registry_owner=lambda: object())
