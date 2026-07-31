@@ -12,6 +12,7 @@ VALIDATOR_MODULE_FILENAMES = {
     "validation.py",
     "validator.py",
 }
+VALIDATOR_PACKAGE_DIRECTORY_NAMES = {"_validation", "validation"}
 
 
 # This is a migration ledger, not a permanent exception list. Remove exactly one
@@ -23,11 +24,15 @@ LEGACY_STATIC_VALIDATE_ENTRYPOINTS: set[str] = set()
 LEGACY_DIRECT_VALIDATOR_CALLS: set[str] = set()
 
 
+def _is_validator_source_file(path: Path) -> bool:
+    return path.name in VALIDATOR_MODULE_FILENAMES or any(
+        parent.name in VALIDATOR_PACKAGE_DIRECTORY_NAMES for parent in path.parents
+    )
+
+
 def _validator_source_files() -> list[Path]:
     return sorted(
-        path
-        for path in EMPEROR_ROOT.rglob("*.py")
-        if path.name in VALIDATOR_MODULE_FILENAMES
+        path for path in EMPEROR_ROOT.rglob("*.py") if _is_validator_source_file(path)
     )
 
 
@@ -35,7 +40,7 @@ def _production_source_files() -> list[Path]:
     return sorted(
         path
         for path in EMPEROR_ROOT.rglob("*.py")
-        if path.name not in VALIDATOR_MODULE_FILENAMES
+        if not _is_validator_source_file(path)
     )
 
 
