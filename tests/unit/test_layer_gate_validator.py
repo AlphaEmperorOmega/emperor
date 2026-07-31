@@ -84,6 +84,12 @@ class TestLayerGateValidatorAdapter(unittest.TestCase):
 
 
 class TestResidualConnectionValidatorAdapter(unittest.TestCase):
+    def test_shared_validator_lives_in_dedicated_validation_module(self):
+        self.assertEqual(
+            ResidualConnectionValidator.__module__,
+            "emperor.layers._composition.residual.validation.common",
+        )
+
     def test_each_runtime_exposes_the_shared_validator_adapter(self):
         for runtime_type in (
             AdditiveResidual,
