@@ -55,6 +55,27 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             "emperor.layers._composition.recurrent.variants.standard",
         )
 
+    def test_recurrent_validators_live_in_dedicated_validation_modules(self) -> None:
+        cases = (
+            (
+                RecurrentLayerValidator,
+                "emperor.layers._composition.recurrent.validation.standard",
+            ),
+            (
+                TinyRecursiveModelRecurrentValidator,
+                "emperor.layers._composition.recurrent.validation.tiny_recursive_model",
+            ),
+            (
+                HierarchicalReasoningModelRecurrentValidator,
+                "emperor.layers._composition.recurrent.validation."
+                "hierarchical_reasoning_model",
+            ),
+        )
+
+        for validator, expected_module in cases:
+            with self.subTest(validator=validator.__name__):
+                self.assertEqual(validator.__module__, expected_module)
+
     def test_recurrent_controller_fields_belong_to_the_family_config(self) -> None:
         controller_field_names = {
             "recurrent_layer_norm_position",
