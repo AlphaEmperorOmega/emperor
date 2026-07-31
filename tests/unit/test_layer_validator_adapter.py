@@ -71,6 +71,17 @@ class TestLayerValidatorAdapter(unittest.TestCase):
         ):
             Layer(make_config(dropout_probability=1.1))
 
+    def test_dropout_probability_rejects_nonfinite_values(self):
+        for dropout_probability in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(dropout_probability=dropout_probability):
+                with self.assertRaises(ValueError) as error:
+                    Layer(make_config(dropout_probability=dropout_probability))
+                self.assertEqual(
+                    str(error.exception),
+                    "dropout_probability must be between 0.0 and 1.0, "
+                    f"received {dropout_probability}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
