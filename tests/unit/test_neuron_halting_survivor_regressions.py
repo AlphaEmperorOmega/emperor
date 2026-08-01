@@ -27,7 +27,7 @@ class _NeverHaltingModel:
 
 
 class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
-    def test_stick_breaking_requests_stop_only_after_all_advanced_rows_halt(
+    def test_stick_breaking_tracks_unhalted_advanced_rows(
         self,
     ) -> None:
         halting_model = (
@@ -50,7 +50,6 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
 
         self.assertIsNotNone(first_state)
         self.assertFalse(first_state.halt_mask.any().item())
-        self.assertFalse(first_state.stop_requested)
 
         second_candidate = first_candidate + 0.75
         second_state = _NeuronHaltingLifecycle.update(
@@ -63,7 +62,6 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
 
         self.assertIsNotNone(second_state)
         self.assertFalse(second_state.halt_mask.any().item())
-        self.assertFalse(second_state.stop_requested)
         torch.testing.assert_close(
             second_state.step_indices,
             torch.tensor([1, 1]),

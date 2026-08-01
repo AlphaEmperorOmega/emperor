@@ -72,11 +72,8 @@ def _stick_breaking_config(
 
 
 def _run_identity_halting_step(halting_model, hidden: torch.Tensor):
-    return halting_model.run_step(
-        None,
-        hidden,
-        lambda computation: computation.raw_hidden,
-    )
+    state, _ = halting_model.update_halting_state(None, hidden)
+    return state
 
 
 class LayerRuntimeMutationContractTests(unittest.TestCase):
@@ -179,7 +176,6 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
         halting_model = _stick_breaking_config(2, threshold=0.4).build().eval()
         hidden = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
         completed_state = _run_identity_halting_step(halting_model, hidden)
-        halting_model.finalize(completed_state, completed_state.raw_hidden)
         self.assertTrue(completed_state.halt_mask.all())
         state = LayerState(
             hidden=hidden.clone(),

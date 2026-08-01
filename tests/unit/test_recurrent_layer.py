@@ -17,6 +17,7 @@ from emperor.experts._model import MixtureOfExpertsModel
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     HaltingStateBase,
+    SoftHalting,
     SoftHaltingConfig,
     StickBreakingConfig,
 )
@@ -348,21 +349,9 @@ class ThresholdHaltingGateLayer(Module):
         return torch.stack((continue_logit, halt_logit), dim=-1)
 
 
-@dataclass(init=False)
+@dataclass
 class DummyHaltingState(HaltingStateBase):
     marker: str
-
-    def __init__(self, marker: str):
-        hidden = torch.zeros(1, 1)
-        super().__init__(
-            output_hidden=hidden.clone(),
-            accumulated_hidden=hidden.clone(),
-            continuation_probability=torch.ones(1),
-            halt_mask=torch.zeros(1, dtype=torch.bool),
-            valid_mask=torch.ones(1, dtype=torch.bool),
-            stop_requested=False,
-        )
-        self.marker = marker
 
 
 class RecordingTransform(torch.nn.Module):
@@ -1433,9 +1422,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 with self.assertRaises(expected_exception):
                     RecurrentLayer(cfg)
 
-    def test_soft_halting_is_rejected_until_it_implements_the_supported_interface(
-        self,
-    ):
+    def test_recurrent_layer_composes_soft_through_the_halting_interface(self):
         dim = 4
         cfg = self.recurrent_config(
             dim=dim,
@@ -1447,9 +1434,15 @@ class TestRecurrentLayer(unittest.TestCase):
                 halting_gate_config=self.halting_gate_config(threshold=1.0),
             ),
         )
+        model = RecurrentLayer(cfg).eval()
+        state = LayerState(hidden=torch.zeros(2, dim))
 
-        with self.assertRaisesRegex(ValueError, "does not implement"):
-            RecurrentLayer(cfg)
+        result = model(state)
+
+        self.assertIsInstance(model.halting_model, SoftHalting)
+        self.assertEqual(result.hidden.shape, state.hidden.shape)
+        self.assertIsNotNone(result.loss)
+        self.assertTrue(torch.isfinite(result.loss).item())
 
     def test_forward_input_validation_errors(self):
         dim = 4
@@ -2256,14 +2249,16 @@ class TestRecurrentLayer(unittest.TestCase):
                     dtype=torch.bool,
                     device=model_hidden_state.device,
                 )
-                state = HaltingStateBase(
-                    output_hidden=model_hidden_state,
-                    accumulated_hidden=torch.zeros_like(model_hidden_state),
-                    continuation_probability=model_hidden_state.new_ones(leading_shape),
-                    halt_mask=halt_mask,
-                    valid_mask=torch.ones_like(halt_mask),
-                    stop_requested=False,
+                state = HaltingStateBase()
+                state.output_hidden = model_hidden_state
+                state.accumulated_hidden = torch.zeros_like(model_hidden_state)
+                state.continuation_probability = model_hidden_state.new_ones(
+                    leading_shape
                 )
+                state.halt_mask = halt_mask
+                state.valid_mask = torch.ones_like(halt_mask)
+                state.advanced_mask = state.valid_mask.clone()
+                state.step_indices = model_hidden_state.new_zeros(leading_shape)
                 return state, model_hidden_state
 
             def finalize_weighted_accumulation(self, state, current_hidden):
