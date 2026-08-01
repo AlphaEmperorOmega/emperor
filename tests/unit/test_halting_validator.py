@@ -1,8 +1,6 @@
 import math
 import unittest
 
-import torch
-
 from emperor.halting import (
     HaltingBase,
     HaltingHiddenStateModeOptions,
@@ -123,48 +121,6 @@ class HaltingValidatorTests(unittest.TestCase):
                     r"received None$",
                 ):
                     cfg.build()
-
-    def test_legacy_pad_mask_validation_contract_is_preserved(self) -> None:
-        hidden = torch.zeros(2, 3, 4)
-
-        StickBreakingValidator.validate_pad_mask(None, hidden)
-        StickBreakingValidator.validate_pad_mask(
-            torch.tensor(
-                ((True, False, True), (False, True, False)),
-            ),
-            hidden,
-        )
-        StickBreakingValidator.validate_pad_mask(
-            torch.tensor(
-                ((1.0, 0.0, 1.0), (0.0, 1.0, 0.0)),
-            ),
-            hidden,
-        )
-
-        with self.assertRaisesRegex(TypeError, "required_by_test"):
-            StickBreakingValidator.validate_pad_mask(
-                None,
-                hidden,
-                required_by="required_by_test",
-            )
-        with self.assertRaisesRegex(TypeError, "must be a Tensor or None"):
-            StickBreakingValidator.validate_pad_mask([[True]], hidden)
-        with self.assertRaisesRegex(ValueError, "must have shape"):
-            StickBreakingValidator.validate_pad_mask(torch.ones(2, 2), hidden)
-        with self.assertRaisesRegex(TypeError, "must use bool or floating dtype"):
-            StickBreakingValidator.validate_pad_mask(
-                torch.ones(2, 3, dtype=torch.int64),
-                hidden,
-            )
-        for invalid_value in (float("nan"), -0.1, 1.1):
-            with self.subTest(invalid_value=invalid_value):
-                invalid_mask = torch.zeros(2, 3)
-                invalid_mask[0, 0] = invalid_value
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "must be finite and between 0.0 and 1.0",
-                ):
-                    StickBreakingValidator.validate_pad_mask(invalid_mask, hidden)
 
     def test_soft_canonical_gate_does_not_require_a_gate_config(self) -> None:
         model = SoftHalting(config(SoftHaltingConfig, halting_gate_config=None))

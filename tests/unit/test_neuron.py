@@ -13,6 +13,7 @@ from emperor.config import ConfigBase, optional_field
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     HaltingStateBase,
+    SoftHalting,
     SoftHaltingConfig,
     StickBreakingConfig,
 )
@@ -339,11 +340,6 @@ class LearnableFourFieldSampler(nn.Module):
         )
 
 
-@dataclass(kw_only=True, init=False)
-class RecordingHaltingState(HaltingStateBase):
-    pass
-
-
 class RecordingHaltingModel(nn.Module):
     def __init__(
         self,
@@ -361,9 +357,9 @@ class RecordingHaltingModel(nn.Module):
 
     def update_halting_state(
         self,
-        previous_state: RecordingHaltingState | None,
+        previous_state: HaltingStateBase | None,
         model_hidden_state: Tensor,
-    ) -> tuple[RecordingHaltingState, Tensor]:
+    ) -> tuple[HaltingStateBase, Tensor]:
         self.update_count += 1
         valid_mask = torch.ones(
             model_hidden_state.shape[:-1],
@@ -396,27 +392,28 @@ class RecordingHaltingModel(nn.Module):
             and self.update_count >= self.halt_after_updates
         ):
             halt_mask |= valid_mask
-        state = RecordingHaltingState(
-            output_hidden=output_hidden,
-            accumulated_hidden=output_hidden,
-            continuation_probability=torch.ones(
-                model_hidden_state.shape[:-1],
-                dtype=model_hidden_state.dtype,
-                device=model_hidden_state.device,
-            ),
-            halt_mask=halt_mask,
-            valid_mask=valid_mask,
-            stop_requested=bool((halt_mask | ~valid_mask).all().item()),
+        state = HaltingStateBase()
+        state.output_hidden = output_hidden
+        state.accumulated_hidden = output_hidden
+        state.continuation_probability = torch.ones(
+            model_hidden_state.shape[:-1],
+            dtype=model_hidden_state.dtype,
+            device=model_hidden_state.device,
+        )
+        state.halt_mask = halt_mask
+        state.valid_mask = valid_mask
+        state.advanced_mask = valid_mask.clone()
+        state.step_indices = state.continuation_probability.new_zeros(
+            state.continuation_probability.shape
         )
         return state, output_hidden
 
     def finalize_weighted_accumulation(
         self,
-        state: RecordingHaltingState,
+        state: HaltingStateBase,
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
         self.finalize_count += 1
-        state.finalized = True
         return (
             state.output_hidden + self.finalize_offset,
             current_hidden.new_full(current_hidden.shape[:-1], self.ponder_loss),
@@ -681,7 +678,7 @@ class TestNeuronConfigs(NeuronTestCase):
         self.assertIsInstance(model, NeuronCluster)
         self.assertIsNotNone(model.halting_model)
 
-    def test_cluster_rejects_soft_halting_until_it_implements_the_interface(self):
+    def test_cluster_builds_with_soft_halting(self):
         config = NeuronClusterConfig(
             x_axis_total_neurons=1,
             y_axis_total_neurons=1,
@@ -697,8 +694,10 @@ class TestNeuronConfigs(NeuronTestCase):
             neuron_config=self.neuron_config(),
         )
 
-        with self.assertRaisesRegex(ValueError, "does not implement"):
-            config.build()
+        model = config.build()
+
+        self.assertIsInstance(model, NeuronCluster)
+        self.assertIsInstance(model.halting_model, SoftHalting)
 
     def test_overrides_replace_config_fields(self):
         cfg = NucleusConfig(model_config=self.projection_config(scale=1.0))
@@ -3870,47 +3869,6 @@ class TestNeuronCluster(NeuronTestCase):
             int(model.cluster["neuron_1_1_1"].route_call_counter.item()),
             0,
         )
-
-    def test_extra_halting_methods_do_not_replace_the_supported_lifecycle(self) -> None:
-        class PartialPreparedHaltingModel(RecordingHaltingModel):
-            def prepare_owner_step(self, *args, **kwargs):
-                raise AssertionError("partial prepared lifecycle must not be used")
-
-            def complete_owner_step(self, *args, **kwargs):
-                raise AssertionError("partial prepared lifecycle must not be used")
-
-        for beam_width in (1, 2):
-            with self.subTest(beam_width=beam_width):
-                halting_model = PartialPreparedHaltingModel()
-                model = self.scripted_cluster(
-                    max_steps=1,
-                    halting_model=halting_model,
-                    input_dim=1,
-                    x_axis_total_neurons=1,
-                    beam_width=beam_width,
-                )
-                model.cluster = nn.ModuleDict(
-                    {
-                        "neuron_1_1_1": ScriptedNeuron(
-                            routes=[[1, 1, 1]],
-                            probabilities=[1.0],
-                            delta=[1.0],
-                        )
-                    }
-                )
-
-                output, auxiliary_loss = model(torch.zeros(1, 1))
-
-                torch.testing.assert_close(
-                    output,
-                    torch.full_like(output, 2.0),
-                )
-                torch.testing.assert_close(
-                    auxiliary_loss,
-                    torch.zeros_like(auxiliary_loss),
-                )
-                self.assertEqual(halting_model.update_count, 2)
-                self.assertEqual(halting_model.finalize_count, 1)
 
     def test_return_trace_records_detached_entry_and_route_steps(self):
         model = self.scripted_cluster(

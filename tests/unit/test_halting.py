@@ -8,12 +8,9 @@ from emperor.halting import (
     HaltingHiddenStateModeOptions,
     SoftHalting,
     SoftHaltingConfig,
-    SoftHaltingState,
     StickBreaking,
     StickBreakingConfig,
-    StickBreakingState,
 )
-from emperor.halting._base import HaltingComputation
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -76,31 +73,6 @@ def soft_config(
         hidden_state_mode=mode,
         halting_gate_config=gate_config(input_dim) if custom_gate else None,
     )
-
-
-def run_step(
-    model: StickBreaking | SoftHalting,
-    previous_state: StickBreakingState | SoftHaltingState | None,
-    raw_hidden: torch.Tensor,
-    candidate: torch.Tensor | None = None,
-    *,
-    valid_mask: torch.Tensor | None = None,
-    update_mask: torch.Tensor | None = None,
-) -> tuple[StickBreakingState | SoftHaltingState, HaltingComputation]:
-    captured: list[HaltingComputation] = []
-
-    def compute(computation: HaltingComputation) -> torch.Tensor:
-        captured.append(computation)
-        return computation.raw_hidden if candidate is None else candidate
-
-    state = model.run_step(
-        previous_state,
-        raw_hidden,
-        compute,
-        valid_mask=valid_mask,
-        update_mask=update_mask,
-    )
-    return state, captured[0]
 
 
 def halting_cases(input_dim: int = 3):
@@ -309,31 +281,7 @@ class HaltingConstructionTests(unittest.TestCase):
         )
 
 
-
-class CommonHaltingLifecycleTests(unittest.TestCase):
-    def test_normalized_state_and_computation_record_contract(self) -> None:
-        hidden = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
-        candidate = hidden + 10.0
-
-        for name, model in halting_cases():
-            with self.subTest(strategy=name):
-                state, computation = run_step(model, None, hidden, candidate)
-                self.assertIsInstance(computation, HaltingComputation)
-                self.assertIs(computation.raw_hidden, hidden)
-                self.assertIsNone(computation.context_hidden)
-                torch.testing.assert_close(
-                    computation.continuation_probability,
-                    torch.ones(2),
-                )
-                self.assertTrue(computation.computation_mask.all())
-                self.assertEqual(state.raw_hidden.shape, hidden.shape)
-                self.assertEqual(state.output_hidden.shape, hidden.shape)
-                self.assertEqual(state.accumulated_hidden.shape, hidden.shape)
-                self.assertEqual(state.continuation_probability.shape, (2,))
-                self.assertEqual(state.halt_mask.shape, (2,))
-                self.assertTrue(state.valid_mask.all())
-                self.assertFalse(state.finalized)
-
+class CommonOfficialLifecycleTests(unittest.TestCase):
     def test_rank_two_rank_three_and_non_contiguous_inputs(self) -> None:
         inputs = (
             torch.randn(4, 3),
@@ -345,161 +293,38 @@ class CommonHaltingLifecycleTests(unittest.TestCase):
         for name, model in halting_cases():
             for hidden in inputs:
                 with self.subTest(strategy=name, shape=tuple(hidden.shape)):
-                    state, _ = run_step(model, None, hidden, hidden + 1)
-                    output, loss = model.finalize(state, state.raw_hidden)
+                    state, owner_output = model.update_halting_state(
+                        None,
+                        hidden + 1.0,
+                    )
+                    output, loss = model.finalize_weighted_accumulation(
+                        state,
+                        owner_output,
+                    )
+                    self.assertEqual(owner_output.shape, hidden.shape)
                     self.assertEqual(output.shape, hidden.shape)
                     self.assertTrue(torch.isfinite(output).all())
                     self.assertTrue(torch.isfinite(loss).all())
 
-    def test_bool_integer_and_float_binary_masks_are_equivalent(self) -> None:
-        hidden = torch.arange(9, dtype=torch.float32).reshape(3, 3)
-        mask_values = (
-            torch.tensor([True, False, True]),
-            torch.tensor([1, 0, 1], dtype=torch.int64),
-            torch.tensor([1.0, 0.0, 1.0]),
-        )
-
-        for name, _ in halting_cases():
-            states = []
-            for mask in mask_values:
-                model = (
-                    StickBreaking(stick_config(3)).eval()
-                    if name == "stick"
-                    else SoftHalting(soft_config(3)).eval()
-                )
-                state, _ = run_step(
-                    model,
-                    None,
-                    hidden,
-                    hidden + 1,
-                    valid_mask=mask,
-                )
-                states.append(state)
-            for state in states[1:]:
-                torch.testing.assert_close(state.output_hidden, states[0].output_hidden)
-                self.assertTrue(torch.equal(state.valid_mask, states[0].valid_mask))
-
-    def test_fractional_nonfinite_complex_wrong_shape_and_non_tensor_masks_fail(
-        self,
-    ) -> None:
-        hidden = torch.ones(2, 3)
-        invalid_cases = (
-            (torch.tensor([1.0, 0.5]), ValueError, "binary"),
-            (torch.tensor([1.0, float("nan")]), ValueError, "finite"),
-            (torch.tensor([1 + 0j, 0 + 0j]), TypeError, "dtype"),
-            (torch.ones(2, 1), ValueError, "shape"),
-            ([True, False], TypeError, "Tensor"),
-        )
-
+    def test_hidden_and_finalization_geometry_validation(self) -> None:
         for name, model in halting_cases():
-            for mask, error_type, message in invalid_cases:
-                with self.subTest(strategy=name, mask=mask):
-                    with self.assertRaisesRegex(error_type, message):
-                        run_step(model, None, hidden, valid_mask=mask)
+            with self.subTest(strategy=name, case="non-tensor"):
+                with self.assertRaisesRegex(TypeError, "must be a Tensor"):
+                    model.update_halting_state(None, [[1.0, 2.0, 3.0]])
+            with self.subTest(strategy=name, case="rank"):
+                with self.assertRaisesRegex(ValueError, "rank >= 2"):
+                    model.update_halting_state(None, torch.ones(3))
+            with self.subTest(strategy=name, case="feature-dimension"):
+                with self.assertRaisesRegex(ValueError, "final dimension"):
+                    model.update_halting_state(None, torch.ones(2, 4))
 
-    def test_valid_mask_is_permanent(self) -> None:
-        hidden = torch.ones(2, 3)
-        for name, model in halting_cases():
-            with self.subTest(strategy=name):
-                state, _ = run_step(
-                    model,
-                    None,
-                    hidden,
-                    valid_mask=torch.tensor([True, False]),
-                )
-                with self.assertRaisesRegex(ValueError, "cannot change"):
-                    run_step(
-                        model,
+            state, _ = model.update_halting_state(None, torch.ones(2, 3))
+            with self.subTest(strategy=name, case="final-shape"):
+                with self.assertRaisesRegex(ValueError, "current_hidden"):
+                    model.finalize_weighted_accumulation(
                         state,
-                        state.raw_hidden,
-                        valid_mask=torch.tensor([True, True]),
+                        torch.ones(1, 3),
                     )
-
-    def test_inactive_and_invalid_rows_do_not_advance_or_contribute_to_loss(
-        self,
-    ) -> None:
-        hidden = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]])
-        valid_mask = torch.tensor([True, True, False])
-        update_mask = torch.tensor([True, False, True])
-
-        for name, model in halting_cases():
-            with self.subTest(strategy=name):
-                state, computation = run_step(
-                    model,
-                    None,
-                    hidden,
-                    hidden + 100,
-                    valid_mask=valid_mask,
-                    update_mask=update_mask,
-                )
-                self.assertTrue(
-                    torch.equal(
-                        computation.computation_mask,
-                        torch.tensor([True, False, False]),
-                    )
-                )
-                torch.testing.assert_close(
-                    computation.continuation_probability,
-                    torch.tensor([1.0, 0.0, 0.0]),
-                )
-                torch.testing.assert_close(state.raw_hidden[1:], hidden[1:])
-                torch.testing.assert_close(state.output_hidden[1:], hidden[1:])
-                output, loss = model.finalize(state, state.raw_hidden)
-                torch.testing.assert_close(output[1:], hidden[1:])
-                if loss.dim() == 0:
-                    torch.testing.assert_close(loss, hidden.new_zeros(()))
-                else:
-                    torch.testing.assert_close(loss[1:], hidden.new_zeros(2))
-
-    def test_all_padding_is_finite_preserves_input_and_has_exact_zero_loss(
-        self,
-    ) -> None:
-        hidden = torch.randn(2, 4, dtype=torch.float64)
-        invalid = torch.zeros(2, dtype=torch.bool)
-
-        for name, model in halting_cases(4):
-            model = model.to(dtype=torch.float64)
-            with self.subTest(strategy=name):
-                state, _ = run_step(
-                    model,
-                    None,
-                    hidden,
-                    hidden * float("nan"),
-                    valid_mask=invalid,
-                )
-                output, loss = model.finalize(state, state.raw_hidden)
-                torch.testing.assert_close(output, hidden)
-                self.assertTrue(torch.isfinite(output).all())
-                self.assertIsInstance(loss, torch.Tensor)
-                self.assertEqual(loss.dtype, hidden.dtype)
-                torch.testing.assert_close(loss, torch.zeros_like(loss))
-
-    def test_candidate_must_be_a_matching_feature_last_tensor(self) -> None:
-        hidden = torch.ones(2, 3)
-        invalid_candidates = (
-            torch.ones(2),
-            torch.ones(2, 4),
-            torch.ones(1, 3),
-        )
-
-        for name, model in halting_cases():
-            for candidate in invalid_candidates:
-                with self.subTest(strategy=name, shape=tuple(candidate.shape)):
-                    with self.assertRaises((ValueError, TypeError)):
-                        run_step(model, None, hidden, candidate)
-
-    def test_hidden_and_finalize_geometry_validation(self) -> None:
-        model = SoftHalting(soft_config(3)).eval()
-        with self.assertRaisesRegex(TypeError, "raw_hidden must be a Tensor"):
-            model.run_step(None, [[1.0, 2.0, 3.0]], lambda computation: None)
-        with self.assertRaisesRegex(ValueError, "rank >= 2"):
-            run_step(model, None, torch.ones(3))
-        with self.assertRaisesRegex(ValueError, "final dimension"):
-            run_step(model, None, torch.ones(2, 4))
-
-        state, _ = run_step(model, None, torch.ones(2, 3))
-        with self.assertRaisesRegex(ValueError, "current_hidden"):
-            model.finalize(state, torch.ones(1, 3))
 
     def test_device_and_dtype_follow_hidden(self) -> None:
         devices = [torch.device("cpu")]
@@ -511,8 +336,14 @@ class CommonHaltingLifecycleTests(unittest.TestCase):
                     with self.subTest(strategy=name, device=device, dtype=dtype):
                         model = model.to(device=device, dtype=dtype)
                         hidden = torch.ones(2, 3, device=device, dtype=dtype)
-                        state, _ = run_step(model, None, hidden, hidden + 1)
-                        output, loss = model.finalize(state, state.raw_hidden)
+                        state, owner_output = model.update_halting_state(
+                            None,
+                            hidden + 1.0,
+                        )
+                        output, loss = model.finalize_weighted_accumulation(
+                            state,
+                            owner_output,
+                        )
                         self.assertEqual(output.device, device)
                         self.assertEqual(output.dtype, dtype)
                         self.assertEqual(loss.device, device)
@@ -529,124 +360,59 @@ class CommonHaltingLifecycleTests(unittest.TestCase):
                 with self.subTest(strategy=name, dtype=dtype):
                     model = model.to(device=device, dtype=dtype)
                     hidden = torch.randn(2, 3, device=device, dtype=dtype)
-                    state, _ = run_step(model, None, hidden, hidden + 1)
-                    output, loss = model.finalize(state, state.raw_hidden)
+                    state, owner_output = model.update_halting_state(None, hidden)
+                    output, loss = model.finalize_weighted_accumulation(
+                        state,
+                        owner_output,
+                    )
                     self.assertTrue(torch.isfinite(output).all())
                     self.assertTrue(torch.isfinite(loss).all())
 
 
 class StickBreakingLifecycleTests(unittest.TestCase):
-    def test_shared_lifecycle_matches_the_unchanged_direct_api(self) -> None:
-        for mode in HaltingHiddenStateModeOptions:
-            cfg = stick_config(2, threshold=0.999, mode=mode)
-            direct_model = StickBreaking(cfg).eval()
-            shared_model = StickBreaking(cfg).eval()
-            with torch.no_grad():
-                direct_model.halting_gate_model[-1].model.weight_params.copy_(
-                    torch.tensor(((0.35, -0.45), (-0.2, 0.5)))
-                )
-            shared_model.load_state_dict(direct_model.state_dict(), strict=True)
-            candidates = (
-                torch.tensor(((1.0, -2.0), (0.5, 1.5))),
-                torch.tensor(((-0.5, 0.25), (2.0, -1.0))),
-                torch.tensor(((1.5, 0.75), (-0.25, 0.5))),
-            )
-            direct_state = None
-            shared_state = None
-
-            for candidate in candidates:
-                direct_state, direct_output = direct_model.update_halting_state(
-                    direct_state,
-                    candidate,
-                )
-                shared_state = shared_model.run_step(
-                    shared_state,
-                    candidate,
-                    lambda _computation, value=candidate: value,
-                )
-
-                with self.subTest(mode=mode, step=direct_state.step_count):
-                    for field_name in (
-                        "halt_mask",
-                        "log_continuation",
-                        "accumulated_hidden",
-                        "output_hidden",
-                        "accumulated_halt_probabilities",
-                        "accumulated_ponder_cost",
-                    ):
-                        torch.testing.assert_close(
-                            getattr(shared_state, field_name),
-                            getattr(direct_state, field_name),
-                        )
-                    self.assertEqual(shared_state.step_count, direct_state.step_count)
-                    torch.testing.assert_close(
-                        shared_state.output_hidden, direct_output
-                    )
-
-            current_hidden = candidates[-1] * 1.7
-            direct_output, direct_loss = direct_model.finalize_weighted_accumulation(
-                direct_state,
-                current_hidden,
-            )
-            shared_output, shared_loss = shared_model.finalize(
-                shared_state,
-                current_hidden,
-            )
-            torch.testing.assert_close(shared_output, direct_output)
-            torch.testing.assert_close(shared_loss, direct_loss)
-
-    def test_computation_precedes_gate_and_equal_logits_preserve_recurrence(
-        self,
-    ) -> None:
+    def test_equal_logits_preserve_the_stick_breaking_recurrence(self) -> None:
         model = StickBreaking(stick_config(2)).eval()
-        events: list[str] = []
-        handle = model.halting_gate_model.register_forward_pre_hook(
-            lambda _module, _inputs: events.append("gate")
-        )
-        hidden_0 = torch.tensor([[1.0, 2.0]])
-        hidden_1 = torch.tensor([[3.0, 4.0]])
+        first_candidate = torch.tensor(((3.0, 4.0),))
+        second_candidate = torch.tensor(((5.0, 6.0),))
 
-        state = model.run_step(
-            None,
-            hidden_0,
-            lambda _computation: events.append("compute") or hidden_1,
-        )
-        handle.remove()
-
-        self.assertEqual(events, ["compute", "gate"])
+        state, _ = model.update_halting_state(None, first_candidate)
         self.assertEqual(state.step_count, 0)
-        torch.testing.assert_close(state.accumulated_hidden, hidden_1 * 0.5)
-        torch.testing.assert_close(state.continuation_probability, torch.tensor([0.5]))
+        torch.testing.assert_close(state.accumulated_hidden, first_candidate * 0.5)
         torch.testing.assert_close(
             state.accumulated_halt_probabilities,
-            torch.tensor([0.5]),
+            torch.tensor((0.5,)),
         )
-        torch.testing.assert_close(state.accumulated_ponder_cost, torch.tensor(0.0))
 
-        hidden_2 = torch.tensor([[5.0, 6.0]])
-        state, _ = run_step(model, state, state.raw_hidden, hidden_2)
+        state, _ = model.update_halting_state(state, second_candidate)
         self.assertEqual(state.step_count, 1)
         torch.testing.assert_close(
             state.accumulated_hidden,
-            hidden_1 * 0.5 + hidden_2 * 0.25,
+            first_candidate * 0.5 + second_candidate * 0.25,
         )
-        torch.testing.assert_close(state.continuation_probability, torch.tensor([0.25]))
         torch.testing.assert_close(
             state.accumulated_halt_probabilities,
-            torch.tensor([0.75]),
+            torch.tensor((0.75,)),
         )
-        torch.testing.assert_close(state.accumulated_ponder_cost, torch.tensor([0.25]))
+        torch.testing.assert_close(
+            state.accumulated_ponder_cost,
+            torch.tensor((0.25,)),
+        )
 
-        output, ponder = model.finalize(state, state.raw_hidden)
-        torch.testing.assert_close(output, hidden_1 * 0.5 + hidden_2 * 0.5)
-        torch.testing.assert_close(ponder, torch.tensor([0.75]))
-        self.assertTrue(state.finalized)
+        output, ponder = model.finalize_weighted_accumulation(
+            state,
+            second_candidate,
+        )
+        torch.testing.assert_close(
+            output,
+            first_candidate * 0.5 + second_candidate * 0.5,
+        )
+        torch.testing.assert_close(ponder, torch.tensor((0.75,)))
 
     def test_raw_and_accumulated_modes_select_owner_output(self) -> None:
-        hidden = torch.tensor([[2.0, 4.0]])
+        hidden = torch.tensor(((2.0, 4.0),))
         for mode in HaltingHiddenStateModeOptions:
             model = StickBreaking(stick_config(2, mode=mode)).eval()
-            state, _ = run_step(model, None, hidden, hidden)
+            state, owner_output = model.update_halting_state(None, hidden)
             expected = (
                 hidden * 0.5
                 if mode == HaltingHiddenStateModeOptions.ACCUMULATED
@@ -654,32 +420,28 @@ class StickBreakingLifecycleTests(unittest.TestCase):
             )
             with self.subTest(mode=mode):
                 torch.testing.assert_close(state.output_hidden, expected)
+                torch.testing.assert_close(owner_output, expected)
 
-    def test_threshold_equality_halts_and_requests_early_stop(self) -> None:
+    def test_threshold_equality_halts(self) -> None:
         model = StickBreaking(stick_config(2, threshold=0.5)).eval()
-        state, _ = run_step(model, None, torch.ones(2, 2))
+
+        state, _ = model.update_halting_state(None, torch.ones(2, 2))
 
         self.assertTrue(state.halt_mask.all())
-        self.assertTrue(state.stop_requested)
 
-    def test_halted_rows_preserve_output_while_legacy_computation_continues(
-        self,
-    ) -> None:
+    def test_halted_rows_preserve_their_owner_output(self) -> None:
         model = StickBreaking(stick_config(2, threshold=0.5)).eval()
-        first = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-        state, _ = run_step(model, None, first, first)
+        first = torch.tensor(((1.0, 2.0), (3.0, 4.0)))
+        state, _ = model.update_halting_state(None, first)
         previous_output = state.output_hidden.clone()
-        candidate = torch.full_like(first, 99.0)
 
-        state, computation = run_step(model, state, state.raw_hidden, candidate)
+        state, _ = model.update_halting_state(state, torch.full_like(first, 99.0))
 
-        self.assertTrue(computation.computation_mask.all())
-        torch.testing.assert_close(state.raw_hidden, candidate)
         torch.testing.assert_close(state.output_hidden, previous_output)
 
     def test_training_noise_is_seeded_and_eval_is_deterministic(self) -> None:
         model = StickBreaking(stick_config(3))
-        hidden = torch.tensor([[1.0, -2.0, 3.0], [0.5, 1.5, -1.0]])
+        hidden = torch.tensor(((1.0, -2.0, 3.0), (0.5, 1.5, -1.0)))
         model.train()
         torch.manual_seed(123)
         first = model._StickBreaking__compute_gate_logits(hidden)
@@ -691,18 +453,20 @@ class StickBreakingLifecycleTests(unittest.TestCase):
         self.assertFalse(torch.allclose(first, third))
 
         model.eval()
-        first_eval = model._StickBreaking__compute_gate_logits(hidden)
-        second_eval = model._StickBreaking__compute_gate_logits(hidden)
-        torch.testing.assert_close(first_eval, second_eval)
+        torch.testing.assert_close(
+            model._StickBreaking__compute_gate_logits(hidden),
+            model._StickBreaking__compute_gate_logits(hidden),
+        )
 
     def test_backward_reaches_gate_and_input(self) -> None:
         model = StickBreaking(stick_config(3)).eval()
         hidden = torch.tensor(
-            [[1.0, -2.0, 3.0], [0.5, 1.5, -1.0]],
+            ((1.0, -2.0, 3.0), (0.5, 1.5, -1.0)),
             requires_grad=True,
         )
-        state, _ = run_step(model, None, hidden, hidden.square())
-        output, ponder = model.finalize(state, state.raw_hidden)
+        candidate = hidden.square()
+        state, _ = model.update_halting_state(None, candidate)
+        output, ponder = model.finalize_weighted_accumulation(state, candidate)
 
         (output.sum() + ponder.sum()).backward()
 
@@ -720,97 +484,63 @@ class SoftHaltingLifecycleTests(unittest.TestCase):
     def _nonzero_gate(self, *, dropout: float = 0.0) -> SoftHalting:
         model = SoftHalting(soft_config(2, threshold=0.8, dropout=dropout))
         with torch.no_grad():
-            model._gate[0].weight.copy_(torch.tensor([[0.5, -0.2], [0.1, 0.4]]))
-            model._gate[0].bias.copy_(torch.tensor([0.2, -0.1]))
-            model._gate[3].weight.copy_(torch.tensor([[0.6, -0.3], [-0.4, 0.7]]))
+            model._gate[0].weight.copy_(torch.tensor(((0.5, -0.2), (0.1, 0.4))))
+            model._gate[0].bias.copy_(torch.tensor((0.2, -0.1)))
+            model._gate[3].weight.copy_(torch.tensor(((0.6, -0.3), (-0.4, 0.7))))
         return model
 
-    def test_first_step_skips_gate_and_uses_first_candidate_as_soft_output(
-        self,
-    ) -> None:
+    def test_first_step_skips_gate_and_uses_candidate_as_output(self) -> None:
         model = self._nonzero_gate().eval()
         gate_calls: list[torch.Tensor] = []
         handle = model._gate.register_forward_pre_hook(
             lambda _module, inputs: gate_calls.append(inputs[0].detach().clone())
         )
-        raw = torch.tensor([[1.0, 2.0]])
-        candidate = torch.tensor([[3.0, 4.0]])
+        candidate = torch.tensor(((3.0, 4.0),))
 
-        state, computation = run_step(model, None, raw, candidate)
+        state, owner_output = model.update_halting_state(None, candidate)
         handle.remove()
 
         self.assertEqual(gate_calls, [])
         self.assertIsNone(state.gate_input)
         self.assertIsNone(state.gate_logits)
-        self.assertIsNone(computation.context_hidden)
         torch.testing.assert_close(state.raw_hidden, candidate)
         torch.testing.assert_close(state.output_hidden, candidate)
+        torch.testing.assert_close(owner_output, candidate)
         torch.testing.assert_close(
-            state.accumulated_hidden, torch.zeros_like(candidate)
+            state.accumulated_hidden,
+            torch.zeros_like(candidate),
         )
         torch.testing.assert_close(state.step_count, torch.zeros(1))
 
-    def test_later_step_gates_previous_raw_and_passes_prior_soft_context(self) -> None:
+    def test_later_step_gates_the_previous_raw_hidden(self) -> None:
         model = self._nonzero_gate().eval()
-        initial_raw = torch.tensor([[1.0, 2.0]])
-        first_candidate = torch.tensor([[3.0, 5.0]])
-        second_candidate = torch.tensor([[7.0, 11.0]])
-        state, _ = run_step(model, None, initial_raw, first_candidate)
+        first_candidate = torch.tensor(((3.0, 5.0),))
+        second_candidate = torch.tensor(((7.0, 11.0),))
+        state, _ = model.update_halting_state(None, first_candidate)
 
-        next_state, computation = run_step(
-            model,
-            state,
-            state.raw_hidden,
-            second_candidate,
-        )
+        next_state, _ = model.update_halting_state(state, second_candidate)
 
         torch.testing.assert_close(next_state.gate_input, first_candidate)
-        torch.testing.assert_close(computation.raw_hidden, first_candidate)
-        torch.testing.assert_close(computation.context_hidden, state.output_hidden)
         expected_halt_mass = next_state.gate_logits[..., 1].exp()
         torch.testing.assert_close(
             next_state.accumulated_hidden,
             expected_halt_mass.unsqueeze(-1) * first_candidate,
         )
 
-    def test_accumulated_extension_passes_partial_accumulation_as_context(self) -> None:
-        model = SoftHalting(
-            soft_config(
-                2,
-                mode=HaltingHiddenStateModeOptions.ACCUMULATED,
-            )
-        ).eval()
-        state, _ = run_step(model, None, torch.ones(1, 2), torch.full((1, 2), 2.0))
-        state, _ = run_step(model, state, state.raw_hidden, torch.full((1, 2), 4.0))
-
-        _next_state, computation = run_step(
-            model,
-            state,
-            state.raw_hidden,
-            torch.full((1, 2), 8.0),
-        )
-
-        torch.testing.assert_close(computation.context_hidden, state.accumulated_hidden)
-
     def test_strict_continuation_boundary_continues_and_lower_values_freeze(
         self,
     ) -> None:
         model = SoftHalting(soft_config(2, threshold=0.5)).eval()
-        first = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-        state, _ = run_step(model, None, first, first)
-        model.threshold = 0.5
-        state.log_continuation = torch.tensor([0.0, math.log(0.5)])
+        first = torch.tensor(((1.0, 2.0), (3.0, 4.0)))
+        state, _ = model.update_halting_state(None, first)
+        state.log_continuation = torch.tensor((0.0, math.log(0.5)))
         previous_output = state.output_hidden.clone()
 
-        next_state, computation = run_step(
-            model,
+        next_state, _ = model.update_halting_state(
             state,
-            state.raw_hidden,
             torch.full_like(first, 10.0),
         )
 
-        self.assertTrue(computation.computation_mask[0])
-        self.assertFalse(computation.computation_mask[1])
         self.assertEqual(next_state.continuation_probability[0].item(), 0.5)
         self.assertEqual(next_state.continuation_probability[1].item(), 0.0)
         self.assertFalse(next_state.halt_mask[0])
@@ -820,100 +550,59 @@ class SoftHaltingLifecycleTests(unittest.TestCase):
             0.5 * first[0] + 0.5 * torch.full_like(first[0], 10.0),
         )
         torch.testing.assert_close(next_state.output_hidden[1], previous_output[1])
+        torch.testing.assert_close(next_state.raw_hidden[1], first[1])
 
-    def test_asynchronous_updates_accumulate_the_advanced_domain(self) -> None:
-        model = SoftHalting(soft_config(2, threshold=0.999)).eval()
-        hidden = torch.tensor(((1.0, 2.0), (3.0, 4.0)))
-        state, _ = run_step(
-            model,
-            None,
-            hidden,
-            hidden + 1.0,
-            update_mask=torch.tensor((True, False)),
-        )
-        state, _ = run_step(
-            model,
-            state,
-            state.raw_hidden,
-            state.raw_hidden + 1.0,
-            update_mask=torch.tensor((False, True)),
-        )
-
-        self.assertTrue(torch.equal(state.advanced_mask, torch.tensor((True, True))))
-
-    def test_never_updated_valid_rows_do_not_dilute_terminal_loss(self) -> None:
-        model = SoftHalting(soft_config(2, threshold=0.999)).eval()
-        hidden = torch.tensor(((1.0, 2.0), (3.0, 4.0)))
-        update_mask = torch.tensor((True, False))
-        state, _ = run_step(
-            model,
-            None,
-            hidden,
-            hidden + 1.0,
-            update_mask=update_mask,
-        )
-        state, _ = run_step(
-            model,
-            state,
-            state.raw_hidden,
-            state.raw_hidden + 1.0,
-            update_mask=update_mask,
-        )
-
-        _output, loss = model.finalize(state, state.raw_hidden)
-
-        self.assertTrue(torch.equal(state.advanced_mask, update_mask))
-        torch.testing.assert_close(loss, loss.new_tensor(0.5))
-
-    def test_soft_never_requests_early_stop(self) -> None:
+    def test_halted_rows_remain_frozen(self) -> None:
         model = SoftHalting(soft_config(2, threshold=0.5)).eval()
-        state, _ = run_step(model, None, torch.ones(2, 2))
-        for _ in range(4):
-            state, _ = run_step(model, state, state.raw_hidden)
-
+        candidate = torch.ones(2, 2)
+        state, _ = model.update_halting_state(None, candidate)
+        state, _ = model.update_halting_state(state, candidate * 2.0)
+        state, _ = model.update_halting_state(state, candidate * 3.0)
         self.assertTrue(state.halt_mask.all())
-        self.assertFalse(state.stop_requested)
+        previous_output = state.output_hidden.clone()
+        previous_raw = state.raw_hidden.clone()
 
-    def test_terminal_loss_is_masked_and_finalized_once_by_state(self) -> None:
+        state, _ = model.update_halting_state(state, candidate * 100.0)
+
+        torch.testing.assert_close(state.output_hidden, previous_output)
+        torch.testing.assert_close(state.raw_hidden, previous_raw)
+
+    def test_finalization_returns_the_soft_output_and_expected_depth(self) -> None:
         model = SoftHalting(soft_config(2)).eval()
-        valid = torch.tensor([True, False])
-        hidden = torch.tensor([[2.0, 4.0], [6.0, 8.0]])
-        state, _ = run_step(model, None, hidden, hidden, valid_mask=valid)
-        state, _ = run_step(
-            model,
+        first = torch.tensor(((2.0, 4.0), (6.0, 8.0)))
+        state, _ = model.update_halting_state(None, first)
+        state, _ = model.update_halting_state(state, first * 2.0)
+
+        output, loss = model.finalize_weighted_accumulation(
             state,
             state.raw_hidden,
-            hidden * 2,
-            valid_mask=valid,
         )
-
-        output, loss = model.finalize(state, state.raw_hidden)
 
         self.assertIs(output, state.output_hidden)
-        self.assertTrue(state.finalized)
         torch.testing.assert_close(loss, loss.new_tensor(0.5))
 
-    def test_finalize_validation_names_current_hidden_exactly(self) -> None:
+    def test_finalization_validation_names_current_hidden_exactly(self) -> None:
         model = SoftHalting(soft_config(2)).eval()
-        state, _ = run_step(model, None, torch.ones(2, 2))
+        state, _ = model.update_halting_state(None, torch.ones(2, 2))
 
-        with self.assertRaisesRegex(
-            TypeError,
-            r"^current_hidden must be a Tensor",
-        ):
-            model.finalize(state, [[1.0, 2.0], [3.0, 4.0]])
+        with self.assertRaisesRegex(TypeError, r"^current_hidden must be a Tensor"):
+            model.finalize_weighted_accumulation(
+                state,
+                [[1.0, 2.0], [3.0, 4.0]],
+            )
         with self.assertRaisesRegex(
             ValueError,
             r"^current_hidden must have shape \(2, 2\)",
         ):
-            model.finalize(state, torch.ones(3, 2))
+            model.finalize_weighted_accumulation(state, torch.ones(3, 2))
 
     def test_train_mode_uses_only_seeded_dropout_not_gaussian_noise(self) -> None:
-        hidden = torch.tensor([[1.0, -2.0], [0.5, 1.5]])
+        hidden = torch.tensor(((1.0, -2.0), (0.5, 1.5)))
         no_dropout = self._nonzero_gate(dropout=0.0).train()
-        first = no_dropout._SoftHalting__compute_gate_logits(hidden)
-        second = no_dropout._SoftHalting__compute_gate_logits(hidden)
-        torch.testing.assert_close(first, second)
+        torch.testing.assert_close(
+            no_dropout._SoftHalting__compute_gate_logits(hidden),
+            no_dropout._SoftHalting__compute_gate_logits(hidden),
+        )
 
         with_dropout = self._nonzero_gate(dropout=0.5).train()
         torch.manual_seed(31)
@@ -933,12 +622,18 @@ class SoftHaltingLifecycleTests(unittest.TestCase):
 
     def test_backward_reaches_every_canonical_gate_parameter_and_inputs(self) -> None:
         model = self._nonzero_gate().double().eval()
-        first = torch.tensor([[1.0, -2.0], [0.5, 1.5]], dtype=torch.float64)
-        second = first.clone().requires_grad_()
-        third = (first * 2).clone().requires_grad_()
-        state, _ = run_step(model, None, first, second)
-        state, _ = run_step(model, state, state.raw_hidden, third)
-        output, loss = model.finalize(state, state.raw_hidden)
+        second = torch.tensor(
+            ((1.0, -2.0), (0.5, 1.5)),
+            dtype=torch.float64,
+            requires_grad=True,
+        )
+        third = (second.detach() * 2.0).requires_grad_()
+        state, _ = model.update_halting_state(None, second)
+        state, _ = model.update_halting_state(state, third)
+        output, loss = model.finalize_weighted_accumulation(
+            state,
+            state.raw_hidden,
+        )
 
         (output.square().sum() + loss).backward()
 

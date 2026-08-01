@@ -188,40 +188,6 @@ class StickBreakingValidator:
                 f"received {tuple(tensor.shape)}"
             )
 
-    @staticmethod
-    def validate_pad_mask(
-        pad_mask: Tensor | None,
-        hidden: Tensor,
-        *,
-        required_by: str | None = None,
-    ) -> None:
-        if pad_mask is None:
-            if required_by is not None:
-                raise TypeError(
-                    f"pad_mask must be a Tensor for {required_by}, received None"
-                )
-            return
-        if not isinstance(pad_mask, Tensor):
-            raise TypeError(
-                f"pad_mask must be a Tensor or None, received {type(pad_mask).__name__}"
-            )
-        expected_shape = hidden.shape[:-1]
-        if pad_mask.shape != expected_shape:
-            raise ValueError(
-                f"pad_mask must have shape {tuple(expected_shape)}, "
-                f"received {tuple(pad_mask.shape)}"
-            )
-        if pad_mask.dtype != torch.bool and not torch.is_floating_point(pad_mask):
-            raise TypeError(
-                f"pad_mask must use bool or floating dtype, received {pad_mask.dtype}"
-            )
-        if pad_mask.dtype != torch.bool and (
-            not torch.isfinite(pad_mask).all().item()
-            or (pad_mask < 0.0).any().item()
-            or (pad_mask > 1.0).any().item()
-        ):
-            raise ValueError("pad_mask values must be finite and between 0.0 and 1.0")
-
 
 class SoftHaltingValidator(StickBreakingValidator):
     OPTIONAL_FIELDS = {
