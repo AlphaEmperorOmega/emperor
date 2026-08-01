@@ -552,6 +552,21 @@ class TestExperimentConfigOverrideParsing(
             ],
         )
 
+    def test_linear_new_presets_resolve_from_canonical_kebab_case_names(self):
+        package = model_package("linears/linear")
+        parser = get_experiment_parser(package)
+
+        for preset in list(LinearExperimentPreset)[24:]:
+            cli_name = preset.name.lower().replace("_", "-")
+            with self.subTest(preset=cli_name):
+                args = parser.parse_args(["--preset", cli_name])
+                mode = resolve_cli_selection(
+                    args,
+                    package,
+                    LinearExperimentPreset,
+                )
+                self.assertIs(mode.preset, preset)
+
     def test_runs_cli_can_defer_monitor_callback_construction(self):
         package = model_package("linears/linear")
         parser = get_experiment_parser(package)
