@@ -330,6 +330,32 @@ class HaltingUsageTrackerTests(unittest.TestCase):
         torch.testing.assert_close(tracker.last_remaining_mass_mean, torch.zeros(()))
         torch.testing.assert_close(tracker.last_ponder_loss, torch.zeros(()))
 
+    def test_missing_optional_metrics_do_not_retain_the_previous_forward(self) -> None:
+        tracker = HaltingUsageTracker()
+        rich_state = stick_state(
+            halt_mask=torch.tensor([True, False]),
+            accumulated_probabilities=torch.tensor([0.9, 0.25]),
+            ponder_cost=torch.tensor([3.0, 5.0]),
+        )
+        tracker.begin_forward()
+        tracker.record_step(rich_state)
+        tracker.record_final(torch.tensor(2.0), rich_state)
+
+        sparse_state = base_state(torch.ones(2))
+        tracker.begin_forward()
+        tracker.record_step(sparse_state)
+        tracker.record_final(None, sparse_state)
+
+        self.assertEqual(tuple(tracker.last_ponder_cost.shape), (0,))
+        for name in (
+            "last_ponder_cost_mean",
+            "last_ponder_cost_std",
+            "last_accumulated_halt_prob_mean",
+            "last_remaining_mass_mean",
+            "last_ponder_loss",
+        ):
+            torch.testing.assert_close(getattr(tracker, name), torch.zeros(()))
+
     def test_accumulated_probabilities_without_halt_mask_keep_all_remaining_mass(
         self,
     ) -> None:
