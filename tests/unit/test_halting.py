@@ -260,6 +260,45 @@ class HaltingConstructionTests(unittest.TestCase):
             torch.full((2, 3, 2), -math.log(2.0)),
         )
 
+    def test_strategy_checkpoint_namespaces_round_trip_strictly(self) -> None:
+        soft_cfg = soft_config(3)
+        source_soft = SoftHalting(soft_cfg).eval()
+        with torch.no_grad():
+            source_soft._gate[0].weight.copy_(
+                torch.tensor(((0.2, -0.1, 0.3), (0.4, 0.5, -0.2), (-0.3, 0.1, 0.6)))
+            )
+            source_soft._gate[0].bias.copy_(torch.tensor((0.1, -0.2, 0.3)))
+            source_soft._gate[3].weight.copy_(
+                torch.tensor(((0.7, -0.4, 0.2), (-0.1, 0.5, 0.3)))
+            )
+        hidden = torch.tensor(((1.0, -2.0, 0.5),))
+        expected_soft = source_soft._SoftHalting__compute_gate_logits(hidden)
+        restored_soft = SoftHalting(soft_cfg).eval()
+        restored_soft.load_state_dict(source_soft.state_dict(), strict=True)
+
+        self.assertEqual(
+            tuple(source_soft.state_dict()),
+            ("_gate.0.weight", "_gate.0.bias", "_gate.3.weight"),
+        )
+        torch.testing.assert_close(
+            restored_soft._SoftHalting__compute_gate_logits(hidden),
+            expected_soft,
+        )
+
+        stick_cfg = stick_config(3)
+        source_stick = StickBreaking(stick_cfg).eval()
+        expected_stick = source_stick._StickBreaking__compute_gate_logits(hidden)
+        restored_stick = StickBreaking(stick_cfg).eval()
+        restored_stick.load_state_dict(source_stick.state_dict(), strict=True)
+        self.assertEqual(
+            tuple(restored_stick.state_dict()),
+            tuple(source_stick.state_dict()),
+        )
+        torch.testing.assert_close(
+            restored_stick._StickBreaking__compute_gate_logits(hidden),
+            expected_stick,
+        )
+
     def test_custom_soft_gate_preserves_layer_stack_namespace(self) -> None:
         model = SoftHalting(soft_config(3, custom_gate=True))
 
@@ -269,47 +308,6 @@ class HaltingConstructionTests(unittest.TestCase):
             ("_gate.layers.0.model.weight_params",),
         )
 
-    def test_canonical_soft_gate_strict_round_trip_preserves_logits(self) -> None:
-        cfg = soft_config(3)
-        source = SoftHalting(cfg).eval()
-        with torch.no_grad():
-            source._gate[0].weight.copy_(
-                torch.tensor([[0.2, -0.1, 0.3], [0.4, 0.5, -0.2], [-0.3, 0.1, 0.6]])
-            )
-            source._gate[0].bias.copy_(torch.tensor([0.1, -0.2, 0.3]))
-            source._gate[3].weight.copy_(
-                torch.tensor([[0.7, -0.4, 0.2], [-0.1, 0.5, 0.3]])
-            )
-        hidden = torch.tensor([[1.0, -2.0, 0.5]])
-        expected = source._SoftHalting__compute_gate_logits(hidden)
-
-        restored = SoftHalting(cfg).eval()
-        restored.load_state_dict(source.state_dict(), strict=True)
-
-        self.assertEqual(
-            tuple(source.state_dict()),
-            ("_gate.0.weight", "_gate.0.bias", "_gate.3.weight"),
-        )
-        torch.testing.assert_close(
-            restored._SoftHalting__compute_gate_logits(hidden),
-            expected,
-        )
-
-    def test_stick_checkpoint_keys_and_behavior_round_trip_strictly(self) -> None:
-        cfg = stick_config(3)
-        source = StickBreaking(cfg).eval()
-        hidden = torch.tensor([[1.0, -2.0, 0.5]])
-        expected = source._StickBreaking__compute_gate_logits(hidden)
-        state_dict = source.state_dict()
-
-        restored = StickBreaking(cfg).eval()
-        restored.load_state_dict(state_dict, strict=True)
-
-        self.assertEqual(tuple(restored.state_dict()), tuple(state_dict))
-        torch.testing.assert_close(
-            restored._StickBreaking__compute_gate_logits(hidden),
-            expected,
-        )
 
 
 class CommonHaltingLifecycleTests(unittest.TestCase):
