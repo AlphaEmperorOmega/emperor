@@ -525,6 +525,7 @@ class TestNeuronCompositionValidation(NeuronTestCase):
         halting_config = self.halting_config(input_dim=self.input_dim)
         halting_config.threshold = 2.0
         config = self.cluster_config(halting_config=halting_config)
+
         with self.assertRaisesRegex(
             ValueError,
             "threshold must be finite and between 0.0.*received 2.0",
