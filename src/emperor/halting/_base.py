@@ -71,10 +71,6 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
             is not HaltingBase.finalize_weighted_accumulation
         )
 
-    @classmethod
-    def validate_resolved_config(cls, cfg) -> None:
-        cls.VALIDATOR.validate_config(cfg)
-
     def run_step(
         self,
         previous_state: StateT | None,
