@@ -91,8 +91,6 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             state.accumulated_ponder_cost,
             torch.tensor([2.0, 2.0], dtype=torch.float64),
         )
-        self.assertTrue(state.stop_requested)
-        self.assertFalse(state.finalized)
 
         state.raw_hidden.sum().backward()
         torch.testing.assert_close(

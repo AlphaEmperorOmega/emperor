@@ -10,6 +10,7 @@ from emperor.convs import Conv2dLayerConfig
 from emperor.halting import (
     HaltingHiddenStateModeOptions,
     SoftHaltingConfig,
+    SoftHaltingState,
     StickBreakingConfig,
 )
 from emperor.layers import (
@@ -2026,7 +2027,7 @@ class TestLayer(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Layer(self.preset(halting_config=halting_config, **case))
 
-    def test_layer_rejects_soft_until_it_implements_the_interface(self):
+    def test_layer_composes_soft_through_the_halting_interface(self):
         dim = 4
         halting_config = SoftHaltingConfig(
             input_dim=dim,
@@ -2034,9 +2035,23 @@ class TestLayer(unittest.TestCase):
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
         )
+        layer = Layer(
+            self.preset(
+                input_dim=dim,
+                output_dim=dim,
+                halting_config=halting_config,
+            )
+        ).eval()
+        state = LayerState(hidden=torch.randn(3, dim))
 
-        with self.assertRaisesRegex(ValueError, "does not implement"):
-            Layer(self.preset(halting_config=halting_config))
+        result = layer(state)
+
+        self.assertIs(result, state)
+        self.assertIsInstance(result.halting_state, SoftHaltingState)
+        torch.testing.assert_close(
+            result.hidden,
+            result.halting_state.output_hidden,
+        )
 
     def test_halting_uses_the_common_lifecycle_to_update_state(self):
         batch_size = 4
@@ -2134,7 +2149,6 @@ class TestLayer(unittest.TestCase):
             loss=loss,
             halting_state=fake_halting_state,
         )
-        fake_halting_state.finalized = True
 
         result = layer(state)
 

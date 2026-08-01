@@ -180,11 +180,6 @@ class _NeuronHaltingLifecycle:
             halting_state.accumulated_ponder_cost = accumulated_ponder_cost.expand(
                 update_mask.shape
             ).clone()
-        halt_mask = cls.halt_mask(halting_state)
-        halting_state.stop_requested = bool(
-            halt_mask is not None and (halt_mask | ~advanced_mask).all().item()
-        )
-        halting_state.finalized = False
 
     @classmethod
     def finalize(

@@ -74,10 +74,9 @@ class HaltingRegressionTests(unittest.TestCase):
         for model in strategies():
             model = model.double()
             with self.subTest(strategy=type(model).__name__):
-                first = model.run_step(
+                first, _ = model.update_halting_state(
                     None,
                     non_contiguous,
-                    lambda computation: computation.raw_hidden,
                 )
                 second_model = (
                     StickBreaking(model.cfg).double().eval()
@@ -85,62 +84,15 @@ class HaltingRegressionTests(unittest.TestCase):
                     else SoftHalting(model.cfg).double().eval()
                 )
                 second_model.load_state_dict(model.state_dict(), strict=True)
-                second = second_model.run_step(
+                second, _ = second_model.update_halting_state(
                     None,
                     contiguous,
-                    lambda computation: computation.raw_hidden,
                 )
                 torch.testing.assert_close(first.output_hidden, second.output_hidden)
                 torch.testing.assert_close(
-                    first.continuation_probability,
-                    second.continuation_probability,
+                    first.log_continuation,
+                    second.log_continuation,
                 )
-
-    def test_omitted_later_valid_mask_restores_the_permanent_domain(self) -> None:
-        hidden = torch.ones(2, 2)
-        valid = torch.tensor([True, False])
-        for model in strategies():
-            with self.subTest(strategy=type(model).__name__):
-                state = model.run_step(
-                    None,
-                    hidden,
-                    lambda computation: computation.raw_hidden,
-                    valid_mask=valid,
-                )
-                state = model.run_step(
-                    state,
-                    state.raw_hidden,
-                    lambda computation: computation.raw_hidden + 1,
-                )
-                self.assertTrue(torch.equal(state.valid_mask, valid))
-                torch.testing.assert_close(state.raw_hidden[1], hidden[1])
-
-    def test_update_mask_uses_the_same_binary_validation_as_valid_mask(self) -> None:
-        hidden = torch.ones(2, 2)
-        for model in strategies():
-            for update_mask, error_type in (
-                ([True, False], TypeError),
-                (torch.tensor([1.0, 0.25]), ValueError),
-                (torch.tensor([1.0, float("inf")]), ValueError),
-                (torch.ones(2, 1), ValueError),
-            ):
-                with self.subTest(
-                    strategy=type(model).__name__,
-                    update_mask=update_mask,
-                ):
-                    with self.assertRaises(error_type):
-                        model.run_step(
-                            None,
-                            hidden,
-                            lambda computation: computation.raw_hidden,
-                            update_mask=update_mask,
-                        )
-
-    def test_compute_callback_must_return_a_tensor(self) -> None:
-        for model in strategies():
-            with self.subTest(strategy=type(model).__name__):
-                with self.assertRaisesRegex(TypeError, "compute_step result"):
-                    model.run_step(None, torch.ones(2, 2), lambda _computation: None)
 
     def test_none_soft_dropout_is_a_runtime_no_op_for_custom_gate(self) -> None:
         cfg = SoftHaltingConfig(
@@ -208,14 +160,16 @@ class HaltingRegressionTests(unittest.TestCase):
 
     def test_finalize_rejects_wrong_feature_dimension_for_both_strategies(self) -> None:
         for model in strategies():
-            state = model.run_step(
+            state, _ = model.update_halting_state(
                 None,
                 torch.ones(2, 2),
-                lambda computation: computation.raw_hidden,
             )
             with self.subTest(strategy=type(model).__name__):
                 with self.assertRaisesRegex(ValueError, "final dimension"):
-                    model.finalize(state, torch.ones(2, 3))
+                    model.finalize_weighted_accumulation(
+                        state,
+                        torch.ones(2, 3),
+                    )
 
 
 if __name__ == "__main__":

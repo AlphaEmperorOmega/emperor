@@ -96,7 +96,6 @@ def stick_state(
     state.raw_hidden = hidden.clone()
     state.continuation_probability = 1.0 - accumulated_probabilities
     state.valid_mask = valid_mask
-    state.stop_requested = False
     state.step_indices = torch.ones_like(accumulated_probabilities)
     state.advanced_mask = valid_mask
     return state
@@ -119,14 +118,17 @@ def base_state(
         else valid_mask
     )
     hidden = continuation_probability.new_zeros(*continuation_probability.shape, 2)
-    return HaltingStateBase(
-        output_hidden=hidden.clone(),
-        accumulated_hidden=hidden.clone(),
-        continuation_probability=continuation_probability,
-        halt_mask=halt_mask,
-        valid_mask=valid_mask,
-        stop_requested=False,
+    state = HaltingStateBase()
+    state.output_hidden = hidden.clone()
+    state.accumulated_hidden = hidden.clone()
+    state.continuation_probability = continuation_probability
+    state.halt_mask = halt_mask
+    state.valid_mask = valid_mask
+    state.advanced_mask = valid_mask.clone()
+    state.step_indices = continuation_probability.new_zeros(
+        continuation_probability.shape
     )
+    return state
 
 
 class _LifecycleHalting(HaltingBase[HaltingStateBase]):
@@ -164,7 +166,7 @@ class _TwoHaltingOwner(LightningModule):
     def __init__(self) -> None:
         super().__init__()
         self.first = stick_model()
-        self.second = stick_model()
+        self.second = soft_model()
         self.logged_names: list[str] = []
 
     def log(
@@ -268,7 +270,6 @@ class HaltingUsageTrackerTests(unittest.TestCase):
             continuation_probability=torch.tensor([0.0, 0.5, 1.0]),
             halt_mask=torch.tensor([True, False, False]),
             valid_mask=torch.tensor([True, True, False]),
-            stop_requested=False,
             halt_probability=torch.tensor([1.0, 0.5, 0.0]),
             gate_input=None,
             gate_logits=None,
@@ -515,14 +516,26 @@ class HaltingUsageTrackerManagerTests(unittest.TestCase):
         self.assertNotIn("_usage_tracker", model._modules)
         manager.detach(model)
 
-    def test_soft_halting_is_rejected_until_it_implements_the_supported_interface(
-        self,
-    ) -> None:
+    def test_real_soft_halting_attachment_records_common_diagnostics(self) -> None:
         model = soft_model()
         manager = HaltingUsageTrackerManager()
+        tracker = manager.attach(model)
+        hidden = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
 
-        with self.assertRaisesRegex(TypeError, "supported halting interface"):
-            manager.attach(model)
+        state, _ = model.update_halting_state(None, hidden)
+        state, _ = model.update_halting_state(state, hidden * 2.0)
+        output, ponder_loss = model.finalize_weighted_accumulation(
+            state,
+            hidden * 2.0,
+        )
+
+        self.assertEqual(output.shape, hidden.shape)
+        torch.testing.assert_close(ponder_loss, torch.tensor(0.5))
+        torch.testing.assert_close(tracker.last_survival, torch.ones(2))
+
+        manager.detach(model)
+        self.assertNotIn("update_halting_state", model.__dict__)
+        self.assertNotIn("finalize_weighted_accumulation", model.__dict__)
 
     def test_attach_accepts_any_concrete_common_lifecycle(self) -> None:
         model = _LifecycleHalting()
