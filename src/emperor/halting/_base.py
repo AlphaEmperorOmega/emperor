@@ -8,7 +8,6 @@ import torch.nn as nn
 from torch import Tensor
 
 from emperor.halting._interface import HaltingInterface
-from emperor.halting._validation import StickBreakingValidator
 from emperor.nn import Module
 
 StateT = TypeVar("StateT")
@@ -63,8 +62,6 @@ class HaltingStateBase:
 
 
 class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
-    VALIDATOR = StickBreakingValidator
-
     @classmethod
     def implements_halting_interface(cls) -> bool:
         return (
