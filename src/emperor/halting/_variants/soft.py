@@ -68,10 +68,6 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
     VALIDATOR = SoftHaltingValidator
     DEFAULT_THRESHOLD = 0.999
 
-    @classmethod
-    def validate_resolved_config(cls, cfg) -> None:
-        cls.VALIDATOR.validate_config(cfg)
-
     def __init__(
         self,
         cfg: "HaltingConfig | ModelConfig",

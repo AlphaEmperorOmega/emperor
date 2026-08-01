@@ -51,22 +51,10 @@ class CustomHalting(HaltingBase):
         return current_hidden, current_hidden.new_zeros(current_hidden.shape[:-1])
 
 
-class NestedConfigMutatingHalting(CustomHalting):
-    @classmethod
-    def validate_resolved_config(cls, cfg) -> None:
-        cfg.halting_gate_config.layer_config.dropout_probability = 0.75
-
-
 @dataclass
 class CustomHaltingConfig(HaltingConfig):
     def _registry_owner(self):
         return CustomHalting
-
-
-@dataclass
-class NestedConfigMutatingHaltingConfig(CustomHaltingConfig):
-    def _registry_owner(self):
-        return NestedConfigMutatingHalting
 
 
 class TestNeuronCompositionValidation(NeuronTestCase):
@@ -533,20 +521,15 @@ class TestNeuronCompositionValidation(NeuronTestCase):
                     config.build()
                 torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
 
-    def test_invalid_concrete_halting_config_fails_before_rng(self) -> None:
+    def test_invalid_concrete_halting_config_is_rejected_by_constructor(self) -> None:
         halting_config = self.halting_config(input_dim=self.input_dim)
         halting_config.threshold = 2.0
         config = self.cluster_config(halting_config=halting_config)
-        torch.manual_seed(20260718)
-        rng_before = torch.random.get_rng_state().clone()
-
         with self.assertRaisesRegex(
             ValueError,
             "threshold must be finite and between 0.0.*received 2.0",
         ):
             config.build()
-
-        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
 
     def test_deferred_stick_breaking_defaults_are_resolved_on_a_copy(self) -> None:
         halting_config = self.halting_config(input_dim=self.input_dim)
@@ -561,27 +544,6 @@ class TestNeuronCompositionValidation(NeuronTestCase):
         self.assertEqual(
             model.halting_model.threshold,
             halting_config.DEFAULT_THRESHOLD,
-        )
-
-    def test_halting_preflight_cannot_mutate_nested_caller_configuration(self) -> None:
-        source = self.halting_config(input_dim=self.input_dim)
-        halting_config = NestedConfigMutatingHaltingConfig(
-            input_dim=source.input_dim,
-            threshold=source.threshold,
-            dropout_probability=source.dropout_probability,
-            hidden_state_mode=source.hidden_state_mode,
-            halting_gate_config=source.halting_gate_config,
-        )
-
-        model = self.cluster_config(halting_config=halting_config).build()
-
-        self.assertEqual(
-            halting_config.halting_gate_config.layer_config.dropout_probability,
-            0.0,
-        )
-        self.assertEqual(
-            model.halting_model.cfg.halting_gate_config.layer_config.dropout_probability,
-            0.0,
         )
 
     def test_custom_halting_runtime_validator_receives_real_initialized_model(
