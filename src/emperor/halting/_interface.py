@@ -9,8 +9,6 @@ StateT = TypeVar("StateT")
 
 @runtime_checkable
 class HaltingInterface(Protocol[StateT]):
-    """StickBreaking-shaped lifecycle consumed by halting owners."""
-
     def update_halting_state(
         self,
         previous_state: StateT | None,

@@ -67,8 +67,6 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
 
     @classmethod
     def implements_halting_interface(cls) -> bool:
-        """Whether the strategy concretely implements the halting interface."""
-
         return (
             issubclass(cls, HaltingInterface)
             and cls.update_halting_state is not HaltingBase.update_halting_state
@@ -173,7 +171,6 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
         previous_state: StateT | None,
         model_hidden_state: Tensor,
     ) -> tuple[StateT, Tensor]:
-        """Update the strategy state from one completed model step."""
         raise NotImplementedError
 
     def finalize_weighted_accumulation(
@@ -181,7 +178,6 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
         state: StateT,
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        """Finalize the hidden representation and auxiliary loss."""
         raise NotImplementedError
 
     @staticmethod
