@@ -3,6 +3,11 @@ from types import SimpleNamespace
 
 import torch
 
+from emperor.halting import (
+    HaltingHiddenStateModeOptions,
+    SoftHalting,
+    SoftHaltingConfig,
+)
 from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
 
 
@@ -45,6 +50,74 @@ def _previous_state(**attributes: object) -> SimpleNamespace:
 
 
 class TestNeuronHaltingLifecycle(unittest.TestCase):
+    def test_soft_halting_starts_new_sparse_rows_at_sut_step_zero(self) -> None:
+        model = SoftHalting(
+            SoftHaltingConfig(
+                input_dim=1,
+                threshold=0.9,
+                dropout_probability=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=None,
+            )
+        ).double()
+        model.eval()
+
+        first_state = _NeuronHaltingLifecycle.update(
+            model,
+            None,
+            torch.tensor([[0.0], [10.0]], dtype=torch.float64),
+            torch.tensor([[1.0], [20.0]], dtype=torch.float64),
+            torch.tensor([True, False]),
+        )
+        second_state = _NeuronHaltingLifecycle.update(
+            model,
+            first_state,
+            first_state.output_hidden,
+            torch.tensor([[2.0], [30.0]], dtype=torch.float64),
+            torch.tensor([False, True]),
+        )
+
+        torch.testing.assert_close(
+            second_state.output_hidden,
+            torch.tensor([[1.0], [30.0]], dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            second_state.step_count,
+            torch.tensor([0.0, 0.0], dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            second_state.advanced_mask,
+            torch.tensor([True, True]),
+        )
+        torch.testing.assert_close(
+            second_state.gate_input,
+            torch.zeros(2, 1, dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            second_state.gate_logits,
+            torch.zeros(2, 2, dtype=torch.float64),
+        )
+
+        third_state = _NeuronHaltingLifecycle.update(
+            model,
+            second_state,
+            second_state.output_hidden,
+            torch.tensor([[4.0], [40.0]], dtype=torch.float64),
+            torch.tensor([True, True]),
+        )
+        finalized_hidden, ponder_loss = _NeuronHaltingLifecycle.finalize(
+            model,
+            third_state,
+            third_state.output_hidden,
+            None,
+        )
+
+        torch.testing.assert_close(
+            finalized_hidden,
+            torch.tensor([[2.5], [35.0]], dtype=torch.float64),
+        )
+        torch.testing.assert_close(ponder_loss, torch.tensor(0.5, dtype=torch.float64))
+
     def test_sparse_update_populates_missing_route_metadata_and_gradients(
         self,
     ) -> None:
