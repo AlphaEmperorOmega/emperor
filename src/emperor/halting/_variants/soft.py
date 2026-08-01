@@ -14,6 +14,7 @@ from emperor.halting._base import (
 )
 from emperor.halting._config import HaltingHiddenStateModeOptions
 from emperor.halting._validation import SoftHaltingValidator
+from emperor.halting._variants._initialization import zero_gate_parameters
 from emperor.layers import LayerStackConfig, LayerState
 
 if TYPE_CHECKING:
@@ -109,7 +110,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         if isinstance(self._gate, nn.Sequential):
             nn.init.zeros_(self._gate[-1].weight)
             return
-        self._initialize_gate_with_equal_logits(self._gate[-1].model)
+        zero_gate_parameters(self._gate[-1].model)
 
     def __compute_gate_logits(self, hidden: Tensor) -> Tensor:
         if isinstance(self._gate, nn.Sequential):
