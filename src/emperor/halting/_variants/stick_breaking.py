@@ -7,6 +7,7 @@ from torch import Tensor
 
 from emperor.halting._base import HaltingBase, HaltingStateBase
 from emperor.halting._config import HaltingHiddenStateModeOptions
+from emperor.halting._validation import StickBreakingValidator
 from emperor.halting._variants._initialization import zero_gate_parameters
 from emperor.layers import Layer, LayerStack, LayerStackConfig
 
@@ -76,6 +77,8 @@ class StickBreakingState(HaltingStateBase):
 
 
 class StickBreaking(HaltingBase[StickBreakingState]):
+    VALIDATOR = StickBreakingValidator
+
     def __init__(
         self,
         cfg: "HaltingConfig | ModelConfig",

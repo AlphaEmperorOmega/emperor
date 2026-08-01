@@ -64,7 +64,7 @@ def config(
 
 class HaltingValidatorTests(unittest.TestCase):
     def test_each_strategy_uses_its_public_config_contract(self) -> None:
-        self.assertIs(HaltingBase.VALIDATOR, StickBreakingValidator)
+        self.assertNotIn("VALIDATOR", HaltingBase.__dict__)
         self.assertIs(StickBreaking.VALIDATOR, StickBreakingValidator)
         self.assertIs(SoftHalting.VALIDATOR, SoftHaltingValidator)
 
