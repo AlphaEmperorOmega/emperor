@@ -1,7 +1,7 @@
 """Mask-aware adapter for Neuron's finished halting lifecycle."""
 
 import copy
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 
 import torch
 from torch import Tensor
@@ -75,6 +75,11 @@ class _NeuronHaltingLifecycle:
             previous_value = getattr(previous_state, attribute_name, None)
             if not cls.__is_row_aligned_tensor(updated_value, update_mask):
                 continue
+            if previous_value is None and cls.__is_optional_tensor_field(
+                previous_state,
+                attribute_name,
+            ):
+                previous_value = torch.zeros_like(updated_value)
             if not isinstance(previous_value, Tensor):
                 raise ValueError(
                     "Halting row-aligned state must retain its tensor schema and "
@@ -100,6 +105,15 @@ class _NeuronHaltingLifecycle:
                 ),
             )
         return updated_state
+
+    @staticmethod
+    def __is_optional_tensor_field(state: Any, attribute_name: str) -> bool:
+        for state_type in type(state).__mro__:
+            annotation = getattr(state_type, "__annotations__", {}).get(attribute_name)
+            annotation_members = get_args(annotation)
+            if Tensor in annotation_members and type(None) in annotation_members:
+                return True
+        return False
 
     @staticmethod
     def __is_row_aligned_tensor(value: Any, update_mask: Tensor) -> bool:
