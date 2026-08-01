@@ -4,7 +4,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MODEL_SOURCE_ROOT = REPOSITORY_ROOT / "src" / "models"
-DEFAULT_HALTING_THRESHOLD = 0.999
+RECOMMENDED_HALTING_THRESHOLD = 0.999
 DEFAULT_THRESHOLD_NAMES = {
     "HALTING_THRESHOLD",
     "ATTN_HALTING_THRESHOLD",
@@ -15,7 +15,7 @@ DEFAULT_THRESHOLD_NAMES = {
 
 
 class TestModelHaltingThresholdContract(unittest.TestCase):
-    def test_literal_model_halting_thresholds_match_strategy_default(self) -> None:
+    def test_literal_model_halting_thresholds_match_recommended_value(self) -> None:
         literal_thresholds: list[tuple[Path, int, float]] = []
         for path in sorted(MODEL_SOURCE_ROOT.rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -37,7 +37,7 @@ class TestModelHaltingThresholdContract(unittest.TestCase):
         mismatches = [
             f"{path.relative_to(REPOSITORY_ROOT)}:{line_number}={threshold}"
             for path, line_number, threshold in literal_thresholds
-            if threshold != DEFAULT_HALTING_THRESHOLD
+            if threshold != RECOMMENDED_HALTING_THRESHOLD
         ]
         self.assertEqual(mismatches, [])
 

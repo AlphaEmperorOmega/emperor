@@ -90,6 +90,7 @@ class HaltingValidatorTests(unittest.TestCase):
     def test_required_fields_report_the_exact_field_and_config_type(self) -> None:
         for field_name in (
             "input_dim",
+            "threshold",
             "hidden_state_mode",
             "halting_gate_config",
         ):
@@ -103,19 +104,25 @@ class HaltingValidatorTests(unittest.TestCase):
                 ):
                     StickBreaking(cfg)
 
-    def test_config_build_resolves_to_each_strategy_default(self) -> None:
-        stick = config(threshold=None).build()
-        soft = config(SoftHaltingConfig, threshold=None).build()
-
-        self.assertEqual(stick.threshold, 0.999)
-        self.assertEqual(soft.threshold, 0.999)
-
-    def test_direct_stick_constructor_retains_required_threshold_contract(self) -> None:
-        with self.assertRaisesRegex(
-            ValueError,
-            r"^threshold is required for StickBreakingConfig, received None$",
+    def test_missing_threshold_is_rejected_by_each_strategy(self) -> None:
+        for config_type, strategy_type in (
+            (StickBreakingConfig, StickBreaking),
+            (SoftHaltingConfig, SoftHalting),
         ):
-            StickBreaking(config(threshold=None))
+            with self.subTest(strategy=strategy_type.__name__):
+                cfg = config(config_type, threshold=None)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    rf"^threshold is required for {config_type.__name__}, "
+                    r"received None$",
+                ):
+                    strategy_type(cfg)
+                with self.assertRaisesRegex(
+                    ValueError,
+                    rf"^threshold is required for {config_type.__name__}, "
+                    r"received None$",
+                ):
+                    cfg.build()
 
     def test_legacy_pad_mask_validation_contract_is_preserved(self) -> None:
         hidden = torch.zeros(2, 3, 4)
