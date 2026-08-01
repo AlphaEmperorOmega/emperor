@@ -227,7 +227,6 @@ class SoftHaltingValidator(StickBreakingValidator):
     OPTIONAL_FIELDS = {
         *StickBreakingValidator.OPTIONAL_FIELDS,
         "halting_gate_config",
-        "threshold",
     }
 
     @classmethod

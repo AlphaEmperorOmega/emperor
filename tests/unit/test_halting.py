@@ -64,7 +64,7 @@ def stick_config(
 def soft_config(
     input_dim: int = 4,
     *,
-    threshold: float | None = None,
+    threshold: float | None = 0.999,
     dropout: float | None = 0.0,
     mode: HaltingHiddenStateModeOptions = HaltingHiddenStateModeOptions.RAW,
     custom_gate: bool = False,
@@ -111,16 +111,16 @@ def halting_cases(input_dim: int = 3):
 
 
 class HaltingConstructionTests(unittest.TestCase):
-    def test_registry_builds_each_strategy_and_resolves_strategy_defaults(self) -> None:
-        for cfg, strategy_type, default_threshold in (
-            (stick_config(threshold=None), StickBreaking, 0.999),
-            (soft_config(), SoftHalting, 0.999),
+    def test_registry_builds_each_strategy_with_an_explicit_threshold(self) -> None:
+        for cfg, strategy_type in (
+            (stick_config(threshold=0.999), StickBreaking),
+            (soft_config(threshold=0.999), SoftHalting),
         ):
             with self.subTest(strategy=strategy_type.__name__):
                 self.assertIs(cfg._registry_owner(), strategy_type)
                 model = cfg.build()
                 self.assertIsInstance(model, strategy_type)
-                self.assertEqual(model.threshold, default_threshold)
+                self.assertEqual(model.threshold, 0.999)
 
     def test_explicit_threshold_and_overrides_are_authoritative(self) -> None:
         base = soft_config(3, threshold=0.8, custom_gate=True)
