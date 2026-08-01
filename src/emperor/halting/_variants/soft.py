@@ -65,13 +65,6 @@ class _SoftOwnerStep:
 
 
 class SoftHalting(HaltingBase[SoftHaltingState]):
-    """SUT-compatible soft adaptive computation.
-
-    In RAW mode with the canonical gate, the recurrence and ordering match the
-    pinned SUT ``ACTWrapper``: step zero skips the gate, later steps gate the
-    previous raw hidden, and computation receives the prior soft context.
-    """
-
     VALIDATOR = SoftHaltingValidator
     DEFAULT_THRESHOLD = 0.999
 

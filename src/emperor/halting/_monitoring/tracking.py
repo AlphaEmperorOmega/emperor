@@ -65,8 +65,6 @@ class HaltingUsageTracker(Module):
         self._survival_stage.append(self.__compute_alive_fraction(halting_state))
 
     def replace_last_step(self, halting_state: "HaltingStateBase") -> None:
-        """Replace raw strategy capture with owner-reconciled route state."""
-
         alive_fraction = self.__compute_alive_fraction(halting_state)
         if self._survival_stage:
             self._survival_stage[-1] = alive_fraction
@@ -189,14 +187,6 @@ class _HaltingAttachment:
 
 
 class HaltingUsageTrackerManager:
-    """Attaches halting trackers without modifying any traced code.
-
-    Capture is installed at runtime and removed on detach, mirroring how the
-    linear monitor installs and removes forward hooks. Strategy methods are
-    plain calls rather than ``__call__``, so the manager wraps the two methods
-    in the supported StickBreaking lifecycle on the halting module instance.
-    """
-
     TRACKER_MODULE_NAME = "_usage_tracker"
     WRAPPED_METHOD_NAMES = (
         "update_halting_state",
