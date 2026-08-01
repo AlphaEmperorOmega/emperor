@@ -618,12 +618,6 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"terminal input_dim={terminal_input_dim}."
             )
 
-        resolved_halting_config = copy.deepcopy(halting_config)
-        resolved_halting_config.input_dim = terminal_input_dim
-        if resolved_halting_config.threshold is None:
-            resolved_halting_config.threshold = halting_config.DEFAULT_THRESHOLD
-        halting_model_type.validate_resolved_config(resolved_halting_config)
-
     @staticmethod
     def validate_forward_input(input: Tensor) -> None:
         if not isinstance(input, Tensor):
