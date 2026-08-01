@@ -148,6 +148,10 @@ class HaltingUsageTracker(Module):
                     self.last_halted_fraction.zero_()
 
         accumulated = getattr(halting_state, "accumulated_halt_probabilities", None)
+        if accumulated is None:
+            log_continuation = getattr(halting_state, "log_continuation", None)
+            if isinstance(log_continuation, Tensor):
+                accumulated = 1.0 - log_continuation.exp()
         if accumulated is not None:
             acc = accumulated.detach().float()
             selected_halt_mask = halt_mask
