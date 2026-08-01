@@ -531,20 +531,19 @@ class TestNeuronCompositionValidation(NeuronTestCase):
         ):
             config.build()
 
-    def test_deferred_stick_breaking_defaults_are_resolved_on_a_copy(self) -> None:
+    def test_missing_stick_breaking_threshold_is_rejected(self) -> None:
         halting_config = self.halting_config(input_dim=self.input_dim)
         halting_config.input_dim = None
         halting_config.threshold = None
 
-        model = self.cluster_config(halting_config=halting_config).build()
+        with self.assertRaisesRegex(
+            ValueError,
+            "threshold is required for StickBreakingConfig, received None",
+        ):
+            self.cluster_config(halting_config=halting_config).build()
 
         self.assertIsNone(halting_config.input_dim)
         self.assertIsNone(halting_config.threshold)
-        self.assertEqual(model.halting_model.input_dim, self.input_dim)
-        self.assertEqual(
-            model.halting_model.threshold,
-            halting_config.DEFAULT_THRESHOLD,
-        )
 
     def test_custom_halting_runtime_validator_receives_real_initialized_model(
         self,

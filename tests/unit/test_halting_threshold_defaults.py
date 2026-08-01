@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from emperor.halting import SoftHaltingConfig, StickBreakingConfig
+from emperor.halting import HaltingConfig, SoftHaltingConfig, StickBreakingConfig
 
 
 class _CapturedBuild:
@@ -10,8 +10,8 @@ class _CapturedBuild:
         self.overrides = overrides
 
 
-class HaltingThresholdDefaultTests(unittest.TestCase):
-    def test_each_strategy_supplies_the_recommended_default_threshold(self) -> None:
+class HaltingThresholdConfigurationTests(unittest.TestCase):
+    def test_each_strategy_leaves_an_omitted_threshold_unresolved(self) -> None:
         for config_type in (StickBreakingConfig, SoftHaltingConfig):
             with self.subTest(config=config_type.__name__):
                 config = config_type()
@@ -22,21 +22,31 @@ class HaltingThresholdDefaultTests(unittest.TestCase):
                 ):
                     built = config.build()
 
-                self.assertEqual(built.overrides.threshold, 0.999)
+                self.assertIsNone(built.overrides)
                 self.assertIsNone(config.threshold)
+                self.assertFalse(hasattr(config, "DEFAULT_THRESHOLD"))
+
+    def test_threshold_help_recommends_an_explicit_value(self) -> None:
+        help_text = HaltingConfig.__dataclass_fields__["threshold"].metadata["help"]
+
+        self.assertIn("Set this to 0.999", help_text)
 
     def test_explicit_override_wins_without_being_mutated(self) -> None:
-        config = SoftHaltingConfig()
-        overrides = SoftHaltingConfig(threshold=0.8)
-        with patch.object(
-            SoftHaltingConfig,
-            "_registry_owner",
-            return_value=_CapturedBuild,
-        ):
-            built = config.build(overrides)
+        for config_type in (StickBreakingConfig, SoftHaltingConfig):
+            with self.subTest(config=config_type.__name__):
+                config = config_type(threshold=0.9)
+                overrides = config_type(threshold=0.8)
+                with patch.object(
+                    config_type,
+                    "_registry_owner",
+                    return_value=_CapturedBuild,
+                ):
+                    built = config.build(overrides)
 
-        self.assertIs(built.overrides, overrides)
-        self.assertEqual(overrides.threshold, 0.8)
+                self.assertIs(built.config, config)
+                self.assertIs(built.overrides, overrides)
+                self.assertEqual(config.threshold, 0.9)
+                self.assertEqual(overrides.threshold, 0.8)
 
 
 if __name__ == "__main__":

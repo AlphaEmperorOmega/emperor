@@ -67,7 +67,6 @@ class _SoftOwnerStep:
 
 class SoftHalting(HaltingBase[SoftHaltingState]):
     VALIDATOR = SoftHaltingValidator
-    DEFAULT_THRESHOLD = 0.999
 
     def __init__(
         self,
@@ -79,9 +78,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         self.cfg: HaltingConfig = self._override_config(config, overrides)
 
         self.input_dim: int = self.cfg.input_dim
-        self.threshold: float = (
-            self.DEFAULT_THRESHOLD if self.cfg.threshold is None else self.cfg.threshold
-        )
+        self.threshold: float = self.cfg.threshold
         self.dropout_probability: float | None = self.cfg.dropout_probability
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
