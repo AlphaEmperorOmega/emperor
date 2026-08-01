@@ -236,9 +236,8 @@ class _NeuronHaltingLifecycle:
                     "Vector Neuron ponder loss requires aligned beam path "
                     "probabilities."
                 )
-            positive_finite_path_mask = (
-                torch.isfinite(beam_path_probabilities)
-                & (beam_path_probabilities > 0)
+            positive_finite_path_mask = torch.isfinite(beam_path_probabilities) & (
+                beam_path_probabilities > 0
             )
             valid_slot_mask = valid_slot_mask & positive_finite_path_mask
 
