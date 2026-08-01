@@ -532,6 +532,14 @@ class HaltingUsageTrackerManagerTests(unittest.TestCase):
         self.assertEqual(output.shape, hidden.shape)
         torch.testing.assert_close(ponder_loss, torch.tensor(0.5))
         torch.testing.assert_close(tracker.last_survival, torch.ones(2))
+        torch.testing.assert_close(
+            tracker.last_accumulated_halt_prob_mean,
+            torch.tensor(0.5),
+        )
+        torch.testing.assert_close(
+            tracker.last_remaining_mass_mean,
+            torch.tensor(0.5),
+        )
 
         manager.detach(model)
         self.assertNotIn("update_halting_state", model.__dict__)
