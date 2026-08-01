@@ -22,6 +22,7 @@ from emperor.experiments import ExperimentTask
 from emperor.layers import (
     ActivationOptions,
     AdditiveResidualConfig,
+    AttentionResidualConfig,
     GateConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -29,9 +30,15 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentLayerConfig,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.memory import MemoryPositionOptions, WeightedDynamicMemoryConfig
+from emperor.memory import (
+    ElementWiseWeightedDynamicMemoryConfig,
+    MemoryPositionOptions,
+    WeightedDynamicMemoryConfig,
+)
 from model_runtime.packages import (
     PresetDefinition,
     config_key_to_model_param,
@@ -75,6 +82,290 @@ _NON_MODEL_KEYS = {
     "NUM_EPOCHS",
     "RECURRENT_HALTING_OPTION",
 }
+_NEW_PRESET_EXPECTATIONS = {
+    "WEIGHTED_RESIDUAL": (
+        25,
+        {"stack_residual_connection_option": WeightedResidualConfig},
+        "Default config with a learned tanh-scaled current contribution composed "
+        "with the previous hidden state at each hidden layer.",
+    ),
+    "WEIGHTED_BLEND_RESIDUAL": (
+        26,
+        {"stack_residual_connection_option": WeightedBlendResidualConfig},
+        "Default config with a learned bounded convex blend between current and "
+        "previous hidden states at each hidden layer.",
+    ),
+    "ATTENTION_RESIDUAL": (
+        27,
+        {"stack_residual_connection_option": AttentionResidualConfig},
+        "Default config with depth-local attention over compatible residual sources "
+        "in the hidden stack.",
+    ),
+    "RECURRENT_LAYER_GATING": (
+        28,
+        {
+            "recurrent_flag": True,
+            "stack_gate_flag": True,
+        },
+        "Recurrent config with per-layer gating inside the reused hidden stack and "
+        "no outer recurrent-step gate.",
+    ),
+    "RECURRENT_DUAL_GATING": (
+        29,
+        {
+            "recurrent_flag": True,
+            "stack_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
+        },
+        "Recurrent config with separate inner per-layer gates and an outer "
+        "recurrent-step gate.",
+    ),
+    "RECURRENT_LAYER_HALTING": (
+        30,
+        {
+            "recurrent_flag": True,
+            "stack_halting_flag": True,
+        },
+        "Recurrent config with halting inside the reused hidden stack while the outer "
+        "recurrence retains a fixed maximum step budget.",
+    ),
+    "RECURRENT_DUAL_HALTING": (
+        31,
+        {
+            "recurrent_flag": True,
+            "stack_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
+        },
+        "Recurrent config with separate inner-stack and outer recurrent-step "
+        "stick-breaking halting controllers.",
+    ),
+    "WEIGHTED_MEMORY": (
+        32,
+        {
+            "memory_flag": True,
+            "memory_option": WeightedDynamicMemoryConfig,
+        },
+        "Default config with shared stack memory using a sample- and position-level "
+        "weighted merge.",
+    ),
+    "ELEMENT_WISE_WEIGHTED_MEMORY": (
+        33,
+        {
+            "memory_flag": True,
+            "memory_option": ElementWiseWeightedDynamicMemoryConfig,
+        },
+        "Default config with shared stack memory using a per-feature weighted merge.",
+    ),
+    "NO_NORM": (
+        34,
+        {"layer_norm_position": LayerNormPositionOptions.DISABLED},
+        "Default config with no layer normalization in the main hidden stack.",
+    ),
+    "PRE_ACTIVATION_NORM": (
+        35,
+        {"layer_norm_position": LayerNormPositionOptions.DEFAULT},
+        "Default config with normalization after affine and memory work but before "
+        "activation, distinct from pre-layer and post-layer normalization.",
+    ),
+}
+_HISTORICAL_PRESET_SNAPSHOT = (
+    (
+        "BASELINE",
+        1,
+        {},
+        "Default config: a GELU hidden linear stack with pre-layer norm and dropout.",
+    ),
+    (
+        "GATING",
+        2,
+        {"stack_gate_flag": True},
+        "Default config with per-layer gating enabled, so each hidden layer output "
+        "is modulated by a learned sigmoid gate.",
+    ),
+    (
+        "HALTING",
+        3,
+        {"stack_halting_flag": True},
+        "Default config with stack halting enabled, so examples can stop early as "
+        "they move through the hidden stack.",
+    ),
+    (
+        "MEMORY",
+        4,
+        {"memory_flag": True},
+        "Default config with shared stack memory enabled across the hidden layers.",
+    ),
+    (
+        "GATING_HALTING",
+        5,
+        {"stack_gate_flag": True, "stack_halting_flag": True},
+        "Default config with both per-layer gating and stack halting enabled.",
+    ),
+    (
+        "GATING_MEMORY",
+        6,
+        {"stack_gate_flag": True, "memory_flag": True},
+        "Default config with both per-layer gating and shared stack memory enabled.",
+    ),
+    (
+        "HALTING_MEMORY",
+        7,
+        {"stack_halting_flag": True, "memory_flag": True},
+        "Default config with both stack halting and shared stack memory enabled.",
+    ),
+    (
+        "GATING_HALTING_MEMORY",
+        8,
+        {
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        "Default config with per-layer gating, stack halting, and shared stack "
+        "memory enabled.",
+    ),
+    (
+        "RESIDUAL",
+        9,
+        {"stack_residual_connection_option": AdditiveResidualConfig},
+        "Default config with residual skip connections enabled between same-width "
+        "hidden layers.",
+    ),
+    (
+        "POST_NORM",
+        10,
+        {"layer_norm_position": LayerNormPositionOptions.AFTER},
+        "Default config with layer norm applied after each layer instead of before it.",
+    ),
+    (
+        "RESIDUAL_POST_NORM",
+        11,
+        {
+            "stack_residual_connection_option": AdditiveResidualConfig,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        "Default config with residual skip connections and post-layer normalization "
+        "enabled.",
+    ),
+    (
+        "RESIDUAL_GATING",
+        12,
+        {
+            "stack_residual_connection_option": AdditiveResidualConfig,
+            "stack_gate_flag": True,
+        },
+        "Default config with residual skip connections and per-layer gating enabled.",
+    ),
+    (
+        "RESIDUAL_HALTING",
+        13,
+        {
+            "stack_residual_connection_option": AdditiveResidualConfig,
+            "stack_halting_flag": True,
+        },
+        "Default config with residual skip connections and stack halting enabled.",
+    ),
+    (
+        "RESIDUAL_MEMORY",
+        14,
+        {
+            "stack_residual_connection_option": AdditiveResidualConfig,
+            "memory_flag": True,
+        },
+        "Default config with residual skip connections and shared stack memory enabled.",
+    ),
+    (
+        "RECURRENT",
+        15,
+        {"recurrent_flag": True},
+        "Default config wrapped in fixed-step recurrence, reusing the hidden stack "
+        "for each recurrent step.",
+    ),
+    (
+        "RECURRENT_GATING",
+        16,
+        {"recurrent_flag": True, "recurrent_stack_gate_flag": True},
+        "Default recurrent config with step-level gating enabled after each recurrent "
+        "update.",
+    ),
+    (
+        "RECURRENT_HALTING",
+        17,
+        {"recurrent_flag": True, "recurrent_stack_halting_flag": True},
+        "Default recurrent config with recurrent halting enabled, allowing early "
+        "stopping before the max step count.",
+    ),
+    (
+        "RECURRENT_MEMORY",
+        18,
+        {"recurrent_flag": True, "memory_flag": True},
+        "Default recurrent config whose reused hidden stack has shared memory enabled.",
+    ),
+    (
+        "RECURRENT_GATING_HALTING",
+        19,
+        {
+            "recurrent_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
+        },
+        "Default recurrent config with both step-level gating and recurrent halting "
+        "enabled.",
+    ),
+    (
+        "RECURRENT_GATING_MEMORY",
+        20,
+        {
+            "recurrent_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "memory_flag": True,
+        },
+        "Default recurrent config with step-level gating and shared memory in the "
+        "reused hidden stack.",
+    ),
+    (
+        "RECURRENT_HALTING_MEMORY",
+        21,
+        {
+            "recurrent_flag": True,
+            "recurrent_stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        "Default recurrent config with recurrent halting and shared memory in the "
+        "reused hidden stack.",
+    ),
+    (
+        "RECURRENT_GATING_HALTING_MEMORY",
+        22,
+        {
+            "recurrent_flag": True,
+            "recurrent_stack_gate_flag": True,
+            "recurrent_stack_halting_flag": True,
+            "memory_flag": True,
+        },
+        "Default recurrent config with step-level gating, recurrent halting, and "
+        "shared memory in the reused hidden stack.",
+    ),
+    (
+        "RECURRENT_RESIDUAL",
+        23,
+        {
+            "recurrent_flag": True,
+            "stack_residual_connection_option": AdditiveResidualConfig,
+        },
+        "Default recurrent config using a residual hidden stack at each recurrent step.",
+    ),
+    (
+        "RECURRENT_POST_NORM",
+        24,
+        {
+            "recurrent_flag": True,
+            "layer_norm_position": LayerNormPositionOptions.AFTER,
+        },
+        "Default recurrent config using a post-normalized hidden stack at each "
+        "recurrent step.",
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -672,7 +963,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         self.assertTrue(issubclass(ExperimentPreset, BaseOptions))
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
-            list(range(1, 25)),
+            list(range(1, 36)),
         )
         self.assertEqual(set(_PRESET_DEFINITIONS), set(ExperimentPreset))
 
@@ -692,12 +983,113 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 )
                 self.assertTrue(definition.description)
 
+    def test_historical_presets_and_default_remain_exact(self):
+        presets = model_package("linears/linear").presets
+
+        self.assertIs(presets.default_preset, ExperimentPreset.BASELINE)
+        self.assertEqual(
+            [preset.name for preset in list(ExperimentPreset)[:24]],
+            [name for name, _, _, _ in _HISTORICAL_PRESET_SNAPSHOT],
+        )
+        for name, value, override_map, description in _HISTORICAL_PRESET_SNAPSHOT:
+            with self.subTest(preset=name):
+                preset = ExperimentPreset[name]
+                self.assertEqual(preset.value, value)
+                self.assertEqual(
+                    presets.overrides_for_preset(preset),
+                    override_map,
+                )
+                self.assertEqual(
+                    presets.description_for_preset(preset),
+                    description,
+                )
+
     def test_every_preset_builds_with_its_declared_values(self):
         presets = model_package("linears/linear").presets
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
                 cfg = presets.get_config(preset)[0]
                 self.assertIsNotNone(cfg.experiment_config.model_config)
+
+    def test_new_preset_values_and_override_maps_are_exact(self):
+        presets = model_package("linears/linear").presets
+
+        for name, (
+            value,
+            override_map,
+            description,
+        ) in _NEW_PRESET_EXPECTATIONS.items():
+            with self.subTest(preset=name):
+                preset = ExperimentPreset[name]
+                self.assertEqual(preset.value, value)
+                self.assertEqual(
+                    presets.overrides_for_preset(preset),
+                    override_map,
+                )
+                self.assertEqual(
+                    presets.description_for_preset(preset),
+                    description,
+                )
+
+    def test_all_resolved_preset_maps_are_pairwise_unique(self):
+        presets = model_package("linears/linear").presets
+        resolved_maps = [
+            frozenset(presets.overrides_for_preset(preset).items())
+            for preset in ExperimentPreset
+        ]
+
+        self.assertEqual(len(resolved_maps), 35)
+        self.assertEqual(len(set(resolved_maps)), 35)
+
+    def test_new_preset_locks_reject_conflicts_and_allow_unrelated_overrides(self):
+        presets = model_package("linears/linear").presets
+        conflicting_values = {
+            "stack_residual_connection_option": AdditiveResidualConfig,
+            "recurrent_flag": False,
+            "stack_gate_flag": False,
+            "recurrent_stack_gate_flag": False,
+            "stack_halting_flag": False,
+            "recurrent_stack_halting_flag": False,
+            "memory_flag": False,
+            "layer_norm_position": LayerNormPositionOptions.BEFORE,
+        }
+
+        for name, (_, override_map, _) in _NEW_PRESET_EXPECTATIONS.items():
+            preset = ExperimentPreset[name]
+            for field, locked_value in override_map.items():
+                if field == "memory_option":
+                    conflict = (
+                        ElementWiseWeightedDynamicMemoryConfig
+                        if locked_value is WeightedDynamicMemoryConfig
+                        else WeightedDynamicMemoryConfig
+                    )
+                else:
+                    conflict = conflicting_values[field]
+                with (
+                    self.subTest(preset=name, locked_field=field),
+                    self.assertRaisesRegex(ValueError, field),
+                ):
+                    presets.get_config(
+                        preset,
+                        config_overrides={field: conflict},
+                    )
+
+            cfg = presets.get_config(
+                preset,
+                config_overrides={"hidden_dim": 19},
+            )[0]
+            self.assertEqual(cfg.hidden_dim, 19)
+
+        memory_cfg = presets.get_config(
+            ExperimentPreset.WEIGHTED_MEMORY,
+            config_overrides={
+                "memory_position_option": MemoryPositionOptions.BEFORE_AFFINE,
+            },
+        )[0]
+        self.assertIs(
+            memory_cfg.experiment_config.model_config.shared_memory_config.memory_position_option,
+            MemoryPositionOptions.BEFORE_AFFINE,
+        )
 
     def test_controller_presets_wire_expected_configs(self):
         expected = {
@@ -747,6 +1139,18 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 AdditiveResidualConfig,
                 config.LAYER_NORM_POSITION,
             ),
+            ExperimentPreset.WEIGHTED_RESIDUAL: (
+                WeightedResidualConfig,
+                config.LAYER_NORM_POSITION,
+            ),
+            ExperimentPreset.WEIGHTED_BLEND_RESIDUAL: (
+                WeightedBlendResidualConfig,
+                config.LAYER_NORM_POSITION,
+            ),
+            ExperimentPreset.ATTENTION_RESIDUAL: (
+                AttentionResidualConfig,
+                config.LAYER_NORM_POSITION,
+            ),
         }
         for preset, (residual, norm) in cases.items():
             with self.subTest(preset=preset.name):
@@ -762,6 +1166,18 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 )
                 self.assertIs(actual_residual, residual)
                 self.assertIs(layer.layer_norm_position, norm)
+
+    def test_attention_residual_preset_preserves_halting_incompatibility(self):
+        cfg = model_package("linears/linear").presets.get_config(
+            ExperimentPreset.ATTENTION_RESIDUAL,
+            config_overrides={"stack_halting_flag": True},
+        )[0]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "halting.*AttentionResidualConfig|AttentionResidualConfig.*halting",
+        ):
+            Model(cfg)
 
     def test_recurrent_presets_wire_optional_controllers(self):
         expected = {
@@ -789,6 +1205,87 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 self.assertEqual(
                     recurrent.block_config.shared_memory_config is not None,
                     memory,
+                )
+
+    def test_recurrent_gating_presets_place_controllers_by_scope(self):
+        presets = model_package("linears/linear").presets
+        cases = {
+            ExperimentPreset.RECURRENT_LAYER_GATING: (True, False),
+            ExperimentPreset.RECURRENT_DUAL_GATING: (True, True),
+        }
+
+        for preset, (has_inner_gate, has_outer_gate) in cases.items():
+            with self.subTest(preset=preset.name):
+                recurrent = presets.get_config(preset)[0].experiment_config.model_config
+                self.assertIsInstance(recurrent, RecurrentLayerConfig)
+                inner_gate = recurrent.block_config.layer_config.gate_config
+                outer_gate = recurrent.gate_config
+                self.assertEqual(inner_gate is not None, has_inner_gate)
+                self.assertEqual(outer_gate is not None, has_outer_gate)
+                if outer_gate is not None:
+                    self.assertIsNot(inner_gate, outer_gate)
+
+    def test_recurrent_halting_presets_place_controllers_by_scope(self):
+        presets = model_package("linears/linear").presets
+        cases = {
+            ExperimentPreset.RECURRENT_LAYER_HALTING: (True, False),
+            ExperimentPreset.RECURRENT_DUAL_HALTING: (True, True),
+        }
+
+        for preset, (has_inner_halting, has_outer_halting) in cases.items():
+            with self.subTest(preset=preset.name):
+                recurrent = presets.get_config(preset)[0].experiment_config.model_config
+                self.assertIsInstance(recurrent, RecurrentLayerConfig)
+                inner_halting = recurrent.block_config.layer_config.halting_config
+                outer_halting = recurrent.halting_config
+                self.assertEqual(inner_halting is not None, has_inner_halting)
+                self.assertEqual(outer_halting is not None, has_outer_halting)
+                if outer_halting is not None:
+                    self.assertIsNot(inner_halting, outer_halting)
+
+    def test_memory_presets_wire_exact_shared_implementations(self):
+        presets = model_package("linears/linear").presets
+        cases = {
+            ExperimentPreset.WEIGHTED_MEMORY: WeightedDynamicMemoryConfig,
+            ExperimentPreset.ELEMENT_WISE_WEIGHTED_MEMORY: (
+                ElementWiseWeightedDynamicMemoryConfig
+            ),
+        }
+
+        for preset, expected_type in cases.items():
+            with self.subTest(preset=preset.name):
+                stack = presets.get_config(preset)[0].experiment_config.model_config
+                memory = stack.shared_memory_config
+                self.assertIs(type(memory), expected_type)
+                self.assertIs(
+                    memory.memory_position_option,
+                    MemoryPositionOptions.AFTER_AFFINE,
+                )
+                self.assertIsNone(memory.test_time_training_learning_rate)
+                self.assertIsNone(memory.test_time_training_num_inner_steps)
+
+    def test_normalization_presets_preserve_all_main_stack_positions(self):
+        presets = model_package("linears/linear").presets
+        cases = {
+            ExperimentPreset.BASELINE: LayerNormPositionOptions.BEFORE,
+            ExperimentPreset.POST_NORM: LayerNormPositionOptions.AFTER,
+            ExperimentPreset.NO_NORM: LayerNormPositionOptions.DISABLED,
+            ExperimentPreset.PRE_ACTIVATION_NORM: LayerNormPositionOptions.DEFAULT,
+        }
+
+        for preset, expected_position in cases.items():
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(preset)[0]
+                stack = cfg.experiment_config.model_config
+                self.assertIs(
+                    stack.layer_config.layer_norm_position,
+                    expected_position,
+                )
+                layers = Model(cfg).main_model.layers
+                self.assertTrue(layers)
+                self.assertEqual(
+                    all(layer.layer_norm_module is None for layer in layers),
+                    expected_position is LayerNormPositionOptions.DISABLED,
                 )
 
     def test_preset_locks_keep_values_and_reasons_together(self):
@@ -997,6 +1494,95 @@ class TestLinearModelBehavior(unittest.TestCase):
             )
         )
 
+    def test_new_residual_presets_are_forward_local_and_backpropagate(self):
+        presets = model_package("linears/linear").presets
+        for preset in (
+            ExperimentPreset.WEIGHTED_RESIDUAL,
+            ExperimentPreset.WEIGHTED_BLEND_RESIDUAL,
+            ExperimentPreset.ATTENTION_RESIDUAL,
+        ):
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(
+                    preset,
+                    config_overrides={
+                        "input_dim": 8,
+                        "hidden_dim": 8,
+                        "output_dim": 4,
+                        "stack_num_layers": 2,
+                        "stack_dropout_probability": 0.0,
+                    },
+                )[0]
+                model = Model(cfg)
+                model.eval()
+                batch = torch.randn(3, 1, 2, 4)
+
+                first_output = model(batch)
+                second_output = model(batch)
+                first_logits = (
+                    first_output[0] if isinstance(first_output, tuple) else first_output
+                )
+                second_logits = (
+                    second_output[0]
+                    if isinstance(second_output, tuple)
+                    else second_output
+                )
+
+                torch.testing.assert_close(second_logits, first_logits)
+                second_logits.square().mean().backward()
+                residual_parameters = [
+                    parameter
+                    for name, parameter in model.named_parameters()
+                    if "residual_connection" in name and parameter.requires_grad
+                ]
+                self.assertTrue(residual_parameters)
+                self.assertTrue(
+                    any(
+                        parameter.grad is not None
+                        and torch.isfinite(parameter.grad).all()
+                        and torch.any(parameter.grad.abs() > 0)
+                        for parameter in residual_parameters
+                    )
+                )
+
+    def test_new_memory_presets_forward_and_backpropagate(self):
+        presets = model_package("linears/linear").presets
+        for preset in (
+            ExperimentPreset.WEIGHTED_MEMORY,
+            ExperimentPreset.ELEMENT_WISE_WEIGHTED_MEMORY,
+        ):
+            with self.subTest(preset=preset.name):
+                cfg = presets.get_config(
+                    preset,
+                    config_overrides={
+                        "input_dim": 8,
+                        "hidden_dim": 8,
+                        "output_dim": 4,
+                        "stack_num_layers": 2,
+                        "stack_dropout_probability": 0.0,
+                    },
+                )[0]
+                model = Model(cfg)
+
+                output = model(torch.randn(3, 1, 2, 4))
+                logits = output[0] if isinstance(output, tuple) else output
+
+                self.assertEqual(logits.shape, (3, 4))
+                logits.square().mean().backward()
+                memory_parameters = [
+                    parameter
+                    for name, parameter in model.named_parameters()
+                    if "memory_model" in name and parameter.requires_grad
+                ]
+                self.assertTrue(memory_parameters)
+                self.assertTrue(
+                    any(
+                        parameter.grad is not None
+                        and torch.isfinite(parameter.grad).all()
+                        and torch.any(parameter.grad.abs() > 0)
+                        for parameter in memory_parameters
+                    )
+                )
+
     def test_recurrent_controller_combination_forwards(self):
         runtime = runtime_from_flat(
             {
@@ -1015,6 +1601,153 @@ class TestLinearModelBehavior(unittest.TestCase):
         logits = output[0] if isinstance(output, tuple) else output
 
         self.assertEqual(logits.shape, (2, 4))
+
+    def test_recurrent_dual_gating_backpropagates_through_both_scopes(self):
+        cfg = model_package("linears/linear").presets.get_config(
+            ExperimentPreset.RECURRENT_DUAL_GATING,
+            config_overrides={
+                "input_dim": 8,
+                "hidden_dim": 8,
+                "output_dim": 4,
+                "stack_num_layers": 2,
+                "recurrent_max_steps": 2,
+                "stack_dropout_probability": 0.0,
+            },
+        )[0]
+        model = Model(cfg)
+
+        output = model(torch.randn(3, 1, 2, 4))
+        logits = output[0] if isinstance(output, tuple) else output
+        logits.square().mean().backward()
+
+        inner_gate_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if "block_model" in name
+            and "gate_model" in name
+            and parameter.requires_grad
+        ]
+        outer_gate_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if "recurrent_gate" in name and parameter.requires_grad
+        ]
+        for scope, parameters in (
+            ("inner", inner_gate_parameters),
+            ("outer", outer_gate_parameters),
+        ):
+            with self.subTest(scope=scope):
+                self.assertTrue(parameters)
+                self.assertTrue(
+                    any(
+                        parameter.grad is not None
+                        and torch.isfinite(parameter.grad).all()
+                        and torch.any(parameter.grad.abs() > 0)
+                        for parameter in parameters
+                    )
+                )
+
+    def test_recurrent_dual_halting_is_forward_local_and_backpropagates(self):
+        cfg = model_package("linears/linear").presets.get_config(
+            ExperimentPreset.RECURRENT_DUAL_HALTING,
+            config_overrides={
+                "input_dim": 8,
+                "hidden_dim": 8,
+                "output_dim": 4,
+                "stack_num_layers": 2,
+                "recurrent_max_steps": 2,
+                "stack_dropout_probability": 0.0,
+                "halting_dropout": 0.0,
+                "recurrent_halting_dropout": 0.0,
+            },
+        )[0]
+        model = Model(cfg)
+        model.eval()
+        batch = torch.randn(3, 1, 2, 4)
+
+        first_logits, first_ponder_loss = model(batch)
+        second_logits, second_ponder_loss = model(batch)
+
+        torch.testing.assert_close(second_logits, first_logits)
+        torch.testing.assert_close(second_ponder_loss, first_ponder_loss)
+        self.assertTrue(torch.isfinite(second_ponder_loss))
+        self.assertTrue(second_ponder_loss.requires_grad)
+        (second_logits.square().mean() + second_ponder_loss).backward()
+
+        inner_halting_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if "block_model" in name
+            and "halting_model" in name
+            and parameter.requires_grad
+        ]
+        outer_halting_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if name.startswith("main_model.halting_model") and parameter.requires_grad
+        ]
+        for scope, parameters in (
+            ("inner", inner_halting_parameters),
+            ("outer", outer_halting_parameters),
+        ):
+            with self.subTest(scope=scope):
+                self.assertTrue(parameters)
+                self.assertTrue(
+                    any(
+                        parameter.grad is not None
+                        and torch.isfinite(parameter.grad).all()
+                        and torch.any(parameter.grad.abs() > 0)
+                        for parameter in parameters
+                    )
+                )
+
+    def test_new_preset_state_dicts_round_trip_strictly(self):
+        presets = model_package("linears/linear").presets
+        batch = torch.randn(3, 1, 2, 4)
+        for name in _NEW_PRESET_EXPECTATIONS:
+            with self.subTest(preset=name):
+                cfg = presets.get_config(
+                    ExperimentPreset[name],
+                    config_overrides={
+                        "input_dim": 8,
+                        "hidden_dim": 8,
+                        "output_dim": 4,
+                        "stack_num_layers": 2,
+                        "recurrent_max_steps": 2,
+                        "stack_dropout_probability": 0.0,
+                        "halting_dropout": 0.0,
+                        "recurrent_halting_dropout": 0.0,
+                    },
+                )[0]
+                source = Model(cfg).eval()
+                restored = Model(cfg).eval()
+
+                load_result = restored.load_state_dict(
+                    source.state_dict(),
+                    strict=True,
+                )
+
+                self.assertEqual(load_result.missing_keys, [])
+                self.assertEqual(load_result.unexpected_keys, [])
+                source_output = source(batch)
+                restored_output = restored(batch)
+                source_tensors = (
+                    source_output
+                    if isinstance(source_output, tuple)
+                    else (source_output,)
+                )
+                restored_tensors = (
+                    restored_output
+                    if isinstance(restored_output, tuple)
+                    else (restored_output,)
+                )
+                self.assertEqual(len(restored_tensors), len(source_tensors))
+                for actual, expected in zip(
+                    restored_tensors,
+                    source_tensors,
+                    strict=True,
+                ):
+                    torch.testing.assert_close(actual, expected)
 
     def test_all_presets_train_one_tiny_epoch(self):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[

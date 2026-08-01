@@ -113,7 +113,7 @@
     }
   },
   "discovery": {
-    "linears/linear": ["46e72388513892402829aeed128aabc055452afd4d8f85fc74c121dc97a67b8b", 5505, 24, 1, 5],
+    "linears/linear": ["cfe122a94b689b08965adebb83122f1ae6948531cba9d7fe3d94e3a03bfe1a98", 7497, 35, 1, 5],
     "linears/linear_adaptive": ["3f1854e66057b64b91d76f0f7bfb916fd596a85dde69e7b521cda95cdb380eef", 14345, 70, 1, 7],
     "bert/linear": ["999ebdf0014f4f2902c8d5c2770ca69ad08bb1bffb8afb5845a911a1b13c3aa4", 5378, 28, 1, 4],
     "gpt/linear": ["ecf4a4fdc30723bac70745ce15cacfb8c71182e1cce9b4565b8cd56155edd40b", 5210, 27, 1, 4],
@@ -131,7 +131,7 @@
   },
   "cliErrors": {
     "unknown-model": [1, "Unknown model: --model-type unknown --model model", false],
-    "invalid-preset": [2, "cli.py: error: argument --preset: invalid choice: 'nope' (choose from baseline, gating, halting, memory, gating-halting, gating-memory, halting-memory, gating-halting-memory, residual, post-norm, residual-post-norm, residual-gating, residual-halting, residual-memory, recurrent, recurrent-gating, recurrent-halting, recurrent-memory, recurrent-gating-halting, recurrent-gating-memory, recurrent-halting-memory, recurrent-gating-halting-memory, recurrent-residual, recurrent-post-norm)", false],
+    "invalid-preset": [2, "cli.py: error: argument --preset: invalid choice: 'nope' (choose from baseline, gating, halting, memory, gating-halting, gating-memory, halting-memory, gating-halting-memory, residual, post-norm, residual-post-norm, residual-gating, residual-halting, residual-memory, recurrent, recurrent-gating, recurrent-halting, recurrent-memory, recurrent-gating-halting, recurrent-gating-memory, recurrent-halting-memory, recurrent-gating-halting-memory, recurrent-residual, recurrent-post-norm, weighted-residual, weighted-blend-residual, attention-residual, recurrent-layer-gating, recurrent-dual-gating, recurrent-layer-halting, recurrent-dual-halting, weighted-memory, element-wise-weighted-memory, no-norm, pre-activation-norm)", false],
     "locked-override": [1, "Preset 'gating' does not allow overriding locked fields: stack_gate_flag (Locked by the GATING preset because this preset locks `stack_gate_flag`.)", false],
     "pre-inspection-malformed-override": [1, "ValueError: invalid literal for int() with base 10: 'not-an-int'", true]
   }

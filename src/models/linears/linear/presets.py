@@ -3,7 +3,14 @@ import models.linears.linear.dataset_options as dataset_options
 from emperor.config import BaseOptions
 from emperor.layers import (
     AdditiveResidualConfig,
+    AttentionResidualConfig,
     LayerNormPositionOptions,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
+)
+from emperor.memory import (
+    ElementWiseWeightedDynamicMemoryConfig,
+    WeightedDynamicMemoryConfig,
 )
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
@@ -41,6 +48,17 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_HALTING_MEMORY = 22
     RECURRENT_RESIDUAL = 23
     RECURRENT_POST_NORM = 24
+    WEIGHTED_RESIDUAL = 25
+    WEIGHTED_BLEND_RESIDUAL = 26
+    ATTENTION_RESIDUAL = 27
+    RECURRENT_LAYER_GATING = 28
+    RECURRENT_DUAL_GATING = 29
+    RECURRENT_LAYER_HALTING = 30
+    RECURRENT_DUAL_HALTING = 31
+    WEIGHTED_MEMORY = 32
+    ELEMENT_WISE_WEIGHTED_MEMORY = 33
+    NO_NORM = 34
+    PRE_ACTIVATION_NORM = 35
 
 
 _PRESET_DEFINITIONS = {
@@ -231,6 +249,90 @@ _PRESET_DEFINITIONS = {
         },
         description="Default recurrent config using a post-normalized hidden stack at each "
         "recurrent step.",
+    ),
+    ExperimentPreset.WEIGHTED_RESIDUAL: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": WeightedResidualConfig,
+        },
+        description="Default config with a learned tanh-scaled current contribution "
+        "composed with the previous hidden state at each hidden layer.",
+    ),
+    ExperimentPreset.WEIGHTED_BLEND_RESIDUAL: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": WeightedBlendResidualConfig,
+        },
+        description="Default config with a learned bounded convex blend between current "
+        "and previous hidden states at each hidden layer.",
+    ),
+    ExperimentPreset.ATTENTION_RESIDUAL: PresetDefinition(
+        preset_values={
+            "stack_residual_connection_option": AttentionResidualConfig,
+        },
+        description="Default config with depth-local attention over compatible residual "
+        "sources in the hidden stack.",
+    ),
+    ExperimentPreset.RECURRENT_LAYER_GATING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_gate_flag": True,
+        },
+        description="Recurrent config with per-layer gating inside the reused hidden "
+        "stack and no outer recurrent-step gate.",
+    ),
+    ExperimentPreset.RECURRENT_DUAL_GATING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_gate_flag": True,
+            "recurrent_stack_gate_flag": True,
+        },
+        description="Recurrent config with separate inner per-layer gates and an outer "
+        "recurrent-step gate.",
+    ),
+    ExperimentPreset.RECURRENT_LAYER_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_halting_flag": True,
+        },
+        description="Recurrent config with halting inside the reused hidden stack while "
+        "the outer recurrence retains a fixed maximum step budget.",
+    ),
+    ExperimentPreset.RECURRENT_DUAL_HALTING: PresetDefinition(
+        preset_values={
+            "recurrent_flag": True,
+            "stack_halting_flag": True,
+            "recurrent_stack_halting_flag": True,
+        },
+        description="Recurrent config with separate inner-stack and outer recurrent-step "
+        "stick-breaking halting controllers.",
+    ),
+    ExperimentPreset.WEIGHTED_MEMORY: PresetDefinition(
+        preset_values={
+            "memory_flag": True,
+            "memory_option": WeightedDynamicMemoryConfig,
+        },
+        description="Default config with shared stack memory using a sample- and "
+        "position-level weighted merge.",
+    ),
+    ExperimentPreset.ELEMENT_WISE_WEIGHTED_MEMORY: PresetDefinition(
+        preset_values={
+            "memory_flag": True,
+            "memory_option": ElementWiseWeightedDynamicMemoryConfig,
+        },
+        description="Default config with shared stack memory using a per-feature weighted "
+        "merge.",
+    ),
+    ExperimentPreset.NO_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.DISABLED,
+        },
+        description="Default config with no layer normalization in the main hidden stack.",
+    ),
+    ExperimentPreset.PRE_ACTIVATION_NORM: PresetDefinition(
+        preset_values={
+            "layer_norm_position": LayerNormPositionOptions.DEFAULT,
+        },
+        description="Default config with normalization after affine and memory work but "
+        "before activation, distinct from pre-layer and post-layer normalization.",
     ),
 }
 
