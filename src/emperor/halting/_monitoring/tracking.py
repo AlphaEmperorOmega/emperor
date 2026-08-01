@@ -117,6 +117,7 @@ class HaltingUsageTracker(Module):
         ponder_loss: Tensor | None,
         halting_state: "HaltingStateBase",
     ) -> None:
+        self.__clear_optional_final_metrics()
         self.last_step_count.fill_(float(len(self._survival_stage)))
 
         valid_mask = getattr(halting_state, "valid_mask", None)
@@ -171,6 +172,15 @@ class HaltingUsageTracker(Module):
 
         if ponder_loss is not None:
             self.last_ponder_loss.copy_(ponder_loss.detach().float().mean())
+
+    def __clear_optional_final_metrics(self) -> None:
+        self.last_ponder_cost = self.last_ponder_cost.new_zeros(0)
+        self.last_ponder_cost_mean.zero_()
+        self.last_ponder_cost_std.zero_()
+        self.last_halted_fraction.zero_()
+        self.last_accumulated_halt_prob_mean.zero_()
+        self.last_remaining_mass_mean.zero_()
+        self.last_ponder_loss.zero_()
 
     def reset(self) -> None:
         self.last_survival = self.last_survival.new_zeros(0)
