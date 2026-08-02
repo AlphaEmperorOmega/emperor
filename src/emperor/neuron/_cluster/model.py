@@ -14,7 +14,10 @@ from emperor.neuron._cluster.recurrent_routes import (
     _NeuronClusterRecurrentRoutesMixin,
 )
 from emperor.neuron._cluster.runtime_policy import inherit_runtime_policy
-from emperor.neuron._cluster.state import _NeuronClusterStateMixin
+from emperor.neuron._cluster.state import (
+    _NeuronClusterForwardContext,
+    _NeuronClusterStateMixin,
+)
 from emperor.neuron._cluster.topology import _NeuronClusterTopologyMixin
 from emperor.neuron._config import NeuronClusterConfig, TerminalConfig
 from emperor.neuron._trace import NeuronClusterTrace
@@ -314,7 +317,7 @@ class NeuronCluster(
                 "traces describe a single chosen branch per sample and beams "
                 "have no such branch."
             )
-        self._neurons_called_this_forward: set[str] = set()
+        forward_context = _NeuronClusterForwardContext()
         growth_counter_baseline = self._capture_growth_counter_baseline()
 
         flattened_input = input.reshape(-1, input.shape[-1])
@@ -323,6 +326,7 @@ class NeuronCluster(
                 flattened_input,
                 tuple(input.shape),
                 return_trace,
+                forward_context,
             )
         )
         routed_output = routed_output.reshape(
@@ -334,8 +338,8 @@ class NeuronCluster(
             # Warmup advances before growth so a neuron grown this forward
             # keeps its full countdown for its first routable forward.
             self._advance_grown_neuron_warmup()
-            self._check_neuron_growth(growth_counter_baseline)
-            self._check_neuron_atrophy()
+            self._check_neuron_growth(growth_counter_baseline, forward_context)
+            self._check_neuron_atrophy(forward_context)
         if return_trace:
             return routed_output, auxiliary_loss, trace
         return routed_output, auxiliary_loss

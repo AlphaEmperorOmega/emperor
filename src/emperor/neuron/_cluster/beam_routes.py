@@ -1,22 +1,54 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-from emperor.neuron._cluster.state import NeuronClusterRouteState
+from emperor.neuron._cluster.state import (
+    NeuronClusterRouteState,
+    _NeuronClusterForwardContext,
+)
 
 
 class _NeuronClusterBeamRoutesMixin:
+    """Own beam routing over explicitly declared sibling capabilities."""
+
+    beam_width: int
+    max_steps: int
+    cluster: ModuleDict
+    _accumulate_auxiliary_loss: Callable[..., Tensor]
+    _callable_route_mask: Callable[..., Tensor]
+    _current_route_mask: Callable[..., Tensor]
+    _ensure_route_buffers: Callable[..., tuple[Tensor, Tensor]]
+    _gather_halting_state_rows: Callable[..., Any]
+    _group_indices_by_position: Callable[..., dict[str, list[int]]]
+    _index_tensor: Callable[..., Tensor]
+    _maybe_finalize_cluster_halting: Callable[..., NeuronClusterRouteState]
+    _maybe_update_halting_state: Callable[..., Any]
+    _route_entry_input: Callable[..., tuple[Tensor, Tensor, Tensor]]
+    _route_neuron: Callable[..., tuple[Tensor, Tensor, Tensor]]
+    _run_process_branches: Callable[..., tuple[Tensor, Tensor, Tensor]]
+
     def _propagate_signal_through_beam_routes(
         self,
         input: Tensor,
+        forward_context: _NeuronClusterForwardContext,
     ) -> tuple[Tensor, Tensor, None]:
         batch_size = input.shape[0]
-        route_state = self.__run_entry_routes_with_beams(input)
+        route_state = self.__run_entry_routes_with_beams(input, forward_context)
 
         for _ in range(self.max_steps):
             route_mask = self._current_route_mask(route_state)
             if not bool(route_mask.any().item()):
                 break
-            route_state = self.__run_beam_route_step(route_state, route_mask)
+            route_state = self.__run_beam_route_step(
+                route_state,
+                route_mask,
+                forward_context,
+            )
 
         route_state = self._maybe_finalize_cluster_halting(route_state)
         merged_output = self.__merge_beams_into_output(route_state, batch_size)
@@ -25,6 +57,7 @@ class _NeuronClusterBeamRoutesMixin:
     def __run_entry_routes_with_beams(
         self,
         input: Tensor,
+        forward_context: _NeuronClusterForwardContext,
     ) -> NeuronClusterRouteState:
         batch_size = input.shape[0]
         beam_width = self.beam_width
@@ -38,6 +71,7 @@ class _NeuronClusterBeamRoutesMixin:
             input,
             selected_coords,
             entry_called_mask,
+            forward_context,
         )
 
         slot_probabilities, slot_branch_indices = self.__top_beam_slots(probabilities)
@@ -89,6 +123,7 @@ class _NeuronClusterBeamRoutesMixin:
         self,
         route_state: NeuronClusterRouteState,
         route_mask: Tensor,
+        forward_context: _NeuronClusterForwardContext,
     ) -> NeuronClusterRouteState:
         beam_width = self.beam_width
         flattened_beam_count = route_state.hidden.shape[0]
@@ -148,6 +183,7 @@ class _NeuronClusterBeamRoutesMixin:
             route_state.hidden,
             selected_coords,
             called_neuron_mask,
+            forward_context,
         )
         parent_path_probabilities = route_state.beam_path_probabilities
         positive_branch_mask = (

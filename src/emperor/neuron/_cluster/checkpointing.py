@@ -1,7 +1,30 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+
 import torch
+from torch import Tensor
+from torch.nn import ModuleDict
+
+from emperor.nn import Module
 
 
 class _NeuronClusterCheckpointingMixin:
+    """Own checkpoint topology over explicitly declared sibling capabilities."""
+
+    cluster: ModuleDict
+    entry_coordinates: Tensor
+    forwards_since_last_growth: Tensor | None
+    total_growth_count: Tensor | None
+    _checkpoint_removed_parameter_ids: set[int]
+    _add_neuron: Callable[..., None]
+    _coordinate_from_row: Callable[..., tuple[int, int, int]]
+    _initialize_neuron: Callable[..., Module]
+    _is_neuron_name: Callable[..., bool]
+    _is_within_grid_capacity: Callable[..., bool]
+    _neuron_name: Callable[..., str]
+    _parse_neuron_name: Callable[..., tuple[int, int, int]]
+
     def _reconcile_cluster_with_state_dict(
         self,
         module,
