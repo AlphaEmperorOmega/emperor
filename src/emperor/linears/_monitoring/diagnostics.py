@@ -119,6 +119,14 @@ class _LinearParameterChannelMetrics:
 
 
 @dataclass(frozen=True)
+class _LinearActivationTrackingContext:
+    pl_module: LightningModule
+    module_name: str
+    input_summary: _TensorSummary | None
+    output_summary: _TensorSummary | None
+
+
+@dataclass(frozen=True)
 class _LinearTrackingContext:
     pl_module: LightningModule
     module_name: str

@@ -422,13 +422,13 @@ class TestLinearMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(trainer, module)
         callback.on_train_batch_start(trainer, module, batch=None, batch_idx=0)
-        self.assertIsNotNone(callback._discovery_hook)
+        self.assertIsNotNone(callback._capture._discovery_hook)
         module.linear(torch.ones(2, 4))
         callback.on_train_batch_end(trainer, module, None, None, batch_idx=0)
 
         self.assertEqual(module.logged_scalars, [])
-        self.assertTrue(callback._activation_moments)
-        self.assertIsNone(callback._discovery_hook)
+        self.assertTrue(callback._capture._activation_moments)
+        self.assertIsNone(callback._capture._discovery_hook)
         callback.on_fit_end(trainer, module)
 
     def test_dynamic_discovery_ignores_non_linears_and_installs_once(self):
@@ -439,12 +439,12 @@ class TestLinearMonitorCallback(unittest.TestCase):
         callback.on_fit_start(trainer, module)
         callback.on_train_batch_start(trainer, module, batch=None, batch_idx=0)
         callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
-        discovery_hook = callback._discovery_hook
+        discovery_hook = callback._capture._discovery_hook
         callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
         torch.nn.ReLU()(torch.ones(1))
 
-        self.assertIs(callback._discovery_hook, discovery_hook)
-        self.assertEqual(set(callback._linear_modules), {"linear"})
+        self.assertIs(callback._capture._discovery_hook, discovery_hook)
+        self.assertEqual(set(callback._capture._linear_modules), {"linear"})
         callback.on_fit_end(trainer, module)
 
     def test_forward_and_parameter_metrics_share_optimizer_step_cadence(self):
@@ -484,15 +484,15 @@ class TestLinearMonitorCallback(unittest.TestCase):
         callback.on_fit_start(trainer, module)
         module.linear(torch.ones(1, 4))
         callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
-        self.assertTrue(callback._activation_moments)
-        self.assertIsNotNone(callback._pending_step)
+        self.assertTrue(callback._capture._activation_moments)
+        self.assertIsNotNone(callback._capture._pending_step)
 
         trainer.global_step = 4
         module.global_step = 4
         callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
 
-        self.assertEqual(callback._activation_moments, {})
-        self.assertIsNone(callback._pending_step)
+        self.assertEqual(callback._capture._activation_moments, {})
+        self.assertIsNone(callback._capture._pending_step)
         callback.on_fit_end(trainer, module)
 
     def test_repeated_forwards_are_aggregated_once_per_optimizer_step(self):
@@ -686,8 +686,8 @@ class TestLinearMonitorCallback(unittest.TestCase):
         names = {name for name, _ in module.logged_scalars}
         self.assertNotIn("linear/input/mean", names)
         self.assertNotIn("linear/output/mean", names)
-        self.assertEqual(callback._activation_moments, {})
-        self.assertEqual(callback._activation_modules, {})
+        self.assertEqual(callback._capture._activation_moments, {})
+        self.assertEqual(callback._capture._activation_modules, {})
         callback.on_fit_end(trainer, module)
 
     def test_manual_optimizer_can_enter_sampled_cadence_after_dynamic_rename(self):
@@ -701,9 +701,9 @@ class TestLinearMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(trainer, module)
         callback.on_train_batch_start(trainer, module, batch=None, batch_idx=0)
-        self.assertIsNone(callback._discovery_hook)
+        self.assertIsNone(callback._capture._discovery_hook)
         callback.on_before_optimizer_step(trainer, module, first_optimizer)
-        self.assertIsNotNone(callback._discovery_hook)
+        self.assertIsNotNone(callback._capture._discovery_hook)
         trainer.global_step = 1
         module.global_step = 1
 
@@ -721,7 +721,7 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertIn("renamed/input/mean", names)
         self.assertIn("renamed/weights/delta_norm", names)
         self.assertNotIn("second/input/mean", names)
-        self.assertIsNone(callback._discovery_hook)
+        self.assertIsNone(callback._capture._discovery_hook)
         callback.on_fit_end(trainer, module)
 
     def test_float64_capture_preserves_small_parameter_changes(self):
@@ -958,6 +958,52 @@ class TestLinearMonitorCallback(unittest.TestCase):
         )
         callback.on_fit_end(trainer, module)
 
+    def test_metric_emission_order_is_stable(self):
+        module = build_module(input_dim=1, output_dim=1)
+        callback = LinearMonitorCallback(
+            log_every_n_steps=1,
+            log_weight_conditioning=True,
+        )
+        trainer = FakeTrainer()
+
+        callback.on_fit_start(trainer, module)
+        module.linear(torch.ones(1, 1)).sum().backward()
+        complete_optimizer_step(callback, trainer, module)
+
+        self.assertEqual(
+            [name for name, _value in module.logged_scalars],
+            [
+                "linear/input/mean",
+                "linear/input/var",
+                "linear/output/mean",
+                "linear/output/var",
+                "linear/weights/mean",
+                "linear/weights/var",
+                "linear/weights/l2_norm",
+                "linear/weights/delta_norm",
+                "linear/weights/relative_delta_norm",
+                "linear/bias/mean",
+                "linear/bias/var",
+                "linear/bias/l2_norm",
+                "linear/bias/delta_norm",
+                "linear/bias/relative_delta_norm",
+                "linear/weights/grad_mean",
+                "linear/weights/grad_var",
+                "linear/weights/grad_norm",
+                "linear/weights/gradient_to_weight_norm_ratio",
+                "linear/weights/update_ratio",
+                "linear/bias/grad_mean",
+                "linear/bias/grad_var",
+                "linear/bias/grad_norm",
+                "linear/weights/dead_input_fraction",
+                "linear/weights/dead_output_fraction",
+                "linear/weights/spectral_norm",
+                "linear/weights/condition_number",
+                "linear/weights/effective_rank",
+            ],
+        )
+        callback.on_fit_end(trainer, module)
+
     def test_default_monitor_skips_weight_conditioning_but_logs_health(self):
         module = build_module()
         callback = LinearMonitorCallback(log_every_n_steps=1)
@@ -1024,16 +1070,18 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertEqual(len(original_layer._forward_hooks), 1)
         original_layer(torch.ones(1, 2))
         untouched_layer(torch.ones(1, 2))
-        self.assertTrue(callback._activation_moments)
+        self.assertTrue(callback._capture._activation_moments)
         callback.on_train_batch_start(trainer, module, batch=None, batch_idx=0)
         module.linear = replacement_layer
         replacement_layer(torch.ones(1, 2))
 
         self.assertEqual(len(original_layer._forward_hooks), 0)
         self.assertEqual(len(replacement_layer._forward_hooks), 1)
-        self.assertTrue(callback._activation_moments)
+        self.assertTrue(callback._capture._activation_moments)
         self.assertEqual(
-            callback._activation_moments[(1, id(replacement_layer), "input")].count,
+            callback._capture._activation_moments[
+                (1, id(replacement_layer), "input")
+            ].count,
             2,
         )
         complete_optimizer_step(callback, trainer, module)
@@ -1069,7 +1117,10 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertEqual(scalars["linear/output/mean"].item(), 2.0)
         self.assertAlmostEqual(scalars["linear/weights/mean"].item(), 0.8)
         self.assertAlmostEqual(scalars["linear/weights/delta_norm"].item(), 0.2)
-        self.assertIs(callback._linear_modules["linear"], replacement_layer)
+        self.assertIs(
+            callback._capture._linear_modules["linear"],
+            replacement_layer,
+        )
         callback.on_fit_end(trainer, module)
 
     def test_discovery_refreshes_namespace_when_tracked_layer_moves(self):
@@ -1116,20 +1167,20 @@ class TestLinearMonitorCallback(unittest.TestCase):
 
         callback.on_fit_start(trainer, module)
         callback.on_train_batch_start(trainer, module, batch=None, batch_idx=0)
-        self.assertIsNotNone(callback._discovery_hook)
+        self.assertIsNotNone(callback._capture._discovery_hook)
         module.linear(torch.ones(2, 4))
         callback.on_before_optimizer_step(trainer, module, None)  # type: ignore[arg-type]
-        self.assertTrue(callback._activation_moments)
-        self.assertIsNotNone(callback._pending_step)
+        self.assertTrue(callback._capture._activation_moments)
+        self.assertIsNotNone(callback._capture._pending_step)
 
         callback.on_fit_end(trainer, module)
 
-        self.assertEqual(callback._hooks, {})
-        self.assertEqual(callback._linear_modules, {})
-        self.assertEqual(callback._activation_moments, {})
-        self.assertEqual(callback._activation_modules, {})
-        self.assertIsNone(callback._pending_step)
-        self.assertIsNone(callback._discovery_hook)
+        self.assertEqual(callback._capture._hooks, {})
+        self.assertEqual(callback._capture._linear_modules, {})
+        self.assertEqual(callback._capture._activation_moments, {})
+        self.assertEqual(callback._capture._activation_modules, {})
+        self.assertIsNone(callback._capture._pending_step)
+        self.assertIsNone(callback._capture._discovery_hook)
         self.assertEqual(len(module.linear._forward_hooks), 0)
 
     def test_every_metric_requests_distributed_synchronization(self):
