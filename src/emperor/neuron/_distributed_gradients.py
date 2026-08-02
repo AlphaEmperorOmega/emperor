@@ -1,43 +1,70 @@
 from __future__ import annotations
 
+from collections.abc import MutableMapping
+from typing import Any
+
 import torch
 from torch import nn
 from torch.optim import Optimizer
 
 
-def configure_conditional_ddp_strategy(strategy: object) -> None:
-    """Require unused-parameter discovery for conditionally routed clusters."""
+class _ConditionalDDPStrategyAdapter:
+    """Own Lightning DDP capability detection, validation, and configuration.
 
-    from lightning.pytorch.strategies import DDPStrategy
+    Neuron supports a Lightning ``DDPStrategy`` when it exposes the effective
+    PyTorch DDP options as a mutable mapping. Unknown layouts fail closed before
+    any option is changed.
+    """
 
-    if not isinstance(strategy, DDPStrategy):
-        return
-    try:
-        ddp_kwargs = strategy._ddp_kwargs
-    except AttributeError as error:
-        raise RuntimeError(
-            "The installed Lightning DDPStrategy does not expose the DDP "
-            "configuration required by NeuronCluster conditional routing."
-        ) from error
-    if ddp_kwargs.get("static_graph") is True:
-        raise RuntimeError(
-            "NeuronCluster conditional routing, growth, and pruning require "
-            "static_graph=False under DDP because the set of used parameters "
-            "can change between batches."
-        )
-    if ddp_kwargs.get("skip_all_reduce_unused_params") is True:
-        raise RuntimeError(
-            "NeuronCluster conditional routing requires "
-            "skip_all_reduce_unused_params=False under DDP because unused "
-            "parameters can differ between batches and ranks."
-        )
-    if ddp_kwargs.get("find_unused_parameters") is False:
-        raise RuntimeError(
-            "NeuronCluster conditional routing requires "
-            "find_unused_parameters=True under DDP; explicitly disabling it "
-            "causes repeated backward passes to fail when routes skip neurons."
-        )
-    ddp_kwargs["find_unused_parameters"] = True
+    @classmethod
+    def configure(cls, strategy: object) -> None:
+        """Require unused-parameter discovery for conditional routes."""
+
+        from lightning.pytorch.strategies import DDPStrategy
+
+        if not isinstance(strategy, DDPStrategy):
+            return
+        ddp_options = cls.__ddp_options(strategy)
+        cls.__validate_options(ddp_options)
+        ddp_options["find_unused_parameters"] = True
+
+    @staticmethod
+    def __ddp_options(strategy: object) -> MutableMapping[str, Any]:
+        try:
+            ddp_options = strategy._ddp_kwargs
+        except AttributeError as error:
+            raise RuntimeError(
+                "The installed Lightning DDPStrategy does not expose the DDP "
+                "configuration required by NeuronCluster conditional routing."
+            ) from error
+        if not isinstance(ddp_options, MutableMapping):
+            raise RuntimeError(
+                "The installed Lightning DDPStrategy does not expose the DDP "
+                "configuration as a mutable mapping required by NeuronCluster "
+                "conditional routing."
+            )
+        return ddp_options
+
+    @staticmethod
+    def __validate_options(ddp_options: MutableMapping[str, Any]) -> None:
+        if ddp_options.get("static_graph") is True:
+            raise RuntimeError(
+                "NeuronCluster conditional routing, growth, and pruning require "
+                "static_graph=False under DDP because the set of used parameters "
+                "can change between batches."
+            )
+        if ddp_options.get("skip_all_reduce_unused_params") is True:
+            raise RuntimeError(
+                "NeuronCluster conditional routing requires "
+                "skip_all_reduce_unused_params=False under DDP because unused "
+                "parameters can differ between batches and ranks."
+            )
+        if ddp_options.get("find_unused_parameters") is False:
+            raise RuntimeError(
+                "NeuronCluster conditional routing requires "
+                "find_unused_parameters=True under DDP; explicitly disabling it "
+                "causes repeated backward passes to fail when routes skip neurons."
+            )
 
 
 def average_post_wrap_gradients(
