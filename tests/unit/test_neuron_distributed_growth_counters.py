@@ -6,6 +6,7 @@ from torch import nn
 
 from emperor.neuron import NeuronCluster
 from emperor.neuron._cluster.plasticity import _NeuronClusterPlasticityMixin
+from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 
 _SYNC_BATCH_COUNTERS = (
     "_NeuronClusterPlasticityMixin__synchronize_batch_counters_across_ranks"
@@ -141,11 +142,17 @@ class TestDistributedNeuronGrowthCounters(unittest.TestCase):
             ),
             patch.object(model, "_advance_grown_neuron_warmup"),
             patch.object(model, "_check_neuron_growth") as check_growth,
-            patch.object(model, "_check_neuron_atrophy"),
+            patch.object(model, "_check_neuron_atrophy") as check_atrophy,
         ):
             model(input_batch)
 
-        check_growth.assert_called_once_with(baseline)
+        check_growth.assert_called_once()
+        check_atrophy.assert_called_once()
+        growth_baseline, growth_context = check_growth.call_args.args
+        (atrophy_context,) = check_atrophy.call_args.args
+        self.assertIs(growth_baseline, baseline)
+        self.assertIs(growth_context, atrophy_context)
+        self.assertIsInstance(growth_context, _NeuronClusterForwardContext)
 
 
 class TestNeuronGrowthCounterTransactions(unittest.TestCase):
@@ -158,7 +165,6 @@ class TestNeuronGrowthCounterTransactions(unittest.TestCase):
         plasticity.total_growth_count = None
         plasticity.forwards_since_last_growth = None
         plasticity._growth_counters_are_global = False
-        plasticity._neurons_called_this_forward = set()
         plasticity._neuron_name = lambda x, y, z: f"neuron_{x}_{y}_{z}"
         plasticity._add_neuron = lambda _cluster, _name, _neuron: None
 
@@ -175,6 +181,9 @@ class TestNeuronGrowthCounterTransactions(unittest.TestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "initializer failed"),
         ):
-            plasticity._check_neuron_growth(None)
+            plasticity._check_neuron_growth(
+                None,
+                _NeuronClusterForwardContext(),
+            )
 
         self.assertEqual(int(saturated_neuron.batch_counter), 5)

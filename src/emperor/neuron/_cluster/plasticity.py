@@ -1,8 +1,13 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
+from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 from emperor.nn import Module
 
 
@@ -14,6 +19,30 @@ class _GrowthCounterBaseline:
 
 
 class _NeuronClusterPlasticityMixin:
+    """Own topology plasticity over explicitly declared sibling capabilities."""
+
+    growth_threshold: int | None
+    growth_cooldown_steps: int | None
+    max_total_growths: int | None
+    growth_warmup_steps: int | None
+    pruning_threshold: int | None
+    mitosis_initialization_flag: bool
+    training: bool
+    y_axis_total_neurons: int
+    z_axis_total_neurons: int
+    cluster: ModuleDict
+    entry_coordinates: Tensor
+    escape_counts: Tensor | None
+    forwards_since_last_growth: Tensor | None
+    total_growth_count: Tensor | None
+    _growth_counters_are_global: bool
+    _add_neuron: Callable[..., None]
+    _coordinate_from_row: Callable[..., tuple[int, int, int]]
+    _initialize_neuron: Callable[..., Module]
+    _is_within_grid_capacity: Callable[..., bool]
+    _neuron_name: Callable[..., str]
+    _parse_neuron_name: Callable[..., tuple[int, int, int]]
+
     def _capture_growth_counter_baseline(self) -> _GrowthCounterBaseline | None:
         if self.growth_threshold is None:
             return None
@@ -34,6 +63,7 @@ class _NeuronClusterPlasticityMixin:
     def _check_neuron_growth(
         self,
         growth_counter_baseline: _GrowthCounterBaseline | None,
+        forward_context: _NeuronClusterForwardContext,
     ) -> None:
         if self.growth_threshold is None:
             return
@@ -80,7 +110,7 @@ class _NeuronClusterPlasticityMixin:
             self.__start_grown_neuron_warmup(self.cluster[grown_neuron_name])
             self.__reset_escape_count(growth_position)
             self.__record_successful_growth()
-            self._neurons_called_this_forward.add(grown_neuron_name)
+            forward_context.called_neuron_names.add(grown_neuron_name)
             saturated_neuron.batch_counter.zero_()
             return
 
@@ -428,11 +458,14 @@ class _NeuronClusterPlasticityMixin:
                 )
         return grown_neuron
 
-    def _check_neuron_atrophy(self) -> None:
+    def _check_neuron_atrophy(
+        self,
+        forward_context: _NeuronClusterForwardContext,
+    ) -> None:
         if self.pruning_threshold is None:
             return
 
-        self.__update_atrophy_counters()
+        self.__update_atrophy_counters(forward_context)
         synchronized_atrophy_counters = (
             self.__synchronize_atrophy_counters_across_ranks()
         )
@@ -443,9 +476,12 @@ class _NeuronClusterPlasticityMixin:
             return
         del self.cluster[prunable_neuron_name]
 
-    def __update_atrophy_counters(self) -> None:
+    def __update_atrophy_counters(
+        self,
+        forward_context: _NeuronClusterForwardContext,
+    ) -> None:
         for neuron_name, neuron in self.cluster.items():
-            if neuron_name in self._neurons_called_this_forward:
+            if neuron_name in forward_context.called_neuron_names:
                 neuron.atrophy_counter.zero_()
             else:
                 neuron.atrophy_counter += 1

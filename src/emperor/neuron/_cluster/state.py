@@ -1,14 +1,18 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
 from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
 from emperor.neuron._trace import NeuronClusterTrace
 
 if TYPE_CHECKING:
-    from emperor.halting import HaltingStateBase
+    from emperor.halting import HaltingBase, HaltingStateBase
 
 
 @dataclass
@@ -24,7 +28,23 @@ class NeuronClusterRouteState:
     beam_path_probabilities: Tensor | None = None
 
 
+@dataclass
+class _NeuronClusterForwardContext:
+    """Own transient collaboration state for one cluster forward."""
+
+    called_neuron_names: set[str] = field(default_factory=set)
+
+
 class _NeuronClusterStateMixin:
+    """Own route-state helpers over explicitly declared sibling capabilities."""
+
+    halting_model: HaltingBase | None
+    cluster: ModuleDict
+    _accumulate_auxiliary_loss: Callable[[Tensor, Tensor], Tensor]
+    _coordinate_from_row: Callable[[list[int]], tuple[int, int, int]]
+    _is_within_grid_capacity: Callable[[tuple[int, int, int]], bool]
+    _neuron_name: Callable[[int, int, int], str]
+
     def _ensure_route_buffers(
         self,
         probabilities: Tensor | None,
@@ -93,11 +113,11 @@ class _NeuronClusterStateMixin:
 
     def _maybe_update_halting_state(
         self,
-        previous_state: "HaltingStateBase | None",
+        previous_state: HaltingStateBase | None,
         current_hidden: Tensor,
         weighted_candidate: Tensor,
         update_mask: Tensor,
-    ) -> "HaltingStateBase | None":
+    ) -> HaltingStateBase | None:
         return _NeuronHaltingLifecycle.update(
             self.halting_model,
             previous_state,
@@ -178,13 +198,13 @@ class _NeuronClusterStateMixin:
 
     def _get_halt_mask(
         self,
-        halting_state: "HaltingStateBase | None",
+        halting_state: HaltingStateBase | None,
     ) -> Tensor | None:
         return _NeuronHaltingLifecycle.halt_mask(halting_state)
 
     def _halt_mask_tensor(
         self,
-        halting_state: "HaltingStateBase | None",
+        halting_state: HaltingStateBase | None,
         batch_size: int,
         device: torch.device,
     ) -> Tensor:
@@ -199,9 +219,9 @@ class _NeuronClusterStateMixin:
 
     def _gather_halting_state_rows(
         self,
-        halting_state: "HaltingStateBase | None",
+        halting_state: HaltingStateBase | None,
         row_indices: Tensor,
-    ) -> "HaltingStateBase | None":
+    ) -> HaltingStateBase | None:
         return _NeuronHaltingLifecycle.gather_state_rows(
             halting_state,
             row_indices,

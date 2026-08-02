@@ -9,6 +9,7 @@ from emperor.neuron._cluster.recurrent_routes import (
 )
 from emperor.neuron._cluster.state import (
     NeuronClusterRouteState,
+    _NeuronClusterForwardContext,
     _NeuronClusterStateMixin,
 )
 
@@ -60,6 +61,7 @@ class TestNeuronMissingRouteLifecycle(unittest.TestCase):
         finalized = harness._NeuronClusterBeamRoutesMixin__run_beam_route_step(
             route_state,
             torch.tensor([True, False]),
+            _NeuronClusterForwardContext(),
         )
 
         torch.testing.assert_close(finalized.active_mask, torch.tensor([False, True]))
@@ -93,6 +95,7 @@ class TestNeuronMissingRouteLifecycle(unittest.TestCase):
             harness._NeuronClusterRecurrentRoutesMixin__run_recurrent_route_step(
                 route_state,
                 torch.tensor([True, False]),
+                _NeuronClusterForwardContext(),
             )
         )
 
