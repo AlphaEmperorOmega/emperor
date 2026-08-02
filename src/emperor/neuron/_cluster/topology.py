@@ -7,6 +7,12 @@ from emperor.nn import Module
 
 
 class _NeuronClusterTopologyMixin:
+    """Own topology operations over the cluster's declared grid dimensions."""
+
+    x_axis_total_neurons: int
+    y_axis_total_neurons: int
+    z_axis_total_neurons: int
+
     def _add_neuron(self, cluster: ModuleDict, name: str, instance: Module) -> None:
         cluster[name] = instance
 

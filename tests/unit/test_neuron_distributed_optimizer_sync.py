@@ -12,6 +12,7 @@ from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 
 from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
+from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 from emperor.neuron._distributed_gradients import (
     _average_gradient,
     average_post_wrap_gradients,
@@ -45,10 +46,10 @@ class _DistributedAtrophyHistoryProbe(nn.Module):
         used_on_this_rank = (
             self.forward_index == 0 and torch.distributed.get_rank() == 1
         )
-        self.cluster._neurons_called_this_forward = (
-            {self.grown_name} if used_on_this_rank else set()
+        forward_context = _NeuronClusterForwardContext(
+            called_neuron_names=({self.grown_name} if used_on_this_rank else set())
         )
-        self.cluster._check_neuron_atrophy()
+        self.cluster._check_neuron_atrophy(forward_context)
         self.forward_index += 1
         parameter_anchor = next(self.cluster.parameters()).reshape(-1)[0]
         return input_tensor + parameter_anchor * 0.0
@@ -69,8 +70,10 @@ class _DistributedGrowthHistoryProbe(nn.Module):
         )
         if contributes_this_forward:
             self.cluster.cluster[self.parent_name].batch_counter += 1
-        self.cluster._neurons_called_this_forward = {self.parent_name}
-        self.cluster._check_neuron_growth(baseline)
+        forward_context = _NeuronClusterForwardContext(
+            called_neuron_names={self.parent_name}
+        )
+        self.cluster._check_neuron_growth(baseline, forward_context)
         self.forward_index += 1
         parameter_anchor = next(self.cluster.parameters()).reshape(-1)[0]
         return input_tensor + parameter_anchor * 0.0

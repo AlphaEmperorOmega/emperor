@@ -43,6 +43,7 @@ from emperor.neuron import (
     TerminalRangeOptions,
     TerminalZAxisOffsetOptions,
 )
+from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 from emperor.nn import Module
 from emperor.sampler import RouterConfig, SamplerConfig
 from unit.test_memory import make_memory_config
@@ -2505,7 +2506,7 @@ class TestNeuronCluster(NeuronTestCase):
                 "Distributed Neuron growth topology changed during a forward pass",
             ),
         ):
-            model._check_neuron_growth(None)
+            model._check_neuron_growth(None, _NeuronClusterForwardContext())
 
     def test_public_forward_passes_captured_growth_baseline_to_growth_check(self):
         model = self.growth_cluster_config(growth_threshold=1).build()
@@ -2523,7 +2524,10 @@ class TestNeuronCluster(NeuronTestCase):
             model(input_batch)
 
         capture_baseline.assert_called_once_with()
-        check_growth.assert_called_once_with(captured_baseline)
+        check_growth.assert_called_once()
+        growth_baseline, forward_context = check_growth.call_args.args
+        self.assertIs(growth_baseline, captured_baseline)
+        self.assertIsInstance(forward_context, _NeuronClusterForwardContext)
 
     def test_distributed_growth_rejects_topology_changed_during_forward(self):
         model = self.growth_cluster_config(
@@ -2541,7 +2545,10 @@ class TestNeuronCluster(NeuronTestCase):
                 "Distributed Neuron growth topology changed during a forward pass",
             ),
         ):
-            model._check_neuron_growth(baseline)
+            model._check_neuron_growth(
+                baseline,
+                _NeuronClusterForwardContext(),
+            )
 
     def test_distributed_growth_rejects_missing_escape_count_baseline(self):
         model = self.escape_growth_cluster()
@@ -3529,11 +3536,13 @@ class TestNeuronCluster(NeuronTestCase):
         input_tensor = torch.zeros(1, 1)
 
         entry_state = model._NeuronClusterBeamRoutesMixin__run_entry_routes_with_beams(
-            input_tensor
+            input_tensor,
+            _NeuronClusterForwardContext(),
         )
         route_state = model._NeuronClusterBeamRoutesMixin__run_beam_route_step(
             entry_state,
             model._current_route_mask(entry_state),
+            _NeuronClusterForwardContext(),
         )
 
         torch.testing.assert_close(
@@ -4111,7 +4120,10 @@ def _distributed_growth_worker_assert_post_load_counter_deltas(
             target.cluster["neuron_1_1_1"].batch_counter.add_(rank + 1)
             target.escape_counts[1, 0, 0].add_(2 * (rank + 1))
 
-            target._check_neuron_growth(baseline)
+            target._check_neuron_growth(
+                baseline,
+                _NeuronClusterForwardContext(),
+            )
 
             observed = (
                 int(target.cluster["neuron_1_1_1"].batch_counter),

@@ -1,27 +1,78 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
 import torch
 from torch import Tensor
+from torch.nn import ModuleDict
 
-from emperor.neuron._cluster.state import NeuronClusterRouteState
+from emperor.neuron._cluster.state import (
+    NeuronClusterRouteState,
+    _NeuronClusterForwardContext,
+)
 from emperor.neuron._trace import NeuronClusterTrace, NeuronClusterTraceStep
 
 
 class _NeuronClusterRecurrentRoutesMixin:
+    """Own recurrent routing over explicitly declared sibling capabilities."""
+
+    beam_width: int
+    max_steps: int
+    growth_warmup_steps: int | None
+    training: bool
+    entry_coordinates: Tensor
+    entry_sampler: Any
+    cluster: ModuleDict
+    _accumulate_auxiliary_loss: Callable[..., Tensor]
+    _callable_route_mask: Callable[..., Tensor]
+    _coordinate_from_row: Callable[..., tuple[int, int, int]]
+    _detach_trace_tensor: Callable[..., Tensor]
+    _ensure_index_matrix: Callable[..., Tensor]
+    _ensure_probability_matrix: Callable[..., Tensor]
+    _ensure_route_buffers: Callable[..., tuple[Tensor, Tensor]]
+    _gather_branch_mask: Callable[..., Tensor]
+    _get_halt_mask: Callable[..., Tensor | None]
+    _group_indices_by_position: Callable[..., dict[str, list[int]]]
+    _halt_mask_tensor: Callable[..., Tensor]
+    _index_tensor: Callable[..., Tensor]
+    _is_valid_coordinate: Callable[..., bool]
+    _is_within_grid_capacity: Callable[..., bool]
+    _mask_indices: Callable[..., list[int]]
+    _maybe_finalize_cluster_halting: Callable[..., NeuronClusterRouteState]
+    _maybe_update_halting_state: Callable[..., Any]
+    _neuron_name: Callable[..., str]
+    _propagate_signal_through_beam_routes: Callable[..., tuple[Tensor, Tensor, None]]
+    _record_escaped_missing_positions: Callable[..., None]
+    _resolve_selected_indices: Callable[..., Tensor]
+    _weighted_branch_candidate: Callable[..., Tensor]
+
     def _propagate_signal_through_recurrent_routes(
         self,
         input: Tensor,
         input_shape: tuple[int, ...],
         return_trace: bool,
+        forward_context: _NeuronClusterForwardContext,
     ) -> tuple[Tensor, Tensor, NeuronClusterTrace | None]:
         if self.beam_width > 1:
-            return self._propagate_signal_through_beam_routes(input)
+            return self._propagate_signal_through_beam_routes(input, forward_context)
 
-        route_state = self.__run_entry_routes(input, input_shape, return_trace)
+        route_state = self.__run_entry_routes(
+            input,
+            input_shape,
+            return_trace,
+            forward_context,
+        )
 
         for _ in range(self.max_steps):
             route_mask = self._current_route_mask(route_state)
             if not bool(route_mask.any().item()):
                 break
-            route_state = self.__run_recurrent_route_step(route_state, route_mask)
+            route_state = self.__run_recurrent_route_step(
+                route_state,
+                route_mask,
+                forward_context,
+            )
 
         route_state = self._maybe_finalize_cluster_halting(route_state)
         return route_state.hidden, route_state.loss, route_state.trace
@@ -31,6 +82,7 @@ class _NeuronClusterRecurrentRoutesMixin:
         input: Tensor,
         input_shape: tuple[int, ...],
         return_trace: bool,
+        forward_context: _NeuronClusterForwardContext,
     ) -> NeuronClusterRouteState:
         probabilities, selected_coords, entry_loss = self._route_entry_input(input)
         entry_called_mask = torch.ones(
@@ -43,6 +95,7 @@ class _NeuronClusterRecurrentRoutesMixin:
                 input,
                 selected_coords,
                 entry_called_mask,
+                forward_context,
             )
         )
         weighted_candidate = self._weighted_branch_candidate(
@@ -142,6 +195,7 @@ class _NeuronClusterRecurrentRoutesMixin:
         self,
         route_state: NeuronClusterRouteState,
         route_mask: Tensor,
+        forward_context: _NeuronClusterForwardContext,
     ) -> NeuronClusterRouteState:
         next_hidden = route_state.hidden.clone()
         next_positions = route_state.positions.clone()
@@ -208,6 +262,7 @@ class _NeuronClusterRecurrentRoutesMixin:
             route_state.hidden,
             selected_coords,
             called_neuron_mask,
+            forward_context,
         )
         weighted_candidate = self._weighted_branch_candidate(
             branch_outputs,
@@ -341,6 +396,7 @@ class _NeuronClusterRecurrentRoutesMixin:
         source_hidden: Tensor,
         selected_coords: Tensor,
         call_mask: Tensor,
+        forward_context: _NeuronClusterForwardContext,
     ) -> tuple[Tensor, Tensor, Tensor]:
         branch_outputs = (
             source_hidden.unsqueeze(1).expand(-1, selected_coords.shape[1], -1).clone()
@@ -368,7 +424,7 @@ class _NeuronClusterRecurrentRoutesMixin:
                 processed_branch_output
             )
             if self.training:
-                self._neurons_called_this_forward.add(neuron_name)
+                forward_context.called_neuron_names.add(neuron_name)
 
         return branch_outputs, valid_target_mask, escape_mask
 

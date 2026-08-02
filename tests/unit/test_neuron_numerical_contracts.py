@@ -21,6 +21,7 @@ from emperor.neuron._cluster.recurrent_routes import (
 )
 from emperor.neuron._cluster.state import (
     NeuronClusterRouteState,
+    _NeuronClusterForwardContext,
     _NeuronClusterStateMixin,
 )
 from emperor.neuron._monitoring.diagnostics import _NeuronDiagnostics
@@ -111,6 +112,7 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
         finalized = harness._NeuronClusterBeamRoutesMixin__run_beam_route_step(
             route_state,
             torch.tensor([True, False]),
+            _NeuronClusterForwardContext(),
         )
 
         self.assertIs(finalized.hidden, route_state.hidden)
@@ -166,6 +168,7 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             harness._NeuronClusterRecurrentRoutesMixin__run_recurrent_route_step(
                 route_state,
                 torch.tensor([True, False]),
+                _NeuronClusterForwardContext(),
             )
         )
 
