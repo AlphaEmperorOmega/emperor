@@ -47,9 +47,6 @@ class _NeuronHaltingLifecycle:
             halting_input,
             update_mask,
         )
-        halting_usage_tracker = getattr(halting_model, "_usage_tracker", None)
-        if halting_usage_tracker is not None:
-            halting_usage_tracker.replace_last_step(halting_state)
         return halting_state
 
     @staticmethod
@@ -212,9 +209,6 @@ class _NeuronHaltingLifecycle:
             beam_path_probabilities,
             getattr(halting_state, "advanced_mask", None),
         )
-        halting_usage_tracker = getattr(halting_model, "_usage_tracker", None)
-        if halting_usage_tracker is not None:
-            halting_usage_tracker.record_final(reduced_ponder_loss, halting_state)
         return finalized_hidden, reduced_ponder_loss
 
     @staticmethod

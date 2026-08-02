@@ -27,7 +27,7 @@ class HaltingUsageTracker(Module):
         self.register_buffer("last_accumulated_halt_prob_mean", torch.zeros(()))
         self.register_buffer("last_remaining_mass_mean", torch.zeros(()))
         self.register_buffer("last_ponder_loss", torch.zeros(()))
-        self._survival_stage: list[Tensor] = []
+        self._survival_stage: list[HaltingStateBase] = []
 
     def _load_from_state_dict(
         self,
@@ -62,22 +62,19 @@ class HaltingUsageTracker(Module):
         self._survival_stage = []
 
     def record_step(self, halting_state: "HaltingStateBase") -> None:
-        self._survival_stage.append(self.__compute_alive_fraction(halting_state))
-
-    def replace_last_step(self, halting_state: "HaltingStateBase") -> None:
-        alive_fraction = self.__compute_alive_fraction(halting_state)
-        if self._survival_stage:
-            self._survival_stage[-1] = alive_fraction
-        else:
-            self._survival_stage.append(alive_fraction)
+        self._survival_stage.append(halting_state)
 
     def record_final(
         self,
         ponder_loss: Tensor | None,
         halting_state: "HaltingStateBase",
     ) -> None:
-        self.__commit_survival()
-        self.__record_final_scalars(ponder_loss, halting_state)
+        self.last_step_count.fill_(float(len(self._survival_stage)))
+        try:
+            self.__commit_survival()
+            self.__record_final_scalars(ponder_loss, halting_state)
+        finally:
+            self._survival_stage = []
 
     def __compute_alive_fraction(self, halting_state: "HaltingStateBase") -> Tensor:
         halt_mask = halting_state.halt_mask
@@ -105,8 +102,10 @@ class HaltingUsageTracker(Module):
         if self._survival_stage:
             self.last_survival = torch.stack(
                 [
-                    value.to(self.last_survival).reshape(())
-                    for value in self._survival_stage
+                    self.__compute_alive_fraction(state)
+                    .to(self.last_survival)
+                    .reshape(())
+                    for state in self._survival_stage
                 ]
             )
         else:
@@ -118,7 +117,6 @@ class HaltingUsageTracker(Module):
         halting_state: "HaltingStateBase",
     ) -> None:
         self.__clear_optional_final_metrics()
-        self.last_step_count.fill_(float(len(self._survival_stage)))
 
         valid_mask = getattr(halting_state, "valid_mask", None)
         ponder_cost = getattr(halting_state, "accumulated_ponder_cost", None)
@@ -171,7 +169,34 @@ class HaltingUsageTracker(Module):
                 self.last_remaining_mass_mean.copy_(remaining.mean())
 
         if ponder_loss is not None:
-            self.last_ponder_loss.copy_(ponder_loss.detach().float().mean())
+            observed_ponder_loss = ponder_loss.detach().float()
+            if (
+                isinstance(valid_mask, Tensor)
+                and observed_ponder_loss.dim() > 0
+                and observed_ponder_loss.shape[0] == valid_mask.shape[0]
+                and valid_mask.dim() <= observed_ponder_loss.dim()
+            ):
+                selected_mask = valid_mask.bool()
+                while selected_mask.dim() < observed_ponder_loss.dim():
+                    selected_mask = selected_mask.unsqueeze(-1)
+                if all(
+                    selected_size in (1, observed_size)
+                    for selected_size, observed_size in zip(
+                        selected_mask.shape,
+                        observed_ponder_loss.shape,
+                        strict=True,
+                    )
+                ):
+                    selected_mask = selected_mask.expand_as(observed_ponder_loss)
+                    selected_count = selected_mask.sum().clamp_min(1)
+                    observed_ponder_loss = (
+                        observed_ponder_loss.masked_fill(
+                            ~selected_mask,
+                            0.0,
+                        ).sum()
+                        / selected_count
+                    )
+            self.last_ponder_loss.copy_(observed_ponder_loss.mean())
 
     def __clear_optional_final_metrics(self) -> None:
         self.last_ponder_cost = self.last_ponder_cost.new_zeros(0)

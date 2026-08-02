@@ -8,8 +8,6 @@ from unit.test_neuron import NeuronTestCase
 
 
 class _NeverHaltingModel:
-    _usage_tracker = None
-
     @staticmethod
     def update_halting_state(
         previous_state: SimpleNamespace | None,

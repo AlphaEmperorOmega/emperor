@@ -20,7 +20,6 @@ class _HaltingModelStub:
     ) -> None:
         self.updated_state = updated_state
         self.ponder_loss = ponder_loss
-        self._usage_tracker = None
 
     def update_halting_state(
         self,
