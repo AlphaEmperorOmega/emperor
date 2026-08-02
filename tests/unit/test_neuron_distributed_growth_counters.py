@@ -13,9 +13,7 @@ _SYNC_BATCH_COUNTERS = (
 _SYNC_ESCAPE_COUNTS = (
     "_NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks"
 )
-_FIND_GROWTH_POSITION = (
-    "_NeuronClusterPlasticityMixin__find_closest_empty_connection"
-)
+_FIND_GROWTH_POSITION = "_NeuronClusterPlasticityMixin__find_closest_empty_connection"
 _INITIALIZE_GROWN_NEURON = (
     "_NeuronClusterPlasticityMixin__initialize_grown_neuron_with_synchronized_rng"
 )
@@ -37,10 +35,7 @@ class TestDistributedNeuronAtrophyCounters(unittest.TestCase):
                 "neuron_2_1_1": _CounterNeuron(atrophy_counter=5),
             }
         )
-        synchronize = (
-            plasticity
-            ._NeuronClusterPlasticityMixin__synchronize_atrophy_counters_across_ranks
-        )
+        synchronize = plasticity._NeuronClusterPlasticityMixin__synchronize_atrophy_counters_across_ranks
 
         def reduce_to_global_minimum(
             counters: torch.Tensor,
