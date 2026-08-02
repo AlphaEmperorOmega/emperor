@@ -61,7 +61,9 @@ modules = [
   "src/emperor/linears/_layer.py",
   "src/emperor/linears/_monitoring/__init__.py",
   "src/emperor/linears/_monitoring/callback.py",
+  "src/emperor/linears/_monitoring/capture.py",
   "src/emperor/linears/_monitoring/diagnostics.py",
+  "src/emperor/linears/_monitoring/emitter.py",
   "src/emperor/linears/_options.py",
   "src/emperor/linears/_validation.py",
 ]
