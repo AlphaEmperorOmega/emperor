@@ -1,5 +1,5 @@
 import unittest
-from types import SimpleNamespace
+from types import MappingProxyType, SimpleNamespace
 
 from lightning.pytorch.strategies import DDPStrategy
 from torch import nn
@@ -65,6 +65,34 @@ class TestConditionalNeuronDDPConfiguration(unittest.TestCase):
                 nn.Module(),
                 "fit",
             )
+
+    def test_non_mutable_lightning_ddp_configuration_is_reported(self) -> None:
+        for option_store in (None, (), MappingProxyType({})):
+            with self.subTest(option_store=type(option_store).__name__):
+                strategy = DDPStrategy()
+                strategy._ddp_kwargs = option_store
+
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "DDP configuration as a mutable mapping",
+                ):
+                    NeuronClusterOptimizerSyncCallback().setup(
+                        SimpleNamespace(strategy=strategy),
+                        nn.Module(),
+                        "fit",
+                    )
+
+    def test_unsafe_options_are_validated_before_configuration_mutates(self) -> None:
+        strategy = DDPStrategy(static_graph=True)
+
+        with self.assertRaisesRegex(RuntimeError, "static_graph=False"):
+            NeuronClusterOptimizerSyncCallback().setup(
+                SimpleNamespace(strategy=strategy),
+                nn.Module(),
+                "fit",
+            )
+
+        self.assertNotIn("find_unused_parameters", strategy._ddp_kwargs)
 
     def test_non_ddp_strategy_is_ignored(self) -> None:
         NeuronClusterOptimizerSyncCallback().setup(

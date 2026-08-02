@@ -10,8 +10,8 @@ from torch.optim import Optimizer
 from torch.utils.hooks import RemovableHandle
 
 from emperor.neuron._distributed_gradients import (
+    _ConditionalDDPStrategyAdapter,
     average_post_wrap_gradients,
-    configure_conditional_ddp_strategy,
 )
 from emperor.neuron._optimizer_layout import (
     OPTIMIZER_LAYOUT_CHECKPOINT_KEY,
@@ -57,7 +57,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         if stage != "fit":
             return
-        configure_conditional_ddp_strategy(trainer.strategy)
+        _ConditionalDDPStrategyAdapter.configure(trainer.strategy)
 
     def on_load_checkpoint(
         self,
