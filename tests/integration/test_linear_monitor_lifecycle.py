@@ -829,8 +829,8 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertIsNotNone(model.removed_layer)
         self.assertEqual(len(model.removed_layer._forward_hooks), 0)
         self.assertEqual(len(model.linear._forward_hooks), 0)
-        self.assertEqual(monitor._hooks, {})
-        self.assertEqual(monitor._linear_modules, {})
+        self.assertEqual(monitor._capture._hooks, {})
+        self.assertEqual(monitor._capture._linear_modules, {})
 
     def test_real_trainer_logs_activation_metrics_only_for_training_batches(
         self,
@@ -947,10 +947,10 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
                 torch.isfinite(trainer.logged_metrics[metric_name]).all(),
                 metric_name,
             )
-        self.assertEqual(monitor._hooks, {})
-        self.assertEqual(monitor._linear_modules, {})
-        self.assertEqual(monitor._activation_moments, {})
-        self.assertIsNone(monitor._pending_step)
+        self.assertEqual(monitor._capture._hooks, {})
+        self.assertEqual(monitor._capture._linear_modules, {})
+        self.assertEqual(monitor._capture._activation_moments, {})
+        self.assertIsNone(monitor._capture._pending_step)
 
     def test_real_trainer_logs_input_metrics_for_non_tensor_hook_output(
         self,
@@ -986,7 +986,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertNotIn("linear/output/mean", trainer.logged_metrics)
         self.assertIn("linear/weights/l2_norm", trainer.logged_metrics)
-        self.assertEqual(monitor._hooks, {})
+        self.assertEqual(monitor._capture._hooks, {})
 
     def test_real_trainer_logs_output_metrics_without_tensor_hook_input(
         self,
@@ -1022,9 +1022,9 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(trainer.logged_metrics["linear/output/var"].item(), 0.0)
         self.assertIn("linear/weights/l2_norm", trainer.logged_metrics)
-        self.assertEqual(monitor._hooks, {})
+        self.assertEqual(monitor._capture._hooks, {})
 
-    def test_real_trainer_exception_cleans_up_callback_state(self) -> None:
+    def test_real_trainer_exception_cleans_up_and_callback_can_be_reused(self) -> None:
         model = _FailingLinearExperiment()
         dataloader = DataLoader(
             TensorDataset(
@@ -1049,11 +1049,34 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "deliberate training failure"):
             trainer.fit(model, train_dataloaders=dataloader)
 
-        self.assertEqual(monitor._hooks, {})
-        self.assertEqual(monitor._linear_modules, {})
-        self.assertEqual(monitor._activation_moments, {})
-        self.assertIsNone(monitor._pending_step)
+        self.assertEqual(monitor._capture._hooks, {})
+        self.assertEqual(monitor._capture._linear_modules, {})
+        self.assertEqual(monitor._capture._activation_moments, {})
+        self.assertIsNone(monitor._capture._pending_step)
+        self.assertIsNone(monitor._capture._discovery_hook)
         self.assertEqual(len(model.linear._forward_hooks), 0)
+
+        reused_model = _LinearRegressionExperiment()
+        reused_trainer = Trainer(
+            max_epochs=1,
+            accelerator="cpu",
+            devices=1,
+            callbacks=[monitor],
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+            num_sanity_val_steps=0,
+        )
+        reused_trainer.fit(reused_model, train_dataloaders=dataloader)
+
+        self.assertIn("linear/weights/mean", reused_trainer.logged_metrics)
+        self.assertEqual(monitor._capture._hooks, {})
+        self.assertEqual(monitor._capture._linear_modules, {})
+        self.assertEqual(monitor._capture._activation_moments, {})
+        self.assertIsNone(monitor._capture._pending_step)
+        self.assertIsNone(monitor._capture._discovery_hook)
+        self.assertEqual(len(reused_model.linear._forward_hooks), 0)
 
 
 if __name__ == "__main__":
