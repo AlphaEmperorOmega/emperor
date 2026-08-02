@@ -187,9 +187,8 @@ class _NeuronClusterBeamRoutesMixin:
             beam_width,
             dim=1,
         )
-        usable_slot_mask = (
-            torch.isfinite(selected_path_probabilities)
-            & (selected_path_probabilities > 0)
+        usable_slot_mask = torch.isfinite(selected_path_probabilities) & (
+            selected_path_probabilities > 0
         )
         selected_path_probabilities = torch.where(
             usable_slot_mask,
@@ -299,9 +298,7 @@ class _NeuronClusterBeamRoutesMixin:
     def __top_beam_slots(self, probabilities: Tensor) -> tuple[Tensor, Tensor]:
         slot_count = min(self.beam_width, probabilities.shape[1])
         slot_probabilities, slot_branch_indices = probabilities.topk(slot_count, dim=1)
-        usable_slot_mask = (
-            torch.isfinite(slot_probabilities) & (slot_probabilities > 0)
-        )
+        usable_slot_mask = torch.isfinite(slot_probabilities) & (slot_probabilities > 0)
         slot_probabilities = torch.where(
             usable_slot_mask,
             slot_probabilities,
@@ -331,6 +328,4 @@ class _NeuronClusterBeamRoutesMixin:
             batch_size,
             self.beam_width,
         )
-        return (
-            beam_hidden * beam_path_probabilities.unsqueeze(-1)
-        ).sum(dim=1)
+        return (beam_hidden * beam_path_probabilities.unsqueeze(-1)).sum(dim=1)
