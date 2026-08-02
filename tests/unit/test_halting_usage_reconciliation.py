@@ -17,17 +17,19 @@ def state(halt_mask: torch.Tensor) -> SimpleNamespace:
 
 
 class HaltingUsageReconciliationTests(unittest.TestCase):
-    def test_reconciled_route_state_replaces_the_raw_step_sample(self) -> None:
+    def test_injected_step_observation_sees_post_return_reconciliation(self) -> None:
         tracker = HaltingUsageTracker()
         tracker.begin_forward()
-        tracker.record_step(state(torch.tensor([False, False])))
+        reconciled_state = state(torch.tensor([False, False]))
+        tracker.record_step(reconciled_state)
 
-        reconciled_state = state(torch.tensor([True, True]))
-        tracker.replace_last_step(reconciled_state)
+        reconciled_state.halt_mask.fill_(True)
+        reconciled_state.continuation_probability.zero_()
         tracker.record_final(torch.tensor(0.0), reconciled_state)
 
         torch.testing.assert_close(tracker.last_survival, torch.tensor([0.0]))
         torch.testing.assert_close(tracker.last_step_count, torch.tensor(1.0))
+        self.assertEqual(tracker._survival_stage, [])
 
 
 if __name__ == "__main__":
