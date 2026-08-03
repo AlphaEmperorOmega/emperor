@@ -49,6 +49,9 @@ class ExperimentPreset(BaseOptions):
     TOP1_SWITCH_AUX = 28
 
 
+_RECOMMENDED_HALTING_THRESHOLD = 0.999
+
+
 _PRESET_OVERRIDES = {
     "BASELINE": {},
     "PRE_NORM": {
@@ -67,17 +70,26 @@ _PRESET_OVERRIDES = {
         "attn_add_key_value_bias_flag": True,
     },
     "GATING": {"stack_gate_flag": True},
-    "HALTING": {"stack_halting_flag": True},
+    "HALTING": {
+        "stack_halting_flag": True,
+        "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+    },
     "GATING_HALTING": {
         "stack_gate_flag": True,
         "stack_halting_flag": True,
+        "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
     },
     "MEMORY": {"memory_flag": True},
     "GATING_MEMORY": {"stack_gate_flag": True, "memory_flag": True},
-    "HALTING_MEMORY": {"stack_halting_flag": True, "memory_flag": True},
+    "HALTING_MEMORY": {
+        "stack_halting_flag": True,
+        "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+        "memory_flag": True,
+    },
     "GATING_HALTING_MEMORY": {
         "stack_gate_flag": True,
         "stack_halting_flag": True,
+        "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         "memory_flag": True,
     },
     "RECURRENT": {"recurrent_flag": True},
@@ -88,12 +100,14 @@ _PRESET_OVERRIDES = {
     "RECURRENT_HALTING": {
         "recurrent_flag": True,
         "recurrent_stack_halting_flag": True,
+        "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
     },
     "RECURRENT_MEMORY": {"recurrent_flag": True, "memory_flag": True},
     "RECURRENT_GATING_HALTING": {
         "recurrent_flag": True,
         "recurrent_stack_gate_flag": True,
         "recurrent_stack_halting_flag": True,
+        "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
     },
     "RECURRENT_GATING_MEMORY": {
         "recurrent_flag": True,
@@ -103,12 +117,14 @@ _PRESET_OVERRIDES = {
     "RECURRENT_HALTING_MEMORY": {
         "recurrent_flag": True,
         "recurrent_stack_halting_flag": True,
+        "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         "memory_flag": True,
     },
     "RECURRENT_GATING_HALTING_MEMORY": {
         "recurrent_flag": True,
         "recurrent_stack_gate_flag": True,
         "recurrent_stack_halting_flag": True,
+        "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         "memory_flag": True,
     },
     "RESIDUAL": {
@@ -126,6 +142,7 @@ _PRESET_OVERRIDES = {
     "RESIDUAL_HALTING": {
         "stack_residual_connection_option": AdditiveResidualConfig,
         "stack_halting_flag": True,
+        "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
     },
     "RESIDUAL_MEMORY": {
         "stack_residual_connection_option": AdditiveResidualConfig,
