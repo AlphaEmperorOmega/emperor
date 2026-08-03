@@ -546,6 +546,40 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Probabilities must be provided"):
             mixture.compute_mixture(None, indices)
 
+    def test_positive_infinite_generator_clip_range_is_effectively_unbounded(
+        self,
+    ) -> None:
+        input_vectors = torch.tensor([[[2.0, -1.0], [0.25, 0.75]]])
+        output_vectors = torch.tensor([[[1.5, -2.0], [-0.5, 1.0]]])
+        expected = torch.einsum("bki,bkj->bkij", input_vectors, output_vectors)
+
+        for clipping_mode in (
+            ClipParameterOptions.DISABLED,
+            ClipParameterOptions.BEFORE,
+            ClipParameterOptions.AFTER,
+        ):
+            with self.subTest(clipping_mode=clipping_mode):
+                config = GeneratorWeightsMixtureConfig(
+                    **_mixture_kwargs(
+                        input_dim=2,
+                        output_dim=2,
+                        top_k=2,
+                        num_experts=2,
+                    ),
+                    generator_config=_generator_config(),
+                )
+                config.clip_parameter_option = clipping_mode
+                config.clip_range = float("inf")
+                mixture = config.build()
+
+                actual = mixture._GeneratorWeightsMixture__compute_outer_product(
+                    input_vectors,
+                    output_vectors,
+                )
+
+                torch.testing.assert_close(actual, expected)
+                self.assertTrue(torch.isfinite(actual).all())
+
     def test_generator_clipping_weighting_and_top_one_math_are_exact(self) -> None:
         config = GeneratorWeightsMixtureConfig(
             **_mixture_kwargs(
