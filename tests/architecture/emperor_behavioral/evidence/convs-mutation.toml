@@ -1,0 +1,7 @@
+family = "convs"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation convs --max-children 4"
+total_mutants = 50
+killed_mutants = 50
+surviving_mutants = 0
+unreviewed_mutants = 0

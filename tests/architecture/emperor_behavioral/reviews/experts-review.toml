@@ -1,0 +1,82 @@
+family = "experts"
+status = "approved"
+implementer = "codex"
+reviewer = "Hooke-independent-read-only-final"
+verdict = "approved"
+review_date = "2026-07-23"
+requested_scope = "Independent skeptical behavioral review after exact routing, loss, gradient, validation, coverage, and mutation completion."
+reviewed_modules = [
+  "src/emperor/experts/__init__.py",
+  "src/emperor/experts/_config.py",
+  "src/emperor/experts/_layers/__init__.py",
+  "src/emperor/experts/_layers/layer.py",
+  "src/emperor/experts/_layers/map.py",
+  "src/emperor/experts/_layers/mixture.py",
+  "src/emperor/experts/_layers/reduce.py",
+  "src/emperor/experts/_model.py",
+  "src/emperor/experts/_options.py",
+  "src/emperor/experts/_routing/__init__.py",
+  "src/emperor/experts/_routing/capacity.py",
+  "src/emperor/experts/_routing/weighting.py",
+  "src/emperor/experts/_state.py",
+  "src/emperor/experts/_validation/__init__.py",
+  "src/emperor/experts/_validation/mixture.py",
+  "src/emperor/experts/_validation/model.py",
+]
+focused_tests = [
+  "tests/unit/test_expert_behavioral_contracts.py",
+  "tests/unit/test_expert_mutation_contracts.py",
+  "tests/unit/test_expert_numerical_contracts.py",
+  "tests/unit/test_expert_option_contracts.py",
+  "tests/unit/test_expert_validation_contracts.py",
+  "tests/unit/test_experts.py",
+  "tests/unit/test_experts_interface.py",
+  "tests/unit/test_mixture_of_experts_model_validator_adapter.py",
+  "tests/unit/test_mixture_of_experts_validator_adapter.py",
+]
+integration_tests = [
+  "tests/model_packages/experts/linear/test_model.py",
+  "tests/model_packages/experts/linear_adaptive/test_model.py",
+  "tests/model_packages/test_attention_real_model_integration.py",
+  "tests/unit/test_attention_mixture_of_attention_heads.py",
+  "tests/unit/test_transformer_feed_forward.py",
+]
+commands = [
+  "python tools/emperor_test_family.py tests experts",
+  "python tools/emperor_test_family.py coverage experts",
+  "python tools/emperor_test_family.py mutation experts --max-children 8",
+  "PYTHONPATH=src python -m unittest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
+]
+review_questions = [
+  "Would tests fail if dense expert output used expert-major rather than sample-major order, mixed samples, weighted the wrong row, or reduced along the wrong axis?",
+  "Would tests fail if sparse routing selected the wrong expert, reordered probabilities incorrectly under capacity shuffling, mishandled dropped tokens, accepted duplicate IDs, or executed unselected experts?",
+  "Would tests fail if top_k=1 column routing mixed row and column coordinates, made incorrect capacity decisions, polluted gradients, or differed from vector routing?",
+  "Would map and reduce tests fail if either forced override, dense indices=None behavior, flattened routing representation, map/reduce compatibility, exact weighting equation, or gradient route changed?",
+  "Would tests fail if nested real LayerStack auxiliary losses were discarded, sampler losses were lost, or zero-loss dtype/device behavior changed?",
+  "Would tests fail if layer-owned and shared routing used the wrong dimensions, accepted external inputs, initialized malformed routers, or changed state/loss propagation?",
+  "Would tests fail for empty batches, rank and dimension mismatches, routing width, integer dtype/range, top_k boundaries, capacity constraints, malformed nested configs, and exact exception classes/messages?",
+  "Would tests fail if capacity, dropped-output, split-record, probabilities, indices, or losses changed dtype/device metadata?",
+  "Do exact numerical tests use asymmetric samples, matrices, probabilities, and routes so shape-correct zeros, transposed axes, or cross-sample contamination fail?",
+  "Do backward and optimizer-sensitive paths prove finite nonzero gradients for selected inputs and experts and absent gradients for unselected experts?",
+  "Are all 32 surviving mutants exact equivalents under proven rank, validation, correlated-routing, repeated pure preflight, private-default, or algebraic invariants across the regenerated 1683-mutant set?",
+  "Do public exports, config defaults and overrides, state records, strict persistence where applicable, and invalid lazy attributes have behavioral evidence?",
+  "Are any completion claims based only on construction, type, shape, non-None, does-not-throw, mocks, patches, fake Emperor collaborators, or symmetric data?",
+  "Were the prior reviewer findings for duplicate sparse IDs and zero-row sparse input resolved at the public boundary without breaking valid dense, sparse, or reduce routing?",
+]
+coverage = "882 statements and 236 branches at 100% across 166 focused tests"
+mutation = "1683 total; 1651 killed; 32 reviewed equivalent; 0 unreviewed"
+findings = [
+  "resolved during final review: SHARED model construction initialized its router before rejecting a malformed expert leaf, advancing RNG on failure; expert leaf configuration is now validated with effective stack dimensions before any sampler is built.",
+]
+resolved_findings = [
+  "high: capacity ignored top_k and truncated fractional capacities; fixed with ceil(batch_size * top_k / num_experts * capacity_factor), a minimum capacity of one, and overflow-safe retention.",
+  "high: weighted identity fallback before experts could lose the dropped route probability; fixed by retaining dropped probabilities so both weighting positions implement probability-scaled identity.",
+  "high: caller-supplied map and reduce overrides were mutated in place; fixed by copying overrides before applying each wrapper's forced fields.",
+  "medium: training and evaluation overload behavior shared random selection; fixed with seeded random training retention and stable RNG-free evaluation retention.",
+  "medium: malformed external routing tensors could cross dtype, device, finite-value, range, or duplicate-route boundaries; fixed with early validator-owned contracts and exact diagnostics.",
+  "medium: model and layer-owned routers did not prove effective outer input-dimension resolution; fixed with real construction contracts that also prove caller config remains unchanged.",
+  "medium: capacity shuffle state survived a later within-capacity token selection; fixed by scoping the shuffle to one token/routing pair and adding public lifecycle evidence.",
+  "high: accepted singleton-column top_k=1 routing mixed row and column coordinates; fixed by collapsing every rank-two routing mask and adding exact public output capacity and gradient evidence.",
+  "low: review evidence became stale after expanding the manifest; refreshed to the nine resolved focused test files and current quality-gate counts.",
+]
+review_summary = "Approved with no remaining findings after an independent read-only review verified the full source, public contracts, exact numerical and gradient behavior, 100% statement and branch coverage, the regenerated mutation cache, and all 32 equivalent-mutant proofs."

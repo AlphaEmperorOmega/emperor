@@ -1,0 +1,13 @@
+family = "sampler"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage sampler"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, Lightning Trainer, TensorBoard"
+focused_tests = 218
+statements = 100
+branches = 100
+statement_count = 922
+branch_count = 182
+
+integration_command = "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_sampler_monitor_lifecycle"
+integration_tests = 4
+integration_result = "pass"

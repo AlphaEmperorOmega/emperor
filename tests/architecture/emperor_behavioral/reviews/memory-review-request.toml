@@ -1,0 +1,50 @@
+family = "memory"
+status = "requested"
+implementer = "codex"
+reviewer = ""
+verdict = "pending"
+requested_scope = "Skeptical behavioral review after focused coverage, mutation, and real Lightning lifecycle completion."
+reviewed_modules = [
+  "src/emperor/memory/__init__.py",
+  "src/emperor/memory/_base.py",
+  "src/emperor/memory/_config.py",
+  "src/emperor/memory/monitoring/callback.py",
+  "src/emperor/memory/_validation.py",
+  "src/emperor/memory/_variants/__init__.py",
+  "src/emperor/memory/_variants/attention.py",
+  "src/emperor/memory/_variants/element_wise_weighted.py",
+  "src/emperor/memory/_variants/gated_residual.py",
+  "src/emperor/memory/_variants/weighted.py",
+]
+focused_tests = [
+  "tests/unit/test_memory.py",
+  "tests/unit/test_memory_adaptive_generator_validator_base.py",
+  "tests/unit/test_memory_interface.py",
+  "tests/unit/test_memory_monitor.py",
+  "tests/unit/test_memory_regressions.py",
+  "tests/unit/test_memory_validator.py",
+  "tests/unit/test_dynamic_memory_validator_adapter.py",
+]
+integration_tests = ["tests/integration/test_memory_monitor_lifecycle.py"]
+commands = [
+  "python tools/emperor_test_family.py tests memory",
+  "python tools/emperor_test_family.py coverage memory",
+  "python tools/emperor_test_family.py mutation memory --max-children 4",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_memory_monitor_lifecycle",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
+]
+review_questions = [
+  "Would tests fail if gated-residual, weighted, element-wise weighted, or attention memory changed its exact closed-form equation, gate axis, attention scaling, slot layout, or residual baseline?",
+  "Do exact tests use genuine Emperor Layer and LayerStack children with assigned parameters rather than replacement modules, and would zero-valued shape-correct implementations fail?",
+  "Would tests fail if generator input, hidden, output, decoder, projection, or multi-layer gate dimensions stopped honoring memory position, rectangular dimensions, slot count, or explicit overrides?",
+  "Would tests fail if test-time training adapted a whole batch jointly, stopped sharing evidence within one sample, changed learning rate or step count, mutated base parameters, retained eval gradients, or lost higher-order training gradients?",
+  "Would tests fail if TTT accepted frozen target generators, rejected legitimate frozen non-TTT children, failed under inference mode, mishandled empty batches, or stopped reaching decoder and meta-parameters through an optimizer step?",
+  "Would tests fail if batch or leading dimensions leaked across samples, rank-three axes changed, float64 or non-contiguous inputs were lost, or strict model and optimizer checkpoint continuation diverged?",
+  "Would tests fail for every required field, exact invalid type and boundary, nested controller, malformed generator, attention slot, rank, and final-dimension error contract?",
+  "Does the real Trainer lifecycle prove exact diagnostics for all variants, gate thresholds, global-step cadence, no duplicate logs, parameter updates, stale-gate cleanup, repeated setup, normal cleanup, and exception cleanup?",
+  "Would tests fail if public lazy exports, unknown attributes, child names, state keys, seeded construction, or strict state loading changed?",
+  "Are any tests mock-dependent or satisfied only by construction, type, shape, non-None, or does-not-throw assertions?",
+]
+coverage = "576 statements and 134 branches at 100%"
+mutation = "984 total; 984 killed; 0 surviving; 0 unreviewed"
+findings = []

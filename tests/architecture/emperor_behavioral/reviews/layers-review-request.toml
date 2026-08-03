@@ -1,0 +1,76 @@
+family = "layers"
+status = "requested"
+implementer = "codex"
+reviewer = ""
+verdict = "pending"
+requested_scope = "Skeptical behavioral review after focused coverage, mutation, strict checkpoint continuation, and real Lightning lifecycle completion."
+reviewed_modules = [
+  "src/emperor/layers/__init__.py",
+  "src/emperor/layers/_composition/__init__.py",
+  "src/emperor/layers/_composition/gate.py",
+  "src/emperor/layers/_composition/residual/__init__.py",
+  "src/emperor/layers/_composition/residual/base.py",
+  "src/emperor/layers/_composition/residual/config.py",
+  "src/emperor/layers/_composition/residual/pairwise.py",
+  "src/emperor/layers/_composition/residual/validation.py",
+  "src/emperor/layers/_composition/residual/variants/__init__.py",
+  "src/emperor/layers/_composition/residual/variants/additive.py",
+  "src/emperor/layers/_composition/residual/variants/attention.py",
+  "src/emperor/layers/_composition/residual/variants/weighted.py",
+  "src/emperor/layers/_composition/residual/variants/weighted_blend.py",
+  "src/emperor/layers/_config.py",
+  "src/emperor/layers/layer.py",
+  "src/emperor/layers/monitoring/__init__.py",
+  "src/emperor/layers/monitoring/callbacks.py",
+  "src/emperor/layers/monitoring/diagnostics.py",
+  "src/emperor/layers/_options.py",
+  "src/emperor/layers/recurrent.py",
+  "src/emperor/layers/stack.py",
+  "src/emperor/layers/state.py",
+  "src/emperor/layers/_support.py",
+  "src/emperor/layers/_validation.py",
+]
+focused_tests = [
+  "tests/unit/test_layer.py",
+  "tests/unit/test_layer_attention_residual.py",
+  "tests/unit/test_layer_attention_residual_validator_adapter.py",
+  "tests/unit/test_layer_behavioral_contracts.py",
+  "tests/unit/test_layer_controller_monitor.py",
+  "tests/unit/test_layer_gate_validator.py",
+  "tests/unit/test_layer_monitor_mutation_contracts.py",
+  "tests/unit/test_layer_residual_variants.py",
+  "tests/unit/test_layer_runtime_mutation_contracts.py",
+  "tests/unit/test_layer_stack.py",
+  "tests/unit/test_layer_stack_validator_adapter.py",
+  "tests/unit/test_layer_validation_mutation_contracts.py",
+  "tests/unit/test_layer_validator_adapter.py",
+  "tests/unit/test_recurrent_layer.py",
+  "tests/unit/test_recurrent_layer_monitor.py",
+  "tests/unit/test_recurrent_layer_validator_adapter.py",
+]
+integration_tests = ["tests/integration/test_layer_monitor_lifecycle.py"]
+commands = [
+  "python tools/emperor_test_family.py tests layers",
+  "python tools/emperor_test_family.py coverage layers",
+  "python tools/emperor_test_family.py mutation layers --max-children 4",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_layer_monitor_lifecycle",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
+]
+review_questions = [
+  "Would tests fail if the Layer pipeline changed the order of model execution, memory, normalization, activation, gate, dropout, residual, halting, state mutation, or output handling?",
+  "Would tests fail if any activation or residual mode changed its exact equation, initialization, disabled identity, dtype, device, gradient, or optimizer-update behavior?",
+  "Would tests fail if LayerGate changed multiplier versus addition semantics, optional activation behavior, plain-state adaptation, output validation, shape ownership, or nested-controller restrictions?",
+  "Would tests fail if LayerStack changed one-layer and multi-layer topology, rectangular dimension transitions, ModelConfig wrapper handling, output-pipeline suppression, last-layer bias precedence, or iteration behavior?",
+  "Would tests fail if shared and per-layer gate, halting, or memory controllers were mixed, rebuilt instead of shared, assigned stale dimensions, leaked across samples, or accumulated the wrong exact output and loss?",
+  "Would tests fail if RecurrentLayer changed max-step execution, early stopping, feature-last rank handling, context-state preservation, controller order, normalization position, recurrent loss accumulation, or restoration of the caller halting state?",
+  "Would tests fail if train/eval dropout, batch-size-one and multi-sample behavior, leading dimensions, float64, non-contiguous inputs, or per-sample isolation regressed?",
+  "Do strict state_dict and Adam optimizer round trips prove exact continuation for trainable LayerStack and RecurrentLayer compositions with real gates, residuals, normalization, and nested linear modules?",
+  "Would tests fail for every required field, invalid type, boundary, malformed nested config, unsupported option, dimension mismatch, spatial restriction, candidate shape, and exact owner-path exception contract?",
+  "Does the real Trainer lifecycle prove exact controller and recurrent metrics, parameter updates, cadence, TensorBoard histogram and heatmap emission, repeated setup, normal cleanup, and exception cleanup?",
+  "Would tests fail if monitoring changed metric equations, thresholds, unbiased variance, norm denominators, malformed-hook no-op behavior, bounded detached history, wrapper keyword handling, or shared-hook deduplication?",
+  "Would tests fail if public lazy exports, owning modules, cache identity, unknown attributes, private LayerGate ownership, or namespace boundaries changed?",
+  "Are any completion claims satisfied only by fake internal collaborators, construction, type, shape, non-None, or does-not-throw assertions rather than exact public behavior?",
+]
+coverage = "1418 statements and 348 branches at 100%"
+mutation = "2146 total; 2144 killed; 2 reviewed equivalent; 0 unreviewed"
+findings = []

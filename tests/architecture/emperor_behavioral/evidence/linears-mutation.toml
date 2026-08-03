@@ -1,0 +1,15 @@
+family = "linears"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation linears --max-children 4"
+total_mutants = 500
+killed_mutants = 498
+surviving_mutants = 2
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.linears._monitoring.callback.xǁLinearMonitorCallbackǁ__build_tracking_contexts__mutmut_26"
+justification = "Replacing False with None is equivalent because include_update_ratio is consumed only by truthiness and both values take the same branch."
+
+[[equivalent]]
+name = "emperor.linears._monitoring.callback.xǁLinearMonitorCallbackǁ__build_tracking_contexts__mutmut_33"
+justification = "Enabling the private bias update-ratio calculation is equivalent because only context.weights.update_ratio is read or emitted; context.bias.update_ratio has no consumer."

@@ -1,0 +1,7 @@
+family = "sampler"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation sampler --max-children 4"
+total_mutants = 1622
+killed_mutants = 1622
+surviving_mutants = 0
+unreviewed_mutants = 0

@@ -1,0 +1,171 @@
+family = "parametric"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation parametric --max-children 4"
+total_mutants = 1997
+killed_mutants = 1956
+surviving_mutants = 41
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__apply_generated_weights__mutmut_10"
+justification = "The mutation alpha-renames every Einstein-summation label in the shared rank-two generated-weight path. Label case has no semantics: each renamed label retains the same operands and output position, so values, shape, dtype, device, and autograd graph are identical."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__apply_generated_weights__mutmut_18"
+justification = "The mutation alpha-renames every Einstein-summation label in the per-sample rank-three generated-weight path. Each renamed label retains the same operands and output position, so the contraction and its autograd graph are exactly identical."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__flatten_vector_skip_mask__mutmut_9"
+justification = "The skip mask has just been reshaped to rank two. Its final axis is therefore both dimension -1 and dimension +1, so the mutated shape lookup returns the same width."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__sample_bias_probabilities_and_indices__mutmut_6"
+justification = "Every real sampler reached by this helper derives routing from the supplied logits and skip mask and does not read the separately forwarded input tensor. Replacing that unused argument with None therefore preserves samples, losses, state, and gradients."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__sample_probabilities_and_indices__mutmut_4"
+justification = "The shared sampler path computes from router logits and the skip mask; the forwarded input parameter is not read by any concrete sampler. Passing None in its place cannot alter probabilities, indices, auxiliary loss, state, or gradients."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__sample_weight_probabilities_and_indices__mutmut_6"
+justification = "Every real weight sampler reached here uses logits and skip mask and ignores the separately forwarded input tensor. Replacing that unused argument with None preserves all observable routing behavior."
+
+[[equivalent]]
+name = "emperor.parametric._layer.xǁParametricLayerǁ__unflatten_vector_skip_mask__mutmut_9"
+justification = "The flattened vector mask is restored with a validated singleton trailing component axis. Changing the inferred size token from -1 to +1 still resolves that same singleton size and produces the identical tensor view."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorMixtureBaseǁ_build_generator__mutmut_4"
+justification = "AdaptiveMixtureValidator requires generator_config.top_k to equal the outer mixture top_k before this method runs. Replacing the explicit override with None therefore retains the already-identical nested value during config merging."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorMixtureBaseǁ_build_generator__mutmut_5"
+justification = "AdaptiveMixtureValidator requires generator_config.num_experts to equal the outer mixture num_experts before construction. A None override leaves that validated identical nested value in place."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorMixtureBaseǁ_build_generator__mutmut_8"
+justification = "Omitting top_k from the override is equivalent because AdaptiveMixtureValidator has already required generator_config.top_k to equal self.top_k; the nested config consequently builds with the same value."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorMixtureBaseǁ_build_generator__mutmut_9"
+justification = "Omitting num_experts from the override is equivalent because AdaptiveMixtureValidator has already required generator_config.num_experts to equal self.num_experts; construction therefore receives the same value."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorMixtureBaseǁ_canonicalize_singleton_generator_routing__mutmut_12"
+justification = "This branch first requires probabilities to be rank one. For a rank-one tensor, unsqueeze(-1) and unsqueeze(+1) both insert dimension 1 and produce the same (batch, 1) view with identical strides, dtype, device, values, and gradient graph."
+
+[[equivalent]]
+name = "emperor.parametric._mixtures.generator.xǁGeneratorWeightsMixtureǁ__compute_outer_product__mutmut_34"
+justification = "The mutation only alpha-renames an Einstein-summation index. The renamed label has the same operand and output occurrences, yielding the exact same outer product and gradient graph."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁ_ParametricDiagnosticsǁrouter_entropy__mutmut_21"
+justification = "The probabilities are explicitly reshaped to rank two immediately before reduction. Dimension -1 and dimension +1 are therefore the same probability axis."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁ_ParametricDiagnosticsǁrouter_entropy__mutmut_31"
+justification = "The normalized probability tensor is rank two by construction. Summing entropy terms over dimension -1 or +1 reduces the same final probability axis."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁ_ParametricDiagnosticsǁutilization__mutmut_51"
+justification = "The normalized dense-mass tensor is rank two by construction. Reducing on dimension -1 or +1 therefore addresses the same expert axis and returns the same normalization."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_28"
+justification = "ParametricSlot has only weight and bias, and sample_for deliberately maps every non-weight value to the bias sample. The mutated non-weight label therefore selects the same bias record."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_32"
+justification = "ParametricSlot has only weight and bias. Both sample_for and the parameter-mixture selector distinguish weight explicitly and map every non-weight value to their bias branch, so the mutated non-weight label selects the same bias sample and bias mixture."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_33"
+justification = "The parameter-mixture selector maps weight explicitly and every other slot to the bias mixture. Replacing the bias label with another non-weight string still selects the identical bias object."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_43"
+justification = "A real LightningModule always defines the logger property, including when its value is None. The changed getattr fallback is therefore unreachable and experiment resolution is identical."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_50"
+justification = "A real LightningModule always exposes global_step through Lightning's trainer attachment. The mutated getattr fallback is never selected on the supported lifecycle path."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_53"
+justification = "A real LightningModule always exposes global_step through Lightning's trainer attachment. Altering only the absent-attribute fallback cannot change supported callback behavior."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__emit_observation__mutmut_56"
+justification = "The callback receives a real LightningModule whose global_step attribute is always present. The mutation changes only an unreachable default value."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__num_experts__mutmut_10"
+justification = "The changed getattr default is immediately followed by `or 0`. Both a missing value defaulted to None and one defaulted to zero consequently produce the same integer zero."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__should_sample__mutmut_10"
+justification = "The supported callback input is a real LightningModule, which always defines global_step. The mutation changes only the fallback used when that required Lightning attribute is absent."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__should_sample__mutmut_4"
+justification = "Real LightningModule instances always expose global_step. Replacing the absent-attribute fallback cannot alter cadence decisions on any supported callback lifecycle."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__should_sample__mutmut_7"
+justification = "The callback contract supplies a real LightningModule with global_step present, so the mutated getattr default is unreachable and sampling cadence is unchanged."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__track_router_entropy__mutmut_23"
+justification = "Calling getattr(mixture, \"top_k\", None) and omitting its optional default both return the same top_k on supported mixtures, because every concrete Parametric mixture defines that required attribute. The missing-attribute behavior is outside the callback's accepted collaborator contract."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__track_utilization_heatmap__mutmut_3"
+justification = "The OR-to-AND mutation only continues when exactly one prerequisite is absent. With no utilization, history remains empty and rendering returns None; with no experiment, image emission finds no callable add_image and returns false. Both paths remain observable no-ops."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__wrap_forward__mutmut_26"
+justification = "The observation key is unconditionally inserted immediately before the try block and can only be removed by this finally block. Calling pop without a default therefore removes the same existing entry and cannot raise on a reachable execution."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__wrap_forward__mutmut_6"
+justification = "Sampled forwards now unconditionally remove their observation in finally, while unsampled forwards never insert one. No stale entry exists for the unsampled cleanup to remove, so mutating its lookup key has no state or output effect."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__wrap_sampling_methods__mutmut_10"
+justification = "_ParametricObservation.set_sample distinguishes weight explicitly and maps every non-weight label to the bias field. The mutated non-weight label therefore stores the same bias sample."
+
+[[equivalent]]
+name = "emperor.parametric._monitoring.xǁParametricLayerMonitorCallbackǁ__wrap_sampling_methods__mutmut_11"
+justification = "_ParametricObservation.set_sample maps all labels other than weight to bias. Replacing the bias label with another non-weight value has the same observable effect."
+
+[[equivalent]]
+name = "emperor.parametric._routing.xǁVectorRouterModelǁcompute_logit_scores__mutmut_12"
+justification = "The mutation only alpha-renames an Einstein-summation index while retaining the same occurrences in both operands and output. Scores and their autograd graph are exactly identical."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_11"
+justification = "validate_dimensions and field-type validation reject every non-positive or non-integer input_dim before this helper. On every value that reaches it the helper returns without using its name argument, so changing that string is unobservable."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_12"
+justification = "Earlier dimension and field validation guarantees a positive integer input_dim. The name string is read only on the now-unreachable error branch, so its mutation cannot affect accepted or rejected configurations."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_13"
+justification = "All invalid output_dim values are rejected by the preceding validators. For every reachable positive integer the helper does not inspect its name argument, making the changed diagnostic name exact-equivalent."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_17"
+justification = "The preceding field and dimension checks reject every invalid output_dim. On all reachable positive integers the helper never reads the diagnostic name, so changing that name cannot alter behavior."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_18"
+justification = "Earlier validation guarantees output_dim is a positive integer before this call. The mutated string is used only by an unreachable helper error branch and is therefore unobservable."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate__mutmut_7"
+justification = "validate_dimensions and field-type checks run first and reject every invalid input_dim. The positive-integer helper does not read its name argument for valid values, so mutating that diagnostic string is exact-equivalent."
+
+[[equivalent]]
+name = "emperor.parametric._validation.xǁParametricLayerValidatorǁvalidate_forward_inputs__mutmut_11"
+justification = "The immediately preceding rank check requires input_batch to be rank two. Its feature axis is consequently both shape[-1] and shape[+1], so the dimension comparison is unchanged."

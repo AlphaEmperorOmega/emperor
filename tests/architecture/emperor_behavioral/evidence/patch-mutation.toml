@@ -1,0 +1,7 @@
+family = "patch"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation patch --max-children 4"
+total_mutants = 192
+killed_mutants = 192
+surviving_mutants = 0
+unreviewed_mutants = 0

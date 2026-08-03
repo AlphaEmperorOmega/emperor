@@ -1,0 +1,49 @@
+family = "adaptive_parameters"
+result = "fail"
+command = "python tools/emperor_test_family.py coverage adaptive_parameters"
+generated_at = "2026-07-28T18:57:50+02:00"
+coverage_data_completed_at = "2026-07-28T18:47:19+02:00"
+provenance = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-provenance.toml"
+environment = "CPU, Python 3.13.12, Torch 2.12.0+cu130, Lightning 2.6.5, coverage 7.15.1"
+focused_test_files = 26
+integration_test_files = 1
+focused_tests = 395
+family_tests = 398
+integration_tests = 3
+integration_result = "pass"
+statements = 99.2393509127789
+branches = 95.96774193548387
+combined = 98.72013651877133
+statement_count = 1972
+covered_statements = 1957
+missing_statements = 15
+branch_count = 372
+covered_branches = 357
+missing_branches = 15
+fail_under = 100
+exit_code = 2
+historical_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-coverage.toml"
+historical_evidence_sha256 = "152de1ed6153e66c32a30ee7c8c3887f676dfa9f7522ab53897ba900a83fe4a4"
+historical_disposition = "Preserved unchanged; its 294-test, 1,785-statement, 298-branch scope predates AP-I01, AP-I02, and the current 54-module manifest."
+excluded_integration_test = "tests/integration/test_checkpoint_continuation.py"
+excluded_integration_reason = "The test exercises only the non-adaptive linears/linear Model Package and maps to no adaptive mutated function; it is not current adaptive checkpoint evidence."
+
+[[gap]]
+path = "src/emperor/augmentations/adaptive_parameters/_grouping.py"
+statement_count = 105
+missing_statements = 12
+branch_count = 42
+missing_branches_count = 12
+combined_coverage = 83.6734693877551
+missing_lines = [37, 42, 49, 78, 90, 94, 99, 104, 115, 145, 174, 237]
+missing_branches = ["36->37", "41->42", "48->49", "76->78", "89->90", "93->94", "98->99", "103->104", "112->115", "144->145", "173->174", "235->237"]
+
+[[gap]]
+path = "src/emperor/augmentations/adaptive_parameters/_validation.py"
+statement_count = 204
+missing_statements = 3
+branch_count = 94
+missing_branches_count = 3
+combined_coverage = 97.98657718120805
+missing_lines = [65, 76, 445]
+missing_branches = ["64->65", "75->76", "444->445"]

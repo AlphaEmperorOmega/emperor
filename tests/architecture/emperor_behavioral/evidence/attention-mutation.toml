@@ -1,0 +1,148 @@
+family = "attention"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation attention --max-children 8"
+cache_mode = "fresh full run after clearing all registered Attention mutant and stats cache files"
+total_mutants = 3765
+killed_mutants = 3730
+surviving_mutants = 35
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.attention._validation.xǁMultiHeadAttentionValidatorǁvalidate_runtime_tensors__mutmut_35"
+justification = "The mutation checks the second validated batch size instead of the first. The immediately preceding equality check proves that query, key, and value batch sizes are identical, so either index has the same value and rejects the same zero batch."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__resolve_causal_attention_mask__mutmut_5"
+justification = "This mutation changes only the intermediate dtype supplied while generating a causal mask. The resolver immediately canonicalizes every generated mask to the runtime query dtype, so the public mask values, dtype, device, forward result, and gradients are identical."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__resolve_causal_attention_mask__mutmut_6"
+justification = "This mutation changes only the intermediate device supplied while generating a causal mask. The resolver immediately canonicalizes every generated mask to the runtime query device, so the public mask values, dtype, device, forward result, and gradients are identical."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__generate_causal_mask__mutmut_5"
+justification = "Generated causal masks contain only zero and negative infinity and are immediately canonicalized by the public resolver to the runtime query dtype and device. Altering the optional intermediate dtype default therefore leaves every public value, metadata field, and gradient unchanged."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__generate_causal_mask__mutmut_6"
+justification = "Generated causal masks contain only zero and negative infinity and are immediately canonicalized by the public resolver to the runtime query dtype and device. Altering the optional intermediate device default therefore leaves every public value, metadata field, and gradient unchanged."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__generate_causal_mask__mutmut_9"
+justification = "Omitting the explicit intermediate dtype changes neither causal-mask values nor supported behavior because the public resolver immediately converts the result to the runtime query dtype. Float64, bfloat16, and meta-device propagation tests establish the final contract."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__generate_causal_mask__mutmut_10"
+justification = "Omitting the explicit intermediate device changes neither causal-mask values nor supported behavior because the public resolver immediately moves the result to the runtime query device. The final device contract is exercised directly, including meta-device propagation."
+
+[[equivalent]]
+name = "emperor.attention._ops.masking.xǁMaskǁ__validate_attention_mask__mutmut_2"
+justification = "On the public resolver path, causal attention with no supplied mask generates a mask before this validator, non-causal attention may validly have no mask, and a supplied mask is already present. The mutated causal-presence condition is therefore redundant for every reachable public input."
+
+[[equivalent]]
+name = "emperor.attention._variants.self_attention.processing.xǁSelfAttentionProcessorǁ__compute_masked_attention_weights__mutmut_26"
+justification = "The mutation changes the temporary finite fill value used only for fully masked rows. Softmax of any row whose entries are all the same is uniform, and the next operation masks every entry back to exact zero; other rows, dropout RNG use, outputs, and gradients are unchanged."
+
+[[equivalent]]
+name = "emperor.attention._variants.self_attention.validation.xǁSelfAttentionValidatorǁvalidate_forward_inputs__mutmut_1"
+justification = "The delegated base forward validator does not inspect its model argument; it validates only query, key, value, and masks. Mutating that unused forwarded argument cannot affect acceptance, errors, outputs, state, or gradients."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.monitoring.xǁ_MixtureOfAttentionHeadsMonitorAdapterǁcanonicalize__mutmut_1"
+justification = "The mutation can differ only for a rank-five attention tensor with zero heads. Public construction requires num_heads to be a positive integer, and real mixture forwards emit rank-three captured weights, so no supported monitor lifecycle can reach the differing case."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.processing.xǁMixtureOfAttentionHeadsProcessorǁ__compute_masked_attention_weights__mutmut_26"
+justification = "The mutation changes the temporary finite fill value used only for fully masked rows. Softmax of an all-equal row remains uniform and the next operation masks all entries to exact zero; non-masked rows, dropout RNG use, outputs, and gradients are identical."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.projection.xǁMixtureOfAttentionHeadsProjectorǁ_build_output_model__mutmut_4"
+justification = "MixtureOfExpertsReduce unconditionally forces its nested routing initialization mode to DISABLED. Changing the redundant routing-initialization override supplied by this builder therefore constructs the same reducer with the same parameters, state, and behavior."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.projection.xǁMixtureOfAttentionHeadsProjectorǁ_build_output_model__mutmut_7"
+justification = "The output reducer itself unconditionally replaces routing initialization with DISABLED. Omitting the redundant override at this call site consequently builds the identical reducer and cannot alter outputs, parameters, state-dict keys, or gradients."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.projection.xǁMixtureOfAttentionHeadsProjectorǁ_compute_expert_indices__mutmut_30"
+justification = "The sampler is invoked without a skip mask and every concrete sampler therefore returns None for the sampled skip mask. The mutation stores that same None, and successful output projection clears the transient routing state. Failed forwards are terminal for that model instance."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.reshaping.xǁMixtureOfAttentionHeadsReshaperǁreshape_qkv_for_attention__mutmut_12"
+justification = "The mutation changes redundant malformed-input validation inside a private reshaper. Public forward validates runtime tensors and static-source combinations before projection and reshaping, so all supported inputs produce the same tensors and all malformed public inputs fail earlier with the same contract errors."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.reshaping.xǁMixtureOfAttentionHeadsReshaperǁreshape_qkv_for_attention__mutmut_13"
+justification = "The differing branch belongs to direct malformed calls to a private reshaper. Every public forward has already validated dimensions and static-source state before this method, making the internal check redundant for the supported interface while preserving all valid values and gradients."
+
+[[equivalent]]
+name = "emperor.attention._variants.mixture.validation.xǁMixtureOfAttentionHeadsValidatorǁvalidate_forward_inputs__mutmut_1"
+justification = "The shared forward validator reads query, key, value, and masks but never reads the separately forwarded model argument. Replacing that unused argument is unobservable for every accepted and rejected public input."
+
+[[equivalent]]
+name = "emperor.attention._variants.independent.validation.xǁIndependentAttentionValidatorǁvalidate_forward_inputs__mutmut_1"
+justification = "The shared forward validator does not inspect its model parameter and validates only the runtime tensors and masks. Mutating that unused delegated argument cannot change any public validation result or execution."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_5"
+justification = "A mixture's specialized adapter is needed when attaching the capture hook, but the captured real mixture weights are rank three and canonicalization then delegates to the default adapter. Re-resolving or selecting the same adapter in the tracking context yields identical metrics."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_9"
+justification = "Real captured mixture weights are rank three, for which the mixture adapter delegates to the default canonicalizer. The mutated adapter selection therefore produces the same canonical probabilities, entropy, maximum probability, dead-head count, and lifecycle state."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_14"
+justification = "Every attachable real attention module defines num_heads and construction validates it as a positive integer. The changed missing-attribute fallback is unreachable and also collapses to zero through the following `or 0` on fabricated missing-attribute objects."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_17"
+justification = "Public attention construction guarantees a present, positive num_heads value before a callback can attach. Altering only the fallback for a fabricated collaborator without that required attribute cannot change a supported lifecycle."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_20"
+justification = "All real AttentionBase implementations expose the validated positive num_heads field. The mutation affects only a missing or false attribute state that cannot arise for an attachable production attention module."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_21"
+justification = "The callback attachment contract supplies a constructed attention module whose num_heads is present and strictly positive. The changed absent-attribute fallback is therefore unreachable and all real metrics remain identical."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_25"
+justification = "Every built attention module defines dropout_probability after configuration validation. Changing the fallback used only when that required attribute is absent cannot affect configured dropout reporting or any real callback lifecycle."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_28"
+justification = "The callback receives a concrete attention module with a validated dropout_probability field. The mutation changes only an unreachable missing-attribute default, leaving the emitted configured dropout metric identical."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_31"
+justification = "All supported attention variants expose dropout_probability as part of their constructed runtime state. Altering the absent-field fallback cannot change attachment, emitted values, or cleanup for a real module."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_32"
+justification = "For real rank-three mixture captures, the specialized adapter canonicalizes through the default implementation. The mutated adapter value consequently computes the same exact monitoring statistics and does not affect hook lifecycle behavior."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_43"
+justification = "A real LightningModule always defines the logger property, including when its value is None. The mutation changes only an absent-attribute fallback that is unreachable during the required real Trainer lifecycle."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_62"
+justification = "A real LightningModule exposes global_step through the Lightning Trainer lifecycle. The changed getattr fallback is never selected for a supported callback invocation, so cadence and emitted step metadata are unchanged."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_65"
+justification = "The callback contract uses a real Trainer-attached LightningModule, which always has global_step. Mutating only the default for a missing attribute cannot affect supported sampling or emission behavior."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.callback.xǁAttentionMonitorCallbackǁ__build_tracking_context__mutmut_68"
+justification = "LightningModule always provides global_step on the real lifecycle path exercised by this callback. The altered absent-attribute fallback is unreachable and cannot change any observation or metric."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.diagnostics.x__resolve_attention_monitor_adapter__mutmut_4"
+justification = "The mutation changes a missing adapter attribute from None to the same default singleton that the next expression selects for None. Both forms therefore resolve to the identical adapter object before canonicalization."
+
+[[equivalent]]
+name = "emperor.attention._monitoring.diagnostics.xǁ_AttentionDiagnosticsǁapproximate_attention_weights__mutmut_58"
+justification = "The mutation changes the temporary finite fill for fully masked rows from 0.0 to 1.0. Every element in each affected row remains equal, so softmax yields the same uniform intermediate values, and the immediately following masked_fill overwrites the entire row with exact zeros; partially masked rows, metrics, outputs, and gradients are unchanged."

@@ -1,0 +1,49 @@
+family = "halting"
+status = "requested"
+implementer = "codex"
+reviewer = ""
+verdict = "pending"
+requested_scope = "Skeptical behavioral review after focused coverage, mutation, and real Lightning lifecycle completion."
+reviewed_modules = [
+  "src/emperor/halting/__init__.py",
+  "src/emperor/halting/base.py",
+  "src/emperor/halting/_config.py",
+  "src/emperor/halting/monitoring/__init__.py",
+  "src/emperor/halting/monitoring/callback.py",
+  "src/emperor/halting/monitoring/diagnostics.py",
+  "src/emperor/halting/monitoring/tracking.py",
+  "src/emperor/halting/_variants/__init__.py",
+  "src/emperor/halting/_variants/soft.py",
+  "src/emperor/halting/_variants/stick_breaking.py",
+  "src/emperor/halting/_validation.py",
+]
+focused_tests = [
+  "tests/unit/test_halting.py",
+  "tests/unit/test_halting_interface.py",
+  "tests/unit/test_halting_monitor.py",
+  "tests/unit/test_halting_regressions.py",
+  "tests/unit/test_halting_validator.py",
+]
+integration_tests = ["tests/integration/test_halting_monitor_lifecycle.py"]
+commands = [
+  "python tools/emperor_test_family.py tests halting",
+  "python tools/emperor_test_family.py coverage halting",
+  "python tools/emperor_test_family.py mutation halting --max-children 4",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src python -m unittest tests.integration.test_halting_monitor_lifecycle",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
+]
+review_questions = [
+  "Would tests fail if either strategy changed its exact continuation, halt-probability, accumulation, threshold-boundary, or ponder-cost equations?",
+  "Would tests fail if halted samples changed on later stick-breaking steps or if batch and leading dimensions leaked across samples?",
+  "Would tests fail if RAW and ACCUMULATED hidden-state modes selected the wrong gate input?",
+  "Would tests fail if dedicated soft-halting dropout moved away from the pre-output projection, ignored train/eval mode, or conflated its probability with the gate stack dropout?",
+  "Would tests fail if padding masks changed dtype semantics, all-padding loss became non-finite, non-contiguous tensors failed, or float64 state was lost?",
+  "Would tests fail if gate initialization, gradients, optimizer updates, strict state restoration, or output-gate parameter ownership changed?",
+  "Would tests fail if tracker metrics, dynamic buffers, attachment idempotence, atomic rollback, detach cleanup, or strict checkpoint loading changed?",
+  "Does the real Trainer lifecycle prove cadence, scalar values, bounded history, TensorBoard histograms and heatmaps, empty payload behavior, parameter updates, and exception cleanup?",
+  "Would tests fail for malformed configuration, nested controllers, invalid hidden ranks or dimensions, state geometry mismatches, and invalid padding masks?",
+  "Are any tests mock-dependent or satisfied only by construction, type, shape, non-None, or does-not-throw assertions?",
+]
+coverage = "624 statements and 150 branches at 100%"
+mutation = "1092 total; 1092 killed; 0 surviving; 0 unreviewed"
+findings = []

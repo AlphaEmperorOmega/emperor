@@ -1,0 +1,135 @@
+family = "experts"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation experts --max-children 8"
+total_mutants = 1683
+killed_mutants = 1651
+surviving_mutants = 32
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.experts._routing.capacity.xǁExpertCapacityHandlerǁ__maybe_apply_capacity_limit__mutmut_1"
+justification = "Every supported caller supplies the randomize behavior explicitly: token selection passes its training flag, while routing-position selection supplies the stored token permutation. If no permutation exists, routing-position selection returns before this helper. The changed private default is therefore never observed."
+
+[[equivalent]]
+name = "emperor.experts._routing.capacity.xǁExpertCapacityHandlerǁ__compute_expert_capacity__mutmut_4"
+justification = "When the original early-retention comparison succeeds, ceil(total_assignments / num_experts * capacity_factor) is already at least assigned_tokens_count. Taking the calculation branch therefore yields the same capacity and the outer caller still returns every assignment without shuffling."
+
+[[equivalent]]
+name = "emperor.experts._routing.capacity.xǁExpertCapacityHandlerǁ__compute_expert_capacity__mutmut_10"
+justification = "Replacing max(1, total_assignments) with max(2, total_assignments) can differ only below two assignments. Validated public calls have a non-empty batch and positive top_k, so zero assignments is unreachable; with one assignment the minimum capacity remains one and the sole assignment is retained by both implementations."
+
+[[equivalent]]
+name = "emperor.experts._routing.capacity.xǁExpertCapacityHandlerǁ__compute_expert_capacity__mutmut_11"
+justification = "At equality the calculated ceiling is exactly assigned_tokens_count. Changing the fast-path comparison from >= to > therefore only takes an algebraically equivalent calculation branch, after which the caller retains every assignment without shuffling."
+
+[[equivalent]]
+name = "emperor.experts._layers.reduce.xǁMixtureOfExpertsReduceǁforward__mutmut_13"
+justification = "MixtureOfExpertsReduce._split_tokens_per_expert does not read its probabilities parameter. Passing None instead of the already validated tensor cannot change records, output values, state, loss, or gradients."
+
+[[equivalent]]
+name = "emperor.experts._layers.reduce.xǁMixtureOfExpertsReduceǁ__compute_expert_mixture__mutmut_3"
+justification = "Reduce expert outputs are guaranteed to be rank-two tensors shaped (routed_rows, output_dim), so size(-1) and size(+1) identify the same feature axis."
+
+[[equivalent]]
+name = "emperor.experts._layers.reduce.xǁMixtureOfExpertsReduceǁ__should_restore_routing_order__mutmut_1"
+justification = "For every validated sparse route, top_k differs from num_experts and routing_positions is present; for every validated dense route, top_k equals num_experts and routing_positions is absent. Replacing the conjunction with either correlated predicate selects the same branch."
+
+[[equivalent]]
+name = "emperor.experts._layers.reduce.xǁMixtureOfExpertsReduceǁ__should_return_expert_outputs_without_reduction__mutmut_1"
+justification = "Reduce forces compute_expert_mixture_flag true. For top_k greater than one both versions reduce; for top_k equal to one, reshape to a singleton expert axis followed by sum is the exact identity for values, shape, and gradients."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_maybe_compute_expert_indices__mutmut_2"
+justification = "Public validation rejects external probabilities or indices when the layer owns routing, and non-layer-owned modes return before sampler use. Replacing the routing-mode comparison cannot alter a reachable validated sampler call."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_maybe_compute_expert_indices__mutmut_7"
+justification = "The preceding guard returns whenever either external routing argument is non-None. On the only reachable sampler path probabilities is already proven to be None, so replacing it with literal None is identical."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_maybe_compute_expert_indices__mutmut_8"
+justification = "The preceding guard returns whenever either external routing argument is non-None. On the only reachable sampler path indices is already proven to be None, so replacing it with literal None is identical."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ__build_routed_expert_inputs__mutmut_25"
+justification = "The routed builder is used only when top_k differs from num_experts. In that sparse branch weighting selects flattened probabilities by routing position and never reads expert_index, which is used only by the mutually exclusive dense branch."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ__build_routed_expert_inputs__mutmut_32"
+justification = "The routed builder is used only when top_k differs from num_experts. Its weighting path is determined by routing positions and does not inspect expert_index, so the replaced expert index has no observable effect."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_get_expert_token_indices__mutmut_9"
+justification = "The summation branch is reached only for rank-two routing indices; valid rank-one top-k-one indices take the separate vector branch. On the summation branch dim=-1 and dim=+1 therefore reduce the same routing-width axis."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_get_expert_routing_positions__mutmut_10"
+justification = "nonzero() on the flattened routing mask always produces a rank-two (matches, 1) tensor. squeeze(-1) and squeeze(+1) remove the same singleton second axis."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_compute_experts__mutmut_24"
+justification = "torch.cat defaults to dim=0, so omitting the explicit dim=0 when concatenating expert row batches preserves the exact tensor and autograd graph."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ_compute_experts__mutmut_29"
+justification = "Concatenated expert outputs are rank two. size(-1) and size(+1) therefore return the same output feature width used by dense reordering."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ__append_expert_output__mutmut_13"
+justification = "torch.cat defaults to dim=0. Omitting the explicit dim=0 preserves output values, shape, dtype, device, and gradient connectivity."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ__append_sample_indices__mutmut_7"
+justification = "torch.cat defaults to dim=0. Omitting the explicit dim=0 on one-dimensional routing-position tensors performs exactly the same concatenation."
+
+[[equivalent]]
+name = "emperor.experts._layers.mixture.xǁMixtureOfExpertsǁ__compute_expert_mixture__mutmut_3"
+justification = "Expert outputs are generated as rank-two tensors shaped (routed_rows, output_dim). Their final axis is therefore both dimension -1 and dimension +1."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_reduce_forward_inputs__mutmut_12"
+justification = "typing.cast returns its value unchanged at runtime and ignores the type argument. cast(Tensor, probabilities) and cast(None, probabilities) therefore produce the same object."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_input_batch__mutmut_16"
+justification = "The immediately preceding rank check requires input_batch to be rank two. shape[-1] and shape[+1] therefore address the same feature axis."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_unique_expert_indices__mutmut_7"
+justification = "Sorting is reached only for validated sparse top-k routing, where indices is necessarily rank two. Sorting dim=-1 and dim=+1 sorts the same routing-width axis."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_unique_expert_indices__mutmut_15"
+justification = "The adjacent-index comparison is rank two with batch and routing-adjacency axes. Reducing any(dim=-1) and any(dim=+1) therefore produces the same duplicate-row mask."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_routing_width__mutmut_7"
+justification = "For top_k equal to one, rank-one tensors short-circuit before the indexed shape is read; every remaining candidate is rank two, where shape[-1] and shape[+1] identify the same width axis."
+
+[[equivalent]]
+name = "emperor.experts._validation.mixture.xǁMixtureOfExpertsValidatorǁvalidate_routing_width__mutmut_15"
+justification = "For top_k greater than one the validator requires a rank-two routing tensor. Its routing width is both shape[-1] and shape[+1]."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_7"
+justification = "For every validated mirrored stack, the input-to-hidden and hidden-to-output boundary validations remain unchanged. This mutation only adds repeated hidden-to-hidden validations. Mixture configuration validation is pure and idempotent, hidden-to-hidden always satisfies the only equality-sensitive dimension rule, and the unchanged final boundary already validates the hidden router input. Success, errors, configuration state, and RNG state are identical."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_8"
+justification = "For every validated mirrored stack, the input-to-hidden and hidden-to-output boundary validations remain unchanged. This mutation only removes repeated hidden-to-hidden validations. The homogeneous leaf configuration is already validated at both boundaries; hidden-to-hidden cannot uniquely fail the capacity equality rule, and its router input is covered by the unchanged final boundary."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_16"
+justification = "When an input projection is required, boundary_layer_count is immediately overwritten with 2. Otherwise, a one-layer stack has no hidden repetitions under either value; for a multi-layer stack no projection implies input_dim equals hidden_dim, so the mutation only removes one duplicate hidden-to-hidden validation. The unchanged boundary validation covers the same effective dimension."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_19"
+justification = "This changes only the number of repeated hidden-to-hidden validations after the unchanged input-to-hidden projection. A two-layer stack has no hidden repetition under either version; in deeper stacks the mutant removes one pure duplicate, while the final hidden-to-output validation remains unchanged."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_21"
+justification = "The mutant only adds repeated hidden-to-hidden validation calls. Those calls are pure, consume no RNG, preserve the supplied configuration, and cannot introduce a distinct failure beyond the unchanged boundary validation for the same effective hidden input."
+
+[[equivalent]]
+name = "emperor.experts._validation.model.xǁMixtureOfExpertsModelValidatorǁ_resolve_layer_dimensions__mutmut_26"
+justification = "The predicates differ only for a two-layer stack. If input_dim equals hidden_dim, both final input values are identical. If they differ and capacity is enabled, both versions already fail at the unchanged input-to-hidden projection; when capacity is disabled, no remaining mixture contract compares effective input and output dimensions, sampler validation overrides the router input with the effective dimension, and the real stack later builds its correct hidden-to-output layer."
