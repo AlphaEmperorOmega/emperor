@@ -11,7 +11,8 @@ flag "--profile <profile>" default="cpu" {
   choices "cpu" "cuda" "cuda-legacy"
 }
 '''
-run = "python tools/emperor_dev.py setup --profile {{ usage.profile }}"
+run = 'python tools/emperor_dev.py setup --profile "${usage_profile?}"'
+run_windows = 'python tools/emperor_dev.py setup --profile "%usage_profile%"'
 
 [tasks.dev]
 description = "Set up and start the Workbench"
@@ -20,7 +21,8 @@ flag "--profile <profile>" default="cpu" {
   choices "cpu" "cuda" "cuda-legacy"
 }
 '''
-run = "python tools/emperor_dev.py dev --profile {{ usage.profile }}"
+run = 'python tools/emperor_dev.py dev --profile "${usage_profile?}"'
+run_windows = 'python tools/emperor_dev.py dev --profile "%usage_profile%"'
 
 [tasks."workbench:start"]
 description = "Start the Workbench backend and frontend"
