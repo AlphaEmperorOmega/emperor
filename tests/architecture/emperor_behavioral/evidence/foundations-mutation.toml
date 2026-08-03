@@ -1,0 +1,7 @@
+family = "foundations"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation foundations --max-children 4"
+total_mutants = 455
+killed_mutants = 455
+surviving_mutants = 0
+unreviewed_mutants = 0

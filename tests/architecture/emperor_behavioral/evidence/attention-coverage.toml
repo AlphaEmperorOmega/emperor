@@ -1,0 +1,11 @@
+family = "attention"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage attention"
+environment = "CPU, Python 3.13, float32, float64, bfloat16, non-contiguous tensors, meta-device propagation, real nested Emperor modules, and real Lightning Trainer lifecycle; CUDA unavailable"
+focused_tests = 410
+skipped_tests = 2
+skip_classification = "CUDA-only matrix cases skipped because compatible CUDA hardware is unavailable; mandatory CPU float32 behavior and applicable CPU float64 and bfloat16 paths passed"
+statements = 100
+branches = 100
+statement_count = 2119
+branch_count = 510

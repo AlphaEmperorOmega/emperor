@@ -1,0 +1,101 @@
+family = "attention"
+status = "approved"
+implementer = "codex"
+reviewer = "Hubble-independent-read-only-re-review"
+verdict = "approved"
+requested_scope = "Independent skeptical behavioral re-review after resolving every finding from the first review and regenerating focused, coverage, and mutation evidence."
+reviewed_modules = [
+  "src/emperor/attention/__init__.py",
+  "src/emperor/attention/_base.py",
+  "src/emperor/attention/_config.py",
+  "src/emperor/attention/monitoring/__init__.py",
+  "src/emperor/attention/monitoring/callback.py",
+  "src/emperor/attention/monitoring/diagnostics.py",
+  "src/emperor/attention/_ops/__init__.py",
+  "src/emperor/attention/_ops/batching.py",
+  "src/emperor/attention/_ops/bias.py",
+  "src/emperor/attention/_ops/masking.py",
+  "src/emperor/attention/_ops/processing.py",
+  "src/emperor/attention/_ops/projection.py",
+  "src/emperor/attention/_ops/reshaping.py",
+  "src/emperor/attention/_ops/zero_attention.py",
+  "src/emperor/attention/_runtime.py",
+  "src/emperor/attention/state.py",
+  "src/emperor/attention/_validation.py",
+  "src/emperor/attention/_variants/__init__.py",
+  "src/emperor/attention/_variants/independent/__init__.py",
+  "src/emperor/attention/_variants/independent/config.py",
+  "src/emperor/attention/_variants/independent/layer.py",
+  "src/emperor/attention/_variants/independent/processing.py",
+  "src/emperor/attention/_variants/independent/projection.py",
+  "src/emperor/attention/_variants/independent/validation.py",
+  "src/emperor/attention/_variants/mixture/__init__.py",
+  "src/emperor/attention/_variants/mixture/bias.py",
+  "src/emperor/attention/_variants/mixture/config.py",
+  "src/emperor/attention/_variants/mixture/layer.py",
+  "src/emperor/attention/_variants/mixture/masking.py",
+  "src/emperor/attention/_variants/mixture/monitoring.py",
+  "src/emperor/attention/_variants/mixture/processing.py",
+  "src/emperor/attention/_variants/mixture/projection.py",
+  "src/emperor/attention/_variants/mixture/reshaping.py",
+  "src/emperor/attention/_variants/mixture/validation.py",
+  "src/emperor/attention/_variants/mixture/zero_attention.py",
+  "src/emperor/attention/_variants/self_attention/__init__.py",
+  "src/emperor/attention/_variants/self_attention/config.py",
+  "src/emperor/attention/_variants/self_attention/layer.py",
+  "src/emperor/attention/_variants/self_attention/processing.py",
+  "src/emperor/attention/_variants/self_attention/projection.py",
+  "src/emperor/attention/_variants/self_attention/validation.py",
+  "src/emperor/attention/monitoring/__init__.py",
+]
+focused_tests = [
+  "tests/unit/test_attention*.py",
+  "tests/unit/test_*attention_validator_adapter.py",
+  "tests/integration/test_attention_monitor_lifecycle.py",
+  "tests/model_packages/test_attention_layout_contract.py",
+  "tests/model_packages/test_attention_real_model_integration.py",
+]
+integration_tests = [
+  "tests/integration/test_attention_monitor_lifecycle.py",
+  "tests/model_packages/test_attention_layout_contract.py",
+  "tests/model_packages/test_attention_real_model_integration.py",
+]
+commands = [
+  "MPLCONFIGDIR=/tmp/matplotlib mise exec -- python tools/emperor_test_family.py tests attention",
+  "MPLCONFIGDIR=/tmp/matplotlib mise exec -- python tools/emperor_test_family.py coverage attention",
+  "MPLCONFIGDIR=/tmp/matplotlib mise exec -- python tools/emperor_test_family.py mutation attention --max-children 8",
+]
+review_questions = [
+  "Would tests fail if any attention variant returned shape-correct zeros, changed exact scaled logits, softmax probabilities, projections, relative-position terms, output values, state, or auxiliary losses?",
+  "Would tests fail if boolean, additive, causal, padding, bias-token, zero-attention, static-source, and combined masks changed values, precedence, geometry, dtype, device, or fully-masked-row behavior?",
+  "Do both core attention and approximate monitoring prove fully masked rows are exact zero and finite while partially masked rows retain their hand-calculated values?",
+  "Would tests fail for batch size one and multiple samples, rectangular target/source lengths, batch-first and sequence-first layouts, leading dimensions, non-contiguous tensors, and cross-sample contamination?",
+  "Would tests fail if separate, combined, explicit, independent, self, and mixture projection strategies selected the wrong dimensions, parameters, experts, or gradient paths?",
+  "Would tests fail if validation accepted malformed ranks, lengths, batches, masks, devices, static sources, zero batches, invalid configurations, or changed exact exception precedence?",
+  "Does backward prove finite nonzero input and parameter gradients for every active path, absent gradients where disabled, and real optimizer updates with a nonzero learning rate?",
+  "Does strict loading begin from differently seeded parameters and prove restored state, forward output, auxiliary loss, input gradients, and parameter gradients?",
+  "Does the monitoring suite use real Lightning Trainer and TensorBoard logger lifecycles, inspect persisted event payloads at exact cadence, and prove cleanup on normal and exceptional paths?",
+  "Do BERT, GPT, ViT, and cross-package layout integrations execute real model-owned attention behavior rather than spies, mocks, or fake Emperor collaborators?",
+  "Are all 35 surviving mutants exact equivalents under validated invariants, immediate overwrites, unreachable missing-attribute fallbacks, or algebraically identical operations?",
+  "Are any completion claims based only on construction, type, shape, non-None, does-not-throw, mocks, patches, fake internal collaborators, symmetric data, or zero learning rates?",
+  "Does EMPEROR_SOURCE_CHANGES.md contain the actual unified code patches, reasons, and behavioral impact for every modified Attention production file?",
+]
+coverage = "1903 statements and 458 branches at 100%; 390 focused/integration tests passed with 2 classified CUDA skips"
+mutation = "3765 total; 3730 killed; 35 reviewed equivalent; 0 unreviewed"
+findings = []
+prior_findings = [
+  "high: Transformer encoder implicit causal-mask generation used dimension zero unconditionally and broke real batch-first causal BERT when batch and sequence differed.",
+  "medium: Attention coverage, mutation, and ledger evidence became stale after the causal BERT regression.",
+  "medium: broad BERT/GPT/ViT package test files selected as Attention evidence contained unrelated patch-based tests and could not satisfy the completed-family mock scanner.",
+]
+resolved_findings = [
+  "high: approximate attention monitoring produced NaN for fully masked rows; fixed with safe finite-row softmax and exact boolean/additive unit plus real Lightning lifecycle regressions.",
+  "medium: visualization evidence used a fake logger/trainer; replaced with a real Trainer, TensorBoardLogger, SummaryWriter event file, EventAccumulator payload, exact cadence, and cleanup assertions.",
+  "medium: persistence and optimizer evidence was insensitive because loading began from an equal seed and the learning rate was zero; destination state now starts different and restored outputs/losses/input gradients/parameter gradients plus a real nonzero optimizer update are asserted.",
+  "medium: cross-package model integrations were absent from the manifest; BERT, GPT, ViT, and attention layout contract suites are now selected and pass.",
+  "low: the root production-change log undercounted standard and mixture Transformer constructors; corrected from 19/four Transformer constructors to 23/five.",
+  "high re-review: causal mask resolution now follows explicit or inferred Attention layout; an unequal batch/sequence real-layer regression proves implicit/explicit output, loss, input-gradient, parameter-gradient, and causality parity, and real causal BERT forward plus Trainer tests pass.",
+  "medium re-review: a fresh 390-test Attention baseline, fresh 1903-statement/458-branch 100% coverage gate, and cleared-cache execution of all 3765 mutants pass.",
+  "medium re-review: broad package files were replaced in the manifest by a dedicated four-test mock-free BERT/GPT/ViT integration suite covering causal BERT, gradients, and equal-dimension sample isolation.",
+]
+approval = "No unresolved high-, medium-, or low-confidence findings remain. The reviewer independently reproduced the focused and coverage gates, inspected the complete mutation cache and all 35 equivalent classifications, ran the architecture mock scanner with zero violations, ran all eight manifest architecture tests, and verified the literal source-change patches."

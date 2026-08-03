@@ -1,0 +1,15 @@
+family = "layers"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation layers --max-children 4"
+total_mutants = 2146
+killed_mutants = 2144
+surviving_mutants = 2
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.layers._monitoring.callbacks.xǁRecurrentLayerMonitorCallbackǁ__record_recurrent_step__mutmut_12"
+justification = "The hidden tensor is reshaped to exactly two dimensions, (batch, flattened_features), before norm is called. Replacing dim=-1 with dim=+1 therefore selects the same flattened-feature axis for every valid input shape and produces identical values, dtype, device, and gradients."
+
+[[equivalent]]
+name = "emperor.layers._monitoring.callbacks.xǁRecurrentLayerMonitorCallbackǁ__wrap_recurrent_controllers__mutmut_28"
+justification = "The wrapped private recurrent controller always returns the internal _RecurrentState record, whose hidden field is required and cannot be absent. Removing getattr's None default therefore has identical behavior for every valid controller result; malformed results already violate the private controller contract."

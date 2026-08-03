@@ -1,0 +1,7 @@
+family = "memory"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation memory --max-children 4"
+total_mutants = 984
+killed_mutants = 984
+surviving_mutants = 0
+unreviewed_mutants = 0

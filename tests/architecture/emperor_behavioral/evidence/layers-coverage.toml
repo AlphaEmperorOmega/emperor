@@ -1,0 +1,13 @@
+family = "layers"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage layers"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, Lightning Trainer, TensorBoard, Adam checkpoint continuation"
+focused_tests = 220
+statements = 100
+branches = 100
+statement_count = 1418
+branch_count = 348
+
+integration_command = "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_layer_monitor_lifecycle"
+integration_tests = 3
+integration_result = "pass"

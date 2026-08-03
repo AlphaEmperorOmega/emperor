@@ -1,0 +1,9 @@
+family = "foundations"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage foundations"
+environment = "CPU, Python 3.13, float32, real Lightning Trainer, matplotlib"
+focused_tests = 78
+statements = 100
+branches = 100
+statement_count = 520
+branch_count = 182

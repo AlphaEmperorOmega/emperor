@@ -1,0 +1,190 @@
+family = "adaptive_parameters"
+status = "reviewed"
+implementer = "codex-root"
+reviewer = "/root/adaptive_evidence_reviewer"
+verdict = "changes_requested"
+review_date = "2026-07-28T18:54:03+02:00"
+reviewer_independence = "Distinct isolated agent session; reviewer made no repository edits."
+signature_context = "b9454d040a042f147cb3736ed80c3a9515451c14 @ 2026-07-28T18:54:03+02:00"
+transcription_status = "approved"
+transcription_checked_at = "2026-07-28T19:02:08+02:00"
+transcription_ledger_sha256 = "30a49f8c78ad741d7ad9e91d8619f99d99cfca8f6a3f7a1e3d4bb15ed13e7d46"
+transcription_provenance_sha256 = "90bc6281fe4698b3dd808c9e5b5843859b0294eb17a703f01585ba754a9dddc4"
+provenance = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-provenance.toml"
+requested_scope = "Independent skeptical review of the current 54-module adaptive-parameter family after AP-I01 and AP-I02, using the exact 398-test selection, current coverage gaps, qualified mutation-cache verification, adaptive lifecycle tests, persistence evidence gaps, and public Interface contracts."
+coverage = "1,972 statements and 372 branches; 15 statements and 15 branch exits uncovered; 98.72% combined; completion gate failed"
+mutation = "3,055 current names; 3,054 cached killed results reused and one sentinel rerun killed; 0 surviving or unreviewed; full current run not performed and original full-run receipt unavailable"
+focused_test_file_count = 26
+focused_test_count = 395
+integration_test_file_count = 1
+integration_test_count = 3
+family_test_count = 398
+resolved_findings = [
+  "RES-1: Reconciled planning-time 53-module scope to the current 54 modules after AP-I01 added _decay.py.",
+  "RES-2: Removed the unrelated memory validator and generic linears/linear checkpoint continuation from adaptive test scope.",
+  "RES-3: Added equivalent = [] so the zero-survivor mutation receipt satisfies the completion schema.",
+  "RES-4: Reconciled all 84 historical equivalent names without reusing them as current classifications.",
+  "RES-5: Independently matched current scope, manifest, ledger, coverage, mutation-stats, and cache fingerprints.",
+  "RES-6: Independently passed all 398 selected tests, 3 adaptive lifecycle tests, and 25 architecture/public-Interface tests.",
+  "RES-7: Confirmed real Lightning monitoring lifecycle evidence covers updates and normal/exception cleanup.",
+  "RES-8: Confirmed no production source or behavioral test changed; only the evidence manifest has a tracked diff.",
+]
+completion_blockers = [
+  "Cover all 15 missing statements and 15 missing branch exits in separately authorized behavioral-test work.",
+  "Replace the Emperor-owned torch.bmm patch with mock-free behavioral evidence.",
+  "Add literal adaptive state-key and missing continuation evidence in separately authorized test work.",
+  "Obtain explicit acceptance of the qualified mutation-cache provenance or perform a full current run after cheaper blockers are resolved.",
+  "Make the ignored evidence artifacts tracked and durable before publication.",
+]
+
+reviewed_modules = [
+  "src/emperor/augmentations/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_augmentation.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/additive.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/affine.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/gated.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/generator.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/multiplicative.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_config.py",
+  "src/emperor/augmentations/adaptive_parameters/_decay.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/anti.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/combined.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/standard.py",
+  "src/emperor/augmentations/adaptive_parameters/_diagonals/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_linear_adapter.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/diagonal.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/outer_product.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/per_axis.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/top_slice.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_masks/variants/weight_informed.py",
+  "src/emperor/augmentations/adaptive_parameters/monitoring/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/adaptive_parameters.py",
+  "src/emperor/augmentations/adaptive_parameters/_monitoring/weight_banks.py",
+  "src/emperor/augmentations/adaptive_parameters/_options.py",
+  "src/emperor/augmentations/adaptive_parameters/_validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/depth_mapping.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/dual_model.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/hypernetwork.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/layered_weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/low_rank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/single_model.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/soft_weighted_bank.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/validation.py",
+]
+
+focused_tests = [
+  "tests/unit/test_adaptive_generator_validator_base.py",
+  "tests/unit/test_adaptive_parameter_augmentation_validator_adapter.py",
+  "tests/unit/test_adaptive_parameter_behavioral_contracts.py",
+  "tests/unit/test_adaptive_parameter_bias_diagonal_mutation_contracts.py",
+  "tests/unit/test_adaptive_parameter_decay_policy.py",
+  "tests/unit/test_adaptive_parameter_grouping_boundaries.py",
+  "tests/unit/test_adaptive_parameter_grouping_contracts.py",
+  "tests/unit/test_adaptive_parameter_mask_mutation_contracts.py",
+  "tests/unit/test_adaptive_parameter_monitor.py",
+  "tests/unit/test_adaptive_parameter_monitor_mutation_contracts.py",
+  "tests/unit/test_adaptive_parameter_validation_mutation_contracts.py",
+  "tests/unit/test_adaptive_parameter_weight_mutation_contracts.py",
+  "tests/unit/test_augmentation_bias.py",
+  "tests/unit/test_augmentation_depth_mapper.py",
+  "tests/unit/test_augmentation_diagonal.py",
+  "tests/unit/test_augmentation_interface.py",
+  "tests/unit/test_augmentation_mask.py",
+  "tests/unit/test_augmentation_options.py",
+  "tests/unit/test_augmentation_weight.py",
+  "tests/unit/test_augmentations.py",
+  "tests/unit/test_axis_mask_validator_adapter.py",
+  "tests/unit/test_dynamic_bias_validator_adapter.py",
+  "tests/unit/test_dynamic_diagonal_validator_adapter.py",
+  "tests/unit/test_dynamic_weight_validator_adapter.py",
+  "tests/unit/test_weight_bank_monitor_mutation_contracts.py",
+  "tests/unit/test_weight_bank_utilization_monitor.py",
+]
+
+integration_tests = [
+  "tests/integration/test_adaptive_parameter_monitor_lifecycle.py",
+]
+
+commands = [
+  "env PYTHONDONTWRITEBYTECODE=1 MPLCONFIGDIR=/tmp/matplotlib-emperor-ap-i04-independent-review IPYTHONDIR=/tmp/ipython-emperor-ap-i04-independent-review PYTHONPATH=src:tests:. python tools/emperor_test_family.py tests adaptive_parameters -> 398 passed in 26.727s",
+  "env PYTHONDONTWRITEBYTECODE=1 MPLCONFIGDIR=/tmp/matplotlib-emperor-ap-i04-independent-review IPYTHONDIR=/tmp/ipython-emperor-ap-i04-independent-review PYTHONPATH=src:tests:. python -m unittest tests.integration.test_adaptive_parameter_monitor_lifecycle -> 3 passed in 0.463s",
+  "env PYTHONDONTWRITEBYTECODE=1 MPLCONFIGDIR=/tmp/matplotlib-emperor-ap-i04-independent-review IPYTHONDIR=/tmp/ipython-emperor-ap-i04-independent-review PYTHONPATH=src:tests:. python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces -> 25 passed in 18.699s",
+  "Read-only coverage.py report over the 54 manifest modules -> 98.72013651877133%, gate exit 2",
+  "Read-only manifest/source/review/ledger set, fingerprint, mutation-cache, mutation-stats, completion-policy, and durability audits -> findings recorded below",
+]
+
+review_questions = [
+  "Does the manifest exactly cover the current 54-module family and exclude unrelated test scope?",
+  "Would tests fail if augmentation order or disabled-slot identity changed?",
+  "Would every weight, bias, diagonal, and mask strategy fail on changed asymmetric mathematics, shapes, gradients, dtype, device, grouping, or override precedence?",
+  "Do validation tests pin boundary values, non-finite inputs, exact errors, timing, and precedence?",
+  "Do decay tests pin schedule equations, warmup, train/eval counters, root state keys, strict loading, and optimizer continuation?",
+  "Do monitor tests pin discovery, exact metric values and order, tags, cadence, deduplication, detachment, bounded history, repeated setup, and normal and exceptional cleanup?",
+  "Do state and checkpoint tests detect parameter, buffer, state-dict, RNG, gradient, or optimizer continuation changes?",
+  "Would public Interface and architecture contracts detect export ownership or private namespace drift?",
+  "Does current coverage meet 100% statement and branch gates, and are every missing line and branch reported honestly?",
+  "Does mutation evidence truthfully show the current mutant name set, cached-result reuse, sentinel rerun, and zero survivors without treating historical equivalents as current?",
+  "Are any claims based only on construction, type, shape, non-None, does-not-throw, fake Emperor modules, or symmetric data?",
+]
+
+[[findings]]
+id = "AP-I04-R1"
+severity = "high"
+classification = "completion blocker"
+title = "Coverage gate fails"
+evidence = "Current coverage is 98.72013651877133%: _grouping.py misses lines 37, 42, 49, 78, 90, 94, 99, 104, 115, 145, 174, and 237 plus 12 branch exits; _validation.py misses lines 65, 76, and 445 plus 3 branch exits."
+disposition = "Unresolved. Add behavioral tests only in a separately authorized task; keep this family partial."
+
+[[findings]]
+id = "AP-I04-R2"
+severity = "high"
+classification = "completion blocker"
+title = "Focused test violates the mock-free completion policy"
+evidence = "tests/unit/test_adaptive_parameter_grouping_contracts.py:581 patches emperor.augmentations.adaptive_parameters._linear_adapter.torch.bmm. The completion scanner reports exactly one focused mock violation."
+disposition = "Unresolved. Replace the patch-based shape spy only in a separately authorized behavioral-test task."
+
+[[findings]]
+id = "AP-I04-R3"
+severity = "medium"
+classification = "evidence gap"
+title = "Adaptive persistence evidence is incomplete"
+evidence = "Strong current round-trip/Adam evidence exists for all six weight leaves, additive bias/decay, depth mapping, and grouping compatibility, but there is no literal whole-family state-key fingerprint or direct strict state/optimizer continuation for diagonal, mask, and non-additive bias owners. The excluded generic checkpoint integration exercised only linears/linear."
+disposition = "Unresolved. Add literal adaptive state-key and missing continuation contracts only through separately authorized test work."
+
+[[findings]]
+id = "AP-I04-R4"
+severity = "medium"
+classification = "provenance decision"
+title = "Mutation provenance remains qualified"
+evidence = "The current cache has 3,055 unique current names, killed exit codes, exact 398-test stats, and one rerun killed sentinel, but full_current_run_performed is false: 3,054 results were reused without an immutable original command/time/revision receipt."
+disposition = "Unresolved. Require explicit user acceptance of this provenance standard or a full current mutation run after cheaper blockers are resolved."
+
+[[findings]]
+id = "AP-I04-R5"
+severity = "medium"
+classification = "durability decision"
+title = "Evidence is ignored and not durable"
+evidence = "The ledger and current provenance, coverage, mutation, and review receipts all match .gitignore:28 (.scratch/) and are absent from git ls-files."
+disposition = "Unresolved. Force-track these exact artifacts or approve a tracked evidence location before publication."

@@ -1,0 +1,42 @@
+family = "patch"
+status = "requested"
+implementer = "codex"
+reviewer = ""
+verdict = "pending"
+requested_scope = "Skeptical behavioral review after focused coverage, mutation, and real ViT integration completion."
+reviewed_modules = [
+  "src/emperor/patch/__init__.py",
+  "src/emperor/patch/_base.py",
+  "src/emperor/patch/_config.py",
+  "src/emperor/patch/_validation.py",
+  "src/emperor/patch/_variants/__init__.py",
+  "src/emperor/patch/_variants/convolutional.py",
+  "src/emperor/patch/_variants/linear.py",
+]
+focused_tests = [
+  "tests/unit/test_patch_behavior.py",
+  "tests/unit/test_patch_validator.py",
+  "tests/unit/test_transformer_patch.py",
+]
+integration_tests = ["tests/model_packages/vit/linear/test_model.py"]
+commands = [
+  "python tools/emperor_test_family.py tests patch",
+  "python tools/emperor_test_family.py coverage patch",
+  "python tools/emperor_test_family.py mutation patch --max-children 4",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.model_packages.vit.linear.test_model.TestVitLinearModel.test_patch_embedding_prepends_class_token tests.model_packages.vit.linear.test_model.TestVitLinearModel.test_model_step_accepts_classifier_batch",
+]
+review_questions = [
+  "Would tests fail if linear unfold order, channel order, stride, padding, or rectangular patch geometry changed?",
+  "Would tests fail if convolution channel mixing, bias, flatten order, or sample isolation changed while shapes remained correct?",
+  "Would tests fail if the embedding stacks ignored forced input or output dimensions?",
+  "Would tests fail if class tokens were initialized differently, appended instead of prepended, shared incorrectly across samples, or stopped receiving gradients?",
+  "Would tests fail if partial overrides mutated the base config, ignored false or zero values, or stopped extracting the real ViT patch_config wrapper?",
+  "Would tests fail if dropout no-op, full-drop, train/eval, or repeated-call behavior changed?",
+  "Would tests fail if float64, non-contiguous inputs, finite gradients, optimizer updates, or strict state continuation broke?",
+  "Would tests fail if required fields, exact types, dimension boundaries, stride, padding, dropout boundaries, rank, or channel errors changed?",
+  "Does the real ViT integration execute production configuration, patch extraction, class-token insertion, and classifier model-step behavior?",
+  "Are any tests mock-dependent or satisfied only by construction, type, shape, non-None, or does-not-throw assertions?",
+]
+coverage = "143 statements and 14 branches at 100%"
+mutation = "192 total; 192 killed; 0 surviving; 0 unreviewed"
+findings = []

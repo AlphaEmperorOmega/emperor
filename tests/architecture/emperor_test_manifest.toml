@@ -19,8 +19,8 @@ mutation_scope = [
   "src/emperor/nn/*",
 ]
 environment = ["cpu", "float32", "lightning-trainer", "matplotlib"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/foundations-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/foundations-mutation.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/foundations-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/foundations-mutation.toml"
 review_evidence = ""
 blocked_reason = ""
 modules = [
@@ -51,8 +51,8 @@ focused_tests = [
 integration_tests = ["tests/integration/test_linear_monitor_lifecycle.py"]
 mutation_scope = ["src/emperor/linears/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/linears-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/linears-mutation.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/linears-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/linears-mutation.toml"
 review_evidence = ""
 blocked_reason = ""
 modules = [
@@ -77,8 +77,8 @@ integration_tests = [
 ]
 mutation_scope = ["src/emperor/convs/*"]
 environment = ["cpu", "float32", "float64"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/convs-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/convs-mutation.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/convs-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/convs-mutation.toml"
 review_evidence = ""
 blocked_reason = ""
 modules = [
@@ -101,8 +101,8 @@ focused_tests = [
 integration_tests = []
 mutation_scope = ["src/emperor/embedding/*"]
 environment = ["cpu", "float32", "float64", "meta-device"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/embedding-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/embedding-mutation.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/embedding-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/embedding-mutation.toml"
 review_evidence = ""
 blocked_reason = ""
 modules = [
@@ -134,9 +134,9 @@ integration_tests = [
 ]
 mutation_scope = ["src/emperor/patch/*"]
 environment = ["cpu", "float32", "float64", "non-contiguous-tensors"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/patch-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/patch-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/patch-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/patch-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/patch-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/patch-review-request.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/patch/__init__.py",
@@ -167,9 +167,9 @@ environment = [
   "lightning-trainer",
   "tensorboard",
 ]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/halting-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/halting-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/halting-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/halting-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/halting-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/halting-review-request.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/halting/__init__.py",
@@ -205,9 +205,9 @@ environment = [
   "non-contiguous-tensors",
   "lightning-trainer",
 ]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/memory-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/memory-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/memory-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/memory-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/memory-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/memory-review-request.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/memory/__init__.py",
@@ -244,9 +244,9 @@ environment = [
   "lightning-trainer",
   "tensorboard",
 ]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/sampler-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/sampler-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/sampler-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/sampler-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/sampler-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/sampler-review-request.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/sampler/__init__.py",
@@ -277,9 +277,9 @@ focused_tests = [
 integration_tests = ["tests/integration/test_layer_monitor_lifecycle.py"]
 mutation_scope = ["src/emperor/layers/*"]
 environment = ["cpu", "float32", "float64", "lightning-trainer", "tensorboard"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/layers-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/layers-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/layers-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/layers-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/layers-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/layers-review-request.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/layers/__init__.py",
@@ -350,9 +350,9 @@ integration_tests = [
 ]
 mutation_scope = ["src/emperor/augmentations/adaptive_parameters/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/adaptive_parameters-b9454d04-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/adaptive_parameters-b9454d04-review.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/adaptive_parameters-b9454d04-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/adaptive_parameters-b9454d04-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/adaptive_parameters-b9454d04-review.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/augmentations/__init__.py",
@@ -420,9 +420,9 @@ focused_tests = [
 integration_tests = []
 mutation_scope = ["src/emperor/experts/*"]
 environment = ["cpu", "float32", "float64", "non-contiguous"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/experts-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/experts-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/experts-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/experts-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/experts-review.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/experts/__init__.py",
@@ -454,9 +454,9 @@ focused_tests = [
 integration_tests = ["tests/integration/test_parametric_monitor_lifecycle.py"]
 mutation_scope = ["src/emperor/parametric/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/parametric-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/parametric-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/parametric-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/parametric-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/parametric-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/parametric-review.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/parametric/__init__.py",
@@ -510,9 +510,9 @@ environment = [
   "lightning-trainer",
   "cuda-optional",
 ]
-coverage_evidence = ".scratch/emperor-behavioral-testing/evidence/attention-coverage.toml"
-mutation_evidence = ".scratch/emperor-behavioral-testing/evidence/attention-mutation.toml"
-review_evidence = ".scratch/emperor-behavioral-testing/reviews/attention-review-request.toml"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/attention-coverage.toml"
+mutation_evidence = "tests/architecture/emperor_behavioral/evidence/attention-mutation.toml"
+review_evidence = "tests/architecture/emperor_behavioral/reviews/attention-review.toml"
 blocked_reason = ""
 modules = [
   "src/emperor/attention/__init__.py",
