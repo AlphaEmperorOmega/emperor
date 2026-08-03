@@ -9,8 +9,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EMPEROR_ROOT = PROJECT_ROOT / "src" / "emperor"
 MANIFEST_PATH = Path(__file__).with_name("emperor_test_manifest.toml")
-LEDGER_PATH = (
-    PROJECT_ROOT / ".scratch" / "emperor-behavioral-testing" / "module-ledger.csv"
+BEHAVIORAL_RECORD_ROOT = Path(__file__).with_name("emperor_behavioral")
+LEDGER_PATH = BEHAVIORAL_RECORD_ROOT / "module-ledger.csv"
+EVIDENCE_FIELDS = (
+    "coverage_evidence",
+    "mutation_evidence",
+    "review_evidence",
 )
 VALID_STATUSES = {"pending", "partial", "complete", "blocked"}
 VALID_MODULE_STATUSES = VALID_STATUSES | {"not_applicable"}
@@ -35,8 +39,25 @@ def _load_manifest() -> dict[str, object]:
         return tomllib.load(manifest_file)
 
 
+def _behavioral_record_path(relative_path: str) -> Path:
+    candidate = Path(relative_path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError(
+            f"behavioral record path must be repository-relative: {relative_path}"
+        )
+
+    record_path = (PROJECT_ROOT / candidate).resolve()
+    record_root = BEHAVIORAL_RECORD_ROOT.resolve()
+    if not record_path.is_relative_to(record_root):
+        raise ValueError(
+            "behavioral record path must stay under "
+            f"{record_root.relative_to(PROJECT_ROOT)}: {relative_path}"
+        )
+    return record_path
+
+
 def _load_evidence(relative_path: str) -> dict[str, object]:
-    with (PROJECT_ROOT / relative_path).open("rb") as evidence_file:
+    with _behavioral_record_path(relative_path).open("rb") as evidence_file:
         return tomllib.load(evidence_file)
 
 
@@ -102,7 +123,14 @@ def _family_completion_errors(
         if not isinstance(relative_path, str) or not relative_path:
             errors.append(f"{family_name} has no {label} evidence")
             continue
-        evidence_path = PROJECT_ROOT / relative_path
+        try:
+            evidence_path = _behavioral_record_path(relative_path)
+        except ValueError:
+            errors.append(
+                f"{family_name} {label} evidence is outside tracked "
+                "behavioral records"
+            )
+            continue
         if not evidence_path.is_file():
             errors.append(f"{family_name} {label} evidence does not exist")
             continue
@@ -252,6 +280,36 @@ class EmperorTestManifestTests(unittest.TestCase):
                         f"{family_name} integration test does not exist: "
                         f"{relative_path}",
                     )
+
+    def test_manifest_evidence_is_confined_to_tracked_behavioral_records(
+        self,
+    ) -> None:
+        manifest = _load_manifest()
+
+        for family_name, family in manifest["families"].items():
+            for field_name in EVIDENCE_FIELDS:
+                relative_path = family[field_name]
+                if not relative_path:
+                    continue
+                with self.subTest(family=family_name, field=field_name):
+                    evidence_path = _behavioral_record_path(relative_path)
+                    self.assertTrue(
+                        evidence_path.is_file(),
+                        f"missing behavioral record: {relative_path}",
+                    )
+
+    def test_behavioral_record_path_rejects_untracked_locations(self) -> None:
+        invalid_paths = (
+            str((BEHAVIORAL_RECORD_ROOT / "evidence" / "example.toml").resolve()),
+            "tests/architecture/emperor_behavioral/../../../pyproject.toml",
+            "tests/architecture/emperor_test_manifest.toml",
+            ".scratch/emperor-behavioral-testing/evidence/example.toml",
+        )
+
+        for invalid_path in invalid_paths:
+            with self.subTest(path=invalid_path):
+                with self.assertRaises(ValueError):
+                    _behavioral_record_path(invalid_path)
 
     def test_module_ledger_tracks_every_manifest_entry_with_required_fields(
         self,

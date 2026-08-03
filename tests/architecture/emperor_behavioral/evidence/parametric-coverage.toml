@@ -1,0 +1,9 @@
+family = "parametric"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage parametric"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, meta-device propagation, real Lightning Trainer lifecycle, real Emperor routers, samplers, mixtures, layers, and augmentations"
+focused_tests = 124
+statements = 100
+branches = 100
+statement_count = 1133
+branch_count = 286

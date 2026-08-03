@@ -1,0 +1,7 @@
+family = "halting"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation halting --max-children 4"
+total_mutants = 1092
+killed_mutants = 1092
+surviving_mutants = 0
+unreviewed_mutants = 0

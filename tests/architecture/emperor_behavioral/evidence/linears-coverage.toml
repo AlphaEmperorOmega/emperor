@@ -1,0 +1,9 @@
+family = "linears"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage linears"
+environment = "CPU, Python 3.13, float32"
+focused_tests = 82
+statements = 100
+branches = 100
+statement_count = 317
+branch_count = 84

@@ -1,0 +1,13 @@
+family = "memory"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage memory"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, Lightning Trainer"
+focused_tests = 85
+statements = 100
+branches = 100
+statement_count = 576
+branch_count = 134
+
+integration_command = "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_memory_monitor_lifecycle"
+integration_tests = 3
+integration_result = "pass"

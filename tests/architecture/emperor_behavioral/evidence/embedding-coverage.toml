@@ -1,0 +1,9 @@
+family = "embedding"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage embedding"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, meta-device propagation"
+focused_tests = 91
+statements = 100
+branches = 100
+statement_count = 427
+branch_count = 112

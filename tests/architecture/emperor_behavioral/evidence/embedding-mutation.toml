@@ -1,0 +1,23 @@
+family = "embedding"
+result = "pass"
+command = "python tools/emperor_test_family.py mutation embedding --max-children 8"
+total_mutants = 688
+killed_mutants = 684
+surviving_mutants = 4
+unreviewed_mutants = 0
+
+[[equivalent]]
+name = "emperor.embedding.absolute._sinusoidal.xǁSinusoidalPositionalEmbeddingǁ_compute_embedding_tensor__mutmut_5"
+justification = "The changed frequency scale is used only when half_dim is zero or one. torch.arange(half_dim) is then empty or exactly [0], so multiplying by either scale produces the same exponent tensor and therefore identical embeddings for every valid embedding dimension in this branch."
+
+[[equivalent]]
+name = "emperor.embedding.absolute._sinusoidal.xǁSinusoidalPositionalEmbeddingǁ_compute_embedding_tensor__mutmut_25"
+justification = "The mutant changes the position arange from explicit float32 to the default integral dtype. Its immediate multiplication by the float32 frequencies tensor promotes every integer position to float32 before multiplication, exactly matching the original float32 arange values and preserving every downstream sine, cosine, shape, dtype, and device result."
+
+[[equivalent]]
+name = "emperor.embedding.absolute._sinusoidal.xǁSinusoidalPositionalEmbeddingǁ_compute_embedding_tensor__mutmut_27"
+justification = "Omitting the position arange dtype has the same exact effect as dtype=None: the integral positions are immediately promoted to the float32 frequencies dtype before multiplication, yielding the same float32 values and identical downstream embeddings."
+
+[[equivalent]]
+name = "emperor.embedding.relative._bias.xǁDynamicPositionalBiasǁforward__mutmut_20"
+justification = "Einstein summation labels are arbitrary identifiers. Changing every label in nhid,hdj->nhij to the corresponding uppercase label preserves all repeated-index, contraction, and output-axis relationships exactly."

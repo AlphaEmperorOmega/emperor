@@ -1,0 +1,65 @@
+family = "sampler"
+status = "requested"
+implementer = "codex"
+reviewer = ""
+verdict = "pending"
+requested_scope = "Skeptical behavioral review after focused coverage, mutation, and real Lightning lifecycle completion."
+reviewed_modules = [
+  "src/emperor/sampler/__init__.py",
+  "src/emperor/sampler/_config.py",
+  "src/emperor/sampler/monitoring.py",
+  "src/emperor/sampler/router.py",
+  "src/emperor/sampler/sampler.py",
+  "src/emperor/sampler/_selection/__init__.py",
+  "src/emperor/sampler/_selection/base.py",
+  "src/emperor/sampler/_selection/full.py",
+  "src/emperor/sampler/_selection/losses.py",
+  "src/emperor/sampler/_selection/sparse.py",
+  "src/emperor/sampler/_selection/top_k.py",
+  "src/emperor/sampler/_selection/validation.py",
+  "src/emperor/sampler/_usage.py",
+  "src/emperor/sampler/_validation.py",
+]
+focused_tests = [
+  "tests/unit/test_routers.py",
+  "tests/unit/test_router_model_validator_adapter.py",
+  "tests/unit/test_sampler_auxiliary_losses.py",
+  "tests/unit/test_sampler_base_validator_adapter.py",
+  "tests/unit/test_sampler_behavioral_contracts.py",
+  "tests/unit/test_sampler_full_validator_adapter.py",
+  "tests/unit/test_sampler_interface.py",
+  "tests/unit/test_sampler_model_validator.py",
+  "tests/unit/test_sampler_model_validator_adapter.py",
+  "tests/unit/test_sampler_monitor.py",
+  "tests/unit/test_sampler_regressions.py",
+  "tests/unit/test_sampler_sparse_validator_adapter.py",
+  "tests/unit/test_sampler_topk_validator_adapter.py",
+  "tests/unit/test_sampler_tracker.py",
+  "tests/unit/test_sampler_validators.py",
+  "tests/unit/test_samplers.py",
+]
+integration_tests = ["tests/integration/test_sampler_monitor_lifecycle.py"]
+commands = [
+  "python tools/emperor_test_family.py tests sampler",
+  "python tools/emperor_test_family.py coverage sampler",
+  "python tools/emperor_test_family.py mutation sampler --max-children 4",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.integration.test_sampler_monitor_lifecycle",
+  "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
+]
+review_questions = [
+  "Would tests fail if sparse, top-k, or full selection returned shape-correct zeros, selected the wrong experts, changed tie or threshold equality behavior, or leaked one sample into another?",
+  "Would tests fail if seeded noisy routing changed its sigmoid scale, epsilon, sign, training-only behavior, split point, dtype, or gradient route?",
+  "Would tests fail if normalization changed its stabilizer, denominator axis, detach behavior, or disabled no-op contract?",
+  "Would tests fail if deterministic and random top-k changed slot ownership, probability-weighted sampling, duplicate prevention, train/eval dispatch, or all-random behavior?",
+  "Would tests fail if CV, switch, zero-centred, or mutual-information losses changed their exact equations, low-mass stabilization, accumulation/reset behavior, skip-mask weighting, dtype, or gradients?",
+  "Would tests fail if SamplerModel dispatch, nested config precedence, router fallback, noisy output width, direct-logit mode, real LayerStack execution, strict state keys, or optimizer updates changed?",
+  "Would tests fail for every required field, exact invalid type and boundary, non-finite auxiliary weight, router mismatch, malformed rank, feature dimension, and skip-mask error contract?",
+  "Would tests fail if usage tracking changed dense versus indexed counts, probability mass, detach behavior, last versus cumulative state, reset, attachment idempotence, or checkpoint round trips?",
+  "Does the real Trainer lifecycle prove exact metrics for sparse, top-k, full, and single-expert samplers; cadence; bounded history; TensorBoard visuals; updates; normal cleanup; and exception cleanup?",
+  "Would tests fail if monitoring skipped later samplers after one missing tracker, produced NaN for one expert, changed per-expert tags or values, or mishandled absent logger and global step?",
+  "Would tests fail if public lazy exports, ownership, cache identity, unknown attributes, or removed legacy paths changed?",
+  "Are any completion claims satisfied only by fakes, construction, type, shape, non-None, or does-not-throw assertions rather than exact public behavior?",
+]
+coverage = "922 statements and 182 branches at 100%"
+mutation = "1622 total; 1622 killed; 0 surviving; 0 unreviewed"
+findings = []

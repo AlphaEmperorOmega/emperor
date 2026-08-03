@@ -1,0 +1,13 @@
+family = "patch"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage patch"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors"
+focused_tests = 47
+statements = 100
+branches = 100
+statement_count = 143
+branch_count = 14
+
+integration_command = "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.model_packages.vit.linear.test_model.TestVitLinearModel.test_patch_embedding_prepends_class_token tests.model_packages.vit.linear.test_model.TestVitLinearModel.test_model_step_accepts_classifier_batch"
+integration_tests = 2
+integration_result = "pass"

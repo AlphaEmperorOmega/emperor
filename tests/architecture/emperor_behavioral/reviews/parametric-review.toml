@@ -1,0 +1,59 @@
+family = "parametric"
+status = "approved"
+implementer = "codex"
+reviewer = "codex-independent-skeptical-parametric-final"
+verdict = "approved"
+review_date = "2026-07-17"
+requested_scope = "Second independent skeptical behavioral review after resolving duplicate-monitor teardown ownership, removing the last fake-backed handler test, persisting public singleton weight-and-bias evidence, and regenerating every quality gate."
+reviewed_modules = [
+  "src/emperor/parametric/__init__.py",
+  "src/emperor/parametric/_config.py",
+  "src/emperor/parametric/_handlers.py",
+  "src/emperor/parametric/_layer.py",
+  "src/emperor/parametric/_mixtures/__init__.py",
+  "src/emperor/parametric/_mixtures/base.py",
+  "src/emperor/parametric/_mixtures/config.py",
+  "src/emperor/parametric/_mixtures/generator.py",
+  "src/emperor/parametric/_mixtures/matrix.py",
+  "src/emperor/parametric/_mixtures/validation.py",
+  "src/emperor/parametric/_mixtures/vector.py",
+  "src/emperor/parametric/_monitoring.py",
+  "src/emperor/parametric/_routing.py",
+  "src/emperor/parametric/_state.py",
+  "src/emperor/parametric/_validation.py",
+]
+focused_tests = [
+  "tests/unit/test_parametric.py",
+  "tests/unit/test_parametric_behavioral_contracts.py",
+  "tests/unit/test_parametric_handler_mutation_contracts.py",
+  "tests/unit/test_parametric_handler_validator_adapter.py",
+  "tests/unit/test_parametric_interface.py",
+  "tests/unit/test_parametric_layer_validator_adapter.py",
+  "tests/unit/test_parametric_monitor.py",
+  "tests/unit/test_parametric_monitor_mutation_contracts.py",
+  "tests/unit/test_parametric_runtime_mutation_contracts.py",
+  "tests/unit/test_parametric_validation_mutation_contracts.py",
+]
+integration_tests = [
+  "tests/integration/test_parametric_monitor_lifecycle.py",
+]
+commands = [
+  "python tools/emperor_test_family.py tests parametric",
+  "python tools/emperor_test_family.py coverage parametric",
+  "python tools/emperor_test_family.py mutation parametric --max-children 4",
+  "python tools/emperor_test_family.py mutation parametric --resume",
+]
+coverage = "1133 statements and 286 branches at 100%"
+mutation = "1997 total; 1956 killed; 41 independently reviewed equivalent; 0 unreviewed"
+findings = []
+resolved_findings = [
+  "high: dense unweighted matrix parameters reduced the batch axis instead of the expert axis; corrected with asymmetric exact public mathematics.",
+  "medium: accepted generated shared rank-two weights were applied as per-sample rank-three matrices; corrected with exact shared and per-sample paths.",
+  "medium: routing initialization and nested generator ownership accepted malformed combinations; rejected before RNG consumption with exact public errors.",
+  "medium: top-one monitor entropy grouped samples as one route; corrected to one-element routes and verified through real Lightning lifecycle.",
+  "medium: two Parametric monitor callbacks leaked stale wrappers after fit; duplicate monitors are now rejected before any wrapping and exact post-failure behavior is verified through a real Trainer.",
+  "medium: one old handler test replaced the real Parametric model with FixedParametricModel; the fake and redundant test were removed in favor of the stronger real router sampler mixture and gradient regression.",
+  "low: the public singleton generator regression covered generated weights but not generated bias; it now proves exact asymmetric weight-plus-bias behavior and gradients through all three nested generators.",
+  "low: two equivalent-mutant explanations named the wrong helper or dimension; both explanations were corrected before approval.",
+]
+review_summary = "Approved with zero unresolved high medium or low findings. The reviewer independently reproduced focused tests and 100% coverage, inspected the regenerated mutation cache and every survivor, verified no Emperor behavior is replaced by mocks or fakes, confirmed strict persistence and public interface compatibility, and matched every production edit to the literal root source-change log."

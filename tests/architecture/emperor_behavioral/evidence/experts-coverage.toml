@@ -1,0 +1,9 @@
+family = "experts"
+result = "pass"
+command = "python tools/emperor_test_family.py coverage experts"
+environment = "CPU, Python 3.13, float32, float64, non-contiguous tensors, meta-device propagation, real affine LayerStack and recurrent experts, halting, optimizer steps, and gradcheck"
+focused_tests = 166
+statements = 100
+branches = 100
+statement_count = 882
+branch_count = 236
