@@ -32,7 +32,7 @@ class _MalformedObservedModule(torch.nn.Module):
     ) -> str:
         return "malformed affine output"
 
-    def _ParametricLayer__sample_weight_probabilities_and_indices(
+    def _sample_weight_probabilities_and_indices(
         self,
         *args: object,
         **kwargs: object,
@@ -251,7 +251,7 @@ class ParametricMonitorMutationContractTests(unittest.TestCase):
         callback._ParametricLayerMonitorCallback__wrap_affine_callback(observed)
         callback._ParametricLayerMonitorCallback__wrap_sampling_method(
             observed,
-            "_ParametricLayer__sample_weight_probabilities_and_indices",
+            "_sample_weight_probabilities_and_indices",
             "weight",
         )
 
@@ -268,7 +268,7 @@ class ParametricMonitorMutationContractTests(unittest.TestCase):
             "malformed affine output",
         )
         self.assertEqual(
-            observed._ParametricLayer__sample_weight_probabilities_and_indices(),
+            observed._sample_weight_probabilities_and_indices(),
             "malformed router sample",
         )
         self.assertEqual(observation, _ParametricObservation())

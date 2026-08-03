@@ -324,8 +324,8 @@ class ParametricLayerMonitorCallback(Callback):
 
     def __wrap_sampling_methods(self, parametric_layer: Module) -> None:
         sampling_methods: tuple[tuple[str, ParametricSlot], ...] = (
-            ("_ParametricLayer__sample_weight_probabilities_and_indices", "weight"),
-            ("_ParametricLayer__sample_bias_probabilities_and_indices", "bias"),
+            ("_sample_weight_probabilities_and_indices", "weight"),
+            ("_sample_bias_probabilities_and_indices", "bias"),
         )
         for method_name, slot in sampling_methods:
             if hasattr(parametric_layer, method_name):

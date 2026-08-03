@@ -124,7 +124,7 @@ class ParametricLayer(Module):
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor | None, Tensor | None, Tensor]:
         weight_probabilities, weight_indices, skip_mask, weight_loss = (
-            self.__sample_weight_probabilities_and_indices(input, skip_mask=skip_mask)
+            self._sample_weight_probabilities_and_indices(input, skip_mask=skip_mask)
         )
         weight_parameters, weight_parameters_loss = self.__generate_weight_parameters(
             weight_probabilities, weight_indices, input
@@ -141,7 +141,7 @@ class ParametricLayer(Module):
         loss = weight_loss + weight_parameters_loss + bias_parameters_loss
         return weight_parameters, bias_parameters, skip_mask, loss
 
-    def __sample_weight_probabilities_and_indices(
+    def _sample_weight_probabilities_and_indices(
         self,
         input: Tensor,
         skip_mask: Tensor | None = None,
@@ -151,7 +151,7 @@ class ParametricLayer(Module):
         logits = self.weights_router.compute_logit_scores(input)
         return self.__sample_probabilities_and_indices(logits, input, skip_mask)
 
-    def __sample_bias_probabilities_and_indices(
+    def _sample_bias_probabilities_and_indices(
         self,
         input: Tensor,
         skip_mask: Tensor | None = None,
@@ -263,7 +263,7 @@ class ParametricLayer(Module):
         if self.routing_initialization_mode == AdaptiveRouterOptions.INDEPENDENT_ROUTER:
             if self.bias_router is not None:
                 probabilities, indices, skip_mask, bias_loss = (
-                    self.__sample_bias_probabilities_and_indices(
+                    self._sample_bias_probabilities_and_indices(
                         input, skip_mask=skip_mask
                     )
                 )
