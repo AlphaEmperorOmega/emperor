@@ -16,12 +16,12 @@ if TYPE_CHECKING:
 
 
 class MaskedLanguageModelExperiment(LightningModule):
+    VALIDATOR = _ExperimentConfigValidator
+
     def __init__(self, cfg: "ModelConfig"):
         super().__init__()
         self.cfg = cfg
-        resolved_config = _ExperimentConfigValidator("Masked-language-model").resolve(
-            cfg
-        )
+        resolved_config = self.VALIDATOR.resolve(cfg, "Masked-language-model")
         self.learning_rate = resolved_config.learning_rate
         self.vocab_size = resolved_config.output_dim
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)

@@ -16,13 +16,16 @@ if TYPE_CHECKING:
 
 
 class SequenceClassifierExperiment(LightningModule):
+    VALIDATOR = _ExperimentConfigValidator
+
     def __init__(self, cfg: "ModelConfig"):
         super().__init__()
         self.cfg = cfg
-        resolved_config = _ExperimentConfigValidator(
+        resolved_config = self.VALIDATOR.resolve(
+            cfg,
             "Sequence-classifier",
             minimum_output_dim=2,
-        ).resolve(cfg)
+        )
         self.learning_rate = resolved_config.learning_rate
         self.num_classes = resolved_config.output_dim
         self.loss_fn = nn.CrossEntropyLoss()
