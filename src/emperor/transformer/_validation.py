@@ -1,7 +1,6 @@
-from dataclasses import fields
 from typing import TYPE_CHECKING
 
-from emperor._validation import ValidatorBase
+from emperor._validation import ValidatorBase, _first_adaptive_grouping_path
 from emperor.config import ConfigBase
 
 if TYPE_CHECKING:
@@ -14,87 +13,6 @@ if TYPE_CHECKING:
         TransformerEncoderLayer,
     )
     from emperor.transformer._model import Transformer
-
-
-def _find_enabled_adaptive_grouping_path(
-    value: object,
-    path: str,
-    visited: set[int] | None = None,
-    *,
-    grouping_scope: object | None = None,
-) -> str | None:
-    """Find the first grouped adaptive leaf in a Transformer-owned config tree."""
-
-    if visited is None:
-        visited = set()
-
-    if isinstance(value, ConfigBase):
-        identity = id(value)
-        if identity in visited:
-            return None
-        visited.add(identity)
-
-        try:
-            config_validator = value.registry_owner().VALIDATOR
-        except (AttributeError, NotImplementedError):
-            config_validator = None
-        grouping_is_enabled = getattr(
-            config_validator,
-            "grouping_is_enabled",
-            None,
-        )
-        if (
-            callable(grouping_is_enabled)
-            and grouping_is_enabled(value)
-            and (
-                grouping_scope is None
-                or getattr(value, "grouping_scope", None) is grouping_scope
-            )
-        ):
-            return path
-
-        for config_field in fields(value):
-            match = _find_enabled_adaptive_grouping_path(
-                getattr(value, config_field.name),
-                f"{path}.{config_field.name}",
-                visited,
-                grouping_scope=grouping_scope,
-            )
-            if match is not None:
-                return match
-        return None
-
-    if isinstance(value, dict):
-        identity = id(value)
-        if identity in visited:
-            return None
-        visited.add(identity)
-        for key, item in value.items():
-            match = _find_enabled_adaptive_grouping_path(
-                item,
-                f"{path}[{key!r}]",
-                visited,
-                grouping_scope=grouping_scope,
-            )
-            if match is not None:
-                return match
-        return None
-
-    if isinstance(value, (list, tuple)):
-        identity = id(value)
-        if identity in visited:
-            return None
-        visited.add(identity)
-        for index, item in enumerate(value):
-            match = _find_enabled_adaptive_grouping_path(
-                item,
-                f"{path}[{index}]",
-                visited,
-                grouping_scope=grouping_scope,
-            )
-            if match is not None:
-                return match
-    return None
 
 
 class TransformerValidator(ValidatorBase):
@@ -182,9 +100,9 @@ class TransformerValidator(ValidatorBase):
         for gate_path, gate_config in gate_configs:
             if gate_config is None:
                 continue
-            grouping_path = _find_enabled_adaptive_grouping_path(
+            grouping_path = _first_adaptive_grouping_path(
                 gate_config,
-                gate_path,
+                root=gate_path,
             )
             if grouping_path is not None:
                 raise ValueError(
@@ -380,10 +298,13 @@ class TransformerValidator(ValidatorBase):
             AdaptiveParameterGroupingScopeOptions,
         )
 
-        grouping_path = _find_enabled_adaptive_grouping_path(
+        grouping_path = _first_adaptive_grouping_path(
             feed_forward_config,
-            f"{owner_name}.feed_forward_config",
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
+            root=f"{owner_name}.feed_forward_config",
+            predicate=lambda config: (
+                getattr(config, "grouping_scope", None)
+                is AdaptiveParameterGroupingScopeOptions.ROWS
+            ),
         )
         if grouping_path is None:
             return

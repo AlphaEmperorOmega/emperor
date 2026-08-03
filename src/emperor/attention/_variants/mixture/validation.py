@@ -4,10 +4,8 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor.attention._validation import (
-    MultiHeadAttentionValidator,
-    _first_enabled_adaptive_grouping_path,
-)
+from emperor._validation import _first_adaptive_grouping_path
+from emperor.attention._validation import MultiHeadAttentionValidator
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
@@ -121,7 +119,7 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
                 model.cfg.experts_config,
             ),
         ):
-            grouping_path = _first_enabled_adaptive_grouping_path(
+            grouping_path = _first_adaptive_grouping_path(
                 config,
                 root=path,
             )

@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from emperor._validation import ValidatorBase
-from emperor.attention._validation import _first_enabled_adaptive_grouping_path
+from emperor._validation import ValidatorBase, _first_adaptive_grouping_path
 from emperor.layers import LayerState
 
 if TYPE_CHECKING:
@@ -44,7 +43,7 @@ class MixerAttentionValidator(ValidatorBase):
                 "MixerAttention, got "
                 f"{type(mixing_model_config).__name__}."
             )
-        grouping_path = _first_enabled_adaptive_grouping_path(
+        grouping_path = _first_adaptive_grouping_path(
             mixing_model_config,
             root="MixerAttentionConfig.mixing_model_config",
         )
