@@ -60,6 +60,7 @@ def conv_stack_config(
     input_dim: int = 107,
     hidden_dim: int = 11,
     output_dim: int = 109,
+    num_layers: int = 1,
     kernel_size: int = 2,
     stride: int = 1,
     padding: int = 0,
@@ -69,7 +70,7 @@ def conv_stack_config(
         input_dim=input_dim,
         hidden_dim=hidden_dim,
         output_dim=output_dim,
-        num_layers=1,
+        num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag=False,
         layer_config=LayerConfig(
@@ -400,6 +401,55 @@ class LinearPatchEmbeddingBehaviorTests(unittest.TestCase):
 
 
 class ConvPatchEmbeddingBehaviorTests(unittest.TestCase):
+    def test_single_and_multi_layer_stacks_use_effective_patch_geometry(
+        self,
+    ) -> None:
+        cases = (
+            (
+                conv_config(
+                    patch_size=2,
+                    conv_stack_config=conv_stack_config(
+                        kernel_size=2,
+                        stride=1,
+                    ),
+                ),
+                torch.ones(1, 1, 4, 5),
+                (1, 13, 2),
+            ),
+            (
+                conv_config(
+                    patch_size=4,
+                    conv_stack_config=conv_stack_config(
+                        num_layers=2,
+                        kernel_size=2,
+                        stride=2,
+                    ),
+                ),
+                torch.ones(1, 1, 8, 12),
+                (1, 7, 2),
+            ),
+        )
+
+        for config, inputs, expected_shape in cases:
+            with self.subTest(
+                patch_size=config.patch_size,
+                num_layers=config.conv_stack_config.num_layers,
+            ):
+                model = PatchEmbeddingConv(config)
+                output = model(inputs)
+
+                self.assertEqual(output.shape, expected_shape)
+                self.assertEqual(
+                    len(model.patch_model),
+                    config.conv_stack_config.num_layers,
+                )
+                self.assertTrue(
+                    all(
+                        layer.model.kernel_size == 2
+                        for layer in model.patch_model
+                    )
+                )
+
     def test_rectangular_multichannel_convolution_is_exact_and_isolated(
         self,
     ) -> None:

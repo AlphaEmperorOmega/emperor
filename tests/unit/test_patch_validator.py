@@ -2,12 +2,14 @@ import unittest
 
 import torch
 
+from emperor.convs import Conv2dLayerConfig
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    MirroredLayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.patch import (
@@ -49,6 +51,38 @@ def linear_stack_config(
             halting_config=None,
             memory_config=None,
             layer_model_config=LinearLayerConfig(bias_flag=True),
+        ),
+    )
+
+
+def convolutional_stack_config(
+    *,
+    kernel_size: int = 2,
+    stride: int = 1,
+    num_layers: int = 1,
+    stack_config_type: type[LayerStackConfig] = LayerStackConfig,
+) -> LayerStackConfig:
+    return stack_config_type(
+        input_dim=1,
+        hidden_dim=4,
+        output_dim=4,
+        num_layers=num_layers,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        apply_output_pipeline_flag=False,
+        layer_config=LayerConfig(
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=Conv2dLayerConfig(
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=0,
+                bias_flag=True,
+            ),
         ),
     )
 
@@ -138,6 +172,80 @@ class PatchValidatorBehaviorTests(unittest.TestCase):
 
         self.assertIs(model.cfg.embedding_stack_config, stack_config)
         self.assertEqual(output.shape, (2, 5, 4))
+
+    def test_convolutional_patch_rejects_non_convolutional_stack_topology(
+        self,
+    ) -> None:
+        config = conv_config(conv_stack_config=linear_stack_config())
+
+        with self.assertRaises(TypeError) as error:
+            PatchEmbeddingConv(config)
+
+        self.assertEqual(
+            str(error.exception),
+            "conv_stack_config.layer_config.layer_model_config must be an instance "
+            "of Conv2dLayerConfig for ConvPatchEmbeddingConfig, got "
+            "LinearLayerConfig",
+        )
+
+    def test_convolutional_patch_rejects_mismatched_effective_geometry_before_rng(
+        self,
+    ) -> None:
+        cases = (
+            (
+                2,
+                convolutional_stack_config(kernel_size=3),
+                3,
+            ),
+            (
+                3,
+                convolutional_stack_config(
+                    kernel_size=2,
+                    stride=2,
+                    num_layers=2,
+                ),
+                4,
+            ),
+            (
+                4,
+                convolutional_stack_config(
+                    kernel_size=2,
+                    num_layers=2,
+                    stack_config_type=MirroredLayerStackConfig,
+                ),
+                5,
+            ),
+        )
+
+        for patch_size, stack_config, effective_patch_size in cases:
+            with self.subTest(
+                patch_size=patch_size,
+                effective_patch_size=effective_patch_size,
+                stack_type=type(stack_config).__name__,
+            ):
+                torch.manual_seed(702)
+                rng_state = torch.random.get_rng_state()
+                config = conv_config(
+                    patch_size=patch_size,
+                    conv_stack_config=stack_config,
+                )
+
+                with self.assertRaises(ValueError) as error:
+                    PatchEmbeddingConv(config)
+
+                self.assertEqual(
+                    str(error.exception),
+                    "patch_size must match the effective convolutional receptive "
+                    "field for ConvPatchEmbeddingConfig, got "
+                    f"patch_size={patch_size} and "
+                    f"effective_patch_size={effective_patch_size}",
+                )
+                torch.testing.assert_close(
+                    torch.random.get_rng_state(),
+                    rng_state,
+                    rtol=0,
+                    atol=0,
+                )
 
     def test_required_common_field_error_is_exact(self) -> None:
         with self.assertRaises(ValueError) as error:

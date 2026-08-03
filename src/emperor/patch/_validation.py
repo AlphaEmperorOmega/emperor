@@ -33,6 +33,7 @@ class PatchValidator(ValidatorBase):
         cls._validate_dropout_probability(model.dropout_probability)
         cls._validate_class_token_flag(model.cfg.class_token_flag)
         cls._validate_stack_config_types(model.cfg)
+        cls._validate_convolutional_patch_geometry(model.cfg)
 
     @staticmethod
     def _validate_stack_config_types(config) -> None:
@@ -47,6 +48,68 @@ class PatchValidator(ValidatorBase):
                     f"{field_name} must be an instance of LayerStackConfig for "
                     f"{type(config).__name__}, got {type(stack_config).__name__}"
                 )
+
+    @classmethod
+    def _validate_convolutional_patch_geometry(cls, config) -> None:
+        if not hasattr(config, "conv_stack_config"):
+            return
+
+        from emperor.convs import Conv2dLayerConfig
+
+        stack_config = config.conv_stack_config
+        layer_config = getattr(stack_config, "layer_config", None)
+        layer_model_config = getattr(layer_config, "layer_model_config", None)
+        if not isinstance(layer_model_config, Conv2dLayerConfig):
+            raise TypeError(
+                "conv_stack_config.layer_config.layer_model_config must be an "
+                "instance of Conv2dLayerConfig for ConvPatchEmbeddingConfig, got "
+                f"{type(layer_model_config).__name__}"
+            )
+
+        effective_patch_size = cls._effective_convolutional_patch_size(
+            stack_config,
+            layer_model_config,
+        )
+        if effective_patch_size is None or config.patch_size == effective_patch_size:
+            return
+        raise ValueError(
+            "patch_size must match the effective convolutional receptive field "
+            "for ConvPatchEmbeddingConfig, got "
+            f"patch_size={config.patch_size} and "
+            f"effective_patch_size={effective_patch_size}"
+        )
+
+    @staticmethod
+    def _effective_convolutional_patch_size(
+        stack_config,
+        layer_model_config,
+    ) -> int | None:
+        from emperor.layers import MirroredLayerStackConfig
+
+        num_layers = stack_config.num_layers
+        kernel_size = layer_model_config.kernel_size
+        stride = layer_model_config.stride
+        if (
+            type(num_layers) is not int
+            or num_layers < 1
+            or type(kernel_size) is not int
+            or kernel_size < 1
+            or type(stride) is not int
+            or stride < 1
+        ):
+            return None
+
+        physical_layer_count = (
+            num_layers * 2
+            if isinstance(stack_config, MirroredLayerStackConfig)
+            else num_layers
+        )
+        effective_patch_size = 1
+        effective_stride = 1
+        for _ in range(physical_layer_count):
+            effective_patch_size += (kernel_size - 1) * effective_stride
+            effective_stride *= stride
+        return effective_patch_size
 
     @staticmethod
     def _validate_dropout_probability(value: float) -> None:
