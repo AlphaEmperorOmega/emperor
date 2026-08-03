@@ -17,7 +17,7 @@ from emperor.embedding.absolute import (
     ImageSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.halting import SoftHaltingConfig
+from emperor.halting import SoftHalting, SoftHaltingConfig
 from emperor.layers import (
     ActivationOptions,
     AdditiveResidualConfig,
@@ -220,7 +220,7 @@ class TestVitLinearModel(unittest.TestCase):
         self.assertIsNone(self._encoder_block_config(cfg).halting_config)
         self.assertIsNotNone(encoder_stack.shared_halting_config)
 
-    def test_soft_halting_option_is_forwarded_but_rejected_until_supported(self):
+    def test_soft_halting_option_builds_shared_encoder_halting(self):
         overrides = self._small_image_overrides(batch_size=2)
         overrides["stack_num_layers"] = 2
         cfg = self._build_config(
@@ -234,8 +234,17 @@ class TestVitLinearModel(unittest.TestCase):
             encoder_stack.shared_halting_config,
             SoftHaltingConfig,
         )
-        with self.assertRaisesRegex(ValueError, "does not implement"):
-            encoder_stack.build()
+        encoder = encoder_stack.build()
+        halting_models = [layer.halting_model for layer in encoder]
+        self.assertTrue(
+            all(
+                isinstance(halting_model, SoftHalting)
+                for halting_model in halting_models
+            )
+        )
+        self.assertTrue(
+            all(halting_model is halting_models[0] for halting_model in halting_models)
+        )
 
     def test_memory_flag_creates_encoder_stack_shared_memory(self):
         cfg = self._build_config(
