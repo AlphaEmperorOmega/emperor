@@ -1063,7 +1063,7 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
         )
 
         probabilities, indices, returned_mask, loss = (
-            model._ParametricLayer__sample_bias_probabilities_and_indices(
+            model._sample_bias_probabilities_and_indices(
                 torch.ones(2, 2),
                 batch_mask,
             )
