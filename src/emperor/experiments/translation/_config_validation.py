@@ -26,20 +26,20 @@ class _ResolvedTranslationConfig:
 
 
 class _TranslationConfigValidator:
-    def __init__(self) -> None:
-        self._experiment_validator = _ExperimentConfigValidator("Translation")
+    EXPERIMENT_VALIDATOR = _ExperimentConfigValidator
 
-    def resolve(self, config: "ModelConfig") -> _ResolvedTranslationConfig:
-        common_config = self._experiment_validator.resolve(config)
+    @classmethod
+    def resolve(cls, config: "ModelConfig") -> _ResolvedTranslationConfig:
+        common_config = cls.EXPERIMENT_VALIDATOR.resolve(config, "Translation")
         experiment_config = config.experiment_config
         return _ResolvedTranslationConfig(
             learning_rate=float(common_config.learning_rate),
             vocab_size=common_config.output_dim,
-            model_dim=self._resolve_positive_integer(
+            model_dim=cls._resolve_positive_integer(
                 config.hidden_dim,
                 "hidden_dim",
             ),
-            pad_token_id=self._resolve_integer(
+            pad_token_id=cls._resolve_integer(
                 getattr(
                     experiment_config,
                     "pad_token_id",
@@ -47,14 +47,14 @@ class _TranslationConfigValidator:
                 ),
                 "pad_token_id",
             ),
-            label_smoothing=self._resolve_label_smoothing(
+            label_smoothing=cls._resolve_label_smoothing(
                 getattr(
                     experiment_config,
                     "label_smoothing",
                     _DEFAULT_LABEL_SMOOTHING,
                 )
             ),
-            warmup_steps=self._resolve_positive_integer(
+            warmup_steps=cls._resolve_positive_integer(
                 getattr(
                     experiment_config,
                     "warmup_steps",
@@ -62,7 +62,7 @@ class _TranslationConfigValidator:
                 ),
                 "warmup_steps",
             ),
-            generation_metrics_flag=self._resolve_generation_metrics_flag(
+            generation_metrics_flag=cls._resolve_generation_metrics_flag(
                 getattr(
                     experiment_config,
                     "generation_metrics_flag",
