@@ -77,6 +77,24 @@ class ParametricMonitorMutationContractTests(unittest.TestCase):
                     ParametricLayerMonitorCallback(**kwargs)
                 self.assertEqual(str(error.exception), expected_message)
 
+        for option_name in ("log_every_n_steps", "history_size"):
+            for value in (True, False, 1.0, 0.0, -1.0, "1", None):
+                with self.subTest(option_name=option_name, value=value):
+                    with self.assertRaises(TypeError) as error:
+                        ParametricLayerMonitorCallback(**{option_name: value})
+                    self.assertEqual(
+                        str(error.exception),
+                        f"{option_name} must be a positive integer, received "
+                        f"{type(value).__name__}.",
+                    )
+
+            for value in (1, 7):
+                with self.subTest(option_name=option_name, value=value):
+                    valid_callback = ParametricLayerMonitorCallback(
+                        **{option_name: value}
+                    )
+                    self.assertEqual(getattr(valid_callback, option_name), value)
+
     def test_clip_saturation_includes_the_exact_boundary(self) -> None:
         config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
         config.clip_range = 2.0
