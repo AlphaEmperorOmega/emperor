@@ -362,6 +362,7 @@ DECODER_FEED_FORWARD_NUM_LAYERS = FF_NUM_LAYERS
 # Controller Options
 STACK_GATE_FLAG = False
 STACK_HALTING_FLAG = False
+HALTING_THRESHOLD: float | None = None
 MEMORY_FLAG = False
 STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 
@@ -383,6 +384,7 @@ RECURRENT_STACK_GATE_FLAG: bool = False
 
 ### Recurrent Halting Options
 RECURRENT_STACK_HALTING_FLAG: bool = False
+RECURRENT_HALTING_THRESHOLD: float | None = None
 
 # Trainer
 NUM_EPOCHS = 30

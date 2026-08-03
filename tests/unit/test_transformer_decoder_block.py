@@ -77,7 +77,13 @@ class TestTransformerDecoderBlock(unittest.TestCase):
         return (
             ("plain", {}),
             ("gated", {"stack_gate_flag": True}),
-            ("halted", {"stack_halting_flag": True}),
+            (
+                "halted",
+                {
+                    "stack_halting_flag": True,
+                    "halting_threshold": 0.999,
+                },
+            ),
             ("memory", {"memory_flag": True}),
             ("recurrent", {"recurrent_flag": True}),
             (
@@ -86,6 +92,7 @@ class TestTransformerDecoderBlock(unittest.TestCase):
                     "recurrent_flag": True,
                     "recurrent_stack_gate_flag": True,
                     "recurrent_stack_halting_flag": True,
+                    "recurrent_halting_threshold": 0.999,
                 },
             ),
         )

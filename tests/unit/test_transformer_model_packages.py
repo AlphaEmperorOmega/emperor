@@ -1015,6 +1015,12 @@ class TestTransformerModelPackages(unittest.TestCase):
                     package=builder_type.__name__,
                     recurrent=recurrent,
                 ):
+                    threshold = 0.875 if recurrent else 0.75
+                    threshold_option = (
+                        "recurrent_halting_threshold"
+                        if recurrent
+                        else "halting_threshold"
+                    )
                     cfg = self.preset(
                         builder_type,
                         encoder_num_layers=2,
@@ -1022,6 +1028,7 @@ class TestTransformerModelPackages(unittest.TestCase):
                         stack_halting_flag=not recurrent,
                         recurrent_flag=recurrent,
                         recurrent_stack_halting_flag=recurrent,
+                        **{threshold_option: threshold},
                     )
                     encoder = cfg.experiment_config.encoder_config
                     halting = (
@@ -1029,6 +1036,7 @@ class TestTransformerModelPackages(unittest.TestCase):
                         if recurrent
                         else encoder.shared_halting_config
                     )
+                    self.assertEqual(halting.threshold, threshold)
                     controller = halting.halting_gate_config
                     self.assertEqual(controller.output_dim, 2)
                     self.assertEqual(

@@ -550,10 +550,12 @@ def runtime_from_config() -> RuntimeOptions:
         layer_norm_position=config.ENCODER_LAYER_NORM_POSITION,
         stack_gate_flag=config.STACK_GATE_FLAG,
         stack_halting_flag=config.STACK_HALTING_FLAG,
+        halting_threshold=config.HALTING_THRESHOLD,
         memory_flag=config.MEMORY_FLAG,
         recurrent_flag=config.RECURRENT_FLAG,
         recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
         recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
+        recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
         recurrent_composition_option=config.RECURRENT_COMPOSITION_OPTION,
         recurrent_no_gradient_transition_count=(
