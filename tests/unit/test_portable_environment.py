@@ -75,6 +75,18 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
                     mise["tasks"][task_name]["usage"],
                 )
 
+    def test_mise_config_is_safe_for_fresh_clones(self) -> None:
+        config_path = PROJECT_ROOT / "mise.toml"
+        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        config_text = config_path.read_text(encoding="utf-8")
+
+        self.assertEqual(set(config), {"min_version", "tools", "tasks"})
+        self.assertTrue(
+            all(isinstance(version, str) for version in config["tools"].values())
+        )
+        self.assertNotIn("{{", config_text)
+        self.assertNotIn("{%", config_text)
+
     def test_cuda_legacy_uses_exact_cu126_wheel_command(self) -> None:
         python = Path("/verified/venv/bin/python")
 
