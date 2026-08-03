@@ -426,6 +426,7 @@ class TestTransformerLinearModel(unittest.TestCase):
             recurrent_flag=True,
             recurrent_composition_option=HierarchicalReasoningModelRecurrentConfig,
             recurrent_stack_halting_flag=True,
+            recurrent_halting_threshold=0.999,
             recurrent_no_gradient_transition_count=3,
             recurrent_high_cycles=2,
             recurrent_low_cycles=2,
