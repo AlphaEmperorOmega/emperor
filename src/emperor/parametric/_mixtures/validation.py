@@ -1,3 +1,4 @@
+import math
 from typing import TYPE_CHECKING
 
 from torch import Tensor
@@ -71,6 +72,8 @@ class AdaptiveMixtureValidator(ValidatorBase):
 
     @staticmethod
     def _validate_clip_range(cfg: AdaptiveMixtureConfig) -> None:
+        if math.isnan(cfg.clip_range):
+            raise ValueError("clip_range must not be NaN, received nan.")
         if cfg.clip_range < 0.0:
             raise ValueError(
                 f"clip_range must be non-negative, received {cfg.clip_range}."
