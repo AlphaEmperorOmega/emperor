@@ -307,6 +307,8 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
         original_forward = layer.forward
         original_generate = layer._generate_parameters
         original_affine = layer._compute_affine_transformation_callback
+        original_weight_sample = layer._sample_weight_probabilities_and_indices
+        original_bias_sample = layer._sample_bias_probabilities_and_indices
         module = CaptureLightningModule(parametric=layer)
         callback = ParametricLayerMonitorCallback(log_every_n_steps=1)
 
@@ -314,6 +316,14 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
         self.assertIsNot(layer.forward, original_forward)
         self.assertIsNot(layer._generate_parameters, original_generate)
         self.assertIsNot(layer._compute_affine_transformation_callback, original_affine)
+        self.assertIsNot(
+            layer._sample_weight_probabilities_and_indices,
+            original_weight_sample,
+        )
+        self.assertIsNot(
+            layer._sample_bias_probabilities_and_indices,
+            original_bias_sample,
+        )
 
         callback.on_fit_end(TrainerStub(), module)
 
@@ -325,6 +335,18 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
             same_bound_method(
                 layer._compute_affine_transformation_callback,
                 original_affine,
+            )
+        )
+        self.assertTrue(
+            same_bound_method(
+                layer._sample_weight_probabilities_and_indices,
+                original_weight_sample,
+            )
+        )
+        self.assertTrue(
+            same_bound_method(
+                layer._sample_bias_probabilities_and_indices,
+                original_bias_sample,
             )
         )
         self.assertEqual(callback._wrapped_methods, [])
