@@ -11,6 +11,8 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.patch import (
+    ConvPatchEmbeddingConfig,
+    LinearPatchEmbeddingConfig,
     PatchBase,
     PatchConfig,
     PatchEmbeddingConv,
@@ -19,8 +21,19 @@ from emperor.patch import (
 from emperor.patch._validation import PatchValidator
 
 
-def linear_stack_config() -> LayerStackConfig:
-    return LayerStackConfig(
+class DerivedLayerStackConfig(LayerStackConfig):
+    pass
+
+
+class BuildOnlyCollaborator:
+    def build(self, overrides=None):
+        raise AssertionError("invalid collaborator must not be built")
+
+
+def linear_stack_config(
+    stack_config_type: type[LayerStackConfig] = LayerStackConfig,
+) -> LayerStackConfig:
+    return stack_config_type(
         input_dim=1,
         hidden_dim=4,
         output_dim=4,
@@ -41,8 +54,6 @@ def linear_stack_config() -> LayerStackConfig:
 
 
 def linear_config(**overrides) -> object:
-    from emperor.patch import LinearPatchEmbeddingConfig
-
     values = {
         "embedding_dim": 4,
         "num_input_channels": 1,
@@ -56,11 +67,77 @@ def linear_config(**overrides) -> object:
     return LinearPatchEmbeddingConfig(**values)
 
 
+def conv_config(**overrides) -> ConvPatchEmbeddingConfig:
+    values = {
+        "embedding_dim": 4,
+        "num_input_channels": 1,
+        "patch_size": 2,
+        "dropout_probability": 0.0,
+        "conv_stack_config": linear_stack_config(),
+    }
+    values.update(overrides)
+    return ConvPatchEmbeddingConfig(**values)
+
+
 class PatchValidatorBehaviorTests(unittest.TestCase):
     def test_real_patch_modules_use_the_real_validator(self) -> None:
         for module_type in (PatchBase, PatchEmbeddingLinear, PatchEmbeddingConv):
             with self.subTest(module_type=module_type.__name__):
                 self.assertIs(module_type.VALIDATOR, PatchValidator)
+
+    def test_stack_collaborators_reject_invalid_nominal_types_before_build(
+        self,
+    ) -> None:
+        invalid_values = (object(), LinearLayerConfig(), BuildOnlyCollaborator())
+        cases = (
+            (
+                PatchEmbeddingLinear,
+                linear_config,
+                "embedding_stack_config",
+            ),
+            (
+                PatchEmbeddingConv,
+                conv_config,
+                "conv_stack_config",
+            ),
+        )
+
+        for module_type, config_factory, field_name in cases:
+            for invalid_value in invalid_values:
+                with self.subTest(
+                    module_type=module_type.__name__,
+                    invalid_type=type(invalid_value).__name__,
+                ):
+                    torch.manual_seed(701)
+                    rng_state = torch.random.get_rng_state()
+                    config = config_factory(**{field_name: invalid_value})
+
+                    with self.assertRaises(TypeError) as error:
+                        module_type(config)
+
+                    self.assertEqual(
+                        str(error.exception),
+                        f"{field_name} must be an instance of LayerStackConfig for "
+                        f"{type(config).__name__}, got "
+                        f"{type(invalid_value).__name__}",
+                    )
+                    torch.testing.assert_close(
+                        torch.random.get_rng_state(),
+                        rng_state,
+                        rtol=0,
+                        atol=0,
+                    )
+
+    def test_linear_patch_accepts_layer_stack_config_subclasses(self) -> None:
+        stack_config = linear_stack_config(DerivedLayerStackConfig)
+        model = PatchEmbeddingLinear(
+            linear_config(embedding_stack_config=stack_config)
+        )
+
+        output = model(torch.ones(2, 1, 4, 4))
+
+        self.assertIs(model.cfg.embedding_stack_config, stack_config)
+        self.assertEqual(output.shape, (2, 5, 4))
 
     def test_required_common_field_error_is_exact(self) -> None:
         with self.assertRaises(ValueError) as error:
