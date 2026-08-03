@@ -9,7 +9,6 @@ from emperor.convs import Conv2dLayerConfig
 from emperor.halting import (
     HaltingConfig,
     HaltingHiddenStateModeOptions,
-    SoftHaltingConfig,
     StickBreakingConfig,
 )
 from emperor.layers import (
@@ -119,20 +118,6 @@ def _gate_config(
 
 def _halting_config(dim: int = 2) -> StickBreakingConfig:
     return StickBreakingConfig(
-        input_dim=dim,
-        threshold=0.99,
-        dropout_probability=0.0,
-        hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
-        halting_gate_config=_stack_config(
-            dim,
-            output_dim=2,
-            num_layers=1,
-        ),
-    )
-
-
-def _soft_halting_config(dim: int = 2) -> SoftHaltingConfig:
-    return SoftHaltingConfig(
         input_dim=dim,
         threshold=0.99,
         dropout_probability=0.0,
@@ -900,14 +885,6 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
                 HaltingConfig(),
                 ValueError,
                 "halting_config must be a concrete halting config for "
-                "RecurrentLayerConfig",
-            ),
-            (
-                "halting_config",
-                _soft_halting_config(),
-                ValueError,
-                "halting_config SoftHaltingConfig builds SoftHalting, which does "
-                "not implement the HaltingInterface required by "
                 "RecurrentLayerConfig",
             ),
             (
