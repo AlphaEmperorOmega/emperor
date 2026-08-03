@@ -13,22 +13,31 @@ class _ResolvedExperimentConfig:
 
 
 class _ExperimentConfigValidator:
-    def __init__(
-        self,
+    @classmethod
+    def resolve(
+        cls,
+        config: "ModelConfig",
         experiment_name: str,
         *,
         minimum_output_dim: int = 1,
-    ) -> None:
-        self._experiment_name = experiment_name
-        self._minimum_output_dim = minimum_output_dim
-
-    def resolve(self, config: "ModelConfig") -> _ResolvedExperimentConfig:
+    ) -> _ResolvedExperimentConfig:
         return _ResolvedExperimentConfig(
-            learning_rate=self._resolve_learning_rate(config.learning_rate),
-            output_dim=self._resolve_output_dim(config.output_dim),
+            learning_rate=cls._resolve_learning_rate(
+                config.learning_rate,
+                experiment_name,
+            ),
+            output_dim=cls._resolve_output_dim(
+                config.output_dim,
+                experiment_name,
+                minimum_output_dim,
+            ),
         )
 
-    def _resolve_learning_rate(self, value: object) -> int | float:
+    @staticmethod
+    def _resolve_learning_rate(
+        value: object,
+        experiment_name: str,
+    ) -> int | float:
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
@@ -36,23 +45,28 @@ class _ExperimentConfigValidator:
             or value < 0
         ):
             raise ValueError(
-                f"{self._experiment_name} config.learning_rate must be a finite "
+                f"{experiment_name} config.learning_rate must be a finite "
                 "real number greater than or equal to 0."
             )
         return value
 
-    def _resolve_output_dim(self, value: object) -> int:
+    @staticmethod
+    def _resolve_output_dim(
+        value: object,
+        experiment_name: str,
+        minimum_output_dim: int,
+    ) -> int:
         if (
             isinstance(value, bool)
             or not isinstance(value, int)
-            or value < self._minimum_output_dim
+            or value < minimum_output_dim
         ):
             requirement = "a positive integer"
-            if self._minimum_output_dim > 1:
+            if minimum_output_dim > 1:
                 requirement = (
-                    f"an integer greater than or equal to {self._minimum_output_dim}"
+                    f"an integer greater than or equal to {minimum_output_dim}"
                 )
             raise ValueError(
-                f"{self._experiment_name} config.output_dim must be {requirement}."
+                f"{experiment_name} config.output_dim must be {requirement}."
             )
         return value

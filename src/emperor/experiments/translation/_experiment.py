@@ -20,10 +20,12 @@ if TYPE_CHECKING:
 class TranslationExperiment(LightningModule):
     """Shared teacher-forced training and corpus evaluation for translation models."""
 
+    VALIDATOR = _TranslationConfigValidator
+
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
         self.cfg = cfg
-        resolved_config = _TranslationConfigValidator().resolve(cfg)
+        resolved_config = self.VALIDATOR.resolve(cfg)
         self.learning_rate = resolved_config.learning_rate
         self.vocab_size = resolved_config.vocab_size
         self.model_dim = resolved_config.model_dim
