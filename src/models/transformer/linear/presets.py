@@ -48,6 +48,9 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_POST_NORM = 27
 
 
+_RECOMMENDED_HALTING_THRESHOLD = 0.999
+
+
 def _definition(values: dict, description: str) -> PresetDefinition:
     return PresetDefinition(preset_values=values, description=description)
 
@@ -82,10 +85,18 @@ _PRESET_DEFINITIONS = {
         {"stack_gate_flag": True}, "Gate encoder and decoder block outputs."
     ),
     ExperimentPreset.HALTING: _definition(
-        {"stack_halting_flag": True}, "Enable block-level adaptive halting."
+        {
+            "stack_halting_flag": True,
+            "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+        },
+        "Enable block-level adaptive halting.",
     ),
     ExperimentPreset.GATING_HALTING: _definition(
-        {"stack_gate_flag": True, "stack_halting_flag": True},
+        {
+            "stack_gate_flag": True,
+            "stack_halting_flag": True,
+            "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+        },
         "Combine block gating and halting.",
     ),
     ExperimentPreset.MEMORY: _definition(
@@ -96,13 +107,18 @@ _PRESET_DEFINITIONS = {
         "Combine block gating and dynamic memory.",
     ),
     ExperimentPreset.HALTING_MEMORY: _definition(
-        {"stack_halting_flag": True, "memory_flag": True},
+        {
+            "stack_halting_flag": True,
+            "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+            "memory_flag": True,
+        },
         "Combine block halting and dynamic memory.",
     ),
     ExperimentPreset.GATING_HALTING_MEMORY: _definition(
         {
             "stack_gate_flag": True,
             "stack_halting_flag": True,
+            "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
             "memory_flag": True,
         },
         "Combine block gating, halting, and memory.",
@@ -115,7 +131,11 @@ _PRESET_DEFINITIONS = {
         "Use recurrent stacks with step gates.",
     ),
     ExperimentPreset.RECURRENT_HALTING: _definition(
-        {"recurrent_flag": True, "recurrent_stack_halting_flag": True},
+        {
+            "recurrent_flag": True,
+            "recurrent_stack_halting_flag": True,
+            "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
+        },
         "Use recurrent stacks with adaptive step halting.",
     ),
     ExperimentPreset.RECURRENT_MEMORY: _definition(
@@ -127,6 +147,7 @@ _PRESET_DEFINITIONS = {
             "recurrent_flag": True,
             "recurrent_stack_gate_flag": True,
             "recurrent_stack_halting_flag": True,
+            "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         },
         "Combine recurrence, step gating, and step halting.",
     ),
@@ -142,6 +163,7 @@ _PRESET_DEFINITIONS = {
         {
             "recurrent_flag": True,
             "recurrent_stack_halting_flag": True,
+            "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
             "memory_flag": True,
         },
         "Combine recurrence, step halting, and memory.",
@@ -151,6 +173,7 @@ _PRESET_DEFINITIONS = {
             "recurrent_flag": True,
             "recurrent_stack_gate_flag": True,
             "recurrent_stack_halting_flag": True,
+            "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
             "memory_flag": True,
         },
         "Enable all recurrent stack controllers.",
@@ -178,6 +201,7 @@ _PRESET_DEFINITIONS = {
         {
             "stack_residual_connection_option": AdditiveResidualConfig,
             "stack_halting_flag": True,
+            "halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         },
         "Combine block residuals and block halting.",
     ),
