@@ -2,7 +2,11 @@ import unittest
 from dataclasses import dataclass
 from typing import Literal
 
-from emperor._validation import ValidatorBase
+from emperor._validation import (
+    ValidatorBase,
+    _adaptive_grouping_paths,
+    _first_adaptive_grouping_path,
+)
 from emperor.config import ConfigBase
 
 
@@ -32,6 +36,49 @@ class ValidatorWithOptionalField(ValidatorBase):
 
 class ValidatorWithOptionalFirst(ValidatorBase):
     OPTIONAL_FIELDS = {"optional_first"}
+
+
+class _GroupingProbeValidator:
+    @staticmethod
+    def grouping_is_enabled(config) -> bool:
+        return config.grouping_enabled
+
+
+class _GroupingProbeOwner:
+    VALIDATOR = _GroupingProbeValidator
+
+
+class _GroupingOwnerWithoutValidator:
+    pass
+
+
+@dataclass
+class _GroupingProbeConfig(ConfigBase):
+    grouping_enabled: bool = False
+    grouping_scope: str = ""
+    nested: object = None
+
+    def _registry_owner(self) -> type:
+        return _GroupingProbeOwner
+
+
+@dataclass
+class _ExplodingGroupingConfig(ConfigBase):
+    def _registry_owner(self) -> type:
+        raise RuntimeError("later config should not be visited")
+
+
+@dataclass
+class _UnsupportedGroupingOwnerConfig(ConfigBase):
+    nested: object = None
+
+
+@dataclass
+class _GroupingConfigWithoutValidator(ConfigBase):
+    nested: object = None
+
+    def _registry_owner(self) -> type:
+        return _GroupingOwnerWithoutValidator
 
 
 class TestValidatorBase(unittest.TestCase):
@@ -145,3 +192,77 @@ class TestValidatorBase(unittest.TestCase):
 
     def test_dimension_validation_accepts_multiple_positive_values(self):
         self.assertIsNone(ValidatorBase.validate_dimensions(width=1, height=3))
+
+    def test_adaptive_grouping_discovery_preserves_paths_cycles_and_predicates(
+        self,
+    ) -> None:
+        first = _GroupingProbeConfig(
+            grouping_enabled=True,
+            grouping_scope="sequence",
+        )
+        second = _GroupingProbeConfig(
+            grouping_enabled=True,
+            grouping_scope="rows",
+        )
+        root = _GroupingProbeConfig()
+        nested: dict[str, object] = {"root_cycle": root}
+        nested["matches"] = (first, [second])
+        root.nested = nested
+
+        self.assertEqual(
+            _adaptive_grouping_paths(root, root="Root"),
+            (
+                "Root.nested['matches'][0]",
+                "Root.nested['matches'][1][0]",
+            ),
+        )
+        self.assertEqual(
+            _first_adaptive_grouping_path(root, root="Root"),
+            "Root.nested['matches'][0]",
+        )
+        self.assertEqual(
+            _first_adaptive_grouping_path(
+                root,
+                root="Root",
+                predicate=lambda config: config.grouping_scope == "rows",
+            ),
+            "Root.nested['matches'][1][0]",
+        )
+
+    def test_first_adaptive_grouping_discovery_stops_after_the_first_match(
+        self,
+    ) -> None:
+        root = _GroupingProbeConfig(
+            nested=[
+                _GroupingProbeConfig(grouping_enabled=True),
+                _ExplodingGroupingConfig(),
+            ]
+        )
+
+        self.assertEqual(
+            _first_adaptive_grouping_path(root, root="Root"),
+            "Root.nested[0]",
+        )
+
+    def test_adaptive_grouping_discovery_tolerates_unsupported_registry_owners(
+        self,
+    ) -> None:
+        enabled = _GroupingProbeConfig(grouping_enabled=True)
+        cases = (
+            (
+                _UnsupportedGroupingOwnerConfig(nested=enabled),
+                "Root.nested",
+            ),
+            (
+                _GroupingConfigWithoutValidator(nested={"leaf": enabled}),
+                "Root.nested['leaf']",
+            ),
+            (_UnsupportedGroupingOwnerConfig(), None),
+        )
+
+        for config, expected_path in cases:
+            with self.subTest(config=type(config).__name__):
+                self.assertEqual(
+                    _first_adaptive_grouping_path(config, root="Root"),
+                    expected_path,
+                )

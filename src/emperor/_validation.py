@@ -1,4 +1,5 @@
 import types
+from collections.abc import Callable, Iterator
 from dataclasses import fields
 from typing import Union, get_args, get_origin
 
@@ -6,21 +7,44 @@ from emperor.config import ConfigBase
 
 
 def _adaptive_grouping_paths(
-    config: ConfigBase,
+    config: object,
     *,
     root: str,
+    predicate: Callable[[ConfigBase], bool] | None = None,
 ) -> tuple[str, ...]:
-    matches: list[str] = []
-    _collect_adaptive_grouping_paths(config, root, set(), matches)
-    return tuple(matches)
+    return tuple(
+        _iter_adaptive_grouping_paths(
+            config,
+            root,
+            set(),
+            predicate,
+        )
+    )
 
 
-def _collect_adaptive_grouping_paths(
+def _first_adaptive_grouping_path(
+    config: object,
+    *,
+    root: str,
+    predicate: Callable[[ConfigBase], bool] | None = None,
+) -> str | None:
+    return next(
+        _iter_adaptive_grouping_paths(
+            config,
+            root,
+            set(),
+            predicate,
+        ),
+        None,
+    )
+
+
+def _iter_adaptive_grouping_paths(
     value: object,
     path: str,
     visited: set[int],
-    matches: list[str],
-) -> None:
+    predicate: Callable[[ConfigBase], bool] | None,
+) -> Iterator[str]:
     if isinstance(value, ConfigBase):
         identity = id(value)
         if identity in visited:
@@ -35,16 +59,20 @@ def _collect_adaptive_grouping_paths(
             "grouping_is_enabled",
             None,
         )
-        if callable(grouping_is_enabled) and grouping_is_enabled(value):
-            matches.append(path)
+        if (
+            callable(grouping_is_enabled)
+            and grouping_is_enabled(value)
+            and (predicate is None or predicate(value))
+        ):
+            yield path
         for config_field in fields(value):
             field_value = getattr(value, config_field.name)
             field_path = f"{path}.{config_field.name}"
-            _collect_adaptive_grouping_paths(
+            yield from _iter_adaptive_grouping_paths(
                 field_value,
                 field_path,
                 visited,
-                matches,
+                predicate,
             )
         return
 
@@ -54,11 +82,11 @@ def _collect_adaptive_grouping_paths(
             return
         visited.add(identity)
         for key, item in value.items():
-            _collect_adaptive_grouping_paths(
+            yield from _iter_adaptive_grouping_paths(
                 item,
                 f"{path}[{key!r}]",
                 visited,
-                matches,
+                predicate,
             )
         return
 
@@ -68,11 +96,11 @@ def _collect_adaptive_grouping_paths(
             return
         visited.add(identity)
         for index, item in enumerate(value):
-            _collect_adaptive_grouping_paths(
+            yield from _iter_adaptive_grouping_paths(
                 item,
                 f"{path}[{index}]",
                 visited,
-                matches,
+                predicate,
             )
 
 
