@@ -32,6 +32,21 @@ class PatchValidator(ValidatorBase):
             )
         cls._validate_dropout_probability(model.dropout_probability)
         cls._validate_class_token_flag(model.cfg.class_token_flag)
+        cls._validate_stack_config_types(model.cfg)
+
+    @staticmethod
+    def _validate_stack_config_types(config) -> None:
+        from emperor.layers import LayerStackConfig
+
+        for field_name in ("embedding_stack_config", "conv_stack_config"):
+            if not hasattr(config, field_name):
+                continue
+            stack_config = getattr(config, field_name)
+            if not isinstance(stack_config, LayerStackConfig):
+                raise TypeError(
+                    f"{field_name} must be an instance of LayerStackConfig for "
+                    f"{type(config).__name__}, got {type(stack_config).__name__}"
+                )
 
     @staticmethod
     def _validate_dropout_probability(value: float) -> None:
