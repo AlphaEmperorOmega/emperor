@@ -65,6 +65,47 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
             callback()
         self.assertEqual(str(error.exception), expected_message)
 
+    def test_clip_range_rejects_nan_and_preserves_positive_infinity(self) -> None:
+        clipping_modes = (
+            ClipParameterOptions.DISABLED,
+            ClipParameterOptions.BEFORE,
+            ClipParameterOptions.AFTER,
+        )
+        for clipping_mode in clipping_modes:
+            with self.subTest(clipping_mode=clipping_mode):
+                unbounded_config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+                unbounded_config.clip_parameter_option = clipping_mode
+                unbounded_config.clip_range = float("inf")
+                AdaptiveMixtureValidator._validate_clip_range(unbounded_config)
+
+                torch.manual_seed(1901)
+                rng_state = torch.random.get_rng_state()
+                nan_config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+                nan_config.clip_parameter_option = clipping_mode
+                nan_config.clip_range = float("nan")
+
+                self.assert_exact_error(
+                    ValueError,
+                    "clip_range must not be NaN, received nan.",
+                    nan_config.build,
+                )
+                torch.testing.assert_close(
+                    torch.random.get_rng_state(),
+                    rng_state,
+                    rtol=0,
+                    atol=0,
+                )
+
+        negative_infinity = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        negative_infinity.clip_range = float("-inf")
+        self.assert_exact_error(
+            ValueError,
+            "clip_range must be non-negative, received -inf.",
+            lambda: AdaptiveMixtureValidator._validate_clip_range(
+                negative_infinity
+            ),
+        )
+
     def test_mixture_constructors_honor_wrappers_overrides_and_exact_state(
         self,
     ) -> None:
