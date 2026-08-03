@@ -39,3 +39,5 @@ mutants/
 /apps/workbench/web/tsconfig.tsbuildinfo
 /.runtime/
 /docs/agents/
+/proposed_components/
+/learning/
