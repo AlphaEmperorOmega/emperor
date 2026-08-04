@@ -207,6 +207,32 @@ class TestAttentionMethodInstrumentation(unittest.TestCase):
                 self.assertTrue(same_bound_method(owner.compute, original_method))
                 self.assertEqual(instrumentation.probe_count, 0)
 
+    def test_instrumentation_keeps_distinct_owners_in_distinct_probes(self):
+        instrumentation = _AttentionMethodInstrumentation()
+        first_owner = MethodOwner()
+        second_owner = MethodOwner()
+        records = []
+        removers = [
+            instrumentation.subscribe(
+                owner,
+                "compute",
+                self.observer(label, records),
+            )
+            for owner, label in (
+                (first_owner, "first"),
+                (second_owner, "second"),
+            )
+        ]
+
+        self.assertEqual(instrumentation.probe_count, 2)
+        self.assertEqual(first_owner.compute(1), 1)
+        self.assertEqual(second_owner.compute(2), 2)
+        self.assertEqual([record[0] for record in records], ["first", "second"])
+
+        for remove in removers:
+            remove()
+        self.assertEqual(instrumentation.probe_count, 0)
+
     def test_probe_preserves_result_identity_and_original_exception(self):
         class IdentityOwner:
             @staticmethod
@@ -1084,6 +1110,53 @@ class TestAttentionDiagnosticsTrackerManager(unittest.TestCase):
             original_projection,
         )
         self.assertIs(attention.processor.compute_attention, original_attention)
+
+    def test_failed_attachment_preserves_preexisting_manager_state(self):
+        first_attention = InstrumentedAttention(returned_weights=torch.ones(1, 1, 1))
+        failing_attention = InstrumentedAttention(returned_weights=None)
+        failing_original_projection = (
+            failing_attention.projector.compute_qkv_projections
+        )
+        failing_original_attention = failing_attention.processor.compute_attention
+        observations = []
+        manager = _AttentionDiagnosticsTrackerManager()
+        manager.attach(
+            "first",
+            first_attention,
+            lambda: True,
+            lambda name, _module, _observation: observations.append(name),
+        )
+        initial_hook_count = manager.hook_count
+        initial_subscription_count = manager.subscription_count
+
+        with self.assertRaisesRegex(
+            AttributeError,
+            "_compute_masked_attention_weights must be callable",
+        ):
+            manager.attach(
+                "failing",
+                failing_attention,
+                lambda: True,
+                lambda _name, _module, _observation: None,
+                monitor_adapter=ExactWeightMonitorAdapter(),
+            )
+
+        self.assertEqual(manager.module_names, ("first",))
+        self.assertEqual(manager.hook_count, initial_hook_count)
+        self.assertEqual(manager.subscription_count, initial_subscription_count)
+        self.assertIs(
+            failing_attention.projector.compute_qkv_projections,
+            failing_original_projection,
+        )
+        self.assertIs(
+            failing_attention.processor.compute_attention,
+            failing_original_attention,
+        )
+
+        first_attention(self.attention_inputs())
+
+        self.assertEqual(observations, ["first"])
+        manager.detach()
 
     def test_processor_starts_observation_when_projector_is_absent(self):
         attention = ProcessorOnlyAttention()
