@@ -33,6 +33,7 @@ class StaticSequenceClassifier(SequenceClassifierExperiment):
         self.register_buffer("fixed_auxiliary_loss", auxiliary_loss)
         self.tuple_output = tuple_output
         self.forward_calls = []
+        self.log_calls = []
 
     def forward(self, tokens: torch.Tensor):
         self.forward_calls.append(tokens)
@@ -40,6 +41,9 @@ class StaticSequenceClassifier(SequenceClassifierExperiment):
         if not self.tuple_output:
             return logits
         return logits, self.fixed_auxiliary_loss
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_calls.append((payload, kwargs))
 
 
 class GraphAuxiliarySequenceClassifier(StaticSequenceClassifier):
@@ -274,31 +278,48 @@ class TestSequenceClassifierExperiment(unittest.TestCase):
                 model._model_step(batch)
             forward.assert_not_called()
 
-    def test_stage_steps_delegate_to_private_metrics_logger(self) -> None:
+    def test_all_real_stage_methods_compose_the_owned_step_and_logger(self) -> None:
         logits, tokens, labels = self.deterministic_batch()
-        model = StaticSequenceClassifier(self.preset(), logits)
-        loss = torch.tensor(0.5)
-        output = SequenceClassifierStepOutput(loss, logits, labels)
+        auxiliary_loss = torch.tensor(0.25)
+        expected_loss = F.cross_entropy(logits, labels) + auxiliary_loss
 
-        for step_name, log_name in (
-            ("training_step", "log_training_step"),
-            ("validation_step", "log_validation_step"),
-            ("test_step", "log_test_step"),
+        for stage, step_name, expected_kwargs in (
+            ("train", "training_step", {"prog_bar": True}),
+            ("validation", "validation_step", {"prog_bar": True}),
+            ("test", "test_step", {}),
         ):
-            with (
-                self.subTest(step=step_name),
-                patch.object(
-                    model,
-                    "_model_step",
-                    return_value=output,
-                ),
-                patch.object(model.metrics, log_name) as log_method,
-            ):
+            with self.subTest(stage=stage):
+                model = StaticSequenceClassifier(
+                    self.preset(),
+                    logits,
+                    auxiliary_loss,
+                )
+
                 result = getattr(model, step_name)((tokens, labels), 0)
 
-                self.assertIs(result, loss)
-                log_method.assert_called_once()
-                self.assertIs(log_method.call_args.args[1], output)
+                torch.testing.assert_close(result, expected_loss)
+                self.assertTrue(result.requires_grad)
+                self.assertEqual(model.forward_calls, [tokens])
+                self.assertEqual(len(model.log_calls), 1)
+                payload, kwargs = model.log_calls[0]
+                self.assertEqual(
+                    set(payload),
+                    {
+                        f"{stage}/loss",
+                        f"{stage}/accuracy",
+                        f"{stage}/f1_score",
+                    },
+                )
+                self.assertIs(payload[f"{stage}/loss"], result)
+                torch.testing.assert_close(
+                    payload[f"{stage}/accuracy"],
+                    torch.tensor(1.0 / 3.0),
+                )
+                torch.testing.assert_close(
+                    payload[f"{stage}/f1_score"],
+                    torch.tensor(2.0 / 9.0),
+                )
+                self.assertEqual(kwargs, expected_kwargs)
 
     def test_metric_payloads_have_exact_stage_keys_and_values(self) -> None:
         logits, _tokens, labels = self.deterministic_batch()
