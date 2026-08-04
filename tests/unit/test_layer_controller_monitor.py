@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import patch
 
 import torch
 
@@ -19,9 +18,6 @@ from emperor.layers import (
     LayerState,
     ResidualConfig,
 )
-from emperor.layers._monitoring.callbacks._hooks import (
-    _install_method_replacement,
-)
 from emperor.layers._monitoring.diagnostics import _LayerGateTrackingContext
 from emperor.linears import LinearLayerConfig
 from support.monitor import (
@@ -31,6 +27,17 @@ from support.monitor import (
     orchestration_calls,
     same_bound_method,
 )
+
+
+class RejectingForwardHookModule(torch.nn.Identity):
+    def __init__(self) -> None:
+        super().__init__()
+        self.reject_forward_hooks = True
+
+    def register_forward_hook(self, *args, **kwargs):
+        if self.reject_forward_hooks:
+            raise RuntimeError("deliberate forward-hook registration failure")
+        return super().register_forward_hook(*args, **kwargs)
 
 
 class TestLayerControllerMonitorCallback(unittest.TestCase):
@@ -250,40 +257,74 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
             )
         )
 
-    def test_partial_setup_failure_restores_installed_wrappers(self):
+    def test_partial_setup_failure_restores_real_hooks_and_wrappers_for_retry(self):
         first_layer = self.layer()
         failing_layer = self.layer()
-        original_activation = first_layer._Layer__maybe_apply_activation
+        rejecting_dropout = RejectingForwardHookModule()
+        failing_layer.dropout_module = rejecting_dropout
         module = CaptureLightningModule(first=first_layer, second=failing_layer)
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)
-        replacement_count = 0
-
-        def fail_during_second_layer_setup(*args, **kwargs):
-            nonlocal replacement_count
-            replacement_count += 1
-            if replacement_count == 3:
-                raise RuntimeError("deliberate wrapper setup failure")
-            return _install_method_replacement(*args, **kwargs)
-
-        with patch(
-            "emperor.layers._monitoring.callbacks.layer_controller."
-            "_install_method_replacement",
-            side_effect=fail_during_second_layer_setup,
-        ):
-            with self.assertRaisesRegex(
-                RuntimeError,
-                "deliberate wrapper setup failure",
-            ):
-                callback.on_fit_start(TrainerStub(), module)
-
-        self.assertTrue(
-            same_bound_method(
-                first_layer._Layer__maybe_apply_activation,
-                original_activation,
-            )
+        monitored_methods = (
+            (first_layer, "_Layer__maybe_apply_activation"),
+            (first_layer, "_Layer__maybe_apply_residual_connection"),
+            (failing_layer, "_Layer__maybe_apply_activation"),
+            (failing_layer, "_Layer__maybe_apply_residual_connection"),
         )
+        original_methods = {
+            (id(layer), method_name): getattr(layer, method_name)
+            for layer, method_name in monitored_methods
+        }
+        hook_targets = (
+            first_layer.gate_model.model,
+            first_layer.dropout_module,
+            first_layer.layer_norm_module,
+            failing_layer.gate_model.model,
+            rejecting_dropout,
+            failing_layer.layer_norm_module,
+        )
+        original_hooks = {
+            id(target): dict(target._forward_hooks) for target in hook_targets
+        }
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "deliberate forward-hook registration failure",
+        ):
+            callback.on_fit_start(TrainerStub(), module)
+
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._wrapped_methods, [])
+        self.assertEqual(callback._hooked_gate_model_ids, set())
+        for target in hook_targets:
+            self.assertEqual(target._forward_hooks, original_hooks[id(target)])
+        for layer, method_name in monitored_methods:
+            self.assertTrue(
+                same_bound_method(
+                    getattr(layer, method_name),
+                    original_methods[(id(layer), method_name)],
+                )
+            )
+
+        rejecting_dropout.reject_forward_hooks = False
+        callback.on_fit_start(TrainerStub(), module)
+        first_layer(self.state())
+        failing_layer(self.state())
+
+        self.assertGreater(len(callback._hooks), 0)
+        self.assertGreater(len(callback._wrapped_methods), 0)
+        self.assertIn("first/gate/output_mean", module.logged_tags)
+        self.assertIn("second/dropout/zero_fraction", module.logged_tags)
+
+        callback.on_fit_end(TrainerStub(), module)
+        for target in hook_targets:
+            self.assertEqual(target._forward_hooks, original_hooks[id(target)])
+        for layer, method_name in monitored_methods:
+            self.assertTrue(
+                same_bound_method(
+                    getattr(layer, method_name),
+                    original_methods[(id(layer), method_name)],
+                )
+            )
 
     def test_logs_expected_finite_scalar_tags(self):
         layer = self.layer()
