@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import cast
 
 import torch
 from torch import Tensor
@@ -60,15 +61,14 @@ class _ClassifierValidationExamples:
         if experiment is None or not self._examples:
             return
 
-        image_grid = self._grid()
-        if image_grid is not None:
-            self._emission_policy.emit_image(
-                experiment,
-                "validation/examples/most_confident_wrong",
-                image_grid,
-                global_step=epoch,
-                module_key="validation",
-            )
+        image_grid = cast(Tensor, self._grid())
+        self._emission_policy.emit_image(
+            experiment,
+            "validation/examples/most_confident_wrong",
+            image_grid,
+            global_step=epoch,
+            module_key="validation",
+        )
 
         add_text = getattr(experiment, "add_text", None)
         if callable(add_text):
