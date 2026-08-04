@@ -3,17 +3,73 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
+from emperor.config import ModelConfig
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
 )
+from emperor.experiments.translation import TranslationExperiment
+from emperor.experiments.translation._metrics import _translation_step_metrics
+from emperor.experiments.translation._records import TranslationStepOutput
 from model_runtime.task_behavior import experiment_task_behavior
 from models.catalog import model_package
 from models.training_test_utils import RandomTranslationDataModule
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
 from models.transformer.linear.presets import Experiment
+
+
+class StaticTranslationExperiment(TranslationExperiment):
+    def __init__(self, auxiliary_loss: torch.Tensor | None = None) -> None:
+        super().__init__(
+            ModelConfig(
+                learning_rate=1e-3,
+                hidden_dim=4,
+                output_dim=5,
+            )
+        )
+        self.scale = nn.Parameter(torch.tensor(1.0))
+        self.register_buffer("fixed_logits", torch.zeros(1, 3, self.vocab_size))
+        self.register_buffer("fixed_auxiliary_loss", auxiliary_loss)
+        self.forward_calls = []
+        self.generate_calls = []
+        self.log_dict_calls = []
+        self.log_calls = []
+
+    def forward(
+        self,
+        source_ids: torch.Tensor,
+        target_input_ids: torch.Tensor,
+    ):
+        self.forward_calls.append((source_ids, target_input_ids))
+        logits = (
+            self.fixed_logits.expand(
+                source_ids.size(0),
+                target_input_ids.size(1),
+                -1,
+            )
+            * self.scale
+        )
+        return logits, self.fixed_auxiliary_loss
+
+    def generate(self, source_ids: torch.Tensor, *, max_length: int) -> torch.Tensor:
+        self.generate_calls.append((source_ids, max_length))
+        return source_ids
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_dict_calls.append((payload, kwargs))
+
+    def log(self, name, value, **kwargs) -> None:
+        self.log_calls.append((name, value, kwargs))
+
+
+class NumericTranslationDataModule:
+    @staticmethod
+    def decode_batch(token_ids: torch.Tensor) -> list[str]:
+        return [" ".join(str(value) for value in row.tolist()) for row in token_ids]
 
 
 class TestTranslationExperiment(unittest.TestCase):
@@ -102,6 +158,7 @@ class TestTranslationExperiment(unittest.TestCase):
             model.vocab_size,
         )
         invalid_outputs = (
+            (logits, "two-item tuple"),
             ((logits,), "two-item tuple"),
             ((logits, None, None), "two-item tuple"),
             (("not logits", None), "rank-3 tensor"),
@@ -129,7 +186,13 @@ class TestTranslationExperiment(unittest.TestCase):
         model = self.preset()
         source_ids, target_ids = self.batch()
         invalid_batches = (
+            ((source_ids,), "must contain"),
+            ((source_ids, target_ids, target_ids), "must contain"),
             (("not source IDs", target_ids), "rank-2 tensors"),
+            ((source_ids, "not target IDs"), "rank-2 tensors"),
+            ((source_ids.unsqueeze(0), target_ids), "rank-2 tensors"),
+            ((source_ids, target_ids.unsqueeze(0)), "rank-2 tensors"),
+            ((source_ids, target_ids[:, :1]), "at least 2 IDs"),
             ((source_ids[:1], target_ids), "batch dimension"),
         )
 
@@ -165,6 +228,24 @@ class TestTranslationExperiment(unittest.TestCase):
             torch.exp(output.nll.detach().clamp(max=20.0)),
         )
 
+    def test_all_pad_targets_report_zero_token_accuracy(self) -> None:
+        logits = torch.tensor([[[3.0, 0.0], [0.0, 3.0]]], dtype=torch.float64)
+        output = TranslationStepOutput(
+            total_loss=torch.tensor(float("nan"), dtype=torch.float64),
+            nll=torch.tensor(0.5, dtype=torch.float64),
+            logits=logits,
+            labels=torch.zeros(1, 2, dtype=torch.long),
+            auxiliary_loss=torch.tensor(0.0, dtype=torch.float64),
+        )
+
+        metrics = _translation_step_metrics("validation", output, pad_token_id=0)
+
+        torch.testing.assert_close(
+            metrics["validation/token_accuracy"],
+            torch.tensor(0.0, dtype=torch.float64),
+        )
+        self.assertEqual(metrics["validation/token_accuracy"].device, logits.device)
+
     def test_corpus_sacrebleu_and_generation_disable_switch(self):
         model = self.preset()
         predictions = ["the cat sat here", "a red house stands"]
@@ -181,6 +262,122 @@ class TestTranslationExperiment(unittest.TestCase):
             model._log_corpus_bleu("validation", predictions, references)
         disabled_log.assert_not_called()
 
+    def test_real_stages_generation_lifecycle_and_missing_decode_no_ops(self) -> None:
+        model = StaticTranslationExperiment(auxiliary_loss=torch.tensor(0.25))
+        model._trainer = SimpleNamespace(datamodule=NumericTranslationDataModule())
+        first_batch = (
+            torch.tensor([[2, 4, 3]]),
+            torch.tensor([[2, 1, 3, 0]]),
+        )
+        second_batch = (
+            torch.tensor([[2, 3, 0]]),
+            torch.tensor([[2, 4, 3, 0]]),
+        )
+        expected_task_loss = F.cross_entropy(
+            torch.zeros(3, model.vocab_size),
+            first_batch[1][:, 1:].reshape(-1),
+            ignore_index=model.pad_token_id,
+            label_smoothing=model.label_smoothing,
+        )
+        expected_total_loss = expected_task_loss + 0.25
+
+        private_step_loss = model._model_step(first_batch)
+        training_loss = model.training_step(first_batch, 0)
+        model.on_validation_epoch_start()
+        validation_losses = (
+            model.validation_step(first_batch, 0),
+            model.validation_step(second_batch, 1),
+        )
+
+        torch.testing.assert_close(private_step_loss, expected_total_loss)
+        torch.testing.assert_close(training_loss, expected_total_loss)
+        self.assertTrue(training_loss.requires_grad)
+        for validation_loss in validation_losses:
+            torch.testing.assert_close(validation_loss, expected_total_loss)
+        self.assertIs(model.forward_calls[1][0], first_batch[0])
+        torch.testing.assert_close(model.forward_calls[1][1], first_batch[1][:, :-1])
+        self.assertEqual(
+            model.forward_calls[1][1].data_ptr(),
+            first_batch[1].data_ptr(),
+        )
+        self.assertEqual(
+            model._validation_predictions,
+            ["2 4 3", "2 3 0"],
+        )
+        self.assertEqual(
+            model._validation_references,
+            ["2 1 3 0", "2 4 3 0"],
+        )
+        model.on_validation_epoch_end()
+        self.assertEqual(model.log_calls[0][0], "validation/bleu")
+
+        model.on_test_epoch_start()
+        test_losses = (
+            model.test_step(first_batch, 0),
+            model.test_step(second_batch, 1),
+        )
+        for test_loss in test_losses:
+            torch.testing.assert_close(test_loss, expected_total_loss)
+        self.assertEqual(model._test_predictions, ["2 4 3", "2 3 0"])
+        self.assertEqual(model._test_references, ["2 1 3 0", "2 4 3 0"])
+        model.on_test_epoch_end()
+        self.assertEqual(model.log_calls[1][0], "test/bleu")
+
+        expected_stages = ("train", "validation", "validation", "test", "test")
+        expected_prog_bars = (True, True, True, False, False)
+        for (payload, kwargs), stage, prog_bar in zip(
+            model.log_dict_calls,
+            expected_stages,
+            expected_prog_bars,
+            strict=True,
+        ):
+            self.assertEqual(
+                set(payload),
+                {
+                    f"{stage}/loss",
+                    f"{stage}/nll",
+                    f"{stage}/perplexity",
+                    f"{stage}/token_accuracy",
+                    f"{stage}/auxiliary_loss",
+                },
+            )
+            self.assertEqual(
+                kwargs,
+                {
+                    "prog_bar": prog_bar,
+                    "on_step": stage == "train",
+                    "on_epoch": True,
+                    "batch_size": 1,
+                },
+            )
+
+        model.on_validation_epoch_start()
+        model.on_test_epoch_start()
+        self.assertEqual(model._validation_predictions, [])
+        self.assertEqual(model._validation_references, [])
+        self.assertEqual(model._test_predictions, [])
+        self.assertEqual(model._test_references, [])
+
+        no_op_model = StaticTranslationExperiment()
+        no_op_model._collect_generation("validation", first_batch)
+        no_op_model._trainer = SimpleNamespace(datamodule=None)
+        no_op_model._collect_generation("validation", first_batch)
+        no_op_model._trainer = SimpleNamespace(datamodule=SimpleNamespace())
+        no_op_model._collect_generation("validation", first_batch)
+        no_op_model._trainer = SimpleNamespace(
+            datamodule=SimpleNamespace(decode_batch=lambda _tokens: [])
+        )
+        no_op_model._collect_generation("validation", first_batch)
+        no_op_model._log_corpus_bleu("validation", [], [])
+        self.assertEqual(no_op_model._validation_predictions, [])
+        self.assertEqual(no_op_model._validation_references, [])
+        self.assertEqual(no_op_model.log_calls, [])
+        self.assertEqual(len(no_op_model.generate_calls), 1)
+
+        no_op_model.generation_metrics_flag = False
+        no_op_model._collect_generation("validation", first_batch)
+        self.assertEqual(len(no_op_model.generate_calls), 1)
+
     def test_optimizer_and_inverse_square_root_scheduler_defaults(self):
         model = self.preset()
 
@@ -196,6 +393,15 @@ class TestTranslationExperiment(unittest.TestCase):
             scheduler.get_last_lr()[0],
             model.learning_rate * expected_initial_factor,
         )
+        schedule = scheduler.lr_lambdas[0]
+        for step in (-2, 0, model.warmup_steps - 1, 4 * model.warmup_steps - 1):
+            with self.subTest(step=step):
+                safe_step = max(1, step + 1)
+                expected_factor = model.model_dim**-0.5 * min(
+                    safe_step**-0.5,
+                    safe_step * model.warmup_steps**-1.5,
+                )
+                self.assertAlmostEqual(schedule(step), expected_factor)
 
     def test_random_translation_data_is_deterministic_and_decodes_numerically(self):
         model = self.preset()
