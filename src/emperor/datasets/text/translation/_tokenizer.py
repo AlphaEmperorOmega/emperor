@@ -43,8 +43,12 @@ class _TokenizerSupport:
             manifest = json.loads(
                 self.tokenizer_manifest_path.read_text(encoding="utf-8")
             )
-            tokenizer = Tokenizer.from_file(str(self.tokenizer_path))
         except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        try:
+            tokenizer = Tokenizer.from_file(str(self.tokenizer_path))
+        except Exception:
+            # The tokenizers binding raises a bare Exception for malformed JSON.
             return False
         return (
             manifest == expected_manifest
