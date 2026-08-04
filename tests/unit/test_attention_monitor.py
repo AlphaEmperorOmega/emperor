@@ -175,7 +175,7 @@ class TestAttentionMethodInstrumentation(unittest.TestCase):
         self.assertEqual(records, [("first", (3,), {"scale": 2}, 6)])
         self.assertEqual(instrumentation.probe_count, 0)
 
-    def test_subscriptions_can_be_removed_in_either_order(self):
+    def test_subscriptions_can_be_removed_repeatedly_and_in_either_order(self):
         for removal_order in ((0, 1), (1, 0)):
             with self.subTest(removal_order=removal_order):
                 instrumentation = _AttentionMethodInstrumentation()
@@ -193,7 +193,9 @@ class TestAttentionMethodInstrumentation(unittest.TestCase):
 
                 self.assertEqual(owner.compute(2), 2)
                 removers[removal_order[0]]()
+                removers[removal_order[0]]()
                 self.assertEqual(owner.compute(3), 3)
+                removers[removal_order[1]]()
                 removers[removal_order[1]]()
 
                 first_label = ("first", "second")[removal_order[0]]
@@ -437,13 +439,38 @@ class TestAttentionObservationAndTracker(unittest.TestCase):
                     )
                 self.assertIsNone(observation.auxiliary_loss)
 
-    def test_invalid_projected_inputs_and_exact_weights_are_ignored(self):
+    def test_invalid_diagnostic_values_are_ignored_without_overwriting_state(self):
         tracker = _AttentionDiagnosticsTracker("attention")
+        raw_logits = torch.tensor([[[1.0, -1.0]]])
+        normalized_weights = torch.tensor([[[0.75, 0.25]]])
+
+        tracker.record_raw_attention_logits(raw_logits)
+        tracker.record_normalized_attention_weights(normalized_weights)
+        recorded_raw_logits = tracker.latest_observation.raw_attention_logits
+        recorded_normalized_weights = (
+            tracker.latest_observation.normalized_attention_weights
+        )
 
         tracker.record_projected_inputs(object())
+        tracker.record_raw_attention_logits(object())
+        tracker.record_normalized_attention_weights(None)
         tracker.record_exact_attention_weights(object())
 
         self.assertIsNone(tracker.latest_observation.projected_inputs)
+        self.assertIs(
+            tracker.latest_observation.raw_attention_logits,
+            recorded_raw_logits,
+        )
+        self.assertIs(
+            tracker.latest_observation.normalized_attention_weights,
+            recorded_normalized_weights,
+        )
+        self.assertEqual(recorded_raw_logits.data_ptr(), raw_logits.data_ptr())
+        self.assertEqual(
+            recorded_normalized_weights.data_ptr(),
+            normalized_weights.data_ptr(),
+        )
+        self.assertIsNone(tracker.latest_observation.exact_attention_weights)
         self.assertIsNone(tracker.latest_observation.exact_attention_weights)
 
 
