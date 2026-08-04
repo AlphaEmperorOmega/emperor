@@ -1,3 +1,4 @@
+import copy
 import unittest
 
 import torch
@@ -31,6 +32,44 @@ def make_config(**overrides) -> SamplerConfig:
 
 
 class TestSamplerModelValidatorAdapter(unittest.TestCase):
+    def test_sparse_and_full_configs_validate_against_distinct_owners(self) -> None:
+        sparse = make_config(
+            top_k=1,
+            num_experts=4,
+            normalize_probabilities_flag=False,
+            coefficient_of_variation_loss_weight=0.5,
+        )
+        full = make_config(
+            top_k=4,
+            num_experts=4,
+            normalize_probabilities_flag=True,
+            coefficient_of_variation_loss_weight=0.0,
+        )
+        sparse_snapshot = copy.deepcopy(sparse)
+        full_snapshot = copy.deepcopy(full)
+
+        SamplerModelValidator.validate_config(sparse)
+        SamplerModelValidator.validate_config(full)
+
+        sparse.normalize_probabilities_flag = True
+        with self.assertRaisesRegex(
+            ValueError,
+            "normalize_probabilities_flag must be False when using SamplerSparse",
+        ):
+            SamplerModelValidator.validate_config(sparse)
+        sparse.normalize_probabilities_flag = False
+
+        full.coefficient_of_variation_loss_weight = 0.5
+        with self.assertRaisesRegex(
+            ValueError,
+            "coefficient_of_variation_loss_weight must be 0.0 when using SamplerFull",
+        ):
+            SamplerModelValidator.validate_config(full)
+        full.coefficient_of_variation_loss_weight = 0.0
+
+        self.assertEqual(sparse, sparse_snapshot)
+        self.assertEqual(full, full_snapshot)
+
     def test_module_exposes_validator_adapter(self):
         self.assertIs(SamplerModel.VALIDATOR, SamplerModelValidator)
 
