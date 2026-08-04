@@ -229,6 +229,13 @@ class TestValidatorBase(unittest.TestCase):
             "Root.nested['matches'][1][0]",
         )
 
+        cyclic_list: list[object] = []
+        cyclic_list.append(cyclic_list)
+        self.assertEqual(
+            _adaptive_grouping_paths(cyclic_list, root="CyclicList"),
+            (),
+        )
+
     def test_first_adaptive_grouping_discovery_stops_after_the_first_match(
         self,
     ) -> None:
