@@ -15,4 +15,4 @@ class MemoryInterface(Protocol):
 
     memory_position_option: MemoryPositionOptions
 
-    def __call__(self, hidden: Tensor) -> Tensor: ...
+    def __call__(self, hidden: Tensor) -> Tensor: ...  # pragma: no cover
