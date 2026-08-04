@@ -114,6 +114,80 @@ def conv_config(**overrides) -> ConvPatchEmbeddingConfig:
 
 
 class PatchValidatorBehaviorTests(unittest.TestCase):
+    def test_invalid_scalar_geometry_returns_none_before_arithmetic(self) -> None:
+        invalid_values = (True, 0, -1, 1.5, (1,))
+        fields = ("num_layers", "kernel_size", "stride")
+
+        for field_name in fields:
+            for invalid_value in invalid_values:
+                with self.subTest(field_name=field_name, value=invalid_value):
+                    stack_config = convolutional_stack_config(
+                        kernel_size=3,
+                        stride=2,
+                        num_layers=2,
+                    )
+                    layer_model_config = stack_config.layer_config.layer_model_config
+                    owner = (
+                        stack_config
+                        if field_name == "num_layers"
+                        else layer_model_config
+                    )
+                    setattr(owner, field_name, invalid_value)
+                    snapshot = (
+                        stack_config.num_layers,
+                        layer_model_config.kernel_size,
+                        layer_model_config.stride,
+                    )
+                    torch.manual_seed(700)
+                    rng_state = torch.random.get_rng_state()
+
+                    result = PatchValidator._effective_convolutional_patch_size(
+                        stack_config,
+                        layer_model_config,
+                    )
+
+                    self.assertIsNone(result)
+                    self.assertEqual(
+                        (
+                            stack_config.num_layers,
+                            layer_model_config.kernel_size,
+                            layer_model_config.stride,
+                        ),
+                        snapshot,
+                    )
+                    torch.testing.assert_close(
+                        torch.random.get_rng_state(),
+                        rng_state,
+                        rtol=0,
+                        atol=0,
+                    )
+
+        ordinary = convolutional_stack_config(
+            kernel_size=3,
+            stride=2,
+            num_layers=2,
+        )
+        mirrored = convolutional_stack_config(
+            kernel_size=3,
+            stride=2,
+            num_layers=2,
+            stack_config_type=MirroredLayerStackConfig,
+        )
+        self.assertEqual(
+            PatchValidator._effective_convolutional_patch_size(
+                ordinary,
+                ordinary.layer_config.layer_model_config,
+            ),
+            7,
+        )
+        self.assertEqual(
+            PatchValidator._effective_convolutional_patch_size(
+                mirrored,
+                mirrored.layer_config.layer_model_config,
+            ),
+            31,
+        )
+
     def test_real_patch_modules_use_the_real_validator(self) -> None:
         for module_type in (PatchBase, PatchEmbeddingLinear, PatchEmbeddingConv):
             with self.subTest(module_type=module_type.__name__):
