@@ -250,6 +250,21 @@ class TestTransformerEncoderLayer(unittest.TestCase):
         ):
             TransformerEncoderLayer(self.preset(layer_norm_position=invalid_position))
 
+    def test_forward_rejects_missing_and_wrong_width_source_embeddings(self):
+        model = TransformerEncoderLayer(self.preset(embedding_dim=4))
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^source_token_embeddings is required, received None\.$",
+        ):
+            model(None)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^source_token_embeddings last dimension must be 4, received 3\.$",
+        ):
+            model(torch.randn(2, 3, 3))
+
     def test_implicit_causal_mask_with_padding_matches_explicit_sequence_mask(self):
         torch.manual_seed(1701)
         model = TransformerEncoderLayer(self.preset(causal_attention_mask_flag=True))
@@ -716,6 +731,36 @@ class TestTransformerDecoderLayer(unittest.TestCase):
             "layer_norm_position must be a LayerNormPositionOptions value",
         ):
             TransformerDecoderLayer(self.preset(layer_norm_position=invalid_position))
+
+    def test_forward_rejects_missing_and_wrong_width_decoder_inputs(self):
+        model = TransformerDecoderLayer(self.preset(embedding_dim=4))
+        target = torch.randn(2, 3, 4)
+        encoder_output = torch.randn(2, 5, 4)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^target_token_embeddings is required, received None\.$",
+        ):
+            model(None, encoder_output=encoder_output)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^target_token_embeddings last dimension must be 4, received 3\.$",
+        ):
+            model(torch.randn(2, 3, 3), encoder_output=encoder_output)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^TransformerDecoderLayer with cross-attention requires "
+            r"encoder_output, received None\.$",
+        ):
+            model(target, encoder_output=None)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^encoder_output last dimension must be 4, received 3\.$",
+        ):
+            model(target, encoder_output=torch.randn(2, 5, 3))
 
     def test_forward_with_different_inputs(self):
         batch_size = 4
