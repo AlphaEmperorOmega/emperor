@@ -7,6 +7,7 @@ from emperor.attention._runtime import (
     AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
 )
+from emperor.attention._validation import MultiHeadAttentionValidator
 
 
 class TestMultiHeadAttentionInputs(unittest.TestCase):
@@ -105,6 +106,25 @@ class TestMultiHeadAttentionInputs(unittest.TestCase):
         self.assertIsNot(first, second)
         self.assertFalse(first == second)
         self.assertTrue(first == first)
+
+    def test_runtime_validation_rejects_an_unresolved_layout_exactly(self):
+        tensor = torch.randn(2, 3)
+        unresolved = MultiHeadAttentionInputs(
+            query=tensor,
+            key=tensor,
+            value=tensor,
+        )
+
+        with self.assertRaises(RuntimeError) as caught:
+            MultiHeadAttentionValidator.validate_runtime_layout(
+                object(),
+                unresolved,
+            )
+
+        self.assertEqual(
+            str(caught.exception),
+            "Attention runtime layout has not been resolved.",
+        )
 
 
 if __name__ == "__main__":

@@ -327,11 +327,13 @@ class TestPrepareAttentionMasks(TestMask):
         cfg = self.preset()
         model = Mask(cfg)
 
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "Attention mask preparation requires resolved runtime layout.",
-        ):
+        with self.assertRaises(RuntimeError) as caught:
             model.prepare_attention_masks(self.unresolved_attention_inputs(cfg))
+
+        self.assertEqual(
+            str(caught.exception),
+            "Attention mask preparation requires resolved runtime layout.",
+        )
 
     def test_runtime_layout_validation_dispatches_through_subclass(self):
         class RejectingValidator(AttentionValidatorBase):
