@@ -164,6 +164,53 @@ class MaskedLanguageModelingDatasetTests(unittest.TestCase):
                 ):
                     dataset.prepare_data()
 
+    def test_loader_requires_collator_and_special_ids_autobuild_once(self) -> None:
+        for dataset_type in self.dataset_types:
+            with self.subTest(dataset=dataset_type.__name__):
+                source = _MaskedCorpusSource()
+                with (
+                    patch.object(dataset_type, "torchtext_dataset", source),
+                    patch(
+                        "emperor.datasets.text.masked_language_modeling._datasets."
+                        "build_vocab_from_iterator",
+                        side_effect=_build_vocabulary,
+                    ),
+                ):
+                    dataset = dataset_type(
+                        batch_size=2,
+                        sequence_length=5,
+                        num_workers=0,
+                        drop_last=False,
+                    )
+                    with self.assertRaisesRegex(
+                        RuntimeError,
+                        "Vocabulary must be built before creating loaders",
+                    ):
+                        dataset._dataloader(
+                            torch.utils.data.TensorDataset(
+                                torch.empty((0, 5), dtype=torch.long)
+                            ),
+                            train=False,
+                        )
+
+                    token_ids = dataset.bert_special_token_ids()
+                    vocabulary = dataset.vocab
+                    collator = dataset.collator
+                    dataset.setup("validate")
+                    dataset.setup("test")
+
+                self.assertEqual(
+                    source.requested_splits,
+                    ["train", "valid", "test"],
+                )
+                self.assertEqual(token_ids, dataset.special_token_ids)
+                self.assertEqual(dataset._text_labels([0, 1]), ["[PAD]", "[UNK]"])
+                self.assertIs(dataset.vocab, vocabulary)
+                self.assertIs(dataset.collator, collator)
+                self.assertEqual(len(dataset.val), 2)
+                self.assertEqual(len(dataset.test), 2)
+                self.assertEqual(len(dataset.test_dataloader()), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
