@@ -572,6 +572,66 @@ class TestLayerValidationMutationContracts(unittest.TestCase):
                 owner_name="Owner",
             )
 
+    def test_typed_halting_owner_reporting_false_is_rejected_by_exact_name(
+        self,
+    ) -> None:
+        class RejectingHaltingOwner:
+            calls = 0
+
+            @classmethod
+            def implements_halting_interface(cls) -> bool:
+                cls.calls += 1
+                return False
+
+        class AcceptingHaltingOwner:
+            calls = 0
+
+            @classmethod
+            def implements_halting_interface(cls) -> bool:
+                cls.calls += 1
+                return True
+
+        rejecting_config = SimpleNamespace(
+            _registry_owner=lambda: RejectingHaltingOwner
+        )
+        accepting_config = SimpleNamespace(
+            _registry_owner=lambda: AcceptingHaltingOwner
+        )
+
+        for expected_call_count in (1, 2):
+            with self.assertRaisesRegex(
+                ValueError,
+                "builds RejectingHaltingOwner, which does not implement the "
+                "HaltingInterface required by Controller",
+            ):
+                _validate_halting_lifecycle_owner(
+                    rejecting_config,
+                    field_name="halting_config",
+                    owner_name="Controller",
+                )
+            self.assertEqual(RejectingHaltingOwner.calls, expected_call_count)
+
+        _validate_halting_lifecycle_owner(
+            accepting_config,
+            field_name="halting_config",
+            owner_name="Controller",
+        )
+        self.assertEqual(AcceptingHaltingOwner.calls, 1)
+
+        non_callable_config = SimpleNamespace(
+            _registry_owner=lambda: type(
+                "NonCallableHaltingOwner",
+                (),
+                {"implements_halting_interface": False},
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "builds NonCallableHaltingOwner"):
+            _validate_halting_lifecycle_owner(
+                non_callable_config,
+                field_name="halting_config",
+                owner_name="Controller",
+            )
+
     def test_layer_validator_dimension_and_controller_errors_are_exact(self) -> None:
         for field_name in ("input_dim", "output_dim"):
             config = _layer_config()
