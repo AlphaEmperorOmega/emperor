@@ -117,8 +117,8 @@ class _AttentionMethodInstrumentation:
         if probe is None:
             probe = _AttentionMethodProbe(owner, method_name)
             self._probes[probe_key] = probe
-        elif probe.owner is not owner:
-            raise RuntimeError("Attention method instrumentation owner collision.")
+        # A live probe strongly references its owner, so Python cannot reuse
+        # that owner's identity for a different object until the probe is gone.
 
         observer_id = probe.add_observer(observer)
         removed = False
@@ -268,7 +268,6 @@ class _AttentionDiagnosticsTrackerManager:
         monitor_adapter: _AttentionMonitorAdapter | None = None,
     ) -> None:
         tracker_key = id(attention_module)
-        initial_hook_count = len(self._hook_handles)
         initial_subscription_count = len(self._method_subscriptions)
         tracker = _AttentionDiagnosticsTracker(module_name)
         self._trackers[tracker_key] = tracker
@@ -304,7 +303,6 @@ class _AttentionDiagnosticsTrackerManager:
         except BaseException:
             self.__rollback_attachment(
                 tracker_key,
-                initial_hook_count,
                 initial_subscription_count,
             )
             raise
@@ -497,12 +495,10 @@ class _AttentionDiagnosticsTrackerManager:
     def __rollback_attachment(
         self,
         tracker_key: int,
-        initial_hook_count: int,
         initial_subscription_count: int,
     ) -> None:
-        for hook_handle in self._hook_handles[initial_hook_count:]:
-            hook_handle.remove()
-        del self._hook_handles[initial_hook_count:]
+        # The forward hook is the final successful action in attach(), so no
+        # manager-owned hook can exist when setup enters this rollback path.
         for remove_subscription in reversed(
             self._method_subscriptions[initial_subscription_count:]
         ):
