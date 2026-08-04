@@ -44,9 +44,6 @@ def build_bert_sentence_pair_inputs(
     ]
     token_type_ids = [0] * (len(tokens_a) + 2) + [1] * (len(tokens_b) + 1)
     padding_length = sequence_length - len(input_ids)
-    if padding_length < 0:
-        raise ValueError("Truncated sentence-pair input is still too long.")
-
     input_ids.extend([special_token_ids.pad] * padding_length)
     token_type_ids.extend([0] * padding_length)
     return torch.tensor(input_ids, dtype=torch.long), torch.tensor(
@@ -101,12 +98,10 @@ def _truncate_longest_first(
     tokens_b: list[int],
     max_content_length: int,
 ) -> None:
+    # Both segments are non-empty and max_content_length is at least two, so an
+    # entered loop always has a longer-or-tied segment with more than one token.
     while len(tokens_a) + len(tokens_b) > max_content_length:
-        if len(tokens_a) >= len(tokens_b) and len(tokens_a) > 1:
-            tokens_a.pop()
-        elif len(tokens_b) > 1:
-            tokens_b.pop()
-        elif len(tokens_a) > 1:
+        if len(tokens_a) >= len(tokens_b):
             tokens_a.pop()
         else:
-            break
+            tokens_b.pop()
