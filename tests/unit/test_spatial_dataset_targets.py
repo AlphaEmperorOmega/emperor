@@ -15,6 +15,7 @@ from emperor.datasets.image.detection._coco import (
 from emperor.datasets.image.detection._voc import VOCDetection
 from emperor.datasets.image.segmentation._cityscapes import Cityscapes
 from emperor.datasets.image.segmentation._coco import CocoSegmentation
+from emperor.datasets.image.segmentation._geometry import _SegmentationGeometry
 from emperor.datasets.image.segmentation._voc import VOCSegmentation
 
 
@@ -25,11 +26,13 @@ def _image(width: int = 6, height: int = 4) -> Image.Image:
 class _FakeCocoApi:
     def __init__(self, category_ids: list[int]) -> None:
         self._category_ids = category_ids
+        self.mask_calls: list[dict] = []
 
     def getCatIds(self) -> list[int]:
         return self._category_ids
 
     def annToMask(self, annotation: dict) -> np.ndarray:
+        self.mask_calls.append(annotation)
         return np.asarray(annotation["segmentation_mask"], dtype=np.uint8)
 
 
@@ -72,6 +75,52 @@ class _FakePairDataset:
 
 
 class TestDetectionSpatialTargets(unittest.TestCase):
+    def test_unknown_detection_categories_map_to_background(self) -> None:
+        coco_source = _FakeCocoDataset(
+            _image(),
+            [
+                {
+                    "bbox": [0, 0, 2, 2],
+                    "category_id": 999,
+                    "iscrowd": 1,
+                }
+            ],
+            category_ids=[7],
+        )
+        coco = CocoDetection(resize=(4, 6))
+        with patch(
+            "emperor.datasets.image.detection._coco.datasets.CocoDetection",
+            return_value=coco_source,
+        ):
+            coco._setup_validate()
+
+        voc_source = _FakePairDataset(
+            _image(),
+            {
+                "annotation": {
+                    "size": {"width": "6", "height": "4"},
+                    "object": {
+                        "name": "not-a-voc-class",
+                        "bndbox": {
+                            "xmin": "0",
+                            "ymin": "0",
+                            "xmax": "2",
+                            "ymax": "2",
+                        },
+                    },
+                }
+            },
+        )
+        voc = VOCDetection(resize=(4, 6))
+        with patch(
+            "emperor.datasets.image.detection._voc.datasets.VOCDetection",
+            return_value=voc_source,
+        ):
+            voc._setup_validate()
+
+        torch.testing.assert_close(coco.val[0][1]["labels"], torch.tensor([0]))
+        torch.testing.assert_close(voc.val[0][1]["labels"], torch.tensor([0]))
+
     def test_coco_boxes_scale_with_non_square_image_resize(self) -> None:
         dataset = _FakeCocoDataset(
             _image(width=10, height=20),
@@ -165,6 +214,71 @@ class TestDetectionSpatialTargets(unittest.TestCase):
 
 
 class TestSegmentationSpatialTargets(unittest.TestCase):
+    def test_coco_missing_and_unknown_segmentations_leave_background(self) -> None:
+        unknown_mask = np.ones((4, 6), dtype=np.uint8)
+        source = _FakeCocoDataset(
+            _image(),
+            [
+                {"category_id": 7, "iscrowd": 1},
+                {
+                    "category_id": 999,
+                    "iscrowd": 1,
+                    "segmentation": [[0, 0, 5, 0, 5, 3]],
+                    "segmentation_mask": unknown_mask,
+                },
+            ],
+            category_ids=[7],
+        )
+        data = CocoSegmentation(resize=(4, 6))
+
+        with patch(
+            "emperor.datasets.image.segmentation._coco.datasets.CocoDetection",
+            return_value=source,
+        ):
+            data._setup_validate()
+
+        _, mask = data.val[0]
+        torch.testing.assert_close(mask, torch.zeros((4, 6), dtype=torch.long))
+        self.assertEqual(len(source.coco.mask_calls), 1)
+        self.assertEqual(source.coco.mask_calls[0]["category_id"], 999)
+
+    def test_coco_rejects_a_segmentation_with_wrong_source_geometry(self) -> None:
+        source = _FakeCocoDataset(
+            _image(),
+            [
+                {
+                    "category_id": 7,
+                    "segmentation": [[0, 0, 5, 0, 5, 2]],
+                    "segmentation_mask": np.ones((3, 6), dtype=np.uint8),
+                }
+            ],
+            category_ids=[7],
+        )
+        data = CocoSegmentation(resize=(4, 6))
+        with patch(
+            "emperor.datasets.image.segmentation._coco.datasets.CocoDetection",
+            return_value=source,
+        ):
+            data._setup_validate()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "COCO segmentation mask dimensions must match the source image",
+        ):
+            data.val[0]
+
+    def test_segmentation_geometry_rejects_multi_channel_masks(self) -> None:
+        geometry = _SegmentationGeometry(
+            lambda _image: torch.zeros((3, 2, 3), dtype=torch.float32)
+        )
+        rgb_mask = Image.new("RGB", (3, 2), color=(1, 2, 3))
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "segmentation masks must contain exactly one channel",
+        ):
+            geometry.transform(_image(width=3, height=2), rgb_mask)
+
     def test_coco_mask_resizes_from_source_geometry_with_nearest_labels(self) -> None:
         first_mask = np.zeros((4, 6), dtype=np.uint8)
         first_mask[:, :2] = 1
@@ -257,6 +371,24 @@ class TestSegmentationSpatialTargets(unittest.TestCase):
 
 
 class TestSpatialAdapterLifecycle(unittest.TestCase):
+    def test_structured_vision_label_boundaries_follow_literal_catalogs(self) -> None:
+        cases = (
+            (CocoDetection(), 81, "background", "toothbrush"),
+            (VOCDetection(), 21, "background", "tvmonitor"),
+            (CocoSegmentation(), 81, "background", "toothbrush"),
+            (Cityscapes(), 19, "road", "bicycle"),
+            (VOCSegmentation(), 21, "background", "tvmonitor"),
+        )
+
+        for adapter, label_count, first_label, last_label in cases:
+            with self.subTest(adapter=type(adapter).__name__):
+                self.assertEqual(
+                    adapter._text_labels([0, label_count - 1, -1]),
+                    [first_label, last_label, last_label],
+                )
+                with self.assertRaises(IndexError):
+                    adapter._text_labels([label_count])
+
     def test_detection_fit_and_loader_contracts_are_offline(self) -> None:
         coco_source = _FakeCocoDataset(
             _image(),
