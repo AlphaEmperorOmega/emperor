@@ -9,13 +9,13 @@ StateT = TypeVar("StateT")
 
 @runtime_checkable
 class HaltingInterface(Protocol[StateT]):
-    def update_halting_state(
+    def update_halting_state(  # pragma: no cover - protocol declaration
         self,
         previous_state: StateT | None,
         model_hidden_state: Tensor,
     ) -> tuple[StateT, Tensor]: ...
 
-    def finalize_weighted_accumulation(
+    def finalize_weighted_accumulation(  # pragma: no cover - protocol declaration
         self,
         state: StateT,
         current_hidden: Tensor,
