@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import dataclass
 
 import torch
 
@@ -17,10 +18,12 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
+    LayerState,
     RecurrentLayer,
     RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
+from emperor.nn import Module
 from emperor.transformer import (
     FeedForwardConfig,
     Transformer,
@@ -34,6 +37,36 @@ from emperor.transformer import (
     TransformerEncoderLayer,
     TransformerEncoderLayerConfig,
 )
+
+
+@dataclass
+class _LossStackConfig(LayerStackConfig):
+    emitted_loss: float | None = None
+
+    def _registry_owner(self) -> type:
+        return _LossStack
+
+
+class _LossStack(Module):
+    def __init__(
+        self,
+        cfg: _LossStackConfig,
+        overrides: _LossStackConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+        self.emitted_loss = self.cfg.emitted_loss
+        self.last_emitted_loss: torch.Tensor | None = None
+
+    def forward(self, state: LayerState) -> LayerState:
+        if self.emitted_loss is not None:
+            self.last_emitted_loss = state.hidden.new_tensor(self.emitted_loss)
+            state.loss = (
+                self.last_emitted_loss
+                if state.loss is None
+                else state.loss + self.last_emitted_loss
+            )
+        return state
 
 
 def linear_stack(
@@ -64,6 +97,22 @@ def linear_stack(
             memory_config=None,
             layer_model_config=LinearLayerConfig(bias_flag=True),
         ),
+    )
+
+
+def loss_stack(emitted_loss: float | None, embedding_dim: int = 4) -> _LossStackConfig:
+    return _LossStackConfig(
+        input_dim=embedding_dim,
+        hidden_dim=embedding_dim,
+        output_dim=embedding_dim,
+        num_layers=1,
+        apply_output_pipeline_flag=True,
+        last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+        shared_gate_config=None,
+        shared_halting_config=None,
+        shared_memory_config=None,
+        layer_config=None,
+        emitted_loss=emitted_loss,
     )
 
 
@@ -231,6 +280,152 @@ def recurrent(stack_config: LayerStackConfig) -> RecurrentLayerConfig:
 
 
 class TestTransformerGenericStacks(unittest.TestCase):
+    def test_transformer_config_registry_owner_is_transformer(self):
+        config = TransformerConfig(
+            encoder_stack_config=None,
+            decoder_stack_config=None,
+        )
+
+        self.assertIs(config.registry_owner(), Transformer)
+
+    def test_constructor_rejects_empty_and_wrong_stack_topologies(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^TransformerConfig requires at least one of encoder_stack_config or "
+            r"decoder_stack_config to be set; both are None\.$",
+        ):
+            Transformer(
+                TransformerConfig(
+                    encoder_stack_config=None,
+                    decoder_stack_config=None,
+                )
+            )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            r"^Transformer stack configurations must be LayerStackConfig or "
+            r"RecurrentCompositionConfig, got LinearLayerConfig\.$",
+        ):
+            Transformer(
+                TransformerConfig(
+                    encoder_stack_config=LinearLayerConfig(  # type: ignore[arg-type]
+                        input_dim=4,
+                        output_dim=4,
+                        bias_flag=False,
+                    ),
+                    decoder_stack_config=None,
+                )
+            )
+
+    def test_forward_requires_inputs_for_each_configured_stack(self):
+        encoder_model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=loss_stack(None),
+                decoder_stack_config=None,
+            )
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^Transformer with an encoder requires source_token_embeddings, "
+            r"received None\.$",
+        ):
+            encoder_model()
+
+        decoder_model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=None,
+                decoder_stack_config=loss_stack(None),
+            )
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^Transformer with a decoder requires target_token_embeddings, "
+            r"received None\.$",
+        ):
+            decoder_model()
+
+    def test_no_auxiliary_loss_uses_the_last_present_state_dtype_and_device(self):
+        cases = (
+            (loss_stack(None), None),
+            (None, loss_stack(None)),
+            (loss_stack(None), loss_stack(None)),
+        )
+        for encoder_config, decoder_config in cases:
+            with self.subTest(
+                encoder_present=encoder_config is not None,
+                decoder_present=decoder_config is not None,
+            ):
+                model = Transformer(
+                    TransformerConfig(
+                        encoder_stack_config=encoder_config,
+                        decoder_stack_config=decoder_config,
+                    )
+                ).double()
+                forward_inputs = {}
+                if encoder_config is not None:
+                    forward_inputs["source_token_embeddings"] = torch.randn(
+                        2, 3, 4, dtype=torch.float64
+                    )
+                if decoder_config is not None:
+                    forward_inputs["target_token_embeddings"] = torch.randn(
+                        2, 2, 4, dtype=torch.float64
+                    )
+
+                output, loss = model(**forward_inputs)
+
+                self.assertEqual(loss.item(), 0.0)
+                self.assertEqual(loss.dtype, output.dtype)
+                self.assertEqual(loss.device, output.device)
+
+    def test_only_present_auxiliary_losses_are_returned_or_summed(self):
+        source = torch.randn(2, 3, 4)
+        target = torch.randn(2, 2, 4)
+
+        one_loss_model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=loss_stack(2.0),
+                decoder_stack_config=loss_stack(None),
+            )
+        )
+        _, one_loss = one_loss_model(
+            source_token_embeddings=source,
+            target_token_embeddings=target,
+        )
+        encoder_loss = one_loss_model.encoder_model.last_emitted_loss
+        self.assertIs(one_loss, encoder_loss)
+        self.assertEqual(one_loss.item(), 2.0)
+
+        decoder_only_model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=None,
+                decoder_stack_config=loss_stack(3.0),
+            )
+        )
+        _, decoder_only_loss = decoder_only_model(target_token_embeddings=target)
+        emitted_decoder_loss = decoder_only_model.decoder_model.last_emitted_loss
+        self.assertIs(decoder_only_loss, emitted_decoder_loss)
+        self.assertEqual(decoder_only_loss.item(), 3.0)
+
+        both_losses_model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=loss_stack(2.0),
+                decoder_stack_config=loss_stack(3.0),
+            )
+        )
+        _, summed_loss = both_losses_model(
+            source_token_embeddings=source,
+            target_token_embeddings=target,
+        )
+        self.assertEqual(summed_loss.item(), 5.0)
+        self.assertIsNot(
+            summed_loss,
+            both_losses_model.encoder_model.last_emitted_loss,
+        )
+        self.assertIsNot(
+            summed_loss,
+            both_losses_model.decoder_model.last_emitted_loss,
+        )
+
     def test_stacks_wrap_layer_instances(self):
         model = Transformer(
             TransformerConfig(
@@ -347,6 +542,20 @@ class TestTransformerGenericStacks(unittest.TestCase):
         self.assertEqual(decoder_output.shape, (2, 4, 8))
         self.assertEqual(encoder_loss.shape, ())
         self.assertEqual(decoder_loss.shape, ())
+
+    def test_decoder_only_accepts_a_generic_stack_without_cross_attention(self):
+        model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=None,
+                decoder_stack_config=linear_stack(4, 4),
+            )
+        )
+        target = torch.randn(2, 3, 4)
+
+        output, loss = model(target_token_embeddings=target)
+
+        self.assertEqual(output.shape, target.shape)
+        self.assertEqual(loss.item(), 0.0)
 
     def test_decoder_only_rejects_cross_attention(self):
         with self.assertRaisesRegex(ValueError, "cross_attention_config=None"):
