@@ -45,6 +45,10 @@ class LinearMonitorCallback(Callback):
 
     @log_every_n_steps.setter
     def log_every_n_steps(self, value: int) -> None:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError("log_every_n_steps must be an int.")
+        if value <= 0:
+            raise ValueError("log_every_n_steps must be greater than 0.")
         self._capture.log_every_n_steps = value
 
     @property
@@ -53,6 +57,8 @@ class LinearMonitorCallback(Callback):
 
     @log_weight_conditioning.setter
     def log_weight_conditioning(self, value: bool) -> None:
+        if not isinstance(value, bool):
+            raise TypeError("log_weight_conditioning must be a bool.")
         self._capture.log_weight_conditioning = value
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:

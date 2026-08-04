@@ -415,6 +415,114 @@ class TestLinearMonitorCallback(unittest.TestCase):
                 ):
                     LinearMonitorCallback(log_weight_conditioning=bad_flag)
 
+    def test_runtime_cadence_rejects_zero_without_changing_policy(self):
+        callback = LinearMonitorCallback(log_every_n_steps=2)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^log_every_n_steps must be greater than 0\.$",
+        ):
+            callback.log_every_n_steps = 0
+
+        self.assertEqual(callback.log_every_n_steps, 2)
+
+    def test_runtime_cadence_rejects_non_integer_without_changing_policy(self):
+        callback = LinearMonitorCallback(log_every_n_steps=2)
+
+        for bad_interval in (True, 1.5, "1"):
+            with self.subTest(log_every_n_steps=bad_interval):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    r"^log_every_n_steps must be an int\.$",
+                ):
+                    callback.log_every_n_steps = bad_interval  # type: ignore[assignment]
+
+                self.assertEqual(callback.log_every_n_steps, 2)
+
+    def test_runtime_conditioning_rejects_non_bool_without_changing_policy(self):
+        callback = LinearMonitorCallback(log_weight_conditioning=True)
+
+        for bad_flag in (0, 1, "false", None):
+            with self.subTest(log_weight_conditioning=bad_flag):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    r"^log_weight_conditioning must be a bool\.$",
+                ):
+                    callback.log_weight_conditioning = bad_flag  # type: ignore[assignment]
+
+                self.assertIs(callback.log_weight_conditioning, True)
+
+    def test_runtime_conditioning_controls_the_next_capture(self):
+        module = build_module(input_dim=2, output_dim=2, bias_flag=False)
+        with torch.no_grad():
+            module.linear.weight_params.copy_(torch.diag(torch.tensor([2.0, 1.0])))
+        callback = LinearMonitorCallback(
+            log_every_n_steps=1,
+            log_weight_conditioning=False,
+        )
+        trainer = FakeTrainer()
+        callback.on_fit_start(trainer, module)
+
+        callback.log_weight_conditioning = True
+        module.linear(torch.ones(1, 2))
+        complete_optimizer_step(callback, trainer, module)
+
+        enabled_names = [name for name, _ in module.logged_scalars]
+        enabled_scalars = dict(module.logged_scalars)
+        self.assertIs(callback.log_weight_conditioning, True)
+        self.assertEqual(enabled_names.count("linear/weights/condition_number"), 1)
+        self.assertEqual(enabled_names.count("linear/weights/effective_rank"), 1)
+        self.assertAlmostEqual(
+            enabled_scalars["linear/weights/spectral_norm"].item(), 2.0, places=5
+        )
+        self.assertAlmostEqual(
+            enabled_scalars["linear/weights/condition_number"].item(), 2.0, places=5
+        )
+        self.assertIn("linear/weights/effective_rank", enabled_scalars)
+
+        module.logged_scalars.clear()
+        callback.log_weight_conditioning = False
+        module.linear(torch.ones(1, 2))
+        complete_optimizer_step(callback, trainer, module)
+
+        disabled_names = {name for name, _ in module.logged_scalars}
+        self.assertIs(callback.log_weight_conditioning, False)
+        self.assertIn("linear/weights/mean", disabled_names)
+        self.assertNotIn("linear/weights/condition_number", disabled_names)
+        self.assertNotIn("linear/weights/effective_rank", disabled_names)
+        callback.on_fit_end(trainer, module)
+
+    def test_runtime_cadence_controls_the_next_capture(self):
+        module = build_module()
+        callback = LinearMonitorCallback(log_every_n_steps=2)
+        trainer = FakeTrainer()
+        callback.on_fit_start(trainer, module)
+
+        module.linear(torch.ones(1, 4))
+        complete_optimizer_step(callback, trainer, module)
+        self.assertEqual(module.logged_scalars, [])
+
+        callback.log_every_n_steps = 1
+        module.linear(torch.ones(1, 4))
+        complete_optimizer_step(callback, trainer, module)
+        self.assertEqual(callback.log_every_n_steps, 1)
+        self.assertEqual(
+            [
+                name
+                for name, _ in module.logged_scalars
+                if name == "linear/weights/mean"
+            ],
+            ["linear/weights/mean"],
+        )
+
+        module.logged_scalars.clear()
+        callback.log_every_n_steps = 4
+        module.linear(torch.ones(1, 4))
+        complete_optimizer_step(callback, trainer, module)
+        self.assertEqual(callback.log_every_n_steps, 4)
+        self.assertEqual(module.logged_scalars, [])
+        callback.on_fit_end(trainer, module)
+
     def test_batch_end_without_optimizer_boundary_does_not_emit(self):
         module = build_module()
         callback = LinearMonitorCallback(log_every_n_steps=1)
