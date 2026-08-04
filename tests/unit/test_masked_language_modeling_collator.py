@@ -55,6 +55,13 @@ class TestBertVocabularyHelpers(unittest.TestCase):
 
         self.assertEqual(token_ids, self.preset())
 
+    def test_get_bert_special_token_ids_accepts_a_bare_mapping(self):
+        token_ids = get_bert_special_token_ids(
+            {token: index for index, token in enumerate(BERT_SPECIAL_TOKENS)}
+        )
+
+        self.assertEqual(token_ids, self.preset())
+
     def test_set_bert_default_index_uses_unk_token(self):
         vocab = FakeVocab(
             {token: index for index, token in enumerate(BERT_SPECIAL_TOKENS)}
@@ -196,6 +203,47 @@ class TestMaskedLanguageModelingCollator(unittest.TestCase):
 
         self.assertTrue(torch.all(labels == tokens))
         self.assertTrue(torch.all(input_ids >= 5))
+
+    def test_configurable_replacement_remainder_has_a_literal_seeded_result(self):
+        collator = self.collator(
+            mlm_probability=1.0,
+            mask_replace_probability=0.3,
+            random_replace_probability=0.3,
+            generator=torch.Generator().manual_seed(0),
+        )
+        tokens = torch.tensor([[2, 5, 6, 7, 8, 9, 10, 11, 3, 0]])
+
+        input_ids, labels, attention_mask = collator(tokens)
+
+        torch.testing.assert_close(
+            input_ids,
+            torch.tensor([[2, 7, 4, 4, 4, 9, 10, 11, 3, 0]]),
+        )
+        torch.testing.assert_close(
+            labels,
+            torch.tensor([[-100, 5, 6, 7, 8, 9, 10, 11, -100, -100]]),
+        )
+        torch.testing.assert_close(
+            attention_mask,
+            torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]),
+        )
+
+    def test_empty_random_token_pool_leaves_selected_token_unchanged(self):
+        collator = MaskedLanguageModelingCollator(
+            special_token_ids=self.preset(),
+            vocab_size=5,
+            mlm_probability=1.0,
+            mask_replace_probability=0.0,
+            random_replace_probability=1.0,
+            generator=torch.Generator().manual_seed(0),
+        )
+        tokens = torch.tensor([[5]])
+
+        input_ids, labels, attention_mask = collator(tokens)
+
+        torch.testing.assert_close(input_ids, torch.tensor([[5]]))
+        torch.testing.assert_close(labels, torch.tensor([[5]]))
+        torch.testing.assert_close(attention_mask, torch.tensor([[1]]))
 
     def test_attention_mask_matches_pad_positions(self):
         token_ids = self.preset()
