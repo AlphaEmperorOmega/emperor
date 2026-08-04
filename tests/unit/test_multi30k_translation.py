@@ -173,6 +173,20 @@ class TestMulti30kTranslation(unittest.TestCase):
 
         self.assertEqual(vocabularies[0], vocabularies[1])
 
+    def test_prepare_rebuilds_a_malformed_tokenizer_cache(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            data, files, calls = self.data_module(Path(temporary_directory))
+            with patch.object(Multi30kDeEn, "files", files):
+                data.prepare_data()
+                download_count = len(calls)
+                data.tokenizer_path.write_text("not tokenizer json", encoding="utf-8")
+
+                data.prepare_data()
+
+            tokenizer = multi30k_module.Tokenizer.from_file(str(data.tokenizer_path))
+            self.assertEqual(tokenizer.get_vocab_size(), 8192)
+            self.assertEqual(len(calls), download_count)
+
     def test_all_splits_fixed_lengths_incomplete_batches_and_direction_reversal(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
