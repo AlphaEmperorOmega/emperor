@@ -272,6 +272,57 @@ class TestSQuADv2Dataset(SQuADDatasetTestCase):
         self.assertEqual((start.item(), end.item()), (-1, -1))
 
 
+class TestAnswerSpanRejections(unittest.TestCase):
+    def setUp(self) -> None:
+        self.aligner = _AnswerSpanAligner(lambda text: text.split(), context_length=8)
+
+    def test_mismatched_answer_arrays_raise_the_owned_error(self) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "answer_start and text must contain the same number of answers",
+        ):
+            self.aligner.first_in_window("alpha beta", [0], [])
+
+    def test_invalid_candidates_fall_through_to_a_later_valid_span(self) -> None:
+        context = "foobar beta"
+        invalid_candidates = (
+            (-1, "foobar"),
+            (0, "foo"),
+            (0, "wrong"),
+            (context.index("beta"), "beta beyond the source"),
+        )
+
+        for invalid_start, invalid_text in invalid_candidates:
+            with self.subTest(start=invalid_start, text=invalid_text):
+                self.assertIsNone(
+                    self.aligner.first_in_window(
+                        context,
+                        [invalid_start],
+                        [invalid_text],
+                    )
+                )
+                span = self.aligner.first_in_window(
+                    context,
+                    [invalid_start, context.index("beta")],
+                    [invalid_text, "beta"],
+                )
+                self.assertIsNotNone(span)
+                self.assertEqual((span.start, span.end), (1, 1))
+
+    def test_answer_with_no_tokens_is_rejected_before_partition_alignment(self) -> None:
+        context = "alpha  beta"
+
+        self.assertIsNone(self.aligner.first_in_window(context, [5], [" "]))
+        span = self.aligner.first_in_window(
+            context,
+            [5, context.index("beta")],
+            [" ", "beta"],
+        )
+
+        self.assertIsNotNone(span)
+        self.assertEqual((span.start, span.end), (1, 1))
+
+
 class TestQuestionAnsweringAdapter(unittest.TestCase):
     cases = (
         (SQuADv1, "squad", _SQuADv1Dataset),
