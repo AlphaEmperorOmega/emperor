@@ -18,6 +18,7 @@ from emperor.embedding.absolute import (
 )
 from emperor.embedding.absolute._variants.learned import LearnedPositionalEmbedding
 from emperor.embedding.absolute._variants.sinusoidal import (
+    SinusoidalPositionalEmbedding,
     TextSinusoidalPositionalEmbedding,
 )
 from emperor.embedding.relative import (
@@ -47,6 +48,37 @@ def relative_config(**overrides: object) -> DynamicPositionalBiasConfig:
 
 
 class EmbeddingConfigurationBehaviorTests(unittest.TestCase):
+    def test_unimplemented_sinusoidal_padding_policy_fails_explicitly(self) -> None:
+        class MissingPaddingPolicy(SinusoidalPositionalEmbedding):
+            pass
+
+        probe = MissingPaddingPolicy.__new__(MissingPaddingPolicy)
+        nn.Module.__init__(probe)
+        with self.assertRaises(NotImplementedError):
+            probe._get_configured_padding_idx()
+        self.assertEqual(tuple(probe.state_dict()), ())
+
+        config = TextSinusoidalPositionalEmbeddingConfig(
+            num_embeddings=4,
+            embedding_dim=2,
+            padding_idx=0,
+            auto_expand_flag=False,
+        )
+        with self.assertRaises(NotImplementedError):
+            MissingPaddingPolicy(config)
+
+        for padding_idx in (0, 2):
+            with self.subTest(padding_idx=padding_idx):
+                concrete = TextSinusoidalPositionalEmbedding(
+                    TextSinusoidalPositionalEmbeddingConfig(
+                        num_embeddings=4,
+                        embedding_dim=2,
+                        padding_idx=padding_idx,
+                        auto_expand_flag=False,
+                    )
+                )
+                self.assertEqual(concrete.padding_idx, padding_idx)
+
     def test_absolute_configs_expose_only_variant_active_inputs(self) -> None:
         expected_fields = {
             AbsolutePositionalEmbeddingConfig: ("num_embeddings", "embedding_dim"),
