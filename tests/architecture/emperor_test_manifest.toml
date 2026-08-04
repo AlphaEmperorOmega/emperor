@@ -3,6 +3,7 @@ schema_version = 1
 [families.foundations]
 status = "partial"
 focused_tests = [
+  "tests/unit/test_adaptive_parameter_grouping_boundaries.py",
   "tests/unit/test_config_foundations.py",
   "tests/unit/test_validator_base.py",
   "tests/unit/test_nn.py",
@@ -414,6 +415,7 @@ modules = [
 [families.experts]
 status = "partial"
 focused_tests = [
+  "tests/unit/test_adaptive_parameter_grouping_boundaries.py",
   "tests/unit/test_expert*.py",
   "tests/unit/test_mixture_of_experts*.py",
 ]
@@ -479,6 +481,7 @@ modules = [
 [families.attention]
 status = "partial"
 focused_tests = [
+  "tests/unit/test_adaptive_parameter_grouping_boundaries.py",
   "tests/unit/test_attention*.py",
   "tests/unit/test_*attention_validator_adapter.py",
   "tests/unit/test_transformer_relative_positional_embedding.py",
@@ -567,6 +570,9 @@ modules = [
 [families.transformer]
 status = "pending"
 focused_tests = [
+  "tests/unit/test_adaptive_parameter_grouping_boundaries.py",
+  "tests/unit/test_attention_model_mixer.py",
+  "tests/unit/test_feed_forward_validator.py",
   "tests/unit/test_transformer.py",
   "tests/unit/test_transformer_adaptive_grouping.py",
   "tests/unit/test_transformer_behavioral_contracts.py",
@@ -671,8 +677,10 @@ focused_tests = [
   "tests/unit/test_*collator.py",
   "tests/unit/test_image_classification_datasets.py",
   "tests/unit/test_multi30k_translation.py",
+  "tests/unit/test_translation_dataset_contracts.py",
   "tests/unit/test_rl_dataset_lifecycle.py",
   "tests/unit/test_spatial_dataset_targets.py",
+  "tests/contract/test_translation_manifest.py",
 ]
 integration_tests = ["tests/integration/datasets/test_dataset_downloads.py"]
 mutation_scope = ["src/emperor/datasets/*"]
