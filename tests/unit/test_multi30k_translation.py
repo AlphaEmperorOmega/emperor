@@ -86,6 +86,26 @@ class TestMulti30kTranslation(unittest.TestCase):
                 self.assertEqual(dataset.flattened_input_dim, 8192)
                 self.assertEqual(dataset.num_classes, 8192)
 
+    def test_empty_language_pair_is_rejected_instead_of_using_the_default(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"Multi30kDeEn only supports the language pair \('de', 'en'\); got \(\)\.",
+        ):
+            Multi30kDeEn(language_pair=())
+
+    def test_explicit_zero_sequence_lengths_are_rejected(self):
+        for arguments in (
+            {"sequence_length": 0},
+            {"source_sequence_length": 0},
+            {"target_sequence_length": 0},
+        ):
+            with self.subTest(arguments=arguments):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "source and target sequence lengths must be at least 2",
+                ):
+                    Multi30kDeEn(**arguments)
+
     def test_prepare_verifies_hashes_recovers_corruption_and_reuses_cache(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             data, files, calls = self.data_module(Path(temporary_directory))
