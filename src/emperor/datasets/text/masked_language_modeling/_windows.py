@@ -26,8 +26,6 @@ def build_mlm_token_windows(
     windows = []
     for start in range(0, len(token_ids), content_length):
         chunk = list(token_ids[start : start + content_length])
-        if not chunk:
-            continue
         if add_special_tokens:
             window = [special_token_ids.cls, *chunk, special_token_ids.sep]
         else:
