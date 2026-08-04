@@ -94,16 +94,28 @@ class _Multi30k(_DownloadSupport, _TokenizerSupport, DataModule):
         seed: int | None = None,
     ) -> None:
         super().__init__(root=str(root), num_workers=num_workers)
-        requested_pair = language_pair or type(self).language_pair
+        requested_pair = (
+            type(self).language_pair if language_pair is None else language_pair
+        )
         if tuple(requested_pair) != tuple(type(self).language_pair):
             raise ValueError(
                 f"{type(self).__name__} only supports the language pair "
                 f"{type(self).language_pair!r}; got {tuple(requested_pair)!r}."
             )
-        broadcast_length = sequence_length or type(self).sequence_length
+        broadcast_length = (
+            type(self).sequence_length if sequence_length is None else sequence_length
+        )
         self.batch_size = int(batch_size)
-        self.source_sequence_length = int(source_sequence_length or broadcast_length)
-        self.target_sequence_length = int(target_sequence_length or broadcast_length)
+        self.source_sequence_length = int(
+            broadcast_length
+            if source_sequence_length is None
+            else source_sequence_length
+        )
+        self.target_sequence_length = int(
+            broadcast_length
+            if target_sequence_length is None
+            else target_sequence_length
+        )
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if self.source_sequence_length < 2 or self.target_sequence_length < 2:
