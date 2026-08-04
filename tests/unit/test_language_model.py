@@ -25,12 +25,18 @@ class StaticLanguageModel(LanguageModelExperiment):
         self.register_buffer("fixed_logits", logits)
         self.register_buffer("fixed_auxiliary_loss", auxiliary_loss)
         self.tuple_output = tuple_output
+        self.forward_calls = []
+        self.log_calls = []
 
     def forward(self, input_ids: torch.Tensor):
+        self.forward_calls.append(input_ids)
         logits = self.fixed_logits * self.scale
         if not self.tuple_output:
             return logits
         return logits, self.fixed_auxiliary_loss
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_calls.append((payload, kwargs))
 
 
 class InvalidTupleLanguageModel(StaticLanguageModel):
@@ -170,6 +176,82 @@ class TestLanguageModelExperiment(unittest.TestCase):
         self.assertIs(payload["validation/auxiliary_loss"], output.auxiliary_loss)
         self.assertEqual(kwargs, {"prog_bar": True})
 
+    def test_real_stages_use_explicit_targets_and_owned_metric_prefixes(self) -> None:
+        logits, input_ids, labels = self.deterministic_batch()
+        auxiliary_loss = torch.tensor(0.25)
+        expected_cross_entropy = F.cross_entropy(logits.transpose(1, 2), labels)
+
+        for stage, step_name, expected_kwargs in (
+            ("train", "training_step", {"prog_bar": True}),
+            ("validation", "validation_step", {"prog_bar": True}),
+            ("test", "test_step", {}),
+        ):
+            with self.subTest(stage=stage):
+                model = StaticLanguageModel(
+                    self.preset(),
+                    logits,
+                    auxiliary_loss,
+                )
+
+                observed_loss = getattr(model, step_name)((input_ids, labels), 0)
+
+                torch.testing.assert_close(
+                    observed_loss,
+                    expected_cross_entropy + auxiliary_loss,
+                )
+                self.assertIs(model.forward_calls[0], input_ids)
+                payload, kwargs = model.log_calls[0]
+                self.assertEqual(
+                    set(payload),
+                    {
+                        f"{stage}/loss",
+                        f"{stage}/cross_entropy",
+                        f"{stage}/perplexity",
+                        f"{stage}/auxiliary_loss",
+                    },
+                )
+                torch.testing.assert_close(
+                    payload[f"{stage}/cross_entropy"],
+                    expected_cross_entropy,
+                )
+                self.assertEqual(kwargs, expected_kwargs)
+
+    def test_raw_loss_logger_has_exact_legacy_payload_for_every_stage(self) -> None:
+        logger = LanguageModelMetricsLogger()
+        raw_loss = torch.tensor(0.5, dtype=torch.float64)
+
+        for stage, log_method, expected_kwargs in (
+            ("train", logger.log_training_step, {"prog_bar": True}),
+            ("validation", logger.log_validation_step, {"prog_bar": True}),
+            ("test", logger.log_test_step, {}),
+        ):
+            with self.subTest(stage=stage):
+                calls = []
+
+                def record_log(payload, calls=calls, **kwargs):
+                    calls.append((payload, kwargs))
+
+                log_method(
+                    record_log,
+                    raw_loss,
+                )
+
+                payload, kwargs = calls[0]
+                self.assertIs(payload[f"{stage}/loss"], raw_loss)
+                self.assertIs(payload[f"{stage}/cross_entropy"], raw_loss)
+                torch.testing.assert_close(
+                    payload[f"{stage}/perplexity"],
+                    torch.exp(raw_loss),
+                )
+                torch.testing.assert_close(
+                    payload[f"{stage}/auxiliary_loss"],
+                    torch.zeros((), dtype=raw_loss.dtype),
+                )
+                self.assertEqual(
+                    payload[f"{stage}/auxiliary_loss"].dtype, raw_loss.dtype
+                )
+                self.assertEqual(kwargs, expected_kwargs)
+
     def test_perplexity_policy_is_tensor_native_bounded_and_detached(self) -> None:
         policy = Perplexity()
 
@@ -218,10 +300,14 @@ class TestLanguageModelExperiment(unittest.TestCase):
         invalid_batches = (
             (input_ids,),
             (input_ids.unsqueeze(0), labels.unsqueeze(0)),
+            ("not input IDs", labels),
+            (input_ids, "not labels"),
+            (input_ids.unsqueeze(0), labels),
+            (input_ids, labels.unsqueeze(0)),
             (input_ids, labels[:, :1]),
         )
         for batch in invalid_batches:
-            with self.subTest(shapes=[tuple(item.shape) for item in batch]):
+            with self.subTest(values=tuple(type(item).__name__ for item in batch)):
                 with self.assertRaises(ValueError):
                     model._model_step(batch)
 
@@ -229,6 +315,7 @@ class TestLanguageModelExperiment(unittest.TestCase):
         logits, input_ids, labels = self.deterministic_batch()
         cases = (
             StaticLanguageModel(self.preset(), logits[:, 0], tuple_output=False),
+            StaticLanguageModel(self.preset(), logits[:1], tuple_output=False),
             StaticLanguageModel(
                 self.preset(),
                 logits,
