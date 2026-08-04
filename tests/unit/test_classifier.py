@@ -1,5 +1,6 @@
 import unittest
 from dataclasses import FrozenInstanceError, fields
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -558,6 +559,32 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         logger.reset_validation_epoch()
         logger.log_validation_examples(text_only_logger, epoch=5)
         self.assertEqual(len(text_only_experiment.text), 1)
+
+    def test_validation_example_boundaries_cover_invalid_channels_empty_and_rgb(
+        self,
+    ) -> None:
+        owner = _ClassifierValidationExamples(limit=2)
+        logits = torch.tensor([[0.0, 4.0]])
+        labels = torch.tensor([0])
+
+        owner.update(torch.ones(1, 2, 2, 2), logits, labels)
+        self.assertEqual(owner._examples, [])
+        self.assertIsNone(owner._grid())
+
+        rgb_examples = torch.arange(12, dtype=torch.float32).reshape(1, 3, 2, 2)
+        owner.update(rgb_examples, logits, labels)
+        grid = owner._grid()
+
+        self.assertIsNotNone(grid)
+        self.assertEqual(grid.shape, torch.Size([3, 2, 2]))
+
+        image_only_experiment = type(
+            "ImageOnlyExperiment",
+            (),
+            {"add_image": lambda self, tag, image, global_step: None},
+        )()
+        image_only_logger = SimpleNamespace(experiment=image_only_experiment)
+        owner.emit(image_only_logger, epoch=3)
 
     def test_optimizer_health_metrics_report_norm_ratio_and_bad_gradient_counts(self):
         model = HealthProbeClassifier()
