@@ -115,7 +115,11 @@ class TestTransformerDecoderBlock(unittest.TestCase):
 
     def test_decoder_block_rejects_a_context_free_layer_state(self):
         decoder = self.preset(decoder_num_layers=1)
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(
+            TypeError,
+            r"^TransformerDecoderBlockLayer requires a "
+            r"TransformerDecoderLayerState\.$",
+        ):
             decoder(LayerState(hidden=torch.randn(3, 4, 16)))
 
     def test_expert_auxiliary_losses_accumulate_on_decoder_state(self):

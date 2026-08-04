@@ -1,15 +1,19 @@
 import dataclasses
 import importlib
+import re
 import unittest
 from pathlib import Path
 
 import torch
 
 from emperor.attention import AttentionLayerState
-from emperor.layers import Layer, LayerStack, RecurrentLayer
+from emperor.config import ConfigBase
+from emperor.layers import Layer, LayerStack, LayerState, RecurrentLayer
+from emperor.nn import Module
 from emperor.transformer import (
     TransformerDecoderLayer,
     TransformerDecoderLayerState,
+    TransformerEncoderBlockLayer,
     TransformerEncoderLayer,
 )
 from unit.test_transformer import decoder_stack, encoder_stack, recurrent
@@ -22,7 +26,91 @@ MODEL_PACKAGES = (
 )
 
 
+@dataclasses.dataclass
+class _RecordingEncoderConfig(ConfigBase):
+    def _registry_owner(self) -> type:
+        return _RecordingEncoder
+
+
+class _RecordingEncoder(Module):
+    def __init__(
+        self,
+        cfg: _RecordingEncoderConfig,
+        overrides: _RecordingEncoderConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+        self.calls: list[tuple[torch.Tensor | None, torch.Tensor | None]] = []
+
+    def forward(
+        self,
+        source_token_embeddings: torch.Tensor,
+        source_key_padding_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self.calls.append((source_key_padding_mask, attention_mask))
+        return source_token_embeddings + 1.0, source_token_embeddings.new_tensor(0.25)
+
+
 class TestTransformerLayerComposition(unittest.TestCase):
+    def test_attention_sublayers_reject_context_free_states(self):
+        encoder_config = encoder_stack(num_layers=1).layer_config.layer_model_config
+        decoder_config = decoder_stack(num_layers=1).layer_config.layer_model_config
+        encoder = TransformerEncoderLayer(encoder_config)
+        decoder = TransformerDecoderLayer(decoder_config)
+        context_free_state = LayerState(hidden=torch.randn(2, 3, 8))
+
+        cases = (
+            (
+                encoder.self_attention_layer,
+                "Encoder self-attention requires an AttentionLayerState.",
+            ),
+            (
+                decoder.self_attention_layer,
+                "Decoder self-attention requires a TransformerDecoderLayerState.",
+            ),
+            (
+                decoder.cross_attention_layer,
+                "Decoder cross-attention requires a TransformerDecoderLayerState.",
+            ),
+        )
+        for layer, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(TypeError, rf"^{re.escape(message)}$"):
+                    layer(context_free_state)
+
+    def test_encoder_block_forwards_only_attention_state_masks(self):
+        block_config = encoder_stack(embedding_dim=4, num_layers=1).layer_config
+        block_config.layer_model_config = _RecordingEncoderConfig()
+        block = block_config.build()
+        self.assertIsInstance(block, TransformerEncoderBlockLayer)
+
+        plain_state = LayerState(hidden=torch.zeros(2, 3, 4))
+        plain_output = block(plain_state)
+
+        self.assertIs(plain_output, plain_state)
+        torch.testing.assert_close(plain_output.hidden, torch.ones(2, 3, 4))
+        torch.testing.assert_close(plain_output.loss, torch.tensor(0.25))
+        self.assertEqual(block.model.calls, [(None, None)])
+
+        block.model.calls.clear()
+        padding_mask = torch.tensor(
+            [[False, False, True], [False, True, True]],
+        )
+        attention_mask = torch.zeros(3, 3, dtype=torch.bool)
+        attention_state = AttentionLayerState(
+            hidden=torch.zeros(2, 3, 4),
+            loss=torch.tensor(1.0),
+            key_padding_mask=padding_mask,
+            attention_mask=attention_mask,
+        )
+        attention_output = block(attention_state)
+
+        self.assertIs(attention_output, attention_state)
+        self.assertIs(block.model.calls[0][0], padding_mask)
+        self.assertIs(block.model.calls[0][1], attention_mask)
+        torch.testing.assert_close(attention_output.loss, torch.tensor(1.25))
+
     def test_encoder_forward_is_composed_from_layer_wrappers(self):
         config = encoder_stack(num_layers=1).layer_config.layer_model_config
         model = TransformerEncoderLayer(config).eval()
