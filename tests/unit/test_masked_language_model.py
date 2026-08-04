@@ -30,6 +30,7 @@ class StaticMaskedLanguageModel(MaskedLanguageModelExperiment):
         self.register_buffer("logits", logits.clone())
         self.register_buffer("auxiliary_loss", auxiliary_loss)
         self.forward_calls = []
+        self.log_calls = []
 
     def forward(
         self,
@@ -47,6 +48,9 @@ class StaticMaskedLanguageModel(MaskedLanguageModelExperiment):
         if self.auxiliary_loss is None:
             return self.logits
         return self.logits, self.auxiliary_loss
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_calls.append((payload, kwargs))
 
 
 class GraphAuxiliaryMaskedLanguageModel(StaticMaskedLanguageModel):
@@ -310,6 +314,9 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
             (("not input IDs", labels), "rank-2 tensors"),
             ((input_ids, labels[:, :2]), "equal shapes"),
             ((input_ids, labels, torch.ones(2, 2)), "attention mask"),
+            ((input_ids, labels, None, "not token types"), "token-type IDs"),
+            ((input_ids, labels, None, torch.ones(3)), "token-type IDs"),
+            ((input_ids, labels, None, torch.ones(2, 2)), "token-type IDs"),
         )
 
         for batch, message in invalid_batches:
@@ -320,6 +327,65 @@ class TestMaskedLanguageModelExperiment(unittest.TestCase):
             ):
                 model._model_step(batch)
             forward.assert_not_called()
+
+    def test_real_validation_and_test_stages_and_batch_arity_boundaries(self) -> None:
+        cfg = self.preset(output_dim=3)
+        logits = torch.tensor(
+            [
+                [[2.0, 0.0, -1.0], [0.0, 3.0, -2.0]],
+                [[-1.0, 2.0, 0.0], [0.5, -0.5, 2.0]],
+            ]
+        )
+        input_ids = torch.tensor([[0, 1], [1, 2]])
+        labels = torch.tensor([[1, -100], [2, 0]])
+        attention_mask = torch.tensor([[1, 1], [1, 0]])
+        token_type_ids = torch.tensor([[0, 0], [0, 1]])
+        auxiliary_loss = torch.tensor(0.25)
+        batch = input_ids, labels, attention_mask, token_type_ids
+        expected_loss = (
+            F.cross_entropy(
+                logits.transpose(1, 2),
+                labels,
+                ignore_index=-100,
+            )
+            + auxiliary_loss
+        )
+
+        for stage, step_name, expected_kwargs in (
+            ("validation", "validation_step", {"prog_bar": True}),
+            ("test", "test_step", {}),
+        ):
+            with self.subTest(stage=stage):
+                model = StaticMaskedLanguageModel(cfg, logits, auxiliary_loss)
+
+                observed_loss = getattr(model, step_name)(batch, 0)
+
+                torch.testing.assert_close(observed_loss, expected_loss)
+                self.assertIs(model.forward_calls[0]["input_ids"], input_ids)
+                self.assertIs(
+                    model.forward_calls[0]["token_type_ids"],
+                    token_type_ids,
+                )
+                payload, kwargs = model.log_calls[0]
+                self.assertEqual(
+                    set(payload),
+                    {
+                        f"{stage}/loss",
+                        f"{stage}/perplexity",
+                        f"{stage}/masked/accuracy",
+                        f"{stage}/masked/top_5_accuracy",
+                        f"{stage}/auxiliary/loss",
+                    },
+                )
+                self.assertEqual(kwargs, expected_kwargs)
+
+        model = StaticMaskedLanguageModel(cfg, logits)
+        for invalid_batch in ((input_ids,), (*batch, input_ids)):
+            with (
+                self.subTest(arity=len(invalid_batch)),
+                self.assertRaisesRegex(ValueError, "batches must contain"),
+            ):
+                model._unpack_batch(invalid_batch)
 
     def test_configure_optimizers_returns_adam_for_model_parameters(self):
         cfg = self.preset(learning_rate=3e-4, output_dim=3)
