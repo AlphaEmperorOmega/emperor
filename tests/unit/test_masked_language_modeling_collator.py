@@ -389,6 +389,63 @@ class TestMaskedLanguageModelingDatasetPath(unittest.TestCase):
             ),
         )
 
+    def test_mlm_windows_reject_invalid_lengths_and_preserve_empty_geometry(self):
+        with self.assertRaises(ValueError) as nonpositive_error:
+            build_mlm_token_windows(
+                [],
+                sequence_length=0,
+                special_token_ids=self.preset(),
+            )
+        self.assertEqual(
+            str(nonpositive_error.exception),
+            "sequence_length must be positive.",
+        )
+        for sequence_length in (1, 2):
+            with self.subTest(sequence_length=sequence_length):
+                with self.assertRaises(ValueError) as special_token_error:
+                    build_mlm_token_windows(
+                        [],
+                        sequence_length=sequence_length,
+                        special_token_ids=self.preset(),
+                    )
+                self.assertEqual(
+                    str(special_token_error.exception),
+                    "sequence_length must be at least 3 when adding [CLS] and [SEP].",
+                )
+
+        minimum_window = build_mlm_token_windows(
+            [5],
+            sequence_length=3,
+            special_token_ids=self.preset(),
+        )
+        torch.testing.assert_close(
+            minimum_window,
+            torch.tensor([[2, 5, 3]]),
+        )
+
+        for token_ids in ([], torch.tensor([], dtype=torch.long)):
+            with self.subTest(token_type=type(token_ids).__name__):
+                windows = build_mlm_token_windows(
+                    token_ids,
+                    sequence_length=5,
+                    special_token_ids=self.preset(),
+                )
+                self.assertEqual(windows.shape, torch.Size([0, 5]))
+                self.assertEqual(windows.dtype, torch.long)
+
+    def test_tensor_mlm_windows_without_specials_have_literal_padding(self):
+        windows = build_mlm_token_windows(
+            torch.tensor([5, 6, 7, 8]),
+            sequence_length=3,
+            special_token_ids=self.preset(),
+            add_special_tokens=False,
+        )
+
+        torch.testing.assert_close(
+            windows,
+            torch.tensor([[5, 6, 7], [8, 0, 0]]),
+        )
+
     def test_dataset_classes_provide_mlm_path_without_changing_legacy_datasets(self):
         for dataset_cls in (
             PennTreebankMaskedLanguageModeling,
