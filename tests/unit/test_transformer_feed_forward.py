@@ -11,6 +11,7 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     MirroredLayerStack,
+    MirroredLayerStackConfig,
     RecurrentLayer,
     RecurrentLayerConfig,
 )
@@ -115,6 +116,35 @@ class TestFeedForward(unittest.TestCase):
             [(layer.input_dim, layer.output_dim) for layer in model.model],
             [(10, 20), (20, 10)],
         )
+
+    def test_already_mirrored_stack_is_deep_copied_before_dimension_override(self):
+        base_config = self.preset(input_dim=7, output_dim=7).stack_config
+        source_config = MirroredLayerStackConfig(
+            input_dim=7,
+            hidden_dim=base_config.hidden_dim,
+            output_dim=7,
+            num_layers=base_config.num_layers,
+            apply_output_pipeline_flag=base_config.apply_output_pipeline_flag,
+            last_layer_bias_option=base_config.last_layer_bias_option,
+            shared_gate_config=base_config.shared_gate_config,
+            shared_halting_config=base_config.shared_halting_config,
+            shared_memory_config=base_config.shared_memory_config,
+            layer_config=base_config.layer_config,
+        )
+
+        model = FeedForward(
+            self.preset(
+                input_dim=3,
+                output_dim=5,
+                stack_config=source_config,
+            )
+        )
+        built_config = model.model.cfg
+
+        self.assertEqual((source_config.input_dim, source_config.output_dim), (7, 7))
+        self.assertEqual((built_config.input_dim, built_config.output_dim), (3, 5))
+        self.assertIsNot(built_config, source_config)
+        self.assertIsNot(built_config.layer_config, source_config.layer_config)
 
     def test_three_layer_depth_builds_independent_six_layer_arms(self):
         model = FeedForward(self.preset(num_layers=3))
