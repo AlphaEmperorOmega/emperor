@@ -59,19 +59,34 @@ class EmperorPublicInterfaceContractTests(unittest.TestCase):
                 with self.assertRaises(AttributeError):
                     attrgetter("__emperor_undeclared_interface_export__")(module)
 
-    def test_all_interfaces_import_in_a_fresh_interpreter(self) -> None:
+    def test_all_interfaces_are_owner_identical_in_a_fresh_interpreter(self) -> None:
         contracts = {
-            module_name: tuple(contract["exports"])
+            module_name: (
+                tuple(contract["exports"]),
+                tuple(contract["owners"]),
+            )
             for module_name, contract in self.interfaces.items()
         }
         completed = self.run_fresh_python(
             "\n".join(
                 (
                     "import importlib",
+                    "import sys",
                     f"contracts = {contracts!r}",
-                    "for module_name, exports in contracts.items():",
+                    "for module_name, (exports, owners) in contracts.items():",
                     "    module = importlib.import_module(module_name)",
                     "    assert tuple(module.__all__) == exports",
+                    "    assert not hasattr(module, '__getattr__')",
+                    "    for export_name, owner_name in zip(exports, owners, strict=True):",
+                    "        assert owner_name in sys.modules",
+                    "        owner = importlib.import_module(owner_name)",
+                    "        assert getattr(module, export_name) is getattr(owner, export_name)",
+                    "    try:",
+                    "        getattr(module, '__emperor_undeclared_interface_export__')",
+                    "    except AttributeError:",
+                    "        pass",
+                    "    else:",
+                    "        raise AssertionError(module_name)",
                 )
             )
         )
