@@ -140,6 +140,49 @@ def _transform_signature(transform) -> tuple[type, ...]:
 
 
 class ImageClassificationDatasetTests(unittest.TestCase):
+    def test_prepare_requests_both_raw_splits_on_every_invocation(self) -> None:
+        for case in _CASES:
+            with self.subTest(dataset=case.dataset_type.__name__):
+                calls: list[dict[str, object]] = []
+
+                def record_prepare(*, calls=calls, **kwargs):
+                    calls.append(kwargs)
+
+                dataset = case.dataset_type(batch_size=2)
+                dataset.root = "/offline/raw-cache"
+                with patch(case.patch_target, side_effect=record_prepare):
+                    dataset.prepare_data()
+                    dataset.prepare_data()
+
+                expected_calls = [
+                    {
+                        "root": "/offline/raw-cache",
+                        "train": train,
+                        "download": True,
+                    }
+                    for _ in range(2)
+                    for train in (True, False)
+                ]
+                self.assertEqual(calls, expected_calls)
+
+    def test_prepare_propagates_failure_from_either_raw_split(self) -> None:
+        for case in _CASES:
+            for failure_position, side_effect in (
+                ("train", RuntimeError("train download failed")),
+                ("test", [None, RuntimeError("test download failed")]),
+            ):
+                with self.subTest(
+                    dataset=case.dataset_type.__name__,
+                    failure_position=failure_position,
+                ):
+                    dataset = case.dataset_type(batch_size=2)
+                    with patch(case.patch_target, side_effect=side_effect):
+                        with self.assertRaisesRegex(
+                            RuntimeError,
+                            f"{failure_position} download failed",
+                        ):
+                            dataset.prepare_data()
+
     def test_asymmetric_resize_matches_instance_metadata_and_emitted_geometry(
         self,
     ) -> None:
