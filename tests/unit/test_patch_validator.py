@@ -238,9 +238,7 @@ class PatchValidatorBehaviorTests(unittest.TestCase):
 
     def test_linear_patch_accepts_layer_stack_config_subclasses(self) -> None:
         stack_config = linear_stack_config(DerivedLayerStackConfig)
-        model = PatchEmbeddingLinear(
-            linear_config(embedding_stack_config=stack_config)
-        )
+        model = PatchEmbeddingLinear(linear_config(embedding_stack_config=stack_config))
 
         output = model(torch.ones(2, 1, 4, 4))
 

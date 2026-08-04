@@ -352,6 +352,7 @@ class TestQuestionAnsweringAdapter(unittest.TestCase):
 
         for dataset_type, source_name, item_dataset_type in self.cases:
             with self.subTest(dataset=dataset_type.__name__):
+
                 def source(
                     name: str,
                     *,
@@ -399,7 +400,9 @@ class TestQuestionAnsweringAdapter(unittest.TestCase):
                 validation_context, _, _, _ = dataset.val[0]
                 self.assertEqual(int(validation_context[0]), 0)
                 self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
-                self.assertIsInstance(dataset.val_dataloader().sampler, SequentialSampler)
+                self.assertIsInstance(
+                    dataset.val_dataloader().sampler, SequentialSampler
+                )
                 self.assertTrue(dataset.train_dataloader().drop_last)
                 self.assertTrue(dataset.val_dataloader().drop_last)
 
@@ -427,6 +430,7 @@ class TestQuestionAnsweringAdapter(unittest.TestCase):
                     split="validation",
                 )
                 self.assertEqual(dataset._text_labels([0, 1]), ["<unk>", "<pad>"])
+
 
 if __name__ == "__main__":
     unittest.main()
