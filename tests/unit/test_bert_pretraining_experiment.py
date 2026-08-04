@@ -30,6 +30,10 @@ class StaticBertPretrainingExperiment(BertPretrainingExperiment):
         self.register_buffer("fixed_nsp_logits", nsp_logits)
         self.register_buffer("fixed_auxiliary_loss", auxiliary_loss)
         self.forward_calls = []
+        self.log_calls = []
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_calls.append((payload, kwargs))
 
     def forward(
         self,
@@ -338,6 +342,7 @@ class TestBertPretrainingExperiment(unittest.TestCase):
             None,
         )
         invalid_outputs = (
+            (mlm_logits, "three-item tuple"),
             ((mlm_logits, nsp_logits), "three-item tuple"),
             ((mlm_logits, nsp_logits, None, None), "three-item tuple"),
             (("not logits", nsp_logits, None), "MLM logits"),
@@ -346,6 +351,7 @@ class TestBertPretrainingExperiment(unittest.TestCase):
             ((mlm_logits[..., :-1], nsp_logits, None), "vocabulary dimension"),
             ((mlm_logits, "not logits", None), "NSP logits"),
             ((mlm_logits, nsp_logits.unsqueeze(0), None), "NSP logits"),
+            ((mlm_logits, nsp_logits[:1], None), "share the batch"),
             ((mlm_logits, torch.zeros(2, 3), None), "2 classes"),
         )
 
@@ -379,8 +385,17 @@ class TestBertPretrainingExperiment(unittest.TestCase):
         )
         invalid_batches = (
             (("not input IDs", *batch[1:]), "rank-2 tensors"),
+            ((batch[0].unsqueeze(0), *batch[1:]), "rank-2 tensors"),
+            ((batch[0], "not MLM labels", *batch[2:]), "rank-2 tensors"),
+            ((batch[0], batch[1].unsqueeze(0), *batch[2:]), "rank-2 tensors"),
+            ((*batch[:2], "not attention mask", *batch[3:]), "rank-2 tensors"),
+            ((*batch[:2], batch[2].unsqueeze(0), *batch[3:]), "rank-2 tensors"),
+            ((*batch[:3], "not token types", batch[4]), "rank-2 tensors"),
+            ((*batch[:3], batch[3].unsqueeze(0), batch[4]), "rank-2 tensors"),
             ((batch[0], batch[1][:, :1], *batch[2:]), "equal shapes"),
+            ((*batch[:4], "not NSP labels"), "rank-1 tensor"),
             ((*batch[:4], batch[4].unsqueeze(1)), "rank-1 tensor"),
+            ((*batch[:4], batch[4][:1]), "share the input batch"),
         )
 
         for invalid_batch, message in invalid_batches:
@@ -391,6 +406,54 @@ class TestBertPretrainingExperiment(unittest.TestCase):
             ):
                 model._model_step(invalid_batch)
             forward.assert_not_called()
+
+    def test_real_stages_compute_and_log_their_owned_payloads(self) -> None:
+        mlm_logits, nsp_logits, batch = self.deterministic_inputs()
+        auxiliary_loss = torch.tensor(0.25)
+        expected_loss = (
+            F.cross_entropy(
+                mlm_logits.transpose(1, 2),
+                batch[1],
+                ignore_index=-100,
+            )
+            + F.cross_entropy(nsp_logits, batch[4])
+            + auxiliary_loss
+        )
+
+        for stage, step_name, expected_kwargs in (
+            ("train", "training_step", {"prog_bar": True}),
+            ("validation", "validation_step", {"prog_bar": True}),
+            ("test", "test_step", {}),
+        ):
+            with self.subTest(stage=stage):
+                model = StaticBertPretrainingExperiment(
+                    self.preset(),
+                    mlm_logits,
+                    nsp_logits,
+                    auxiliary_loss,
+                )
+
+                observed_loss = getattr(model, step_name)(batch, 0)
+
+                torch.testing.assert_close(observed_loss, expected_loss)
+                self.assertEqual(len(model.forward_calls), 1)
+                self.assertEqual(len(model.log_calls), 1)
+                payload, kwargs = model.log_calls[0]
+                self.assertEqual(
+                    set(payload),
+                    {
+                        f"{stage}/loss",
+                        f"{stage}/mlm/loss",
+                        f"{stage}/mlm/perplexity",
+                        f"{stage}/mlm/masked_accuracy",
+                        f"{stage}/mlm/masked_top_5_accuracy",
+                        f"{stage}/nsp/loss",
+                        f"{stage}/nsp/accuracy",
+                        f"{stage}/auxiliary/loss",
+                    },
+                )
+                self.assertIs(payload[f"{stage}/auxiliary/loss"], auxiliary_loss)
+                self.assertEqual(kwargs, expected_kwargs)
 
     def test_stage_steps_delegate_to_private_metrics_logger(self) -> None:
         mlm_logits, nsp_logits, batch = self.deterministic_inputs()
