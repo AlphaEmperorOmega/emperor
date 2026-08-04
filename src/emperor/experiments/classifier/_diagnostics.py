@@ -24,9 +24,7 @@ class _ClassifierDiagnostics:
     ) -> None:
         self._num_classes = num_classes
         self._confidence_bin_count = confidence_bin_count
-        self._full_confusion_matrix_class_limit = (
-            full_confusion_matrix_class_limit
-        )
+        self._full_confusion_matrix_class_limit = full_confusion_matrix_class_limit
         self._top_confused_pair_limit = top_confused_pair_limit
 
     def update(
@@ -153,9 +151,7 @@ class _ClassifierDiagnostics:
             device=state.confidence_total.device,
             dtype=state.confidence_total.dtype,
         )
-        state.confidence_total.add_(
-            confidence.sum().to(state.confidence_total.dtype)
-        )
+        state.confidence_total.add_(confidence.sum().to(state.confidence_total.dtype))
         state.confidence_count.add_(
             torch.as_tensor(
                 confidence.numel(),

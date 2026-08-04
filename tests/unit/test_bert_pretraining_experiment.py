@@ -563,9 +563,7 @@ class TestBertPretrainingExperiment(unittest.TestCase):
         mlm_loss = torch.tensor(100.0, requires_grad=True)
         output = replace(self._step_output(), mlm_loss=mlm_loss)
 
-        perplexity = logger._payload("validation", output)[
-            "validation/mlm/perplexity"
-        ]
+        perplexity = logger._payload("validation", output)["validation/mlm/perplexity"]
 
         torch.testing.assert_close(perplexity, torch.exp(torch.tensor(20.0)))
         self.assertFalse(perplexity.requires_grad)

@@ -215,7 +215,9 @@ class ImageClassificationDatasetTests(unittest.TestCase):
                     dataset.resolved_metadata.flattened_input_dim,
                     expected_flattened_dim,
                 )
-                self.assertEqual(dataset.resolved_metadata.num_classes, case.num_classes)
+                self.assertEqual(
+                    dataset.resolved_metadata.num_classes, case.num_classes
+                )
                 self.assertEqual(
                     (
                         case.dataset_type.default_height,
@@ -248,7 +250,9 @@ class ImageClassificationDatasetTests(unittest.TestCase):
                     RandomHorizontalFlip,
                     _transform_signature(fitted_validation_transform),
                 )
-                training_signature = _transform_signature(fitted.train.dataset.transform)
+                training_signature = _transform_signature(
+                    fitted.train.dataset.transform
+                )
                 self.assertEqual(
                     RandomHorizontalFlip in training_signature,
                     case.dataset_type is Cifar100,

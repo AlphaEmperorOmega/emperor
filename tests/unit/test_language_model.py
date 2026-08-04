@@ -270,9 +270,7 @@ class TestLanguageModelExperiment(unittest.TestCase):
 
         for dtype in (torch.float16, torch.bfloat16):
             with self.subTest(dtype=dtype):
-                perplexity = policy.from_token_loss(
-                    torch.tensor(100.0, dtype=dtype)
-                )
+                perplexity = policy.from_token_loss(torch.tensor(100.0, dtype=dtype))
                 self.assertEqual(perplexity.dtype, torch.float32)
                 self.assertTrue(torch.isfinite(perplexity))
                 torch.testing.assert_close(perplexity, torch.exp(torch.tensor(20.0)))
