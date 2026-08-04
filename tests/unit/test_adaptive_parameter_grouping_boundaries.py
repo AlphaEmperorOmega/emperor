@@ -488,6 +488,67 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
                 )
             )
 
+    def test_outer_transformer_scan_reaches_a_nested_generic_layer_gate(self):
+        nested_layer_config = LayerConfig(
+            input_dim=4,
+            output_dim=4,
+            activation=ActivationOptions.DISABLED,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            gate_config=GateConfig(
+                gate_dim=4,
+                option=LayerGateOptions.ADDITION,
+                activation=ActivationOptions.DISABLED,
+                model_config=grouped_stack(
+                    4,
+                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                ),
+            ),
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(
+                input_dim=4,
+                output_dim=4,
+                bias_flag=False,
+            ),
+        )
+        stack_config = linear_stack(4, 4)
+        stack_config.layer_config.layer_model_config = nested_layer_config
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"TransformerConfig\.encoder_stack_config\.layer_config\."
+            r"layer_model_config\.gate_config",
+        ):
+            Transformer(
+                TransformerConfig(
+                    encoder_stack_config=stack_config,
+                    decoder_stack_config=None,
+                )
+            )
+
+    def test_outer_transformer_scan_accepts_a_non_grouped_shared_gate(self):
+        stack_config = linear_stack(4, 4)
+        stack_config.shared_gate_config = GateConfig(
+            gate_dim=4,
+            option=LayerGateOptions.ADDITION,
+            activation=ActivationOptions.DISABLED,
+            model_config=linear_stack(4, 4),
+        )
+        model = Transformer(
+            TransformerConfig(
+                encoder_stack_config=stack_config,
+                decoder_stack_config=None,
+            )
+        )
+        source = torch.randn(2, 3, 4)
+
+        output, loss = model(source_token_embeddings=source)
+
+        self.assertEqual(output.shape, source.shape)
+        self.assertEqual(loss.item(), 0.0)
+
     def test_outer_transformer_gate_scan_traverses_both_hierarchical_reasoning_model_transitions(
         self,
     ):
@@ -552,6 +613,30 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
                     decoder_stack_config=None,
                 )
             )
+
+    def test_transformer_grouping_scan_does_not_mask_missing_layer_model_config(self):
+        direct_missing_model = linear_stack(4, 4)
+        direct_missing_model.layer_config.layer_model_config = None
+
+        nested_layer_config = deepcopy(linear_stack(4, 4).layer_config)
+        nested_layer_config.layer_model_config = None
+        nested_missing_model = linear_stack(4, 4)
+        nested_missing_model.layer_config.layer_model_config = nested_layer_config
+
+        for stack_config in (direct_missing_model, nested_missing_model):
+            with (
+                self.subTest(nested=stack_config is nested_missing_model),
+                self.assertRaisesRegex(
+                    ValueError,
+                    r"^layer_model_config is required, Layer needs it to build the model$",
+                ),
+            ):
+                Transformer(
+                    TransformerConfig(
+                        encoder_stack_config=stack_config,
+                        decoder_stack_config=None,
+                    )
+                )
 
     def test_routed_expert_config_reports_first_grouping_through_cycles(self):
         first_grouping = grouped_linear_config(
@@ -678,6 +763,44 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             "not supported by mixture-of-attention-heads projections",
         ):
             config.build()
+
+    def test_mixture_attention_reports_first_grouping_inside_experts_config(self):
+        config = build_attention_config(
+            config_class=MixtureOfAttentionHeadsConfig,
+            batch_size=2,
+            num_heads=2,
+            embedding_dim=4,
+            target_sequence_length=4,
+            source_sequence_length=4,
+            use_kv_expert_models_flag=False,
+            experts_top_k=1,
+            experts_num_experts=2,
+        )
+        first_grouping = grouped_linear_config(
+            4,
+            AdaptiveParameterGroupingScopeOptions.ROWS,
+        ).adaptive_augmentation_config
+        second_grouping = grouped_linear_config(
+            4,
+            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+        ).adaptive_augmentation_config
+        config.experts_config.expert_model_config.layer_config.layer_model_config = (
+            _NestedConfig(nested={"matches": [first_grouping, second_grouping]})
+        )
+        rng_state = torch.random.get_rng_state().clone()
+
+        with self.assertRaises(ValueError) as caught:
+            config.build()
+
+        self.assertEqual(
+            str(caught.exception),
+            "Adaptive parameter grouping is not supported by mixture-of-attention-"
+            "heads projections because expert routing changes row membership and "
+            "order. Found grouping at MixtureOfAttentionHeadsConfig.experts_config."
+            "expert_model_config.layer_config.layer_model_config.nested"
+            "['matches'][0].",
+        )
+        self.assertTrue(torch.equal(torch.random.get_rng_state(), rng_state))
 
 
 if __name__ == "__main__":
