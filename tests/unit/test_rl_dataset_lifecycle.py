@@ -5,8 +5,10 @@ from unittest.mock import patch
 
 import numpy as np
 import torch
+from torch.utils.data import RandomSampler, SequentialSampler
 
 from emperor.datasets.rl._acrobot import Acrobot
+from emperor.datasets.rl._base import _TransitionDataset
 from emperor.datasets.rl._cart_pole import CartPole
 from emperor.datasets.rl._frozen_lake import FrozenLake
 from emperor.datasets.rl._lunar_lander import LunarLander
@@ -125,6 +127,37 @@ def _assert_transition_datasets_equal(
 
 
 class GymDatasetLifecycleTests(unittest.TestCase):
+    def test_transition_dataset_indexes_fields_in_canonical_order(self) -> None:
+        dataset = _TransitionDataset(
+            states=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+            actions=torch.tensor([5, 6]),
+            rewards=torch.tensor([7.0, 8.0]),
+            next_states=torch.tensor([[9.0, 10.0], [11.0, 12.0]]),
+            dones=torch.tensor([0.0, 1.0]),
+        )
+
+        transition = dataset[1]
+
+        self.assertEqual(len(dataset), 2)
+        self.assertEqual(len(transition), 5)
+        torch.testing.assert_close(transition[0], torch.tensor([3.0, 4.0]))
+        torch.testing.assert_close(transition[1], torch.tensor(6))
+        torch.testing.assert_close(transition[2], torch.tensor(8.0))
+        torch.testing.assert_close(transition[3], torch.tensor([11.0, 12.0]))
+        torch.testing.assert_close(transition[4], torch.tensor(1.0))
+
+    def test_prepare_is_a_noop_and_collection_requires_an_environment(self) -> None:
+        dataset = CartPole(num_episodes=1)
+
+        dataset.prepare_data()
+
+        self.assertIsNone(dataset.env)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Gym environment must be created before collection",
+        ):
+            dataset._collect_transitions(1, seed=None)
+
     def test_equal_seeds_reproduce_train_and_validation_transitions(self) -> None:
         factory = _EnvironmentFactory()
         with patch("emperor.datasets.rl._base.gym.make", side_effect=factory):
@@ -187,6 +220,48 @@ class GymDatasetLifecycleTests(unittest.TestCase):
         self.assertEqual(factory.environments[0].close_calls, 1)
         self.assertIsNone(dataset.env)
         self.assertFalse(hasattr(dataset, "train"))
+
+    def test_validation_failure_closes_and_releases_the_environment(self) -> None:
+        factory = _EnvironmentFactory(raise_on_step=True)
+        dataset = CartPole(num_episodes=1, seed=5)
+
+        with (
+            patch("emperor.datasets.rl._base.gym.make", side_effect=factory),
+            self.assertRaisesRegex(RuntimeError, "step failed"),
+        ):
+            dataset.setup("validate")
+
+        self.assertEqual(factory.environments[0].close_calls, 1)
+        self.assertIsNone(dataset.env)
+        self.assertFalse(hasattr(dataset, "val"))
+
+    def test_loader_policies_and_text_label_rejection_are_explicit(self) -> None:
+        transitions = _TransitionDataset(
+            states=torch.arange(12, dtype=torch.float32).reshape(3, 4),
+            actions=torch.tensor([0, 1, 0]),
+            rewards=torch.tensor([1.0, 2.0, 3.0]),
+            next_states=torch.arange(12, 24, dtype=torch.float32).reshape(3, 4),
+            dones=torch.tensor([0.0, 0.0, 1.0]),
+        )
+        dataset = CartPole(batch_size=2, num_episodes=1)
+        dataset.num_workers = 0
+        dataset.train = transitions
+        dataset.val = transitions
+
+        training_loader = dataset.get_dataloader(train=True)
+        validation_loader = dataset.get_dataloader(train=False)
+
+        self.assertIsInstance(training_loader.sampler, RandomSampler)
+        self.assertIsInstance(validation_loader.sampler, SequentialSampler)
+        self.assertTrue(training_loader.drop_last)
+        self.assertTrue(validation_loader.drop_last)
+        self.assertEqual(training_loader.batch_size, 2)
+        self.assertEqual(validation_loader.batch_size, 2)
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "RL environments do not have text labels",
+        ):
+            dataset._text_labels([0])
 
     def test_close_and_teardown_are_idempotent(self) -> None:
         factory = _EnvironmentFactory()
