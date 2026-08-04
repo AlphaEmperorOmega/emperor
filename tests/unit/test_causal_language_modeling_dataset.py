@@ -3,7 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
+from torch.utils.data import RandomSampler, SequentialSampler
 
+import emperor.datasets.text.language_modeling._penn_treebank as penn_module
+import emperor.datasets.text.language_modeling._wiki_text_2 as wiki_module
 from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
 from emperor.experiments import (
     ExperimentTask,
@@ -47,6 +50,22 @@ class FakeLegacyCorpus:
             )
             for split in ("train", "valid", "test")
         )
+
+
+class _ModernVocabulary:
+    def __init__(self) -> None:
+        self.mapping = {"<unk>": 0, "one": 1, "two": 2}
+        self.tokens = ["<unk>", "one", "two"]
+        self.default_index = None
+
+    def __getitem__(self, token: str) -> int:
+        return self.mapping[token]
+
+    def set_default_index(self, index: int) -> None:
+        self.default_index = index
+
+    def lookup_token(self, index: int) -> str:
+        return self.tokens[index]
 
 
 class TestCausalLanguageModelingDatasets(unittest.TestCase):
@@ -138,6 +157,94 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                         ["test", "one", "two"],
                     )
                 self.assertEqual(FakeLegacyCorpus.calls, ["fake-root"])
+
+    def test_modern_vocab_and_legacy_field_compatibility_helpers_are_literal(self):
+        for module in (penn_module, wiki_module):
+            with self.subTest(module=module.__name__):
+                vocabulary = _ModernVocabulary()
+
+                module._set_unknown_default(vocabulary)
+                decoded = module._lookup_token(vocabulary, 2)
+                field = module._legacy_text_field(str.split)
+
+                self.assertEqual(vocabulary.default_index, 0)
+                self.assertEqual(decoded, "two")
+                self.assertEqual(field.tokenize("one two"), ["one", "two"])
+
+    def test_modern_provider_path_requests_the_literal_split(self):
+        cases = (
+            (PennTreebank, penn_module, "PennTreebankDataset"),
+            (WikiText2, wiki_module, "WikiText2Dataset"),
+        )
+        for dataset_type, module, provider_name in cases:
+            with self.subTest(dataset=dataset_type.__name__):
+                calls: list[tuple[str, str]] = []
+
+                def provider(*, root: str, split: str, calls=calls):
+                    calls.append((root, split))
+                    return iter(("one two",))
+
+                with patch.object(module, provider_name, new=provider):
+                    data = dataset_type(root="offline-root", num_workers=0)
+                    text_units = tuple(data._dataset("valid"))
+
+                self.assertEqual(text_units, ("one two",))
+                self.assertEqual(calls, [("offline-root", "valid")])
+
+    def test_validation_preconditions_and_encode_autobuild_are_exact(self):
+        for dataset_type in self.dataset_types():
+            with self.subTest(dataset=dataset_type.__name__):
+                fresh = dataset_type(sequence_length=3, num_workers=0)
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Vocabulary must be built before the dataset",
+                ):
+                    fresh._build_dataset(iter(("one two",)))
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Vocabulary must be built before decoding IDs",
+                ):
+                    fresh._text_labels([0])
+
+                self.assertEqual(fresh.encode_text("one two three"), [3, 6, 5])
+                vocabulary = fresh.vocab
+                self.assertEqual(fresh.encode_text("unknown one"), [0, 3])
+                self.assertIs(fresh.vocab, vocabulary)
+
+                validating = dataset_type(sequence_length=3, num_workers=0)
+                validating.setup("validate")
+                self.assertEqual(validating.requested_splits, ["train", "valid"])
+                self.assertEqual(len(validating.val), 1)
+
+    def test_seeded_training_and_validation_loader_order_is_literal(self):
+        for dataset_type in self.dataset_types():
+            with self.subTest(dataset=dataset_type.__name__):
+                data = dataset_type(
+                    batch_size=2,
+                    sequence_length=1,
+                    num_workers=0,
+                    drop_last=False,
+                    seed=7,
+                )
+                literal_dataset = torch.utils.data.TensorDataset(torch.arange(4))
+                data.train = literal_dataset
+                data.val = literal_dataset
+
+                training_loader = data.get_dataloader(train=True)
+                validation_loader = data.get_dataloader(train=False)
+                training_order = [
+                    value for batch in training_loader for value in batch[0].tolist()
+                ]
+                validation_order = [
+                    value for batch in validation_loader for value in batch[0].tolist()
+                ]
+
+                self.assertEqual(training_order, [1, 3, 0, 2])
+                self.assertEqual(validation_order, [0, 1, 2, 3])
+                self.assertIsInstance(training_loader.sampler, RandomSampler)
+                self.assertIsInstance(validation_loader.sampler, SequentialSampler)
+                self.assertFalse(training_loader.drop_last)
+                self.assertFalse(validation_loader.drop_last)
 
     def test_windows_are_shifted_by_exactly_one_token(self):
         for dataset_type in self.dataset_types():
