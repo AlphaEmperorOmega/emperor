@@ -47,6 +47,10 @@ from emperor.augmentations.adaptive_parameters._grouping import (
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
 )
+from emperor.augmentations.adaptive_parameters._validation import (
+    AdaptiveLinearValidator,
+    AdaptiveParameterAugmentationValidator,
+)
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
@@ -134,6 +138,29 @@ class DenseWeightShapeSpy(torch.nn.Module):
         self.conditioning_shape = tuple(conditioning_input.shape)
         generated_weights = torch.diag_embed(conditioning_input)
         self.generated_weight_shape = tuple(generated_weights.shape)
+        return generated_weights
+
+
+class DeterministicDynamicWeightGenerator(torch.nn.Module):
+    def __init__(self, dtype: torch.dtype) -> None:
+        super().__init__()
+        self.scale = torch.nn.Parameter(
+            torch.tensor([[0.5, -1.0], [1.5, 2.0]], dtype=dtype)
+        )
+        self.offset = torch.nn.Parameter(
+            torch.tensor([[0.25, 0.5], [-0.5, 1.0]], dtype=dtype)
+        )
+        self.generated_weights = None
+        self.conditioning_input = None
+
+    def forward(self, weight_params, conditioning_input):
+        del weight_params
+        self.conditioning_input = conditioning_input.detach().clone()
+        generated_weights = conditioning_input.unsqueeze(-1) * self.scale.unsqueeze(
+            0
+        ) + self.offset.unsqueeze(0)
+        generated_weights.retain_grad()
+        self.generated_weights = generated_weights
         return generated_weights
 
 
@@ -430,6 +457,191 @@ class AdaptiveParameterGroupingPrimitiveTests(unittest.TestCase):
                         layout,
                     )
 
+    def test_restore_rejects_non_tensor_rank_and_leading_shape_before_reshape(self):
+        inputs = torch.tensor([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0]])
+        valid_rows = torch.tensor([True, False, False, True])
+        inputs_before = inputs.clone()
+        valid_rows_before = valid_rows.clone()
+        layout = RowLayout.rows(
+            4,
+            valid_rows=valid_rows,
+            context_sharing_restricted=False,
+        )
+        plan = build_adaptive_group_plan(
+            inputs,
+            AdaptiveParameterGroupingScopeOptions.ROWS,
+            2,
+            layout,
+        )
+        cases = (
+            (
+                [1.0, 2.0],
+                TypeError,
+                "grouped_output must be a Tensor, received list.",
+            ),
+            (
+                torch.ones(2, 2),
+                ValueError,
+                "grouped_output must have shape (context_count, members_per_group, "
+                "output_dim), received (2, 2).",
+            ),
+            (
+                torch.ones(2, 3, 1),
+                ValueError,
+                "grouped_output leading dimensions must equal (2, 2), received (2, 3).",
+            ),
+        )
+
+        for grouped_output, exception_type, message in cases:
+            with self.subTest(grouped_output=grouped_output):
+                with self.assertRaises(exception_type) as caught:
+                    plan.restore(grouped_output)
+                self.assertEqual(str(caught.exception), message)
+
+        torch.testing.assert_close(
+            plan.valid_members,
+            torch.tensor([[True, False], [False, True]]),
+        )
+        torch.testing.assert_close(inputs, inputs_before)
+        torch.testing.assert_close(valid_rows, valid_rows_before)
+
+    def test_plan_input_scope_and_layout_guards_report_the_failing_value(self):
+        inputs = torch.ones(4, 2)
+        rows_layout = RowLayout.rows(4, context_sharing_restricted=False)
+        meta_mask_layout = RowLayout.rows(
+            4,
+            valid_rows=torch.ones(4, dtype=torch.bool, device="meta"),
+            context_sharing_restricted=False,
+        )
+        cases = (
+            (
+                [1.0, 2.0],
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+                rows_layout,
+                TypeError,
+                "input_rows must be a Tensor, received list.",
+            ),
+            (
+                torch.ones(2, 2, 1),
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+                rows_layout,
+                ValueError,
+                "input_rows must be a two-dimensional matrix, received shape "
+                "(2, 2, 1).",
+            ),
+            (
+                inputs,
+                "ROWS",
+                rows_layout,
+                TypeError,
+                "grouping_scope must be an AdaptiveParameterGroupingScopeOptions "
+                "value, received 'ROWS'.",
+            ),
+            (
+                inputs,
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+                object(),
+                TypeError,
+                "row_layout must be a RowLayout, received object.",
+            ),
+            (
+                inputs,
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+                meta_mask_layout,
+                ValueError,
+                "row_layout.valid_rows must be on the same device as input_rows, "
+                "received meta and cpu.",
+            ),
+        )
+
+        for input_rows, scope, layout, exception_type, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaises(exception_type) as caught:
+                    build_adaptive_group_plan(input_rows, scope, 2, layout)
+                self.assertEqual(str(caught.exception), message)
+
+        torch.testing.assert_close(inputs, torch.ones(4, 2))
+
+    def test_grouping_scope_requires_matching_layout_semantics(self):
+        inputs = torch.ones(4, 2)
+        rows_layout = RowLayout.rows(4, context_sharing_restricted=False)
+        sequence_layout = RowLayout.sequence(
+            leading_shape=(2, 2),
+            batch_axis=0,
+            sequence_axis=1,
+            context_sharing_restricted=False,
+        )
+        cases = (
+            (
+                AdaptiveParameterGroupingScopeOptions.ROWS,
+                sequence_layout,
+                "ROWS grouping requires a one-axis row layout.",
+            ),
+            (
+                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+                rows_layout,
+                "SEQUENCE grouping requires a two-axis sequence layout.",
+            ),
+        )
+
+        for scope, layout, message in cases:
+            with self.subTest(scope=scope):
+                with self.assertRaises(ValueError) as caught:
+                    build_adaptive_group_plan(inputs, scope, 2, layout)
+                self.assertEqual(str(caught.exception), message)
+
+        future_scope = object.__new__(AdaptiveParameterGroupingScopeOptions)
+        object.__setattr__(future_scope, "_name_", "FUTURE")
+        object.__setattr__(future_scope, "_value_", 99)
+
+        with self.assertRaises(ValueError) as caught:
+            build_adaptive_group_plan(inputs, future_scope, 2, rows_layout)
+
+        self.assertEqual(
+            str(caught.exception),
+            "Unsupported adaptive parameter grouping scope "
+            "<AdaptiveParameterGroupingScopeOptions.FUTURE: 99>.",
+        )
+
+    def test_generated_parameter_context_and_grouped_bias_guards_are_exact(self):
+        input_batch = torch.ones(3, 2)
+        weights = torch.ones(2, 2, 2)
+        bias = torch.ones(4, 2)
+        grouped_bias = torch.ones(2, 2)
+        cases = (
+            (
+                lambda: AdaptiveLinearValidator.validate_weight_context_count(
+                    input_batch,
+                    weights,
+                ),
+                "Dynamic weights context count must match affine input, received "
+                "2 and 3.",
+            ),
+            (
+                lambda: AdaptiveLinearValidator.validate_bias_context_count(
+                    input_batch,
+                    bias,
+                ),
+                "Dynamic bias context count must match affine input, received 4 and 3.",
+            ),
+            (
+                lambda: (
+                    AdaptiveParameterAugmentationValidator.validate_grouped_base_parameters(
+                        torch.ones(2, 2),
+                        grouped_bias,
+                    )
+                ),
+                "Adaptive parameter grouping requires a shared one-dimensional base "
+                "bias; row-specific base bias is not supported.",
+            ),
+        )
+
+        for action, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaises(ValueError) as caught:
+                    action()
+                self.assertEqual(str(caught.exception), message)
+
 
 class GroupedAdaptiveLinearTests(unittest.TestCase):
     def test_buildable_augmentation_owns_grouping_and_restoration(self):
@@ -599,6 +811,78 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         grouped_members, generated_weights = grouped_matrix_multiply.call_args.args
         self.assertEqual(tuple(grouped_members.shape), (2, 2, 2))
         self.assertEqual(tuple(generated_weights.shape), (2, 2, 2))
+
+    def test_generated_weight_gradients_drive_exact_generator_updates(self):
+        for dtype in (torch.float32, torch.float64):
+            with self.subTest(dtype=dtype):
+                model = grouped_adaptive_bias_linear(
+                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                    2,
+                ).to(dtype=dtype)
+                generator = DeterministicDynamicWeightGenerator(dtype)
+                model.adaptive_behaviour.weight_model = generator
+                model.adaptive_behaviour.bias_model = None
+                inputs = torch.tensor(
+                    [[1.0, 2.0], [0.0, 2.0], [4.0, 0.0], [5.0, 6.0]],
+                    dtype=dtype,
+                )
+                loss_coefficients = torch.tensor(
+                    [[1.0, 2.0], [3.0, -2.0], [-1.0, 1.0], [2.0, -2.0]],
+                    dtype=dtype,
+                )
+                layout = RowLayout.rows(4, context_sharing_restricted=False)
+                optimizer = torch.optim.SGD(generator.parameters(), lr=0.05)
+                scale_before = generator.scale.detach().clone()
+                offset_before = generator.offset.detach().clone()
+
+                output = model(inputs, row_layout=layout)
+                loss = (output * loss_coefficients).sum()
+                loss.backward()
+
+                expected_generated_gradient = torch.tensor(
+                    [
+                        [[1.0, 2.0], [8.0, 0.0]],
+                        [[6.0, -6.0], [12.0, -12.0]],
+                    ],
+                    dtype=dtype,
+                )
+                expected_scale_gradient = torch.tensor(
+                    [[55.0, -52.0], [104.0, -72.0]],
+                    dtype=dtype,
+                )
+                expected_offset_gradient = torch.tensor(
+                    [[7.0, -4.0], [20.0, -12.0]],
+                    dtype=dtype,
+                )
+
+                torch.testing.assert_close(
+                    generator.conditioning_input,
+                    torch.tensor([[1.0, 4.0], [9.0, 6.0]], dtype=dtype),
+                )
+                self.assertIsNotNone(generator.generated_weights.grad)
+                torch.testing.assert_close(
+                    generator.generated_weights.grad,
+                    expected_generated_gradient,
+                )
+                torch.testing.assert_close(
+                    generator.scale.grad,
+                    expected_scale_gradient,
+                )
+                torch.testing.assert_close(
+                    generator.offset.grad,
+                    expected_offset_gradient,
+                )
+
+                optimizer.step()
+
+                torch.testing.assert_close(
+                    generator.scale,
+                    scale_before - 0.05 * expected_scale_gradient,
+                )
+                torch.testing.assert_close(
+                    generator.offset,
+                    offset_before - 0.05 * expected_offset_gradient,
+                )
 
     def test_missing_or_restricted_layout_fails_before_generator_execution(self):
         model = grouped_adaptive_bias_linear(
