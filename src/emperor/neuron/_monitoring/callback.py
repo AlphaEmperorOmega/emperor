@@ -117,6 +117,11 @@ class NeuronClusterMonitorCallback(Callback):
             self.__cleanup()
             raise
 
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        # Lightning restores the fit-loop progress after on_fit_start. Rebase
+        # emission cadence here so a resumed run starts from its restored step.
+        self._last_emitted_step = int(pl_module.global_step)
+
     def __wrap_cluster_forward(
         self,
         module_name: str,
