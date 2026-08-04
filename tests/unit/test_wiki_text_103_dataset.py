@@ -54,6 +54,68 @@ class WikiText103DatasetTests(unittest.TestCase):
         "build_vocab_from_iterator"
     )
 
+    def test_literal_short_boundary_and_discarded_tail_windows(self) -> None:
+        dataset = WikiText103(sequence_length=3)
+        dataset.vocab = _Vocabulary(
+            (("zero", "one", "two", "three", "four", "five", "six", "tail"),),
+            specials=["<unk>"],
+        )
+
+        empty_inputs, empty_targets = dataset._build_dataset(iter(())).tensors
+        exact_inputs, exact_targets = dataset._build_dataset(
+            iter(("zero one two",))
+        ).tensors
+        one_inputs, one_targets = dataset._build_dataset(
+            iter(("zero one two three",))
+        ).tensors
+        tail_inputs, tail_targets = dataset._build_dataset(
+            iter(("zero one two three four five six tail",))
+        ).tensors
+
+        self.assertEqual(empty_inputs.shape, torch.Size([0, 3]))
+        self.assertEqual(empty_targets.shape, torch.Size([0, 3]))
+        self.assertEqual(exact_inputs.shape, torch.Size([0, 3]))
+        self.assertEqual(exact_targets.shape, torch.Size([0, 3]))
+        torch.testing.assert_close(one_inputs, torch.tensor([[8, 3, 7]]))
+        torch.testing.assert_close(one_targets, torch.tensor([[3, 7, 6]]))
+        torch.testing.assert_close(
+            tail_inputs,
+            torch.tensor([[8, 3, 7], [6, 2, 1]]),
+        )
+        torch.testing.assert_close(
+            tail_targets,
+            torch.tensor([[3, 7, 6], [2, 1, 4]]),
+        )
+
+    def test_repeated_stages_preserve_train_owned_vocabulary_and_metadata(self) -> None:
+        source = _WikiTextSource()
+        dataset = WikiText103(batch_size=1, sequence_length=3)
+        dataset.num_workers = 0
+        with (
+            patch(self.source_target, side_effect=source),
+            patch(
+                self.vocabulary_target,
+                side_effect=_build_vocabulary,
+            ) as vocabulary_builder,
+        ):
+            dataset.setup("fit")
+            vocabulary = dataset.vocab
+            metadata = dataset.resolved_metadata
+            dataset.setup("validate")
+            dataset.setup("validate")
+
+        self.assertEqual(
+            source.calls,
+            ["train", "train", "valid", "valid", "valid"],
+        )
+        self.assertEqual(vocabulary_builder.call_count, 1)
+        self.assertIs(dataset.vocab, vocabulary)
+        self.assertIs(dataset.resolved_metadata, metadata)
+        self.assertEqual(dataset.vocab.default_index, 0)
+        self.assertEqual(dataset.vocab["validation-only"], 0)
+        self.assertTrue(dataset.train_dataloader().drop_last)
+        self.assertTrue(dataset.val_dataloader().drop_last)
+
     def test_prepare_fit_and_shifted_batch_contract_are_offline(self) -> None:
         source = _WikiTextSource()
         dataset = WikiText103(batch_size=1, sequence_length=3)
