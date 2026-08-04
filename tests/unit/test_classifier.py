@@ -27,6 +27,30 @@ class HealthProbeClassifier(ClassifierExperiment):
         return torch.zeros(X.size(0), self.num_classes, device=X.device)
 
 
+class LifecycleProbeClassifier(ClassifierExperiment):
+    def __init__(self) -> None:
+        super().__init__(ModelConfig(input_dim=4, output_dim=2, learning_rate=1e-3))
+        self.scale = nn.Parameter(torch.tensor(1.0))
+        self.register_buffer(
+            "fixed_logits",
+            torch.tensor([[4.0, 0.0], [4.0, 0.0]]),
+        )
+        self.forward_calls = []
+        self.log_calls = []
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        self.forward_calls.append(inputs)
+        return self.fixed_logits[: inputs.size(0)] * self.scale
+
+    def log_dict(self, payload, **kwargs) -> None:
+        self.log_calls.append((payload, kwargs))
+
+
+class EmptyHealthProbeClassifier(LifecycleProbeClassifier):
+    def optimizer_health_metrics(self, optimizer) -> dict[str, torch.Tensor]:
+        return {}
+
+
 class AuxiliaryLossProbeClassifier(ClassifierExperiment):
     def __init__(self):
         super().__init__(ModelConfig(input_dim=1, output_dim=2, learning_rate=1e-3))
@@ -456,6 +480,107 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         )
         self.assertLessEqual(len(confusion), 12)
 
+    def test_empty_diagnostics_and_non_confused_large_matrices_emit_nothing(
+        self,
+    ) -> None:
+        logger = ClassifierMetricsLogger(num_classes=2)
+
+        self.assertEqual(logger.train_per_class_epoch_metrics(), {})
+        self.assertEqual(logger.train_confusion_matrix_epoch_metrics(), {})
+        self.assertEqual(logger.train_confidence_epoch_metrics(), {})
+
+        no_pairs = ClassifierMetricsLogger(
+            num_classes=21,
+            full_confusion_matrix_class_limit=20,
+            top_confused_pair_limit=3,
+        )
+        diagonal_logits = torch.full((2, 21), -8.0)
+        diagonal_logits[0, 0] = 8.0
+        diagonal_logits[1, 1] = 8.0
+        no_pairs.log_validation_step(
+            self._discard_log,
+            self._step_output(
+                torch.tensor(0.5),
+                diagonal_logits,
+                torch.tensor([0, 1]),
+            ),
+        )
+        self.assertEqual(no_pairs.validation_confusion_matrix_epoch_metrics(), {})
+
+        zero_limit = ClassifierMetricsLogger(
+            num_classes=21,
+            full_confusion_matrix_class_limit=20,
+            top_confused_pair_limit=0,
+        )
+        confused_logits = diagonal_logits.clone()
+        confused_logits[0].fill_(-8.0)
+        confused_logits[0, 1] = 8.0
+        zero_limit.log_validation_step(
+            self._discard_log,
+            self._step_output(
+                torch.tensor(0.5),
+                confused_logits,
+                torch.tensor([0, 1]),
+            ),
+        )
+        self.assertEqual(zero_limit.validation_confusion_matrix_epoch_metrics(), {})
+
+    def test_defensive_top_pair_skips_zero_and_preserves_positive_payload(
+        self,
+    ) -> None:
+        diagnostics = _ClassifierDiagnostics(
+            num_classes=2,
+            confidence_bin_count=10,
+            full_confusion_matrix_class_limit=20,
+            top_confused_pair_limit=3,
+        )
+        confusion_matrix = torch.zeros((2, 2), dtype=torch.float64)
+        rate_matrix = torch.tensor(
+            [[0.0, 0.25], [0.75, 0.0]],
+            dtype=torch.float64,
+        )
+
+        payload = diagnostics._top_confused_pair_payload(
+            "validation",
+            confusion_matrix,
+            rate_matrix,
+            values=torch.tensor([0.0, 1.0], dtype=torch.float64),
+            flat_indices=torch.tensor([1, 2]),
+        )
+
+        pair_prefix = "validation/confusion_top_pairs/rank_2"
+        self.assertEqual(
+            set(payload),
+            {
+                f"{pair_prefix}/count",
+                f"{pair_prefix}/rate",
+                f"{pair_prefix}/true_class",
+                f"{pair_prefix}/predicted_class",
+            },
+        )
+        torch.testing.assert_close(
+            payload[f"{pair_prefix}/count"],
+            torch.tensor(1.0, dtype=torch.float64),
+        )
+        torch.testing.assert_close(payload[f"{pair_prefix}/rate"], rate_matrix[1, 0])
+        torch.testing.assert_close(
+            payload[f"{pair_prefix}/true_class"],
+            torch.tensor(1.0, dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            payload[f"{pair_prefix}/predicted_class"],
+            torch.tensor(0.0, dtype=torch.float64),
+        )
+
+        with self.assertRaises(ValueError):
+            diagnostics._top_confused_pair_payload(
+                "validation",
+                confusion_matrix,
+                rate_matrix,
+                values=torch.tensor([1.0]),
+                flat_indices=torch.tensor([], dtype=torch.long),
+            )
+
     def test_best_validation_tracks_best_accuracy_and_loss_epochs(self):
         logger = ClassifierMetricsLogger(num_classes=2)
 
@@ -498,6 +623,46 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         torch.testing.assert_close(
             second_best["best_validation/loss_epoch"],
             torch.tensor(4.0),
+        )
+
+    def test_empty_and_tied_validation_epochs_preserve_best_state(self) -> None:
+        logger = ClassifierMetricsLogger(num_classes=2)
+        calls = []
+
+        self.assertEqual(logger.update_best_validation_metrics(epoch=1), {})
+        logger.log_best_validation(
+            lambda payload, **kwargs: calls.append((payload, kwargs)),
+            epoch=1,
+        )
+        self.assertEqual(calls, [])
+
+        tied_output = self._step_output(
+            torch.tensor(0.5),
+            torch.tensor([[4.0, 0.0], [0.0, 4.0]]),
+            torch.tensor([0, 1]),
+        )
+        logger.log_validation_step(self._discard_log, tied_output)
+        logger.update_best_validation_metrics(epoch=2)
+        logger.reset_validation_epoch()
+        logger.log_validation_step(self._discard_log, tied_output)
+
+        tied_best = logger.update_best_validation_metrics(epoch=9)
+
+        torch.testing.assert_close(
+            tied_best["best_validation/accuracy"],
+            torch.tensor(1.0),
+        )
+        torch.testing.assert_close(
+            tied_best["best_validation/loss"],
+            torch.tensor(0.5),
+        )
+        torch.testing.assert_close(
+            tied_best["best_validation/accuracy_epoch"],
+            torch.tensor(2.0),
+        )
+        torch.testing.assert_close(
+            tied_best["best_validation/loss_epoch"],
+            torch.tensor(2.0),
         )
 
     def test_validation_examples_log_most_confident_wrong_images_and_labels(self):
@@ -586,6 +751,103 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         image_only_logger = SimpleNamespace(experiment=image_only_experiment)
         owner.emit(image_only_logger, epoch=3)
 
+    def test_empty_epoch_loggers_never_emit_empty_payloads(self) -> None:
+        logger = ClassifierMetricsLogger(num_classes=2)
+        calls = []
+
+        def log_fn(payload, **kwargs):
+            calls.append((payload, kwargs))
+
+        logger.log_train_epoch(log_fn)
+        logger.log_validation_epoch_and_gap(log_fn)
+
+        self.assertEqual(calls, [])
+
+    def test_real_steps_epoch_hooks_sanity_boundary_and_optimizer_health(self) -> None:
+        model = LifecycleProbeClassifier()
+        external_logger = FakeLogger()
+        model._trainer = SimpleNamespace(
+            sanity_checking=True,
+            current_epoch=3,
+            logger=external_logger,
+        )
+        images = torch.arange(8, dtype=torch.float32).reshape(2, 1, 2, 2)
+        labels = torch.tensor([0, 1])
+        expected_loss = nn.functional.cross_entropy(model.fixed_logits, labels)
+
+        model.metrics.update_train_epoch(
+            torch.tensor(9.0),
+            model.fixed_logits,
+            labels,
+        )
+        model.on_train_epoch_start()
+        self.assertEqual(model.metrics.train_epoch_metrics(), {})
+        train_loss = model.training_step((images, labels), 0)
+        model.on_train_epoch_end()
+
+        torch.testing.assert_close(train_loss, expected_loss)
+        self.assertIs(model.forward_calls[0], images)
+        self.assertTrue(any("train/loss" in payload for payload, _ in model.log_calls))
+        self.assertTrue(
+            any("train/loss_epoch" in payload for payload, _ in model.log_calls)
+        )
+
+        model.on_validation_epoch_start()
+        sanity_loss = model.validation_step((images, labels), 0)
+        model.on_validation_epoch_end()
+
+        torch.testing.assert_close(sanity_loss, expected_loss)
+        self.assertEqual(external_logger.experiment.images, [])
+        self.assertFalse(
+            any("best_validation/accuracy" in payload for payload, _ in model.log_calls)
+        )
+
+        model._trainer.sanity_checking = False
+        model.on_validation_epoch_start()
+        validation_loss = model.validation_step((images, labels), 0)
+        model.on_validation_epoch_end()
+        test_loss = model.test_step((images, labels), 0)
+
+        torch.testing.assert_close(validation_loss, expected_loss)
+        torch.testing.assert_close(test_loss, expected_loss)
+        self.assertTrue(
+            any("validation/loss" in payload for payload, _ in model.log_calls)
+        )
+        self.assertTrue(any("test/loss" in payload for payload, _ in model.log_calls))
+        self.assertTrue(
+            any("best_validation/accuracy" in payload for payload, _ in model.log_calls)
+        )
+        self.assertEqual(len(external_logger.experiment.images), 1)
+        torch.testing.assert_close(
+            model.metrics._validation_examples_owner._examples[0].image,
+            images[1],
+        )
+
+        train_loss.backward()
+        optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+        model.on_before_optimizer_step(optimizer)
+        health_payload, health_kwargs = model.log_calls[-1]
+        self.assertEqual(
+            set(health_payload),
+            {
+                "gradients/global_norm",
+                "parameters/global_norm",
+                "updates/update_to_weight_ratio",
+                "gradients/nan_count",
+                "gradients/inf_count",
+            },
+        )
+        self.assertEqual(
+            health_kwargs,
+            {"prog_bar": False, "on_step": True, "on_epoch": False},
+        )
+
+        empty_health_model = EmptyHealthProbeClassifier()
+        empty_health_model.on_before_optimizer_step(
+            torch.optim.SGD(empty_health_model.parameters(), lr=0.1)
+        )
+        self.assertEqual(empty_health_model.log_calls, [])
+
     def test_optimizer_health_metrics_report_norm_ratio_and_bad_gradient_counts(self):
         model = HealthProbeClassifier()
         model.probe.grad = torch.tensor([6.0, 8.0])
@@ -613,6 +875,13 @@ class TestClassifierMetricsLogger(unittest.TestCase):
         torch.testing.assert_close(
             metrics["gradients/inf_count"],
             torch.tensor(1.0),
+        )
+
+        optimizer.param_groups[0]["params"].append(None)
+        model.probe.grad = None
+        metrics_without_gradient = model.optimizer_health_metrics(optimizer)
+        self.assertTrue(
+            torch.isfinite(metrics_without_gradient["parameters/global_norm"])
         )
 
     def test_model_step_adds_auxiliary_loss_without_scalar_sync(self):
