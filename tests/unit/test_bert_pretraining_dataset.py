@@ -128,6 +128,65 @@ class TestBertPretrainingDatasetHelpers(unittest.TestCase):
             torch.tensor([0, 0, 0, 0, 1, 1, 1]),
         )
 
+    def test_sentence_pair_inputs_reject_an_empty_segment(self):
+        for tokens_a, tokens_b in (([], [5]), ([5], [])):
+            with self.subTest(tokens_a=tokens_a, tokens_b=tokens_b):
+                with self.assertRaises(ValueError) as raised:
+                    build_bert_sentence_pair_inputs(
+                        tokens_a=tokens_a,
+                        tokens_b=tokens_b,
+                        sequence_length=5,
+                        special_token_ids=self.preset(),
+                    )
+                self.assertEqual(
+                    str(raised.exception),
+                    "Both sentence-pair segments must contain tokens.",
+                )
+
+    def test_sentence_pair_inputs_require_room_for_both_segments(self):
+        with self.assertRaises(ValueError) as raised:
+            build_bert_sentence_pair_inputs(
+                tokens_a=[5],
+                tokens_b=[6],
+                sequence_length=4,
+                special_token_ids=self.preset(),
+            )
+        self.assertEqual(
+            str(raised.exception),
+            "sequence_length must be at least 5 for BERT pairs.",
+        )
+
+    def test_sentence_pair_inputs_truncate_the_longer_second_segment(self):
+        input_ids, token_type_ids = build_bert_sentence_pair_inputs(
+            tokens_a=[5, 6],
+            tokens_b=[7, 8, 9],
+            sequence_length=7,
+            special_token_ids=self.preset(),
+        )
+
+        torch.testing.assert_close(input_ids, torch.tensor([2, 5, 6, 3, 7, 8, 3]))
+        torch.testing.assert_close(
+            token_type_ids,
+            torch.tensor([0, 0, 0, 0, 1, 1, 1]),
+        )
+
+    def test_sentence_pair_input_tie_truncates_the_first_segment(self):
+        input_ids, token_type_ids = build_bert_sentence_pair_inputs(
+            tokens_a=[5, 6, 7],
+            tokens_b=[8, 9, 10],
+            sequence_length=8,
+            special_token_ids=self.preset(),
+        )
+
+        torch.testing.assert_close(
+            input_ids,
+            torch.tensor([2, 5, 6, 3, 8, 9, 10, 3]),
+        )
+        torch.testing.assert_close(
+            token_type_ids,
+            torch.tensor([0, 0, 0, 0, 1, 1, 1, 1]),
+        )
+
     def test_next_sentence_pairs_label_adjacent_and_random_next(self):
         pairs = build_bert_next_sentence_pairs(
             ["alpha", "beta", "gamma", "delta"],
