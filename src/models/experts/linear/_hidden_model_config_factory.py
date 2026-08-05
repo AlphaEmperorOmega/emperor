@@ -34,6 +34,8 @@ from models.experts.linear.runtime_options import (
     resolve_experts_submodule_stack_options,
 )
 
+from ._residual import build_residual_config
+
 
 def build_linear_controller_stack(
     options: ExpertsSubmoduleStackOptions,
@@ -65,9 +67,11 @@ def build_controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_config=None
-            if options.residual_connection_option is None
-            else options.residual_connection_option(),
+            residual_config=build_residual_config(
+                options.residual_connection_option,
+                options.residual_model_flag,
+                options.residual_stack_options,
+            ),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -383,6 +387,7 @@ class HiddenModelConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
             apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -401,6 +406,7 @@ class HiddenModelConfigFactory:
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
             bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
         )
@@ -469,6 +475,7 @@ class HiddenModelConfigFactory:
             activation=config.ROUTER_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
             bias_flag=config.ROUTER_BIAS_FLAG,
         )
@@ -609,6 +616,7 @@ class HiddenModelConfigFactory:
             residual_connection_option=getattr(
                 config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
             ),
+            residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
             dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
             bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
         )
@@ -655,9 +663,11 @@ class HiddenModelConfigFactory:
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_config=None
-            if stack_options.residual_connection_option is None
-            else stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                stack_options.residual_stack_options,
+            ),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -702,9 +712,11 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
-                residual_config=None
-                if expert_stack_options.residual_connection_option is None
-                else expert_stack_options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    expert_stack_options.residual_connection_option,
+                    expert_stack_options.residual_model_flag,
+                    expert_stack_options.residual_stack_options,
+                ),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,

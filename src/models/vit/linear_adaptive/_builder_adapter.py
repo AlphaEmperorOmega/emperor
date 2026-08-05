@@ -15,7 +15,12 @@ from models.vit.linear_adaptive._linears_builder_adapter import (
     _hidden_adaptive_mask_options_from_kwargs,
     _hidden_adaptive_weight_options_from_kwargs,
 )
+from models.vit.linear_adaptive._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 from models.vit.linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
     DynamicMemoryOptions,
     LayerControllerOptions,
     MainLayerStackOptions,
@@ -56,6 +61,7 @@ _CONTROLLER_STACK_FIELD_MAP = {
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
 }
@@ -67,6 +73,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
 }
@@ -76,6 +83,7 @@ _ADAPTIVE_GENERATOR_STACK_FIELD_MAP = {
     "num_layers": "num_layers",
     "activation": "activation",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "last_layer_bias_option": "last_layer_bias_option",
     "apply_output_pipeline_flag": "apply_output_pipeline_flag",
@@ -95,8 +103,109 @@ def linear_adaptive_builder_kwargs_from_flat(
             kwargs, config_module, consumed, include_role_overrides=True
         )
     )
+    _attach_residual_stack_options(
+        builder_kwargs,
+        kwargs,
+        config_module,
+        consumed,
+    )
     builder_kwargs.update(_leftover_kwargs(kwargs, consumed))
     return builder_kwargs
+
+
+_RESIDUAL_STACK_FLAT_FIELDS = {
+    "independent_flag",
+    "hidden_dim",
+    "layer_norm_position",
+    "num_layers",
+    "activation",
+    "residual_connection_option",
+    "residual_model_flag",
+    "dropout_probability",
+    "last_layer_bias_option",
+    "apply_output_pipeline_flag",
+    "bias_flag",
+}
+
+
+def _attach_residual_stack_options(
+    builder_kwargs: dict[str, Any],
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    consumed: set[str],
+) -> None:
+    residual_stack_keys = {
+        f"residual_stack_{field}" for field in _RESIDUAL_STACK_FLAT_FIELDS
+    }
+    submodule_stack_options = builder_kwargs.get("submodule_stack_options")
+    if submodule_stack_options is None:
+        submodule_stack_options = _default_config_options(
+            config_module,
+            "SUBMODULE_STACK_OPTIONS",
+        )
+    residual_stack_options = resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=kwargs.get(
+                "residual_stack_independent_flag",
+                config_module.RESIDUAL_STACK_INDEPENDENT_FLAG,
+            ),
+            hidden_dim=kwargs.get(
+                "residual_stack_hidden_dim", config_module.RESIDUAL_STACK_HIDDEN_DIM
+            ),
+            layer_norm_position=kwargs.get(
+                "residual_stack_layer_norm_position",
+                config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            num_layers=kwargs.get(
+                "residual_stack_num_layers", config_module.RESIDUAL_STACK_NUM_LAYERS
+            ),
+            activation=kwargs.get(
+                "residual_stack_activation", config_module.RESIDUAL_STACK_ACTIVATION
+            ),
+            residual_connection_option=kwargs.get(
+                "residual_stack_residual_connection_option",
+                config_module.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+            ),
+            residual_model_flag=kwargs.get(
+                "residual_stack_residual_model_flag",
+                config_module.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG,
+            ),
+            dropout_probability=kwargs.get(
+                "residual_stack_dropout_probability",
+                config_module.RESIDUAL_STACK_DROPOUT_PROBABILITY,
+            ),
+            last_layer_bias_option=kwargs.get(
+                "residual_stack_last_layer_bias_option",
+                config_module.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
+            ),
+            apply_output_pipeline_flag=kwargs.get(
+                "residual_stack_apply_output_pipeline_flag",
+                config_module.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            ),
+            bias_flag=kwargs.get(
+                "residual_stack_bias_flag", config_module.RESIDUAL_STACK_BIAS_FLAG
+            ),
+        ),
+        submodule_stack_options,
+    )
+    builder_kwargs["submodule_stack_options"] = replace(
+        submodule_stack_options,
+        residual_stack_options=residual_stack_options,
+    )
+    for key, value in tuple(builder_kwargs.items()):
+        if isinstance(
+            value,
+            (
+                MainLayerStackOptions,
+                SubmoduleStackOptions,
+                AdaptiveGeneratorStackOptions,
+            ),
+        ):
+            builder_kwargs[key] = replace(
+                value,
+                residual_stack_options=residual_stack_options,
+            )
+    consumed.update(residual_stack_keys.intersection(kwargs))
 
 
 def _top_level_kwargs(kwargs: dict[str, Any], consumed: set[str]) -> dict[str, Any]:
@@ -659,6 +768,7 @@ def _main_stack_options_from_kwargs(
                 "stack_num_layers": "num_layers",
                 "stack_activation": "activation",
                 "stack_residual_connection_option": "residual_connection_option",
+                "stack_residual_model_flag": "residual_model_flag",
                 "stack_dropout_probability": "dropout_probability",
                 "stack_last_layer_bias_option": "last_layer_bias_option",
                 "stack_apply_output_pipeline_flag": "apply_output_pipeline_flag",
@@ -1071,6 +1181,7 @@ def _factory_relevant_keys(
             "stack_num_layers",
             "stack_activation",
             "stack_residual_connection_option",
+            "stack_residual_model_flag",
             "stack_dropout_probability",
             "stack_last_layer_bias_option",
             "stack_apply_output_pipeline_flag",

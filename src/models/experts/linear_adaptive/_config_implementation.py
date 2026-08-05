@@ -38,6 +38,10 @@ from models.experts.linear_adaptive._projection_config_factory import (
     BoundaryModelConfigDependencies,
     BoundaryModelConfigFactory,
 )
+from models.experts.linear_adaptive._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 from models.experts.linear_adaptive.experiment_config import ExperimentConfig
 from models.experts.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
@@ -75,19 +79,50 @@ class _RuntimeDefaultsResolver:
         layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION,
         stack_num_layers: int = config.STACK_NUM_LAYERS,
         stack_activation: ActivationOptions = config.STACK_ACTIVATION,
-        stack_residual_connection_option: type[ResidualConfig] = config.STACK_RESIDUAL_CONNECTION_OPTION,
+        stack_residual_connection_option: type[
+            ResidualConfig
+        ] = config.STACK_RESIDUAL_CONNECTION_OPTION,
+        stack_residual_model_flag: bool = config.STACK_RESIDUAL_MODEL_FLAG,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
         stack_last_layer_bias_option: LastLayerBiasOptions = config.STACK_LAST_LAYER_BIAS_OPTION,
         stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         submodule_stack_hidden_dim: int = config.SUBMODULE_STACK_HIDDEN_DIM,
         submodule_stack_num_layers: int = config.SUBMODULE_STACK_NUM_LAYERS,
         submodule_stack_activation: ActivationOptions = config.SUBMODULE_STACK_ACTIVATION,
-        submodule_stack_residual_connection_option: type[ResidualConfig] = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        submodule_stack_residual_connection_option: type[
+            ResidualConfig
+        ] = config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        submodule_stack_residual_model_flag: bool = config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         submodule_stack_dropout_probability: float = config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         submodule_stack_layer_norm_position: LayerNormPositionOptions = config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         submodule_stack_last_layer_bias_option: LastLayerBiasOptions = config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
         submodule_stack_apply_output_pipeline_flag: bool = config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
         submodule_stack_bias_flag: bool = config.SUBMODULE_STACK_BIAS_FLAG,
+        residual_stack_independent_flag: bool = config.RESIDUAL_STACK_INDEPENDENT_FLAG,
+        residual_stack_hidden_dim: int | None = config.RESIDUAL_STACK_HIDDEN_DIM,
+        residual_stack_layer_norm_position: LayerNormPositionOptions | None = (
+            config.RESIDUAL_STACK_LAYER_NORM_POSITION
+        ),
+        residual_stack_num_layers: int | None = config.RESIDUAL_STACK_NUM_LAYERS,
+        residual_stack_activation: ActivationOptions | None = (
+            config.RESIDUAL_STACK_ACTIVATION
+        ),
+        residual_stack_residual_connection_option: type[ResidualConfig] | None = (
+            config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_stack_residual_model_flag: bool = (
+            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
+        ),
+        residual_stack_dropout_probability: float | None = (
+            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
+        ),
+        residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
+            config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        residual_stack_apply_output_pipeline_flag: bool | None = (
+            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        residual_stack_bias_flag: bool | None = config.RESIDUAL_STACK_BIAS_FLAG,
         top_k: int = config.TOP_K,
         num_experts: int = config.NUM_EXPERTS,
         capacity_factor: float = config.CAPACITY_FACTOR,
@@ -99,8 +134,8 @@ class _RuntimeDefaultsResolver:
         expert_stack_hidden_dim: int | None = None,
         expert_stack_num_layers: int | None = None,
         expert_stack_activation: ActivationOptions | None = None,
-        expert_stack_residual_connection_option: type[ResidualConfig]
-        | None = None,
+        expert_stack_residual_connection_option: type[ResidualConfig] | None = None,
+        expert_stack_residual_model_flag: bool = False,
         expert_stack_dropout_probability: float | None = None,
         expert_stack_layer_norm_position: LayerNormPositionOptions
         | None = config.EXPERT_STACK_LAYER_NORM_POSITION,
@@ -121,6 +156,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_GATE_STACK_ACTIVATION,
         expert_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        expert_gate_stack_residual_model_flag: bool = config.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         expert_gate_stack_dropout_probability: float
         | None = config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
         expert_gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -144,6 +180,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_HALTING_STACK_ACTIVATION,
         expert_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        expert_halting_stack_residual_model_flag: bool = config.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         expert_halting_stack_dropout_probability: float
         | None = config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY,
         expert_halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -170,6 +207,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_MEMORY_STACK_ACTIVATION,
         expert_memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
+        expert_memory_stack_residual_model_flag: bool = config.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         expert_memory_stack_dropout_probability: float
         | None = config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
         expert_memory_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -197,6 +235,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
         expert_recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        expert_recurrent_gate_stack_residual_model_flag: bool = config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         expert_recurrent_gate_stack_dropout_probability: float
         | None = config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         expert_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -220,6 +259,7 @@ class _RuntimeDefaultsResolver:
         | None = config.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
         expert_recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        expert_recurrent_halting_stack_residual_model_flag: bool = config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         expert_recurrent_halting_stack_dropout_probability: float
         | None = config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         expert_recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -244,6 +284,7 @@ class _RuntimeDefaultsResolver:
         router_stack_residual_connection_option: type[ResidualConfig] = (
             config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        router_stack_residual_model_flag: bool = config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         router_stack_dropout_probability: float = (
             config.ROUTER_STACK_DROPOUT_PROBABILITY
         ),
@@ -270,6 +311,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_GATE_STACK_ACTIVATION,
         router_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_gate_stack_residual_model_flag: bool = config.ROUTER_GATE_STACK_RESIDUAL_MODEL_FLAG,
         router_gate_stack_dropout_probability: float
         | None = config.ROUTER_GATE_STACK_DROPOUT_PROBABILITY,
         router_gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -293,6 +335,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_HALTING_STACK_ACTIVATION,
         router_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_halting_stack_residual_model_flag: bool = config.ROUTER_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         router_halting_stack_dropout_probability: float
         | None = config.ROUTER_HALTING_STACK_DROPOUT_PROBABILITY,
         router_halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -319,6 +362,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_MEMORY_STACK_ACTIVATION,
         router_memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_memory_stack_residual_model_flag: bool = config.ROUTER_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         router_memory_stack_dropout_probability: float
         | None = config.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY,
         router_memory_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -346,6 +390,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_RECURRENT_GATE_STACK_ACTIVATION,
         router_recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_recurrent_gate_stack_residual_model_flag: bool = config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         router_recurrent_gate_stack_dropout_probability: float
         | None = config.ROUTER_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         router_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -369,6 +414,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_RECURRENT_HALTING_STACK_ACTIVATION,
         router_recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_recurrent_halting_stack_residual_model_flag: bool = config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         router_recurrent_halting_stack_dropout_probability: float
         | None = config.ROUTER_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         router_recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -388,6 +434,7 @@ class _RuntimeDefaultsResolver:
         gate_stack_activation: ActivationOptions | None = config.GATE_STACK_ACTIVATION,
         gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        gate_stack_residual_model_flag: bool = config.GATE_STACK_RESIDUAL_MODEL_FLAG,
         gate_stack_dropout_probability: float
         | None = config.GATE_STACK_DROPOUT_PROBABILITY,
         gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -409,6 +456,7 @@ class _RuntimeDefaultsResolver:
         | None = config.HALTING_STACK_ACTIVATION,
         halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        halting_stack_residual_model_flag: bool = config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
         halting_stack_dropout_probability: float
         | None = config.HALTING_STACK_DROPOUT_PROBABILITY,
         halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -432,6 +480,7 @@ class _RuntimeDefaultsResolver:
         | None = config.MEMORY_STACK_ACTIVATION,
         memory_stack_residual_connection_option: type[ResidualConfig]
         | None = config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
+        memory_stack_residual_model_flag: bool = config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         memory_stack_dropout_probability: float
         | None = config.MEMORY_STACK_DROPOUT_PROBABILITY,
         memory_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -457,6 +506,7 @@ class _RuntimeDefaultsResolver:
         | None = config.WEIGHT_GENERATOR_STACK_ACTIVATION,
         weight_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        weight_generator_stack_residual_model_flag: bool = config.WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         weight_generator_stack_dropout_probability: float
         | None = config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
         weight_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -486,6 +536,7 @@ class _RuntimeDefaultsResolver:
         | None = config.BIAS_GENERATOR_STACK_ACTIVATION,
         bias_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        bias_generator_stack_residual_model_flag: bool = config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         bias_generator_stack_dropout_probability: float
         | None = config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
         bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -505,6 +556,7 @@ class _RuntimeDefaultsResolver:
         | None = config.DIAGONAL_GENERATOR_STACK_ACTIVATION,
         diagonal_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        diagonal_generator_stack_residual_model_flag: bool = config.DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         diagonal_generator_stack_dropout_probability: float
         | None = config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
         diagonal_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -531,6 +583,7 @@ class _RuntimeDefaultsResolver:
         | None = config.MASK_GENERATOR_STACK_ACTIVATION,
         mask_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        mask_generator_stack_residual_model_flag: bool = config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         mask_generator_stack_dropout_probability: float
         | None = config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
         mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -542,7 +595,10 @@ class _RuntimeDefaultsResolver:
         adaptive_generator_stack_num_layers: int = config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
         adaptive_generator_stack_hidden_dim: int = config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
         adaptive_generator_stack_activation: ActivationOptions = config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-        adaptive_generator_stack_residual_connection_option: type[ResidualConfig] = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        adaptive_generator_stack_residual_connection_option: type[
+            ResidualConfig
+        ] = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        adaptive_generator_stack_residual_model_flag: bool = config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         adaptive_generator_stack_dropout_probability: float = config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
         adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
@@ -617,6 +673,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_ACTIVATION,
         router_weight_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_weight_generator_stack_residual_model_flag: bool = config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         router_weight_generator_stack_dropout_probability: float
         | None = config.ROUTER_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
         router_weight_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -642,6 +699,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_BIAS_GENERATOR_STACK_ACTIVATION,
         router_bias_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_bias_generator_stack_residual_model_flag: bool = config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         router_bias_generator_stack_dropout_probability: float
         | None = config.ROUTER_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
         router_bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -664,6 +722,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_ACTIVATION,
         router_diagonal_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_diagonal_generator_stack_residual_model_flag: bool = config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         router_diagonal_generator_stack_dropout_probability: float
         | None = config.ROUTER_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
         router_diagonal_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -691,6 +750,7 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_MASK_GENERATOR_STACK_ACTIVATION,
         router_mask_generator_stack_residual_connection_option: type[ResidualConfig]
         | None = config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        router_mask_generator_stack_residual_model_flag: bool = config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         router_mask_generator_stack_dropout_probability: float
         | None = config.ROUTER_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
         router_mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -717,6 +777,7 @@ class _RuntimeDefaultsResolver:
         | None = config.RECURRENT_GATE_STACK_ACTIVATION,
         recurrent_gate_stack_residual_connection_option: type[ResidualConfig]
         | None = config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        recurrent_gate_stack_residual_model_flag: bool = config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         recurrent_gate_stack_dropout_probability: float
         | None = config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -740,6 +801,7 @@ class _RuntimeDefaultsResolver:
         | None = config.RECURRENT_HALTING_STACK_ACTIVATION,
         recurrent_halting_stack_residual_connection_option: type[ResidualConfig]
         | None = config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        recurrent_halting_stack_residual_model_flag: bool = config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         recurrent_halting_stack_dropout_probability: float
         | None = config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -788,6 +850,7 @@ class _RuntimeDefaultsResolver:
             num_layers=stack_num_layers,
             activation=stack_activation,
             residual_connection_option=stack_residual_connection_option,
+            residual_model_flag=stack_residual_model_flag,
             dropout_probability=stack_dropout_probability,
             last_layer_bias_option=stack_last_layer_bias_option,
             apply_output_pipeline_flag=stack_apply_output_pipeline_flag,
@@ -802,6 +865,7 @@ class _RuntimeDefaultsResolver:
                 activation=submodule_stack_activation,
                 layer_norm_position=submodule_stack_layer_norm_position,
                 residual_connection_option=(submodule_stack_residual_connection_option),
+                residual_model_flag=submodule_stack_residual_model_flag,
                 dropout_probability=submodule_stack_dropout_probability,
                 bias_flag=submodule_stack_bias_flag,
             )
@@ -827,6 +891,7 @@ class _RuntimeDefaultsResolver:
                 activation=expert_stack_activation,
                 layer_norm_position=expert_stack_layer_norm_position,
                 residual_connection_option=expert_stack_residual_connection_option,
+                residual_model_flag=expert_stack_residual_model_flag,
                 dropout_probability=expert_stack_dropout_probability,
                 bias_flag=expert_bias_flag,
             )
@@ -850,6 +915,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         expert_gate_stack_residual_connection_option
                     ),
+                    residual_model_flag=expert_gate_stack_residual_model_flag,
                     dropout_probability=expert_gate_stack_dropout_probability,
                     bias_flag=expert_gate_stack_bias_flag,
                 ),
@@ -872,6 +938,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         expert_halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=expert_halting_stack_residual_model_flag,
                     dropout_probability=expert_halting_stack_dropout_probability,
                     bias_flag=expert_halting_stack_bias_flag,
                 ),
@@ -903,6 +970,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         expert_memory_stack_residual_connection_option
                     ),
+                    residual_model_flag=expert_memory_stack_residual_model_flag,
                     dropout_probability=expert_memory_stack_dropout_probability,
                     bias_flag=expert_memory_stack_bias_flag,
                 ),
@@ -934,6 +1002,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         expert_recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_model_flag=expert_recurrent_gate_stack_residual_model_flag,
                     dropout_probability=(
                         expert_recurrent_gate_stack_dropout_probability
                     ),
@@ -962,6 +1031,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         expert_recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=expert_recurrent_halting_stack_residual_model_flag,
                     dropout_probability=(
                         expert_recurrent_halting_stack_dropout_probability
                     ),
@@ -993,6 +1063,7 @@ class _RuntimeDefaultsResolver:
             activation=router_stack_activation,
             layer_norm_position=router_stack_layer_norm_position,
             residual_connection_option=router_stack_residual_connection_option,
+            residual_model_flag=router_stack_residual_model_flag,
             dropout_probability=router_stack_dropout_probability,
             bias_flag=router_bias_flag,
         )
@@ -1015,6 +1086,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_gate_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_gate_stack_residual_model_flag,
                     dropout_probability=router_gate_stack_dropout_probability,
                     bias_flag=router_gate_stack_bias_flag,
                 ),
@@ -1037,6 +1109,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_halting_stack_residual_model_flag,
                     dropout_probability=router_halting_stack_dropout_probability,
                     bias_flag=router_halting_stack_bias_flag,
                 ),
@@ -1068,6 +1141,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_memory_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_memory_stack_residual_model_flag,
                     dropout_probability=router_memory_stack_dropout_probability,
                     bias_flag=router_memory_stack_bias_flag,
                 ),
@@ -1099,6 +1173,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_recurrent_gate_stack_residual_model_flag,
                     dropout_probability=(
                         router_recurrent_gate_stack_dropout_probability
                     ),
@@ -1127,6 +1202,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_recurrent_halting_stack_residual_model_flag,
                     dropout_probability=(
                         router_recurrent_halting_stack_dropout_probability
                     ),
@@ -1149,6 +1225,7 @@ class _RuntimeDefaultsResolver:
                     activation=gate_stack_activation,
                     layer_norm_position=gate_stack_layer_norm_position,
                     residual_connection_option=gate_stack_residual_connection_option,
+                    residual_model_flag=gate_stack_residual_model_flag,
                     dropout_probability=gate_stack_dropout_probability,
                     bias_flag=gate_stack_bias_flag,
                 ),
@@ -1169,6 +1246,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=halting_stack_residual_model_flag,
                     dropout_probability=halting_stack_dropout_probability,
                     bias_flag=halting_stack_bias_flag,
                 ),
@@ -1195,6 +1273,7 @@ class _RuntimeDefaultsResolver:
                 activation=memory_stack_activation,
                 layer_norm_position=memory_stack_layer_norm_position,
                 residual_connection_option=(memory_stack_residual_connection_option),
+                residual_model_flag=memory_stack_residual_model_flag,
                 dropout_probability=memory_stack_dropout_probability,
                 bias_flag=memory_stack_bias_flag,
             ),
@@ -1209,6 +1288,7 @@ class _RuntimeDefaultsResolver:
                 residual_connection_option=(
                     adaptive_generator_stack_residual_connection_option
                 ),
+                residual_model_flag=adaptive_generator_stack_residual_model_flag,
                 dropout_probability=adaptive_generator_stack_dropout_probability,
                 last_layer_bias_option=(
                     adaptive_generator_stack_last_layer_bias_option
@@ -1230,6 +1310,7 @@ class _RuntimeDefaultsResolver:
                 residual_connection_option=(
                     adaptive_generator_stack_options.residual_connection_option
                 ),
+                residual_model_flag=adaptive_generator_stack_options.residual_model_flag,
                 dropout_probability=(
                     adaptive_generator_stack_options.dropout_probability
                 ),
@@ -1240,6 +1321,11 @@ class _RuntimeDefaultsResolver:
                     adaptive_generator_stack_options.apply_output_pipeline_flag
                 ),
                 bias_flag=adaptive_generator_stack_bias_flag,
+                residual_stack_options=getattr(
+                    adaptive_generator_stack_options,
+                    "residual_stack_options",
+                    None,
+                ),
             )
         hidden_adaptive_weight_options = (
             hidden_adaptive_weight_options
@@ -1266,6 +1352,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         weight_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=weight_generator_stack_residual_model_flag,
                     dropout_probability=(weight_generator_stack_dropout_probability),
                     last_layer_bias_option=(
                         weight_generator_stack_last_layer_bias_option
@@ -1299,6 +1386,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         bias_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=bias_generator_stack_residual_model_flag,
                     dropout_probability=bias_generator_stack_dropout_probability,
                     last_layer_bias_option=(
                         bias_generator_stack_last_layer_bias_option
@@ -1328,6 +1416,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         diagonal_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=diagonal_generator_stack_residual_model_flag,
                     dropout_probability=(diagonal_generator_stack_dropout_probability),
                     last_layer_bias_option=(
                         diagonal_generator_stack_last_layer_bias_option
@@ -1362,6 +1451,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         mask_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=mask_generator_stack_residual_model_flag,
                     dropout_probability=mask_generator_stack_dropout_probability,
                     last_layer_bias_option=(
                         mask_generator_stack_last_layer_bias_option
@@ -1453,6 +1543,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_weight_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_weight_generator_stack_residual_model_flag,
                     dropout_probability=(
                         router_weight_generator_stack_dropout_probability
                     ),
@@ -1490,6 +1581,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_bias_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_bias_generator_stack_residual_model_flag,
                     dropout_probability=(
                         router_bias_generator_stack_dropout_probability
                     ),
@@ -1523,6 +1615,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_diagonal_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_diagonal_generator_stack_residual_model_flag,
                     dropout_probability=(
                         router_diagonal_generator_stack_dropout_probability
                     ),
@@ -1561,6 +1654,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         router_mask_generator_stack_residual_connection_option
                     ),
+                    residual_model_flag=router_mask_generator_stack_residual_model_flag,
                     dropout_probability=(
                         router_mask_generator_stack_dropout_probability
                     ),
@@ -1598,6 +1692,7 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_model_flag=recurrent_gate_stack_residual_model_flag,
                     dropout_probability=recurrent_gate_stack_dropout_probability,
                     bias_flag=recurrent_gate_stack_bias_flag,
                 ),
@@ -1622,11 +1717,53 @@ class _RuntimeDefaultsResolver:
                     residual_connection_option=(
                         recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_model_flag=recurrent_halting_stack_residual_model_flag,
                     dropout_probability=(recurrent_halting_stack_dropout_probability),
                     bias_flag=recurrent_halting_stack_bias_flag,
                 ),
             )
         )
+        residual_stack_options = resolve_residual_stack_options(
+            ResidualStackSource(
+                independent_flag=residual_stack_independent_flag,
+                hidden_dim=residual_stack_hidden_dim,
+                num_layers=residual_stack_num_layers,
+                activation=residual_stack_activation,
+                layer_norm_position=residual_stack_layer_norm_position,
+                residual_connection_option=(
+                    residual_stack_residual_connection_option
+                ),
+                residual_model_flag=residual_stack_residual_model_flag,
+                dropout_probability=residual_stack_dropout_probability,
+                last_layer_bias_option=residual_stack_last_layer_bias_option,
+                apply_output_pipeline_flag=(
+                    residual_stack_apply_output_pipeline_flag
+                ),
+                bias_flag=residual_stack_bias_flag,
+            ),
+            submodule_stack_options,
+        )
+        stack_options = replace(
+            stack_options,
+            residual_stack_options=residual_stack_options,
+        )
+        submodule_stack_options = replace(
+            submodule_stack_options,
+            residual_stack_options=residual_stack_options,
+        )
+        expert_stack_options = replace(
+            expert_stack_options,
+            residual_stack_options=residual_stack_options,
+        )
+        router_stack_options = replace(
+            router_stack_options,
+            residual_stack_options=residual_stack_options,
+        )
+        adaptive_generator_stack_options = replace(
+            adaptive_generator_stack_options,
+            residual_stack_options=residual_stack_options,
+        )
+
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.input_dim = input_dim
@@ -1638,6 +1775,7 @@ class _RuntimeDefaultsResolver:
         self.stack_num_layers = stack_options.num_layers
         self.stack_activation = stack_options.activation
         self.stack_residual_connection_option = stack_options.residual_connection_option
+        self.stack_residual_model_flag = stack_options.residual_model_flag
         self.stack_dropout_probability = stack_options.dropout_probability
         self.stack_last_layer_bias_option = stack_options.last_layer_bias_option
         self.stack_apply_output_pipeline_flag = stack_options.apply_output_pipeline_flag
@@ -1647,6 +1785,9 @@ class _RuntimeDefaultsResolver:
         self.submodule_stack_activation = submodule_stack_options.activation
         self.submodule_stack_residual_connection_option = (
             submodule_stack_options.residual_connection_option
+        )
+        self.submodule_stack_residual_model_flag = (
+            submodule_stack_options.residual_model_flag
         )
         self.submodule_stack_dropout_probability = (
             submodule_stack_options.dropout_probability
@@ -1676,6 +1817,7 @@ class _RuntimeDefaultsResolver:
         self.expert_stack_residual_connection_option = (
             expert_stack_options.residual_connection_option
         )
+        self.expert_stack_residual_model_flag = expert_stack_options.residual_model_flag
         self.expert_stack_dropout_probability = expert_stack_options.dropout_probability
         self.expert_stack_layer_norm_position = expert_stack_options.layer_norm_position
         self.expert_stack_last_layer_bias_option = (
@@ -1786,6 +1928,7 @@ class _RuntimeDefaultsResolver:
         self.router_stack_residual_connection_option = (
             router_stack_options.residual_connection_option
         )
+        self.router_stack_residual_model_flag = router_stack_options.residual_model_flag
         self.router_stack_dropout_probability = router_stack_options.dropout_probability
         self.router_stack_layer_norm_position = router_stack_options.layer_norm_position
         self.router_stack_last_layer_bias_option = (
@@ -1895,6 +2038,9 @@ class _RuntimeDefaultsResolver:
         self.gate_stack_residual_connection_option = (
             self.gate_stack_options.residual_connection_option
         )
+        self.gate_stack_residual_model_flag = (
+            self.gate_stack_options.residual_model_flag
+        )
         self.gate_stack_dropout_probability = (
             self.gate_stack_options.dropout_probability
         )
@@ -1930,6 +2076,9 @@ class _RuntimeDefaultsResolver:
         self.halting_stack_residual_connection_option = (
             self.halting_stack_options.residual_connection_option
         )
+        self.halting_stack_residual_model_flag = (
+            self.halting_stack_options.residual_model_flag
+        )
         self.halting_stack_dropout_probability = (
             self.halting_stack_options.dropout_probability
         )
@@ -1963,6 +2112,9 @@ class _RuntimeDefaultsResolver:
         self.memory_stack_activation = self.memory_stack_options.activation
         self.memory_stack_residual_connection_option = (
             self.memory_stack_options.residual_connection_option
+        )
+        self.memory_stack_residual_model_flag = (
+            self.memory_stack_options.residual_model_flag
         )
         self.memory_stack_dropout_probability = (
             self.memory_stack_options.dropout_probability
@@ -2032,6 +2184,9 @@ class _RuntimeDefaultsResolver:
         )
         self.adaptive_generator_stack_residual_connection_option = (
             adaptive_generator_stack_options.residual_connection_option
+        )
+        self.adaptive_generator_stack_residual_model_flag = (
+            adaptive_generator_stack_options.residual_model_flag
         )
         self.adaptive_generator_stack_dropout_probability = (
             adaptive_generator_stack_options.dropout_probability

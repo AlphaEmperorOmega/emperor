@@ -42,6 +42,12 @@ from emperor.transformer import (
     TransformerEncoderLayerConfig,
 )
 
+from ._residual import (
+    ResidualStackOptions,
+    ResidualStackSource,
+    build_residual_config,
+    resolve_residual_stack_options,
+)
 from ._transformer_submodule import configure_transformer_submodule
 from .experiment_config import ExperimentConfig
 from .runtime_options import (
@@ -132,10 +138,36 @@ def _adaptive_augmentation(options: AdaptiveParameterOptions):
     )
 
 
+def _residual_stack(runtime: RuntimeOptions) -> ResidualStackOptions:
+    return resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=runtime.residual_stack_independent_flag,
+            hidden_dim=runtime.residual_stack_hidden_dim,
+            num_layers=runtime.residual_stack_num_layers,
+            activation=runtime.residual_stack_activation,
+            layer_norm_position=runtime.residual_stack_layer_norm_position,
+            residual_connection_option=(
+                runtime.residual_stack_residual_connection_option
+            ),
+            residual_model_flag=runtime.residual_stack_residual_model_flag,
+            dropout_probability=runtime.residual_stack_dropout_probability,
+            last_layer_bias_option=(
+                runtime.residual_stack_last_layer_bias_option
+            ),
+            apply_output_pipeline_flag=(
+                runtime.residual_stack_apply_output_pipeline_flag
+            ),
+            bias_flag=runtime.residual_stack_bias_flag,
+        ),
+        runtime.encoder_attention_options.stack_options,
+    )
+
+
 def _adaptive_stack(
     *,
     stack_options,
     adaptive_options: AdaptiveParameterOptions,
+    residual_stack_options: ResidualStackOptions,
 ) -> LayerStackConfig:
     return LayerStackConfig(
         hidden_dim=stack_options.hidden_dim,
@@ -144,9 +176,11 @@ def _adaptive_stack(
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
-            residual_config=None
-            if (stack_options.residual_connection_option) is None
-            else stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                residual_stack_options,
+            ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -206,12 +240,14 @@ def _attention_config(
     projection_stack = _adaptive_stack(
         stack_options=options.stack_options,
         adaptive_options=runtime.projection_adaptive_options,
+        residual_stack_options=_residual_stack(runtime),
     )
     projection_config = configure_transformer_submodule(
         projection_stack,
         control_stack=projection_stack,
         path_options=options,
         model_dim=runtime.model_dim,
+        residual_stack_options=_residual_stack(runtime),
     )
     kwargs = dict(
         batch_size=runtime.batch_size,
@@ -241,6 +277,7 @@ def _feed_forward(runtime: RuntimeOptions, options: TransformerFeedForwardOption
     stack = _adaptive_stack(
         stack_options=options.stack_options,
         adaptive_options=runtime.feed_forward_adaptive_options,
+        residual_stack_options=_residual_stack(runtime),
     )
     return FeedForwardConfig(
         input_dim=runtime.model_dim,
@@ -250,6 +287,7 @@ def _feed_forward(runtime: RuntimeOptions, options: TransformerFeedForwardOption
             control_stack=stack,
             path_options=options,
             model_dim=runtime.model_dim,
+            residual_stack_options=_residual_stack(runtime),
         ),
     )
 
@@ -280,9 +318,11 @@ def _controlled_stack(
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
-        residual_config=None
-        if options.recurrent_residual_connection_option is None
-        else options.recurrent_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.recurrent_residual_connection_option,
+            options.recurrent_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         halting_config=_halting(
             runtime.model_dim,
             options.recurrent_stack_halting_flag,
@@ -315,9 +355,11 @@ def _encoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_config=None
-        if options.stack_residual_connection_option is None
-        else options.stack_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.stack_residual_connection_option,
+            options.stack_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
@@ -363,9 +405,11 @@ def _decoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_config=None
-        if options.stack_residual_connection_option is None
-        else options.stack_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.stack_residual_connection_option,
+            options.stack_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
@@ -390,9 +434,7 @@ def build_experiment_config(runtime: RuntimeOptions) -> ExperimentConfig:
     }
     active_fields = {field.name for field in fields(positional)}
     position_kwargs = {
-        name: value
-        for name, value in available_values.items()
-        if name in active_fields
+        name: value for name, value in available_values.items() if name in active_fields
     }
     return ExperimentConfig(
         source_positional_embedding_config=positional(

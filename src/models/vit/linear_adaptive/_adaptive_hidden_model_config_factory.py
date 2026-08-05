@@ -46,6 +46,8 @@ from models.vit.linear_adaptive.runtime_options import (
     SubmoduleStackSource,
 )
 
+from ._residual import build_residual_config
+
 
 @dataclass(frozen=True)
 class HiddenModelConfigDependencies:
@@ -156,6 +158,7 @@ class HiddenModelConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
             apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -179,6 +182,7 @@ class HiddenModelConfigFactory:
             residual_connection_option=(
                 config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
             bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
         )
@@ -266,6 +270,7 @@ class HiddenModelConfigFactory:
             residual_connection_option=(
                 config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(
                 config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
@@ -294,6 +299,10 @@ class HiddenModelConfigFactory:
             config,
             f"{prefix}_RESIDUAL_CONNECTION_OPTION",
         )
+        residual_model_flag = getattr(
+            config,
+            f"{prefix}_RESIDUAL_MODEL_FLAG",
+        )
         dropout_probability = getattr(config, f"{prefix}_DROPOUT_PROBABILITY")
         bias_flag = getattr(config, f"{prefix}_BIAS_FLAG")
 
@@ -306,6 +315,7 @@ class HiddenModelConfigFactory:
             activation=activation,
             layer_norm_position=layer_norm_position,
             residual_connection_option=residual_connection_option,
+            residual_model_flag=residual_model_flag,
             dropout_probability=dropout_probability,
             bias_flag=bias_flag,
         )
@@ -399,6 +409,10 @@ class HiddenModelConfigFactory:
             config,
             f"{prefix}_RESIDUAL_CONNECTION_OPTION",
         )
+        residual_model_flag = getattr(
+            config,
+            f"{prefix}_RESIDUAL_MODEL_FLAG",
+        )
         dropout_probability = getattr(config, f"{prefix}_DROPOUT_PROBABILITY")
         last_layer_bias_option = getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION")
         apply_output_pipeline_flag = getattr(
@@ -414,6 +428,7 @@ class HiddenModelConfigFactory:
             num_layers=num_layers,
             activation=activation,
             residual_connection_option=residual_connection_option,
+            residual_model_flag=residual_model_flag,
             dropout_probability=dropout_probability,
             last_layer_bias_option=last_layer_bias_option,
             apply_output_pipeline_flag=apply_output_pipeline_flag,
@@ -460,9 +475,11 @@ class HiddenModelConfigFactory:
         return LayerConfig(
             activation=self.stack_options.activation,
             layer_norm_position=self.stack_options.layer_norm_position,
-            residual_config=None
-            if self.stack_options.residual_connection_option is None
-            else self.stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                self.stack_options.residual_connection_option,
+                self.stack_options.residual_model_flag,
+                self.stack_options.residual_stack_options,
+            ),
             dropout_probability=self.stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

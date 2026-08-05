@@ -132,6 +132,8 @@ class _BertExpertConfigFactoryBase:
             residual_connection_option=(
                 feed_forward_stack_options.residual_connection_option
             ),
+            residual_model_flag=feed_forward_stack_options.residual_model_flag,
+            residual_stack_options=feed_forward_stack_options.residual_stack_options,
             dropout_probability=feed_forward_stack_options.dropout_probability,
             last_layer_bias_option=feed_forward_stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=(
@@ -148,6 +150,10 @@ class _BertExpertConfigFactoryBase:
             num_layers=dependencies.feed_forward_options.num_layers,
             activation=dependencies.encoder_options.activation,
             residual_connection_option=None,
+            residual_model_flag=False,
+            residual_stack_options=(
+                dependencies.expert_stack_options.residual_stack_options
+            ),
             dropout_probability=dependencies.encoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

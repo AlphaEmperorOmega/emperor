@@ -4,6 +4,8 @@ from models.neuron.expert_linear_adaptive.runtime_options import (
     NeuronSubmoduleStackOptions,
 )
 
+from ._residual import build_residual_config
+
 
 class NeuronControllerStackConfigFactory:
     def build_config(
@@ -31,9 +33,11 @@ class NeuronControllerStackConfigFactory:
     ) -> LayerConfig:
         return LayerConfig(
             activation=options.activation,
-            residual_config=None
-            if options.residual_connection_option is None
-            else options.residual_connection_option(),
+            residual_config=build_residual_config(
+                options.residual_connection_option,
+                options.residual_model_flag,
+                options.residual_stack_options,
+            ),
             dropout_probability=options.dropout_probability,
             layer_norm_position=options.layer_norm_position,
             gate_config=None,

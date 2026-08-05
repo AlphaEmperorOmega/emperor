@@ -37,6 +37,8 @@ from models.gpt.linear.runtime_options import (
     TransformerFeedForwardOptions,
 )
 
+from ._residual import build_residual_config
+
 
 @dataclass(frozen=True)
 class CoreConfigDependencies:
@@ -146,9 +148,11 @@ class CoreConfigFactory:
         layer_config = TransformerDecoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_config=None
-            if (self.stack_options.residual_connection_option) is None
-            else self.stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                self.stack_options.residual_connection_option,
+                self.stack_options.residual_model_flag,
+                self.stack_options.residual_stack_options,
+            ),
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
             halting_config=None,
@@ -226,6 +230,8 @@ class CoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -260,6 +266,8 @@ class CoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -446,6 +454,7 @@ class CoreConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
             apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -469,6 +478,7 @@ class CoreConfigFactory:
             residual_connection_option=(
                 config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
             bias_flag=self.stack_options.bias_flag,
         )
@@ -487,6 +497,7 @@ class CoreConfigFactory:
             activation=self.decoder_options.activation,
             layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
             residual_connection_option=(config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION),
+            residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
             bias_flag=self.attention_options.bias_flag,
         )
@@ -505,6 +516,7 @@ class CoreConfigFactory:
             activation=self.decoder_options.activation,
             layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
             residual_connection_option=(config.FF_STACK_RESIDUAL_CONNECTION_OPTION),
+            residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=self.decoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )
@@ -644,6 +656,7 @@ class CoreConfigFactory:
                 config,
                 f"{prefix}_RESIDUAL_CONNECTION_OPTION",
             ),
+            residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
             dropout_probability=getattr(
                 config,
                 f"{prefix}_DROPOUT_PROBABILITY",

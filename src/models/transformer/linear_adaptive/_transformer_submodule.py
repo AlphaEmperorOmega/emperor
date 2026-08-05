@@ -8,6 +8,7 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 
+from ._residual import ResidualStackOptions, build_residual_config
 from .runtime_options import (
     ControllerStackOptions,
     SubmoduleStackOptions,
@@ -20,6 +21,7 @@ from .runtime_options import (
 def _controller_stack(
     source: ControllerStackOptions,
     defaults: SubmoduleStackOptions,
+    residual_stack_options: ResidualStackOptions,
     *,
     output_dim: int | None = None,
 ) -> LayerStackConfig:
@@ -37,10 +39,10 @@ def _controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_config=(
-                None
-                if options.residual_connection_option is None
-                else options.residual_connection_option()
+            residual_config=build_residual_config(
+                options.residual_connection_option,
+                options.residual_model_flag,
+                residual_stack_options,
             ),
             dropout_probability=options.dropout_probability,
             gate_config=None,
@@ -53,6 +55,7 @@ def _controller_stack(
 
 def _gate_config(
     path_options: TransformerAttentionOptions | TransformerFeedForwardOptions,
+    residual_stack_options: ResidualStackOptions,
     *,
     recurrent: bool,
 ) -> GateConfig | None:
@@ -67,6 +70,7 @@ def _gate_config(
             model_config=_controller_stack(
                 options.recurrent_gate_stack_options,
                 stack_options,
+                residual_stack_options,
             ),
         )
     options = path_options.layer_controller_options
@@ -78,12 +82,14 @@ def _gate_config(
         model_config=_controller_stack(
             options.gate_stack_options,
             stack_options,
+            residual_stack_options,
         ),
     )
 
 
 def _halting_config(
     path_options: TransformerAttentionOptions | TransformerFeedForwardOptions,
+    residual_stack_options: ResidualStackOptions,
     *,
     recurrent: bool,
 ) -> HaltingConfig | None:
@@ -99,6 +105,7 @@ def _halting_config(
             halting_gate_config=_controller_stack(
                 options.recurrent_halting_stack_options,
                 stack_options,
+                residual_stack_options,
                 output_dim=2,
             ),
         )
@@ -112,6 +119,7 @@ def _halting_config(
         halting_gate_config=_controller_stack(
             options.halting_stack_options,
             stack_options,
+            residual_stack_options,
             output_dim=2,
         ),
     )
@@ -119,6 +127,7 @@ def _halting_config(
 
 def _memory_config(
     path_options: TransformerAttentionOptions | TransformerFeedForwardOptions,
+    residual_stack_options: ResidualStackOptions,
     *,
     model_dim: int,
 ):
@@ -138,6 +147,7 @@ def _memory_config(
         model_config=_controller_stack(
             options.memory_stack_options,
             path_options.stack_options,
+            residual_stack_options,
         ),
     )
 
@@ -148,14 +158,17 @@ def configure_transformer_submodule(
     control_stack: LayerStackConfig,
     path_options: TransformerAttentionOptions | TransformerFeedForwardOptions,
     model_dim: int,
+    residual_stack_options: ResidualStackOptions,
 ):
     control_stack.layer_config.gate_config = _gate_config(
         path_options,
+        residual_stack_options,
         recurrent=False,
     )
     control_stack.layer_config.halting_config = None
     control_stack.shared_halting_config = _halting_config(
         path_options,
+        residual_stack_options,
         recurrent=False,
     )
     control_stack.shared_gate_config = (
@@ -163,6 +176,7 @@ def configure_transformer_submodule(
     )
     control_stack.shared_memory_config = _memory_config(
         path_options,
+        residual_stack_options,
         model_dim=model_dim,
     )
     recurrent = path_options.recurrent_controller_options
@@ -174,8 +188,16 @@ def configure_transformer_submodule(
         max_steps=recurrent.recurrent_max_steps,
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
         block_config=model_config,
-        gate_config=_gate_config(path_options, recurrent=True),
+        gate_config=_gate_config(
+            path_options,
+            residual_stack_options,
+            recurrent=True,
+        ),
         residual_config=None,
-        halting_config=_halting_config(path_options, recurrent=True),
+        halting_config=_halting_config(
+            path_options,
+            residual_stack_options,
+            recurrent=True,
+        ),
         memory_config=None,
     )

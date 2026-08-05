@@ -2,6 +2,8 @@ from emperor.layers import (
     ActivationOptions,
     AdditiveResidualConfig,  # noqa: F401
     AttentionResidualConfig,  # noqa: F401
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
     ResidualConfig,
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
@@ -57,8 +59,27 @@ OUTPUT_DIM: int = 10
 # - hidden_dim comes from the global HIDDEN_DIM field above.
 STACK_NUM_LAYERS: int = 1
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
+
+#########################################################################
+# Residual Options
+# - False uses the residual variant's learned coefficient parameters.
+# - True uses the residual stack for data-dependent coefficients.
+STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+STACK_RESIDUAL_MODEL_FLAG: bool = False
+## Residual Stack Options
+# - If False, residual stack options inherit layer stack options.
+RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
+RESIDUAL_STACK_HIDDEN_DIM: int | None = None
+RESIDUAL_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RESIDUAL_STACK_NUM_LAYERS: int | None = None
+RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
+RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+RESIDUAL_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RESIDUAL_STACK_DROPOUT_PROBABILITY: float | None = None
+RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
+RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
+RESIDUAL_STACK_BIAS_FLAG: bool | None = None
 
 # Parametric Generator Mixture Options
 ADAPTIVE_MIXTURE_TOP_K: int = 1

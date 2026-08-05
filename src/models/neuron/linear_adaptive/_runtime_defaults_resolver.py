@@ -1,5 +1,6 @@
 # ruff: noqa: E501
 
+from dataclasses import replace
 from typing import Any
 
 import models.neuron.linear_adaptive.config as config
@@ -68,6 +69,9 @@ class _NeuronLinearAdaptiveRuntimeDefaultsResolver(NeuronConfigBuilder):
         cluster_terminal_router_residual_connection_option: type[ResidualConfig] = (
             config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION
         ),
+        cluster_terminal_router_residual_model_flag: bool = (
+            config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG
+        ),
         cluster_terminal_router_dropout_probability: float = (
             config.CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY
         ),
@@ -129,6 +133,9 @@ class _NeuronLinearAdaptiveRuntimeDefaultsResolver(NeuronConfigBuilder):
         cluster_halting_stack_residual_connection_option: type[ResidualConfig] = (
             config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        cluster_halting_stack_residual_model_flag: bool = (
+            config.CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
+        ),
         cluster_halting_stack_dropout_probability: float = (
             config.CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY
         ),
@@ -188,6 +195,7 @@ class _NeuronLinearAdaptiveRuntimeDefaultsResolver(NeuronConfigBuilder):
                 residual_connection_option=(
                     cluster_terminal_router_residual_connection_option
                 ),
+                residual_model_flag=cluster_terminal_router_residual_model_flag,
                 dropout_probability=cluster_terminal_router_dropout_probability,
                 bias_flag=cluster_terminal_router_bias_flag,
             )
@@ -233,6 +241,7 @@ class _NeuronLinearAdaptiveRuntimeDefaultsResolver(NeuronConfigBuilder):
                 residual_connection_option=(
                     cluster_halting_stack_residual_connection_option
                 ),
+                residual_model_flag=cluster_halting_stack_residual_model_flag,
                 dropout_probability=cluster_halting_stack_dropout_probability,
                 bias_flag=cluster_halting_stack_bias_flag,
             ),
@@ -248,8 +257,22 @@ class _NeuronLinearAdaptiveRuntimeDefaultsResolver(NeuronConfigBuilder):
         if shared_gate_config is not None:
             hidden_flat_options["shared_gate_config"] = shared_gate_config
 
+        hidden_runtime = runtime_from_flat(hidden_flat_options)
+        residual_stack_options = hidden_runtime.residual_stack
+        terminal_router_options = replace(
+            terminal_router_options,
+            residual_stack_options=residual_stack_options,
+        )
+        cluster_halting_options = replace(
+            cluster_halting_options,
+            stack_options=replace(
+                cluster_halting_options.stack_options,
+                residual_stack_options=residual_stack_options,
+            ),
+        )
+
         super().__init__(
-            hidden_runtime=runtime_from_flat(hidden_flat_options),
+            hidden_runtime=hidden_runtime,
             cluster_capacity_options=cluster_capacity_options,
             terminal_options=terminal_options,
             terminal_router_options=terminal_router_options,

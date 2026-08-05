@@ -163,6 +163,66 @@ describe("buildTrainingCommand", () => {
     expect(command).not.toContain("--router-stack-independent-flag");
   });
 
+  it("projects a weighted residual model flag beside its selector", () => {
+    const residualSections: ConfigSection[] = [
+      {
+        title: "Residual Options",
+        fields: [
+          field({
+            key: "stack_residual_connection_option",
+            flag: "--stack-residual-connection-option",
+            type: "class",
+            default: null,
+            nullable: true,
+          }),
+          field({
+            key: "stack_residual_model_flag",
+            flag: "--stack-residual-model-flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+          }),
+        ],
+      },
+      {
+        title: "Residual Stack Options",
+        fields: [
+          field({
+            key: "residual_stack_independent_flag",
+            flag: "--residual-stack-independent-flag",
+            type: "bool",
+            default: false,
+            choices: [true, false],
+          }),
+          field({
+            key: "residual_stack_hidden_dim",
+            flag: "--residual-stack-hidden-dim",
+            type: "int",
+            default: null,
+            nullable: true,
+          }),
+        ],
+      },
+    ];
+
+    expect(
+      buildTrainingCommand({
+        modelType: "linears",
+        model: "linear",
+        preset: "baseline",
+        sections: residualSections,
+        overrides: {
+          stack_residual_connection_option: "WeightedResidualConfig",
+          stack_residual_model_flag: "true",
+          residual_stack_independent_flag: "true",
+          residual_stack_hidden_dim: "48",
+        },
+      }),
+    ).toBe(
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-residual-connection-option WeightedResidualConfig --stack-residual-model-flag true --residual-stack-independent-flag true --residual-stack-hidden-dim 48",
+    );
+  });
+
   it("quotes values with spaces and shell-sensitive characters", () => {
     expect(
       buildTrainingCommand({

@@ -48,6 +48,7 @@ from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.experiment_cli_parser import get_experiment_parser
 from models.linears.linear._projection_config_factory import ProjectionConfigFactory
+from models.linears.linear._residual import ResidualStackOptions
 from models.linears.linear.config_builder import LinearConfigBuilder
 from models.linears.linear.model import Model
 from models.linears.linear.presets import (
@@ -417,6 +418,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             HaltingOptions,
             MemoryOptions,
             RecurrenceOptions,
+            ResidualStackOptions,
         )
         for option_type in option_types:
             with self.subTest(option_type=option_type.__name__):
@@ -436,7 +438,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             and not any(key.startswith(prefix) for prefix in _NON_MODEL_PREFIXES)
         ]
 
-        self.assertEqual(len(model_keys), 94)
+        self.assertEqual(len(model_keys), 112)
         for key in model_keys:
             with self.subTest(key=key):
                 flat_key = config_key_to_model_param(key)

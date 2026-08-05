@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.halting import (
     HaltingConfig,
@@ -14,6 +14,7 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
+from models.linears.linear._residual import ResidualStackOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,7 @@ class MainStackOptions:
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
@@ -37,6 +39,7 @@ class ControllerStackOptions:
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     bias_flag: bool
 
@@ -87,6 +90,10 @@ class RuntimeOptions:
     output_dim: int
     stack: MainStackOptions
     submodule_stack: ControllerStackOptions
+    residual_stack: ResidualStackOptions | None = field(
+        default=None,
+        kw_only=True,
+    )
     gate: GateOptions
     halting: HaltingOptions
     memory: MemoryOptions

@@ -17,6 +17,7 @@ def adaptive_generator_stack_options(config: object) -> AdaptiveGeneratorStackOp
         residual_connection_option=(
             config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         apply_output_pipeline_flag=(
@@ -40,6 +41,7 @@ def adaptive_generator_stack_source(
             config,
             f"{prefix}_RESIDUAL_CONNECTION_OPTION",
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
         apply_output_pipeline_flag=getattr(

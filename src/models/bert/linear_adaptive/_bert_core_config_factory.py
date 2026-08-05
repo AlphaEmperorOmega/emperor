@@ -40,6 +40,8 @@ from models.bert.linear_adaptive.runtime_options import (
     TransformerFeedForwardOptions,
 )
 
+from ._residual import build_residual_config
+
 
 @dataclass(frozen=True)
 class CoreConfigDependencies:
@@ -128,9 +130,11 @@ class BertCoreConfigFactory:
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_config=None
-            if (self.encoder_stack_options.residual_connection_option) is None
-            else self.encoder_stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                self.encoder_stack_options.residual_connection_option,
+                self.encoder_stack_options.residual_model_flag,
+                self.encoder_stack_options.residual_stack_options,
+            ),
             dropout_probability=0.0,
             gate_config=(
                 gate_factory.build_gate_config() if gate_factory is not None else None
@@ -223,6 +227,8 @@ class BertCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -277,6 +283,8 @@ class BertCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,

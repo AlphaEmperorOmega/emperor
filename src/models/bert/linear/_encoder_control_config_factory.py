@@ -19,6 +19,8 @@ from models.bert.linear.runtime_options import (
     resolve_controller_stack_options,
 )
 
+from ._residual import build_residual_config
+
 
 class GateConfigFactory:
     def __init__(
@@ -95,9 +97,11 @@ class GateConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_config=None
-                if options.residual_connection_option is None
-                else options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    options.residual_connection_option,
+                    options.residual_model_flag,
+                    options.residual_stack_options,
+                ),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -196,9 +200,11 @@ class HaltingConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_config=None
-                if options.residual_connection_option is None
-                else options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    options.residual_connection_option,
+                    options.residual_model_flag,
+                    options.residual_stack_options,
+                ),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,
@@ -277,9 +283,11 @@ class MemoryConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_config=None
-                if options.residual_connection_option is None
-                else options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    options.residual_connection_option,
+                    options.residual_model_flag,
+                    options.residual_stack_options,
+                ),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,

@@ -8,6 +8,7 @@ from emperor.layers import (
 from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
 from models.linears.linear._control_config_factory import ControlConfigFactory
+from models.linears.linear._residual import build_residual_config
 from models.linears.linear.runtime_options import RuntimeOptions
 
 
@@ -56,9 +57,13 @@ class HiddenModelConfigFactory:
         return LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_config=None
-            if options.residual_connection_option is None
-            else options.residual_connection_option(),
+            residual_config=build_residual_config(
+                options.residual_connection_option,
+                options.residual_model_flag,
+                self.runtime.residual_stack,
+                selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
+                model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
+            ),
             dropout_probability=options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,

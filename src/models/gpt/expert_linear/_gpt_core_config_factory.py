@@ -46,6 +46,8 @@ from models.gpt.expert_linear.runtime_options import (
     TransformerFeedForwardOptions,
 )
 
+from ._residual import build_residual_config
+
 
 class _GptExpertConfigFactory(Protocol):
     def build_attention_config(
@@ -155,10 +157,15 @@ class GptCoreConfigFactory:
             else None
         )
         stack_residual_connection_option = self._stack_residual_connection_option()
-        residual_config = (
-            None
-            if stack_residual_connection_option is None
-            else stack_residual_connection_option()
+        stack_residual_model_flag = self._stack_residual_model_flag()
+        residual_config = build_residual_config(
+            stack_residual_connection_option,
+            stack_residual_model_flag,
+            (
+                self.decoder_stack_options.residual_stack_options
+                if self.decoder_stack_options is not None
+                else None
+            ),
         )
         layer_config = TransformerDecoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -282,6 +289,8 @@ class GptCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -360,6 +369,8 @@ class GptCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -418,6 +429,11 @@ class GptCoreConfigFactory:
             return None
         return self.decoder_stack_options.residual_connection_option
 
+    def _stack_residual_model_flag(self) -> bool:
+        if self.decoder_stack_options is None:
+            return False
+        return self.decoder_stack_options.residual_model_flag
+
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
         if self.decoder_stack_options is None:
             return LastLayerBiasOptions.DEFAULT
@@ -442,6 +458,7 @@ class GptCoreConfigFactory:
             num_layers=self.decoder_options.num_layers,
             activation=self.decoder_options.activation,
             residual_connection_option=None,
+            residual_model_flag=False,
             dropout_probability=self.decoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

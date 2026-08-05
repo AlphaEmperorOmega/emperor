@@ -24,6 +24,8 @@ from models.bert.linear_adaptive.runtime_options import (
     TransformerEncoderOptions,
 )
 
+from ._residual import ResidualStackOptions, build_residual_config
+
 
 @dataclass(frozen=True)
 class LinearLayerConfigDependencies:
@@ -127,6 +129,8 @@ class LinearLayerConfigFactory:
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
         residual_connection_option: type[ResidualConfig] | None = None,
+        residual_model_flag: bool = False,
+        residual_stack_options: ResidualStackOptions | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -135,9 +139,11 @@ class LinearLayerConfigFactory:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
-            residual_config=None
-            if residual_connection_option is None
-            else residual_connection_option(),
+            residual_config=build_residual_config(
+                residual_connection_option,
+                residual_model_flag,
+                residual_stack_options,
+            ),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,

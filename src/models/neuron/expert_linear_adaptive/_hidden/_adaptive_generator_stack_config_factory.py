@@ -5,6 +5,8 @@ from models.neuron.expert_linear_adaptive._hidden.runtime_options import (
     AdaptiveGeneratorStackSource,
 )
 
+from .._residual import build_residual_config
+
 
 class AdaptiveGeneratorStackConfigFactory:
     def __init__(self, shared_options: AdaptiveGeneratorStackOptions) -> None:
@@ -38,6 +40,9 @@ class AdaptiveGeneratorStackConfigFactory:
                 source.residual_connection_option,
                 defaults.residual_connection_option,
             ),
+            residual_model_flag=self.__resolve(
+                source.residual_model_flag, defaults.residual_model_flag
+            ),
             dropout_probability=self.__resolve(
                 source.dropout_probability, defaults.dropout_probability
             ),
@@ -49,6 +54,7 @@ class AdaptiveGeneratorStackConfigFactory:
                 defaults.apply_output_pipeline_flag,
             ),
             bias_flag=self.__resolve(source.bias_flag, defaults.bias_flag),
+            residual_stack_options=defaults.residual_stack_options,
         )
 
     @staticmethod
@@ -67,9 +73,11 @@ class AdaptiveGeneratorStackConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_config=None
-                if options.residual_connection_option is None
-                else options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    options.residual_connection_option,
+                    options.residual_model_flag,
+                    options.residual_stack_options,
+                ),
                 dropout_probability=options.dropout_probability,
                 gate_config=None,
                 halting_config=None,

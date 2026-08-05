@@ -22,6 +22,11 @@ from emperor.transformer import (
     TransformerEncoderLayerConfig,
 )
 
+from ._residual import (
+    ResidualStackSource,
+    build_residual_config,
+    resolve_residual_stack_options,
+)
 from .runtime_options import RuntimeOptions
 
 
@@ -33,6 +38,7 @@ class _StackOptions:
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig] | None
+    residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
     bias_flag: bool
@@ -52,8 +58,39 @@ def sequence_length(runtime: RuntimeOptions) -> int:
     return patches_per_side**2
 
 
-def _residual(option):
-    return None if option is None else option()
+def _residual(runtime: RuntimeOptions, option, model_flag):
+    return build_residual_config(
+        option,
+        model_flag,
+        resolve_residual_stack_options(
+            ResidualStackSource(
+                independent_flag=runtime.residual_stack_independent_flag,
+                hidden_dim=runtime.residual_stack_hidden_dim,
+                num_layers=runtime.residual_stack_num_layers,
+                activation=runtime.residual_stack_activation,
+                layer_norm_position=(
+                    runtime.residual_stack_layer_norm_position
+                ),
+                residual_connection_option=(
+                    runtime.residual_stack_residual_connection_option
+                ),
+                residual_model_flag=(
+                    runtime.residual_stack_residual_model_flag
+                ),
+                dropout_probability=(
+                    runtime.residual_stack_dropout_probability
+                ),
+                last_layer_bias_option=(
+                    runtime.residual_stack_last_layer_bias_option
+                ),
+                apply_output_pipeline_flag=(
+                    runtime.residual_stack_apply_output_pipeline_flag
+                ),
+                bias_flag=runtime.residual_stack_bias_flag,
+            ),
+            _submodule_stack_defaults(runtime),
+        ),
+    )
 
 
 def _plain_linear_config(*, bias_flag: bool) -> LinearLayerConfig:
@@ -79,6 +116,7 @@ def _affine_stack(
     dropout_probability: float,
     layer_norm_position,
     residual_connection_option,
+    residual_model_flag,
     last_layer_bias_option,
     apply_output_pipeline_flag: bool,
     bias_flag: bool,
@@ -112,7 +150,9 @@ def _affine_stack(
         shared_memory_config=None,
         layer_config=LayerConfig(
             activation=activation,
-            residual_config=_residual(residual_connection_option),
+            residual_config=_residual(
+                runtime, residual_connection_option, residual_model_flag
+            ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
             gate_config=None,
@@ -135,6 +175,7 @@ def _affine_stack(
         dropout_probability=dropout_probability,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
+        residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
         apply_output_pipeline_flag=apply_output_pipeline_flag,
         bias_flag=bias_flag,
@@ -160,6 +201,7 @@ def patch_config(runtime: RuntimeOptions) -> LinearPatchEmbeddingConfig:
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         residual_connection_option=None,
+        residual_model_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag=False,
         bias_flag=runtime.patch_bias_flag,
@@ -190,6 +232,7 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
         residual_connection_option=(
             runtime.token_mixer_stack_residual_connection_option
         ),
+        residual_model_flag=runtime.token_mixer_stack_residual_model_flag,
         last_layer_bias_option=runtime.token_mixer_stack_last_layer_bias_option,
         apply_output_pipeline_flag=(
             runtime.token_mixer_stack_apply_output_pipeline_flag
@@ -212,6 +255,7 @@ def _channel_mixing_model(runtime: RuntimeOptions):
         residual_connection_option=(
             runtime.channel_mixer_stack_residual_connection_option
         ),
+        residual_model_flag=runtime.channel_mixer_stack_residual_model_flag,
         last_layer_bias_option=runtime.channel_mixer_stack_last_layer_bias_option,
         apply_output_pipeline_flag=(
             runtime.channel_mixer_stack_apply_output_pipeline_flag
@@ -234,6 +278,7 @@ def _submodule_stack_defaults(runtime: RuntimeOptions) -> _StackOptions:
         dropout_probability=runtime.submodule_stack_dropout_probability,
         layer_norm_position=runtime.submodule_stack_layer_norm_position,
         residual_connection_option=(runtime.submodule_stack_residual_connection_option),
+        residual_model_flag=runtime.submodule_stack_residual_model_flag,
         last_layer_bias_option=runtime.submodule_stack_last_layer_bias_option,
         apply_output_pipeline_flag=(runtime.submodule_stack_apply_output_pipeline_flag),
         bias_flag=runtime.submodule_stack_bias_flag,
@@ -260,6 +305,7 @@ def _resolved_controller_options(
         dropout_probability=resolved("dropout_probability"),
         layer_norm_position=resolved("layer_norm_position"),
         residual_connection_option=resolved("residual_connection_option"),
+        residual_model_flag=resolved("residual_model_flag"),
         last_layer_bias_option=resolved("last_layer_bias_option"),
         apply_output_pipeline_flag=resolved("apply_output_pipeline_flag"),
         bias_flag=resolved("bias_flag"),
@@ -288,6 +334,7 @@ def _controller_stack_config(
         dropout_probability=options.dropout_probability,
         layer_norm_position=options.layer_norm_position,
         residual_connection_option=options.residual_connection_option,
+        residual_model_flag=options.residual_model_flag,
         last_layer_bias_option=(
             options.last_layer_bias_option
             if output_dim is None
@@ -456,10 +503,12 @@ def _configure_controls(
             recurrent=True,
         ),
         residual_config=_residual(
+            runtime,
             getattr(
                 runtime,
                 _option_name(prefix, "recurrent_residual_connection_option"),
-            )
+            ),
+            getattr(runtime, _option_name(prefix, "recurrent_residual_model_flag")),
         ),
         halting_config=_configured_halting(
             runtime,
@@ -483,7 +532,11 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
         embedding_dim=runtime.hidden_dim,
         layer_norm_position=runtime.layer_norm_position,
         dropout_probability=runtime.stack_dropout_probability,
-        residual_config=_residual(runtime.mixer_residual_connection_option),
+        residual_config=_residual(
+            runtime,
+            runtime.mixer_residual_connection_option,
+            runtime.mixer_residual_model_flag,
+        ),
         attention_config=MixerAttentionConfig(
             embedding_dim=runtime.hidden_dim,
             sequence_length=tokens,
@@ -498,7 +551,11 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
     )
     block_layer = TransformerEncoderBlockLayerConfig(
         activation=ActivationOptions.DISABLED,
-        residual_config=_residual(runtime.stack_residual_connection_option),
+        residual_config=_residual(
+            runtime,
+            runtime.stack_residual_connection_option,
+            runtime.stack_residual_model_flag,
+        ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,

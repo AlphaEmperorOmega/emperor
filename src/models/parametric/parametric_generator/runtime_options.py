@@ -1,7 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.layers import (
     ActivationOptions,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
     ResidualConfig,
 )
 from emperor.parametric import ClipParameterOptions
@@ -14,7 +16,12 @@ class ParametricStackOptions:
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
+    layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
+    last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
+    apply_output_pipeline_flag: bool = True
+    bias_flag: bool = True
 
 
 @dataclass(frozen=True)

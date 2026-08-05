@@ -4,6 +4,10 @@ from typing import Any, Final
 
 import models.experts.linear.config as config
 from models.experts.linear import runtime_options as options
+from models.experts.linear._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 
 _TOP_LEVEL_KEYS = ("batch_size", "learning_rate", "input_dim", "output_dim")
 _STACK_FIELDS = {
@@ -14,6 +18,7 @@ _STACK_FIELDS = {
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
 }
@@ -34,6 +39,63 @@ def builder_kwargs_from_flat(
         kwargs,
         config_module,
         kwargs.pop("submodule_stack_options", None),
+    )
+    residual_stack_options = resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=kwargs.pop(
+                "residual_stack_independent_flag",
+                config_module.RESIDUAL_STACK_INDEPENDENT_FLAG,
+            ),
+            hidden_dim=kwargs.pop(
+                "residual_stack_hidden_dim",
+                config_module.RESIDUAL_STACK_HIDDEN_DIM,
+            ),
+            num_layers=kwargs.pop(
+                "residual_stack_num_layers",
+                config_module.RESIDUAL_STACK_NUM_LAYERS,
+            ),
+            activation=kwargs.pop(
+                "residual_stack_activation",
+                config_module.RESIDUAL_STACK_ACTIVATION,
+            ),
+            layer_norm_position=kwargs.pop(
+                "residual_stack_layer_norm_position",
+                config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            residual_connection_option=kwargs.pop(
+                "residual_stack_residual_connection_option",
+                config_module.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+            ),
+            residual_model_flag=kwargs.pop(
+                "residual_stack_residual_model_flag",
+                config_module.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG,
+            ),
+            dropout_probability=kwargs.pop(
+                "residual_stack_dropout_probability",
+                config_module.RESIDUAL_STACK_DROPOUT_PROBABILITY,
+            ),
+            last_layer_bias_option=kwargs.pop(
+                "residual_stack_last_layer_bias_option",
+                config_module.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
+            ),
+            apply_output_pipeline_flag=kwargs.pop(
+                "residual_stack_apply_output_pipeline_flag",
+                config_module.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            ),
+            bias_flag=kwargs.pop(
+                "residual_stack_bias_flag",
+                config_module.RESIDUAL_STACK_BIAS_FLAG,
+            ),
+        ),
+        submodule,
+    )
+    stack = replace(
+        stack,
+        residual_stack_options=residual_stack_options,
+    )
+    submodule = replace(
+        submodule,
+        residual_stack_options=residual_stack_options,
     )
     result.update(
         stack_options=stack,
@@ -110,6 +172,16 @@ def builder_kwargs_from_flat(
             config_prefix="EXPERT_",
         ),
     )
+    for stack_key in (
+        "stack_options",
+        "submodule_stack_options",
+        "expert_stack_options",
+        "router_stack_options",
+    ):
+        result[stack_key] = replace(
+            result[stack_key],
+            residual_stack_options=residual_stack_options,
+        )
     result.update(kwargs)
     return result
 
@@ -122,6 +194,7 @@ def _stack_options(kwargs, config, provided):
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
         apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -135,6 +208,7 @@ def _stack_options(kwargs, config, provided):
             "stack_num_layers": "num_layers",
             "stack_activation": "activation",
             "stack_residual_connection_option": "residual_connection_option",
+            "stack_residual_model_flag": "residual_model_flag",
             "stack_dropout_probability": "dropout_probability",
             "stack_last_layer_bias_option": "last_layer_bias_option",
             "stack_apply_output_pipeline_flag": "apply_output_pipeline_flag",
@@ -152,6 +226,7 @@ def _submodule_stack_options(kwargs, config, provided):
         activation=config.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
     )
@@ -187,6 +262,7 @@ def _router_stack_defaults(config):
         activation=config.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.ROUTER_BIAS_FLAG,
     )
@@ -277,6 +353,7 @@ def _stack_source(kwargs, config, flat_prefix, config_prefix, role, provided=Non
         residual_connection_option=getattr(
             config, f"{config_name}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{config_name}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{config_name}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config, f"{config_name}_BIAS_FLAG"),
     )

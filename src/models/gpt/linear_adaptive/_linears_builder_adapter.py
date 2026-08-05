@@ -12,6 +12,7 @@ _ADAPTIVE_GENERATOR_SOURCE_FIELD_MAP = {
     "num_layers": "num_layers",
     "activation": "activation",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "last_layer_bias_option": "last_layer_bias_option",
     "apply_output_pipeline_flag": "apply_output_pipeline_flag",
@@ -76,6 +77,9 @@ def _default_adaptive_generator_stack_options(config_module: ModuleType) -> Any:
         residual_connection_option=getattr(
             config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(
+            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
+        ),
         dropout_probability=getattr(
             config_module, f"{config_prefix}_DROPOUT_PROBABILITY"
         ),
@@ -104,6 +108,9 @@ def _default_adaptive_generator_stack_source(
         activation=getattr(config_module, f"{config_prefix}_ACTIVATION"),
         residual_connection_option=getattr(
             config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
+        ),
+        residual_model_flag=getattr(
+            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
         ),
         dropout_probability=getattr(
             config_module, f"{config_prefix}_DROPOUT_PROBABILITY"
@@ -259,6 +266,7 @@ def _adaptive_generator_stack_options_from_kwargs(
             "adaptive_generator_stack_residual_connection_option": (
                 "residual_connection_option"
             ),
+            "adaptive_generator_stack_residual_model_flag": "residual_model_flag",
             "adaptive_generator_stack_dropout_probability": "dropout_probability",
             "adaptive_generator_stack_last_layer_bias_option": "last_layer_bias_option",
             "adaptive_generator_stack_apply_output_pipeline_flag": (

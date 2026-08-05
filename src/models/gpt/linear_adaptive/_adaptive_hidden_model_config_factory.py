@@ -48,6 +48,8 @@ from models.gpt.linear_adaptive.runtime_options import (
     SubmoduleStackOptions,
 )
 
+from ._residual import build_residual_config
+
 
 @dataclass(frozen=True)
 class HiddenModelConfigDependencies:
@@ -284,9 +286,11 @@ class HiddenModelConfigFactory:
         return LayerConfig(
             activation=self.stack_options.activation,
             layer_norm_position=self.stack_options.layer_norm_position,
-            residual_config=None
-            if self.stack_options.residual_connection_option is None
-            else self.stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                self.stack_options.residual_connection_option,
+                self.stack_options.residual_model_flag,
+                self.stack_options.residual_stack_options,
+            ),
             dropout_probability=self.stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
