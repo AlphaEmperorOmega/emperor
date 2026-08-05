@@ -375,9 +375,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             },
         )
 
-    def test_recurrent_fields_expose_exact_sections_types_and_applicability(
-        self,
-    ) -> None:
+    def test_recurrent_fields_expose_exact_sections_and_types(self) -> None:
         package = model_package("transformer/linear")
         assert package is not None
 
@@ -395,20 +393,6 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             "RECURRENT_HIGH_CYCLES": "int",
             "RECURRENT_LOW_CYCLES": "int",
             "RECURRENT_INITIALIZATION_STANDARD_DEVIATION": "float",
-        }
-        restricted_values = {
-            "RECURRENT_MAX_STEPS": ("RecurrentLayerConfig",),
-            "RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG": ("RecurrentLayerConfig",),
-            "RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE": (
-                "TinyRecursiveModelRecurrentConfig",
-            ),
-            "RECURRENT_ANSWER_UPDATE_COUNT": ("TinyRecursiveModelRecurrentConfig",),
-            "RECURRENT_HIGH_CYCLES": ("HierarchicalReasoningModelRecurrentConfig",),
-            "RECURRENT_LOW_CYCLES": ("HierarchicalReasoningModelRecurrentConfig",),
-            "RECURRENT_INITIALIZATION_STANDARD_DEVIATION": (
-                "TinyRecursiveModelRecurrentConfig",
-                "HierarchicalReasoningModelRecurrentConfig",
-            ),
         }
         scopes = (
             ("", ("Controller Options", "Recurrent Layer Options")),
@@ -438,14 +422,11 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 self.assertEqual(selector.choices, variants)
                 self.assertEqual(selector.applicable_when, ())
 
-                for suffix, values in restricted_values.items():
+                for suffix, value_type in restricted_types.items():
                     target = fields[f"{prefix}{suffix}"]
                     self.assertEqual(target.section_path, section_path)
-                    self.assertEqual(target.value_type, restricted_types[suffix])
-                    self.assertEqual(len(target.applicable_when), 1)
-                    condition = target.applicable_when[0]
-                    self.assertEqual(condition.key, selector_key)
-                    self.assertEqual(condition.values, values)
+                    self.assertEqual(target.value_type, value_type)
+                    self.assertEqual(target.applicable_when, ())
 
                 shared = fields[f"{prefix}RECURRENT_NO_GRADIENT_TRANSITION_COUNT"]
                 self.assertEqual(shared.value_type, "int")
@@ -543,6 +524,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                     transformer_linear_config,
                     "CONFIG_FIELD_APPLICABILITY",
                     metadata,
+                    create=True,
                 ),
                 self.assertRaisesRegex(InspectionError, message),
             ):
