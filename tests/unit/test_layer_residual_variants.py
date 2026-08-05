@@ -4,8 +4,14 @@ import unittest
 import torch
 
 from emperor.layers import (
+    ActivationOptions,
     AdditiveResidualConfig,
     AttentionResidualConfig,
+    LastLayerBiasOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    LayerStack,
+    LayerStackConfig,
     ResidualConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
@@ -24,6 +30,32 @@ from emperor.layers._composition.residual.variants.weighted_blend import (
     WeightedBlendResidual,
 )
 from emperor.linears import LinearLayerConfig
+
+
+def _coefficient_stack_config(
+    *,
+    bias_flag: bool = True,
+    last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
+) -> LayerStackConfig:
+    return LayerStackConfig(
+        hidden_dim=3,
+        num_layers=2,
+        apply_output_pipeline_flag=False,
+        last_layer_bias_option=last_layer_bias_option,
+        shared_gate_config=None,
+        shared_halting_config=None,
+        shared_memory_config=None,
+        layer_config=LayerConfig(
+            activation=ActivationOptions.GELU,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            residual_config=None,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(bias_flag=bias_flag),
+        ),
+    )
 
 
 class TestResidualConfigRegistry(unittest.TestCase):
@@ -216,6 +248,74 @@ class TestPairwiseResidualVariants(unittest.TestCase):
             torch.count_nonzero(residual.model.weight_params.grad).item(),
             0,
         )
+
+    def test_residual_stack_owns_dimensions_initialization_behavior_and_gradients(
+        self,
+    ):
+        residual_dim = 2
+        cases = (
+            (WeightedResidualConfig, 0.0),
+            (
+                WeightedBlendResidualConfig,
+                math.log(0.9 / (1.0 - 0.9)),
+            ),
+        )
+        current = torch.tensor([[2.0, 3.0]], requires_grad=True)
+        previous = torch.tensor([[5.0, 7.0]], requires_grad=True)
+
+        for config_type, expected_bias in cases:
+            with self.subTest(config=config_type.__name__):
+                residual = config_type(
+                    residual_dim=residual_dim,
+                    model_config=_coefficient_stack_config(),
+                ).build()
+                model = residual.model
+
+                self.assertIsNone(residual.raw_weight)
+                self.assertIsInstance(model, LayerStack)
+                self.assertEqual(model.input_dim, residual_dim * 2)
+                self.assertEqual(model.output_dim, residual_dim)
+                affine_output = model[-1].model
+                torch.testing.assert_close(
+                    affine_output.weight_params,
+                    torch.zeros_like(affine_output.weight_params),
+                )
+                torch.testing.assert_close(
+                    affine_output.bias_params,
+                    torch.full_like(affine_output.bias_params, expected_bias),
+                )
+
+                output = residual(current, previous)
+                if config_type is WeightedResidualConfig:
+                    expected = previous
+                else:
+                    expected = 0.9 * current + 0.1 * previous
+                torch.testing.assert_close(output, expected)
+                output.sum().backward(retain_graph=True)
+                self.assertIsNotNone(affine_output.weight_params.grad)
+                self.assertGreater(
+                    torch.count_nonzero(affine_output.weight_params.grad).item(),
+                    0,
+                )
+
+    def test_residual_stack_requires_an_effective_final_bias(self):
+        invalid_stacks = (
+            _coefficient_stack_config(bias_flag=False),
+            _coefficient_stack_config(
+                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            ),
+        )
+
+        for model_config in invalid_stacks:
+            with self.subTest(model_config=model_config):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "must enable bias on its final layer",
+                ):
+                    WeightedResidualConfig(
+                        residual_dim=2,
+                        model_config=model_config,
+                    ).build()
 
     def test_runtime_parameter_names_remain_stable_and_attention_is_direct(self):
         cases = (

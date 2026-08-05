@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from emperor.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
     from emperor.linears import LinearLayerConfig
 
 
@@ -33,7 +34,7 @@ class AdditiveResidualConfig(ResidualConfig):
 
 @dataclass
 class WeightedResidualConfig(ResidualConfig):
-    model_config: "LinearLayerConfig | None" = optional_field(
+    model_config: "LayerStackConfig | LinearLayerConfig | None" = optional_field(
         "Optional data-dependent coefficient model. When provided, the model "
         "receives concatenated current and previous values and produces one raw "
         "mixing coefficient per feature. When omitted, a learned scalar parameter "
@@ -50,7 +51,7 @@ class WeightedResidualConfig(ResidualConfig):
 
 @dataclass
 class WeightedBlendResidualConfig(ResidualConfig):
-    model_config: "LinearLayerConfig | None" = optional_field(
+    model_config: "LayerStackConfig | LinearLayerConfig | None" = optional_field(
         "Optional data-dependent coefficient model. When provided, the model "
         "receives concatenated current and previous values and produces one raw "
         "blend coefficient per feature. When omitted, a learned scalar parameter "
