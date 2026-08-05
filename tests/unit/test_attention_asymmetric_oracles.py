@@ -20,6 +20,7 @@ def _reference_attention(
     value: Tensor,
     *,
     num_heads: int,
+    attention_mask: Tensor | None = None,
 ) -> tuple[Tensor, Tensor]:
     target_length, batch_size, embedding_dim = query.shape
     source_length = key.size(0)
@@ -43,7 +44,10 @@ def _reference_attention(
         head_width,
     ).permute(1, 2, 0, 3)
     scores = torch.einsum("bhtd,bhsd->bhts", query_heads, key_heads)
-    probabilities = torch.softmax(scores * head_width**-0.5, dim=-1)
+    scaled_scores = scores * head_width**-0.5
+    if attention_mask is not None:
+        scaled_scores = scaled_scores + attention_mask
+    probabilities = torch.softmax(scaled_scores, dim=-1)
     context = torch.einsum("bhts,bhsd->bhtd", probabilities, value_heads)
     output = context.permute(2, 0, 1, 3).reshape(
         target_length,
@@ -245,6 +249,247 @@ class TestAsymmetricStandardAttentionOracle(unittest.TestCase):
                         rtol=1e-11,
                         atol=1e-11,
                     )
+
+
+class TestCausalMaskCompositionOracle(unittest.TestCase):
+    sequence_length = 4
+    batch_size = 2
+    num_heads = 2
+    embedding_dim = 4
+
+    def _model(self, batch_first_flag: bool):
+        config = build_attention_config(
+            config_class=SelfAttentionConfig,
+            batch_size=self.batch_size,
+            num_heads=self.num_heads,
+            embedding_dim=self.embedding_dim,
+            target_sequence_length=self.sequence_length,
+            source_sequence_length=self.sequence_length,
+            causal_attention_mask_flag=True,
+            return_attention_weights_flag=True,
+            self_attention_projection_strategy=(
+                SelfAttentionProjectionStrategy.SEPARATE
+            ),
+        )
+        model = replace(
+            config,
+            target_dtype=torch.float64,
+            batch_first_flag=batch_first_flag,
+        ).build()
+        model.eval()
+        with torch.no_grad():
+            for projection in (
+                model.projector.query_model,
+                model.projector.key_model,
+                model.projector.value_model,
+                model.projector.output_model,
+            ):
+                _set_stack_identity(projection)
+        return model
+
+    def _sequence_values(self) -> Tensor:
+        return (
+            torch.arange(
+                self.sequence_length * self.batch_size * self.embedding_dim,
+                dtype=torch.float64,
+            )
+            .reshape(self.sequence_length, self.batch_size, self.embedding_dim)
+            .roll(5, dims=0)
+            .div_(11.0)
+            .sub_(1.25)
+        )
+
+    def test_explicit_additive_mask_composes_with_causality_across_layouts(self):
+        explicit_mask = torch.tensor(
+            (
+                (0.00, 4.00, 5.00, 6.00),
+                (0.35, -0.20, 7.00, 8.00),
+                (0.50, 0.10, -0.40, 9.00),
+                (0.70, -0.10, 0.20, 0.00),
+            ),
+            dtype=torch.float64,
+        )
+        causal_positions = torch.triu(
+            torch.ones(
+                self.sequence_length,
+                self.sequence_length,
+                dtype=torch.bool,
+            ),
+            diagonal=1,
+        )
+        composed_mask = explicit_mask.masked_fill(causal_positions, -torch.inf)
+
+        for layout in ("sequence_first", "batch_first", "unbatched"):
+            with self.subTest(layout=layout):
+                sequence_values = self._sequence_values()
+                reference_inputs = sequence_values
+                batch_first_flag = layout == "batch_first"
+                if layout == "unbatched":
+                    reference_inputs = sequence_values[:, :1]
+                    model_inputs = sequence_values[:, 0]
+                elif batch_first_flag:
+                    model_inputs = sequence_values.transpose(0, 1).contiguous()
+                else:
+                    model_inputs = sequence_values
+                model_inputs = model_inputs.clone().requires_grad_()
+                reference_inputs = reference_inputs.clone().requires_grad_()
+                model = self._model(batch_first_flag)
+
+                output, weights, auxiliary_loss = model(
+                    model_inputs,
+                    model_inputs,
+                    model_inputs,
+                    attention_mask=explicit_mask,
+                )
+                reference_output, reference_weights = _reference_attention(
+                    reference_inputs,
+                    reference_inputs,
+                    reference_inputs,
+                    num_heads=self.num_heads,
+                    attention_mask=composed_mask,
+                )
+                if layout == "unbatched":
+                    reference_output = reference_output.squeeze(1)
+                    reference_weights = reference_weights.squeeze(0)
+                elif batch_first_flag:
+                    reference_output = reference_output.transpose(0, 1).contiguous()
+
+                torch.testing.assert_close(
+                    output,
+                    reference_output,
+                    rtol=1e-12,
+                    atol=1e-12,
+                )
+                torch.testing.assert_close(
+                    weights,
+                    reference_weights,
+                    rtol=1e-12,
+                    atol=1e-12,
+                )
+                self.assertIsNone(auxiliary_loss)
+
+                marker = torch.arange(
+                    1,
+                    output.numel() + 1,
+                    dtype=output.dtype,
+                ).reshape_as(output)
+                (output * marker).sum().backward()
+                (reference_output * marker).sum().backward()
+                expected_input_gradient = reference_inputs.grad
+                if layout == "unbatched":
+                    expected_input_gradient = expected_input_gradient.squeeze(1)
+                elif batch_first_flag:
+                    expected_input_gradient = expected_input_gradient.transpose(
+                        0,
+                        1,
+                    ).contiguous()
+                torch.testing.assert_close(
+                    model_inputs.grad,
+                    expected_input_gradient,
+                    rtol=1e-11,
+                    atol=1e-11,
+                )
+
+    def test_explicit_zero_mask_cannot_leak_future_values_or_gradients(self):
+        cutoff = 2
+        explicit_mask = torch.zeros(
+            self.sequence_length,
+            self.sequence_length,
+            dtype=torch.float64,
+        )
+
+        for layout in ("sequence_first", "batch_first", "unbatched"):
+            with self.subTest(layout=layout):
+                base_sequence = self._sequence_values()
+                changed_sequence = base_sequence.clone()
+                changed_sequence[cutoff:] += torch.tensor(
+                    (
+                        ((3.0, -4.0, 5.0, -6.0), (7.0, -8.0, 9.0, -10.0)),
+                        ((-11.0, 12.0, -13.0, 14.0), (15.0, -16.0, 17.0, -18.0)),
+                    ),
+                    dtype=torch.float64,
+                )
+                batch_first_flag = layout == "batch_first"
+                if layout == "unbatched":
+                    base_inputs = base_sequence[:, 0]
+                    changed_inputs = changed_sequence[:, 0]
+                elif batch_first_flag:
+                    base_inputs = base_sequence.transpose(0, 1).contiguous()
+                    changed_inputs = changed_sequence.transpose(0, 1).contiguous()
+                else:
+                    base_inputs = base_sequence
+                    changed_inputs = changed_sequence
+                base_inputs = base_inputs.clone().requires_grad_()
+                changed_inputs = changed_inputs.clone().requires_grad_()
+                base_model = self._model(batch_first_flag)
+                changed_model = self._model(batch_first_flag)
+                changed_model.load_state_dict(base_model.state_dict(), strict=True)
+
+                base_output, _, _ = base_model(
+                    base_inputs,
+                    base_inputs,
+                    base_inputs,
+                    attention_mask=explicit_mask,
+                )
+                changed_output, _, _ = changed_model(
+                    changed_inputs,
+                    changed_inputs,
+                    changed_inputs,
+                    attention_mask=explicit_mask,
+                )
+                if batch_first_flag and layout != "unbatched":
+                    base_prefix = base_output[:, :cutoff]
+                    changed_prefix = changed_output[:, :cutoff]
+                else:
+                    base_prefix = base_output[:cutoff]
+                    changed_prefix = changed_output[:cutoff]
+
+                torch.testing.assert_close(
+                    changed_prefix,
+                    base_prefix,
+                    rtol=1e-12,
+                    atol=1e-12,
+                )
+                marker = torch.arange(
+                    1,
+                    base_prefix.numel() + 1,
+                    dtype=base_prefix.dtype,
+                ).reshape_as(base_prefix)
+                (base_prefix * marker).sum().backward()
+                (changed_prefix * marker).sum().backward()
+
+                torch.testing.assert_close(
+                    changed_inputs.grad,
+                    base_inputs.grad,
+                    rtol=1e-11,
+                    atol=1e-11,
+                )
+                if batch_first_flag and layout != "unbatched":
+                    future_gradient = changed_inputs.grad[:, cutoff:]
+                else:
+                    future_gradient = changed_inputs.grad[cutoff:]
+                torch.testing.assert_close(
+                    future_gradient,
+                    torch.zeros_like(future_gradient),
+                    rtol=0.0,
+                    atol=0.0,
+                )
+                for (base_name, base_parameter), (
+                    changed_name,
+                    changed_parameter,
+                ) in zip(
+                    base_model.named_parameters(),
+                    changed_model.named_parameters(),
+                    strict=True,
+                ):
+                    with self.subTest(layout=layout, parameter=base_name):
+                        self.assertEqual(base_name, changed_name)
+                        torch.testing.assert_close(
+                            changed_parameter.grad,
+                            base_parameter.grad,
+                            rtol=1e-11,
+                            atol=1e-11,
+                        )
 
 
 class TestRelativePositionAttentionOracle(unittest.TestCase):

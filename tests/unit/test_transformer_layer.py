@@ -762,6 +762,63 @@ class TestTransformerDecoderLayer(unittest.TestCase):
         ):
             model(target, encoder_output=torch.randn(2, 5, 3))
 
+    def test_explicit_zero_target_mask_preserves_decoder_causality(self):
+        torch.manual_seed(1704)
+        model = TransformerDecoderLayer(
+            self.preset(
+                embedding_dim=4,
+                batch_size=2,
+                num_heads=2,
+                target_sequence_length=4,
+                source_sequence_length=5,
+                feed_forward_hidden_dim=8,
+                causal_attention_mask_flag=True,
+            )
+        ).eval()
+        target = (
+            torch.arange(4 * 2 * 4, dtype=torch.float32)
+            .reshape(4, 2, 4)
+            .div_(13.0)
+            .sub_(0.75)
+        )
+        encoder_output = (
+            torch.arange(5 * 2 * 4, dtype=torch.float32)
+            .flip(0)
+            .reshape(5, 2, 4)
+            .div_(17.0)
+            .sub_(1.25)
+        )
+        explicit_zero_mask = torch.zeros(4, 4)
+
+        implicit_output, implicit_loss = model(
+            target,
+            encoder_output=encoder_output,
+        )
+        explicit_output, explicit_loss = model(
+            target,
+            encoder_output=encoder_output,
+            attention_mask=explicit_zero_mask,
+        )
+
+        torch.testing.assert_close(explicit_output, implicit_output)
+        torch.testing.assert_close(explicit_loss, implicit_loss)
+
+        changed_future_target = target.clone()
+        changed_future_target[2:] += torch.tensor(
+            (
+                ((3.0, -4.0, 5.0, -6.0), (7.0, -8.0, 9.0, -10.0)),
+                ((-11.0, 12.0, -13.0, 14.0), (15.0, -16.0, 17.0, -18.0)),
+            )
+        )
+        changed_output, changed_loss = model(
+            changed_future_target,
+            encoder_output=encoder_output,
+            attention_mask=explicit_zero_mask,
+        )
+
+        torch.testing.assert_close(changed_output[:2], explicit_output[:2])
+        torch.testing.assert_close(changed_loss, explicit_loss)
+
     def test_forward_with_different_inputs(self):
         batch_size = 4
         num_heads = 2

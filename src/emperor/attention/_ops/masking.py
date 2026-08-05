@@ -39,14 +39,15 @@ class Mask:
         )
         runtime_layout = cast(AttentionRuntimeLayout, runtime_layout)
         self.__set_runtime_query_properties(query)
-        attention_mask = self.__resolve_causal_attention_mask(
-            attention_inputs.attention_mask, runtime_layout
-        )
         key_padding_mask, attention_mask = self.__process_attention_masks(
             attention_inputs.key_padding_mask,
-            attention_mask,
+            attention_inputs.attention_mask,
             runtime_layout,
         )
+        attention_mask = self.__resolve_causal_attention_mask(
+            attention_mask, runtime_layout
+        )
+        attention_mask = self.__validate_attention_mask(attention_mask)
         self.__clear_runtime_query_properties()
         if (
             key_padding_mask is attention_inputs.key_padding_mask
@@ -72,13 +73,14 @@ class Mask:
         attention_mask: Tensor | None,
         runtime_layout: AttentionRuntimeLayout,
     ) -> Tensor | None:
-        if attention_mask is not None:
-            return attention_mask
         if not self.causal_attention_mask_flag:
-            return None
+            return attention_mask
         target_length = runtime_layout.target_sequence_length
         source_length = runtime_layout.source_sequence_length
-        return self.__generate_causal_mask(target_length, source_length)
+        causal_mask = self.__generate_causal_mask(target_length, source_length)
+        if attention_mask is None:
+            return causal_mask
+        return attention_mask.masked_fill(causal_mask.isneginf(), -torch.inf)
 
     def __generate_causal_mask(
         self,
@@ -109,7 +111,10 @@ class Mask:
             key_padding_mask,
             "key_padding_mask",
         )
-        prepared_attention_mask = self.__validate_attention_mask(attention_mask)
+        prepared_attention_mask = self.__canonical_mask(
+            attention_mask,
+            "attention_mask",
+        )
         return prepared_key_padding_mask, prepared_attention_mask
 
     def _validate_mask_shapes(

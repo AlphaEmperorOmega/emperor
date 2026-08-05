@@ -47,7 +47,8 @@ class MultiHeadAttentionConfig(ConfigBase):
         "non-attending positions."
     )
     causal_attention_mask_flag: bool | None = optional_field(
-        "If True, use a causal mask to prevent attention to future positions."
+        "If True, compose a causal mask with any supplied attention mask so "
+        "future positions remain inaccessible."
     )
     add_key_value_bias_flag: bool | None = optional_field(
         "If True, add learnable bias vectors to the key and value projections."

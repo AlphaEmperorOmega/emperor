@@ -669,6 +669,58 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                 )
                 self.assertIs(prepared.attention_mask, floating_mask)
 
+    def test_causal_mask_composes_with_every_supported_mixture_branch_shape(self):
+        cfg = self.preset(causal_attention_mask_flag=True)
+        model = cfg.build()
+        runtime_layout = self.runtime_layout(cfg)
+        sequence_shape = (
+            cfg.target_sequence_length,
+            cfg.source_sequence_length,
+        )
+        standard_branch_count = cfg.batch_size * cfg.num_heads
+        expert_branch_count = standard_branch_count * cfg.experts_config.top_k
+        causal_positions = torch.triu(
+            torch.ones(sequence_shape, dtype=torch.bool),
+            diagonal=1,
+        )
+        inputs = self.input_tensor(cfg)
+
+        for leading_dimension in (
+            None,
+            1,
+            standard_branch_count,
+            expert_branch_count,
+        ):
+            with self.subTest(leading_dimension=leading_dimension):
+                shape = sequence_shape
+                if leading_dimension is not None:
+                    shape = (leading_dimension, *sequence_shape)
+                attention_mask = torch.arange(
+                    torch.tensor(shape).prod().item(),
+                    dtype=cfg.target_dtype,
+                ).reshape(shape)
+                original_attention_mask = attention_mask.clone()
+
+                prepared = model.masks.prepare_attention_masks(
+                    MultiHeadAttentionInputs(
+                        query=inputs,
+                        key=inputs,
+                        value=inputs,
+                        attention_mask=attention_mask,
+                        runtime_layout=runtime_layout,
+                    )
+                )
+
+                expected = attention_mask.masked_fill(
+                    causal_positions,
+                    -torch.inf,
+                )
+                torch.testing.assert_close(prepared.attention_mask, expected)
+                torch.testing.assert_close(
+                    attention_mask,
+                    original_attention_mask,
+                )
+
     def test_causal_padding_bias_and_zero_masks_compose_in_mixture_branch_order(self):
         for use_kv_expert_models_flag in (False, True):
             with self.subTest(
@@ -695,6 +747,11 @@ class TestMixtureOfAttentionHeadsExpertKeyValue(unittest.TestCase):
                         key=inputs,
                         value=inputs,
                         key_padding_mask=padding_mask,
+                        attention_mask=torch.zeros(
+                            cfg.target_sequence_length,
+                            cfg.source_sequence_length,
+                            dtype=cfg.target_dtype,
+                        ),
                         runtime_layout=runtime_layout,
                     )
                 )

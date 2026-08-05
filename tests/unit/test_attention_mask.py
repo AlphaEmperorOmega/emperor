@@ -353,11 +353,12 @@ class TestPrepareAttentionMasks(TestMask):
         ):
             model.prepare_attention_masks(self.unresolved_attention_inputs(cfg))
 
-    def test_preserves_existing_attention_mask(self):
+    def test_causal_mask_composes_with_existing_attention_mask(self):
         cfg = self.preset(causal_attention_mask_flag=True)
         model = Mask(cfg)
         query = self.query_tensor(cfg)
         attention_mask = self.float_attention_mask(cfg)
+        original_attention_mask = attention_mask.clone()
 
         input_values = self.attention_inputs(
             cfg,
@@ -366,8 +367,32 @@ class TestPrepareAttentionMasks(TestMask):
         )
         output = model.prepare_attention_masks(input_values)
 
-        self.assertIs(output, input_values)
-        self.assertIs(output.attention_mask, attention_mask)
+        expected = attention_mask.masked_fill(
+            self.expected_causal_mask(cfg).isneginf(),
+            -torch.inf,
+        )
+        torch.testing.assert_close(output.attention_mask, expected)
+        torch.testing.assert_close(attention_mask, original_attention_mask)
+
+    def test_causal_overlay_dominates_positive_infinity_without_nan(self):
+        cfg = self.preset(causal_attention_mask_flag=True)
+        model = Mask(cfg)
+        attention_mask = torch.arange(
+            cfg.target_sequence_length * cfg.source_sequence_length,
+            dtype=cfg.target_dtype,
+        ).reshape(cfg.target_sequence_length, cfg.source_sequence_length)
+        future_positions = self.expected_causal_mask(cfg).isneginf()
+        attention_mask[future_positions] = torch.inf
+        original_attention_mask = attention_mask.clone()
+
+        output = model.prepare_attention_masks(
+            self.attention_inputs(cfg, attention_mask=attention_mask)
+        )
+
+        expected = attention_mask.masked_fill(future_positions, -torch.inf)
+        torch.testing.assert_close(output.attention_mask, expected)
+        self.assertFalse(torch.isnan(output.attention_mask).any())
+        torch.testing.assert_close(attention_mask, original_attention_mask)
 
     def test_returns_original_masks_when_absent_and_causal_disabled(self):
         cfg = self.preset(causal_attention_mask_flag=False)
@@ -404,6 +429,45 @@ class TestPrepareAttentionMasks(TestMask):
             output.attention_mask,
             self.expected_causal_mask(cfg),
         )
+
+    def test_composes_causal_mask_from_smaller_rectangular_runtime_lengths(self):
+        cfg = self.preset(
+            causal_attention_mask_flag=True,
+            target_sequence_length=6,
+            source_sequence_length=7,
+            target_dtype=torch.float64,
+        )
+        model = Mask(cfg)
+        runtime_layout = AttentionRuntimeLayout(
+            batch_size=cfg.batch_size,
+            target_sequence_length=3,
+            source_sequence_length=5,
+        )
+        query = torch.randn(3, cfg.batch_size, cfg.embedding_dim, dtype=torch.float64)
+        key = torch.randn(
+            cfg.batch_size * cfg.num_heads,
+            5,
+            cfg.embedding_dim // cfg.num_heads,
+            dtype=torch.float64,
+        )
+        attention_mask = torch.arange(15, dtype=torch.float64).reshape(3, 5)
+
+        output = model.prepare_attention_masks(
+            self.attention_inputs(
+                cfg,
+                query=query,
+                key=key,
+                attention_mask=attention_mask,
+                runtime_layout=runtime_layout,
+            )
+        )
+
+        causal_positions = torch.triu(
+            torch.ones(3, 5, dtype=torch.bool),
+            diagonal=1,
+        )
+        expected = attention_mask.masked_fill(causal_positions, -torch.inf)
+        torch.testing.assert_close(output.attention_mask, expected)
 
     def test_generates_causal_mask_on_query_device(self):
         cfg = self.preset(causal_attention_mask_flag=True)
@@ -534,7 +598,7 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
         self.assertIsNone(model.query_dtype)
         self.assertIsNone(model.query_device)
 
-    def test_canonicalizes_without_mutating_causal_configuration(self):
+    def test_canonicalizes_boolean_mask_before_causal_composition(self):
         cfg = self.preset(
             causal_attention_mask_flag=True,
             return_attention_weights_flag=True,
@@ -556,9 +620,16 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
             output.key_padding_mask,
             self.canonical_bool_mask(cfg, key_padding_mask),
         )
+        expected_attention_mask = self.canonical_bool_mask(
+            cfg,
+            attention_mask,
+        ).masked_fill(
+            self.expected_causal_mask(cfg).isneginf(),
+            -torch.inf,
+        )
         torch.testing.assert_close(
             output.attention_mask,
-            self.canonical_bool_mask(cfg, attention_mask),
+            expected_attention_mask,
         )
 
     def test_rejects_integer_masks(self):
@@ -600,9 +671,9 @@ class TestPrepareAttentionMaskCanonicalization(TestMask):
                     f"Only bool and floating types of {case_name} are supported.",
                 )
 
-    def test_preserves_float_masks(self):
+    def test_preserves_float_mask_identity_when_causality_is_disabled(self):
         cfg = self.preset(
-            causal_attention_mask_flag=True,
+            causal_attention_mask_flag=False,
             return_attention_weights_flag=True,
         )
         model = Mask(cfg)
@@ -780,5 +851,38 @@ class TestMergePaddingAndAttentionMask(TestMask):
                 cfg.target_sequence_length,
                 cfg.source_sequence_length,
             ),
+        )
+        torch.testing.assert_close(output, expected)
+
+    def test_causal_explicit_and_key_padding_masks_merge_exactly(self):
+        cfg = self.preset(causal_attention_mask_flag=True)
+        model = Mask(cfg)
+        key_padding_mask = self.bool_key_padding_mask(cfg)
+        attention_mask = torch.arange(
+            cfg.target_sequence_length * cfg.source_sequence_length,
+            dtype=cfg.target_dtype,
+        ).reshape(cfg.target_sequence_length, cfg.source_sequence_length)
+        attention_inputs = self.attention_inputs(
+            cfg,
+            key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
+        )
+
+        prepared = model.prepare_attention_masks(attention_inputs)
+        output = model.merge_padding_and_attention_mask(
+            prepared
+        ).merged_attention_mask
+
+        causal_attention_mask = attention_mask.masked_fill(
+            self.expected_causal_mask(cfg).isneginf(),
+            -torch.inf,
+        )
+        canonical_key_padding_mask = self.canonical_bool_mask(
+            cfg,
+            key_padding_mask,
+        )
+        expected = causal_attention_mask + self.expanded_key_padding_mask(
+            cfg,
+            canonical_key_padding_mask,
         )
         torch.testing.assert_close(output, expected)
