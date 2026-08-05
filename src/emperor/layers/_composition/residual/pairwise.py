@@ -18,8 +18,9 @@ from emperor.layers._composition.residual.config import (
 from emperor.layers._support import RowLayoutAwareModule
 
 if TYPE_CHECKING:
+    from emperor.layers import LayerStack, LayerStackConfig
     from emperor.layers._row_layout import RowLayout
-    from emperor.linears import LinearLayer, LinearLayerConfig
+    from emperor.linears import LinearAbstract, LinearLayerConfig
 
 
 class PairwiseResidualAbstract(ResidualConnectionAbstract):
@@ -37,9 +38,11 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         overrides: WeightedResidualConfig | WeightedBlendResidualConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.model_config: LinearLayerConfig | None = self.cfg.model_config
+        self.model_config: LayerStackConfig | LinearLayerConfig | None = (
+            self.cfg.model_config
+        )
         self.raw_weight: nn.Parameter | None = None
-        self.model: LinearLayer | None = None
+        self.model: LayerStack | LinearAbstract | None = None
         self.__initialize_coefficient()
 
     def __initialize_coefficient(self) -> None:
@@ -50,16 +53,33 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
 
         coefficient_dim = cast(int, self.residual_dim)
         self.model = cast(
-            "LinearLayer",
+            "LayerStack | LinearAbstract",
             self._build_from_config(
                 self.model_config,
                 input_dim=coefficient_dim * 2,
                 output_dim=coefficient_dim,
             ),
         )
-        nn.init.zeros_(self.model.weight_params)
-        bias_params = cast(Tensor, self.model.bias_params)
+        affine_output = self.__coefficient_affine_output()
+        nn.init.zeros_(affine_output.weight_params)
+        bias_params = cast(Tensor, affine_output.bias_params)
         nn.init.constant_(bias_params, initial_raw_coefficient.item())
+
+    def __coefficient_affine_output(self) -> LinearAbstract:
+        from emperor.layers import LayerStack
+        from emperor.linears import LinearAbstract
+
+        coefficient_model = self.model
+        if isinstance(coefficient_model, LinearAbstract):
+            return coefficient_model
+        if isinstance(coefficient_model, LayerStack):
+            output_model = coefficient_model[-1].model
+            if isinstance(output_model, LinearAbstract):
+                return output_model
+        raise TypeError(
+            "weighted residual coefficient model must end in LinearAbstract, got "
+            f"{type(coefficient_model).__name__}."
+        )
 
     @staticmethod
     @abstractmethod
@@ -75,6 +95,14 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         coefficient_model = self.model
         if coefficient_model is not None:
             coefficient_model_input = torch.cat((current, previous), dim=-1)
+            from emperor.layers import LayerStack, LayerState
+
+            if isinstance(coefficient_model, LayerStack):
+                coefficient_state = LayerState(
+                    hidden=coefficient_model_input,
+                    row_layout=row_layout,
+                )
+                return coefficient_model(coefficient_state).hidden
             if isinstance(coefficient_model, RowLayoutAwareModule):
                 return coefficient_model(
                     coefficient_model_input,
