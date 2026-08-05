@@ -30,45 +30,6 @@ from emperor.memory import (
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
 
-
-def _recurrent_field_applicability(
-    prefix: str,
-) -> dict[str, dict[str, tuple[type[RecurrentCompositionConfig], ...]]]:
-    composition_key = f"{prefix}RECURRENT_COMPOSITION_OPTION"
-    return {
-        f"{prefix}RECURRENT_MAX_STEPS": {
-            composition_key: (RecurrentLayerConfig,),
-        },
-        f"{prefix}RECURRENT_REINJECT_ORIGINAL_HIDDEN_FLAG": {
-            composition_key: (RecurrentLayerConfig,),
-        },
-        f"{prefix}RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE": {
-            composition_key: (TinyRecursiveModelRecurrentConfig,),
-        },
-        f"{prefix}RECURRENT_ANSWER_UPDATE_COUNT": {
-            composition_key: (TinyRecursiveModelRecurrentConfig,),
-        },
-        f"{prefix}RECURRENT_HIGH_CYCLES": {
-            composition_key: (HierarchicalReasoningModelRecurrentConfig,),
-        },
-        f"{prefix}RECURRENT_LOW_CYCLES": {
-            composition_key: (HierarchicalReasoningModelRecurrentConfig,),
-        },
-        f"{prefix}RECURRENT_INITIALIZATION_STANDARD_DEVIATION": {
-            composition_key: (
-                TinyRecursiveModelRecurrentConfig,
-                HierarchicalReasoningModelRecurrentConfig,
-            ),
-        },
-    }
-
-
-CONFIG_FIELD_APPLICABILITY = {
-    **_recurrent_field_applicability(""),
-    **_recurrent_field_applicability("ATTN_"),
-    **_recurrent_field_applicability("FF_"),
-}
-
 # Global
 BATCH_SIZE = 64
 LEARNING_RATE = 1.0

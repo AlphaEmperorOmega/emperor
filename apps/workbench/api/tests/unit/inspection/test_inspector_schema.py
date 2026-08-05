@@ -96,26 +96,13 @@ class InspectorSchemaTests(unittest.TestCase):
 
         self.assertEqual(
             fields["recurrent_max_steps"]["applicableWhen"],
-            [
-                {
-                    "key": "RECURRENT_COMPOSITION_OPTION",
-                    "values": ["RecurrentLayerConfig"],
-                }
-            ],
+            [],
         )
         self.assertEqual(
             fields["attn_recurrent_initialization_standard_deviation"][
                 "applicableWhen"
             ],
-            [
-                {
-                    "key": "ATTN_RECURRENT_COMPOSITION_OPTION",
-                    "values": [
-                        "TinyRecursiveModelRecurrentConfig",
-                        "HierarchicalReasoningModelRecurrentConfig",
-                    ],
-                }
-            ],
+            [],
         )
         self.assertEqual(
             fields["ff_recurrent_no_gradient_transition_count"]["applicableWhen"],
