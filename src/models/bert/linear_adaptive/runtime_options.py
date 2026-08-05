@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -30,6 +30,7 @@ from emperor.layers import (
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
+from models.bert.linear_adaptive._residual import ResidualStackOptions
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class SubmoduleStackSource:
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -55,6 +57,10 @@ class SubmoduleStackOptions:
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_stack_options: ResidualStackOptions | None = field(
+        default=None, kw_only=True
+    )
     dropout_probability: float
     bias_flag: bool
 
@@ -101,6 +107,8 @@ def resolve_controller_stack_options(
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
+        residual_model_flag=(source.residual_model_flag),
+        residual_stack_options=defaults.residual_stack_options,
         dropout_probability=dropout_probability,
         bias_flag=bias_flag,
     )
@@ -137,6 +145,10 @@ class MainLayerStackOptions:
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_stack_options: ResidualStackOptions | None = field(
+        default=None, kw_only=True
+    )
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool
@@ -223,6 +235,7 @@ class AdaptiveGeneratorStackSource:
     num_layers: int | None
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_pipeline_flag: bool | None
@@ -236,6 +249,10 @@ class AdaptiveGeneratorStackOptions:
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_stack_options: ResidualStackOptions | None = field(
+        default=None, kw_only=True
+    )
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_pipeline_flag: bool

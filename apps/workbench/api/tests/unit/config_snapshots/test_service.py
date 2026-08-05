@@ -199,6 +199,31 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
             {"HIDDEN_DIM": "64", "MEMORY_STACK_HIDDEN_DIM": "48"},
         )
 
+    def test_real_schema_snapshot_preserves_residual_stack_overrides(self) -> None:
+        snapshot = self.service.create_snapshot(
+            model="linears/linear",
+            preset="baseline",
+            name="residual coefficient stack",
+            overrides={
+                "stack_residual_connection_option": "WeightedResidualConfig",
+                "stack_residual_model_flag": "true",
+                "residual_stack_independent_flag": "true",
+                "residual_stack_hidden_dim": "48",
+                "residual_stack_num_layers": "3",
+            },
+        )
+
+        self.assertEqual(
+            dict(snapshot.overrides),
+            {
+                "RESIDUAL_STACK_HIDDEN_DIM": "48",
+                "RESIDUAL_STACK_INDEPENDENT_FLAG": "true",
+                "RESIDUAL_STACK_NUM_LAYERS": "3",
+                "STACK_RESIDUAL_CONNECTION_OPTION": "WeightedResidualConfig",
+                "STACK_RESIDUAL_MODEL_FLAG": "true",
+            },
+        )
+
     def test_real_schema_rejects_preset_locked_create_without_persisting(self) -> None:
         with self.assertRaisesRegex(
             ConfigSnapshotFailure,

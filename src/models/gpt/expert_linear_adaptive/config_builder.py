@@ -313,6 +313,8 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             residual_connection_option=(
                 feed_forward_stack_options.residual_connection_option
             ),
+            residual_model_flag=feed_forward_stack_options.residual_model_flag,
+            residual_stack_options=feed_forward_stack_options.residual_stack_options,
             dropout_probability=feed_forward_stack_options.dropout_probability,
             last_layer_bias_option=feed_forward_stack_options.last_layer_bias_option,
             apply_output_pipeline_flag=(
@@ -328,6 +330,8 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             num_layers=self.feed_forward_options.num_layers,
             activation=self.decoder_options.activation,
             residual_connection_option=None,
+            residual_model_flag=False,
+            residual_stack_options=self.expert_stack_options.residual_stack_options,
             dropout_probability=self.decoder_options.dropout_probability,
             last_layer_bias_option=config.LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,

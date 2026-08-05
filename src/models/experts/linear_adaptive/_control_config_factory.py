@@ -61,6 +61,8 @@ from models.experts.linear_adaptive.runtime_options import (
     HiddenAdaptiveWeightOptions,
 )
 
+from ._residual import build_residual_config
+
 
 @dataclass(frozen=True)
 class ControlConfigDependencies:
@@ -328,9 +330,11 @@ class ControlConfigFactory:
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
-            residual_config=None
-            if (stack_options.residual_connection_option) is None
-            else stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                stack_options.residual_stack_options,
+            ),
             dropout_probability=stack_options.dropout_probability,
             gate_config=gate_config,
             halting_config=halting_config,
@@ -380,9 +384,11 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
-                residual_config=None
-                if (expert_stack_options.residual_connection_option) is None
-                else expert_stack_options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    expert_stack_options.residual_connection_option,
+                    expert_stack_options.residual_model_flag,
+                    expert_stack_options.residual_stack_options,
+                ),
                 dropout_probability=expert_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,
@@ -491,9 +497,11 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=router_stack_options.activation,
                 layer_norm_position=router_stack_options.layer_norm_position,
-                residual_config=None
-                if (router_stack_options.residual_connection_option) is None
-                else router_stack_options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    router_stack_options.residual_connection_option,
+                    router_stack_options.residual_model_flag,
+                    router_stack_options.residual_stack_options,
+                ),
                 dropout_probability=router_stack_options.dropout_probability,
                 gate_config=gate_config,
                 halting_config=halting_config,

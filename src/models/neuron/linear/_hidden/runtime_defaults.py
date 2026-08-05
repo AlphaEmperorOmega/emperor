@@ -24,6 +24,10 @@ from models.neuron.linear._hidden.runtime_options import (
     RecurrenceOptions,
     RuntimeOptions,
 )
+from models.neuron.linear._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 
 _PACKAGE_NAME = "models.neuron.linear._hidden"
 _CONTROLLER_STACK_FIELDS = (
@@ -35,6 +39,7 @@ _CONTROLLER_STACK_FIELDS = (
     "activation",
     "layer_norm_position",
     "residual_connection_option",
+    "residual_model_flag",
     "dropout_probability",
     "bias_flag",
 )
@@ -69,6 +74,7 @@ def _flat_defaults() -> dict[str, object]:
         "stack_num_layers": config.STACK_NUM_LAYERS,
         "stack_activation": config.STACK_ACTIVATION,
         "stack_residual_connection_option": (config.STACK_RESIDUAL_CONNECTION_OPTION),
+        "stack_residual_model_flag": config.STACK_RESIDUAL_MODEL_FLAG,
         "stack_dropout_probability": config.STACK_DROPOUT_PROBABILITY,
         "stack_last_layer_bias_option": config.STACK_LAST_LAYER_BIAS_OPTION,
         "stack_apply_output_pipeline_flag": (config.STACK_APPLY_OUTPUT_PIPELINE_FLAG),
@@ -87,10 +93,36 @@ def _flat_defaults() -> dict[str, object]:
         "submodule_stack_residual_connection_option": (
             config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        "submodule_stack_residual_model_flag": (
+            config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG
+        ),
         "submodule_stack_dropout_probability": (
             config.SUBMODULE_STACK_DROPOUT_PROBABILITY
         ),
         "submodule_stack_bias_flag": config.SUBMODULE_STACK_BIAS_FLAG,
+        "residual_stack_independent_flag": config.RESIDUAL_STACK_INDEPENDENT_FLAG,
+        "residual_stack_hidden_dim": config.RESIDUAL_STACK_HIDDEN_DIM,
+        "residual_stack_num_layers": config.RESIDUAL_STACK_NUM_LAYERS,
+        "residual_stack_activation": config.RESIDUAL_STACK_ACTIVATION,
+        "residual_stack_layer_norm_position": (
+            config.RESIDUAL_STACK_LAYER_NORM_POSITION
+        ),
+        "residual_stack_residual_connection_option": (
+            config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        "residual_stack_residual_model_flag": (
+            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
+        ),
+        "residual_stack_dropout_probability": (
+            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
+        ),
+        "residual_stack_last_layer_bias_option": (
+            config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        "residual_stack_apply_output_pipeline_flag": (
+            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        "residual_stack_bias_flag": config.RESIDUAL_STACK_BIAS_FLAG,
         "stack_gate_flag": config.STACK_GATE_FLAG,
         "gate_option": config.GATE_OPTION,
         "gate_activation": config.GATE_ACTIVATION,
@@ -282,6 +314,7 @@ def _main_stack(
             sources,
             "stack_residual_connection_option",
         ),
+        residual_model_flag=_bool(values, sources, "stack_residual_model_flag"),
         dropout_probability=dropout,
         last_layer_bias_option=_enum(
             values,
@@ -330,6 +363,11 @@ def _submodule_stack(
             sources,
             "submodule_stack_residual_connection_option",
         ),
+        residual_model_flag=_bool(
+            values,
+            sources,
+            "submodule_stack_residual_model_flag",
+        ),
         dropout_probability=dropout,
         bias_flag=_bool(values, sources, "submodule_stack_bias_flag"),
     )
@@ -369,6 +407,7 @@ def _resolved_controller_stack(
         sources,
         f"{prefix}_residual_connection_option",
     )
+    residual_model_flag = _bool(values, sources, f"{prefix}_residual_model_flag")
     dropout = _optional_float(values, sources, f"{prefix}_dropout_probability")
     bias_flag = values[f"{prefix}_bias_flag"]
     if bias_flag is not None:
@@ -406,10 +445,12 @@ def _resolved_controller_stack(
             if residual_connection_option is None
             else residual_connection_option
         ),
+        residual_model_flag=residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability if dropout is None else dropout
         ),
         bias_flag=defaults.bias_flag if bias_flag is None else bias_flag,
+        residual_stack_options=defaults.residual_stack_options,
     )
 
 
@@ -443,6 +484,77 @@ def runtime_from_flat(
 
     main_stack = _main_stack(values, sources)
     submodule_stack = _submodule_stack(values, sources)
+    residual_stack_hidden_dim = _optional_int(
+        values, sources, "residual_stack_hidden_dim"
+    )
+    residual_stack_num_layers = _optional_int(
+        values, sources, "residual_stack_num_layers"
+    )
+    residual_stack_dropout = _optional_float(
+        values, sources, "residual_stack_dropout_probability"
+    )
+    if residual_stack_hidden_dim is not None:
+        _positive(sources["residual_stack_hidden_dim"], residual_stack_hidden_dim)
+    if residual_stack_num_layers is not None:
+        _positive(sources["residual_stack_num_layers"], residual_stack_num_layers)
+    if residual_stack_dropout is not None:
+        _probability(
+            sources["residual_stack_dropout_probability"],
+            residual_stack_dropout,
+        )
+    residual_stack_options = resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=_bool(
+                values, sources, "residual_stack_independent_flag"
+            ),
+            hidden_dim=residual_stack_hidden_dim,
+            num_layers=residual_stack_num_layers,
+            activation=_optional_enum(
+                values, sources, "residual_stack_activation", ActivationOptions
+            ),
+            layer_norm_position=_optional_enum(
+                values,
+                sources,
+                "residual_stack_layer_norm_position",
+                LayerNormPositionOptions,
+            ),
+            residual_connection_option=_optional_residual_config_type(
+                values,
+                sources,
+                "residual_stack_residual_connection_option",
+            ),
+            residual_model_flag=_bool(
+                values, sources, "residual_stack_residual_model_flag"
+            ),
+            dropout_probability=residual_stack_dropout,
+            last_layer_bias_option=_optional_enum(
+                values,
+                sources,
+                "residual_stack_last_layer_bias_option",
+                LastLayerBiasOptions,
+            ),
+            apply_output_pipeline_flag=(
+                None
+                if values["residual_stack_apply_output_pipeline_flag"] is None
+                else _bool(
+                    values,
+                    sources,
+                    "residual_stack_apply_output_pipeline_flag",
+                )
+            ),
+            bias_flag=(
+                None
+                if values["residual_stack_bias_flag"] is None
+                else _bool(values, sources, "residual_stack_bias_flag")
+            ),
+        ),
+        submodule_stack,
+    )
+    main_stack = replace(main_stack, residual_stack_options=residual_stack_options)
+    submodule_stack = replace(
+        submodule_stack,
+        residual_stack_options=residual_stack_options,
+    )
     gate_stack = _resolved_controller_stack(
         values, sources, "gate_stack", submodule_stack
     )

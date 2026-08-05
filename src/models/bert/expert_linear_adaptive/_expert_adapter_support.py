@@ -14,6 +14,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
 }
@@ -55,6 +56,7 @@ def _router_stack_options_from_config(
         activation=config_module.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config_module.ROUTER_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config_module.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ROUTER_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.ROUTER_BIAS_FLAG,
     )
@@ -590,6 +592,9 @@ def _default_controller_stack_source(
         ),
         residual_connection_option=getattr(
             config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
+        ),
+        residual_model_flag=getattr(
+            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
         ),
         dropout_probability=getattr(
             config_module, f"{config_prefix}_DROPOUT_PROBABILITY"

@@ -207,6 +207,8 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
 
         fields = {field.key: field for field in configuration_schema(package).fields}
         residual_selector = fields["STACK_RESIDUAL_CONNECTION_OPTION"]
+        residual_model_flag = fields["STACK_RESIDUAL_MODEL_FLAG"]
+        residual_stack_hidden_dim = fields["RESIDUAL_STACK_HIDDEN_DIM"]
 
         self.assertEqual(residual_selector.value_type, "class")
         self.assertIsNone(residual_selector.default)
@@ -220,13 +222,54 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 "WeightedResidualConfig",
             ),
         )
+        self.assertEqual(residual_model_flag.value_type, "bool")
+        self.assertIs(residual_model_flag.default, False)
+        self.assertFalse(residual_model_flag.nullable)
+        self.assertIn(
+            "Residual Stack Options as a data-dependent coefficient model",
+            residual_model_flag.description,
+        )
+        self.assertTupleEqual(residual_model_flag.applicable_when, ())
+        self.assertEqual(
+            residual_stack_hidden_dim.section_path,
+            ("Residual Options", "Residual Stack Options"),
+        )
+        self.assertEqual(
+            residual_stack_hidden_dim.flag,
+            "--residual-stack-hidden-dim",
+        )
         parsed = parse_overrides(
             package,
-            {"stack_residual_connection_option": "WeightedResidualConfig"},
+            {
+                "stack_residual_connection_option": "WeightedResidualConfig",
+                "stack_residual_model_flag": "true",
+                "residual_stack_independent_flag": "true",
+                "residual_stack_hidden_dim": "48",
+            },
         )
         self.assertIs(
             parsed.values["stack_residual_connection_option"],
             WeightedResidualConfig,
+        )
+        self.assertIs(parsed.values["stack_residual_model_flag"], True)
+        self.assertIs(parsed.values["residual_stack_independent_flag"], True)
+        self.assertEqual(parsed.values["residual_stack_hidden_dim"], 48)
+        self.assertEqual(
+            serialize_overrides(
+                package,
+                {
+                    "stack_residual_connection_option": "WeightedResidualConfig",
+                    "stack_residual_model_flag": "true",
+                    "residual_stack_independent_flag": "true",
+                    "residual_stack_hidden_dim": "48",
+                },
+            ),
+            {
+                "STACK_RESIDUAL_CONNECTION_OPTION": "WeightedResidualConfig",
+                "STACK_RESIDUAL_MODEL_FLAG": True,
+                "RESIDUAL_STACK_INDEPENDENT_FLAG": True,
+                "RESIDUAL_STACK_HIDDEN_DIM": 48,
+            },
         )
         with self.assertRaisesRegex(InspectionError, "unknown config class 'RESIDUAL'"):
             parse_overrides(

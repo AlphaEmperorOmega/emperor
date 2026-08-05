@@ -15,6 +15,8 @@ from models.parametric.parametric_matrix.runtime_options import (
     ParametricStackOptions,
 )
 
+from ._residual import build_residual_config
+
 __all__ = [
     "ParametricMixtureOptions",
     "ParametricRouterOptions",
@@ -35,6 +37,7 @@ def build_linear_stack_config(
     num_layers: int,
     activation: ActivationOptions,
     residual_connection_option: type[ResidualConfig],
+    residual_model_flag: bool,
     dropout_probability: float,
     apply_output_pipeline_flag: bool,
 ) -> LayerStackConfig:
@@ -45,9 +48,9 @@ def build_linear_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=activation,
-        residual_config=None
-        if residual_connection_option is None
-        else residual_connection_option(),
+        residual_config=build_residual_config(
+            residual_connection_option, residual_model_flag
+        ),
         dropout_probability=dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,
@@ -79,6 +82,7 @@ def build_router_config(
         num_layers=1,
         activation=router_options.activation,
         residual_connection_option=None,
+        residual_model_flag=False,
         dropout_probability=0.0,
         apply_output_pipeline_flag=False,
     )

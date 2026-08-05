@@ -55,6 +55,8 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
     TransformerPositionalEmbeddingOptions,
 )
 
+from ._residual import build_residual_config
+
 if TYPE_CHECKING:
     from emperor.config import ConfigBase, ModelConfig
 
@@ -304,6 +306,8 @@ class GptBackendConfigBuilder:
             bias_flag=options.bias_flag,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -366,6 +370,8 @@ class GptBackendConfigBuilder:
             bias_flag=options.bias_flag,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_model_flag=options.residual_model_flag,
+            residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
@@ -434,6 +440,8 @@ class GptBackendConfigBuilder:
         output_dim: int | None = None,
         activation: ActivationOptions | None = None,
         residual_connection_option: type[ResidualConfig] | None = None,
+        residual_model_flag: bool = False,
+        residual_stack_options=None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
         apply_output_pipeline_flag: bool = True,
     ) -> LayerStackConfig:
@@ -443,9 +451,11 @@ class GptBackendConfigBuilder:
                 self.decoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
-            residual_config=None
-            if residual_connection_option is None
-            else residual_connection_option(),
+            residual_config=build_residual_config(
+                residual_connection_option,
+                residual_model_flag,
+                residual_stack_options,
+            ),
             dropout_probability=dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -484,6 +494,8 @@ class GptBackendConfigBuilder:
             num_layers=self.decoder_options.num_layers,
             activation=self.decoder_options.activation,
             residual_connection_option=None,
+            residual_model_flag=False,
+            residual_stack_options=self.submodule_stack_options.residual_stack_options,
             dropout_probability=self.decoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
             apply_output_pipeline_flag=True,
@@ -507,6 +519,8 @@ class GptBackendConfigBuilder:
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_connection_option=None,
+            residual_model_flag=False,
+            residual_stack_options=self.submodule_stack_options.residual_stack_options,
             dropout_probability=0.0,
             bias_flag=self.attention_options.bias_flag,
         )
@@ -522,6 +536,8 @@ class GptBackendConfigBuilder:
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,
+            residual_model_flag=False,
+            residual_stack_options=self.submodule_stack_options.residual_stack_options,
             dropout_probability=self.decoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )

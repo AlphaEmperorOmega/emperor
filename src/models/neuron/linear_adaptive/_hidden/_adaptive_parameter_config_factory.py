@@ -27,6 +27,10 @@ from models.neuron.linear_adaptive._hidden.runtime_options import (
     RuntimeOptions,
     StackOptions,
 )
+from models.neuron.linear_adaptive._residual import (
+    ResidualStackOptions,
+    build_residual_config,
+)
 
 _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
     SingleModelDynamicWeightConfig: (
@@ -64,7 +68,10 @@ def _selected_kwargs(
     return {name: available[name] for name in table.get(option, ())}
 
 
-def _stack_config(options: StackOptions) -> LayerStackConfig:
+def _stack_config(
+    options: StackOptions,
+    residual_stack: ResidualStackOptions,
+) -> LayerStackConfig:
     return LayerStackConfig(
         hidden_dim=options.hidden_dim,
         num_layers=options.num_layers,
@@ -73,9 +80,11 @@ def _stack_config(options: StackOptions) -> LayerStackConfig:
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
-            residual_config=None
-            if options.residual_connection_option is None
-            else options.residual_connection_option(),
+            residual_config=build_residual_config(
+                options.residual_connection_option,
+                options.residual_model_flag,
+                residual_stack,
+            ),
             dropout_probability=options.dropout_probability,
             gate_config=None,
             halting_config=None,
@@ -86,8 +95,9 @@ def _stack_config(options: StackOptions) -> LayerStackConfig:
 
 def _independent_stack_config(
     options: GeneratorStackOptions,
+    residual_stack: ResidualStackOptions,
 ) -> LayerStackConfig | None:
-    return _stack_config(options.stack) if options.independent else None
+    return _stack_config(options.stack, residual_stack) if options.independent else None
 
 
 class AdaptiveParameterConfigFactory:
@@ -109,7 +119,9 @@ class AdaptiveParameterConfigFactory:
                     runtime.weight.normalization_position_option
                 ),
                 bank_expansion_factor=runtime.weight.bank_expansion_factor,
-                model_config=_independent_stack_config(runtime.weight.generator_stack),
+                model_config=_independent_stack_config(
+                    runtime.weight.generator_stack, runtime.residual_stack
+                ),
             )
         bias_config = None
         if runtime.bias.enabled:
@@ -119,14 +131,16 @@ class AdaptiveParameterConfigFactory:
                 decay_rate=runtime.bias.decay_rate,
                 decay_warmup_batches=runtime.bias.decay_warmup_batches,
                 bank_expansion_factor=runtime.bias.bank_expansion_factor,
-                model_config=_independent_stack_config(runtime.bias.generator_stack),
+                model_config=_independent_stack_config(
+                    runtime.bias.generator_stack, runtime.residual_stack
+                ),
             )
         diagonal_config = None
         if runtime.diagonal.enabled:
             diagonal_config = self._diagonal_config(
                 runtime.diagonal.option,
                 model_config=_independent_stack_config(
-                    runtime.diagonal.generator_stack
+                    runtime.diagonal.generator_stack, runtime.residual_stack
                 ),
             )
         mask_config = None
@@ -138,7 +152,9 @@ class AdaptiveParameterConfigFactory:
                 mask_surrogate_scale=runtime.mask.surrogate_scale,
                 mask_floor=runtime.mask.floor,
                 mask_transition_width=runtime.mask.transition_width,
-                model_config=_independent_stack_config(runtime.mask.generator_stack),
+                model_config=_independent_stack_config(
+                    runtime.mask.generator_stack, runtime.residual_stack
+                ),
             )
         return AdaptiveParameterAugmentationConfig(
             grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
@@ -146,7 +162,9 @@ class AdaptiveParameterConfigFactory:
             bias_config=bias_config,
             diagonal_config=diagonal_config,
             mask_config=mask_config,
-            model_config=_stack_config(runtime.adaptive_generator_stack),
+            model_config=_stack_config(
+                runtime.adaptive_generator_stack, runtime.residual_stack
+            ),
         )
 
     def build_projection_config(
@@ -183,7 +201,10 @@ class AdaptiveParameterConfigFactory:
                 mask_floor=options.mask_floor,
                 mask_transition_width=options.mask_transition_width,
             ),
-            model_config=_stack_config(self._runtime.adaptive_generator_stack),
+            model_config=_stack_config(
+                self._runtime.adaptive_generator_stack,
+                self._runtime.residual_stack,
+            ),
         )
 
     @staticmethod

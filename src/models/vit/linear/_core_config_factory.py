@@ -124,6 +124,7 @@ class CoreConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
             apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -143,6 +144,7 @@ class CoreConfigFactory:
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_connection_option=None,
+            residual_model_flag=False,
             dropout_probability=0.0,
             bias_flag=self.attention_options.bias_flag,
         )
@@ -161,6 +163,7 @@ class CoreConfigFactory:
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,
+            residual_model_flag=False,
             dropout_probability=self.encoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )

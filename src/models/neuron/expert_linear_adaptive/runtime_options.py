@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.halting import (
     HaltingConfig,
@@ -13,6 +13,7 @@ from emperor.layers import (
 )
 from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
+from models.neuron.expert_linear_adaptive._residual import ResidualStackOptions
 
 
 @dataclass(frozen=True)
@@ -44,8 +45,12 @@ class NeuronSubmoduleStackOptions:
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     bias_flag: bool
+    residual_stack_options: ResidualStackOptions | None = field(
+        default=None, kw_only=True
+    )
 
 
 @dataclass(frozen=True)

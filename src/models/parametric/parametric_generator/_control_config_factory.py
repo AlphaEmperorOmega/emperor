@@ -20,6 +20,10 @@ from emperor.parametric import (
     ParametricLayerConfig,
     ParametricLayerHandlerConfig,
 )
+from models.parametric.parametric_generator._residual import (
+    ResidualStackOptions,
+    build_residual_config,
+)
 from models.parametric.parametric_generator._stack_config_factory import (
     build_linear_stack_config,
     build_router_config,
@@ -45,6 +49,7 @@ def build_parametric_stack_config(
     router_options: ParametricRouterOptions,
     adaptive_bias_option: type[GeneratorBiasMixtureConfig] | None,
     generator_stack_options: ParametricGeneratorStackOptions,
+    residual_stack_options: ResidualStackOptions,
 ) -> LayerStackConfig:
     generator_config = build_generator_config(
         input_dim=input_dim,
@@ -106,9 +111,13 @@ def build_parametric_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=stack_options.activation,
-        residual_config=None
-        if stack_options.residual_connection_option is None
-        else stack_options.residual_connection_option(),
+        residual_config=build_residual_config(
+            stack_options.residual_connection_option,
+            stack_options.residual_model_flag,
+            residual_stack_options,
+            selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
+            model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
+        ),
         dropout_probability=stack_options.dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,
@@ -141,6 +150,7 @@ def build_generator_config(
         num_layers=generator_stack_options.num_layers,
         activation=generator_stack_options.activation,
         residual_connection_option=None,
+        residual_model_flag=False,
         dropout_probability=generator_stack_options.dropout_probability,
         apply_output_pipeline_flag=False,
     )

@@ -7,6 +7,10 @@ from typing import Final, Union, get_args, get_origin, get_type_hints
 
 from emperor.layers import GateConfig
 from models.linears.linear_adaptive import config
+from models.linears.linear_adaptive._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 from models.linears.linear_adaptive.runtime_options import (
     AdaptiveBiasOptions,
     AdaptiveDiagonalOptions,
@@ -33,6 +37,7 @@ _TOP_LEVEL_CONSTANTS = {
 _RUNTIME_PREFIXES = (
     "STACK_",
     "SUBMODULE_STACK_",
+    "RESIDUAL_STACK_",
     "ADAPTIVE_GENERATOR_STACK_",
     "GATE_",
     "HALTING_",
@@ -257,6 +262,7 @@ def _stack(values: Mapping[str, object], prefix: str) -> StackOptions:
         activation=values[f"{prefix}_activation"],  # type: ignore[arg-type]
         layer_norm_position=values[f"{prefix}_layer_norm_position"],  # type: ignore[arg-type]
         residual_connection_option=values[f"{prefix}_residual_connection_option"],  # type: ignore[arg-type]
+        residual_model_flag=values[f"{prefix}_residual_model_flag"],  # type: ignore[arg-type]
         dropout_probability=values[f"{prefix}_dropout_probability"],  # type: ignore[arg-type]
         bias_flag=values[f"{prefix}_bias_flag"],  # type: ignore[arg-type]
     )
@@ -279,6 +285,7 @@ def _resolved_stack(
             "activation",
             "layer_norm_position",
             "residual_connection_option",
+            "residual_model_flag",
             "dropout_probability",
             "bias_flag",
         )
@@ -341,10 +348,39 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
         activation=values["stack_activation"],  # type: ignore[arg-type]
         layer_norm_position=values["layer_norm_position"],  # type: ignore[arg-type]
         residual_connection_option=values["stack_residual_connection_option"],  # type: ignore[arg-type]
+        residual_model_flag=values["stack_residual_model_flag"],  # type: ignore[arg-type]
         dropout_probability=values["stack_dropout_probability"],  # type: ignore[arg-type]
         bias_flag=values["stack_bias_flag"],  # type: ignore[arg-type]
     )
     submodule_stack = _stack(values, "submodule_stack")
+    residual_stack = resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=values["residual_stack_independent_flag"],  # type: ignore[arg-type]
+            hidden_dim=values["residual_stack_hidden_dim"],  # type: ignore[arg-type]
+            num_layers=values["residual_stack_num_layers"],  # type: ignore[arg-type]
+            activation=values["residual_stack_activation"],  # type: ignore[arg-type]
+            layer_norm_position=values[
+                "residual_stack_layer_norm_position"
+            ],  # type: ignore[arg-type]
+            residual_connection_option=values[
+                "residual_stack_residual_connection_option"
+            ],  # type: ignore[arg-type]
+            residual_model_flag=values[
+                "residual_stack_residual_model_flag"
+            ],  # type: ignore[arg-type]
+            dropout_probability=values[
+                "residual_stack_dropout_probability"
+            ],  # type: ignore[arg-type]
+            last_layer_bias_option=values[
+                "residual_stack_last_layer_bias_option"
+            ],  # type: ignore[arg-type]
+            apply_output_pipeline_flag=values[
+                "residual_stack_apply_output_pipeline_flag"
+            ],  # type: ignore[arg-type]
+            bias_flag=values["residual_stack_bias_flag"],  # type: ignore[arg-type]
+        ),
+        submodule_stack,
+    )
     gate_stack = _resolved_stack(values, "gate_stack", submodule_stack)
     halting_defaults = replace(
         submodule_stack,
@@ -371,6 +407,7 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
         output_dim=values["output_dim"],  # type: ignore[arg-type]
         stack=stack,
         submodule_stack=submodule_stack,
+        residual_stack=residual_stack,
         gate=GateOptions(
             enabled=values["stack_gate_flag"],  # type: ignore[arg-type]
             option=values["gate_option"],  # type: ignore[arg-type]

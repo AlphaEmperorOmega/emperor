@@ -13,6 +13,10 @@ from emperor.parametric import (
     ParametricLayerHandlerConfig,
     VectorWeightsMixtureConfig,
 )
+from models.parametric.parametric_vector._residual import (
+    ResidualStackOptions,
+    build_residual_config,
+)
 from models.parametric.parametric_vector._stack_config_factory import (
     build_router_config,
     build_sampler_config,
@@ -34,6 +38,7 @@ def build_parametric_stack_config(
     mixture_options: ParametricMixtureOptions,
     sampler_options: ParametricSamplerOptions,
     router_options: ParametricRouterOptions,
+    residual_stack_options: ResidualStackOptions,
 ) -> LayerStackConfig:
     router_config = build_router_config(
         input_dim=input_dim,
@@ -76,9 +81,13 @@ def build_parametric_stack_config(
         input_dim=input_dim,
         output_dim=output_dim,
         activation=stack_options.activation,
-        residual_config=None
-        if stack_options.residual_connection_option is None
-        else stack_options.residual_connection_option(),
+        residual_config=build_residual_config(
+            stack_options.residual_connection_option,
+            stack_options.residual_model_flag,
+            residual_stack_options,
+            selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
+            model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
+        ),
         dropout_probability=stack_options.dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=None,

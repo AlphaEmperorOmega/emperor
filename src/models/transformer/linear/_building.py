@@ -29,6 +29,11 @@ from emperor.transformer import (
 )
 
 from ._recurrent_composition import build_recurrent_composition
+from ._residual import (
+    ResidualStackSource,
+    build_residual_config,
+    resolve_residual_stack_options,
+)
 from ._transformer_submodule import configure_transformer_submodule
 from .experiment_config import ExperimentConfig
 from .runtime_options import (
@@ -133,7 +138,32 @@ def _memory(model_dim: int, enabled: bool):
     )
 
 
-def _projection_stack(model_dim: int, options: TransformerAttentionOptions):
+def _residual_stack(runtime: RuntimeOptions):
+    return resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=runtime.residual_stack_independent_flag,
+            hidden_dim=runtime.residual_stack_hidden_dim,
+            num_layers=runtime.residual_stack_num_layers,
+            activation=runtime.residual_stack_activation,
+            layer_norm_position=runtime.residual_stack_layer_norm_position,
+            residual_connection_option=(
+                runtime.residual_stack_residual_connection_option
+            ),
+            residual_model_flag=runtime.residual_stack_residual_model_flag,
+            dropout_probability=runtime.residual_stack_dropout_probability,
+            last_layer_bias_option=(
+                runtime.residual_stack_last_layer_bias_option
+            ),
+            apply_output_pipeline_flag=(
+                runtime.residual_stack_apply_output_pipeline_flag
+            ),
+            bias_flag=runtime.residual_stack_bias_flag,
+        ),
+        runtime.encoder_attention_options.stack_options,
+    )
+
+
+def _projection_stack(runtime: RuntimeOptions, options: TransformerAttentionOptions):
     stack_options = options.stack_options
     stack = LayerStackConfig(
         hidden_dim=stack_options.hidden_dim,
@@ -142,9 +172,11 @@ def _projection_stack(model_dim: int, options: TransformerAttentionOptions):
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
-            residual_config=None
-            if (stack_options.residual_connection_option) is None
-            else stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                _residual_stack(runtime),
+            ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -157,7 +189,8 @@ def _projection_stack(model_dim: int, options: TransformerAttentionOptions):
         stack,
         control_stack=stack,
         path_options=options,
-        model_dim=model_dim,
+        model_dim=runtime.model_dim,
+        residual_stack_options=_residual_stack(runtime),
     )
 
 
@@ -184,7 +217,7 @@ def _self_attention(
         average_attention_weights_flag=True,
         return_attention_weights_flag=False,
         batch_first_flag=True,
-        projection_model_config=_projection_stack(runtime.model_dim, options),
+        projection_model_config=_projection_stack(runtime, options),
         relative_positional_embedding_config=None,
         projection_strategy=SelfAttentionProjectionStrategy.SEPARATE,
     )
@@ -210,7 +243,7 @@ def _cross_attention(
         average_attention_weights_flag=True,
         return_attention_weights_flag=False,
         batch_first_flag=True,
-        projection_model_config=_projection_stack(runtime.model_dim, options),
+        projection_model_config=_projection_stack(runtime, options),
         relative_positional_embedding_config=None,
     )
 
@@ -227,9 +260,11 @@ def _feed_forward(
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
-            residual_config=None
-            if (stack_options.residual_connection_option) is None
-            else stack_options.residual_connection_option(),
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                _residual_stack(runtime),
+            ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
             gate_config=None,
@@ -243,6 +278,7 @@ def _feed_forward(
         control_stack=stack,
         path_options=options,
         model_dim=runtime.model_dim,
+        residual_stack_options=_residual_stack(runtime),
     )
     return FeedForwardConfig(
         input_dim=runtime.model_dim,
@@ -280,9 +316,11 @@ def _controlled_stack(
         max_steps=options.recurrent_max_steps,
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
-        residual_config=None
-        if options.recurrent_residual_connection_option is None
-        else options.recurrent_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.recurrent_residual_connection_option,
+            options.recurrent_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         halting_config=_halting(
             runtime.model_dim,
             options.recurrent_stack_halting_flag,
@@ -325,9 +363,11 @@ def _encoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_config=None
-        if options.stack_residual_connection_option is None
-        else options.stack_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.stack_residual_connection_option,
+            options.stack_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
@@ -367,9 +407,11 @@ def _decoder(runtime: RuntimeOptions):
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         activation=ActivationOptions.DISABLED,
-        residual_config=None
-        if options.stack_residual_connection_option is None
-        else options.stack_residual_connection_option(),
+        residual_config=build_residual_config(
+            options.stack_residual_connection_option,
+            options.stack_residual_model_flag,
+            _residual_stack(runtime),
+        ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
@@ -394,9 +436,7 @@ def build_experiment_config(runtime: RuntimeOptions) -> ExperimentConfig:
     }
     active_fields = {field.name for field in fields(positional)}
     position_kwargs = {
-        name: value
-        for name, value in available_values.items()
-        if name in active_fields
+        name: value for name, value in available_values.items() if name in active_fields
     }
     source_position = positional(
         num_embeddings=runtime.source_sequence_length,

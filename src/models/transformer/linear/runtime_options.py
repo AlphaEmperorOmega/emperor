@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
@@ -53,7 +53,9 @@ class TransformerStackOptions:
     recurrent_low_cycles: int = 2
     recurrent_initialization_standard_deviation: float = 1.0
     stack_residual_connection_option: type[ResidualConfig] | None = None
+    stack_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_residual_connection_option: type[ResidualConfig] | None = None
+    recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,7 @@ class SubmoduleStackOptions:
     activation: ActivationOptions = ActivationOptions.DISABLED
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
     residual_connection_option: type[ResidualConfig] | None = None
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float = 0.0
     bias_flag: bool = True
 
@@ -79,6 +82,7 @@ class ControllerStackOptions:
     activation: ActivationOptions | None = None
     layer_norm_position: LayerNormPositionOptions | None = None
     residual_connection_option: type[ResidualConfig] | None = None
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None = None
     bias_flag: bool | None = None
 
@@ -119,6 +123,7 @@ def resolve_controller_stack_options(
             if source.residual_connection_option is None
             else source.residual_connection_option
         ),
+        residual_model_flag=source.residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability
             if source.dropout_probability is None
@@ -223,6 +228,17 @@ class RuntimeOptions:
     source_sequence_length: int = 64
     target_sequence_length: int = 64
     dropout_probability: float = 0.1
+    residual_stack_independent_flag: bool = False
+    residual_stack_hidden_dim: int | None = None
+    residual_stack_layer_norm_position: LayerNormPositionOptions | None = None
+    residual_stack_num_layers: int | None = None
+    residual_stack_activation: ActivationOptions | None = None
+    residual_stack_residual_connection_option: type[ResidualConfig] | None = None
+    residual_stack_residual_model_flag: bool = False
+    residual_stack_dropout_probability: float | None = None
+    residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = None
+    residual_stack_apply_output_pipeline_flag: bool | None = None
+    residual_stack_bias_flag: bool | None = None
     positional_embedding_option: type = TextSinusoidalPositionalEmbeddingConfig
     encoder_options: TransformerStackOptions = TransformerStackOptions()
     decoder_options: TransformerStackOptions = TransformerStackOptions()

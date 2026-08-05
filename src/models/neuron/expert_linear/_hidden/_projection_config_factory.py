@@ -26,6 +26,7 @@ class ProjectionConfigFactory:
             num_layers=config.STACK_NUM_LAYERS,
             activation=config.STACK_ACTIVATION,
             residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
             apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,

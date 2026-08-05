@@ -85,6 +85,7 @@ def main_layer_stack_options(config: object) -> MainLayerStackOptions:
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
         apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -110,6 +111,7 @@ def linears_submodule_stack_options(
         residual_connection_option=getattr(
             config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config, bias_key or f"{prefix}_BIAS_FLAG"),
     )
@@ -131,6 +133,7 @@ def linears_controller_stack_source(
         residual_connection_option=getattr(
             config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
     )
@@ -245,6 +248,7 @@ def adaptive_generator_stack_options(config: object) -> AdaptiveGeneratorStackOp
         num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
         activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
         residual_connection_option=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         apply_output_pipeline_flag=config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
@@ -264,6 +268,7 @@ def adaptive_generator_stack_source(
         residual_connection_option=getattr(
             config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
         apply_output_pipeline_flag=getattr(
@@ -346,6 +351,7 @@ def experts_submodule_stack_options(
         residual_connection_option=getattr(
             config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config, bias_key or f"{prefix}_BIAS_FLAG"),
     )
@@ -367,6 +373,7 @@ def experts_submodule_stack_source(
         residual_connection_option=getattr(
             config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
     )

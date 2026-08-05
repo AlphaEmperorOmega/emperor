@@ -13,6 +13,7 @@ from models.neuron.linear_adaptive._hidden.runtime_options import (
     RuntimeOptions,
     StackOptions,
 )
+from models.neuron.linear_adaptive._residual import build_residual_config
 
 STICK_BREAKING_GATE_OUTPUT_DIM = 2
 
@@ -83,8 +84,8 @@ class ControlConfigFactory:
             ),
         )
 
-    @staticmethod
     def _build_stack(
+        self,
         options: StackOptions,
         *,
         hidden_dim: int | None = None,
@@ -99,9 +100,11 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
-                residual_config=None
-                if options.residual_connection_option is None
-                else options.residual_connection_option(),
+                residual_config=build_residual_config(
+                    options.residual_connection_option,
+                    options.residual_model_flag,
+                    self._runtime.residual_stack,
+                ),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
                 gate_config=None,

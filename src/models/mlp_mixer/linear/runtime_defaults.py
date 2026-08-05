@@ -16,6 +16,7 @@ _CONTROLLER_STACK_FIELDS = (
     "num_layers",
     "activation",
     "residual_connection_option",
+    "residual_model_flag",
     "dropout_probability",
     "last_layer_bias_option",
     "apply_output_pipeline_flag",

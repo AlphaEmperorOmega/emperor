@@ -91,7 +91,37 @@ class InspectorSchemaTests(unittest.TestCase):
             self.assertEqual(field["key"], field["configKey"])
             self.assertTrue(field["key"].isupper())
 
-    def test_config_schema_transports_recurrent_applicability(self) -> None:
+    def test_config_schema_exposes_residual_model_flags(self) -> None:
+        fields = _fields_by_key(config_schema("linears/linear"))
+        residual_model_flag = fields["stack_residual_model_flag"]
+        residual_stack_hidden_dim = fields["residual_stack_hidden_dim"]
+
+        self.assertEqual(
+            residual_model_flag["configKey"],
+            "STACK_RESIDUAL_MODEL_FLAG",
+        )
+        self.assertEqual(
+            residual_model_flag["flag"],
+            "--stack-residual-model-flag",
+        )
+        self.assertEqual(residual_model_flag["type"], "bool")
+        self.assertIs(residual_model_flag["default"], False)
+        self.assertFalse(residual_model_flag["nullable"])
+        self.assertEqual(residual_model_flag["applicableWhen"], [])
+        self.assertIn(
+            "Residual Stack Options as a data-dependent coefficient model",
+            residual_model_flag["description"],
+        )
+        self.assertEqual(
+            residual_stack_hidden_dim["sectionPath"],
+            ["Residual Options", "Residual Stack Options"],
+        )
+        self.assertEqual(
+            residual_stack_hidden_dim["flag"],
+            "--residual-stack-hidden-dim",
+        )
+
+    def test_config_schema_does_not_invent_recurrent_applicability(self) -> None:
         fields = _fields_by_key(config_schema("transformer/linear"))
 
         self.assertEqual(

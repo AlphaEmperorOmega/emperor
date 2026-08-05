@@ -79,7 +79,6 @@ TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
-STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_DROPOUT_PROBABILITY: float = 0.0
 STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = True
@@ -92,12 +91,34 @@ SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSIT
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+SUBMODULE_STACK_RESIDUAL_MODEL_FLAG: bool = False
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
 )
 SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
 SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
+
+#########################################################################
+# Residual Options
+# - False uses the residual variant's learned coefficient parameters.
+# - True uses the residual stack for data-dependent coefficients.
+STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+STACK_RESIDUAL_MODEL_FLAG: bool = False
+## Residual Stack Options
+# - If False, residual stack options inherit layer stack submodule options.
+RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
+RESIDUAL_STACK_HIDDEN_DIM: int | None = None
+RESIDUAL_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RESIDUAL_STACK_NUM_LAYERS: int | None = None
+RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
+RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+RESIDUAL_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RESIDUAL_STACK_DROPOUT_PROBABILITY: float | None = None
+RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
+RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
+RESIDUAL_STACK_BIAS_FLAG: bool | None = None
+
 
 #########################################################################
 # Gate Options
@@ -113,6 +134,7 @@ GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 GATE_STACK_NUM_LAYERS: int | None = None
 GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+GATE_STACK_RESIDUAL_MODEL_FLAG: bool = False
 GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = True
@@ -138,6 +160,7 @@ HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
 HALTING_STACK_NUM_LAYERS: int | None = None
 HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+HALTING_STACK_RESIDUAL_MODEL_FLAG: bool = False
 HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     LastLayerBiasOptions.DISABLED
@@ -161,6 +184,7 @@ MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 MEMORY_STACK_NUM_LAYERS: int | None = None
 MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
 MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+MEMORY_STACK_RESIDUAL_MODEL_FLAG: bool = False
 MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
 MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -187,6 +211,7 @@ RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG: bool = False
 RECURRENT_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -208,9 +233,8 @@ RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
 RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
-RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
-    None
-)
+RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG: bool = False
 RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
@@ -252,9 +276,8 @@ CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABL
 CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
-CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
-    None
-)
+CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG: bool = False
 CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -288,9 +311,8 @@ CLUSTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
 )
 CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
 CLUSTER_HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED
-CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
-    None
-)
+CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG: bool = False
 CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY: float = 0.0
 CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DISABLED

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -48,7 +48,9 @@ class RuntimeOptions:
     stack_activation: ActivationOptions
     stack_dropout_probability: float
     mixer_residual_connection_option: type[ResidualConfig]
+    mixer_residual_model_flag: bool = field(default=False, kw_only=True)
     stack_residual_connection_option: type[ResidualConfig] | None
+    stack_residual_model_flag: bool = field(default=False, kw_only=True)
     stack_last_layer_bias_option: LastLayerBiasOptions
     stack_apply_output_pipeline_flag: bool
     stack_bias_flag: bool
@@ -57,15 +59,28 @@ class RuntimeOptions:
     submodule_stack_num_layers: int
     submodule_stack_activation: ActivationOptions
     submodule_stack_residual_connection_option: type[ResidualConfig] | None
+    submodule_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     submodule_stack_dropout_probability: float
     submodule_stack_last_layer_bias_option: LastLayerBiasOptions
     submodule_stack_apply_output_pipeline_flag: bool
     submodule_stack_bias_flag: bool
+    residual_stack_independent_flag: bool
+    residual_stack_hidden_dim: int | None
+    residual_stack_layer_norm_position: LayerNormPositionOptions | None
+    residual_stack_num_layers: int | None
+    residual_stack_activation: ActivationOptions | None
+    residual_stack_residual_connection_option: type[ResidualConfig] | None
+    residual_stack_residual_model_flag: bool
+    residual_stack_dropout_probability: float | None
+    residual_stack_last_layer_bias_option: LastLayerBiasOptions | None
+    residual_stack_apply_output_pipeline_flag: bool | None
+    residual_stack_bias_flag: bool | None
     controller_stack_hidden_dim: int
     controller_stack_layer_norm_position: LayerNormPositionOptions
     controller_stack_num_layers: int
     controller_stack_activation: ActivationOptions
     controller_stack_residual_connection_option: type[ResidualConfig] | None
+    controller_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     controller_stack_dropout_probability: float
     controller_stack_last_layer_bias_option: LastLayerBiasOptions
     controller_stack_apply_output_pipeline_flag: bool
@@ -76,6 +91,7 @@ class RuntimeOptions:
     token_mixer_stack_dropout_probability: float
     token_mixer_stack_layer_norm_position: LayerNormPositionOptions
     token_mixer_stack_residual_connection_option: type[ResidualConfig] | None
+    token_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     token_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
     token_mixer_stack_apply_output_pipeline_flag: bool
     channel_mixer_stack_hidden_dim: int
@@ -84,6 +100,7 @@ class RuntimeOptions:
     channel_mixer_stack_dropout_probability: float
     channel_mixer_stack_layer_norm_position: LayerNormPositionOptions
     channel_mixer_stack_residual_connection_option: type[ResidualConfig] | None
+    channel_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     channel_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
     channel_mixer_stack_apply_output_pipeline_flag: bool
     stack_gate_flag: bool
@@ -103,6 +120,7 @@ class RuntimeOptions:
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
     recurrent_residual_connection_option: type[ResidualConfig] | None
+    recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -118,6 +136,7 @@ class RuntimeOptions:
     gate_stack_num_layers: int | None
     gate_stack_activation: ActivationOptions | None
     gate_stack_residual_connection_option: type[ResidualConfig] | None
+    gate_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     gate_stack_dropout_probability: float | None
     gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
     gate_stack_apply_output_pipeline_flag: bool | None
@@ -128,6 +147,7 @@ class RuntimeOptions:
     halting_stack_num_layers: int | None
     halting_stack_activation: ActivationOptions | None
     halting_stack_residual_connection_option: type[ResidualConfig] | None
+    halting_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     halting_stack_dropout_probability: float | None
     halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
     halting_stack_apply_output_pipeline_flag: bool | None
@@ -138,6 +158,7 @@ class RuntimeOptions:
     memory_stack_num_layers: int | None
     memory_stack_activation: ActivationOptions | None
     memory_stack_residual_connection_option: type[ResidualConfig] | None
+    memory_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     memory_stack_dropout_probability: float | None
     memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
     memory_stack_apply_output_pipeline_flag: bool | None
@@ -148,6 +169,7 @@ class RuntimeOptions:
     recurrent_gate_stack_num_layers: int | None
     recurrent_gate_stack_activation: ActivationOptions | None
     recurrent_gate_stack_residual_connection_option: type[ResidualConfig] | None
+    recurrent_gate_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_gate_stack_dropout_probability: float | None
     recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
     recurrent_gate_stack_apply_output_pipeline_flag: bool | None
@@ -158,6 +180,9 @@ class RuntimeOptions:
     recurrent_halting_stack_num_layers: int | None
     recurrent_halting_stack_activation: ActivationOptions | None
     recurrent_halting_stack_residual_connection_option: type[ResidualConfig] | None
+    recurrent_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     recurrent_halting_stack_dropout_probability: float | None
     recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
     recurrent_halting_stack_apply_output_pipeline_flag: bool | None
@@ -171,6 +196,9 @@ class RuntimeOptions:
     token_mixer_gate_stack_num_layers: int | None
     token_mixer_gate_stack_activation: ActivationOptions | None
     token_mixer_gate_stack_residual_connection_option: type[ResidualConfig] | None
+    token_mixer_gate_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     token_mixer_gate_stack_dropout_probability: float | None
     token_mixer_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
     token_mixer_gate_stack_apply_output_pipeline_flag: bool | None
@@ -185,8 +213,9 @@ class RuntimeOptions:
     token_mixer_halting_stack_layer_norm_position: LayerNormPositionOptions | None
     token_mixer_halting_stack_num_layers: int | None
     token_mixer_halting_stack_activation: ActivationOptions | None
-    token_mixer_halting_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    token_mixer_halting_stack_residual_connection_option: type[ResidualConfig] | None
+    token_mixer_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     token_mixer_halting_stack_dropout_probability: float | None
     token_mixer_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -202,8 +231,9 @@ class RuntimeOptions:
     token_mixer_memory_stack_layer_norm_position: LayerNormPositionOptions | None
     token_mixer_memory_stack_num_layers: int | None
     token_mixer_memory_stack_activation: ActivationOptions | None
-    token_mixer_memory_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    token_mixer_memory_stack_residual_connection_option: type[ResidualConfig] | None
+    token_mixer_memory_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     token_mixer_memory_stack_dropout_probability: float | None
     token_mixer_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -213,6 +243,7 @@ class RuntimeOptions:
     token_mixer_recurrent_max_steps: int
     token_mixer_recurrent_layer_norm_position: LayerNormPositionOptions
     token_mixer_recurrent_residual_connection_option: type[ResidualConfig] | None
+    token_mixer_recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     token_mixer_recurrent_stack_gate_flag: bool
     token_mixer_recurrent_gate_option: LayerGateOptions | None
     token_mixer_recurrent_gate_activation: ActivationOptions | None
@@ -225,6 +256,9 @@ class RuntimeOptions:
     token_mixer_recurrent_gate_stack_activation: ActivationOptions | None
     token_mixer_recurrent_gate_stack_residual_connection_option: (
         type[ResidualConfig] | None
+    )
+    token_mixer_recurrent_gate_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     token_mixer_recurrent_gate_stack_dropout_probability: float | None
     token_mixer_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -245,6 +279,9 @@ class RuntimeOptions:
     token_mixer_recurrent_halting_stack_residual_connection_option: (
         type[ResidualConfig] | None
     )
+    token_mixer_recurrent_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     token_mixer_recurrent_halting_stack_dropout_probability: float | None
     token_mixer_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
@@ -259,8 +296,9 @@ class RuntimeOptions:
     channel_mixer_gate_stack_layer_norm_position: LayerNormPositionOptions | None
     channel_mixer_gate_stack_num_layers: int | None
     channel_mixer_gate_stack_activation: ActivationOptions | None
-    channel_mixer_gate_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    channel_mixer_gate_stack_residual_connection_option: type[ResidualConfig] | None
+    channel_mixer_gate_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     channel_mixer_gate_stack_dropout_probability: float | None
     channel_mixer_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -276,8 +314,9 @@ class RuntimeOptions:
     channel_mixer_halting_stack_layer_norm_position: LayerNormPositionOptions | None
     channel_mixer_halting_stack_num_layers: int | None
     channel_mixer_halting_stack_activation: ActivationOptions | None
-    channel_mixer_halting_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    channel_mixer_halting_stack_residual_connection_option: type[ResidualConfig] | None
+    channel_mixer_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     channel_mixer_halting_stack_dropout_probability: float | None
     channel_mixer_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -293,8 +332,9 @@ class RuntimeOptions:
     channel_mixer_memory_stack_layer_norm_position: LayerNormPositionOptions | None
     channel_mixer_memory_stack_num_layers: int | None
     channel_mixer_memory_stack_activation: ActivationOptions | None
-    channel_mixer_memory_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    channel_mixer_memory_stack_residual_connection_option: type[ResidualConfig] | None
+    channel_mixer_memory_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     channel_mixer_memory_stack_dropout_probability: float | None
     channel_mixer_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -304,6 +344,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_max_steps: int
     channel_mixer_recurrent_layer_norm_position: LayerNormPositionOptions
     channel_mixer_recurrent_residual_connection_option: type[ResidualConfig] | None
+    channel_mixer_recurrent_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     channel_mixer_recurrent_stack_gate_flag: bool
     channel_mixer_recurrent_gate_option: LayerGateOptions | None
     channel_mixer_recurrent_gate_activation: ActivationOptions | None
@@ -316,6 +359,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_gate_stack_activation: ActivationOptions | None
     channel_mixer_recurrent_gate_stack_residual_connection_option: (
         type[ResidualConfig] | None
+    )
+    channel_mixer_recurrent_gate_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     channel_mixer_recurrent_gate_stack_dropout_probability: float | None
     channel_mixer_recurrent_gate_stack_last_layer_bias_option: (
@@ -338,6 +384,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_halting_stack_residual_connection_option: (
         type[ResidualConfig] | None
     )
+    channel_mixer_recurrent_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     channel_mixer_recurrent_halting_stack_dropout_probability: float | None
     channel_mixer_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
@@ -348,8 +397,9 @@ class RuntimeOptions:
     adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions
     adaptive_generator_stack_num_layers: int
     adaptive_generator_stack_activation: ActivationOptions
-    adaptive_generator_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    adaptive_generator_stack_residual_connection_option: type[ResidualConfig] | None
+    adaptive_generator_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     adaptive_generator_stack_dropout_probability: float
     adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -370,6 +420,9 @@ class RuntimeOptions:
     weight_generator_stack_num_layers: int | None
     weight_generator_stack_activation: ActivationOptions | None
     weight_generator_stack_residual_connection_option: type[ResidualConfig] | None
+    weight_generator_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
+    )
     weight_generator_stack_dropout_probability: float | None
     weight_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None
     weight_generator_stack_apply_output_pipeline_flag: bool | None
@@ -386,6 +439,7 @@ class RuntimeOptions:
     bias_generator_stack_num_layers: int | None
     bias_generator_stack_activation: ActivationOptions | None
     bias_generator_stack_residual_connection_option: type[ResidualConfig] | None
+    bias_generator_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     bias_generator_stack_dropout_probability: float | None
     bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None
     bias_generator_stack_apply_output_pipeline_flag: bool | None
@@ -397,8 +451,9 @@ class RuntimeOptions:
     diagonal_generator_stack_layer_norm_position: LayerNormPositionOptions | None
     diagonal_generator_stack_num_layers: int | None
     diagonal_generator_stack_activation: ActivationOptions | None
-    diagonal_generator_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    diagonal_generator_stack_residual_connection_option: type[ResidualConfig] | None
+    diagonal_generator_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     diagonal_generator_stack_dropout_probability: float | None
     diagonal_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -417,6 +472,7 @@ class RuntimeOptions:
     mask_generator_stack_num_layers: int | None
     mask_generator_stack_activation: ActivationOptions | None
     mask_generator_stack_residual_connection_option: type[ResidualConfig] | None
+    mask_generator_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     mask_generator_stack_dropout_probability: float | None
     mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None
     mask_generator_stack_apply_output_pipeline_flag: bool | None
@@ -443,6 +499,7 @@ class RuntimeOptions:
     router_stack_num_layers: int
     router_stack_activation: ActivationOptions
     router_stack_residual_connection_option: type[ResidualConfig] | None
+    router_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     router_stack_dropout_probability: float
     router_stack_layer_norm_position: LayerNormPositionOptions
     router_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -454,6 +511,7 @@ class RuntimeOptions:
     expert_stack_dropout_probability: float
     expert_stack_layer_norm_position: LayerNormPositionOptions
     expert_stack_residual_connection_option: type[ResidualConfig] | None
+    expert_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_stack_last_layer_bias_option: LastLayerBiasOptions
     expert_stack_apply_output_pipeline_flag: bool
     expert_bias_flag: bool
@@ -466,6 +524,7 @@ class RuntimeOptions:
     expert_gate_stack_num_layers: int | None
     expert_gate_stack_activation: ActivationOptions | None
     expert_gate_stack_residual_connection_option: type[ResidualConfig] | None
+    expert_gate_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_gate_stack_dropout_probability: float | None
     expert_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
     expert_gate_stack_apply_output_pipeline_flag: bool | None
@@ -481,6 +540,7 @@ class RuntimeOptions:
     expert_halting_stack_num_layers: int | None
     expert_halting_stack_activation: ActivationOptions | None
     expert_halting_stack_residual_connection_option: type[ResidualConfig] | None
+    expert_halting_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_halting_stack_dropout_probability: float | None
     expert_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
     expert_halting_stack_apply_output_pipeline_flag: bool | None
@@ -496,6 +556,7 @@ class RuntimeOptions:
     expert_memory_stack_num_layers: int | None
     expert_memory_stack_activation: ActivationOptions | None
     expert_memory_stack_residual_connection_option: type[ResidualConfig] | None
+    expert_memory_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_memory_stack_dropout_probability: float | None
     expert_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
     expert_memory_stack_apply_output_pipeline_flag: bool | None
@@ -504,6 +565,7 @@ class RuntimeOptions:
     expert_recurrent_max_steps: int
     expert_recurrent_layer_norm_position: LayerNormPositionOptions
     expert_recurrent_residual_connection_option: type[ResidualConfig] | None
+    expert_recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_recurrent_stack_gate_flag: bool
     expert_recurrent_gate_option: LayerGateOptions | None
     expert_recurrent_gate_activation: ActivationOptions | None
@@ -512,8 +574,9 @@ class RuntimeOptions:
     expert_recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None
     expert_recurrent_gate_stack_num_layers: int | None
     expert_recurrent_gate_stack_activation: ActivationOptions | None
-    expert_recurrent_gate_stack_residual_connection_option: (
-        type[ResidualConfig] | None
+    expert_recurrent_gate_stack_residual_connection_option: type[ResidualConfig] | None
+    expert_recurrent_gate_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     expert_recurrent_gate_stack_dropout_probability: float | None
     expert_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
@@ -531,6 +594,9 @@ class RuntimeOptions:
     expert_recurrent_halting_stack_activation: ActivationOptions | None
     expert_recurrent_halting_stack_residual_connection_option: (
         type[ResidualConfig] | None
+    )
+    expert_recurrent_halting_stack_residual_model_flag: bool = field(
+        default=False, kw_only=True
     )
     expert_recurrent_halting_stack_dropout_probability: float | None
     expert_recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None

@@ -15,10 +15,20 @@ from models.gpt.expert_linear_adaptive._linear_adapter_support import (
     _hidden_adaptive_mask_options_from_kwargs,
     _hidden_adaptive_weight_options_from_kwargs,
 )
+from models.gpt.expert_linear_adaptive._residual import (
+    ResidualStackSource,
+    resolve_residual_stack_options,
+)
 from models.gpt.expert_linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    ExpertsAdaptiveGeneratorStackOptions,
+    ExpertsStackOptions,
+    ExpertsSubmoduleStackOptions,
     GptEmbeddingOptions,
     GptLmHeadOptions,
+    MainLayerStackOptions,
     RuntimeOptions,
+    SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
     TransformerFeedForwardOptions,
@@ -138,6 +148,7 @@ _CONTROLLER_STACK_FIELD_MAP = {
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
+    "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
 }
@@ -425,7 +436,77 @@ def expert_linear_adaptive_builder_kwargs_from_flat(
             ),
         }
     )
+    _attach_residual_stack_options(builder_kwargs, flat_kwargs, config_module)
     return builder_kwargs
+
+
+def _attach_residual_stack_options(
+    builder_kwargs: dict[str, Any],
+    flat_kwargs: dict[str, Any],
+    config_module: ModuleType,
+) -> None:
+    defaults = builder_kwargs["submodule_stack_options"]
+    residual_stack_options = resolve_residual_stack_options(
+        ResidualStackSource(
+            independent_flag=flat_kwargs.get(
+                "residual_stack_independent_flag",
+                config_module.RESIDUAL_STACK_INDEPENDENT_FLAG,
+            ),
+            hidden_dim=flat_kwargs.get(
+                "residual_stack_hidden_dim", config_module.RESIDUAL_STACK_HIDDEN_DIM
+            ),
+            layer_norm_position=flat_kwargs.get(
+                "residual_stack_layer_norm_position",
+                config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            num_layers=flat_kwargs.get(
+                "residual_stack_num_layers", config_module.RESIDUAL_STACK_NUM_LAYERS
+            ),
+            activation=flat_kwargs.get(
+                "residual_stack_activation", config_module.RESIDUAL_STACK_ACTIVATION
+            ),
+            residual_connection_option=flat_kwargs.get(
+                "residual_stack_residual_connection_option",
+                config_module.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+            ),
+            residual_model_flag=flat_kwargs.get(
+                "residual_stack_residual_model_flag",
+                config_module.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG,
+            ),
+            dropout_probability=flat_kwargs.get(
+                "residual_stack_dropout_probability",
+                config_module.RESIDUAL_STACK_DROPOUT_PROBABILITY,
+            ),
+            last_layer_bias_option=flat_kwargs.get(
+                "residual_stack_last_layer_bias_option",
+                config_module.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
+            ),
+            apply_output_pipeline_flag=flat_kwargs.get(
+                "residual_stack_apply_output_pipeline_flag",
+                config_module.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            ),
+            bias_flag=flat_kwargs.get(
+                "residual_stack_bias_flag", config_module.RESIDUAL_STACK_BIAS_FLAG
+            ),
+        ),
+        defaults,
+    )
+    for key, value in tuple(builder_kwargs.items()):
+        if isinstance(
+            value,
+            (
+                ExpertsStackOptions,
+                ExpertsSubmoduleStackOptions,
+                ExpertsAdaptiveGeneratorStackOptions,
+                AdaptiveGeneratorStackOptions,
+                MainLayerStackOptions,
+                SubmoduleStackOptions,
+            ),
+        ):
+            builder_kwargs[key] = replace(
+                value,
+                residual_stack_options=residual_stack_options,
+            )
 
 
 def _linear_builder_kwargs_only(
@@ -608,6 +689,7 @@ def _submodule_stack_options_from_kwargs(
         activation=config_module.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config_module.SUBMODULE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config_module.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.SUBMODULE_STACK_BIAS_FLAG,
     )
@@ -649,6 +731,7 @@ def _attention_projection_stack_options_from_kwargs(
             "attn_stack_activation": "activation",
             "attn_stack_layer_norm_position": "layer_norm_position",
             "attn_stack_residual_connection_option": "residual_connection_option",
+            "attn_stack_residual_model_flag": "residual_model_flag",
             "attn_stack_dropout_probability": "dropout_probability",
         },
     )
@@ -680,6 +763,7 @@ def _feed_forward_stack_options_from_kwargs(
             "ff_stack_activation": "activation",
             "ff_stack_layer_norm_position": "layer_norm_position",
             "ff_stack_residual_connection_option": "residual_connection_option",
+            "ff_stack_residual_model_flag": "residual_model_flag",
             "ff_stack_dropout_probability": "dropout_probability",
         },
     )
@@ -1049,6 +1133,7 @@ def _default_attention_projection_stack_options(
         else activation,
         layer_norm_position=config_module.ATTN_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config_module.ATTN_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ATTN_STACK_DROPOUT_PROBABILITY,
         bias_flag=attention_options.bias_flag,
     )
@@ -1070,6 +1155,7 @@ def _default_feed_forward_stack_options(
         activation=config_module.FF_STACK_ACTIVATION,
         layer_norm_position=config_module.FF_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.FF_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config_module.FF_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.FF_STACK_DROPOUT_PROBABILITY,
         bias_flag=feed_forward_options.bias_flag,
     )
@@ -1213,6 +1299,9 @@ def _default_controller_stack_source(
         ),
         residual_connection_option=getattr(
             config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
+        ),
+        residual_model_flag=getattr(
+            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
         ),
         dropout_probability=getattr(
             config_module, f"{config_prefix}_DROPOUT_PROBABILITY"

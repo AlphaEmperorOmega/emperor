@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -28,6 +28,7 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
+from models.neuron.linear_adaptive._residual import ResidualStackOptions
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,7 @@ class StackOptions:
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
+    residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     bias_flag: bool
 
@@ -165,6 +167,7 @@ class RuntimeOptions:
     output_dim: int
     stack: StackOptions
     submodule_stack: StackOptions
+    residual_stack: ResidualStackOptions
     gate: GateOptions
     halting: HaltingOptions
     memory: MemoryOptions

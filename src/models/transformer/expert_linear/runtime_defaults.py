@@ -50,6 +50,7 @@ def _controller_stack_from_config(
         residual_connection_option=getattr(
             config_module, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_model_flag=getattr(config_module, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config_module, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
     )
@@ -161,6 +162,7 @@ def attention_options_from_config(
             residual_connection_option=(
                 config_module.ATTN_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_model_flag=config_module.ATTN_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=(config_module.ATTN_STACK_DROPOUT_PROBABILITY),
             bias_flag=config_module.ATTN_BIAS_FLAG,
         ),
@@ -186,6 +188,7 @@ def feed_forward_options_from_config(
             residual_connection_option=(
                 config_module.FF_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_model_flag=config_module.FF_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config_module.FF_STACK_DROPOUT_PROBABILITY,
             bias_flag=config_module.FF_BIAS_FLAG,
         ),
@@ -203,6 +206,7 @@ _STACK_OPTION_FIELDS = (
     "activation",
     "layer_norm_position",
     "residual_connection_option",
+    "residual_model_flag",
     "dropout_probability",
     "bias_flag",
 )
@@ -508,9 +512,11 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+        stack_residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         recurrent_residual_connection_option=(
             config.RECURRENT_RESIDUAL_CONNECTION_OPTION
         ),
+        recurrent_residual_model_flag=config.RECURRENT_RESIDUAL_MODEL_FLAG,
     )
     attention = attention_options_from_config(config)
     feed_forward = feed_forward_options_from_config(config)
@@ -529,6 +535,31 @@ def runtime_from_config() -> RuntimeOptions:
         source_sequence_length=config.SOURCE_SEQUENCE_LENGTH,
         target_sequence_length=config.TARGET_SEQUENCE_LENGTH,
         dropout_probability=config.DROPOUT_PROBABILITY,
+        residual_stack_independent_flag=(
+            config.RESIDUAL_STACK_INDEPENDENT_FLAG
+        ),
+        residual_stack_hidden_dim=config.RESIDUAL_STACK_HIDDEN_DIM,
+        residual_stack_layer_norm_position=(
+            config.RESIDUAL_STACK_LAYER_NORM_POSITION
+        ),
+        residual_stack_num_layers=config.RESIDUAL_STACK_NUM_LAYERS,
+        residual_stack_activation=config.RESIDUAL_STACK_ACTIVATION,
+        residual_stack_residual_connection_option=(
+            config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_stack_residual_model_flag=(
+            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
+        ),
+        residual_stack_dropout_probability=(
+            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
+        ),
+        residual_stack_last_layer_bias_option=(
+            config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        residual_stack_apply_output_pipeline_flag=(
+            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        residual_stack_bias_flag=config.RESIDUAL_STACK_BIAS_FLAG,
         positional_embedding_option=config.POSITIONAL_EMBEDDING_OPTION,
         encoder_options=stack,
         decoder_options=replace(

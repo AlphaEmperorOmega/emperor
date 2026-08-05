@@ -25,6 +25,7 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     RecurrentLayerConfig,
+    WeightedBlendResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from torch import nn
@@ -323,6 +324,35 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
         self.assertIn(
             "AdditiveResidual",
             {node["typeName"] for node in enabled_nodes},
+        )
+
+    def test_package_residual_stack_is_serialized_as_a_child_model(self) -> None:
+        result = inspect_model(
+            "linears/linear",
+            "baseline",
+            overrides={
+                "STACK_RESIDUAL_CONNECTION_OPTION": (
+                    WeightedBlendResidualConfig.__name__
+                ),
+                "STACK_RESIDUAL_MODEL_FLAG": True,
+            },
+            dataset="Mnist",
+            experiment_task="image-classification",
+        )
+        nodes = nodes_by_id(result["nodes"])
+        owning_node = next(
+            node
+            for node in result["nodes"]
+            if config_fields(node).get("residual_model_config") == "LayerStackConfig"
+        )
+        residual_node_id = f"{owning_node['id']}.residual_connection"
+        coefficient_node_id = f"{residual_node_id}.model"
+
+        self.assertEqual(nodes[residual_node_id]["typeName"], "WeightedBlendResidual")
+        self.assertEqual(nodes[coefficient_node_id]["typeName"], "LayerStack")
+        self.assertEqual(
+            nodes[coefficient_node_id]["config"]["typeName"],
+            "LayerStackConfig",
         )
 
     def test_graph_serializer_preserves_layer_stack_config_on_layer_stack(self) -> None:

@@ -11,6 +11,7 @@ from models.neuron.linear_adaptive._hidden._control_config_factory import (
     ControlConfigFactory,
 )
 from models.neuron.linear_adaptive._hidden.runtime_options import RuntimeOptions
+from models.neuron.linear_adaptive._residual import build_residual_config
 
 
 class HiddenModelConfigFactory:
@@ -33,9 +34,13 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=runtime.stack.activation,
                 layer_norm_position=runtime.stack.layer_norm_position,
-                residual_config=None
-                if (runtime.stack.residual_connection_option) is None
-                else runtime.stack.residual_connection_option(),
+                residual_config=build_residual_config(
+                    runtime.stack.residual_connection_option,
+                    runtime.stack.residual_model_flag,
+                    runtime.residual_stack,
+                    selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
+                    model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
+                ),
                 dropout_probability=runtime.stack.dropout_probability,
                 gate_config=self._control_factory.build_gate_config(runtime.gate),
                 halting_config=self._control_factory.build_halting_config(

@@ -1,6 +1,7 @@
 from emperor.config import ModelConfig
 from emperor.layers import (
     ActivationOptions,
+    LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
     ResidualConfig,
@@ -10,6 +11,11 @@ from emperor.parametric import ClipParameterOptions, GeneratorBiasMixtureConfig
 from models.parametric.parametric_generator import config
 from models.parametric.parametric_generator._control_config_factory import (
     build_parametric_stack_config,
+)
+from models.parametric.parametric_generator._residual import (
+    ResidualStackOptions,
+    ResidualStackSource,
+    resolve_residual_stack_options,
 )
 from models.parametric.parametric_generator.experiment_config import ExperimentConfig
 from models.parametric.parametric_generator.runtime_defaults import DEFAULT_RUNTIME
@@ -36,7 +42,41 @@ class _ParametricGeneratorConfigBuilderImplementation:
         stack_residual_connection_option: type[ResidualConfig] = (
             config.STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        stack_residual_model_flag: bool = config.STACK_RESIDUAL_MODEL_FLAG,
         stack_dropout_probability: float = config.STACK_DROPOUT_PROBABILITY,
+        residual_stack_independent_flag: bool = (
+            config.RESIDUAL_STACK_INDEPENDENT_FLAG
+        ),
+        residual_stack_hidden_dim: int | None = (
+            config.RESIDUAL_STACK_HIDDEN_DIM
+        ),
+        residual_stack_layer_norm_position: LayerNormPositionOptions | None = (
+            config.RESIDUAL_STACK_LAYER_NORM_POSITION
+        ),
+        residual_stack_num_layers: int | None = (
+            config.RESIDUAL_STACK_NUM_LAYERS
+        ),
+        residual_stack_activation: ActivationOptions | None = (
+            config.RESIDUAL_STACK_ACTIVATION
+        ),
+        residual_stack_residual_connection_option: type[
+            ResidualConfig
+        ] | None = config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_stack_residual_model_flag: bool = (
+            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
+        ),
+        residual_stack_dropout_probability: float | None = (
+            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
+        ),
+        residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
+            config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        residual_stack_apply_output_pipeline_flag: bool | None = (
+            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        residual_stack_bias_flag: bool | None = (
+            config.RESIDUAL_STACK_BIAS_FLAG
+        ),
         adaptive_mixture_top_k: int = config.ADAPTIVE_MIXTURE_TOP_K,
         adaptive_mixture_num_experts: int = config.ADAPTIVE_MIXTURE_NUM_EXPERTS,
         adaptive_mixture_weighted_parameters_flag: bool = (
@@ -79,13 +119,44 @@ class _ParametricGeneratorConfigBuilderImplementation:
         sampler_options: ParametricSamplerOptions | None = None,
         router_options: ParametricRouterOptions | None = None,
         generator_stack_options: ParametricGeneratorStackOptions | None = None,
+        residual_stack_options: ResidualStackOptions | None = None,
     ) -> None:
         stack_options = stack_options or ParametricStackOptions(
             hidden_dim=hidden_dim,
             num_layers=stack_num_layers,
             activation=stack_activation,
             residual_connection_option=stack_residual_connection_option,
+            residual_model_flag=stack_residual_model_flag,
             dropout_probability=stack_dropout_probability,
+        )
+        residual_stack_options = (
+            residual_stack_options
+            or resolve_residual_stack_options(
+                ResidualStackSource(
+                    independent_flag=residual_stack_independent_flag,
+                    hidden_dim=residual_stack_hidden_dim,
+                    num_layers=residual_stack_num_layers,
+                    activation=residual_stack_activation,
+                    layer_norm_position=residual_stack_layer_norm_position,
+                    residual_connection_option=(
+                        residual_stack_residual_connection_option
+                    ),
+                    residual_model_flag=(
+                        residual_stack_residual_model_flag
+                    ),
+                    dropout_probability=(
+                        residual_stack_dropout_probability
+                    ),
+                    last_layer_bias_option=(
+                        residual_stack_last_layer_bias_option
+                    ),
+                    apply_output_pipeline_flag=(
+                        residual_stack_apply_output_pipeline_flag
+                    ),
+                    bias_flag=residual_stack_bias_flag,
+                ),
+                stack_options,
+            )
         )
         mixture_options = mixture_options or ParametricMixtureOptions(
             top_k=adaptive_mixture_top_k,
@@ -128,7 +199,9 @@ class _ParametricGeneratorConfigBuilderImplementation:
         self.stack_num_layers = stack_options.num_layers
         self.stack_activation = stack_options.activation
         self.stack_residual_connection_option = stack_options.residual_connection_option
+        self.stack_residual_model_flag = stack_options.residual_model_flag
         self.stack_dropout_probability = stack_options.dropout_probability
+        self.residual_stack_options = residual_stack_options
         self.mixture_options = mixture_options
         self.adaptive_mixture_top_k = mixture_options.top_k
         self.adaptive_mixture_num_experts = mixture_options.num_experts
@@ -178,6 +251,7 @@ class _ParametricGeneratorConfigBuilderImplementation:
             sampler_options=self.sampler_options,
             router_options=self.router_options,
             adaptive_bias_option=self.adaptive_bias_option,
+            residual_stack_options=self.residual_stack_options,
             generator_stack_options=self.generator_stack_options,
         )
         output_model_config = build_linear_layer_config(

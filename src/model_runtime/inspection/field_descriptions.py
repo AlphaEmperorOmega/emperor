@@ -309,6 +309,13 @@ def config_field_description(
             "of inheriting shared submodule settings.",
             caveat,
         )
+    if key.endswith("_RESIDUAL_MODEL_FLAG"):
+        return _with_caveat(
+            f"Uses the Residual Stack Options as a data-dependent coefficient "
+            f"model for the {context}. This is supported only when the paired "
+            "residual selector uses a weighted or weighted-blend residual.",
+            caveat,
+        )
     if key.endswith("_BIAS_FLAG"):
         return _with_caveat(
             f"Controls whether linear layers in the {context} include bias terms.",
