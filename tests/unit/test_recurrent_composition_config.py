@@ -127,6 +127,7 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         expected_protected_methods = {
             RecurrentCompositionAbstract: {
                 "_accumulate_recurrent_losses",
+                "_build_recurrent_residual_schedule",
                 "_build_transition_model",
                 "_expand_recurrent_initial",
                 "_finalize_recurrent_halting",

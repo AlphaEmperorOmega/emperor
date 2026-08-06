@@ -3,12 +3,17 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 import torch
 from torch import Tensor, nn
 
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.recurrent.schedule import (
+    RecurrentResidualSchedule,
+    build_recurrent_residual_schedule,
+)
+from emperor.layers._composition.residual.base import ResidualConnectionAbstract
 from emperor.layers._options import LayerNormPositionOptions
 from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 from emperor.memory import MemoryPositionOptions
@@ -21,6 +26,7 @@ if TYPE_CHECKING:
     from emperor.layers._composition.recurrent.config import (
         RecurrentCompositionConfig,
     )
+    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
     from emperor.nn import Module
@@ -66,7 +72,9 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         self.halting_config = self.cfg.halting_config
         self.memory_config = self.cfg.memory_config
         self.recurrent_gate = self.__build_recurrent_gate()
-        self.residual_connection = self.__build_residual_connection()
+        self.residual_connection: ResidualConnectionAbstract | None = (
+            self.__build_residual_connection()
+        )
         self.halting_model = self.__build_halting_model()
         self.memory_model = self.__build_memory_model()
         self.recurrent_layer_norm_module = self.__build_recurrent_layer_norm()
@@ -87,10 +95,22 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             gate_dim=self.output_dim,
         )
 
-    def __build_residual_connection(self) -> Module | None:
-        return self._build_from_config(
-            self.residual_config,
-            residual_dim=self.output_dim,
+    def __build_residual_connection(self) -> ResidualConnectionAbstract | None:
+        return cast(
+            ResidualConnectionAbstract | None,
+            self._build_from_config(
+                self.residual_config,
+                residual_dim=self.output_dim,
+            ),
+        )
+
+    def _build_recurrent_residual_schedule(
+        self,
+        transition_count: int,
+    ) -> RecurrentResidualSchedule | None:
+        return build_recurrent_residual_schedule(
+            self.residual_connection,
+            transition_count,
         )
 
     def __build_halting_model(self) -> Module | None:
@@ -178,6 +198,9 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         previous_evolving_hidden: Tensor,
         halting_update_enabled: bool,
         loss: Tensor | None = None,
+        residual_state: ResidualState | None = None,
+        residual_schedule: RecurrentResidualSchedule | None = None,
+        transition_index: int = 0,
     ) -> _RecurrentTransitionResult:
         transition_model_input = self.__maybe_apply_layer_norm_before(transition_input)
         transition_model_input = self.__maybe_apply_memory_before(
@@ -207,6 +230,9 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             candidate_hidden,
             previous_evolving_hidden,
             recurrent_state.row_layout,
+            residual_state,
+            residual_schedule,
+            transition_index,
         )
         candidate_hidden = self.__maybe_apply_layer_norm_after(candidate_hidden)
         halting_state, output_hidden = self.__maybe_apply_halting(
@@ -263,12 +289,26 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         candidate_hidden: Tensor,
         previous_hidden: Tensor,
         row_layout: RowLayout | None,
+        residual_state: ResidualState | None,
+        residual_schedule: RecurrentResidualSchedule | None,
+        transition_index: int,
     ) -> Tensor:
-        if self.residual_connection is None:
+        residual_connection = self.residual_connection
+        if residual_connection is None:
             return candidate_hidden
-        return self.residual_connection(
+        if residual_schedule is not None:
+            return residual_schedule.apply(
+                residual_connection,
+                transition_index,
+                candidate_hidden,
+                previous_hidden,
+                residual_state=residual_state,
+                row_layout=row_layout,
+            )
+        return residual_connection(
             candidate_hidden,
             previous_hidden,
+            residual_state=residual_state,
             row_layout=row_layout,
         )
 

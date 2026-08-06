@@ -183,6 +183,46 @@ class EmperorSourceLayoutTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_residual_composition_does_not_own_recurrent_integration(self):
+        residual_root = SOURCE_ROOT / "emperor" / "layers" / "_composition" / "residual"
+        violations = []
+
+        for path in residual_root.rglob("*.py"):
+            syntax_tree = ast.parse(
+                path.read_text(encoding="utf-8"),
+                filename=str(path),
+            )
+            relative_path = path.relative_to(REPOSITORY_ROOT).as_posix()
+            for node in ast.walk(syntax_tree):
+                referenced_modules = []
+                if isinstance(node, ast.Import):
+                    referenced_modules.extend(alias.name for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    referenced_modules.append(node.module)
+                for referenced_module in referenced_modules:
+                    if ".recurrent" in referenced_module:
+                        violations.append(
+                            (relative_path, node.lineno, referenced_module)
+                        )
+
+                identifier = (
+                    node.name
+                    if isinstance(
+                        node,
+                        (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+                    )
+                    else node.id
+                    if isinstance(node, ast.Name)
+                    else node.attr
+                    if isinstance(node, ast.Attribute)
+                    else None
+                )
+                if identifier is not None and "recurrent" in identifier.lower():
+                    violations.append((relative_path, node.lineno, identifier))
+
+        self.assertFalse((residual_root / "recurrent.py").exists())
+        self.assertEqual(violations, [])
+
     def test_recurrent_composition_has_no_standalone_reasoning_boundary(self):
         retired_modules = (
             "emperor.layers._recurrent",

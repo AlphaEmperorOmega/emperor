@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import math
 from numbers import Real
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
-from emperor.layers._composition.residual.config import AttentionResidualConfig
+from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._composition.residual.validation import (
     ResidualConnectionValidator,
 )
@@ -29,6 +30,49 @@ _RECURRENT_CONTROLLER_OPTIONAL_FIELDS = {
     "halting_config",
     "memory_config",
 }
+
+if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.schedule import (
+        DepthwiseRecurrentResidualSchedule,
+        RecurrentResidualSchedule,
+    )
+
+
+class RecurrentResidualScheduleValidator(ValidatorBase):
+    @classmethod
+    def validate(cls, schedule: RecurrentResidualSchedule) -> None:
+        transition_count = schedule.transition_count
+        if (
+            isinstance(transition_count, bool)
+            or not isinstance(transition_count, int)
+            or transition_count <= 0
+        ):
+            raise ValueError("transition_count must be a positive integer.")
+
+    @staticmethod
+    def validate_transition_index(
+        schedule: RecurrentResidualSchedule,
+        transition_index: object,
+    ) -> None:
+        if (
+            isinstance(transition_index, bool)
+            or not isinstance(transition_index, int)
+            or not 0 <= transition_index < schedule.transition_count
+        ):
+            raise IndexError(
+                "transition_index must identify a configured recurrent transition."
+            )
+
+    @staticmethod
+    def validate_subsequent_connections(
+        schedule: DepthwiseRecurrentResidualSchedule,
+    ) -> None:
+        expected_connection_count = schedule.transition_count - 1
+        if len(schedule.subsequent_connections) != expected_connection_count:
+            raise ValueError(
+                "subsequent_connections must contain one connection for every "
+                "transition after transition zero."
+            )
 
 
 def _validate_initialization_standard_deviation(value: object) -> None:
@@ -150,7 +194,13 @@ def _validate_transition_gradient_window(
         )
 
 
-def _validate_recurrent_controller_config(config: object) -> None:
+def _validate_recurrent_controller_config(
+    config: object,
+    *,
+    supported_residual_requirements: frozenset[
+        ResidualRuntimeRequirement
+    ] = frozenset(),
+) -> None:
     owner_name = type(config).__name__
     recurrent_layer_norm_position = config.recurrent_layer_norm_position
     if recurrent_layer_norm_position is not None and not isinstance(
@@ -171,11 +221,27 @@ def _validate_recurrent_controller_config(config: object) -> None:
         config.residual_config,
         owner_name=owner_name,
     )
-    if isinstance(config.residual_config, AttentionResidualConfig):
+    residual_config = config.residual_config
+    if residual_config is not None:
+        residual_owner = residual_config.registry_owner()
+        residual_requirements = getattr(
+            residual_owner,
+            "RUNTIME_REQUIREMENTS",
+            frozenset(),
+        )
+        unsupported_requirements = residual_requirements.difference(
+            supported_residual_requirements
+        )
+    else:
+        unsupported_requirements = frozenset()
+    if unsupported_requirements:
+        requirement_names = ", ".join(
+            sorted(requirement.value for requirement in unsupported_requirements)
+        )
         raise ValueError(
-            f"AttentionResidualConfig is not supported for {owner_name} until "
-            "recurrent depth owns a distinct learned query and an explicit "
-            "forward-local history bridge."
+            f"{type(residual_config).__name__} is not supported for {owner_name}; "
+            "the recurrent owner does not satisfy residual runtime requirements: "
+            f"{requirement_names}."
         )
 
     halting_config = config.halting_config

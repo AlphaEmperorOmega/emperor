@@ -13,6 +13,7 @@ from emperor.layers._state import LayerState
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingStateBase
+    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._row_layout import RowLayout
 
 
@@ -23,6 +24,7 @@ class _RecurrentState:
     loss: Tensor | None
     context_state: LayerState
     row_layout: RowLayout | None = None
+    residual_state: ResidualState | None = None
     halting_state: HaltingStateBase | None = None
     all_items_halted: bool = False
 
@@ -46,7 +48,9 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         self._initialize_transition_gradient_window(
             default_no_gradient_transition_count=0,
         )
-
+        self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
+            self.max_steps
+        )
         self.block_model = self._build_transition_model(self.block_config)
 
     @property
@@ -95,6 +99,20 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             loss=layer_state.loss,
             context_state=layer_state,
             row_layout=self._recurrent_row_layout_for_transitions(layer_state),
+            residual_state=self.__initialize_recurrent_residual_state(layer_state),
+        )
+
+    def __initialize_recurrent_residual_state(
+        self,
+        layer_state: LayerState,
+    ) -> ResidualState | None:
+        residual_schedule = self.recurrent_residual_schedule
+        residual_connection = self.residual_connection
+        if residual_schedule is None or residual_connection is None:
+            return None
+        return residual_schedule.new_state(
+            residual_connection,
+            layer_state.hidden,
         )
 
     def __detach_evolving_state_at_gradient_boundary(
@@ -124,6 +142,9 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             previous_evolving_hidden=previous_hidden,
             loss=recurrent_state.loss,
             halting_update_enabled=halting_update_enabled,
+            residual_state=recurrent_state.residual_state,
+            residual_schedule=self.recurrent_residual_schedule,
+            transition_index=transition_index,
         )
         return replace(
             recurrent_state,

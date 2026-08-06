@@ -42,6 +42,18 @@ from emperor.layers import (
     WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.recurrent.schedule import (
+    DepthwiseRecurrentResidualSchedule,
+    RecurrentResidualSchedule,
+    SharedRecurrentResidualSchedule,
+)
+from emperor.layers._composition.recurrent.validation import (
+    RecurrentResidualScheduleValidator,
+)
+from emperor.layers._composition.residual.base import (
+    ResidualConnectionAbstract,
+    ResidualRuntimeRequirement,
+)
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
     DynamicMemoryConfig,
@@ -80,6 +92,113 @@ class AdditiveFeatureLastLayer(Module):
         if self.input_dim != self.output_dim:
             raise ValueError("AdditiveFeatureLastLayer requires stable dimensions")
         return X + self.increment
+
+
+@dataclass
+class DepthwiseTestResidualConfig(ResidualConfig):
+    def _registry_owner(self) -> type:
+        return DepthwiseTestResidual
+
+
+class DepthwiseTestResidual(ResidualConnectionAbstract):
+    RUNTIME_REQUIREMENTS = frozenset(
+        {ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS}
+    )
+
+    def __init__(
+        self,
+        cfg: DepthwiseTestResidualConfig,
+        overrides: DepthwiseTestResidualConfig | None = None,
+    ) -> None:
+        super().__init__(cfg, overrides)
+        self.offset = torch.nn.Parameter(torch.zeros(()))
+
+    def forward(
+        self,
+        current: torch.Tensor,
+        previous: torch.Tensor,
+        *,
+        residual_state=None,
+        row_layout=None,
+    ) -> torch.Tensor:
+        return current + self.offset
+
+
+class TestRecurrentResidualScheduleValidatorAdapter(unittest.TestCase):
+    def test_schedule_exposes_validator_adapter(self):
+        self.assertIs(
+            RecurrentResidualSchedule.VALIDATOR,
+            RecurrentResidualScheduleValidator,
+        )
+
+    def test_construction_dispatches_through_substituted_validator(self):
+        class RejectingValidator(RecurrentResidualScheduleValidator):
+            @classmethod
+            def validate(cls, schedule):
+                raise RuntimeError("substituted schedule validator was called")
+
+        class RejectingSchedule(SharedRecurrentResidualSchedule):
+            VALIDATOR = RejectingValidator
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted schedule validator was called",
+        ):
+            RejectingSchedule(1)
+
+    def test_transition_lookup_dispatches_through_substituted_validator(self):
+        class RejectingValidator(RecurrentResidualScheduleValidator):
+            @staticmethod
+            def validate_transition_index(schedule, transition_index):
+                raise RuntimeError("substituted transition validator was called")
+
+        class RejectingSchedule(SharedRecurrentResidualSchedule):
+            VALIDATOR = RejectingValidator
+
+        schedule = RejectingSchedule(1)
+        primary_connection = AdditiveResidualConfig().build()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted transition validator was called",
+        ):
+            schedule.connection_for_transition(primary_connection, 0)
+
+    def test_depthwise_construction_dispatches_through_substituted_validator(self):
+        class RejectingValidator(RecurrentResidualScheduleValidator):
+            @staticmethod
+            def validate_subsequent_connections(schedule):
+                raise RuntimeError("substituted depthwise validator was called")
+
+        class RejectingSchedule(DepthwiseRecurrentResidualSchedule):
+            VALIDATOR = RejectingValidator
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted depthwise validator was called",
+        ):
+            RejectingSchedule(1, ())
+
+    def test_validation_error_contracts_are_preserved(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "transition_count must be a positive integer",
+        ):
+            SharedRecurrentResidualSchedule(0)
+
+        schedule = SharedRecurrentResidualSchedule(2)
+        primary_connection = AdditiveResidualConfig().build()
+        with self.assertRaisesRegex(
+            IndexError,
+            "transition_index must identify a configured recurrent transition",
+        ):
+            schedule.connection_for_transition(primary_connection, 2)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "subsequent_connections must contain one connection",
+        ):
+            DepthwiseRecurrentResidualSchedule(2, ())
 
 
 @dataclass
@@ -1966,18 +2085,164 @@ class TestRecurrentLayer(unittest.TestCase):
 
         self.assertIsNone(model.residual_config)
         self.assertIsNone(model.residual_connection)
+        self.assertIsNone(model.recurrent_residual_schedule)
 
-    def test_recurrent_rejects_attention_residual_without_a_history_bridge(self):
-        config = self.recurrent_config(
-            residual_connection_option=(AttentionResidualConfig),
+    def test_recurrent_attention_residual_routes_across_step_history(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=2,
+                block_config=self.layer_block_config(increment=2.0),
+                residual_connection_option=AttentionResidualConfig,
+            )
+        )
+        hidden = torch.ones(1, dim)
+
+        result = model(LayerState(hidden=hidden))
+
+        torch.testing.assert_close(
+            result.hidden,
+            torch.full_like(hidden, 8.0 / 3.0),
         )
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "AttentionResidualConfig is not supported for RecurrentLayerConfig.*"
-            "distinct learned query",
-        ):
-            RecurrentLayer(config)
+    def test_recurrent_uses_custom_depthwise_residual_schedule(self):
+        max_steps = 3
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=2,
+                max_steps=max_steps,
+                block_config=self.layer_block_config(increment=0.0),
+                residual_connection_option=DepthwiseTestResidualConfig,
+            )
+        )
+        schedule = model.recurrent_residual_schedule
+
+        self.assertIsInstance(schedule, DepthwiseRecurrentResidualSchedule)
+        connections = tuple(
+            schedule.connection_for_transition(
+                model.residual_connection,
+                transition_index,
+            )
+            for transition_index in range(max_steps)
+        )
+        self.assertEqual(len(connections), max_steps)
+        self.assertEqual(len({id(connection) for connection in connections}), max_steps)
+        with torch.no_grad():
+            for offset, connection in enumerate(connections, start=1):
+                connection.offset.fill_(offset)
+
+        result = model(LayerState(hidden=torch.zeros(1, 2)))
+
+        torch.testing.assert_close(result.hidden, torch.full((1, 2), 6.0))
+
+    def test_recurrent_attention_residual_checkpoint_owns_one_router_per_step(self):
+        dim = 2
+        max_steps = 3
+        config = self.recurrent_config(
+            dim=dim,
+            max_steps=max_steps,
+            block_config=self.layer_block_config(increment=1.0),
+            residual_connection_option=AttentionResidualConfig,
+        )
+        model = RecurrentLayer(config)
+        query_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if name.endswith("query")
+        ]
+
+        self.assertEqual(len(query_parameters), max_steps)
+        self.assertEqual(
+            len({id(parameter) for parameter in query_parameters}),
+            max_steps,
+        )
+        with torch.no_grad():
+            for step, query in enumerate(query_parameters, start=1):
+                query.fill_(step / 10)
+        hidden = torch.tensor([[1.0, -2.0]])
+        expected = model(LayerState(hidden=hidden.clone())).hidden
+        checkpoint = model.state_dict()
+
+        restored = RecurrentLayer(config)
+        restored.load_state_dict(checkpoint, strict=True)
+        actual = restored(LayerState(hidden=hidden.clone())).hidden
+
+        self.assertEqual(set(restored.state_dict()), set(checkpoint))
+        torch.testing.assert_close(actual, expected)
+
+    def test_pairwise_recurrent_residual_checkpoint_paths_remain_compatible(self):
+        config = self.recurrent_config(
+            dim=2,
+            max_steps=3,
+            block_config=self.layer_block_config(increment=1.0),
+            residual_connection_option=WeightedBlendResidualConfig,
+        )
+        model = RecurrentLayer(config)
+        hidden = torch.tensor([[1.0, -2.0]])
+        expected = model(LayerState(hidden=hidden.clone())).hidden
+
+        checkpoint = model.state_dict()
+
+        self.assertEqual(
+            set(checkpoint),
+            {"residual_connection.raw_weight"},
+        )
+        restored = RecurrentLayer(config)
+        restored.load_state_dict(checkpoint, strict=True)
+        actual = restored(LayerState(hidden=hidden.clone())).hidden
+        torch.testing.assert_close(actual, expected)
+
+    def test_recurrent_attention_residual_starts_fresh_history_per_forward(self):
+        config = self.recurrent_config(
+            dim=2,
+            max_steps=3,
+            block_config=self.layer_block_config(increment=1.0),
+            residual_connection_option=AttentionResidualConfig,
+        )
+        reused_model = RecurrentLayer(config)
+        fresh_model = RecurrentLayer(config)
+        reused_model(LayerState(hidden=torch.tensor([[1.0, -2.0]])))
+        next_hidden = torch.tensor([[0.5, 3.0], [2.0, -1.0]])
+
+        reused_result = reused_model(LayerState(hidden=next_hidden.clone()))
+        fresh_result = fresh_model(LayerState(hidden=next_hidden.clone()))
+
+        torch.testing.assert_close(reused_result.hidden, fresh_result.hidden)
+
+    def test_recurrent_attention_residual_backpropagates_through_all_routers(self):
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=2,
+                max_steps=3,
+                block_config=self.layer_block_config(increment=1.0),
+                residual_connection_option=AttentionResidualConfig,
+            )
+        )
+        router_parameters = [
+            parameter
+            for name, parameter in model.named_parameters()
+            if name.endswith("query") or name.endswith("key_norm.weight")
+        ]
+        with torch.no_grad():
+            for parameter in router_parameters:
+                parameter.copy_(torch.tensor([0.25, -0.15]))
+        hidden = torch.tensor(
+            [[1.0, -2.0], [0.5, 3.0]],
+            requires_grad=True,
+        )
+
+        result = model(LayerState(hidden=hidden))
+        result.hidden.square().sum().backward()
+
+        self.assertIsNotNone(hidden.grad)
+        self.assertTrue(torch.isfinite(hidden.grad).all())
+        self.assertGreater(torch.count_nonzero(hidden.grad).item(), 0)
+        self.assertEqual(len(router_parameters), model.max_steps * 2)
+        for parameter in router_parameters:
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(torch.count_nonzero(parameter.grad).item(), 0)
 
     def test_recurrent_residual_options_apply_between_steps(self):
         dim = 3
@@ -2173,6 +2438,35 @@ class TestRecurrentLayer(unittest.TestCase):
         expected = torch.tensor([[2.0, 2.0], [11.0, 11.0]])
         self.assertEqual(model.block_model.model.call_count, 2)
         torch.testing.assert_close(result.hidden, expected)
+
+    def test_recurrent_attention_residual_preserves_individually_halted_rows(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=4,
+                block_config=self.layer_block_config(increment=1.0),
+                residual_connection_option=AttentionResidualConfig,
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=2.0,
+                    high_logit=20.0,
+                    low_logit=-20.0,
+                ),
+            )
+        )
+        model.eval()
+        hidden = torch.tensor([[0.0, 0.0], [10.0, 10.0]])
+
+        result = model(LayerState(hidden=hidden))
+
+        self.assertEqual(model.block_model.model.call_count, model.max_steps)
+        torch.testing.assert_close(
+            result.hidden[1],
+            torch.tensor([10.5, 10.5]),
+        )
+        self.assertTrue(torch.isfinite(result.hidden).all())
+        self.assertGreater(result.hidden[0, 0].item(), hidden[0, 0].item())
 
     def test_recurrent_halting_preserves_3d_halted_positions_with_controllers(self):
         dim = 2
