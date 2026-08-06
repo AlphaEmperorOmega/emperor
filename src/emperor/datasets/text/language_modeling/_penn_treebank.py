@@ -71,6 +71,12 @@ class PennTreebank(DataModule):
         self._legacy_split_tokens: dict[str, tuple[str, ...]] | None = None
 
     def prepare_data(self) -> None:
+        if isinstance(PennTreebankDataset, type) and hasattr(
+            PennTreebankDataset,
+            "download",
+        ):
+            PennTreebankDataset.download(self.root)
+            return
         for split in ("train", "valid", "test"):
             next(iter(self._dataset(split)), None)
 
