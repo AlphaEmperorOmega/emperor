@@ -68,6 +68,7 @@ retired_modules = [
   "emperor.datasets.text.bert_pretraining.constants",
   "emperor.datasets.text.language_modeling.penn_treebank",
   "emperor.datasets.text.language_modeling.wiki_text_2",
+  "emperor.datasets.text.language_modeling.wiki_text_103",
   "emperor.datasets.text.translation.multi30k",
   "emperor.experiments.tasks",
   "emperor.experiments.bert_pretraining.experiment",
@@ -279,8 +280,8 @@ owners = ["emperor.datasets.text.bert_pretraining", "emperor.datasets.text.bert_
 [[interfaces]]
 module = "emperor.datasets.text.language_modeling"
 kind = "runtime"
-exports = ["PennTreebank", "WikiText2"]
-owners = ["emperor.datasets.text.language_modeling._penn_treebank", "emperor.datasets.text.language_modeling._wiki_text_2"]
+exports = ["PennTreebank", "WikiText2", "WikiText103"]
+owners = ["emperor.datasets.text.language_modeling._penn_treebank", "emperor.datasets.text.language_modeling._wiki_text_2", "emperor.datasets.text.language_modeling._wiki_text_103"]
 
 [[interfaces]]
 module = "emperor.datasets.text.translation"
