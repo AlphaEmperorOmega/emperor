@@ -191,6 +191,27 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                 self.assertEqual(text_units, ("one two",))
                 self.assertEqual(calls, [("offline-root", "valid")])
 
+    def test_wikitext2_provider_uses_the_maintained_hugging_face_source(self):
+        with patch.object(
+            wiki_module,
+            "load_dataset",
+            return_value=({"text": "one two"}, {"text": "three four"}),
+        ) as loader:
+            text_units = tuple(
+                wiki_module.WikiText2Dataset(
+                    root="cache-root",
+                    split="valid",
+                )
+            )
+
+        self.assertEqual(text_units, ("one two", "three four"))
+        loader.assert_called_once_with(
+            "Salesforce/wikitext",
+            "wikitext-2-v1",
+            split="validation",
+            cache_dir="cache-root",
+        )
+
     def test_validation_preconditions_and_encode_autobuild_are_exact(self):
         for dataset_type in self.dataset_types():
             with self.subTest(dataset=dataset_type.__name__):
