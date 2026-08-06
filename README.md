@@ -241,7 +241,8 @@ mise run experiment -- \
 ```
 
 The GPT packages use causal next-token loss and return token IDs from greedy
-generation. `penn-treebank` is available as the alternative dataset name.
+generation. The selectable download-backed datasets are `penn-treebank`,
+`wiki-text2`, `wiki-text103`, and `open-web-text`.
 
 Each training run writes a Lightning/TensorBoard run directory under:
 
@@ -508,11 +509,18 @@ BERT-pretraining Dataset Metadata uses the task-specific
 text source Interface accepts both TorchText's legacy `.splits(...)` datasets
 and its later `root=..., split=...` factories, while always yielding one text
 unit per source line for next-sentence construction. The verified constraints
-currently select TorchText 0.6.0. Contract tests use deterministic offline
-source fixtures and do not download corpora. They discover every declared
-Dataset Metadata class and verify its task compatibility, one-batch shape,
-dtype, collation semantics, and seed ownership through the public DataModule
-Interface.
+currently select TorchText 0.6.0.
+
+Causal language modeling exposes `PennTreebank`, `WikiText2`, and `WikiText103`
+as download-backed DataModules, with `OpenWebText` available as the much larger
+option. WikiText uses the maintained Salesforce datasets on Hugging Face;
+OpenWebText uses `Skylion007/openwebtext`. The adapters cache the selected corpus
+under their configured root.
+
+Contract tests use deterministic offline source fixtures and do not download
+corpora. They discover every declared Dataset Metadata class and verify its task
+compatibility, one-batch shape, dtype, collation semantics, and seed ownership
+through the public DataModule Interface.
 
 Real downloads remain explicit integration work performed by `prepare_data()`.
 Run that network-dependent suite only when the required sources are available:
@@ -522,6 +530,9 @@ EMPEROR_RUN_DATASET_DOWNLOAD_TESTS=1 \
   PYTHONSAFEPATH=1 PYTHONPATH=src:tests \
   python -P -m unittest integration.datasets.test_dataset_downloads
 ```
+
+OpenWebText is excluded from that integration run unless the additional
+`EMPEROR_RUN_LARGE_DATASET_DOWNLOAD_TESTS=1` opt-in is set.
 
 List available datasets for a model:
 
