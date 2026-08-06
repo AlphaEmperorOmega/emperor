@@ -34,6 +34,10 @@ class _InMemoryCorpusMixin:
         self.requested_splits.append(split)
         return iter(self.corpus[split])
 
+    def prepare_data(self) -> None:
+        for split in ("train", "valid", "test"):
+            next(iter(self._dataset(split)), None)
+
 
 class InMemoryWikiText2(_InMemoryCorpusMixin, WikiText2):
     pass
@@ -59,6 +63,18 @@ class FakeLegacyCorpus:
             )
             for split in ("train", "valid", "test")
         )
+
+
+class FakeLegacyDownloadCorpus:
+    calls = []
+
+    @classmethod
+    def download(cls, root):
+        cls.calls.append(root)
+
+    @classmethod
+    def splits(cls, *_args, **_kwargs):
+        raise AssertionError("prepare_data must not materialize legacy splits")
 
 
 class _ModernVocabulary:
@@ -177,6 +193,24 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                         ["test", "one", "two"],
                     )
                 self.assertEqual(FakeLegacyCorpus.calls, ["fake-root"])
+
+    def test_legacy_prepare_data_downloads_without_materializing_splits(self):
+        cases = (
+            (PennTreebank, penn_module, "PennTreebankDataset"),
+            (WikiText2, wiki_module, "WikiText2Dataset"),
+            (WikiText103, wiki103_module, "WikiText103Dataset"),
+        )
+        for dataset_type, module, provider_name in cases:
+            with self.subTest(dataset=dataset_type.__name__):
+                FakeLegacyDownloadCorpus.calls = []
+                with patch.object(
+                    module,
+                    provider_name,
+                    new=FakeLegacyDownloadCorpus,
+                ):
+                    dataset_type(root="download-root", num_workers=0).prepare_data()
+
+                self.assertEqual(FakeLegacyDownloadCorpus.calls, ["download-root"])
 
     def test_modern_vocab_and_legacy_field_compatibility_helpers_are_literal(self):
         for module in (penn_module, wiki_module, wiki103_module):
