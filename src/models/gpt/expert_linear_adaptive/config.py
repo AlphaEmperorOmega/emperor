@@ -246,6 +246,8 @@ RECURRENT_MAX_STEPS: int = 4
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+RECURRENT_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+RECURRENT_RESIDUAL_MODEL_FLAG: bool = False
 
 ## Recurrent Gate Options
 RECURRENT_STACK_GATE_FLAG: bool = False

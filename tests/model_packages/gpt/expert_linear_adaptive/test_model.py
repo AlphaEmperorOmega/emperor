@@ -13,10 +13,25 @@ from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
     SelfAttentionConfig,
 )
-from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    CombinedDynamicDiagonalConfig,
+    DynamicDepthOptions,
+    GeneratorDynamicBiasConfig,
+    SingleModelDynamicWeightConfig,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
-from emperor.layers import ActivationOptions, LayerNormPositionOptions
+from emperor.halting import StickBreakingConfig
+from emperor.layers import (
+    ActivationOptions,
+    AttentionResidualConfig,
+    LayerNormPositionOptions,
+    RecurrentLayerConfig,
+)
 from emperor.transformer import (
     TransformerDecoderLayerConfig,
     TransformerDecoderLayerState,
@@ -280,6 +295,138 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsInstance(mixture, MixtureOfExpertsModelConfig)
         self.assertIsInstance(expert_layer, AdaptiveLinearLayerConfig)
         self.assertIsNotNone(expert_layer.adaptive_augmentation_config.weight_config)
+
+    def test_single_layer_recurrent_attention_residual_preset(self):
+        cfg = self._preset_config(
+            ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL
+        )
+
+        recurrent_config = cfg.experiment_config.decoder_config
+        self.assertIsInstance(recurrent_config, RecurrentLayerConfig)
+        self.assertEqual(recurrent_config.input_dim, 32)
+        self.assertEqual(cfg.sequence_length, 35)
+        self.assertEqual(recurrent_config.max_steps, 10)
+        self.assertEqual(recurrent_config.block_config.num_layers, 1)
+        self.assertEqual(recurrent_config.halting_config.threshold, 0.99)
+        self.assertEqual(
+            recurrent_config.halting_config.hidden_state_mode,
+            config.HaltingHiddenStateModeOptions.RAW,
+        )
+        self.assertIsInstance(
+            recurrent_config.residual_config,
+            AttentionResidualConfig,
+        )
+        self.assertIsInstance(recurrent_config.halting_config, StickBreakingConfig)
+
+        decoder_layer = recurrent_config.block_config.layer_config.layer_model_config
+        feed_forward_mixture = decoder_layer.feed_forward_config.stack_config
+        expert_core = feed_forward_mixture.stack_config.layer_config.layer_model_config
+        expert_layer = expert_core.expert_model_config.layer_config.layer_model_config
+        adaptive_config = expert_layer.adaptive_augmentation_config
+
+        self.assertEqual(decoder_layer.dropout_probability, 0.0)
+        self.assertEqual(decoder_layer.self_attention_config.num_heads, 4)
+        self.assertFalse(decoder_layer.self_attention_config.use_kv_expert_models_flag)
+        self.assertEqual(
+            decoder_layer.self_attention_config.experts_config.capacity_factor,
+            0.0,
+        )
+        self.assertEqual(feed_forward_mixture.stack_config.hidden_dim, 32)
+        self.assertEqual(expert_core.num_experts, 12)
+        self.assertEqual(expert_core.top_k, 2)
+        self.assertEqual(expert_core.capacity_factor, 0.0)
+        self.assertEqual(expert_core.sampler_config.switch_loss_weight, 0.01)
+        self.assertEqual(expert_core.sampler_config.zero_centred_loss_weight, 0.001)
+        self.assertEqual(
+            decoder_layer.self_attention_config.experts_config.num_experts, 12
+        )
+        self.assertEqual(decoder_layer.self_attention_config.experts_config.top_k, 2)
+        self.assertTrue(expert_layer.bias_flag)
+        self.assertIsInstance(
+            adaptive_config.weight_config,
+            SingleModelDynamicWeightConfig,
+        )
+        self.assertEqual(
+            adaptive_config.weight_config.generator_depth,
+            DynamicDepthOptions.DEPTH_OF_FIVE,
+        )
+        self.assertEqual(
+            adaptive_config.weight_config.normalization_option,
+            WeightNormalizationOptions.L2_SCALE,
+        )
+        self.assertEqual(
+            adaptive_config.weight_config.normalization_position_option,
+            WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
+        )
+        self.assertEqual(
+            adaptive_config.weight_config.decay_schedule,
+            WeightDecayScheduleOptions.EXPONENTIAL,
+        )
+        self.assertEqual(adaptive_config.weight_config.decay_rate, 1e-4)
+        self.assertEqual(adaptive_config.weight_config.decay_warmup_batches, 5_000)
+        self.assertIsInstance(
+            adaptive_config.bias_config,
+            GeneratorDynamicBiasConfig,
+        )
+        self.assertIsInstance(
+            adaptive_config.diagonal_config,
+            CombinedDynamicDiagonalConfig,
+        )
+        self.assertIsNone(adaptive_config.mask_config)
+
+        model = Model(cfg).eval()
+        self.assertIsInstance(
+            model.transformer.residual_connection,
+            recurrent_config.residual_config.registry_owner(),
+        )
+        self.assertIsInstance(
+            model.transformer.halting_model,
+            recurrent_config.halting_config.registry_owner(),
+        )
+        logits, auxiliary_loss = model(self._input_ids(cfg))
+        self.assertEqual(
+            tuple(logits.shape),
+            (2, cfg.sequence_length, cfg.output_dim),
+        )
+        self.assertEqual(tuple(auxiliary_loss.shape), ())
+
+    def test_single_layer_recurrent_attention_residual_preset_trains_one_batch(self):
+        torch.manual_seed(449)
+        cfg = self._preset_config(
+            ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL
+        )
+        model = Model(cfg)
+        parameters_before_training = {
+            name: parameter.detach().clone()
+            for name, parameter in model.named_parameters()
+            if parameter.requires_grad
+        }
+        trainer = tiny_cpu_trainer()
+
+        trainer.fit(
+            model,
+            datamodule=RandomLanguageModelDataModule(
+                cfg,
+                batch_size=2,
+                num_batches=1,
+            ),
+        )
+
+        self.assertEqual(trainer.global_step, 1)
+        self.assertTrue(torch.isfinite(trainer.callback_metrics["train/loss"]).item())
+        self.assertTrue(
+            any(
+                not torch.equal(parameter.detach(), parameters_before_training[name])
+                for name, parameter in model.named_parameters()
+                if parameter.requires_grad
+            )
+        )
+        self.assertTrue(
+            all(
+                torch.isfinite(parameter).all().item()
+                for parameter in model.parameters()
+            )
+        )
 
     def test_expert_attention_uses_adaptive_expert_internals(self):
         cfg = self._preset_config(ExperimentPreset.BASELINE)
@@ -572,13 +719,25 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         preset: ExperimentPreset,
         overrides: dict | None = None,
     ):
+        small_overrides = self._small_flat_overrides()
+        if preset is ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL:
+            for preset_field in (
+                "hidden_dim",
+                "sequence_length",
+                "stack_num_layers",
+                "attn_num_heads",
+                "stack_dropout_probability",
+                "num_experts",
+                "recurrent_max_steps",
+            ):
+                small_overrides.pop(preset_field)
         return model_package("gpt/expert_linear_adaptive").presets.get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
             ][0],
             config_overrides={
-                **self._small_flat_overrides(),
+                **small_overrides,
                 **(overrides or {}),
             },
         )[0]
