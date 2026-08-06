@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import TYPE_CHECKING, ClassVar
 
 from torch import Tensor
@@ -15,6 +16,13 @@ if TYPE_CHECKING:
     from emperor.layers._row_layout import RowLayout
 
 
+class ResidualRuntimeRequirement(Enum):
+    """Execution requirements declared by a residual connection."""
+
+    FORWARD_LOCAL_STATE = "forward-local residual state"
+    DEPTH_SPECIFIC_CONNECTIONS = "depth-specific residual connections"
+
+
 class ResidualState:
     """Private marker for residual state scoped to one forward execution."""
 
@@ -24,6 +32,7 @@ class ResidualConnectionAbstract(Module, ABC):
 
     VALIDATOR = ResidualConnectionValidator
     supports_pairwise_diagnostics: ClassVar[bool] = False
+    RUNTIME_REQUIREMENTS: ClassVar[frozenset[ResidualRuntimeRequirement]] = frozenset()
 
     def __init__(
         self,

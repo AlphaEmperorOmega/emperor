@@ -10,6 +10,7 @@ from torch import Tensor
 
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
+    ResidualRuntimeRequirement,
     ResidualState,
 )
 from emperor.layers._composition.residual.config import AttentionResidualConfig
@@ -66,6 +67,12 @@ class AttentionResidual(ResidualConnectionAbstract):
 
     DEFAULT_BLOCK_SIZE = 1
     DEFAULT_RMS_NORM_EPSILON = 1e-6
+    RUNTIME_REQUIREMENTS = frozenset(
+        {
+            ResidualRuntimeRequirement.FORWARD_LOCAL_STATE,
+            ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS,
+        }
+    )
 
     def __init__(
         self,
