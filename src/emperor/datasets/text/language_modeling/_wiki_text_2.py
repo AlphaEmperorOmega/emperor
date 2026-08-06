@@ -84,6 +84,12 @@ class WikiText2(DataModule):
         self._legacy_split_tokens: dict[str, tuple[str, ...]] | None = None
 
     def prepare_data(self) -> None:
+        if isinstance(WikiText2Dataset, type) and hasattr(
+            WikiText2Dataset,
+            "download",
+        ):
+            WikiText2Dataset.download(self.root)
+            return
         for split in ("train", "valid", "test"):
             next(iter(self._dataset(split)), None)
 
