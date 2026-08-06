@@ -5,10 +5,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from emperor.datasets.text.language_modeling import OpenWebText
 from emperor.experiments import ExperimentTask
 from support.dataset_metadata import DATASET_TASKS
 
 RUN_DOWNLOAD_TESTS = os.environ.get("EMPEROR_RUN_DATASET_DOWNLOAD_TESTS") == "1"
+RUN_LARGE_DOWNLOAD_TESTS = (
+    os.environ.get("EMPEROR_RUN_LARGE_DATASET_DOWNLOAD_TESTS") == "1"
+)
 
 
 @unittest.skipUnless(
@@ -21,6 +25,11 @@ class DatasetDownloadIntegrationTests(unittest.TestCase):
             root = Path(temporary)
             for dataset_type, task in DATASET_TASKS.items():
                 with self.subTest(dataset=dataset_type.__name__, task=task.name):
+                    if dataset_type is OpenWebText and not RUN_LARGE_DOWNLOAD_TESTS:
+                        self.skipTest(
+                            "set EMPEROR_RUN_LARGE_DATASET_DOWNLOAD_TESTS=1 "
+                            "to download OpenWebText"
+                        )
                     dataset = self._dataset(dataset_type, task, root)
                     dataset.prepare_data()
 
