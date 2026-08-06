@@ -18,6 +18,7 @@ from emperor.datasets.text.bert_pretraining import (
     WikiText2BertPretraining,
 )
 from emperor.datasets.text.language_modeling import (
+    OpenWebText,
     PennTreebank,
     WikiText2,
     WikiText103,
@@ -64,6 +65,7 @@ DATASET_TASKS = {
     PennTreebank: ExperimentTask.CAUSAL_LANGUAGE_MODELING,
     WikiText2: ExperimentTask.CAUSAL_LANGUAGE_MODELING,
     WikiText103: ExperimentTask.CAUSAL_LANGUAGE_MODELING,
+    OpenWebText: ExperimentTask.CAUSAL_LANGUAGE_MODELING,
     Multi30kDeEn: ExperimentTask.TEXT_TRANSLATION,
     Multi30kEnDe: ExperimentTask.TEXT_TRANSLATION,
 }
@@ -182,6 +184,7 @@ def _causal_source_module(dataset_type: type) -> tuple[ModuleType, str]:
         PennTreebank: "PennTreebankDataset",
         WikiText2: "WikiText2Dataset",
         WikiText103: "WikiText103Dataset",
+        OpenWebText: "OpenWebTextDataset",
     }[dataset_type]
     return module, source_name
 
@@ -240,7 +243,7 @@ def offline_dataset_metadata(
             yield dataset
         return
 
-    if dataset_type in (PennTreebank, WikiText2, WikiText103):
+    if dataset_type in (PennTreebank, WikiText2, WikiText103, OpenWebText):
         module, source_name = _causal_source_module(dataset_type)
         with patch.object(module, source_name, _offline_modern_text_source):
             yield dataset_type(

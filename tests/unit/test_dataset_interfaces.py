@@ -22,6 +22,7 @@ class DatasetInterfaceTests(unittest.TestCase):
             "WikiText2BertPretraining",
         ),
         "emperor.datasets.text.language_modeling": (
+            "OpenWebText",
             "PennTreebank",
             "WikiText2",
             "WikiText103",
@@ -45,6 +46,7 @@ class DatasetInterfaceTests(unittest.TestCase):
             "emperor.datasets.text.bert_pretraining._datasets",
             "WikiText2BertPretraining",
         ),
+        ("emperor.datasets.text.language_modeling._open_web_text", "OpenWebText"),
         ("emperor.datasets.text.language_modeling._penn_treebank", "PennTreebank"),
         ("emperor.datasets.text.language_modeling._wiki_text_2", "WikiText2"),
         ("emperor.datasets.text.language_modeling._wiki_text_103", "WikiText103"),
@@ -89,6 +91,7 @@ class DatasetInterfaceTests(unittest.TestCase):
             "emperor.datasets.image.classification.cifar_100",
             "emperor.datasets.text.bert_pretraining.constants",
             "emperor.datasets.text.bert_pretraining.datasets",
+            "emperor.datasets.text.language_modeling.open_web_text",
             "emperor.datasets.text.language_modeling.penn_treebank",
             "emperor.datasets.text.language_modeling.wiki_text_2",
             "emperor.datasets.text.language_modeling.wiki_text_103",
