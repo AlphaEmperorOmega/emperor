@@ -349,6 +349,7 @@ src/emperor/datasets/text/classification/_dbpedia.py,datasets,_yield_tokens;_enc
 src/emperor/datasets/text/classification/_imdb.py,datasets,_yield_tokens;_encode;IMDB,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/datasets/text/classification/_yelp_review_full.py,datasets,_yield_tokens;_encode;YelpReviewFull,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/datasets/text/language_modeling/__init__.py,datasets,__getattr__,pending,manifest,pending,pending,pending,pending,pending,pending,
+src/emperor/datasets/text/language_modeling/_open_web_text.py,datasets,OPEN_WEB_TEXT_VOCAB_SIZE;OpenWebTextDataset;_yield_tokens;_build_compatible_vocab;_set_unknown_default;_lookup_token;OpenWebText,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/datasets/text/language_modeling/_penn_treebank.py,datasets,_yield_tokens;_build_compatible_vocab;_set_unknown_default;_lookup_token;_legacy_text_field;PennTreebank,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/datasets/text/language_modeling/_wiki_text_103.py,datasets,_yield_tokens;WikiText103,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/datasets/text/language_modeling/_wiki_text_2.py,datasets,_yield_tokens;_build_compatible_vocab;_set_unknown_default;_lookup_token;_legacy_text_field;WikiText2,pending,manifest,pending,pending,pending,pending,pending,pending,

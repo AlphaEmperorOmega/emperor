@@ -741,6 +741,7 @@ modules = [
   "src/emperor/datasets/text/classification/_imdb.py",
   "src/emperor/datasets/text/classification/_yelp_review_full.py",
   "src/emperor/datasets/text/language_modeling/__init__.py",
+  "src/emperor/datasets/text/language_modeling/_open_web_text.py",
   "src/emperor/datasets/text/language_modeling/_penn_treebank.py",
   "src/emperor/datasets/text/language_modeling/_wiki_text_103.py",
   "src/emperor/datasets/text/language_modeling/_wiki_text_2.py",

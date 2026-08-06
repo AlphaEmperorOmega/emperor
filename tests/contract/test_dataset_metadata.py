@@ -9,6 +9,7 @@ from pathlib import Path
 import torch
 
 from emperor.datasets.text.language_modeling import (
+    OpenWebText,
     PennTreebank,
     WikiText2,
     WikiText103,
@@ -33,7 +34,7 @@ def declared_dataset_tasks() -> dict[type, set[ExperimentTask]]:
 class DatasetMetadataContractTests(unittest.TestCase):
     def test_a_setup_does_not_mutate_dataset_class_metadata(self) -> None:
         metadata_names = ("vocab_size", "flattened_input_dim", "num_classes")
-        for dataset_type in (PennTreebank, WikiText2, WikiText103):
+        for dataset_type in (PennTreebank, WikiText2, WikiText103, OpenWebText):
             with self.subTest(dataset=dataset_type.__name__):
                 expected = {
                     name: getattr(dataset_type, name) for name in metadata_names

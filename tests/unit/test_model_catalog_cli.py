@@ -483,6 +483,7 @@ class TestProjectCatalogCli(unittest.TestCase):
                 "  --datasets wiki-text2",
                 "  --datasets penn-treebank",
                 "  --datasets wiki-text103",
+                "  --datasets open-web-text",
             ],
         )
 
