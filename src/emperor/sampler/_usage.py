@@ -99,7 +99,10 @@ class SamplerUsageTrackerManager:
         existing_usage_tracker = sampler.usage_tracker
         if existing_usage_tracker is not None:
             return existing_usage_tracker
-        new_usage_tracker = SamplerUsageTracker(sampler.num_experts)
+        sampler_state_buffer = next(sampler.buffers())
+        new_usage_tracker = SamplerUsageTracker(sampler.num_experts).to(
+            device=sampler_state_buffer.device
+        )
         sampler.add_module(self.TRACKER_MODULE_NAME, new_usage_tracker)
         return new_usage_tracker
 
