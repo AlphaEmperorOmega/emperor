@@ -254,6 +254,10 @@ class ExpertsRecurrentConfigFactory:
             ),
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
-            residual_config=None,
+            residual_config=build_residual_config(
+                self.recurrent_controller_options.recurrent_residual_connection_option,
+                self.recurrent_controller_options.recurrent_residual_model_flag,
+                self.recurrent_controller_options.residual_stack_options,
+            ),
             halting_config=self.halting_config_factory.build_recurrent_halting_config(),
         )

@@ -1,5 +1,14 @@
 import models.bert.expert_linear_adaptive.config as config
 import models.bert.expert_linear_adaptive.dataset_options as dataset_options
+from emperor.augmentations.adaptive_parameters import (
+    CombinedDynamicDiagonalConfig,
+    DynamicDepthOptions,
+    GeneratorDynamicBiasConfig,
+    SingleModelDynamicWeightConfig,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
 from emperor.config import BaseOptions
 from emperor.datasets.text.bert_pretraining import PennTreebankBertPretraining
 from emperor.embedding.absolute import (
@@ -45,6 +54,7 @@ class ExperimentPreset(BaseOptions):
     RECURRENT_GATING_HALTING_MEMORY = 21
     TOP1_SWITCH_AUX = 22
     LOW_RANK_EXPERT_WEIGHT = 23
+    SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL = 24
 
 
 _PRESET_DEFINITIONS = {
@@ -234,6 +244,60 @@ _PRESET_DEFINITIONS[ExperimentPreset.LOW_RANK_EXPERT_WEIGHT] = PresetDefinition(
     },
     description="Default config with adaptive low-rank dynamic weights inside expert "
     "feed-forward internals.",
+)
+_PRESET_DEFINITIONS[ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL] = (
+    PresetDefinition(
+        preset_values={
+            "hidden_dim": 32,
+            "sequence_length": 35,
+            "stack_num_layers": 1,
+            "stack_dropout_probability": 0.0,
+            "attn_num_heads": 4,
+            "ff_stack_hidden_dim": 32,
+            "num_experts": 12,
+            "top_k": 2,
+            "capacity_factor": 0.0,
+            "expert_attention_use_kv_expert_models_flag": False,
+            "sampler_switch_loss_weight": 0.01,
+            "sampler_zero_centred_loss_weight": 0.001,
+            "recurrent_flag": True,
+            "recurrent_max_steps": 10,
+            "recurrent_residual_connection_option": config.AttentionResidualConfig,
+            "recurrent_stack_halting_flag": True,
+            "recurrent_halting_option": config.StickBreakingConfig,
+            "recurrent_halting_threshold": 0.99,
+            "recurrent_halting_hidden_state_mode": (
+                config.HaltingHiddenStateModeOptions.RAW
+            ),
+            "expert_bias_flag": True,
+            "weight_option_flag": True,
+            "weight_option": SingleModelDynamicWeightConfig,
+            "generator_depth": DynamicDepthOptions.DEPTH_OF_FIVE,
+            "weight_decay_schedule": WeightDecayScheduleOptions.EXPONENTIAL,
+            "weight_decay_rate": 1e-4,
+            "weight_decay_warmup_batches": 5000,
+            "weight_normalization_option": WeightNormalizationOptions.L2_SCALE,
+            "weight_normalization_position_option": (
+                WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+            ),
+            "bias_option_flag": True,
+            "bias_option": GeneratorDynamicBiasConfig,
+            "diagonal_option_flag": True,
+            "diagonal_option": CombinedDynamicDiagonalConfig,
+            "mask_option_flag": False,
+        },
+        description=(
+            "One dropout-free 32-dimensional encoder layer over 35-token sequences, "
+            "with four attention heads and a 32-dimensional feed-forward stack. "
+            "Top-two routing selects from twelve adaptive experts without a capacity "
+            "limit, while key/value paths remain dense. The bidirectional layer is "
+            "reused for up to ten recurrent steps with an outer attention residual "
+            "and raw-state stick-breaking halting at 0.99. Expert weights use a "
+            "depth-five single-model generator, post-outer-product L2 normalization, "
+            "and delayed exponential base-weight decay; generated biases and combined "
+            "diagonals are enabled without weight masking."
+        ),
+    )
 )
 
 
