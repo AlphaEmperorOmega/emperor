@@ -3,11 +3,22 @@ from collections.abc import Iterable, Sequence
 
 import torch
 import torch.utils.data
+from datasets import load_dataset
 from torchtext.data.utils import get_tokenizer
-from torchtext.datasets import WikiText2 as WikiText2Dataset
 from torchtext.vocab import Vocab, build_vocab_from_iterator
 
 from emperor.datasets._base import DataModule
+
+
+def WikiText2Dataset(*, root: str, split: str) -> Iterable[str]:
+    hugging_face_split = "validation" if split == "valid" else split
+    dataset = load_dataset(
+        "Salesforce/wikitext",
+        "wikitext-2-v1",
+        split=hugging_face_split,
+        cache_dir=root,
+    )
+    return (row["text"] for row in dataset)
 
 
 def _yield_tokens(data_iter, tokenizer):
