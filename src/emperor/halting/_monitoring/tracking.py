@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from functools import wraps
+from itertools import chain
 from typing import TYPE_CHECKING
 
 import torch
@@ -241,7 +242,12 @@ class HaltingUsageTrackerManager:
             return existing_tracker
 
         self.__validate_supported_interface(halting_model)
-        tracker = HaltingUsageTracker()
+        halting_state_tensor = next(
+            chain(halting_model.parameters(), halting_model.buffers()),
+            None,
+        )
+        tracker_device = getattr(halting_state_tensor, "device", torch.device("cpu"))
+        tracker = HaltingUsageTracker().to(device=tracker_device)
         try:
             self.__wrap_halting_methods(
                 halting_model,
