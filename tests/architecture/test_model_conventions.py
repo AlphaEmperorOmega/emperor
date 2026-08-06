@@ -20,6 +20,11 @@ MODEL_PACKAGE_TESTS_ROOT = PROJECT_ROOT / "tests" / "model_packages"
 
 _STANDARD_PUBLIC_EXPORTS = ("MODEL_PACKAGE",)
 
+_BERT_ONLY_PRESETS = {"CAUSAL"}
+_GPT_ONLY_PRESETS_BY_BACKEND = {
+    "expert_linear_adaptive": {"SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL"},
+}
+
 _EXPECTED_CONFIG_BUILDERS = {
     "models.bert.linear": "BertLinearConfigBuilder",
     "models.bert.linear_adaptive": "BertLinearAdaptiveConfigBuilder",
@@ -80,14 +85,19 @@ class TestModelConventions(unittest.TestCase):
             gpt_datasets_module = import_module(f"models.gpt.{backend}.dataset_options")
             bert_search_module = import_module(f"models.bert.{backend}.search_space")
             gpt_search_module = import_module(f"models.gpt.{backend}.search_space")
+            gpt_only_presets = _GPT_ONLY_PRESETS_BY_BACKEND.get(backend, set())
 
             with self.subTest(backend=backend):
                 self.assertEqual(
-                    [preset.name for preset in gpt_presets_module.ExperimentPreset],
+                    [
+                        preset.name
+                        for preset in gpt_presets_module.ExperimentPreset
+                        if preset.name not in gpt_only_presets
+                    ],
                     [
                         preset.name
                         for preset in bert_presets_module.ExperimentPreset
-                        if preset.name != "CAUSAL"
+                        if preset.name not in _BERT_ONLY_PRESETS
                     ],
                 )
                 self.assertEqual(
@@ -96,13 +106,14 @@ class TestModelConventions(unittest.TestCase):
                         for preset, definition in vars(bert_presets_module)[
                             "_PRESET_DEFINITIONS"
                         ].items()
-                        if preset.name != "CAUSAL"
+                        if preset.name not in _BERT_ONLY_PRESETS
                     },
                     {
                         preset.name: definition.preset_values
                         for preset, definition in vars(gpt_presets_module)[
                             "_PRESET_DEFINITIONS"
                         ].items()
+                        if preset.name not in gpt_only_presets
                     },
                 )
                 self.assertEqual(
