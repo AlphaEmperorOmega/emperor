@@ -76,6 +76,7 @@ ALL_STAGE_ADAPTERS = (
         "emperor.datasets.text.bert_pretraining._datasets",
         "WikiText2BertPretraining",
     ),
+    ("emperor.datasets.text.language_modeling._open_web_text", "OpenWebText"),
     ("emperor.datasets.text.language_modeling._penn_treebank", "PennTreebank"),
     ("emperor.datasets.text.language_modeling._wiki_text_2", "WikiText2"),
     ("emperor.datasets.text.language_modeling._wiki_text_103", "WikiText103"),

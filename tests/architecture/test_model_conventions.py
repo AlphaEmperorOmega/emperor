@@ -6,6 +6,7 @@ from pathlib import Path
 
 from emperor.config import ModelConfig
 from emperor.datasets.text.language_modeling import (
+    OpenWebText,
     PennTreebank,
     WikiText2,
     WikiText103,
@@ -135,6 +136,7 @@ class TestModelConventions(unittest.TestCase):
                             WikiText2,
                             PennTreebank,
                             WikiText103,
+                            OpenWebText,
                         ]
                     },
                 )

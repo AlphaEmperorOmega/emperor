@@ -66,6 +66,7 @@ retired_modules = [
   "emperor.datasets.image.classification.cifar_100",
   "emperor.datasets.text.bert_pretraining.datasets",
   "emperor.datasets.text.bert_pretraining.constants",
+  "emperor.datasets.text.language_modeling.open_web_text",
   "emperor.datasets.text.language_modeling.penn_treebank",
   "emperor.datasets.text.language_modeling.wiki_text_2",
   "emperor.datasets.text.language_modeling.wiki_text_103",
@@ -280,8 +281,8 @@ owners = ["emperor.datasets.text.bert_pretraining", "emperor.datasets.text.bert_
 [[interfaces]]
 module = "emperor.datasets.text.language_modeling"
 kind = "runtime"
-exports = ["PennTreebank", "WikiText2", "WikiText103"]
-owners = ["emperor.datasets.text.language_modeling._penn_treebank", "emperor.datasets.text.language_modeling._wiki_text_2", "emperor.datasets.text.language_modeling._wiki_text_103"]
+exports = ["OpenWebText", "PennTreebank", "WikiText2", "WikiText103"]
+owners = ["emperor.datasets.text.language_modeling._open_web_text", "emperor.datasets.text.language_modeling._penn_treebank", "emperor.datasets.text.language_modeling._wiki_text_2", "emperor.datasets.text.language_modeling._wiki_text_103"]
 
 [[interfaces]]
 module = "emperor.datasets.text.translation"

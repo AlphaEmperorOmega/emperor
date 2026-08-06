@@ -5,10 +5,12 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import RandomSampler, SequentialSampler
 
+import emperor.datasets.text.language_modeling._open_web_text as open_web_module
 import emperor.datasets.text.language_modeling._penn_treebank as penn_module
 import emperor.datasets.text.language_modeling._wiki_text_2 as wiki_module
 import emperor.datasets.text.language_modeling._wiki_text_103 as wiki103_module
 from emperor.datasets.text.language_modeling import (
+    OpenWebText,
     PennTreebank,
     WikiText2,
     WikiText103,
@@ -48,6 +50,10 @@ class InMemoryPennTreebank(_InMemoryCorpusMixin, PennTreebank):
 
 
 class InMemoryWikiText103(_InMemoryCorpusMixin, WikiText103):
+    pass
+
+
+class InMemoryOpenWebText(_InMemoryCorpusMixin, OpenWebText):
     pass
 
 
@@ -99,6 +105,7 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
             InMemoryWikiText2,
             InMemoryPennTreebank,
             InMemoryWikiText103,
+            InMemoryOpenWebText,
         )
 
     def test_invalid_batch_and_sequence_lengths_are_rejected(self):
@@ -230,6 +237,7 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
             (PennTreebank, penn_module, "PennTreebankDataset"),
             (WikiText2, wiki_module, "WikiText2Dataset"),
             (WikiText103, wiki103_module, "WikiText103Dataset"),
+            (OpenWebText, open_web_module, "OpenWebTextDataset"),
         )
         for dataset_type, module, provider_name in cases:
             with self.subTest(dataset=dataset_type.__name__):
@@ -272,6 +280,71 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                     split="validation",
                     cache_dir="cache-root",
                 )
+
+    def test_open_web_text_provider_uses_disjoint_slices_of_the_train_split(self):
+        instructions = {
+            "train": "train[:98%]",
+            "valid": "train[98%:99%]",
+            "test": "train[99%:]",
+        }
+        for split, instruction in instructions.items():
+            with self.subTest(split=split):
+                with patch.object(
+                    open_web_module,
+                    "load_dataset",
+                    return_value=({"text": "one two"}, {"text": "three four"}),
+                ) as loader:
+                    text_units = tuple(
+                        open_web_module.OpenWebTextDataset(
+                            root="cache-root",
+                            split=split,
+                        )
+                    )
+
+                self.assertEqual(text_units, ("one two", "three four"))
+                loader.assert_called_once_with(
+                    "Skylion007/openwebtext",
+                    split=instruction,
+                    cache_dir="cache-root",
+                )
+
+        with self.assertRaisesRegex(ValueError, "Unsupported OpenWebText split"):
+            open_web_module.OpenWebTextDataset(
+                root="cache-root",
+                split="validation",
+            )
+
+    def test_open_web_text_prepare_data_materializes_each_cached_slice(self):
+        calls: list[tuple[str, str]] = []
+
+        def provider(*, root: str, split: str):
+            calls.append((root, split))
+            return iter((f"{split} text",))
+
+        with patch.object(
+            open_web_module,
+            "OpenWebTextDataset",
+            new=provider,
+        ):
+            OpenWebText(root="cache-root", num_workers=0).prepare_data()
+
+        self.assertEqual(
+            calls,
+            [
+                ("cache-root", "train"),
+                ("cache-root", "valid"),
+                ("cache-root", "test"),
+            ],
+        )
+
+    def test_open_web_text_vocabulary_is_bounded_to_its_catalog_size(self):
+        with patch.object(open_web_module, "OPEN_WEB_TEXT_VOCAB_SIZE", 4):
+            vocabulary = open_web_module._build_compatible_vocab(
+                iter((("one", "one", "two", "three", "four"),))
+            )
+
+        self.assertEqual(len(vocabulary), 4)
+        self.assertEqual(vocabulary["not-in-vocabulary"], vocabulary["<unk>"])
 
     def test_validation_preconditions_and_encode_autobuild_are_exact(self):
         for dataset_type in self.dataset_types():
