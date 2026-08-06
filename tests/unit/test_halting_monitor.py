@@ -715,6 +715,19 @@ class HaltingMonitorCallbackUnitTests(unittest.TestCase):
         )
         callback.on_fit_end(trainer, owner)
 
+    def test_fit_start_places_tracker_on_already_moved_halting_device(self) -> None:
+        owner = _HaltingOwner()
+        owner.to(device="meta")
+        callback = HaltingMonitorCallback()
+
+        callback.on_fit_start(trainer=None, pl_module=owner)
+
+        tracker_devices = {
+            buffer.device for buffer in owner.halting._usage_tracker.buffers()
+        }
+        self.assertEqual(tracker_devices, {torch.device("meta")})
+        callback.on_fit_end(trainer=None, pl_module=owner)
+
     def test_missing_first_tracker_does_not_prevent_second_module_logging(
         self,
     ) -> None:
