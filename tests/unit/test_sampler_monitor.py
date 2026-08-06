@@ -150,6 +150,15 @@ class TestSamplerMonitorCallback(unittest.TestCase):
         self.assertIn(attached_name, callback._usage_history)
         self.assertIn(attached_name, callback._mass_history)
 
+    def test_on_fit_start_places_tracker_on_already_moved_sampler_device(self):
+        module, sampler = self.build_module_with_sampler()
+        module.to(device="meta")
+
+        self.primed_callback(module)
+
+        tracker_devices = {buffer.device for buffer in sampler.usage_tracker.buffers()}
+        self.assertEqual(tracker_devices, {torch.device("meta")})
+
     def test_on_fit_start_restarts_without_duplicate_sampler_modules(self):
         module, sampler = self.build_module_with_sampler()
         callback = self.primed_callback(module, log_every_n_steps=1)
