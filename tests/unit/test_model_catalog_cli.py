@@ -482,6 +482,7 @@ class TestProjectCatalogCli(unittest.TestCase):
                 "Available datasets for --model-type gpt --model linear:",
                 "  --datasets wiki-text2",
                 "  --datasets penn-treebank",
+                "  --datasets wiki-text103",
             ],
         )
 
