@@ -53,7 +53,6 @@ FIT_VALIDATE_ADAPTERS = (
     ("emperor.datasets.text.classification._dbpedia", "DBpedia"),
     ("emperor.datasets.text.classification._imdb", "IMDB"),
     ("emperor.datasets.text.classification._yelp_review_full", "YelpReviewFull"),
-    ("emperor.datasets.text.language_modeling._wiki_text_103", "WikiText103"),
     ("emperor.datasets.text.ner._conll2003", "CoNLL2003"),
     ("emperor.datasets.text.nli._multi_nli", "MultiNLI"),
     ("emperor.datasets.text.nli._snli", "SNLI"),
@@ -79,6 +78,7 @@ ALL_STAGE_ADAPTERS = (
     ),
     ("emperor.datasets.text.language_modeling._penn_treebank", "PennTreebank"),
     ("emperor.datasets.text.language_modeling._wiki_text_2", "WikiText2"),
+    ("emperor.datasets.text.language_modeling._wiki_text_103", "WikiText103"),
     (
         "emperor.datasets.text.masked_language_modeling._datasets",
         "PennTreebankMaskedLanguageModeling",

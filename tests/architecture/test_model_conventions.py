@@ -5,7 +5,11 @@ from importlib import import_module
 from pathlib import Path
 
 from emperor.config import ModelConfig
-from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
+from emperor.datasets.text.language_modeling import (
+    PennTreebank,
+    WikiText2,
+    WikiText103,
+)
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import PresetDefinition
 from models.catalog import MODEL_CATALOG
@@ -130,6 +134,7 @@ class TestModelConventions(unittest.TestCase):
                         ExperimentTask.CAUSAL_LANGUAGE_MODELING: [
                             WikiText2,
                             PennTreebank,
+                            WikiText103,
                         ]
                     },
                 )

@@ -7,7 +7,12 @@ from torch.utils.data import RandomSampler, SequentialSampler
 
 import emperor.datasets.text.language_modeling._penn_treebank as penn_module
 import emperor.datasets.text.language_modeling._wiki_text_2 as wiki_module
-from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
+import emperor.datasets.text.language_modeling._wiki_text_103 as wiki103_module
+from emperor.datasets.text.language_modeling import (
+    PennTreebank,
+    WikiText2,
+    WikiText103,
+)
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
@@ -35,6 +40,10 @@ class InMemoryWikiText2(_InMemoryCorpusMixin, WikiText2):
 
 
 class InMemoryPennTreebank(_InMemoryCorpusMixin, PennTreebank):
+    pass
+
+
+class InMemoryWikiText103(_InMemoryCorpusMixin, WikiText103):
     pass
 
 
@@ -70,7 +79,11 @@ class _ModernVocabulary:
 
 class TestCausalLanguageModelingDatasets(unittest.TestCase):
     def dataset_types(self):
-        return (InMemoryWikiText2, InMemoryPennTreebank)
+        return (
+            InMemoryWikiText2,
+            InMemoryPennTreebank,
+            InMemoryWikiText103,
+        )
 
     def test_invalid_batch_and_sequence_lengths_are_rejected(self):
         for dataset_type in self.dataset_types():
@@ -139,6 +152,13 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                 "emperor.datasets.text.language_modeling._penn_treebank."
                 "_legacy_text_field",
             ),
+            (
+                WikiText103,
+                "emperor.datasets.text.language_modeling._wiki_text_103."
+                "WikiText103Dataset",
+                "emperor.datasets.text.language_modeling._wiki_text_103."
+                "_legacy_text_field",
+            ),
         )
         for dataset_type, patch_target, field_patch_target in cases:
             with self.subTest(dataset=dataset_type.__name__):
@@ -159,7 +179,7 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                 self.assertEqual(FakeLegacyCorpus.calls, ["fake-root"])
 
     def test_modern_vocab_and_legacy_field_compatibility_helpers_are_literal(self):
-        for module in (penn_module, wiki_module):
+        for module in (penn_module, wiki_module, wiki103_module):
             with self.subTest(module=module.__name__):
                 vocabulary = _ModernVocabulary()
 
@@ -175,6 +195,7 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
         cases = (
             (PennTreebank, penn_module, "PennTreebankDataset"),
             (WikiText2, wiki_module, "WikiText2Dataset"),
+            (WikiText103, wiki103_module, "WikiText103Dataset"),
         )
         for dataset_type, module, provider_name in cases:
             with self.subTest(dataset=dataset_type.__name__):
@@ -191,26 +212,32 @@ class TestCausalLanguageModelingDatasets(unittest.TestCase):
                 self.assertEqual(text_units, ("one two",))
                 self.assertEqual(calls, [("offline-root", "valid")])
 
-    def test_wikitext2_provider_uses_the_maintained_hugging_face_source(self):
-        with patch.object(
-            wiki_module,
-            "load_dataset",
-            return_value=({"text": "one two"}, {"text": "three four"}),
-        ) as loader:
-            text_units = tuple(
-                wiki_module.WikiText2Dataset(
-                    root="cache-root",
-                    split="valid",
-                )
-            )
-
-        self.assertEqual(text_units, ("one two", "three four"))
-        loader.assert_called_once_with(
-            "Salesforce/wikitext",
-            "wikitext-2-v1",
-            split="validation",
-            cache_dir="cache-root",
+    def test_wikitext_providers_use_the_maintained_hugging_face_source(self):
+        cases = (
+            (wiki_module, "WikiText2Dataset", "wikitext-2-v1"),
+            (wiki103_module, "WikiText103Dataset", "wikitext-103-v1"),
         )
+        for module, provider_name, config_name in cases:
+            with self.subTest(config=config_name):
+                with patch.object(
+                    module,
+                    "load_dataset",
+                    return_value=({"text": "one two"}, {"text": "three four"}),
+                ) as loader:
+                    text_units = tuple(
+                        getattr(module, provider_name)(
+                            root="cache-root",
+                            split="valid",
+                        )
+                    )
+
+                self.assertEqual(text_units, ("one two", "three four"))
+                loader.assert_called_once_with(
+                    "Salesforce/wikitext",
+                    config_name,
+                    split="validation",
+                    cache_dir="cache-root",
+                )
 
     def test_validation_preconditions_and_encode_autobuild_are_exact(self):
         for dataset_type in self.dataset_types():

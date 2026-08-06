@@ -6,7 +6,7 @@ from unittest.mock import patch
 import torch
 from torch.utils.data import RandomSampler, SequentialSampler
 
-from emperor.datasets.text.language_modeling._wiki_text_103 import WikiText103
+from emperor.datasets.text.language_modeling import WikiText103
 
 
 class _Vocabulary:
@@ -38,6 +38,7 @@ class _WikiTextSource:
         self.corpus = {
             "train": ("zero one two three four five six seven",),
             "valid": ("one two three four five",),
+            "test": ("two three four five six",),
         }
 
     def __call__(self, *, root: str, split: str):
@@ -126,10 +127,11 @@ class WikiText103DatasetTests(unittest.TestCase):
         ):
             dataset.prepare_data()
             dataset.setup("fit")
+            dataset.setup("test")
 
         self.assertEqual(
             source.calls,
-            ["train", "valid", "train", "train", "valid"],
+            ["train", "valid", "test", "train", "train", "valid", "test"],
         )
         train_inputs, train_targets = dataset.train.tensors
         validation_inputs, validation_targets = dataset.val.tensors
@@ -148,6 +150,11 @@ class WikiText103DatasetTests(unittest.TestCase):
         self.assertIsInstance(dataset.train_dataloader().sampler, RandomSampler)
         self.assertIsInstance(dataset.val_dataloader().sampler, SequentialSampler)
         self.assertEqual(dataset._text_labels(train_inputs[0, :2]), ["zero", "one"])
+
+        test_inputs, test_targets = next(iter(dataset.test_dataloader()))
+        self.assertEqual(test_inputs.shape, torch.Size([1, 3]))
+        self.assertEqual(test_targets.shape, torch.Size([1, 3]))
+        torch.testing.assert_close(test_inputs[:, 1:], test_targets[:, :-1])
 
     def test_validation_reuses_training_vocabulary_source_and_propagates_errors(
         self,

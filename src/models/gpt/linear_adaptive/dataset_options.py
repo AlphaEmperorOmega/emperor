@@ -1,7 +1,11 @@
-from emperor.datasets.text.language_modeling import PennTreebank, WikiText2
+from emperor.datasets.text.language_modeling import (
+    PennTreebank,
+    WikiText2,
+    WikiText103,
+)
 from emperor.experiments import ExperimentTask
 
 DEFAULT_EXPERIMENT_TASK: ExperimentTask = ExperimentTask.CAUSAL_LANGUAGE_MODELING
 DATASET_OPTIONS_BY_TASK: dict[ExperimentTask, list[type]] = {
-    DEFAULT_EXPERIMENT_TASK: [WikiText2, PennTreebank],
+    DEFAULT_EXPERIMENT_TASK: [WikiText2, PennTreebank, WikiText103],
 }
