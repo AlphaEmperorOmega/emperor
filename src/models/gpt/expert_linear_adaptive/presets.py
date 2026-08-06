@@ -210,24 +210,23 @@ _PRESET_DEFINITIONS = {
             "and shared memory."
         ),
     ),
+    ExperimentPreset.TOP1_SWITCH_AUX: PresetDefinition(
+        preset_values={
+            "top_k": 1,
+            "sampler_normalize_probabilities_flag": False,
+            "sampler_switch_loss_weight": 0.1,
+        },
+        description="Default config with top-1 expert routing and switch auxiliary loss.",
+    ),
+    ExperimentPreset.LOW_RANK_EXPERT_WEIGHT: PresetDefinition(
+        preset_values={
+            "weight_option_flag": True,
+            "weight_option": config.LowRankDynamicWeightConfig,
+        },
+        description="Default config with adaptive low-rank dynamic weights inside expert "
+        "feed-forward internals.",
+    ),
 }
-
-_PRESET_DEFINITIONS[ExperimentPreset.TOP1_SWITCH_AUX] = PresetDefinition(
-    preset_values={
-        "top_k": 1,
-        "sampler_normalize_probabilities_flag": False,
-        "sampler_switch_loss_weight": 0.1,
-    },
-    description="Default config with top-1 expert routing and switch auxiliary loss.",
-)
-_PRESET_DEFINITIONS[ExperimentPreset.LOW_RANK_EXPERT_WEIGHT] = PresetDefinition(
-    preset_values={
-        "weight_option_flag": True,
-        "weight_option": config.LowRankDynamicWeightConfig,
-    },
-    description="Default config with adaptive low-rank dynamic weights inside expert "
-    "feed-forward internals.",
-)
 
 
 class ExperimentPresets(BuilderBackedExperimentPresetsBase):
