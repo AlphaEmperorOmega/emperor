@@ -62,7 +62,9 @@ class DatasetInterfaceTests(unittest.TestCase):
                 self.assertFalse(hasattr(module, "__getattr__"))
                 self.assertFalse(hasattr(module, "_LAZY_EXPORTS"))
 
-    def test_dataset_roots_export_symbols_from_their_original_owner_modules(self) -> None:
+    def test_dataset_roots_export_symbols_from_their_original_owner_modules(
+        self,
+    ) -> None:
         for owner_name, export_name in self.OWNER_CASES:
             with self.subTest(owner=owner_name, export=export_name):
                 owner = importlib.import_module(owner_name)

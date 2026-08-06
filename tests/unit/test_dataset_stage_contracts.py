@@ -169,7 +169,9 @@ class TestDatasetStageContracts(unittest.TestCase):
         for adapters, expected_stages in cases:
             for module_name, class_name in adapters:
                 with self.subTest(adapter=f"{module_name}.{class_name}"):
-                    adapter_type = getattr(importlib.import_module(module_name), class_name)
+                    adapter_type = getattr(
+                        importlib.import_module(module_name), class_name
+                    )
                     adapter = adapter_type.__new__(adapter_type)
                     self.assertEqual(adapter._supported_stages(), expected_stages)
 
