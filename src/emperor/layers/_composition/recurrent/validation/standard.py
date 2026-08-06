@@ -13,10 +13,19 @@ from emperor.layers._composition.recurrent.validation.common import (
     _validate_recurrent_controller_config,
     _validate_transition_gradient_window,
 )
+from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 
 if TYPE_CHECKING:
     from emperor.layers._composition.recurrent.variants.standard import RecurrentLayer
     from emperor.layers._state import LayerState
+
+
+_SUPPORTED_RESIDUAL_REQUIREMENTS = frozenset(
+    {
+        ResidualRuntimeRequirement.FORWARD_LOCAL_STATE,
+        ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS,
+    }
+)
 
 
 class RecurrentLayerValidator(_RecurrentCompositionValidator):
@@ -65,7 +74,10 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             cfg.output_dim,
         )
         cls.__validate_block_config(cfg.block_config)
-        _validate_recurrent_controller_config(cfg)
+        _validate_recurrent_controller_config(
+            cfg,
+            supported_residual_requirements=_SUPPORTED_RESIDUAL_REQUIREMENTS,
+        )
         expected_owner = cfg.registry_owner()
         if not isinstance(model, expected_owner):
             raise TypeError(
