@@ -497,6 +497,7 @@ def _attach_residual_stack_options(
             (
                 ExpertsStackOptions,
                 ExpertsSubmoduleStackOptions,
+                ExpertsRecurrentControllerOptions,
                 ExpertsAdaptiveGeneratorStackOptions,
                 AdaptiveGeneratorStackOptions,
                 MainLayerStackOptions,
@@ -970,6 +971,10 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_flag=config_module.RECURRENT_FLAG,
         recurrent_max_steps=config_module.RECURRENT_MAX_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
+        recurrent_residual_connection_option=(
+            config_module.RECURRENT_RESIDUAL_CONNECTION_OPTION
+        ),
+        recurrent_residual_model_flag=config_module.RECURRENT_RESIDUAL_MODEL_FLAG,
         recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
@@ -991,6 +996,10 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_flag": "recurrent_flag",
             "recurrent_max_steps": "recurrent_max_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
+            "recurrent_residual_connection_option": (
+                "recurrent_residual_connection_option"
+            ),
+            "recurrent_residual_model_flag": "recurrent_residual_model_flag",
             "recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "recurrent_gate_option": "recurrent_gate_option",
             "recurrent_gate_activation": "recurrent_gate_activation",
