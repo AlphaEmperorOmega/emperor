@@ -3,6 +3,7 @@ import contextlib
 import io
 import unittest
 from dataclasses import fields
+from typing import get_args, get_type_hints
 
 from lightning.pytorch.callbacks import EarlyStopping
 
@@ -13,6 +14,7 @@ import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.vit.linear.config as vit_config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterMonitorCallback,
+    DynamicBiasConfig,
     GeneratorDynamicBiasConfig,
     LowRankDynamicWeightConfig,
 )
@@ -20,8 +22,12 @@ from emperor.datasets.image.classification import Mnist
 from emperor.halting import HaltingMonitorCallback
 from emperor.layers import ActivationOptions, LayerGateOptions
 from emperor.linears import LinearMonitorCallback
-from model_runtime.packages import iter_supported_config_keys
-from models.catalog import model_package
+from model_runtime.packages import (
+    config_key_to_flag,
+    config_key_to_model_param,
+    iter_supported_config_keys,
+)
+from models.catalog import discover_model_packages, model_package
 from models.cli_selection import (
     CliSelection,
     resolve_cli_selection,
@@ -46,6 +52,13 @@ from models.linears.linear_adaptive.presets import (
 from models.parametric.parametric_vector.presets import (
     ExperimentPreset as ParametricVectorExperimentPreset,
 )
+
+
+def annotation_contains_type(annotation, expected_type: type) -> bool:
+    return annotation is expected_type or any(
+        annotation_contains_type(argument, expected_type)
+        for argument in get_args(annotation)
+    )
 
 
 class ExperimentConfigOverrideTestCase:
@@ -210,26 +223,47 @@ class TestExperimentConfigOverrideParsing(
         )
         self.assertEqual(mode.search_overrides, {})
 
-    def test_generator_dynamic_bias_config_parses_as_named_override(self):
-        args = self.make_parser().parse_args(
-            [
-                "--preset",
-                "baseline",
-                "--config",
-                "--bias-option-flag",
-                "true",
-                "--bias-option",
-                "GeneratorDynamicBiasConfig",
+    def test_generator_dynamic_bias_config_parses_for_every_dynamic_bias_override(
+        self,
+    ):
+        exercised_overrides = []
+
+        for package in discover_model_packages():
+            annotations = get_type_hints(package.runtime_defaults)
+            dynamic_bias_keys = [
+                key
+                for key in iter_supported_config_keys(package.runtime_defaults)
+                if annotation_contains_type(
+                    annotations.get(key),
+                    DynamicBiasConfig,
+                )
             ]
-        )
 
-        mode = self.resolve_args(args)
+            for key in dynamic_bias_keys:
+                with self.subTest(package=package.catalog_key, key=key):
+                    args = get_experiment_parser(package).parse_args(
+                        [
+                            "--preset",
+                            package.preset_name(package.default_preset),
+                            "--config",
+                            config_key_to_flag(key),
+                            "GeneratorDynamicBiasConfig",
+                        ]
+                    )
 
-        self.assertTrue(mode.config_overrides["bias_option_flag"])
-        self.assertIs(
-            mode.config_overrides["bias_option"],
-            GeneratorDynamicBiasConfig,
-        )
+                    mode = resolve_cli_selection(
+                        args,
+                        package,
+                        package.preset_type,
+                    )
+
+                    self.assertIs(
+                        mode.config_overrides[config_key_to_model_param(key)],
+                        GeneratorDynamicBiasConfig,
+                    )
+                    exercised_overrides.append((package.catalog_key, key))
+
+        self.assertTrue(exercised_overrides)
 
     def test_hidden_dim_flag_sets_hidden_dim_override(self):
         args = self.make_parser().parse_args(
