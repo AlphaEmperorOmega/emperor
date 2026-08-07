@@ -11,6 +11,7 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GeneratorDynamicBiasConfig,  # noqa: F401
     HypernetworkDynamicWeightConfig,  # noqa: F401
     LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
     LowRankDynamicWeightConfig,  # noqa: F401

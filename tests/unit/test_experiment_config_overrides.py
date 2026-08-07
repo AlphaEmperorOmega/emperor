@@ -13,6 +13,7 @@ import models.linears.linear_adaptive.config as linear_adaptive_config
 import models.vit.linear.config as vit_config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterMonitorCallback,
+    GeneratorDynamicBiasConfig,
     LowRankDynamicWeightConfig,
 )
 from emperor.datasets.image.classification import Mnist
@@ -208,6 +209,27 @@ class TestExperimentConfigOverrideParsing(
             LowRankDynamicWeightConfig,
         )
         self.assertEqual(mode.search_overrides, {})
+
+    def test_generator_dynamic_bias_config_parses_as_named_override(self):
+        args = self.make_parser().parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--config",
+                "--bias-option-flag",
+                "true",
+                "--bias-option",
+                "GeneratorDynamicBiasConfig",
+            ]
+        )
+
+        mode = self.resolve_args(args)
+
+        self.assertTrue(mode.config_overrides["bias_option_flag"])
+        self.assertIs(
+            mode.config_overrides["bias_option"],
+            GeneratorDynamicBiasConfig,
+        )
 
     def test_hidden_dim_flag_sets_hidden_dim_override(self):
         args = self.make_parser().parse_args(
