@@ -39,6 +39,7 @@ class ExperimentTaskBehavior:
     dataset_arguments: tuple[DatasetArgument, ...]
     ranking_metrics: tuple[RankingMetric, ...]
     missing_ranking_score: tuple[float, float]
+    core_result_metric_keys: tuple[str, ...] = ()
 
     def synthetic_inputs(self, dataset: type, configuration: Any) -> tuple[Any, ...]:
         return self.synthetic_input_builder(dataset, configuration)
@@ -159,12 +160,64 @@ _VALIDATION_BLEU = RankingMetric(
     keys=("validation/bleu", "validation_bleu"),
 )
 
+
+def _stage_metric_keys(*metric_names: str) -> tuple[str, ...]:
+    return tuple(
+        f"{stage}/{metric_name}"
+        for stage in ("train", "validation", "test")
+        for metric_name in metric_names
+    )
+
+
+_IMAGE_CLASSIFICATION_RESULT_METRIC_KEYS = (
+    *_stage_metric_keys("loss", "accuracy", "f1_score"),
+    "train/loss_epoch",
+    "train/accuracy_epoch",
+    "validation/loss_epoch",
+    "validation/accuracy_epoch",
+    "gap/accuracy",
+    "gap/loss",
+    "best_validation/accuracy",
+    "best_validation/loss",
+    "best_validation/epoch",
+    "best_validation/accuracy_epoch",
+    "best_validation/loss_epoch",
+)
+_BERT_PRETRAINING_RESULT_METRIC_KEYS = _stage_metric_keys(
+    "loss",
+    "mlm/loss",
+    "mlm/perplexity",
+    "mlm/masked_accuracy",
+    "mlm/masked_top_5_accuracy",
+    "nsp/loss",
+    "nsp/accuracy",
+    "auxiliary/loss",
+)
+_TEXT_TRANSLATION_RESULT_METRIC_KEYS = (
+    *_stage_metric_keys(
+        "loss",
+        "nll",
+        "perplexity",
+        "token_accuracy",
+        "auxiliary_loss",
+    ),
+    "validation/bleu",
+    "test/bleu",
+)
+_CAUSAL_LANGUAGE_MODELING_RESULT_METRIC_KEYS = _stage_metric_keys(
+    "loss",
+    "cross_entropy",
+    "perplexity",
+    "auxiliary_loss",
+)
+
 _DECLARED_BEHAVIORS = (
     ExperimentTaskBehavior(
         task=ExperimentTask.IMAGE_CLASSIFICATION,
         synthetic_input_builder=_image_inputs,
         dataset_arguments=(_BATCH_SIZE,),
         ranking_metrics=(_VALIDATION_ACCURACY,),
+        core_result_metric_keys=_IMAGE_CLASSIFICATION_RESULT_METRIC_KEYS,
         missing_ranking_score=(1.0, 0.0),
     ),
     ExperimentTaskBehavior(
@@ -172,6 +225,7 @@ _DECLARED_BEHAVIORS = (
         synthetic_input_builder=_token_inputs,
         dataset_arguments=(_BATCH_SIZE,),
         ranking_metrics=(_VALIDATION_ACCURACY,),
+        core_result_metric_keys=_BERT_PRETRAINING_RESULT_METRIC_KEYS,
         missing_ranking_score=(1.0, 0.0),
     ),
     ExperimentTaskBehavior(
@@ -183,6 +237,7 @@ _DECLARED_BEHAVIORS = (
             _TARGET_SEQUENCE_LENGTH,
         ),
         ranking_metrics=(_VALIDATION_BLEU, _VALIDATION_LOSS),
+        core_result_metric_keys=_TEXT_TRANSLATION_RESULT_METRIC_KEYS,
         missing_ranking_score=(0.0, float("-inf")),
     ),
     ExperimentTaskBehavior(
@@ -190,6 +245,7 @@ _DECLARED_BEHAVIORS = (
         synthetic_input_builder=_token_inputs,
         dataset_arguments=(_BATCH_SIZE, _SEQUENCE_LENGTH),
         ranking_metrics=(_VALIDATION_LOSS,),
+        core_result_metric_keys=_CAUSAL_LANGUAGE_MODELING_RESULT_METRIC_KEYS,
         missing_ranking_score=(0.0, float("-inf")),
     ),
 )
@@ -214,6 +270,14 @@ def _compile_registry() -> Mapping[ExperimentTask, ExperimentTaskBehavior]:
 
 
 EXPERIMENT_TASK_BEHAVIORS = _compile_registry()
+CORE_RESULT_METRIC_KEYS = frozenset(
+    key
+    for behavior in EXPERIMENT_TASK_BEHAVIORS.values()
+    for key in (
+        *behavior.core_result_metric_keys,
+        *(key for metric in behavior.ranking_metrics for key in metric.keys),
+    )
+)
 
 
 def experiment_task_behavior(task: ExperimentTask) -> ExperimentTaskBehavior:
@@ -224,6 +288,7 @@ def experiment_task_behavior(task: ExperimentTask) -> ExperimentTaskBehavior:
 
 
 __all__ = [
+    "CORE_RESULT_METRIC_KEYS",
     "EXPERIMENT_TASK_BEHAVIORS",
     "ExperimentTaskBehavior",
     "SyntheticInputError",

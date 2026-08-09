@@ -6,11 +6,26 @@ from types import SimpleNamespace
 from emperor.experiments import ExperimentTask
 from model_runtime.task_behavior import (
     EXPERIMENT_TASK_BEHAVIORS,
+    ExperimentTaskBehavior,
     experiment_task_behavior,
 )
 
 
 class ExperimentTaskBehaviorTests(unittest.TestCase):
+    def test_legacy_positional_construction_keeps_empty_core_result_contract(
+        self,
+    ) -> None:
+        behavior = ExperimentTaskBehavior(
+            ExperimentTask.IMAGE_CLASSIFICATION,
+            lambda _dataset, _configuration: (),
+            (),
+            (),
+            (1.0, 0.0),
+        )
+
+        self.assertEqual(behavior.missing_ranking_score, (1.0, 0.0))
+        self.assertEqual(behavior.core_result_metric_keys, ())
+
     def test_registry_is_exhaustive_and_unique(self) -> None:
         self.assertEqual(set(EXPERIMENT_TASK_BEHAVIORS), set(ExperimentTask))
         self.assertEqual(
@@ -78,6 +93,65 @@ class ExperimentTaskBehaviorTests(unittest.TestCase):
             translation.ranking_score({"metrics": {"validation/bleu": 1.0}}),
             translation.ranking_score({"metrics": {"validation/loss": 0.1}}),
         )
+
+    def test_core_result_metric_contracts_cover_every_task_output(self) -> None:
+        def stage_keys(*metric_names: str) -> set[str]:
+            return {
+                f"{stage}/{metric_name}"
+                for stage in ("train", "validation", "test")
+                for metric_name in metric_names
+            }
+
+        expected_keys = {
+            ExperimentTask.IMAGE_CLASSIFICATION: {
+                *stage_keys("loss", "accuracy", "f1_score"),
+                "train/loss_epoch",
+                "train/accuracy_epoch",
+                "validation/loss_epoch",
+                "validation/accuracy_epoch",
+                "gap/accuracy",
+                "gap/loss",
+                "best_validation/accuracy",
+                "best_validation/loss",
+                "best_validation/epoch",
+                "best_validation/accuracy_epoch",
+                "best_validation/loss_epoch",
+            },
+            ExperimentTask.BERT_PRETRAINING: stage_keys(
+                "loss",
+                "mlm/loss",
+                "mlm/perplexity",
+                "mlm/masked_accuracy",
+                "mlm/masked_top_5_accuracy",
+                "nsp/loss",
+                "nsp/accuracy",
+                "auxiliary/loss",
+            ),
+            ExperimentTask.TEXT_TRANSLATION: {
+                *stage_keys(
+                    "loss",
+                    "nll",
+                    "perplexity",
+                    "token_accuracy",
+                    "auxiliary_loss",
+                ),
+                "validation/bleu",
+                "test/bleu",
+            },
+            ExperimentTask.CAUSAL_LANGUAGE_MODELING: stage_keys(
+                "loss",
+                "cross_entropy",
+                "perplexity",
+                "auxiliary_loss",
+            ),
+        }
+
+        for task, expected_task_keys in expected_keys.items():
+            with self.subTest(task=task.name):
+                self.assertEqual(
+                    set(experiment_task_behavior(task).core_result_metric_keys),
+                    expected_task_keys,
+                )
 
 
 if __name__ == "__main__":

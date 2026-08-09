@@ -11,7 +11,15 @@ from unittest.mock import patch
 
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelIdentity
-from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
+from model_runtime.runs.artifacts import (
+    DEFAULT_RESULT_METRIC_KEY_LIMIT,
+    FilesystemRunArtifacts,
+    RunArtifacts,
+)
+from model_runtime.task_behavior import (
+    CORE_RESULT_METRIC_KEYS,
+    EXPERIMENT_TASK_BEHAVIORS,
+)
 
 
 class RunsArtifactsTests(unittest.TestCase):
@@ -149,6 +157,142 @@ class RunsArtifactsTests(unittest.TestCase):
         self.assertEqual(payload["metrics"], {"validation/accuracy": 0.75})
         self.assertEqual(payload["metricsOriginalCount"], 2)
         self.assertEqual(payload["metricsDroppedCount"], 1)
+
+    def test_result_metrics_keep_core_metrics_after_optional_metric_limit(self) -> None:
+        optional_metrics = {
+            f"adaptive/module_{index:04d}/mean": index
+            for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 200)
+        }
+
+        payload = FilesystemRunArtifacts().result_metrics_payload(
+            {
+                **optional_metrics,
+                "validation/perplexity": 42.0,
+            }
+        )
+
+        self.assertEqual(payload["metrics"]["validation/perplexity"], 42.0)
+
+    def test_core_result_metrics_are_independent_of_insertion_order(self) -> None:
+        optional_metrics = {
+            f"monitor/module_{index:04d}/mean": index
+            for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 1)
+        }
+        core_metrics = {
+            "validation/loss": 3.5,
+            "validation/perplexity": 33.1,
+        }
+
+        core_first = FilesystemRunArtifacts().result_metrics_payload(
+            {**core_metrics, **optional_metrics}
+        )
+        core_last = FilesystemRunArtifacts().result_metrics_payload(
+            {**optional_metrics, **core_metrics}
+        )
+
+        for payload in (core_first, core_last):
+            self.assertEqual(
+                {key: payload["metrics"][key] for key in core_metrics},
+                core_metrics,
+            )
+
+    def test_result_metric_limit_applies_only_to_optional_metrics(self) -> None:
+        metrics = {
+            **{
+                f"monitor/module_{index:04d}/mean": index
+                for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 100)
+            },
+            "validation/loss": 3.5,
+            "validation/perplexity": 33.1,
+        }
+
+        payload = FilesystemRunArtifacts().result_metrics_payload(metrics)
+
+        self.assertEqual(
+            len(payload["metrics"]),
+            DEFAULT_RESULT_METRIC_KEY_LIMIT + 2,
+        )
+        self.assertLessEqual(
+            len(payload["metrics"]),
+            DEFAULT_RESULT_METRIC_KEY_LIMIT + len(CORE_RESULT_METRIC_KEYS),
+        )
+        self.assertEqual(payload["metricsOriginalCount"], len(metrics))
+        self.assertEqual(payload["metricsDroppedCount"], 100)
+
+    def test_truncated_optional_metric_selection_and_order_are_deterministic(
+        self,
+    ) -> None:
+        optional_keys = [
+            f"monitor/module_{index:04d}/mean"
+            for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 100)
+        ]
+        core_metrics = {"validation/loss": 3.5}
+        ascending = FilesystemRunArtifacts().result_metrics_payload(
+            {
+                **{key: key for key in optional_keys},
+                **core_metrics,
+            }
+        )
+        descending = FilesystemRunArtifacts().result_metrics_payload(
+            {
+                **{key: key for key in reversed(optional_keys)},
+                **core_metrics,
+            }
+        )
+
+        expected_optional_keys = optional_keys[:DEFAULT_RESULT_METRIC_KEY_LIMIT]
+        self.assertEqual(
+            [key for key in ascending["metrics"] if key not in core_metrics],
+            expected_optional_keys,
+        )
+        self.assertEqual(
+            list(ascending["metrics"]),
+            list(descending["metrics"]),
+        )
+        self.assertEqual(ascending, descending)
+
+    def test_low_cardinality_result_metrics_remain_unchanged(self) -> None:
+        metrics = {
+            "monitor/z_metric": 1.0,
+            "validation/perplexity": 42.0,
+            "monitor/a_metric": 2.0,
+        }
+
+        payload = FilesystemRunArtifacts().result_metrics_payload(metrics)
+
+        self.assertEqual(payload, {"metrics": metrics})
+        self.assertEqual(list(payload["metrics"]), list(metrics))
+
+    def test_every_task_core_result_contract_survives_optional_metric_pressure(
+        self,
+    ) -> None:
+        optional_metrics = {
+            f"monitor/module_{index:04d}/mean": index
+            for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 1)
+        }
+
+        for task, behavior in EXPERIMENT_TASK_BEHAVIORS.items():
+            ranking_keys = {
+                key
+                for ranking_metric in behavior.ranking_metrics
+                for key in ranking_metric.keys
+            }
+            expected_core_keys = {
+                *behavior.core_result_metric_keys,
+                *ranking_keys,
+            }
+            with self.subTest(task=task.name):
+                payload = FilesystemRunArtifacts().result_metrics_payload(
+                    {
+                        **optional_metrics,
+                        **{key: 1.0 for key in expected_core_keys},
+                    }
+                )
+
+                self.assertTrue(
+                    expected_core_keys.issubset(payload["metrics"]),
+                    expected_core_keys.difference(payload["metrics"]),
+                )
 
     def test_namespace_must_be_one_relative_folder(self) -> None:
         for namespace in ("", ".", "..", "../escape", "nested/folder", "/logs", "a\\b"):
