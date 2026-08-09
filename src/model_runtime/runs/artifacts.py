@@ -17,7 +17,10 @@ from emperor.experiments import ExperimentTask
 from model_runtime.packages.identity import ModelIdentity
 from model_runtime.runs._metrics import sanitize_metric_payload
 from model_runtime.runs.json_values import require_finite_json
-from model_runtime.task_behavior import experiment_task_behavior
+from model_runtime.task_behavior import (
+    CORE_RESULT_METRIC_KEYS,
+    experiment_task_behavior,
+)
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
 DEFAULT_RESULT_STRING_VALUE_LIMIT = 20_000
@@ -137,6 +140,8 @@ class FilesystemRunArtifacts:
             metrics,
             metric_key_limit=DEFAULT_RESULT_METRIC_KEY_LIMIT,
             string_value_limit=DEFAULT_RESULT_STRING_VALUE_LIMIT,
+            protected_metric_keys=CORE_RESULT_METRIC_KEYS,
+            deterministic_selection=True,
         )
         payload: dict[str, Any] = {"metrics": sanitized}
         if dropped_count > 0:

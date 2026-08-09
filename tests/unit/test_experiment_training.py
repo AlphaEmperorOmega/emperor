@@ -20,7 +20,10 @@ from model_runtime.packages import (
 )
 from model_runtime.runs import ExperimentBase, JsonlRunProgress
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
-from model_runtime.runs.artifacts import FilesystemRunArtifacts
+from model_runtime.runs.artifacts import (
+    DEFAULT_RESULT_METRIC_KEY_LIMIT,
+    FilesystemRunArtifacts,
+)
 from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
 
 
@@ -308,6 +311,34 @@ class TestExperimentTraining(unittest.TestCase):
         self._execute_run(experiment)
 
         self.assertIsInstance(FakeTrainer.instances[0].model.config, FakeConfig)
+
+    def test_run_result_keeps_core_metrics_after_monitor_metric_pressure(self):
+        class MonitorHeavyTrainer(FakeTrainer):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.callback_metrics = {
+                    **{
+                        f"monitor/module_{index:04d}/mean": FakeMetric(index)
+                        for index in range(DEFAULT_RESULT_METRIC_KEY_LIMIT + 200)
+                    },
+                    "validation/accuracy": FakeMetric(0.75),
+                    "validation/loss": FakeMetric(0.5),
+                }
+
+        experiments_base.Trainer = MonitorHeavyTrainer
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+
+        result, log_dir = self._execute_run(experiment)
+
+        self.assertEqual(result["metrics"]["validation/accuracy"], 0.75)
+        self.assertEqual(result["metrics"]["validation/loss"], 0.5)
+        self.assertEqual(
+            json.loads(Path(log_dir, "result.json").read_text(encoding="utf-8")),
+            result,
+        )
 
     def test_materialized_run_sets_progress_context_and_events(self):
         experiment = FakeExperiment(model_package=self.model_package)

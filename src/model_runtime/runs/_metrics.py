@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from model_runtime.runs.json_values import require_finite_json
@@ -51,19 +51,50 @@ def sanitize_metric_payload(
     *,
     metric_key_limit: int,
     string_value_limit: int,
+    protected_metric_keys: Collection[str] = (),
+    deterministic_selection: bool = False,
 ) -> tuple[dict[str, Any], int, int]:
-    sanitized: dict[str, Any] = {}
-    dropped_count = 0
-    safe_metric_key_limit = max(0, int(metric_key_limit))
+    eligible_metrics: dict[str, Any] = {}
+    filtered_count = 0
+    protected_keys = frozenset(str(key) for key in protected_metric_keys)
     for raw_key, value in metrics.items():
         key = str(raw_key)
-        if _metric_key_is_dropped(key) or len(sanitized) >= safe_metric_key_limit:
-            dropped_count += 1
+        if _metric_key_is_dropped(key):
+            filtered_count += 1
             continue
-        sanitized[key] = _json_value(
-            value,
+        eligible_metrics[key] = value
+
+    safe_metric_key_limit = max(0, int(metric_key_limit))
+    present_protected_keys = protected_keys.intersection(eligible_metrics)
+    optional_keys = [
+        key for key in eligible_metrics if key not in present_protected_keys
+    ]
+    optional_key_limit = safe_metric_key_limit
+    optional_truncated_count = max(0, len(optional_keys) - optional_key_limit)
+    if optional_truncated_count > 0 and deterministic_selection:
+        retained_keys = sorted(
+            present_protected_keys.union(
+                sorted(optional_keys)[:optional_key_limit],
+            )
+        )
+    elif optional_truncated_count > 0:
+        retained_optional_keys = frozenset(optional_keys[:optional_key_limit])
+        retained_keys = [
+            key
+            for key in eligible_metrics
+            if key in present_protected_keys or key in retained_optional_keys
+        ]
+    else:
+        retained_keys = list(eligible_metrics)
+
+    sanitized = {
+        key: _json_value(
+            eligible_metrics[key],
             string_value_limit=string_value_limit,
         )
+        for key in retained_keys
+    }
+    dropped_count = filtered_count + optional_truncated_count
     return sanitized, len(metrics), dropped_count
 
 
