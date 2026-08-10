@@ -88,21 +88,13 @@ def _residual(runtime: RuntimeOptions, option, model_flag):
                 hidden_dim=runtime.residual_stack_hidden_dim,
                 num_layers=runtime.residual_stack_num_layers,
                 activation=runtime.residual_stack_activation,
-                layer_norm_position=(
-                    runtime.residual_stack_layer_norm_position
-                ),
+                layer_norm_position=(runtime.residual_stack_layer_norm_position),
                 residual_connection_option=(
                     runtime.residual_stack_residual_connection_option
                 ),
-                residual_model_flag=(
-                    runtime.residual_stack_residual_model_flag
-                ),
-                dropout_probability=(
-                    runtime.residual_stack_dropout_probability
-                ),
-                last_layer_bias_option=(
-                    runtime.residual_stack_last_layer_bias_option
-                ),
+                residual_model_flag=(runtime.residual_stack_residual_model_flag),
+                dropout_probability=(runtime.residual_stack_dropout_probability),
+                last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
                 apply_output_pipeline_flag=(
                     runtime.residual_stack_apply_output_pipeline_flag
                 ),

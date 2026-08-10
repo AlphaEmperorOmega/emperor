@@ -195,9 +195,7 @@ class TestLayerStack(unittest.TestCase):
             hidden_dim=dim,
             output_dim=dim,
             stack_num_layers=2,
-            stack_residual_connection_option=(
-                AttentionResidualConfig
-            ),
+            stack_residual_connection_option=(AttentionResidualConfig),
             stack_dropout_probability=0.0,
             gate_enabled=False,
             halting_config=self.halting_config(dim, threshold=0.9),
@@ -259,9 +257,7 @@ class TestLayerStack(unittest.TestCase):
     def test_attention_residual_stack_owns_one_router_per_layer(self):
         stack = self.attention_residual_stack((2.0, 3.0, 4.0))
 
-        queries = tuple(
-            layer.residual_connection.query for layer in stack
-        )
+        queries = tuple(layer.residual_connection.query for layer in stack)
 
         self.assertEqual(len({id(query) for query in queries}), len(queries))
         for query in queries:
@@ -1375,7 +1371,10 @@ class TestLayerStack(unittest.TestCase):
         halting_models = [layer.halting_model for layer in layers]
 
         self.assertTrue(
-            all(isinstance(halting_model, SoftHalting) for halting_model in halting_models)
+            all(
+                isinstance(halting_model, SoftHalting)
+                for halting_model in halting_models
+            )
         )
         self.assertTrue(
             all(halting_model is halting_models[0] for halting_model in halting_models)

@@ -578,7 +578,6 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 "halting_config must be an instance of HaltingConfig for "
                 f"NeuronClusterConfig, got {type(halting_config).__name__}"
             )
-
         try:
             halting_model_type = halting_config._registry_owner()
         except NotImplementedError as registry_error:
