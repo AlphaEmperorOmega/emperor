@@ -9,6 +9,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from torch import nn
 
+from emperor.halting import HaltingHiddenStateModeOptions, SoftHaltingConfig
 from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
     LayerConfig,
@@ -135,12 +136,36 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                 bias_flag=False,
             ),
             max_steps=2,
+            halting_config=SoftHaltingConfig(
+                input_dim=4,
+                threshold=0.99,
+                ponder_cost_weight=1.0,
+                dropout_probability=0.0,
+                hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                halting_gate_config=None,
+                min_steps=2,
+            ),
         ).build()
 
-        root = inspect_model_graph(recurrent).nodes[0]
+        graph = inspect_model_graph(recurrent)
+        root = graph.nodes[0]
 
         self.assertEqual(root.type_name, "RecurrentLayer")
         self.assertIs(root.details["recurrent"]["diagnostics"], True)
+        self.assertEqual(root.details["recurrent"]["min_steps"], 2)
+        self.assertIsNotNone(root.configuration)
+        assert root.configuration is not None
+        configuration = {field.key: field.value for field in root.configuration.fields}
+        self.assertNotIn("min_steps", configuration)
+        halting_node = next(
+            node for node in graph.nodes if node.path == "halting_model"
+        )
+        self.assertIsNotNone(halting_node.configuration)
+        assert halting_node.configuration is not None
+        halting_configuration = {
+            field.key: field.value for field in halting_node.configuration.fields
+        }
+        self.assertEqual(halting_configuration["min_steps"], 2)
 
     def test_tiny_recursive_model_is_discovered_through_generic_graph_inspection(
         self,

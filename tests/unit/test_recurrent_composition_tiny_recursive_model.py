@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import torch
 
 from emperor.config import ConfigBase, optional_field
-from emperor.halting import HaltingConfig
+from emperor.halting import (
+    HaltingConfig,
+    HaltingHiddenStateModeOptions,
+    HaltingUsageTrackerManager,
+    SoftHaltingConfig,
+)
 from emperor.layers import (
     AdditiveResidualConfig,
     AttentionResidualConfig,
@@ -172,6 +177,22 @@ def _config(
 
 
 class TestTinyRecursiveModelRecurrentConfig(unittest.TestCase):
+    def test_non_default_halting_minimum_is_owned_by_the_halting_strategy(self) -> None:
+        config = _config()
+        config.halting_config = SoftHaltingConfig(
+            input_dim=1,
+            threshold=0.999,
+            ponder_cost_weight=1.0,
+            dropout_probability=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=None,
+            min_steps=2,
+        )
+
+        runtime = config.build()
+
+        self.assertEqual(runtime.halting_model.min_steps, 2)
+
     def test_config_builds_its_exact_private_runtime_owner(self) -> None:
         config = _config()
 
@@ -582,6 +603,22 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
         self.assertEqual(len(runtime.halting_model.update_inputs), 2)
         self.assertEqual(runtime.halting_model.finalize_calls, 1)
         self.assertIs(result.halting_state, owner_halting_state)
+
+    def test_halting_monitor_preserves_answer_update_depth_semantics(self) -> None:
+        config = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=4,
+            no_gradient_transition_count=0,
+        )
+        config.halting_config = _RecordingHaltingConfig(halt_after_updates=2)
+        runtime = config.build()
+        tracker_manager = HaltingUsageTrackerManager()
+        tracker = tracker_manager.attach(runtime.halting_model)
+
+        runtime(LayerState(hidden=torch.ones(1, 1)))
+
+        torch.testing.assert_close(tracker.last_step_count, torch.tensor(2.0))
+        tracker_manager.detach(runtime.halting_model)
 
     def test_halting_starts_on_the_first_eligible_trainable_answer(self) -> None:
         config = _config(

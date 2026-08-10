@@ -1,4 +1,6 @@
+import math
 from dataclasses import replace
+from numbers import Real
 from typing import Any
 
 from emperor.config import ConfigBase
@@ -151,6 +153,8 @@ class ExpertsHaltingConfigFactory:
         )
         return controller.halting_option(
             threshold=controller.halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=controller.halting_dropout,
             hidden_state_mode=controller.halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
@@ -166,6 +170,8 @@ class ExpertsHaltingConfigFactory:
         )
         return controller.recurrent_halting_option(
             threshold=controller.recurrent_halting_threshold,
+            min_steps=controller.recurrent_min_steps,
+            ponder_cost_weight=controller.recurrent_ponder_cost_weight,
             dropout_probability=controller.recurrent_halting_dropout,
             hidden_state_mode=controller.recurrent_halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
@@ -245,6 +251,7 @@ class ExpertsRecurrentConfigFactory:
     def build_config(
         self, block_config: ConfigBase
     ) -> ConfigBase | RecurrentLayerConfig:
+        self.__validate_recurrent_halting_configuration()
         if not self.recurrent_controller_options.recurrent_flag:
             return block_config
         return RecurrentLayerConfig(
@@ -261,3 +268,67 @@ class ExpertsRecurrentConfigFactory:
             ),
             halting_config=self.halting_config_factory.build_recurrent_halting_config(),
         )
+
+    def __validate_recurrent_halting_configuration(self) -> None:
+        controller = self.recurrent_controller_options
+        min_steps = controller.recurrent_min_steps
+        if isinstance(min_steps, bool) or not isinstance(min_steps, int):
+            raise TypeError(
+                "recurrent_min_steps must be an integer, "
+                f"received {type(min_steps).__name__}."
+            )
+        if min_steps < 1:
+            raise ValueError(
+                "recurrent_min_steps must be greater than or equal to 1, "
+                f"received {min_steps}."
+            )
+        max_steps = controller.recurrent_max_steps
+        if (
+            isinstance(max_steps, int)
+            and not isinstance(max_steps, bool)
+            and min_steps > max_steps
+        ):
+            raise ValueError(
+                "recurrent_min_steps must be less than or equal to "
+                f"recurrent_max_steps, received {min_steps} and {max_steps}."
+            )
+
+        ponder_cost_weight = controller.recurrent_ponder_cost_weight
+        if isinstance(ponder_cost_weight, bool) or not isinstance(
+            ponder_cost_weight,
+            Real,
+        ):
+            raise TypeError(
+                "recurrent_ponder_cost_weight must be a number, "
+                f"received {type(ponder_cost_weight).__name__}."
+            )
+        if not math.isfinite(float(ponder_cost_weight)) or ponder_cost_weight < 0:
+            raise ValueError(
+                "recurrent_ponder_cost_weight must be finite and greater than or "
+                f"equal to 0, received {ponder_cost_weight}."
+            )
+
+        minimum_is_default = min_steps == 1
+        ponder_weight_is_default = ponder_cost_weight == 1.0
+        if minimum_is_default and ponder_weight_is_default:
+            return
+        if not controller.recurrent_flag:
+            configured_field = (
+                "recurrent_min_steps"
+                if not minimum_is_default
+                else "recurrent_ponder_cost_weight"
+            )
+            raise ValueError(
+                f"{configured_field} requires recurrent_flag=True when configured "
+                "away from its default."
+            )
+        if not controller.recurrent_stack_halting_flag:
+            configured_field = (
+                "recurrent_min_steps"
+                if not minimum_is_default
+                else "recurrent_ponder_cost_weight"
+            )
+            raise ValueError(
+                f"{configured_field} requires recurrent_stack_halting_flag=True "
+                "when configured away from its default."
+            )

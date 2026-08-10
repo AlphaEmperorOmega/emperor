@@ -37,6 +37,25 @@ def _cluster_config_with(halting_config: HaltingConfig):
 
 
 class TestNeuronHaltingInterfaceValidation(unittest.TestCase):
+    def test_non_default_minimum_rejects_sparse_route_step_semantics(self) -> None:
+        halting_config = SoftHaltingConfig(
+            input_dim=4,
+            threshold=0.999,
+            ponder_cost_weight=1.0,
+            dropout_probability=0.0,
+            hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+            halting_gate_config=None,
+            min_steps=2,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "min_steps.*NeuronClusterConfig",
+        ):
+            NeuronClusterValidator.validate_halting_config(
+                _cluster_config_with(halting_config)
+            )
+
     def test_duck_typed_halting_owner_is_rejected(self) -> None:
         config = _cluster_config_with(_DuckTypedHaltingConfig(input_dim=4))
 
@@ -50,6 +69,8 @@ class TestNeuronHaltingInterfaceValidation(unittest.TestCase):
         halting_config = SoftHaltingConfig(
             input_dim=None,
             threshold=0.999,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=None,

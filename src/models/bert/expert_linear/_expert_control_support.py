@@ -150,6 +150,8 @@ class ExpertsHaltingConfigFactory:
         )
         return controller.halting_option(
             threshold=controller.halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=controller.halting_dropout,
             hidden_state_mode=controller.halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),
@@ -165,6 +167,8 @@ class ExpertsHaltingConfigFactory:
         )
         return controller.recurrent_halting_option(
             threshold=controller.recurrent_halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=controller.recurrent_halting_dropout,
             hidden_state_mode=controller.recurrent_halting_hidden_state_mode,
             halting_gate_config=self.__build_halting_gate_stack(options),

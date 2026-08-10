@@ -176,6 +176,8 @@ class NeuronControlConfigFactory:
         return halting_options.halting_option(
             input_dim=hidden_dim,
             threshold=halting_options.threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=halting_options.dropout,
             hidden_state_mode=halting_options.hidden_state_mode,
             halting_gate_config=halting_gate_config,

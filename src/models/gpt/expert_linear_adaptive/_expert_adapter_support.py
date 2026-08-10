@@ -247,6 +247,7 @@ def _recurrent_controller_options_from_kwargs(
     options = provided or expert_options.ExpertsRecurrentControllerOptions(
         recurrent_flag=config_module.RECURRENT_FLAG,
         recurrent_max_steps=config_module.RECURRENT_MAX_STEPS,
+        recurrent_min_steps=config_module.RECURRENT_MIN_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
         recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
@@ -257,6 +258,7 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_stack_halting_flag=config_module.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.RECURRENT_HALTING_THRESHOLD,
+        recurrent_ponder_cost_weight=config_module.RECURRENT_PONDER_COST_WEIGHT,
         recurrent_halting_dropout=config_module.RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=config_module.RECURRENT_HALTING_HIDDEN_STATE_MODE,
         recurrent_halting_stack_source=_default_controller_stack_source(
@@ -268,6 +270,7 @@ def _recurrent_controller_options_from_kwargs(
         {
             "recurrent_flag": "recurrent_flag",
             "recurrent_max_steps": "recurrent_max_steps",
+            "recurrent_min_steps": "recurrent_min_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
             "recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "recurrent_gate_option": "recurrent_gate_option",
@@ -275,6 +278,7 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
             "recurrent_halting_option": "recurrent_halting_option",
             "recurrent_halting_threshold": "recurrent_halting_threshold",
+            "recurrent_ponder_cost_weight": "recurrent_ponder_cost_weight",
             "recurrent_halting_dropout": "recurrent_halting_dropout",
             "recurrent_halting_hidden_state_mode": "recurrent_halting_hidden_state_mode",
         },

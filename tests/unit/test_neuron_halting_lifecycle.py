@@ -54,6 +54,8 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             SoftHaltingConfig(
                 input_dim=1,
                 threshold=0.9,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=None,

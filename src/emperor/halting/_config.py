@@ -37,6 +37,15 @@ class HaltingConfig(ConfigBase):
     halting_gate_config: "LayerStackConfig | None" = optional_field(
         "Config used to build the model module within the layer"
     )
+    ponder_cost_weight: float | None = optional_field(
+        "Non-negative weight applied to the ponder-loss contribution. Zero "
+        "disables the loss contribution without disabling adaptive halting."
+    )
+    min_steps: int | None = optional_field(
+        "Minimum number of completed owner steps before adaptive halting becomes "
+        "eligible."
+    )
+
 
 @dataclass
 class StickBreakingConfig(HaltingConfig):

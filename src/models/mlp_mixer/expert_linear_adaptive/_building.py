@@ -816,6 +816,8 @@ def _configured_halting(
             runtime,
             _option_name(prefix, f"{role}halting_threshold"),
         ),
+        min_steps=1,
+        ponder_cost_weight=1.0,
         dropout_probability=getattr(
             runtime,
             _option_name(prefix, f"{role}halting_dropout"),

@@ -605,6 +605,19 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 "lifecycle required by NeuronCluster"
             )
 
+        validator = getattr(halting_model_type, "VALIDATOR", None)
+        validate_owner_step_contract = getattr(
+            validator,
+            "validate_owner_step_contract",
+            None,
+        )
+        if callable(validate_owner_step_contract):
+            validate_owner_step_contract(
+                halting_config,
+                owner_step_limit=None,
+                owner_name="NeuronClusterConfig",
+            )
+
         terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
         if (
             halting_config.input_dim is not None

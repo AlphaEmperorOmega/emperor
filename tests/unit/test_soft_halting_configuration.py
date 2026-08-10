@@ -17,6 +17,8 @@ class SoftHaltingConfigurationTests(unittest.TestCase):
             SoftHaltingConfig(
                 input_dim=3,
                 threshold=0.999,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.25,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=None,

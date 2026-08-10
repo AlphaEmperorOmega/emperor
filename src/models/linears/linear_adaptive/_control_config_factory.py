@@ -41,6 +41,8 @@ class ControlConfigFactory:
         halting_option = self._runtime.halting_option if option is None else option
         return halting_option(
             threshold=options.threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=options.dropout_probability,
             hidden_state_mode=options.hidden_state_mode,
             halting_gate_config=self._build_stack(

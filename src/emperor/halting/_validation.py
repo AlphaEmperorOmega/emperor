@@ -13,7 +13,99 @@ if TYPE_CHECKING:
     from emperor.halting._config import HaltingConfig
 
 
-class StickBreakingValidator:
+class _HaltingContractValidator:
+    @classmethod
+    def validate_minimum_step_capability(
+        cls,
+        cfg: "HaltingConfig",
+        *,
+        owner_name: str,
+    ) -> None:
+        configured_min_steps = getattr(cfg, "min_steps", None)
+        cls._validate_min_steps(configured_min_steps)
+        min_steps = 1 if configured_min_steps is None else configured_min_steps
+        if min_steps == 1:
+            return
+        owner = cfg._registry_owner()
+        if getattr(owner, "supports_minimum_step_delay", False) is not True:
+            owner_type_name = getattr(owner, "__name__", type(owner).__name__)
+            raise ValueError(
+                f"halting_config.min_steps={min_steps} requires minimum-step "
+                f"delay support for {owner_name}; {owner_type_name} implements "
+                "only the legacy lifecycle."
+            )
+
+    @classmethod
+    def validate_owner_step_contract(
+        cls,
+        cfg: "HaltingConfig",
+        *,
+        owner_step_limit: int | None,
+        owner_name: str,
+    ) -> None:
+        cls.validate_minimum_step_capability(cfg, owner_name=owner_name)
+        configured_min_steps = getattr(cfg, "min_steps", None)
+        min_steps = 1 if configured_min_steps is None else configured_min_steps
+        if min_steps == 1:
+            return
+        if owner_step_limit is None:
+            raise ValueError(
+                f"halting_config.min_steps={min_steps} is not supported for "
+                f"{owner_name}; this owner has no defined owner step limit."
+            )
+        if isinstance(owner_step_limit, bool) or not isinstance(
+            owner_step_limit,
+            Integral,
+        ):
+            raise TypeError(
+                "owner_step_limit must be an integer or None, "
+                f"received {type(owner_step_limit).__name__}"
+            )
+        if owner_step_limit < 1:
+            raise ValueError(
+                "owner_step_limit must be greater than or equal to 1, "
+                f"received {owner_step_limit}"
+            )
+        if min_steps > owner_step_limit:
+            raise ValueError(
+                "min_steps must be less than or equal to the owner step limit, "
+                f"received min_steps={min_steps} and "
+                f"owner_step_limit={owner_step_limit}."
+            )
+
+    @staticmethod
+    def _validate_ponder_cost_weight(ponder_cost_weight: float | None) -> None:
+        if ponder_cost_weight is None:
+            return
+        if isinstance(ponder_cost_weight, bool) or not isinstance(
+            ponder_cost_weight, Real
+        ):
+            raise TypeError(
+                "ponder_cost_weight must be a number or None, "
+                f"received {type(ponder_cost_weight).__name__}"
+            )
+        if not math.isfinite(float(ponder_cost_weight)) or ponder_cost_weight < 0:
+            raise ValueError(
+                "ponder_cost_weight must be finite and greater than or equal to 0, "
+                f"received {ponder_cost_weight}"
+            )
+
+    @staticmethod
+    def _validate_min_steps(min_steps: int | None) -> None:
+        if min_steps is None:
+            return
+        if isinstance(min_steps, bool) or not isinstance(min_steps, Integral):
+            raise TypeError(
+                "min_steps must be an integer or None, "
+                f"received {type(min_steps).__name__}"
+            )
+        if min_steps < 1:
+            raise ValueError(
+                f"min_steps must be greater than or equal to 1, received {min_steps}"
+            )
+
+
+class StickBreakingValidator(_HaltingContractValidator):
     OPTIONAL_FIELDS = {
         "dropout_probability",
         "override_config",
@@ -25,6 +117,8 @@ class StickBreakingValidator:
         cls._validate_required_fields(cfg)
         cls._validate_input_dim(cfg.input_dim)
         cls._validate_threshold(cfg.threshold)
+        cls._validate_min_steps(cfg.min_steps)
+        cls._validate_ponder_cost_weight(cfg.ponder_cost_weight)
         cls._validate_dropout_probability(cfg.dropout_probability)
         cls._validate_hidden_state_mode(cfg.hidden_state_mode)
         cls._validate_halting_gate_config(cfg.halting_gate_config)
@@ -200,7 +294,9 @@ class SoftHaltingValidator(StickBreakingValidator):
         cfg = model.cfg
         cls._validate_required_fields(cfg)
         cls._validate_input_dim(cfg.input_dim)
-        cls._validate_threshold(model.threshold)
+        cls._validate_threshold(cfg.threshold)
+        cls._validate_min_steps(cfg.min_steps)
+        cls._validate_ponder_cost_weight(cfg.ponder_cost_weight)
         cls._validate_dropout_probability(cfg.dropout_probability)
         cls._validate_hidden_state_mode(cfg.hidden_state_mode)
         if cfg.halting_gate_config is None:

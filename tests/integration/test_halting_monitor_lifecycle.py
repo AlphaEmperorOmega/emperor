@@ -36,6 +36,8 @@ SCALAR_SUFFIXES = (
     "halt/remaining_mass_mean",
     "halt/saturation_fraction",
     "loss/ponder_loss",
+    "loss/raw_ponder_loss",
+    "loss/effective_ponder_loss",
 )
 
 
@@ -92,6 +94,8 @@ def recurrent_config(
         halting_config=StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=stack_config(

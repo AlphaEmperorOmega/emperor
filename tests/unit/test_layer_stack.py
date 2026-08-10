@@ -398,6 +398,8 @@ class TestLayerStack(unittest.TestCase):
         ):
             halting_config = StickBreakingConfig(
                 threshold=0.99,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
@@ -504,6 +506,8 @@ class TestLayerStack(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
@@ -1188,6 +1192,8 @@ class TestLayerStack(unittest.TestCase):
         halting_config = StickBreakingConfig(
             input_dim=dim,
             threshold=0.99,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
@@ -1362,6 +1368,8 @@ class TestLayerStack(unittest.TestCase):
             shared_halting_config=SoftHaltingConfig(
                 input_dim=dim,
                 threshold=0.999,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             ),
