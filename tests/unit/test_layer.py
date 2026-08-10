@@ -398,6 +398,8 @@ class TestLayer(unittest.TestCase):
         if halting_config is None and input_dim == output_dim:
             halting_config = StickBreakingConfig(
                 threshold=0.99,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=LayerStackConfig(
@@ -459,6 +461,8 @@ class TestLayer(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
@@ -614,6 +618,13 @@ class TestLayer(unittest.TestCase):
 
                 with self.assertRaisesRegex(ValueError, pattern):
                     Layer(cfg)
+
+    def test_non_default_halting_minimum_requires_owner_step_semantics(self):
+        halting_config = self._halting_config(dim=4)
+        halting_config.min_steps = 2
+
+        with self.assertRaisesRegex(ValueError, "min_steps.*LayerConfig"):
+            Layer(self.bare_config(halting_config=halting_config))
 
     def test_residual_connection_rejects_mismatched_dimensions(self):
         residual_options = [
@@ -1991,6 +2002,8 @@ class TestLayer(unittest.TestCase):
         halting_config = StickBreakingConfig(
             input_dim=dim,
             threshold=0.99,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
@@ -2032,6 +2045,8 @@ class TestLayer(unittest.TestCase):
         halting_config = SoftHaltingConfig(
             input_dim=dim,
             threshold=0.999,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
         )

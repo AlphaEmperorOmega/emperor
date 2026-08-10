@@ -15,8 +15,10 @@ from emperor.experts import (
 )
 from emperor.experts._model import MixtureOfExpertsModel
 from emperor.halting import (
+    HaltingConfig,
     HaltingHiddenStateModeOptions,
     HaltingStateBase,
+    HaltingUsageTrackerManager,
     SoftHalting,
     SoftHaltingConfig,
     StickBreakingConfig,
@@ -473,6 +475,38 @@ class DummyHaltingState(HaltingStateBase):
     marker: str
 
 
+@dataclass
+class LegacyHaltingConfig(HaltingConfig):
+    def _registry_owner(self) -> type:
+        return LegacyHalting
+
+
+class LegacyHalting(Module):
+    @classmethod
+    def implements_halting_interface(cls) -> bool:
+        return True
+
+    def __init__(
+        self,
+        cfg: LegacyHaltingConfig,
+        overrides: LegacyHaltingConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+
+    def update_halting_state(self, previous_state, model_hidden_state):
+        state = DummyHaltingState(marker="legacy")
+        state.halt_mask = torch.zeros(
+            model_hidden_state.shape[:-1],
+            dtype=torch.bool,
+            device=model_hidden_state.device,
+        )
+        return state, model_hidden_state
+
+    def finalize_weighted_accumulation(self, state, current_hidden):
+        return current_hidden, current_hidden.new_zeros(())
+
+
 class RecordingTransform(torch.nn.Module):
     def __init__(self, scale: float = 1.0, offset: float = 0.0):
         super().__init__()
@@ -503,7 +537,7 @@ class TestRecurrentLayer(unittest.TestCase):
         increment: float = 1.0,
         input_dim: int | None = None,
         output_dim: int | None = None,
-        halting_config: StickBreakingConfig | None = None,
+        halting_config: HaltingConfig | None = None,
     ) -> LayerConfig:
         return LayerConfig(
             input_dim=input_dim,
@@ -519,6 +553,25 @@ class TestRecurrentLayer(unittest.TestCase):
             ),
         )
 
+    def trainable_scale_block_config(
+        self,
+        *,
+        dim: int,
+        scale: float,
+    ) -> LayerConfig:
+        return LayerConfig(
+            input_dim=dim,
+            output_dim=dim,
+            activation=ActivationOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=TrainableScaleFeatureLastConfig(scale=scale),
+        )
+
     def stack_block_config(
         self,
         increment: float = 1.0,
@@ -526,7 +579,7 @@ class TestRecurrentLayer(unittest.TestCase):
         hidden_dim: int = 3,
         output_dim: int = 4,
         num_layers: int = 2,
-        halting_config: StickBreakingConfig | None = None,
+        halting_config: HaltingConfig | None = None,
     ) -> LayerStackConfig:
         return LayerStackConfig(
             input_dim=input_dim,
@@ -726,10 +779,14 @@ class TestRecurrentLayer(unittest.TestCase):
         threshold: float = 0.99,
         high_logit: float = 10.0,
         low_logit: float = -10.0,
+        ponder_cost_weight: float | None = 1.0,
+        min_steps: int | None = 1,
     ) -> StickBreakingConfig:
         return StickBreakingConfig(
             input_dim=dim,
             threshold=threshold,
+            ponder_cost_weight=ponder_cost_weight,
+            min_steps=min_steps,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=self.halting_gate_config(
@@ -1324,6 +1381,30 @@ class TestRecurrentLayer(unittest.TestCase):
                 ):
                     cfg.build()
 
+    def test_non_default_minimum_requires_halting_delay_support(self):
+        config = self.recurrent_config(
+            max_steps=3,
+            halting_config=LegacyHaltingConfig(min_steps=2),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "min_steps.*minimum-step delay support",
+        ):
+            config.build()
+
+    def test_default_minimum_preserves_legacy_halting_strategies(self):
+        model = self.recurrent_config(
+            dim=2,
+            max_steps=2,
+            block_config=self.layer_block_config(increment=1.0),
+            halting_config=LegacyHaltingConfig(),
+        ).build()
+
+        result = model(LayerState(hidden=torch.zeros(1, 2)))
+
+        torch.testing.assert_close(result.hidden, torch.full((1, 2), 2.0))
+
     def test_validation_errors(self):
         dim = 4
         valid_block = self.layer_block_config()
@@ -1548,6 +1629,8 @@ class TestRecurrentLayer(unittest.TestCase):
             halting_config=SoftHaltingConfig(
                 input_dim=dim,
                 threshold=0.99,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=self.halting_gate_config(threshold=1.0),
@@ -2420,6 +2503,221 @@ class TestRecurrentLayer(unittest.TestCase):
 
         self.assertEqual(model.block_model.model.call_count, 1)
         torch.testing.assert_close(result.hidden, torch.ones_like(hidden))
+
+    def test_default_minimum_preserves_first_transition_halting(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(dim=dim, gate_threshold=0.0),
+            )
+        ).eval()
+        hidden = torch.zeros(3, dim)
+
+        result = model(LayerState(hidden=hidden))
+
+        self.assertFalse(hasattr(model, "min_steps"))
+        self.assertEqual(model.halting_model.min_steps, 1)
+        self.assertEqual(model.block_model.model.call_count, 1)
+        torch.testing.assert_close(result.hidden, torch.ones_like(hidden))
+
+    def test_always_halt_waits_for_three_functional_transitions(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                    min_steps=3,
+                ),
+            )
+        ).eval()
+        hidden = torch.zeros(3, dim)
+
+        result = model(LayerState(hidden=hidden))
+
+        self.assertEqual(model.block_model.model.call_count, 3)
+        torch.testing.assert_close(result.hidden, torch.full_like(hidden, 3.0))
+
+    def test_mandatory_trainable_transitions_affect_output_and_task_gradient(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                block_config=self.trainable_scale_block_config(
+                    dim=dim,
+                    scale=0.5,
+                ),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                    high_logit=100.0,
+                    low_logit=-100.0,
+                    min_steps=3,
+                ),
+            )
+        ).eval()
+
+        result = model(LayerState(hidden=torch.ones(1, dim)))
+        result.hidden.sum().backward()
+
+        trainable_block = model.block_model.model
+        self.assertEqual(trainable_block.grad_modes, [True, True, True])
+        torch.testing.assert_close(result.hidden, torch.full((1, dim), 0.125))
+        self.assertIsNotNone(trainable_block.scale.grad)
+        self.assertGreater(trainable_block.scale.grad.abs().item(), 0.0)
+
+    def test_halting_can_continue_from_minimum_until_the_maximum(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=100.0,
+                    min_steps=3,
+                ),
+            )
+        ).eval()
+
+        result = model(LayerState(hidden=torch.zeros(1, dim)))
+
+        self.assertEqual(model.block_model.model.call_count, 5)
+        torch.testing.assert_close(result.hidden, torch.full((1, dim), 5.0))
+
+    def test_equal_minimum_and_maximum_produces_fixed_depth_execution(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                    high_logit=100.0,
+                    low_logit=-100.0,
+                    min_steps=3,
+                ),
+            )
+        ).eval()
+
+        result = model(LayerState(hidden=torch.zeros(1, dim)))
+
+        self.assertEqual(model.block_model.model.call_count, 3)
+        torch.testing.assert_close(result.hidden, torch.full((1, dim), 3.0))
+
+    def test_minimum_and_no_gradient_constraints_both_gate_halting(self):
+        cases = (
+            (1, 3, [False, False, False, True]),
+            (4, 1, [False, True, True, True, True]),
+        )
+
+        for min_steps, no_gradient_count, expected_gradient_modes in cases:
+            with self.subTest(
+                min_steps=min_steps,
+                no_gradient_transition_count=no_gradient_count,
+            ):
+                dim = 2
+                model = RecurrentLayer(
+                    self.recurrent_config(
+                        dim=dim,
+                        max_steps=5,
+                        no_gradient_transition_count=no_gradient_count,
+                        block_config=self.trainable_scale_block_config(
+                            dim=dim,
+                            scale=0.5,
+                        ),
+                        halting_config=self.halting_config(
+                            dim=dim,
+                            gate_threshold=0.0,
+                            high_logit=100.0,
+                            low_logit=-100.0,
+                            min_steps=min_steps,
+                        ),
+                    )
+                ).eval()
+
+                model(LayerState(hidden=torch.ones(1, dim)))
+
+                self.assertEqual(
+                    model.block_model.model.grad_modes,
+                    expected_gradient_modes,
+                )
+
+    def test_runtime_controls_do_not_change_checkpoint_namespaces(self):
+        dim = 2
+        default_model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                gate_config=self.trainable_gate_config(dim),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                ),
+            )
+        )
+        controlled_model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                gate_config=self.trainable_gate_config(dim),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                    ponder_cost_weight=0.5,
+                    min_steps=3,
+                ),
+            )
+        )
+
+        self.assertEqual(
+            tuple(default_model.state_dict()),
+            tuple(controlled_model.state_dict()),
+        )
+        controlled_model.load_state_dict(default_model.state_dict(), strict=True)
+        default_model.load_state_dict(controlled_model.state_dict(), strict=True)
+
+    def test_halting_monitor_reports_realized_depth_and_optional_ponder_cost(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=4.0,
+                    high_logit=20.0,
+                    low_logit=-20.0,
+                    ponder_cost_weight=0.5,
+                    min_steps=3,
+                ),
+            )
+        ).eval()
+        tracker_manager = HaltingUsageTrackerManager()
+        tracker = tracker_manager.attach(model.halting_model)
+
+        result = model(LayerState(hidden=torch.zeros(1, dim)))
+
+        self.assertEqual(model.block_model.model.call_count, 4)
+        torch.testing.assert_close(tracker.last_step_count, torch.tensor(4.0))
+        torch.testing.assert_close(tracker.last_raw_ponder_loss, torch.tensor(1.0))
+        torch.testing.assert_close(
+            tracker.last_effective_ponder_loss,
+            torch.tensor(0.5),
+        )
+        torch.testing.assert_close(result.loss, torch.tensor(0.5))
+        tracker_manager.detach(model.halting_model)
 
     def test_recurrent_halting_preserves_halted_positions(self):
         dim = 2

@@ -492,6 +492,8 @@ class NeuronTestCase(unittest.TestCase):
         return StickBreakingConfig(
             input_dim=input_dim,
             threshold=threshold,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=LayerStackConfig(
@@ -689,6 +691,8 @@ class TestNeuronConfigs(NeuronTestCase):
             halting_config=SoftHaltingConfig(
                 input_dim=self.input_dim,
                 threshold=0.999,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=0.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             ),

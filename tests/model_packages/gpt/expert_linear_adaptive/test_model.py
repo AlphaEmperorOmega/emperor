@@ -36,7 +36,10 @@ from emperor.transformer import (
     TransformerDecoderLayerConfig,
     TransformerDecoderLayerState,
 )
+from model_runtime.inspection import configuration_schema, serialize_overrides
 from models.catalog import model_package
+from models.cli_selection import resolve_cli_selection
+from models.experiment_cli_parser import get_experiment_parser
 from models.gpt.expert_linear_adaptive.config_builder import (
     GptExpertLinearAdaptiveConfigBuilder,
 )
@@ -100,6 +103,206 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertEqual(
             model_package("gpt/expert_linear_adaptive").catalog_key,
             "gpt/expert_linear_adaptive",
+        )
+
+    def test_cli_accepts_recurrent_minimum_and_ponder_cost_weight(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        parser = get_experiment_parser(package)
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--recurrent-flag",
+                "true",
+                "--recurrent-stack-halting-flag",
+                "true",
+                "--recurrent-min-steps",
+                "3",
+                "--recurrent-ponder-cost-weight",
+                "1.0",
+            ]
+        )
+        selection = resolve_cli_selection(args, package, ExperimentPreset)
+        runtime = package.bind_runtime_defaults(selection.config_overrides)
+
+        built = GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+        recurrent = built.experiment_config.decoder_config
+        self.assertIsInstance(recurrent, RecurrentLayerConfig)
+        self.assertFalse(hasattr(recurrent, "min_steps"))
+        self.assertEqual(recurrent.halting_config.min_steps, 3)
+        self.assertEqual(recurrent.halting_config.ponder_cost_weight, 1.0)
+
+    def test_recurrent_minimum_requires_recurrent_halting(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        parser = get_experiment_parser(package)
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--recurrent-flag",
+                "true",
+                "--recurrent-stack-halting-flag",
+                "false",
+                "--recurrent-min-steps",
+                "3",
+            ]
+        )
+        selection = resolve_cli_selection(args, package, ExperimentPreset)
+        runtime = package.bind_runtime_defaults(selection.config_overrides)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "recurrent_min_steps.*recurrent_stack_halting_flag",
+        ):
+            GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_recurrent_minimum_requires_recurrence(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        runtime = package.bind_runtime_defaults(
+            {
+                "recurrent_flag": False,
+                "recurrent_min_steps": 3,
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "recurrent_min_steps.*recurrent_flag",
+        ):
+            GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_recurrent_minimum_rejects_invalid_values_when_recurrence_is_disabled(
+        self,
+    ):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        invalid_cases = (
+            (True, TypeError),
+            (1.5, TypeError),
+            ("1", TypeError),
+            (0, ValueError),
+            (-1, ValueError),
+        )
+
+        for invalid_value, expected_error in invalid_cases:
+            with self.subTest(invalid_value=invalid_value):
+                runtime = package.bind_runtime_defaults(
+                    {"recurrent_min_steps": invalid_value}
+                )
+
+                with self.assertRaisesRegex(expected_error, "recurrent_min_steps"):
+                    GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_recurrent_minimum_cannot_exceed_recurrent_maximum(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        runtime = package.bind_runtime_defaults(
+            {
+                "recurrent_flag": True,
+                "recurrent_stack_halting_flag": True,
+                "recurrent_min_steps": 4,
+                "recurrent_max_steps": 3,
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "recurrent_min_steps.*recurrent_max_steps",
+        ):
+            GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_recurrent_ponder_weight_rejects_invalid_values_when_halting_is_disabled(
+        self,
+    ):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        invalid_cases = (
+            (True, TypeError),
+            ("1.0", TypeError),
+            (float("nan"), ValueError),
+            (float("inf"), ValueError),
+            (float("-inf"), ValueError),
+            (-0.1, ValueError),
+        )
+
+        for invalid_value, expected_error in invalid_cases:
+            with self.subTest(invalid_value=invalid_value):
+                runtime = package.bind_runtime_defaults(
+                    {"recurrent_ponder_cost_weight": invalid_value}
+                )
+
+                with self.assertRaisesRegex(
+                    expected_error,
+                    "recurrent_ponder_cost_weight",
+                ):
+                    GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_non_default_recurrent_ponder_weight_requires_recurrent_halting(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        runtime = package.bind_runtime_defaults(
+            {
+                "recurrent_flag": True,
+                "recurrent_stack_halting_flag": False,
+                "recurrent_ponder_cost_weight": 0.5,
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "recurrent_ponder_cost_weight.*recurrent_stack_halting_flag",
+        ):
+            GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
+
+    def test_recurrent_controls_are_inspectable_and_serializable(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        fields = {field.key: field for field in configuration_schema(package).fields}
+
+        minimum = fields["RECURRENT_MIN_STEPS"]
+        self.assertEqual(minimum.flag, "--recurrent-min-steps")
+        self.assertEqual(
+            minimum.section_path,
+            ("Recurrent Layer Options", "Recurrent Halting Options"),
+        )
+        self.assertEqual(minimum.value_type, "int")
+        self.assertEqual(minimum.default, 1)
+
+        ponder_weight = fields["RECURRENT_PONDER_COST_WEIGHT"]
+        self.assertEqual(
+            ponder_weight.flag,
+            "--recurrent-ponder-cost-weight",
+        )
+        self.assertEqual(
+            ponder_weight.section_path,
+            ("Recurrent Layer Options", "Recurrent Halting Options"),
+        )
+        self.assertEqual(ponder_weight.value_type, "float")
+        self.assertEqual(ponder_weight.default, 1.0)
+        self.assertEqual(
+            serialize_overrides(
+                package,
+                {
+                    "recurrent_min_steps": "3",
+                    "recurrent-ponder-cost-weight": "0.5",
+                },
+            ),
+            {
+                "RECURRENT_MIN_STEPS": 3,
+                "RECURRENT_PONDER_COST_WEIGHT": 0.5,
+            },
         )
 
     def test_presets_are_contiguous_buildable_and_always_causal(self):
@@ -306,8 +509,14 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertEqual(recurrent_config.input_dim, 32)
         self.assertEqual(cfg.sequence_length, 35)
         self.assertEqual(recurrent_config.max_steps, 10)
+        self.assertFalse(hasattr(recurrent_config, "min_steps"))
+        self.assertEqual(recurrent_config.halting_config.min_steps, 1)
         self.assertEqual(recurrent_config.block_config.num_layers, 1)
         self.assertEqual(recurrent_config.halting_config.threshold, 0.99)
+        self.assertEqual(
+            recurrent_config.halting_config.ponder_cost_weight,
+            1.0,
+        )
         self.assertEqual(
             recurrent_config.halting_config.hidden_state_mode,
             config.HaltingHiddenStateModeOptions.RAW,

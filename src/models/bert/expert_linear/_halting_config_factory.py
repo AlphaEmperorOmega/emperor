@@ -55,6 +55,8 @@ class HaltingConfigFactory:
         )
         return self.layer_controller_options.halting_option(
             threshold=self.layer_controller_options.halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=self.layer_controller_options.halting_dropout,
             hidden_state_mode=self.layer_controller_options.halting_hidden_state_mode,
             halting_gate_config=halting_gate_config,
@@ -76,6 +78,8 @@ class HaltingConfigFactory:
         )
         return self.recurrent_controller_options.recurrent_halting_option(
             threshold=self.recurrent_controller_options.recurrent_halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=self.recurrent_controller_options.recurrent_halting_dropout,
             hidden_state_mode=(
                 self.recurrent_controller_options.recurrent_halting_hidden_state_mode

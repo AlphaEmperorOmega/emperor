@@ -10,6 +10,7 @@ from emperor.layers._validation.common import (
     _MEMORY_CONFIG_FIELDS,
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
+    _validate_halting_owner_step_contract,
     _validate_no_grouping_with_context_controllers,
 )
 from emperor.layers._validation.gate import LayerGateValidator
@@ -195,6 +196,11 @@ class LayerStackValidator(ValidatorBase):
         _validate_halting_lifecycle_owner(
             shared_halting_config,
             field_name="shared_halting_config",
+            owner_name="LayerStackConfig",
+        )
+        _validate_halting_owner_step_contract(
+            shared_halting_config,
+            owner_step_limit=None,
             owner_name="LayerStackConfig",
         )
 

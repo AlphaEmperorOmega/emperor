@@ -19,9 +19,13 @@ class HaltingStateBase:
     valid_mask: Tensor = field(init=False, repr=False)
     advanced_mask: Tensor = field(init=False, repr=False)
     step_indices: Tensor = field(init=False, repr=False)
+    raw_ponder_loss: Tensor = field(init=False, repr=False)
 
 
 class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
+    def __init__(self) -> None:
+        super().__init__()
+
     @classmethod
     def implements_halting_interface(cls) -> bool:
         return (
@@ -44,3 +48,11 @@ class HaltingBase(Module, HaltingInterface[StateT], Generic[StateT], ABC):
         current_hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
         raise NotImplementedError
+
+    def _apply_ponder_cost_weight(
+        self,
+        state: HaltingStateBase,
+        raw_ponder_loss: Tensor,
+    ) -> Tensor:
+        state.raw_ponder_loss = raw_ponder_loss
+        return raw_ponder_loss * self.ponder_cost_weight

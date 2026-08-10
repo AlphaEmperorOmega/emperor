@@ -44,6 +44,8 @@ def strategies(input_dim: int = 2):
     common = {
         "input_dim": input_dim,
         "threshold": 0.9,
+        "ponder_cost_weight": 1.0,
+        "min_steps": 1,
         "dropout_probability": None,
         "hidden_state_mode": HaltingHiddenStateModeOptions.RAW,
     }
@@ -98,6 +100,8 @@ class HaltingRegressionTests(unittest.TestCase):
         cfg = SoftHaltingConfig(
             input_dim=2,
             threshold=0.9,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=None,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=gate_config(),
@@ -141,6 +145,8 @@ class HaltingRegressionTests(unittest.TestCase):
         cfg = SoftHaltingConfig(
             input_dim=2,
             threshold=0.9,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=1.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=gate_config(),

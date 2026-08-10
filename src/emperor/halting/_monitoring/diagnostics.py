@@ -22,6 +22,8 @@ class _HaltingDiagnosticMetrics:
     remaining_mass_mean: Tensor
     final_survival_fraction: Tensor
     ponder_loss: Tensor
+    raw_ponder_loss: Tensor
+    effective_ponder_loss: Tensor
     survival: Tensor
 
 
@@ -44,5 +46,7 @@ class _HaltingDiagnostics:
             remaining_mass_mean=tracker.last_remaining_mass_mean.detach().float(),
             final_survival_fraction=final_survival_fraction,
             ponder_loss=tracker.last_ponder_loss.detach().float(),
+            raw_ponder_loss=tracker.last_raw_ponder_loss.detach().float(),
+            effective_ponder_loss=tracker.last_effective_ponder_loss.detach().float(),
             survival=survival,
         )

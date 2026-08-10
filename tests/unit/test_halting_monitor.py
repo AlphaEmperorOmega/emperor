@@ -57,6 +57,8 @@ def stick_model(input_dim: int = 2) -> StickBreaking:
         StickBreakingConfig(
             input_dim=input_dim,
             threshold=1.0,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=gate_config(input_dim),
@@ -69,6 +71,8 @@ def soft_model(input_dim: int = 2) -> SoftHalting:
         SoftHaltingConfig(
             input_dim=input_dim,
             threshold=0.99,
+            ponder_cost_weight=1.0,
+            min_steps=1,
             dropout_probability=0.0,
             hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
             halting_gate_config=gate_config(input_dim),
@@ -180,6 +184,29 @@ class _TwoHaltingOwner(LightningModule):
 
 
 class HaltingUsageTrackerTests(unittest.TestCase):
+    def test_records_halting_depth_and_raw_and_effective_ponder_losses(self) -> None:
+        tracker = HaltingUsageTracker()
+        state = base_state(torch.ones(1))
+        state.raw_ponder_loss = torch.tensor(0.75)
+
+        tracker.begin_forward()
+        tracker.record_step(state)
+        tracker.record_final(torch.tensor(0.375), state)
+
+        torch.testing.assert_close(tracker.last_step_count, torch.tensor(1.0))
+        torch.testing.assert_close(
+            tracker.last_raw_ponder_loss,
+            torch.tensor(0.75),
+        )
+        torch.testing.assert_close(
+            tracker.last_effective_ponder_loss,
+            torch.tensor(0.375),
+        )
+        torch.testing.assert_close(
+            tracker.last_ponder_loss,
+            tracker.last_effective_ponder_loss,
+        )
+
     def test_fresh_tracker_has_exact_empty_dynamic_and_zero_scalar_state(self) -> None:
         tracker = HaltingUsageTracker()
 
@@ -486,6 +513,8 @@ class HaltingUsageTrackerTests(unittest.TestCase):
         tracker.last_accumulated_halt_prob_mean.fill_(0.8)
         tracker.last_remaining_mass_mean.fill_(0.1)
         tracker.last_ponder_loss.fill_(1.25)
+        tracker.last_raw_ponder_loss.fill_(2.5)
+        tracker.last_effective_ponder_loss.fill_(1.25)
         tracker.last_survival = torch.tensor([0.8, 0.3], dtype=torch.float64)
 
         metrics = _HaltingDiagnostics.calculate(tracker)
@@ -494,6 +523,8 @@ class HaltingUsageTrackerTests(unittest.TestCase):
             metrics.final_survival_fraction,
             torch.tensor(0.3),
         )
+        torch.testing.assert_close(metrics.raw_ponder_loss, torch.tensor(2.5))
+        torch.testing.assert_close(metrics.effective_ponder_loss, torch.tensor(1.25))
         for value in (
             metrics.ponder_cost_mean,
             metrics.ponder_cost_std,
@@ -504,6 +535,8 @@ class HaltingUsageTrackerTests(unittest.TestCase):
             metrics.remaining_mass_mean,
             metrics.final_survival_fraction,
             metrics.ponder_loss,
+            metrics.raw_ponder_loss,
+            metrics.effective_ponder_loss,
             metrics.survival,
         ):
             self.assertEqual(value.dtype, torch.float32)
@@ -636,6 +669,8 @@ class HaltingMonitorCallbackUnitTests(unittest.TestCase):
                 "__track_remaining_mass_mean",
                 "__track_saturation_fraction",
                 "__track_ponder_loss",
+                "__track_raw_ponder_loss",
+                "__track_effective_ponder_loss",
                 "__track_survival_history",
                 "__track_survival_histogram",
                 "__track_ponder_cost_histogram",
@@ -746,7 +781,7 @@ class HaltingMonitorCallbackUnitTests(unittest.TestCase):
 
         callback.on_train_batch_end(trainer, owner, None, None, 0)
 
-        self.assertEqual(len(owner.logged_names), 8)
+        self.assertEqual(len(owner.logged_names), 10)
         self.assertTrue(all(name.startswith("second/") for name in owner.logged_names))
         callback.on_fit_end(trainer, owner)
 
