@@ -1,10 +1,12 @@
 import math
 import unittest
+from dataclasses import fields
 
 import torch
 import torch.nn as nn
 
 from emperor.halting import (
+    HaltingConfig,
     HaltingHiddenStateModeOptions,
     SoftHalting,
     SoftHaltingConfig,
@@ -48,10 +50,14 @@ def stick_config(
     *,
     threshold: float | None = 0.99,
     mode: HaltingHiddenStateModeOptions = HaltingHiddenStateModeOptions.RAW,
+    ponder_cost_weight: float | None = 1.0,
+    min_steps: int | None = 1,
 ) -> StickBreakingConfig:
     return StickBreakingConfig(
         input_dim=input_dim,
         threshold=threshold,
+        ponder_cost_weight=ponder_cost_weight,
+        min_steps=min_steps,
         dropout_probability=None,
         hidden_state_mode=mode,
         halting_gate_config=gate_config(input_dim),
@@ -65,10 +71,14 @@ def soft_config(
     dropout: float | None = 0.0,
     mode: HaltingHiddenStateModeOptions = HaltingHiddenStateModeOptions.RAW,
     custom_gate: bool = False,
+    ponder_cost_weight: float | None = 1.0,
+    min_steps: int | None = 1,
 ) -> SoftHaltingConfig:
     return SoftHaltingConfig(
         input_dim=input_dim,
         threshold=threshold,
+        ponder_cost_weight=ponder_cost_weight,
+        min_steps=min_steps,
         dropout_probability=dropout,
         hidden_state_mode=mode,
         halting_gate_config=gate_config(input_dim) if custom_gate else None,
@@ -83,6 +93,176 @@ def halting_cases(input_dim: int = 3):
 
 
 class HaltingConstructionTests(unittest.TestCase):
+    def test_halting_config_does_not_own_validation_behavior(self) -> None:
+        self.assertNotIn("validate_owner_step_contract", HaltingConfig.__dict__)
+        self.assertNotIn("validate_minimum_step_capability", HaltingConfig.__dict__)
+
+    def test_minimum_steps_and_ponder_weight_are_required(self) -> None:
+        for config_factory in (stick_config, soft_config):
+            for field_name, config in (
+                (
+                    "min_steps",
+                    config_factory(
+                        input_dim=2,
+                        min_steps=None,
+                        ponder_cost_weight=1.0,
+                    ),
+                ),
+                (
+                    "ponder_cost_weight",
+                    config_factory(
+                        input_dim=2,
+                        min_steps=1,
+                        ponder_cost_weight=None,
+                    ),
+                ),
+            ):
+                with self.subTest(
+                    strategy=config_factory.__name__,
+                    field_name=field_name,
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        rf"{field_name} is required",
+                    ):
+                        config.build()
+
+    def test_stick_breaking_delays_accumulation_until_its_step_floor(self) -> None:
+        model = stick_config(input_dim=2, min_steps=3).build().eval()
+        hidden_states = (
+            torch.tensor(((1.0, 2.0),)),
+            torch.tensor(((3.0, 4.0),)),
+            torch.tensor(((5.0, 6.0),)),
+        )
+        state = None
+
+        for step_index, hidden in enumerate(hidden_states):
+            state, output_hidden = model.update_halting_state(state, hidden)
+
+            self.assertEqual(state.step_count, step_index)
+            torch.testing.assert_close(output_hidden, hidden)
+            if step_index < 2:
+                torch.testing.assert_close(
+                    state.accumulated_halt_probabilities,
+                    torch.zeros_like(state.accumulated_halt_probabilities),
+                )
+                torch.testing.assert_close(
+                    state.accumulated_ponder_cost,
+                    torch.zeros_like(state.accumulated_ponder_cost),
+                )
+
+        self.assertTrue(bool((state.accumulated_halt_probabilities > 0).all()))
+
+    def test_soft_halting_delays_accumulation_until_its_step_floor(self) -> None:
+        model = soft_config(input_dim=2, min_steps=3).build().eval()
+        hidden_states = (
+            torch.tensor(((1.0, 2.0),)),
+            torch.tensor(((3.0, 4.0),)),
+            torch.tensor(((5.0, 6.0),)),
+        )
+        state = None
+
+        for step_index, hidden in enumerate(hidden_states):
+            state, output_hidden = model.update_halting_state(state, hidden)
+
+            torch.testing.assert_close(
+                state.step_count,
+                hidden.new_full(state.step_count.shape, step_index),
+            )
+            if step_index < 2:
+                torch.testing.assert_close(output_hidden, hidden)
+                torch.testing.assert_close(
+                    state.accumulated_hidden,
+                    torch.zeros_like(state.accumulated_hidden),
+                )
+                torch.testing.assert_close(
+                    state.accumulated_ponder_cost,
+                    torch.zeros_like(state.accumulated_ponder_cost),
+                )
+
+        self.assertTrue(bool((state.accumulated_hidden != 0).any()))
+
+    def test_minimum_steps_rejects_invalid_values(self) -> None:
+        invalid_cases = (
+            (True, TypeError),
+            (1.5, TypeError),
+            ("1", TypeError),
+            (0, ValueError),
+            (-1, ValueError),
+        )
+
+        for config_factory in (stick_config, soft_config):
+            for invalid_value, expected_error in invalid_cases:
+                with self.subTest(
+                    strategy=config_factory.__name__,
+                    invalid_value=invalid_value,
+                ):
+                    config = config_factory(input_dim=2, min_steps=invalid_value)
+
+                    with self.assertRaisesRegex(expected_error, "min_steps"):
+                        config.build()
+
+    def test_ponder_weight_appends_to_the_positional_config_contract(self) -> None:
+        for config_type in (StickBreakingConfig, SoftHaltingConfig):
+            with self.subTest(config_type=config_type.__name__):
+                field_names = [field.name for field in fields(config_type)]
+
+                self.assertGreater(
+                    field_names.index("ponder_cost_weight"),
+                    field_names.index("halting_gate_config"),
+                )
+
+    def test_default_ponder_cost_weight_preserves_existing_effective_loss(self) -> None:
+        expected_losses = {"stick": 0.75, "soft": 0.5}
+        for strategy_name, model in halting_cases(input_dim=2):
+            with self.subTest(strategy=strategy_name):
+                first_hidden = torch.tensor(((1.0, 2.0),))
+                second_hidden = torch.tensor(((3.0, 4.0),))
+                state, _ = model.update_halting_state(None, first_hidden)
+                state, output_hidden = model.update_halting_state(
+                    state,
+                    second_hidden,
+                )
+
+                _, ponder_loss = model.finalize_weighted_accumulation(
+                    state,
+                    output_hidden,
+                )
+
+                self.assertEqual(model.ponder_cost_weight, 1.0)
+                torch.testing.assert_close(
+                    ponder_loss,
+                    ponder_loss.new_full(
+                        ponder_loss.shape,
+                        expected_losses[strategy_name],
+                    ),
+                )
+
+    def test_ponder_cost_weight_rejects_invalid_values(self) -> None:
+        invalid_cases = (
+            (True, TypeError),
+            ("1.0", TypeError),
+            (float("nan"), ValueError),
+            (float("inf"), ValueError),
+            (float("-inf"), ValueError),
+            (-0.1, ValueError),
+        )
+
+        for config_factory in (stick_config, soft_config):
+            for invalid_value, expected_error in invalid_cases:
+                with self.subTest(
+                    strategy=config_factory.__name__,
+                    invalid_value=invalid_value,
+                ):
+                    config = config_factory(input_dim=2)
+                    config.ponder_cost_weight = invalid_value
+
+                    with self.assertRaisesRegex(
+                        expected_error,
+                        "ponder_cost_weight",
+                    ):
+                        config.build()
+
     def test_registry_builds_each_strategy_with_an_explicit_threshold(self) -> None:
         for cfg, strategy_type in (
             (stick_config(threshold=0.999), StickBreaking),
@@ -164,6 +344,8 @@ class HaltingConstructionTests(unittest.TestCase):
             SoftHaltingConfig(
                 input_dim=2,
                 threshold=0.9,
+                ponder_cost_weight=1.0,
+                min_steps=1,
                 dropout_probability=1.0,
                 hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
                 halting_gate_config=custom_gate,
@@ -282,6 +464,52 @@ class HaltingConstructionTests(unittest.TestCase):
 
 
 class CommonOfficialLifecycleTests(unittest.TestCase):
+    def test_ponder_cost_weight_scales_only_effective_loss_and_gradient(self) -> None:
+        strategy_cases = (
+            (StickBreaking, stick_config),
+            (SoftHalting, soft_config),
+        )
+
+        for strategy_type, config_factory in strategy_cases:
+            weighted_results = {}
+            for weight in (0.0, 0.5, 1.0):
+                with torch.random.fork_rng():
+                    torch.manual_seed(23)
+                    model = strategy_type(
+                        config_factory(2, ponder_cost_weight=weight)
+                    ).eval()
+                first_hidden = torch.tensor(((1.0, 2.0),))
+                second_hidden = torch.tensor(((3.0, 4.0),))
+                state, _ = model.update_halting_state(None, first_hidden)
+                state, output_hidden = model.update_halting_state(
+                    state,
+                    second_hidden,
+                )
+
+                finalized_hidden, effective_loss = model.finalize_weighted_accumulation(
+                    state,
+                    output_hidden,
+                )
+                effective_loss.sum().backward()
+                output_gate = tuple(model.parameters())[-1]
+                weighted_results[weight] = (
+                    finalized_hidden.detach(),
+                    state.raw_ponder_loss.detach(),
+                    effective_loss.detach(),
+                    output_gate.grad.detach(),
+                )
+
+            baseline_hidden, baseline_raw_loss, baseline_loss, baseline_gradient = (
+                weighted_results[1.0]
+            )
+            for weight in (0.0, 0.5, 1.0):
+                hidden, raw_loss, effective_loss, gradient = weighted_results[weight]
+                with self.subTest(strategy=strategy_type.__name__, weight=weight):
+                    torch.testing.assert_close(hidden, baseline_hidden)
+                    torch.testing.assert_close(raw_loss, baseline_raw_loss)
+                    torch.testing.assert_close(effective_loss, baseline_loss * weight)
+                    torch.testing.assert_close(gradient, baseline_gradient * weight)
+
     def test_rank_two_rank_three_and_non_contiguous_inputs(self) -> None:
         inputs = (
             torch.randn(4, 3),

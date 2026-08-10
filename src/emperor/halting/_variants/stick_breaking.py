@@ -78,6 +78,7 @@ class StickBreakingState(HaltingStateBase):
 
 class StickBreaking(HaltingBase[StickBreakingState]):
     VALIDATOR = StickBreakingValidator
+    supports_minimum_step_delay = True
 
     def __init__(
         self,
@@ -91,6 +92,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
 
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
+        self.min_steps: int = self.cfg.min_steps
+        self.ponder_cost_weight: float = self.cfg.ponder_cost_weight
         self.halting_gate_config: LayerStackConfig = self.cfg.halting_gate_config
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
@@ -120,14 +123,73 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             model_hidden_state,
             self.input_dim,
         )
-        current_log_gates = self.__compute_gate_logits(model_hidden_state)
         if previous_state is None:
-            state = self.__init_state(current_log_gates, model_hidden_state)
+            state = self.__initialize_first_step(model_hidden_state)
         else:
-            state = self.__update_state(
-                previous_state, current_log_gates, model_hidden_state
-            )
+            state = self.__advance_step(previous_state, model_hidden_state)
         return state, state.output_hidden
+
+    def __initialize_first_step(
+        self,
+        model_hidden_state: Tensor,
+    ) -> StickBreakingState:
+        if self.min_steps > 1:
+            return self.__dormant_state(model_hidden_state, step_count=0)
+        return self.__init_state(
+            self.__compute_gate_logits(model_hidden_state),
+            model_hidden_state,
+            step_count=0,
+        )
+
+    def __advance_step(
+        self,
+        previous_state: StickBreakingState,
+        model_hidden_state: Tensor,
+    ) -> StickBreakingState:
+        if self.min_steps == 1:
+            return self.__update_state(
+                previous_state,
+                self.__compute_gate_logits(model_hidden_state),
+                model_hidden_state,
+            )
+
+        updated_step_count = previous_state.step_count + 1
+        accumulation_start_index = self.min_steps - 1
+        if updated_step_count < accumulation_start_index:
+            return self.__dormant_state(
+                model_hidden_state,
+                step_count=updated_step_count,
+            )
+
+        current_log_gates = self.__compute_gate_logits(model_hidden_state)
+        if previous_state.step_count < accumulation_start_index:
+            return self.__init_state(
+                current_log_gates,
+                model_hidden_state,
+                step_count=updated_step_count,
+            )
+        return self.__update_state(
+            previous_state,
+            current_log_gates,
+            model_hidden_state,
+        )
+
+    @staticmethod
+    def __dormant_state(
+        model_hidden_state: Tensor,
+        *,
+        step_count: int,
+    ) -> StickBreakingState:
+        leading_zeros = model_hidden_state.new_zeros(model_hidden_state.shape[:-1])
+        return StickBreakingState(
+            halt_mask=leading_zeros.bool(),
+            log_continuation=leading_zeros,
+            accumulated_hidden=torch.zeros_like(model_hidden_state),
+            output_hidden=model_hidden_state,
+            accumulated_halt_probabilities=leading_zeros,
+            step_count=step_count,
+            accumulated_ponder_cost=model_hidden_state.new_zeros(()),
+        )
 
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         original_shape = hidden_state.shape
@@ -142,6 +204,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
         self,
         log_softmax_gates: Tensor,
         model_hidden_state: Tensor,
+        *,
+        step_count: int,
     ) -> StickBreakingState:
         log_continuation, log_halting = torch.unbind(log_softmax_gates, dim=-1)
         halting_probability = torch.exp(log_halting)
@@ -156,7 +220,7 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             accumulated_hidden=weighted_hidden,
             output_hidden=output_hidden,
             accumulated_halt_probabilities=halting_probability,
-            step_count=0,
+            step_count=step_count,
             accumulated_ponder_cost=model_hidden_state.new_zeros(()),
         )
 
@@ -184,7 +248,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             output_hidden,
             previous_state.halt_mask,
         )
-        step_contribution = halting_probability * updated_step_count
+        optional_step_index = updated_step_count - (self.min_steps - 1)
+        step_contribution = halting_probability * optional_step_index
         updated_accumulated_ponder_cost = (
             previous_state.accumulated_ponder_cost + step_contribution
         )
@@ -253,6 +318,14 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             remaining_probabilities.unsqueeze(-1) * current_hidden
         )
         soft_halted_hidden = state.accumulated_hidden + weighted_remaining_hidden
-        remaining_step_contribution = remaining_probabilities * (state.step_count + 1)
-        ponder_loss = state.accumulated_ponder_cost + remaining_step_contribution
-        return soft_halted_hidden, ponder_loss
+        next_optional_step_index = state.step_count - (self.min_steps - 1) + 1
+        if isinstance(next_optional_step_index, Tensor):
+            next_optional_step_index = next_optional_step_index.clamp_min(0)
+        else:
+            next_optional_step_index = max(0, next_optional_step_index)
+        remaining_step_contribution = remaining_probabilities * next_optional_step_index
+        raw_ponder_loss = state.accumulated_ponder_cost + remaining_step_contribution
+        return soft_halted_hidden, self._apply_ponder_cost_weight(
+            state,
+            raw_ponder_loss,
+        )

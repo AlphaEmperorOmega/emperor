@@ -100,6 +100,8 @@ def _halting_config(
             return None
         return options.recurrent_halting_option(
             threshold=options.recurrent_halting_threshold,
+            min_steps=1,
+            ponder_cost_weight=1.0,
             dropout_probability=options.recurrent_halting_dropout,
             hidden_state_mode=options.recurrent_halting_hidden_state_mode,
             halting_gate_config=_controller_stack(
@@ -114,6 +116,8 @@ def _halting_config(
         return None
     return options.halting_option(
         threshold=options.halting_threshold,
+        min_steps=1,
+        ponder_cost_weight=1.0,
         dropout_probability=options.halting_dropout,
         hidden_state_mode=options.halting_hidden_state_mode,
         halting_gate_config=_controller_stack(

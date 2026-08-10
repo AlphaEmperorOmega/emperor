@@ -1,7 +1,9 @@
 import importlib
 import unittest
 from dataclasses import fields
+from pathlib import Path
 
+from emperor.halting import HaltingConfig
 from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
     RecurrentCompositionConfig,
@@ -38,6 +40,35 @@ def _declared_protected_method_names(owner: type) -> set[str]:
 
 
 class TestRecurrentCompositionConfig(unittest.TestCase):
+    def test_halting_floor_policy_does_not_live_in_the_recurrent_package(self) -> None:
+        recurrent_package = (
+            Path(__file__).parents[2]
+            / "src"
+            / "emperor"
+            / "layers"
+            / "_composition"
+            / "recurrent"
+        )
+        prohibited_policy_names = (
+            "min_steps",
+            "is_update_eligible",
+            "owner_step",
+        )
+        offenders = {}
+        for path in sorted(recurrent_package.rglob("*.py")):
+            source = path.read_text(encoding="utf-8")
+            leaked_policy_names = tuple(
+                policy_name
+                for policy_name in prohibited_policy_names
+                if policy_name in source
+            )
+            if leaked_policy_names:
+                offenders[str(path.relative_to(recurrent_package))] = (
+                    leaked_policy_names
+                )
+
+        self.assertEqual(offenders, {})
+
     def test_abstract_config_cannot_be_built(self) -> None:
         with self.assertRaisesRegex(
             ValueError,
@@ -111,6 +142,16 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                     field_name,
                     {field.name for field in fields(config_type)},
                 )
+
+    def test_minimum_steps_belongs_to_the_halting_contract(self) -> None:
+        recurrent_field_names = {field.name for field in fields(RecurrentLayerConfig)}
+        halting_field_names = [field.name for field in fields(HaltingConfig)]
+
+        self.assertNotIn("min_steps", recurrent_field_names)
+        self.assertGreater(
+            halting_field_names.index("min_steps"),
+            halting_field_names.index("halting_gate_config"),
+        )
 
     def test_transition_seam_ignores_unconfigured_resources(self) -> None:
         config = RecurrentLayerConfig(block_config=None)

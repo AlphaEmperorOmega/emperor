@@ -138,6 +138,8 @@ class HaltingMonitorCallback(Callback):
         self.__track_remaining_mass_mean(context)
         self.__track_saturation_fraction(context)
         self.__track_ponder_loss(context)
+        self.__track_raw_ponder_loss(context)
+        self.__track_effective_ponder_loss(context)
         self.__track_survival_history(context)
         self.__track_survival_histogram(context)
         self.__track_ponder_cost_histogram(context)
@@ -201,6 +203,20 @@ class HaltingMonitorCallback(Callback):
         context.pl_module.log(
             f"{context.module_name}/loss/ponder_loss",
             context.metrics.ponder_loss,
+        )
+
+    @staticmethod
+    def __track_raw_ponder_loss(context: _HaltingTrackingContext) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/loss/raw_ponder_loss",
+            context.metrics.raw_ponder_loss,
+        )
+
+    @staticmethod
+    def __track_effective_ponder_loss(context: _HaltingTrackingContext) -> None:
+        context.pl_module.log(
+            f"{context.module_name}/loss/effective_ponder_loss",
+            context.metrics.effective_ponder_loss,
         )
 
     def __track_survival_history(self, context: _HaltingTrackingContext) -> None:

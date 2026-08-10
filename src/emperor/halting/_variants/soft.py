@@ -51,6 +51,7 @@ class _SoftPreparedStep:
 
 class SoftHalting(HaltingBase[SoftHaltingState]):
     VALIDATOR = SoftHaltingValidator
+    supports_minimum_step_delay = True
 
     def __init__(
         self,
@@ -60,15 +61,16 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
         super().__init__()
         config = getattr(cfg, "halting_config", cfg)
         self.cfg: HaltingConfig = self._override_config(config, overrides)
-
+        self.VALIDATOR.validate(self)
         self.input_dim: int = self.cfg.input_dim
         self.threshold: float = self.cfg.threshold
+        self.min_steps: int = self.cfg.min_steps
+        self.ponder_cost_weight: float = self.cfg.ponder_cost_weight
         self.dropout_probability: float | None = self.cfg.dropout_probability
         self.hidden_state_mode: HaltingHiddenStateModeOptions = (
             self.cfg.hidden_state_mode
         )
         self.halting_gate_config: LayerStackConfig | None = self.cfg.halting_gate_config
-        self.VALIDATOR.validate(self)
 
         self._gate = self.__build_gate()
         self.__initialize_output_projection()
@@ -146,6 +148,13 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             previous_state.raw_hidden.shape,
             "model_hidden_state",
         )
+        if self.__next_step_remains_below_minimum(previous_state):
+            state = self.__advance_dormant_step(
+                previous_state,
+                model_hidden_state,
+            )
+            return state, state.output_hidden
+
         previously_advanced = previous_state.advanced_mask.bool()
         prepared = self.__prepare_later_step(
             previous_state,
@@ -171,6 +180,28 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             update_mask,
         )
         return state, state.output_hidden
+
+    def __next_step_remains_below_minimum(
+        self,
+        previous_state: SoftHaltingState,
+    ) -> bool:
+        accumulation_start_index = self.min_steps - 1
+        next_step_count = previous_state.step_count + 1
+        return bool((next_step_count < accumulation_start_index).all().item())
+
+    @staticmethod
+    def __advance_dormant_step(
+        previous_state: SoftHaltingState,
+        model_hidden_state: Tensor,
+    ) -> SoftHaltingState:
+        return replace(
+            previous_state,
+            raw_hidden=model_hidden_state,
+            output_hidden=model_hidden_state,
+            step_count=previous_state.step_count + 1,
+            gate_input=None,
+            gate_logits=None,
+        )
 
     def __prepare_initial_step(
         self,
@@ -227,6 +258,9 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             previous_state.step_count + 1,
             previous_state.step_count,
         )
+        optional_previous_step_index = (
+            previous_state.step_count - (self.min_steps - 1)
+        ).clamp_min(0)
         return _SoftPreparedStep(
             accumulated_hidden=(
                 previous_state.accumulated_hidden
@@ -242,7 +276,7 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             log_continuation=log_continuation,
             accumulated_ponder_cost=(
                 previous_state.accumulated_ponder_cost
-                + previous_state.step_count * halt_probability
+                + optional_previous_step_index * halt_probability
             ),
             halt_probability=halt_probability,
             gate_input=raw_hidden,
@@ -326,12 +360,16 @@ class SoftHalting(HaltingBase[SoftHaltingState]):
             "current_hidden",
         )
         valid_weight = state.valid_mask & state.advanced_mask
+        optional_step_count = (state.step_count - (self.min_steps - 1)).clamp_min(0)
         loss_by_position = (
             state.accumulated_ponder_cost
-            + state.continuation_probability * state.step_count
+            + state.continuation_probability * optional_step_count
         ) * valid_weight
-        loss = loss_by_position.sum() / valid_weight.sum().clamp_min(1)
-        return state.output_hidden, loss
+        raw_ponder_loss = loss_by_position.sum() / valid_weight.sum().clamp_min(1)
+        return state.output_hidden, self._apply_ponder_cost_weight(
+            state,
+            raw_ponder_loss,
+        )
 
     @staticmethod
     def __preserve_uncomputed_hidden(

@@ -646,6 +646,10 @@ def _recurrent_details(
         "gateOption": gate_option_name,
         "halting": bool(getattr(module, "halting_model", None) is not None),
     }
+    halting_model = getattr(module, "halting_model", None)
+    min_steps = getattr(halting_model, "min_steps", None)
+    if min_steps is not None:
+        recurrent["minSteps"] = min_steps
     no_gradient_transition_count = getattr(
         module,
         "no_gradient_transition_count",

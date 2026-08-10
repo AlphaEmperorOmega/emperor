@@ -103,6 +103,8 @@ def _halting(
         return None
     return option(
         threshold=threshold,
+        min_steps=1,
+        ponder_cost_weight=1.0,
         dropout_probability=0.0,
         hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
         halting_gate_config=_linear_stack(hidden_dim=model_dim, output_dim=2),

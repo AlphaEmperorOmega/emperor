@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import torch
 
 from emperor.config import ConfigBase, optional_field
+from emperor.halting import HaltingHiddenStateModeOptions, StickBreakingConfig
 from emperor.layers import (
     ActivationOptions,
     GateConfig,
@@ -277,6 +278,66 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
         )
         callback.on_fit_end(TrainerStub(), module)
         self.assertTrue(same_bound_method(recurrent.forward, original_forward))
+
+    def test_minimum_depth_is_reported_as_realized_recurrent_steps(self):
+        dim = 4
+        halting_gate_config = LayerStackConfig(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=2,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                residual_config=None,
+                dropout_probability=0.0,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(bias_flag=False),
+            ),
+        )
+        recurrent = (
+            RecurrentLayerConfig(
+                input_dim=dim,
+                output_dim=dim,
+                max_steps=5,
+                recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+                block_config=IncrementBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    increment=0.25,
+                ),
+                halting_config=StickBreakingConfig(
+                    input_dim=dim,
+                    threshold=0.49,
+                    ponder_cost_weight=1.0,
+                    min_steps=3,
+                    dropout_probability=0.0,
+                    hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                    halting_gate_config=halting_gate_config,
+                ),
+            )
+            .build()
+            .eval()
+        )
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(TrainerStub(), module)
+
+        recurrent(self.state())
+
+        torch.testing.assert_close(
+            module.logged_value("recurrent/recurrent/actual_steps"),
+            torch.tensor(3.0),
+        )
+        self.assertEqual(
+            len(callback._observations[id(recurrent)].step_deltas),
+            3,
+        )
+        callback.on_fit_end(TrainerStub(), module)
 
     def test_tiny_recursive_model_uses_shared_recurrent_diagnostic_capability(self):
         recurrent = self.tiny_recursive_model()
