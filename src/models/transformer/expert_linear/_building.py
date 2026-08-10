@@ -184,9 +184,7 @@ def _residual_stack(runtime: RuntimeOptions):
             ),
             residual_model_flag=runtime.residual_stack_residual_model_flag,
             dropout_probability=runtime.residual_stack_dropout_probability,
-            last_layer_bias_option=(
-                runtime.residual_stack_last_layer_bias_option
-            ),
+            last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
             apply_output_pipeline_flag=(
                 runtime.residual_stack_apply_output_pipeline_flag
             ),
