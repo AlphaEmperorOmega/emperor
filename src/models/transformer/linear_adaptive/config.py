@@ -1,18 +1,22 @@
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,  # noqa: F401
     AffineTransformDynamicBiasConfig,  # noqa: F401
     AntiDynamicDiagonalConfig,  # noqa: F401
     AxisMaskConfig,
+    BankExpansionFactorOptions,
     CombinedDynamicDiagonalConfig,  # noqa: F401
     DiagonalAxisMaskConfig,  # noqa: F401
     DualModelDynamicWeightConfig,  # noqa: F401
     DynamicBiasConfig,
+    DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
     GeneratorDynamicBiasConfig,  # noqa: F401
     HypernetworkDynamicWeightConfig,  # noqa: F401
     LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
     LowRankDynamicWeightConfig,  # noqa: F401
+    MaskDimensionOptions,
     MultiplicativeDynamicBiasConfig,  # noqa: F401
     OuterProductMaskConfig,  # noqa: F401
     PerAxisScoreMaskConfig,  # noqa: F401
@@ -22,8 +26,11 @@ from emperor.augmentations.adaptive_parameters import (
     StandardDynamicDiagonalConfig,  # noqa: F401
     TanhGatedDynamicBiasConfig,  # noqa: F401
     TopSliceAxisMaskConfig,  # noqa: F401
+    WeightDecayScheduleOptions,
     WeightedBankDynamicBiasConfig,  # noqa: F401
     WeightInformedScoreAxisMaskConfig,  # noqa: F401
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
 )
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
@@ -371,15 +378,165 @@ RESIDUAL_STACK_BIAS_FLAG: bool | None = None
 
 
 # Adaptive Parameter Options
-PROJECTION_ADAPTIVE_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
-PROJECTION_ADAPTIVE_BIAS_OPTION: type[DynamicBiasConfig] | None = None
-PROJECTION_ADAPTIVE_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
-PROJECTION_ADAPTIVE_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+_CONFIG_FIELD_METADATA_ALIASES: dict[str, str] = {}
 
-FEED_FORWARD_ADAPTIVE_WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
-FEED_FORWARD_ADAPTIVE_BIAS_OPTION: type[DynamicBiasConfig] | None = None
-FEED_FORWARD_ADAPTIVE_DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
-FEED_FORWARD_ADAPTIVE_ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+GROUPING_SCOPE: AdaptiveParameterGroupingScopeOptions = (
+    AdaptiveParameterGroupingScopeOptions.DISABLED
+)
+GROUP_COUNT: int = 1
+WEIGHT_OPTION_FLAG: bool = True
+WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
+GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_ONE
+WEIGHT_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
+WEIGHT_DECAY_RATE: float = 0.0
+WEIGHT_DECAY_WARMUP_BATCHES: int = 0
+WEIGHT_NORMALIZATION_OPTION: WeightNormalizationOptions = (
+    WeightNormalizationOptions.DISABLED
+)
+WEIGHT_NORMALIZATION_POSITION_OPTION: WeightNormalizationPositionOptions = (
+    WeightNormalizationPositionOptions.DISABLED
+)
+WEIGHT_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    BankExpansionFactorOptions.FACTOR_OF_ONE
+)
+BIAS_OPTION_FLAG: bool = True
+BIAS_OPTION: type[DynamicBiasConfig] | None = None
+BIAS_DECAY_SCHEDULE: WeightDecayScheduleOptions = WeightDecayScheduleOptions.DISABLED
+BIAS_DECAY_RATE: float = 0.0
+BIAS_DECAY_WARMUP_BATCHES: int = 0
+BIAS_BANK_EXPANSION_FACTOR: BankExpansionFactorOptions = (
+    BankExpansionFactorOptions.FACTOR_OF_ONE
+)
+DIAGONAL_OPTION_FLAG: bool = True
+DIAGONAL_OPTION: type[DynamicDiagonalConfig] | None = None
+MASK_OPTION_FLAG: bool = True
+ROW_MASK_OPTION: type[AxisMaskConfig] | None = None
+MASK_THRESHOLD: float = 0.5
+MASK_SURROGATE_SCALE: float = 1.0
+MASK_FLOOR: float = 0.0
+MASK_DIMENSION_OPTION: MaskDimensionOptions = MaskDimensionOptions.ROW
+MASK_TRANSITION_WIDTH: float = 0.1
+
+# Shared adaptive generator stack. Component-specific stacks inherit this unless
+# their INDEPENDENT_FLAG is enabled.
+ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM: int = 64
+ADAPTIVE_GENERATOR_STACK_NUM_LAYERS: int = 1
+ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
+ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
+    LayerNormPositionOptions.DISABLED
+)
+ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
+ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG: bool = False
+ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
+ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
+    LastLayerBiasOptions.DEFAULT
+)
+ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool = False
+ADAPTIVE_GENERATOR_STACK_BIAS_FLAG: bool = True
+
+_COMPONENT_GENERATOR_DEFAULTS = {
+    "INDEPENDENT_FLAG": False,
+    "HIDDEN_DIM": None,
+    "NUM_LAYERS": None,
+    "ACTIVATION": None,
+    "LAYER_NORM_POSITION": None,
+    "RESIDUAL_CONNECTION_OPTION": None,
+    "RESIDUAL_MODEL_FLAG": False,
+    "DROPOUT_PROBABILITY": None,
+    "LAST_LAYER_BIAS_OPTION": None,
+    "APPLY_OUTPUT_PIPELINE_FLAG": None,
+    "BIAS_FLAG": None,
+}
+_annotations = globals().setdefault("__annotations__", {})
+for _component in ("WEIGHT", "BIAS", "DIAGONAL", "MASK"):
+    for _suffix, _value in _COMPONENT_GENERATOR_DEFAULTS.items():
+        _target = f"{_component}_GENERATOR_STACK_{_suffix}"
+        globals()[_target] = _value
+        _source_suffix = "HIDDEN_DIM" if _suffix == "INDEPENDENT_FLAG" else _suffix
+        _source = f"ADAPTIVE_GENERATOR_STACK_{_source_suffix}"
+        _CONFIG_FIELD_METADATA_ALIASES[_target] = _source
+        if _suffix == "INDEPENDENT_FLAG":
+            _annotations[_target] = bool
+        elif _source in _annotations:
+            _annotations[_target] = (
+                _annotations[_source]
+                if _value is not None
+                else _annotations[_source] | None
+            )
+
+
+_ADAPTIVE_DEFAULT_NAMES = {
+    "GROUPING_SCOPE": "GROUPING_SCOPE",
+    "GROUP_COUNT": "GROUP_COUNT",
+    "WEIGHT_OPTION_FLAG": "WEIGHT_OPTION_FLAG",
+    "WEIGHT_OPTION": "WEIGHT_OPTION",
+    "GENERATOR_DEPTH": "GENERATOR_DEPTH",
+    "WEIGHT_DECAY_SCHEDULE": "WEIGHT_DECAY_SCHEDULE",
+    "WEIGHT_DECAY_RATE": "WEIGHT_DECAY_RATE",
+    "WEIGHT_DECAY_WARMUP_BATCHES": "WEIGHT_DECAY_WARMUP_BATCHES",
+    "WEIGHT_NORMALIZATION_OPTION": "WEIGHT_NORMALIZATION_OPTION",
+    "WEIGHT_NORMALIZATION_POSITION_OPTION": ("WEIGHT_NORMALIZATION_POSITION_OPTION"),
+    "WEIGHT_BANK_EXPANSION_FACTOR": "WEIGHT_BANK_EXPANSION_FACTOR",
+    "BIAS_OPTION_FLAG": "BIAS_OPTION_FLAG",
+    "BIAS_OPTION": "BIAS_OPTION",
+    "BIAS_DECAY_SCHEDULE": "BIAS_DECAY_SCHEDULE",
+    "BIAS_DECAY_RATE": "BIAS_DECAY_RATE",
+    "BIAS_DECAY_WARMUP_BATCHES": "BIAS_DECAY_WARMUP_BATCHES",
+    "BIAS_BANK_EXPANSION_FACTOR": "BIAS_BANK_EXPANSION_FACTOR",
+    "DIAGONAL_OPTION_FLAG": "DIAGONAL_OPTION_FLAG",
+    "DIAGONAL_OPTION": "DIAGONAL_OPTION",
+    "MASK_OPTION_FLAG": "MASK_OPTION_FLAG",
+    "ROW_MASK_OPTION": "ROW_MASK_OPTION",
+    "MASK_THRESHOLD": "MASK_THRESHOLD",
+    "MASK_SURROGATE_SCALE": "MASK_SURROGATE_SCALE",
+    "MASK_FLOOR": "MASK_FLOOR",
+    "MASK_DIMENSION_OPTION": "MASK_DIMENSION_OPTION",
+    "MASK_TRANSITION_WIDTH": "MASK_TRANSITION_WIDTH",
+}
+for _name in tuple(globals()):
+    if _name.startswith("ADAPTIVE_GENERATOR_STACK_"):
+        _ADAPTIVE_DEFAULT_NAMES[_name.removeprefix("ADAPTIVE_")] = _name
+    elif any(
+        _name.startswith(f"{_component}_GENERATOR_STACK_")
+        for _component in ("WEIGHT", "BIAS", "DIAGONAL", "MASK")
+    ):
+        _ADAPTIVE_DEFAULT_NAMES[_name] = _name
+
+
+def _copy_adaptive_runtime_defaults(target_prefix: str) -> None:
+    annotations = globals().setdefault("__annotations__", {})
+    for suffix, source in _ADAPTIVE_DEFAULT_NAMES.items():
+        target = f"{target_prefix}{suffix}"
+        globals()[target] = globals()[source]
+        _CONFIG_FIELD_METADATA_ALIASES[target] = source
+        if source in annotations:
+            annotations[target] = annotations[source]
+
+
+for _adaptive_target_prefix in (
+    "PROJECTION_ADAPTIVE_",
+    "FEED_FORWARD_ADAPTIVE_",
+    "ATTN_",
+    "FF_",
+    "ENCODER_ATTN_ADAPTIVE_",
+    "DECODER_SELF_ATTN_ADAPTIVE_",
+    "DECODER_CROSS_ATTN_ADAPTIVE_",
+    "ENCODER_FF_ADAPTIVE_",
+    "DECODER_FF_ADAPTIVE_",
+):
+    _copy_adaptive_runtime_defaults(_adaptive_target_prefix)
+
+del (
+    _adaptive_target_prefix,
+    _annotations,
+    _component,
+    _name,
+    _source,
+    _source_suffix,
+    _suffix,
+    _target,
+    _value,
+)
 
 # Trainer
 NUM_EPOCHS = 30
@@ -400,9 +557,6 @@ CALLBACK_CHECKPOINT_FLAG = False
 DATA_NUM_WORKERS = 0
 RUN_TEST_AFTER_FIT = True
 SEED = 0
-
-
-_CONFIG_FIELD_METADATA_ALIASES: dict[str, str] = {}
 
 
 def _copy_path_runtime_defaults(source_prefix: str, target_prefix: str) -> None:

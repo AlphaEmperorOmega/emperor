@@ -239,6 +239,171 @@ def feed_forward_options_from_config(
     )
 
 
+def _adaptive_controller_stack_from_config(
+    config_module: ModuleType,
+    prefix: str,
+) -> ControllerStackOptions:
+    return ControllerStackOptions(
+        independent_flag=getattr(config_module, f"{prefix}_INDEPENDENT_FLAG"),
+        hidden_dim=getattr(config_module, f"{prefix}_HIDDEN_DIM"),
+        num_layers=getattr(config_module, f"{prefix}_NUM_LAYERS"),
+        last_layer_bias_option=getattr(
+            config_module,
+            f"{prefix}_LAST_LAYER_BIAS_OPTION",
+        ),
+        apply_output_pipeline_flag=getattr(
+            config_module,
+            f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
+        ),
+        activation=getattr(config_module, f"{prefix}_ACTIVATION"),
+        layer_norm_position=getattr(
+            config_module,
+            f"{prefix}_LAYER_NORM_POSITION",
+        ),
+        residual_connection_option=getattr(
+            config_module,
+            f"{prefix}_RESIDUAL_CONNECTION_OPTION",
+        ),
+        residual_model_flag=getattr(
+            config_module,
+            f"{prefix}_RESIDUAL_MODEL_FLAG",
+        ),
+        dropout_probability=getattr(
+            config_module,
+            f"{prefix}_DROPOUT_PROBABILITY",
+        ),
+        bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
+    )
+
+
+def adaptive_options_from_config(
+    config_module: ModuleType,
+    prefix: str,
+) -> AdaptiveParameterOptions:
+    return AdaptiveParameterOptions(
+        grouping_scope=getattr(config_module, f"{prefix}_GROUPING_SCOPE"),
+        group_count=getattr(config_module, f"{prefix}_GROUP_COUNT"),
+        weight_option_flag=getattr(config_module, f"{prefix}_WEIGHT_OPTION_FLAG"),
+        weight_option=getattr(config_module, f"{prefix}_WEIGHT_OPTION"),
+        generator_depth=getattr(config_module, f"{prefix}_GENERATOR_DEPTH"),
+        weight_decay_schedule=getattr(
+            config_module,
+            f"{prefix}_WEIGHT_DECAY_SCHEDULE",
+        ),
+        weight_decay_rate=getattr(config_module, f"{prefix}_WEIGHT_DECAY_RATE"),
+        weight_decay_warmup_batches=getattr(
+            config_module,
+            f"{prefix}_WEIGHT_DECAY_WARMUP_BATCHES",
+        ),
+        weight_normalization_option=getattr(
+            config_module,
+            f"{prefix}_WEIGHT_NORMALIZATION_OPTION",
+        ),
+        weight_normalization_position_option=getattr(
+            config_module,
+            f"{prefix}_WEIGHT_NORMALIZATION_POSITION_OPTION",
+        ),
+        weight_bank_expansion_factor=getattr(
+            config_module,
+            f"{prefix}_WEIGHT_BANK_EXPANSION_FACTOR",
+        ),
+        bias_option_flag=getattr(config_module, f"{prefix}_BIAS_OPTION_FLAG"),
+        bias_option=getattr(config_module, f"{prefix}_BIAS_OPTION"),
+        bias_decay_schedule=getattr(
+            config_module,
+            f"{prefix}_BIAS_DECAY_SCHEDULE",
+        ),
+        bias_decay_rate=getattr(config_module, f"{prefix}_BIAS_DECAY_RATE"),
+        bias_decay_warmup_batches=getattr(
+            config_module,
+            f"{prefix}_BIAS_DECAY_WARMUP_BATCHES",
+        ),
+        bias_bank_expansion_factor=getattr(
+            config_module,
+            f"{prefix}_BIAS_BANK_EXPANSION_FACTOR",
+        ),
+        diagonal_option_flag=getattr(
+            config_module,
+            f"{prefix}_DIAGONAL_OPTION_FLAG",
+        ),
+        diagonal_option=getattr(config_module, f"{prefix}_DIAGONAL_OPTION"),
+        mask_option_flag=getattr(config_module, f"{prefix}_MASK_OPTION_FLAG"),
+        row_mask_option=getattr(config_module, f"{prefix}_ROW_MASK_OPTION"),
+        mask_threshold=getattr(config_module, f"{prefix}_MASK_THRESHOLD"),
+        mask_surrogate_scale=getattr(
+            config_module,
+            f"{prefix}_MASK_SURROGATE_SCALE",
+        ),
+        mask_floor=getattr(config_module, f"{prefix}_MASK_FLOOR"),
+        mask_dimension_option=getattr(
+            config_module,
+            f"{prefix}_MASK_DIMENSION_OPTION",
+        ),
+        mask_transition_width=getattr(
+            config_module,
+            f"{prefix}_MASK_TRANSITION_WIDTH",
+        ),
+        generator_stack_options=SubmoduleStackOptions(
+            hidden_dim=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_HIDDEN_DIM",
+            ),
+            num_layers=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_NUM_LAYERS",
+            ),
+            last_layer_bias_option=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION",
+            ),
+            apply_output_pipeline_flag=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+            ),
+            activation=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_ACTIVATION",
+            ),
+            layer_norm_position=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_LAYER_NORM_POSITION",
+            ),
+            residual_connection_option=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION",
+            ),
+            residual_model_flag=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_RESIDUAL_MODEL_FLAG",
+            ),
+            dropout_probability=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_DROPOUT_PROBABILITY",
+            ),
+            bias_flag=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_BIAS_FLAG",
+            ),
+        ),
+        weight_generator_stack_options=_adaptive_controller_stack_from_config(
+            config_module,
+            f"{prefix}_WEIGHT_GENERATOR_STACK",
+        ),
+        bias_generator_stack_options=_adaptive_controller_stack_from_config(
+            config_module,
+            f"{prefix}_BIAS_GENERATOR_STACK",
+        ),
+        diagonal_generator_stack_options=_adaptive_controller_stack_from_config(
+            config_module,
+            f"{prefix}_DIAGONAL_GENERATOR_STACK",
+        ),
+        mask_generator_stack_options=_adaptive_controller_stack_from_config(
+            config_module,
+            f"{prefix}_MASK_GENERATOR_STACK",
+        ),
+    )
+
+
 _STACK_OPTION_FIELDS = (
     "hidden_dim",
     "num_layers",
@@ -440,6 +605,77 @@ def _pop_updates(
     return updates
 
 
+_ADAPTIVE_NESTED_FIELDS = {
+    "generator_stack_options",
+    "weight_generator_stack_options",
+    "bias_generator_stack_options",
+    "diagonal_generator_stack_options",
+    "mask_generator_stack_options",
+}
+_ADAPTIVE_VALUE_FIELDS = {
+    item.name for item in fields(AdaptiveParameterOptions)
+} - _ADAPTIVE_NESTED_FIELDS
+
+
+def _pop_adaptive_options(
+    values: MutableMapping[str, Any],
+    prefix: str,
+    current: AdaptiveParameterOptions,
+) -> AdaptiveParameterOptions:
+    updates = {}
+    for field_name in _ADAPTIVE_VALUE_FIELDS:
+        key = f"{prefix}{field_name}"
+        if key in values:
+            updates[field_name] = values.pop(key)
+
+    generator = current.generator_stack_options
+    generator_updates = {}
+    generator_prefix = (
+        f"{prefix}generator_stack_" if prefix else "adaptive_generator_stack_"
+    )
+    for field_name in _STACK_OPTION_FIELDS:
+        key = f"{generator_prefix}{field_name}"
+        if key in values:
+            generator_updates[field_name] = values.pop(key)
+    generator = replace(generator, **generator_updates)
+
+    component_stacks = {}
+    for component in ("weight", "bias", "diagonal", "mask"):
+        field_name = f"{component}_generator_stack_options"
+        stack = getattr(current, field_name)
+        stack_updates = {}
+        component_prefix = f"{prefix}{component}_generator_stack_"
+        for stack_field in _CONTROLLER_STACK_FIELDS:
+            key = f"{component_prefix}{stack_field}"
+            if key in values:
+                stack_updates[stack_field] = values.pop(key)
+        component_stacks[field_name] = replace(stack, **stack_updates)
+
+    return replace(
+        current,
+        **updates,
+        generator_stack_options=generator,
+        **component_stacks,
+    )
+
+
+def _pop_adaptive_broadcast(
+    values: MutableMapping[str, Any],
+    prefix: str,
+    groups: dict[str, AdaptiveParameterOptions],
+    names: tuple[str, ...],
+) -> None:
+    before = dict(values)
+    _pop_adaptive_options(values, prefix, AdaptiveParameterOptions())
+    consumed = {key: value for key, value in before.items() if key not in values}
+    for name in names:
+        groups[name] = _pop_adaptive_options(
+            dict(consumed),
+            prefix,
+            groups[name],
+        )
+
+
 def _pop_scoped_feed_forward_updates(
     values: MutableMapping[str, Any], prefix: str
 ) -> dict[str, Any]:
@@ -560,17 +796,13 @@ def runtime_from_config() -> RuntimeOptions:
         ),
         recurrent_residual_model_flag=config.RECURRENT_RESIDUAL_MODEL_FLAG,
     )
-    projection_adaptive = AdaptiveParameterOptions(
-        weight_option=config.PROJECTION_ADAPTIVE_WEIGHT_OPTION,
-        bias_option=config.PROJECTION_ADAPTIVE_BIAS_OPTION,
-        diagonal_option=config.PROJECTION_ADAPTIVE_DIAGONAL_OPTION,
-        row_mask_option=config.PROJECTION_ADAPTIVE_ROW_MASK_OPTION,
+    projection_adaptive = adaptive_options_from_config(
+        config,
+        "PROJECTION_ADAPTIVE",
     )
-    feed_forward_adaptive = AdaptiveParameterOptions(
-        weight_option=config.FEED_FORWARD_ADAPTIVE_WEIGHT_OPTION,
-        bias_option=config.FEED_FORWARD_ADAPTIVE_BIAS_OPTION,
-        diagonal_option=config.FEED_FORWARD_ADAPTIVE_DIAGONAL_OPTION,
-        row_mask_option=config.FEED_FORWARD_ADAPTIVE_ROW_MASK_OPTION,
+    feed_forward_adaptive = adaptive_options_from_config(
+        config,
+        "FEED_FORWARD_ADAPTIVE",
     )
     return RuntimeOptions(
         batch_size=config.BATCH_SIZE,
@@ -631,6 +863,26 @@ def runtime_from_config() -> RuntimeOptions:
         ),
         projection_adaptive_options=projection_adaptive,
         feed_forward_adaptive_options=feed_forward_adaptive,
+        encoder_attention_adaptive_options=adaptive_options_from_config(
+            config,
+            "ENCODER_ATTN_ADAPTIVE",
+        ),
+        decoder_self_attention_adaptive_options=adaptive_options_from_config(
+            config,
+            "DECODER_SELF_ATTN_ADAPTIVE",
+        ),
+        decoder_cross_attention_adaptive_options=adaptive_options_from_config(
+            config,
+            "DECODER_CROSS_ATTN_ADAPTIVE",
+        ),
+        encoder_feed_forward_adaptive_options=adaptive_options_from_config(
+            config,
+            "ENCODER_FF_ADAPTIVE",
+        ),
+        decoder_feed_forward_adaptive_options=adaptive_options_from_config(
+            config,
+            "DECODER_FF_ADAPTIVE",
+        ),
     )
 
 
@@ -643,7 +895,6 @@ _PATH_FIELDS = {
     "encoder_feed_forward_options",
     "decoder_feed_forward_options",
 }
-_ADAPTIVE_FIELDS = {item.name for item in fields(AdaptiveParameterOptions)}
 
 
 def runtime_from_flat(
@@ -711,21 +962,65 @@ def runtime_from_flat(
             decoder_feed_forward_options=runtime.decoder_feed_forward_options,
         ),
     )
-    projection_adaptive = runtime.projection_adaptive_options
-    feed_forward_adaptive = runtime.feed_forward_adaptive_options
-    for prefix, current in (
-        ("projection_adaptive_", projection_adaptive),
-        ("feed_forward_adaptive_", feed_forward_adaptive),
+    adaptive_groups = {
+        "projection": runtime.projection_adaptive_options,
+        "feed_forward": runtime.feed_forward_adaptive_options,
+        "encoder_attention": runtime.encoder_attention_adaptive_options,
+        "decoder_self_attention": runtime.decoder_self_attention_adaptive_options,
+        "decoder_cross_attention": runtime.decoder_cross_attention_adaptive_options,
+        "encoder_feed_forward": runtime.encoder_feed_forward_adaptive_options,
+        "decoder_feed_forward": runtime.decoder_feed_forward_adaptive_options,
+    }
+
+    _pop_adaptive_broadcast(
+        values,
+        "",
+        adaptive_groups,
+        tuple(adaptive_groups),
+    )
+    for prefix in ("projection_adaptive_", "attn_"):
+        _pop_adaptive_broadcast(
+            values,
+            prefix,
+            adaptive_groups,
+            (
+                "projection",
+                "encoder_attention",
+                "decoder_self_attention",
+                "decoder_cross_attention",
+            ),
+        )
+    for prefix in ("feed_forward_adaptive_", "ff_"):
+        _pop_adaptive_broadcast(
+            values,
+            prefix,
+            adaptive_groups,
+            (
+                "feed_forward",
+                "encoder_feed_forward",
+                "decoder_feed_forward",
+            ),
+        )
+
+    for name, prefixes in (
+        ("encoder_attention", ("encoder_attn_", "encoder_attn_adaptive_")),
+        (
+            "decoder_self_attention",
+            ("decoder_self_attn_", "decoder_self_attn_adaptive_"),
+        ),
+        (
+            "decoder_cross_attention",
+            ("decoder_cross_attn_", "decoder_cross_attn_adaptive_"),
+        ),
+        ("encoder_feed_forward", ("encoder_ff_", "encoder_ff_adaptive_")),
+        ("decoder_feed_forward", ("decoder_ff_", "decoder_ff_adaptive_")),
     ):
-        updates = {}
-        for field_name in _ADAPTIVE_FIELDS:
-            key = f"{prefix}{field_name}"
-            if key in values:
-                updates[field_name] = values.pop(key)
-        if prefix == "projection_adaptive_":
-            projection_adaptive = replace(current, **updates)
-        else:
-            feed_forward_adaptive = replace(current, **updates)
+        for prefix in prefixes:
+            adaptive_groups[name] = _pop_adaptive_options(
+                values,
+                prefix,
+                adaptive_groups[name],
+            )
     if values:
         unknown = sorted(values)[0]
         raise TypeError(
@@ -742,8 +1037,17 @@ def runtime_from_flat(
         decoder_cross_attention_options=paths.decoder_cross_attention_options,
         encoder_feed_forward_options=paths.encoder_feed_forward_options,
         decoder_feed_forward_options=paths.decoder_feed_forward_options,
-        projection_adaptive_options=projection_adaptive,
-        feed_forward_adaptive_options=feed_forward_adaptive,
+        projection_adaptive_options=adaptive_groups["projection"],
+        feed_forward_adaptive_options=adaptive_groups["feed_forward"],
+        encoder_attention_adaptive_options=adaptive_groups["encoder_attention"],
+        decoder_self_attention_adaptive_options=adaptive_groups[
+            "decoder_self_attention"
+        ],
+        decoder_cross_attention_adaptive_options=adaptive_groups[
+            "decoder_cross_attention"
+        ],
+        encoder_feed_forward_adaptive_options=adaptive_groups["encoder_feed_forward"],
+        decoder_feed_forward_adaptive_options=adaptive_groups["decoder_feed_forward"],
     )
 
 
