@@ -5,6 +5,11 @@ from dataclasses import dataclass, field
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
 from emperor.halting import (
     HaltingConfig,
     HaltingHiddenStateModeOptions,
@@ -199,11 +204,43 @@ class TransformerFeedForwardOptions:
 
 @dataclass(frozen=True)
 class ExpertOptions:
+    use_kv_expert_models_flag: bool | None = None
     num_experts: int = 4
     top_k: int = 2
+    dropped_token_behavior: DroppedTokenOptions = DroppedTokenOptions.ZEROS
+    compute_expert_mixture_flag: bool = True
+    weighted_parameters_flag: bool = False
+    weighting_position_option: ExpertWeightingPositionOptions = (
+        ExpertWeightingPositionOptions.BEFORE_EXPERTS
+    )
+    routing_initialization_mode: RoutingInitializationMode = (
+        RoutingInitializationMode.LAYER
+    )
+    sampler_threshold: float = 0.0
+    sampler_filter_above_threshold: bool = False
+    sampler_num_topk_samples: int = 0
     normalize_probabilities_flag: bool = True
+    sampler_noisy_topk_flag: bool = False
+    coefficient_of_variation_loss_weight: float = 0.0
     switch_loss_weight: float = 0.0
+    zero_centred_loss_weight: float = 0.0
+    mutual_information_loss_weight: float = 0.0
     capacity_factor: float = 0.0
+    router_noisy_topk_flag: bool = False
+    router_path_options: TransformerFeedForwardOptions = TransformerFeedForwardOptions(
+        stack_options=SubmoduleStackOptions(
+            hidden_dim=128,
+            num_layers=2,
+            activation=ActivationOptions.GELU,
+        )
+    )
+    expert_path_options: TransformerFeedForwardOptions = TransformerFeedForwardOptions(
+        stack_options=SubmoduleStackOptions(
+            hidden_dim=128,
+            num_layers=1,
+            activation=ActivationOptions.RELU,
+        )
+    )
 
 
 @dataclass(frozen=True)

@@ -6,11 +6,9 @@ import torch
 
 from emperor.attention import MixtureOfAttentionHeadsConfig
 from emperor.experts import (
-    ExpertWeightingPositionOptions,
     MixtureOfExpertsConfig,
     MixtureOfExpertsLayerConfig,
     MixtureOfExpertsModelConfig,
-    RoutingInitializationMode,
 )
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
@@ -124,35 +122,40 @@ def _memory(model_dim: int, enabled: bool):
     )
 
 
-def _sampler(input_dim: int, options: ExpertOptions) -> SamplerConfig:
+def _sampler(
+    runtime: RuntimeOptions,
+    input_dim: int,
+    options: ExpertOptions,
+) -> SamplerConfig:
     router = RouterConfig(
         input_dim=input_dim,
         num_experts=options.num_experts,
-        noisy_topk_flag=False,
-        model_config=_linear_stack(hidden_dim=max(input_dim, options.num_experts)),
+        noisy_topk_flag=options.router_noisy_topk_flag,
+        model_config=_projection_stack(runtime, options.router_path_options),
     )
     return SamplerConfig(
         top_k=options.top_k,
-        threshold=0.0,
-        filter_above_threshold=False,
-        num_topk_samples=0,
+        threshold=options.sampler_threshold,
+        filter_above_threshold=options.sampler_filter_above_threshold,
+        num_topk_samples=options.sampler_num_topk_samples,
         normalize_probabilities_flag=options.normalize_probabilities_flag,
-        noisy_topk_flag=False,
+        noisy_topk_flag=options.sampler_noisy_topk_flag,
         num_experts=options.num_experts,
-        coefficient_of_variation_loss_weight=0.0,
+        coefficient_of_variation_loss_weight=(
+            options.coefficient_of_variation_loss_weight
+        ),
         switch_loss_weight=options.switch_loss_weight,
-        zero_centred_loss_weight=0.0,
-        mutual_information_loss_weight=0.0,
+        zero_centred_loss_weight=options.zero_centred_loss_weight,
+        mutual_information_loss_weight=options.mutual_information_loss_weight,
         router_config=router,
     )
 
 
 def _experts_config(
+    runtime: RuntimeOptions,
     input_dim: int,
     output_dim: int,
     options: ExpertOptions,
-    *,
-    bias_flag: bool = True,
 ):
     return MixtureOfExpertsConfig(
         input_dim=input_dim,
@@ -160,15 +163,15 @@ def _experts_config(
         top_k=options.top_k,
         num_experts=options.num_experts,
         capacity_factor=options.capacity_factor,
-        dropped_token_behavior=None,
-        compute_expert_mixture_flag=True,
-        weighted_parameters_flag=False,
-        weighting_position_option=ExpertWeightingPositionOptions.BEFORE_EXPERTS,
-        routing_initialization_mode=RoutingInitializationMode.LAYER,
-        sampler_config=_sampler(input_dim, options),
-        expert_model_config=_linear_stack(
-            hidden_dim=max(input_dim, output_dim),
-            bias_flag=bias_flag,
+        dropped_token_behavior=options.dropped_token_behavior,
+        compute_expert_mixture_flag=options.compute_expert_mixture_flag,
+        weighted_parameters_flag=options.weighted_parameters_flag,
+        weighting_position_option=options.weighting_position_option,
+        routing_initialization_mode=options.routing_initialization_mode,
+        sampler_config=_sampler(runtime, input_dim, options),
+        expert_model_config=_projection_stack(
+            runtime,
+            options.expert_path_options,
         ),
     )
 
@@ -258,8 +261,17 @@ def _attention(
         batch_first_flag=True,
         projection_model_config=_projection_stack(runtime, attention_options),
         relative_positional_embedding_config=None,
-        experts_config=_experts_config(runtime.model_dim, runtime.model_dim, experts),
-        use_kv_expert_models_flag=self_attention,
+        experts_config=_experts_config(
+            runtime,
+            runtime.model_dim,
+            runtime.model_dim,
+            experts,
+        ),
+        use_kv_expert_models_flag=(
+            self_attention
+            if experts.use_kv_expert_models_flag is None
+            else experts.use_kv_expert_models_flag
+        ),
     )
 
 
@@ -269,10 +281,10 @@ def _expert_feed_forward(
     options = runtime.feed_forward_expert_options
     stack_options = ff_options.stack_options
     leaf = _experts_config(
+        runtime,
         runtime.model_dim,
         runtime.model_dim,
         options,
-        bias_flag=stack_options.bias_flag,
     )
     stack = LayerStackConfig(
         input_dim=runtime.model_dim,
@@ -303,8 +315,8 @@ def _expert_feed_forward(
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         top_k=options.top_k,
-        routing_initialization_mode=RoutingInitializationMode.LAYER,
-        sampler_config=_sampler(runtime.model_dim, options),
+        routing_initialization_mode=options.routing_initialization_mode,
+        sampler_config=_sampler(runtime, runtime.model_dim, options),
         stack_config=stack,
     )
     configured = configure_transformer_submodule(
