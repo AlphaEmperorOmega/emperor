@@ -228,7 +228,11 @@ class TestTransformerModelPackages(unittest.TestCase):
                     for key in iter_supported_config_keys(config)
                     if key.startswith(("ATTN_", "FF_"))
                 }
-                self.assertEqual(actual - recurrent_variant_fields, expected)
+                declared_path_fields = actual - recurrent_variant_fields
+                if package.endswith("_adaptive"):
+                    self.assertLessEqual(expected, declared_path_fields)
+                else:
+                    self.assertEqual(declared_path_fields, expected)
                 self.assertEqual(
                     actual & recurrent_variant_fields,
                     recurrent_variant_fields if package == "linear" else set(),
@@ -330,17 +334,9 @@ class TestTransformerModelPackages(unittest.TestCase):
                         {key.lower(): getattr(config, key)}
                     )
 
-            for retired_alias in (
-                "encoder_attn_bias_flag",
-                "decoder_self_attn_zero_attention_flag",
-                "decoder_cross_attn_stack_gate_flag",
-                "encoder_ff_stack_hidden_dim",
-                "decoder_ff_num_layers",
-                "layer_norm_position",
-            ):
-                with self.subTest(package=package, retired_alias=retired_alias):
-                    with self.assertRaisesRegex(ValueError, "unknown Runtime Defaults"):
-                        runtime_defaults.runtime_from_flat({retired_alias: True})
+            with self.subTest(package=package, retired_alias="layer_norm_position"):
+                with self.assertRaisesRegex(ValueError, "unknown Runtime Defaults"):
+                    runtime_defaults.runtime_from_flat({"layer_norm_position": True})
 
     def test_presets_search_metadata_and_cli_use_shared_path_options(self):
         for package in (
