@@ -22,7 +22,10 @@ from emperor.layers._validation.common import (
 )
 from emperor.layers._validation.gate import LayerGateValidator
 
-_GRADIENT_WINDOW_FIELDS = {"no_gradient_transition_count"}
+_GRADIENT_WINDOW_FIELDS = {
+    "no_gradient_transition_count",
+    "gradient_transition_count",
+}
 _RECURRENT_CONTROLLER_OPTIONAL_FIELDS = {
     "recurrent_layer_norm_position",
     "gate_config",
@@ -169,29 +172,66 @@ def _validate_variant_transition_output(
         )
 
 
-def _validate_transition_gradient_window(
+def _validate_recurrent_iteration_controls(
     config: object,
     *,
-    total_transition_count: int,
+    maximum_iterations: int,
+    transitions_per_iteration: int,
 ) -> None:
+    initial_iterations = config.initial_iterations
+    _validate_positive_integer("initial_iterations", initial_iterations)
+    if initial_iterations > maximum_iterations:
+        raise ValueError(
+            "initial_iterations must be less than or equal to the variant's "
+            f"maximum of {maximum_iterations}."
+        )
+
+    for field_name in (
+        "iteration_increment",
+        "forward_calls_before_iteration_increment",
+    ):
+        _validate_positive_integer(field_name, getattr(config, field_name))
+
+    minimum_transition_count = initial_iterations * transitions_per_iteration
     no_gradient_count = config.no_gradient_transition_count
-    if no_gradient_count is None:
-        return
-    if isinstance(no_gradient_count, bool) or not isinstance(no_gradient_count, int):
-        raise TypeError(
-            "no_gradient_transition_count must be int, "
-            f"got {type(no_gradient_count).__name__}."
-        )
-    if no_gradient_count < 0:
+    gradient_count = config.gradient_transition_count
+    if no_gradient_count is not None:
+        if isinstance(no_gradient_count, bool) or not isinstance(
+            no_gradient_count, int
+        ):
+            raise TypeError(
+                "no_gradient_transition_count must be int, "
+                f"got {type(no_gradient_count).__name__}."
+            )
+        if no_gradient_count < 0:
+            raise ValueError(
+                "no_gradient_transition_count must be greater than or equal to 0."
+            )
+        if no_gradient_count >= minimum_transition_count:
+            raise ValueError(
+                "no_gradient_transition_count must be less than the minimum active "
+                f"{minimum_transition_count} transitions so at least one transition "
+                "uses gradients."
+            )
+    if gradient_count is not None:
+        _validate_positive_integer("gradient_transition_count", gradient_count)
+        if gradient_count > minimum_transition_count:
+            raise ValueError(
+                "gradient_transition_count must be less than or equal to the "
+                f"minimum active transition count of {minimum_transition_count}."
+            )
+    if gradient_count is not None and no_gradient_count is not None:
         raise ValueError(
-            "no_gradient_transition_count must be greater than or equal to 0."
+            "gradient_transition_count and no_gradient_transition_count are "
+            "mutually exclusive."
         )
-    if no_gradient_count >= total_transition_count:
-        raise ValueError(
-            "no_gradient_transition_count must be less than the variant's "
-            f"{total_transition_count} scheduled transitions so at least one "
-            "transition uses gradients."
-        )
+
+
+def _validate_positive_integer(field_name: str, value: object) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field_name} must be int, got {type(value).__name__}.")
+    if value <= 0:
+        raise ValueError(f"{field_name} must be greater than or equal to 1.")
 
 
 def _validate_recurrent_controller_config(

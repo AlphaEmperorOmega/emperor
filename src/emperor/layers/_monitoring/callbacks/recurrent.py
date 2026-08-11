@@ -286,14 +286,9 @@ class RecurrentLayerMonitorCallback(Callback):
     def __track_maximum_step_fraction(context: _RecurrentTrackingContext) -> None:
         if context.metrics is None:
             return
+        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
         maximum_steps = max(
-            float(
-                getattr(
-                    context.recurrent_layer,
-                    "recurrent_diagnostic_step_limit",
-                    1,
-                )
-            ),
+            float(iteration_schedule.active_transition_count),
             1.0,
         )
         context.pl_module.log(

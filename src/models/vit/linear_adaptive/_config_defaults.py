@@ -197,6 +197,26 @@ def linears_recurrent_controller_options(
     return RecurrentControllerOptions(
         recurrent_flag=getattr(config, f"{recurrent_prefix}_FLAG"),
         recurrent_max_steps=getattr(config, f"{recurrent_prefix}_MAX_STEPS"),
+        recurrent_initial_iterations=getattr(
+            config,
+            f"{recurrent_prefix}_INITIAL_ITERATIONS",
+            2,
+        ),
+        recurrent_gradient_transition_count=getattr(
+            config,
+            f"{recurrent_prefix}_GRADIENT_TRANSITION_COUNT",
+            None,
+        ),
+        recurrent_iteration_increment=getattr(
+            config,
+            f"{recurrent_prefix}_ITERATION_INCREMENT",
+            1,
+        ),
+        recurrent_forward_calls_before_iteration_increment=getattr(
+            config,
+            f"{recurrent_prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
+            1,
+        ),
         recurrent_layer_norm_position=getattr(
             config, f"{recurrent_prefix}_LAYER_NORM_POSITION"
         ),

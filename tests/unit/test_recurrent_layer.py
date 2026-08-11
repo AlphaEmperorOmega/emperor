@@ -801,6 +801,10 @@ class TestRecurrentLayer(unittest.TestCase):
         dim: int = 4,
         max_steps: int = 3,
         no_gradient_transition_count: int | None = None,
+        initial_iterations: int | None = None,
+        gradient_transition_count: int | None = None,
+        iteration_increment: int | None = None,
+        forward_calls_before_iteration_increment: int | None = None,
         reinject_original_hidden_flag: bool | None = None,
         block_config: ConfigBase | None = None,
         gate_config: LayerStackConfig | GateConfig | None = None,
@@ -816,11 +820,21 @@ class TestRecurrentLayer(unittest.TestCase):
     ) -> RecurrentLayerConfig:
         if block_config is None:
             block_config = self.layer_block_config()
+        if initial_iterations is None:
+            initial_iterations = max_steps
+        if iteration_increment is None:
+            iteration_increment = 1
+        if forward_calls_before_iteration_increment is None:
+            forward_calls_before_iteration_increment = 1
         return RecurrentLayerConfig(
             input_dim=dim,
             output_dim=dim,
             max_steps=max_steps,
             no_gradient_transition_count=no_gradient_transition_count,
+            initial_iterations=initial_iterations,
+            gradient_transition_count=gradient_transition_count,
+            iteration_increment=iteration_increment,
+            forward_calls_before_iteration_increment=forward_calls_before_iteration_increment,
             reinject_original_hidden_flag=reinject_original_hidden_flag,
             recurrent_layer_norm_position=recurrent_layer_norm_position,
             block_config=block_config,
@@ -958,6 +972,9 @@ class TestRecurrentLayer(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 max_steps=1,
+                initial_iterations=1,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
                 block_config=self.layer_block_config(increment=2.0),
             )
         )
@@ -1345,6 +1362,9 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=3,
             output_dim=3,
             max_steps=5,
+            initial_iterations=5,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             reinject_original_hidden_flag=True,
             block_config=override_block,
             gate_config=self.recurrent_gate_config(override_gate, None),
@@ -1419,6 +1439,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=None,
                     residual_config=None,
@@ -1431,6 +1454,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=object(),
                     residual_config=None,
@@ -1443,6 +1469,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=MissingInputDimBlockConfig(output_dim=dim),
                     residual_config=None,
@@ -1455,6 +1484,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=MissingOutputDimBlockConfig(input_dim=dim),
                     residual_config=None,
@@ -1467,6 +1499,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=0,
+                    initial_iterations=0,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=None,
@@ -1479,6 +1514,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps="3",
+                    initial_iterations="3",
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=None,
@@ -1491,6 +1529,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=2,
+                    initial_iterations=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     no_gradient_transition_count=True,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
@@ -1504,6 +1545,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=2,
+                    initial_iterations=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     no_gradient_transition_count=-1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
@@ -1517,6 +1561,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=2,
+                    initial_iterations=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     no_gradient_transition_count=2,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
@@ -1530,6 +1577,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim + 1,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=None,
@@ -1542,6 +1592,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=object(),
                     block_config=valid_block,
                     residual_config=None,
@@ -1554,6 +1607,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     gate_config=object(),
@@ -1567,6 +1623,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     gate_config=GateConfig(option=object()),
@@ -1580,6 +1639,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     residual_config=ResidualConfig(),
@@ -1592,6 +1654,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     gate_config=GateConfig(
@@ -1608,6 +1673,9 @@ class TestRecurrentLayer(unittest.TestCase):
                     input_dim=dim,
                     output_dim=dim,
                     max_steps=1,
+                    initial_iterations=1,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                     block_config=valid_block,
                     halting_config=object(),
@@ -1619,6 +1687,9 @@ class TestRecurrentLayer(unittest.TestCase):
 
         for name, cfg, expected_exception in invalid_cases:
             with self.subTest(name=name):
+                cfg.initial_iterations = 1
+                cfg.iteration_increment = 1
+                cfg.forward_calls_before_iteration_increment = 1
                 with self.assertRaises(expected_exception):
                     RecurrentLayer(cfg)
 
@@ -1845,7 +1916,13 @@ class TestRecurrentLayer(unittest.TestCase):
 
         checkpoint = recurrent.state_dict()
 
-        self.assertEqual(set(checkpoint), {"block_model.model.scale"})
+        self.assertEqual(
+            set(checkpoint),
+            {
+                "recurrent_iteration_schedule.forward_call_progress",
+                "block_model.model.scale",
+            },
+        )
         restored = RecurrentLayer(config)
         restored.load_state_dict(checkpoint, strict=True)
         actual = restored(LayerState(hidden=inputs.clone())).hidden
@@ -1882,6 +1959,9 @@ class TestRecurrentLayer(unittest.TestCase):
             input_dim=1,
             output_dim=1,
             max_steps=3,
+            initial_iterations=3,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             no_gradient_transition_count=None,
             reinject_original_hidden_flag=True,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -1976,6 +2056,356 @@ class TestRecurrentLayer(unittest.TestCase):
             [False, False, True, True],
         )
         self.assertIsNotNone(model.block_model.model.scale.grad)
+
+    def test_scheduled_iterations_keep_a_fixed_gradient_suffix_as_depth_grows(self):
+        dim = 3
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=10,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
+                block_config=self.trainable_scale_block_config(
+                    dim=dim,
+                    scale=0.5,
+                ),
+            )
+        )
+
+        for expected_active_iterations in range(2, 11):
+            with self.subTest(active_iterations=expected_active_iterations):
+                model.block_model.model.grad_modes.clear()
+
+                model(LayerState(hidden=torch.ones(2, dim)))
+
+                self.assertEqual(
+                    model.block_model.model.grad_modes,
+                    [False] * (expected_active_iterations - 2) + [True, True],
+                )
+
+        schedule = model.recurrent_iteration_schedule
+        self.assertEqual(schedule.active_iterations, schedule.maximum_iterations)
+        self.assertEqual(schedule.no_gradient_transition_count, 8)
+
+    def test_iteration_schedule_runtime_values_belong_to_schedule_module(
+        self,
+    ) -> None:
+        model = self.recurrent_config(max_steps=5, initial_iterations=2).build()
+        schedule = model.recurrent_iteration_schedule
+
+        expected_values = {
+            "iteration_unit": "transition",
+            "maximum_iterations": 5,
+            "active_iterations": 2,
+            "maximum_transition_count": 5,
+            "active_transition_count": 2,
+            "complete": False,
+        }
+        for attribute_name, expected_value in expected_values.items():
+            with self.subTest(attribute_name=attribute_name):
+                self.assertEqual(getattr(schedule, attribute_name), expected_value)
+                self.assertFalse(hasattr(model, attribute_name))
+        self.assertEqual(schedule.snapshot().forward_call_progress, 0)
+        self.assertFalse(hasattr(model, "schedule_forward_call_progress"))
+
+    def test_initial_iterations_is_required_by_validator(self) -> None:
+        config = self.recurrent_config()
+        config.initial_iterations = None
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "initial_iterations is required for RecurrentLayerConfig",
+        ):
+            config.build()
+
+    def test_iteration_schedule_advances_on_forward_call_boundaries_and_caps_at_capacity(
+        self,
+    ) -> None:
+        model = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=7,
+            initial_iterations=2,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=3,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=self.layer_block_config(),
+        ).build()
+
+        executed_iterations = []
+        for _ in range(10):
+            call_count_before = model.block_model.model.call_count
+            model(LayerState(hidden=torch.zeros(1, 4)))
+            executed_iterations.append(
+                model.block_model.model.call_count - call_count_before
+            )
+
+        self.assertEqual(executed_iterations, [2, 2, 2, 4, 4, 4, 6, 6, 6, 7])
+        schedule = model.recurrent_iteration_schedule
+        self.assertEqual(schedule.active_iterations, 7)
+        self.assertEqual(schedule.snapshot().forward_call_progress, 9)
+        self.assertTrue(schedule.complete)
+
+    def test_failed_forward_does_not_advance_iteration_schedule(self) -> None:
+        model = RecurrentLayer(
+            self.recurrent_config(
+                max_steps=10,
+                initial_iterations=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "last dimension must be 4"):
+            model(LayerState(hidden=torch.ones(1, 3)))
+
+        schedule = model.recurrent_iteration_schedule
+        self.assertEqual(schedule.snapshot().forward_call_progress, 0)
+        self.assertEqual(schedule.active_iterations, 2)
+
+    def test_iteration_schedule_counts_training_and_inference_forwards(self) -> None:
+        model = RecurrentLayer(
+            self.recurrent_config(
+                max_steps=3,
+                initial_iterations=1,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
+            )
+        ).eval()
+
+        with torch.inference_mode():
+            model(LayerState(hidden=torch.ones(1, 4)))
+        schedule = model.recurrent_iteration_schedule
+        self.assertEqual(schedule.snapshot().forward_call_progress, 1)
+        self.assertEqual(schedule.active_iterations, 2)
+
+        model.train()
+        model(LayerState(hidden=torch.ones(1, 4)))
+        self.assertEqual(schedule.snapshot().forward_call_progress, 2)
+        self.assertEqual(schedule.active_iterations, 3)
+
+    def test_iteration_schedule_progress_round_trips_through_a_checkpoint(self):
+        config = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=7,
+            initial_iterations=2,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=3,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=self.layer_block_config(),
+        )
+        model = config.build()
+        for _ in range(3):
+            model(LayerState(hidden=torch.zeros(1, 4)))
+
+        checkpoint = model.state_dict()
+        restored = config.build()
+        restored.load_state_dict(checkpoint, strict=True)
+
+        restored_schedule = restored.recurrent_iteration_schedule
+        self.assertEqual(restored_schedule.snapshot().forward_call_progress, 3)
+        self.assertEqual(restored_schedule.active_iterations, 4)
+        call_count_before = restored.block_model.model.call_count
+        restored(LayerState(hidden=torch.zeros(1, 4)))
+        self.assertEqual(restored.block_model.model.call_count - call_count_before, 4)
+
+    def test_legacy_checkpoint_missing_only_schedule_progress_loads_strictly(self):
+        config = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=7,
+            initial_iterations=2,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=3,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=self.layer_block_config(),
+        )
+        legacy_checkpoint = config.build().state_dict()
+        legacy_checkpoint.pop("recurrent_iteration_schedule.forward_call_progress")
+
+        restored = config.build()
+        restored.load_state_dict(legacy_checkpoint, strict=True)
+
+        restored_schedule = restored.recurrent_iteration_schedule
+        self.assertEqual(restored_schedule.snapshot().forward_call_progress, 0)
+        self.assertEqual(restored_schedule.active_iterations, 2)
+
+    def test_complete_schedule_target_ignores_loaded_schedule_progress(self) -> None:
+        scheduled_config = self.recurrent_config(
+            max_steps=3,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        )
+        scheduled = scheduled_config.build()
+        scheduled(LayerState(hidden=torch.ones(1, 4)))
+
+        complete = self.recurrent_config(max_steps=3).build()
+        complete.load_state_dict(scheduled.state_dict(), strict=True)
+
+        complete_schedule = complete.recurrent_iteration_schedule
+        self.assertEqual(complete_schedule.snapshot().forward_call_progress, 0)
+        self.assertEqual(complete_schedule.active_iterations, 3)
+        self.assertTrue(complete_schedule.complete)
+
+    def test_checkpoint_progress_is_validated_and_clamped_to_saturation(self):
+        config = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=7,
+            initial_iterations=2,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=3,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=self.layer_block_config(),
+        )
+        checkpoint = config.build().state_dict()
+        progress_key = "recurrent_iteration_schedule.forward_call_progress"
+        checkpoint[progress_key] = torch.tensor(999, dtype=torch.long)
+
+        restored = config.build()
+        restored.load_state_dict(checkpoint, strict=True)
+
+        restored_schedule = restored.recurrent_iteration_schedule
+        self.assertEqual(restored_schedule.snapshot().forward_call_progress, 9)
+        self.assertEqual(restored_schedule.active_iterations, 7)
+        checkpoint[progress_key] = torch.tensor(-1, dtype=torch.long)
+        with self.assertRaisesRegex(ValueError, "must be non-negative"):
+            config.build().load_state_dict(checkpoint, strict=True)
+
+        malformed_progress = (
+            (torch.tensor([1], dtype=torch.long), ValueError, "scalar Tensor"),
+            (torch.tensor(1.0), TypeError, "torch.long dtype"),
+            ("1", TypeError, "must be a Tensor"),
+        )
+        for value, error_type, message in malformed_progress:
+            with self.subTest(value=value):
+                checkpoint[progress_key] = value
+                with self.assertRaisesRegex(error_type, message):
+                    config.build().load_state_dict(checkpoint, strict=True)
+
+    def test_gradient_transition_count_is_static_for_a_complete_iteration_schedule(
+        self,
+    ):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                gradient_transition_count=2,
+                block_config=self.trainable_scale_block_config(
+                    dim=dim,
+                    scale=0.5,
+                ),
+            )
+        )
+
+        model(LayerState(hidden=torch.ones(1, dim)))
+
+        self.assertEqual(model.recurrent_iteration_schedule.active_iterations, 5)
+        self.assertEqual(
+            model.block_model.model.grad_modes,
+            [False, False, False, True, True],
+        )
+
+    def test_recurrent_step_controls_reject_ambiguous_or_invalid_windows(self):
+        invalid_cases = (
+            (
+                "both gradient window forms",
+                {
+                    "max_steps": 5,
+                    "no_gradient_transition_count": 1,
+                    "gradient_transition_count": 2,
+                },
+                ValueError,
+                "mutually exclusive",
+            ),
+            (
+                "gradient suffix exceeds initial depth",
+                {
+                    "max_steps": 10,
+                    "initial_iterations": 2,
+                    "gradient_transition_count": 3,
+                    "iteration_increment": 1,
+                    "forward_calls_before_iteration_increment": 1,
+                },
+                ValueError,
+                "less than or equal to the minimum active transition count",
+            ),
+            (
+                "initial depth exceeds capacity",
+                {
+                    "max_steps": 4,
+                    "initial_iterations": 5,
+                    "iteration_increment": 1,
+                    "forward_calls_before_iteration_increment": 1,
+                },
+                ValueError,
+                "initial_iterations must be less than or equal to the variant's maximum",
+            ),
+            (
+                "zero schedule increment",
+                {
+                    "max_steps": 4,
+                    "initial_iterations": 2,
+                    "iteration_increment": 0,
+                    "forward_calls_before_iteration_increment": 1,
+                },
+                ValueError,
+                "iteration_increment must be greater than or equal to 1",
+            ),
+        )
+
+        for name, overrides, error_type, message in invalid_cases:
+            with self.subTest(name=name), self.assertRaisesRegex(error_type, message):
+                self.recurrent_config(**overrides).build()
+
+    def test_fixed_gradient_suffix_requires_a_matching_halting_floor(self):
+        config = self.recurrent_config(
+            dim=2,
+            max_steps=5,
+            gradient_transition_count=2,
+            halting_config=self.halting_config(
+                dim=2,
+                gate_threshold=0.0,
+                min_steps=1,
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "halting_config.min_steps.*required update count",
+        ):
+            config.build()
+
+    def test_fixed_gradient_suffix_executes_fully_with_matching_halting_floor(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=5,
+                gradient_transition_count=2,
+                block_config=self.trainable_scale_block_config(
+                    dim=dim,
+                    scale=0.5,
+                ),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=0.0,
+                    min_steps=2,
+                ),
+            )
+        ).eval()
+
+        model(LayerState(hidden=torch.ones(1, dim)))
+
+        self.assertEqual(
+            model.block_model.model.grad_modes,
+            [False, False, False, True, True],
+        )
 
     def test_reinjection_refines_no_grad_prefix_and_reconnects_original_input(self):
         model = RecurrentLayer(
@@ -2195,6 +2625,9 @@ class TestRecurrentLayer(unittest.TestCase):
             self.recurrent_config(
                 dim=2,
                 max_steps=max_steps,
+                initial_iterations=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
                 block_config=self.layer_block_config(increment=0.0),
                 residual_connection_option=DepthwiseTestResidualConfig,
             )
@@ -2215,9 +2648,11 @@ class TestRecurrentLayer(unittest.TestCase):
             for offset, connection in enumerate(connections, start=1):
                 connection.offset.fill_(offset)
 
-        result = model(LayerState(hidden=torch.zeros(1, 2)))
+        initial_result = model(LayerState(hidden=torch.zeros(1, 2)))
+        capacity_result = model(LayerState(hidden=torch.zeros(1, 2)))
 
-        torch.testing.assert_close(result.hidden, torch.full((1, 2), 6.0))
+        torch.testing.assert_close(initial_result.hidden, torch.full((1, 2), 3.0))
+        torch.testing.assert_close(capacity_result.hidden, torch.full((1, 2), 6.0))
 
     def test_recurrent_attention_residual_checkpoint_owns_one_router_per_step(self):
         dim = 2
@@ -2269,7 +2704,10 @@ class TestRecurrentLayer(unittest.TestCase):
 
         self.assertEqual(
             set(checkpoint),
-            {"residual_connection.raw_weight"},
+            {
+                "recurrent_iteration_schedule.forward_call_progress",
+                "residual_connection.raw_weight",
+            },
         )
         restored = RecurrentLayer(config)
         restored.load_state_dict(checkpoint, strict=True)
@@ -2670,6 +3108,10 @@ class TestRecurrentLayer(unittest.TestCase):
             self.recurrent_config(
                 dim=dim,
                 max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
                 gate_config=self.trainable_gate_config(dim),
                 halting_config=self.halting_config(
                     dim=dim,
@@ -2679,7 +3121,6 @@ class TestRecurrentLayer(unittest.TestCase):
                 ),
             )
         )
-
         self.assertEqual(
             tuple(default_model.state_dict()),
             tuple(controlled_model.state_dict()),

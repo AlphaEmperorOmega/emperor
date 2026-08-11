@@ -42,6 +42,7 @@ INTERNAL_GRAPH_TYPE_NAMES = {
     "Dropout",
     "KeyValueBias",
     "LayerNorm",
+    "RecurrentIterationSchedule",
     "SamplerAuxiliaryLosses",
     "SelfAttentionProcessor",
     "SelfAttentionProjector",
@@ -77,6 +78,10 @@ COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
     "LayerNorm": (
         "Normalizes features within each sample to stabilize hidden-state "
         "scale before or after a layer block."
+    ),
+    "RecurrentIterationSchedule": (
+        "Tracks forward-call progress, active recurrent depth, and the "
+        "gradient-enabled transition suffix."
     ),
     "CrossEntropyLoss": ("Runtime loss module for multi-class classification targets."),
     "ClassifierMetricsLogger": (
@@ -624,7 +629,15 @@ def _recurrent_details(
     module: _GraphModule,
     cluster: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    max_steps = getattr(module, "max_steps", None)
+    iteration_schedule = getattr(module, "recurrent_iteration_schedule", None)
+    schedule_snapshot = (
+        iteration_schedule.snapshot() if iteration_schedule is not None else None
+    )
+    max_steps = (
+        schedule_snapshot.maximum_transition_count
+        if schedule_snapshot is not None
+        else getattr(module, "max_steps", None)
+    )
     if max_steps is None:
         max_steps = getattr(module, "recurrent_diagnostic_step_limit", None)
     if max_steps is None or cluster is not None:
@@ -646,17 +659,32 @@ def _recurrent_details(
         "gateOption": gate_option_name,
         "halting": bool(getattr(module, "halting_model", None) is not None),
     }
+    if schedule_snapshot is not None:
+        recurrent["activeSteps"] = schedule_snapshot.active_transition_count
+        if schedule_snapshot.gradient_transition_count is not None:
+            recurrent["gradientTransitionCount"] = (
+                schedule_snapshot.gradient_transition_count
+            )
+        recurrent["iterationSchedule"] = {
+            "unit": schedule_snapshot.iteration_unit,
+            "initialIterations": schedule_snapshot.initial_iterations,
+            "maximumIterations": schedule_snapshot.maximum_iterations,
+            "activeIterations": schedule_snapshot.active_iterations,
+            "iterationIncrement": schedule_snapshot.iteration_increment,
+            "forwardCallsBeforeIterationIncrement": (
+                schedule_snapshot.forward_calls_before_iteration_increment
+            ),
+            "forwardCallProgress": schedule_snapshot.forward_call_progress,
+            "complete": schedule_snapshot.complete,
+        }
     halting_model = getattr(module, "halting_model", None)
     min_steps = getattr(halting_model, "min_steps", None)
     if min_steps is not None:
         recurrent["minSteps"] = min_steps
-    no_gradient_transition_count = getattr(
-        module,
-        "no_gradient_transition_count",
-        None,
-    )
-    if no_gradient_transition_count is not None:
-        recurrent["noGradientTransitionCount"] = no_gradient_transition_count
+    if schedule_snapshot is not None:
+        recurrent["noGradientTransitionCount"] = (
+            schedule_snapshot.no_gradient_transition_count
+        )
     recurrent_layer_norm = getattr(module, "recurrent_layer_norm_position", None)
     if recurrent_layer_norm is not None:
         recurrent["layerNorm"] = _display_value(recurrent_layer_norm)

@@ -260,6 +260,14 @@ class ExpertsRecurrentConfigFactory:
             return block_config
         return RecurrentLayerConfig(
             max_steps=self.recurrent_controller_options.recurrent_max_steps,
+            gradient_transition_count=(
+                self.recurrent_controller_options.recurrent_gradient_transition_count
+            ),
+            initial_iterations=self.recurrent_controller_options.recurrent_initial_iterations,
+            iteration_increment=self.recurrent_controller_options.recurrent_iteration_increment,
+            forward_calls_before_iteration_increment=(
+                self.recurrent_controller_options.recurrent_forward_calls_before_iteration_increment
+            ),
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
@@ -526,6 +534,12 @@ class HiddenModelConfigFactory:
         return ExpertsRecurrentControllerOptions(
             recurrent_flag=config.RECURRENT_FLAG,
             recurrent_max_steps=config.RECURRENT_MAX_STEPS,
+            recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
+            recurrent_gradient_transition_count=config.RECURRENT_GRADIENT_TRANSITION_COUNT,
+            recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
+            recurrent_forward_calls_before_iteration_increment=(
+                config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+            ),
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,

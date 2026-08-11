@@ -105,9 +105,16 @@ class InspectionShapeTraceTests(unittest.TestCase):
             InspectionRequest(preset="recurrent"),
         )
         modules = {module.node_id: module for module in trace.modules}
+        expected_initial_iterations = 2
 
-        self.assertEqual(len(modules["main_model.block_model"].calls), 4)
-        self.assertEqual(len(modules["main_model.block_model.layers.0"].calls), 4)
+        self.assertEqual(
+            len(modules["main_model.block_model"].calls),
+            expected_initial_iterations,
+        )
+        self.assertEqual(
+            len(modules["main_model.block_model.layers.0"].calls),
+            expected_initial_iterations,
+        )
 
 
 if __name__ == "__main__":

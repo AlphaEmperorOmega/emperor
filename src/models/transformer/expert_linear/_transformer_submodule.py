@@ -190,6 +190,10 @@ def configure_transformer_submodule(
         input_dim=model_dim,
         output_dim=model_dim,
         max_steps=recurrent.recurrent_max_steps,
+        gradient_transition_count=None,
+        initial_iterations=recurrent.recurrent_max_steps,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
         block_config=model_config,
         gate_config=_gate_config(

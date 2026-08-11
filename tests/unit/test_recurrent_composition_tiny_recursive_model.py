@@ -159,7 +159,17 @@ def _config(
     auxiliary_loss: float | None = None,
     initialization_standard_deviation: float = 0.0,
     no_gradient_transition_count: int | None = None,
+    gradient_transition_count: int | None = None,
+    initial_iterations: int | None = None,
+    iteration_increment: int | None = None,
+    forward_calls_before_iteration_increment: int | None = None,
 ) -> TinyRecursiveModelRecurrentConfig:
+    if initial_iterations is None:
+        initial_iterations = answer_update_count
+    if iteration_increment is None:
+        iteration_increment = 1
+    if forward_calls_before_iteration_increment is None:
+        forward_calls_before_iteration_increment = 1
     return TinyRecursiveModelRecurrentConfig(
         input_dim=model_dim,
         output_dim=model_dim,
@@ -173,10 +183,30 @@ def _config(
         answer_update_count=answer_update_count,
         initialization_standard_deviation=initialization_standard_deviation,
         no_gradient_transition_count=no_gradient_transition_count,
+        gradient_transition_count=gradient_transition_count,
+        initial_iterations=initial_iterations,
+        iteration_increment=iteration_increment,
+        forward_calls_before_iteration_increment=(
+            forward_calls_before_iteration_increment
+        ),
     )
 
 
 class TestTinyRecursiveModelRecurrentConfig(unittest.TestCase):
+    def test_gradient_suffix_requires_enough_complete_halting_updates(self) -> None:
+        config = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=2,
+            gradient_transition_count=4,
+        )
+        config.halting_config = _RecordingHaltingConfig(
+            halt_after_updates=10,
+            min_steps=1,
+        )
+
+        with self.assertRaisesRegex(ValueError, "required_update_count=2"):
+            config.build()
+
     def test_non_default_halting_minimum_is_owned_by_the_halting_strategy(self) -> None:
         config = _config()
         config.halting_config = SoftHaltingConfig(
@@ -265,7 +295,7 @@ class TestTinyRecursiveModelRecurrentConfig(unittest.TestCase):
                 "no_gradient_transition_count",
                 6,
                 ValueError,
-                "less than the variant's 6 scheduled transitions",
+                "less than the minimum active 6 transitions",
             ),
         )
 
@@ -326,6 +356,9 @@ class TestTinyRecursiveModelRecurrentConfig(unittest.TestCase):
             overrides=TinyRecursiveModelRecurrentConfig(
                 latent_updates_per_answer_update=3,
                 answer_update_count=4,
+                initial_iterations=4,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
             )
         )
 
@@ -394,6 +427,9 @@ class TestTinyRecursiveModelRecurrentValidation(unittest.TestCase):
             input_dim=1,
             output_dim=1,
             max_steps=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
             block_config=_RecordingBlockConfig(
                 input_dim=1,
@@ -505,6 +541,46 @@ class TestTinyRecursiveModelRecurrentValidation(unittest.TestCase):
 
 
 class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
+    def test_schedule_grows_only_by_complete_answer_cycles(self) -> None:
+        recurrent = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=5,
+            initial_iterations=1,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=2,
+        ).build()
+
+        executed_transition_counts = []
+        for _ in range(5):
+            transition_count_before = len(recurrent.block_model.inputs)
+            recurrent(LayerState(hidden=torch.ones(1, 1)))
+            executed_transition_counts.append(
+                len(recurrent.block_model.inputs) - transition_count_before
+            )
+
+        self.assertEqual(executed_transition_counts, [3, 3, 9, 9, 15])
+        schedule = recurrent.recurrent_iteration_schedule
+        self.assertEqual(schedule.iteration_unit, "answer_cycle")
+        self.assertEqual(schedule.active_iterations, 5)
+
+    def test_fixed_gradient_suffix_tracks_scheduled_answer_cycles(self) -> None:
+        recurrent = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=3,
+            gradient_transition_count=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        ).build()
+
+        for active_transition_count in (3, 6, 9):
+            recurrent.block_model.grad_modes.clear()
+            recurrent(LayerState(hidden=torch.ones(1, 1)))
+            self.assertEqual(
+                recurrent.block_model.grad_modes,
+                [False] * (active_transition_count - 2) + [True, True],
+            )
+
     def test_exact_schedule_reuses_one_block_and_returns_the_final_answer(self) -> None:
         runtime = _config().build()
         fixed_input = torch.full((2, 1), 2.0)
@@ -776,6 +852,7 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
         self.assertEqual(
             set(runtime.state_dict()),
             {
+                "recurrent_iteration_schedule.forward_call_progress",
                 "answer_initial",
                 "latent_initial",
                 "block_model.scale",

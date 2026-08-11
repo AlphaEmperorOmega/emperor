@@ -438,7 +438,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             and not any(key.startswith(prefix) for prefix in _NON_MODEL_PREFIXES)
         ]
 
-        self.assertEqual(len(model_keys), 112)
+        self.assertEqual(len(model_keys), 116)
         for key in model_keys:
             with self.subTest(key=key):
                 flat_key = config_key_to_model_param(key)
@@ -550,9 +550,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
                 "submodule_stack_num_layers": 4,
                 "submodule_stack_activation": ActivationOptions.MISH,
                 "submodule_stack_layer_norm_position": (LayerNormPositionOptions.AFTER),
-                "submodule_stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "submodule_stack_residual_connection_option": (AdditiveResidualConfig),
                 "submodule_stack_dropout_probability": 0.12,
                 "submodule_stack_last_layer_bias_option": (
                     LastLayerBiasOptions.DEFAULT

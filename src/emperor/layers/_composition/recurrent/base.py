@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol, cast
 
@@ -9,6 +8,9 @@ import torch
 from torch import Tensor, nn
 
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
+    RecurrentIterationSchedule,
+)
 from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     RecurrentResidualSchedule,
     build_recurrent_residual_schedule,
@@ -52,7 +54,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     """Private stable interface implemented by every recurrent variant."""
 
     supports_recurrent_diagnostics = False
-    recurrent_diagnostic_step_limit = 1
 
     def __init__(
         self,
@@ -62,6 +63,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         super().__init__()
         self.cfg: RecurrentCompositionConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
+        self.recurrent_iteration_schedule = RecurrentIterationSchedule(self.cfg)
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.recurrent_layer_norm_position: LayerNormPositionOptions = (
@@ -130,32 +132,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.DISABLED:
             return None
         return nn.LayerNorm(self.output_dim)
-
-    def _initialize_transition_gradient_window(
-        self,
-        *,
-        default_no_gradient_transition_count: int,
-    ) -> None:
-        configured_no_gradient_count = self.cfg.no_gradient_transition_count
-        self.no_gradient_transition_count = (
-            default_no_gradient_transition_count
-            if configured_no_gradient_count is None
-            else configured_no_gradient_count
-        )
-
-    def _transition_gradient_context(
-        self,
-        transition_index: int,
-    ) -> AbstractContextManager[None]:
-        if transition_index < self.no_gradient_transition_count:
-            return torch.no_grad()
-        return nullcontext()
-
-    def _starts_gradient_suffix(self, transition_index: int) -> bool:
-        return (
-            self.no_gradient_transition_count > 0
-            and transition_index == self.no_gradient_transition_count
-        )
 
     def _set_recurrent_diagnostic_observer(
         self,

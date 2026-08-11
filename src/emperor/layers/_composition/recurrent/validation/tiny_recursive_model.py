@@ -11,10 +11,13 @@ from emperor.layers._composition.recurrent.validation.common import (
     _RecurrentCompositionValidator,
     _validate_initialization_standard_deviation,
     _validate_recurrent_controller_config,
-    _validate_transition_gradient_window,
+    _validate_recurrent_iteration_controls,
     _validate_variant_hidden,
     _validate_variant_state,
     _validate_variant_transition_output,
+)
+from emperor.layers._validation.common import (
+    _validate_halting_required_update_count,
 )
 
 
@@ -50,12 +53,11 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
             latent_updates_per_answer_update=(config.latent_updates_per_answer_update),
             answer_update_count=config.answer_update_count,
         )
-        _validate_transition_gradient_window(
+        transitions_per_iteration = config.latent_updates_per_answer_update + 1
+        _validate_recurrent_iteration_controls(
             config,
-            total_transition_count=(
-                config.answer_update_count
-                * (config.latent_updates_per_answer_update + 1)
-            ),
+            maximum_iterations=config.answer_update_count,
+            transitions_per_iteration=transitions_per_iteration,
         )
         if config.input_dim != config.output_dim:
             raise ValueError(
@@ -64,6 +66,18 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
                 f"output_dim={config.output_dim}."
             )
         _validate_recurrent_controller_config(config)
+        if (
+            config.gradient_transition_count is not None
+            and config.halting_config is not None
+        ):
+            required_update_count = (
+                config.gradient_transition_count + transitions_per_iteration - 1
+            ) // transitions_per_iteration
+            _validate_halting_required_update_count(
+                config.halting_config,
+                required_update_count=required_update_count,
+                owner_name=type(config).__name__,
+            )
         cls.__validate_block_config(config.block_config)
         _validate_initialization_standard_deviation(
             config.initialization_standard_deviation

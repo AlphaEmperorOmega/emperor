@@ -110,6 +110,9 @@ class LayerBehavioralContractTests(unittest.TestCase):
                     input_dim=2,
                     output_dim=2,
                     max_steps=2,
+                    initial_iterations=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=1,
                     recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
                     block_config=LayerConfig(
                         input_dim=2,

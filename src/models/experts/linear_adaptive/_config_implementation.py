@@ -761,6 +761,13 @@ class _RuntimeDefaultsResolver:
         | None = config.ROUTER_MASK_GENERATOR_STACK_BIAS_FLAG,
         recurrent_flag: bool = config.RECURRENT_FLAG,
         recurrent_max_steps: int = config.RECURRENT_MAX_STEPS,
+        recurrent_initial_iterations: int | None = config.RECURRENT_INITIAL_ITERATIONS,
+        recurrent_gradient_transition_count: int
+        | None = config.RECURRENT_GRADIENT_TRANSITION_COUNT,
+        recurrent_iteration_increment: int = config.RECURRENT_ITERATION_INCREMENT,
+        recurrent_forward_calls_before_iteration_increment: int = (
+            config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+        ),
         recurrent_layer_norm_position: LayerNormPositionOptions = config.RECURRENT_LAYER_NORM_POSITION,
         recurrent_stack_gate_flag: bool = config.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
@@ -1673,6 +1680,12 @@ class _RuntimeDefaultsResolver:
             or ExpertsRecurrentControllerOptions(
                 recurrent_flag=recurrent_flag,
                 recurrent_max_steps=recurrent_max_steps,
+                recurrent_initial_iterations=recurrent_initial_iterations,
+                recurrent_gradient_transition_count=recurrent_gradient_transition_count,
+                recurrent_iteration_increment=recurrent_iteration_increment,
+                recurrent_forward_calls_before_iteration_increment=(
+                    recurrent_forward_calls_before_iteration_increment
+                ),
                 recurrent_layer_norm_position=recurrent_layer_norm_position,
                 recurrent_stack_gate_flag=recurrent_stack_gate_flag,
                 recurrent_gate_option=recurrent_gate_option,
@@ -1730,15 +1743,11 @@ class _RuntimeDefaultsResolver:
                 num_layers=residual_stack_num_layers,
                 activation=residual_stack_activation,
                 layer_norm_position=residual_stack_layer_norm_position,
-                residual_connection_option=(
-                    residual_stack_residual_connection_option
-                ),
+                residual_connection_option=(residual_stack_residual_connection_option),
                 residual_model_flag=residual_stack_residual_model_flag,
                 dropout_probability=residual_stack_dropout_probability,
                 last_layer_bias_option=residual_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=(
-                    residual_stack_apply_output_pipeline_flag
-                ),
+                apply_output_pipeline_flag=(residual_stack_apply_output_pipeline_flag),
                 bias_flag=residual_stack_bias_flag,
             ),
             submodule_stack_options,

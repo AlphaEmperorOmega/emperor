@@ -359,21 +359,13 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
             hidden_dim=values["residual_stack_hidden_dim"],  # type: ignore[arg-type]
             num_layers=values["residual_stack_num_layers"],  # type: ignore[arg-type]
             activation=values["residual_stack_activation"],  # type: ignore[arg-type]
-            layer_norm_position=values[
-                "residual_stack_layer_norm_position"
-            ],  # type: ignore[arg-type]
+            layer_norm_position=values["residual_stack_layer_norm_position"],  # type: ignore[arg-type]
             residual_connection_option=values[
                 "residual_stack_residual_connection_option"
             ],  # type: ignore[arg-type]
-            residual_model_flag=values[
-                "residual_stack_residual_model_flag"
-            ],  # type: ignore[arg-type]
-            dropout_probability=values[
-                "residual_stack_dropout_probability"
-            ],  # type: ignore[arg-type]
-            last_layer_bias_option=values[
-                "residual_stack_last_layer_bias_option"
-            ],  # type: ignore[arg-type]
+            residual_model_flag=values["residual_stack_residual_model_flag"],  # type: ignore[arg-type]
+            dropout_probability=values["residual_stack_dropout_probability"],  # type: ignore[arg-type]
+            last_layer_bias_option=values["residual_stack_last_layer_bias_option"],  # type: ignore[arg-type]
             apply_output_pipeline_flag=values[
                 "residual_stack_apply_output_pipeline_flag"
             ],  # type: ignore[arg-type]
@@ -437,6 +429,12 @@ def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
         recurrence=RecurrenceOptions(
             enabled=values["recurrent_flag"],  # type: ignore[arg-type]
             max_steps=values["recurrent_max_steps"],  # type: ignore[arg-type]
+            initial_iterations=values["recurrent_initial_iterations"],  # type: ignore[arg-type]
+            gradient_transition_count=values["recurrent_gradient_transition_count"],  # type: ignore[arg-type]
+            iteration_increment=values["recurrent_iteration_increment"],  # type: ignore[arg-type]
+            forward_calls_before_iteration_increment=values[
+                "recurrent_forward_calls_before_iteration_increment"
+            ],  # type: ignore[arg-type]
             layer_norm_position=values["recurrent_layer_norm_position"],  # type: ignore[arg-type]
             gate=GateOptions(
                 enabled=values["recurrent_stack_gate_flag"],  # type: ignore[arg-type]
