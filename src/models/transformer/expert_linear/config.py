@@ -1,6 +1,11 @@
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
+from emperor.experts import (
+    DroppedTokenOptions,
+    ExpertWeightingPositionOptions,
+    RoutingInitializationMode,
+)
 from emperor.halting import (
     HaltingConfig,
     HaltingHiddenStateModeOptions,
@@ -311,11 +316,27 @@ ENCODER_FEED_FORWARD_NUM_LAYERS = FF_NUM_LAYERS
 DECODER_FEED_FORWARD_NUM_LAYERS = FF_NUM_LAYERS
 
 # Mixture Of Experts Options
+EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG: bool | None = None
 NUM_EXPERTS = 4
 TOP_K = 2
+DROPPED_TOKEN_BEHAVIOR: DroppedTokenOptions = DroppedTokenOptions.ZEROS
+COMPUTE_EXPERT_MIXTURE_FLAG: bool = True
+WEIGHTED_PARAMETERS_FLAG: bool = False
+WEIGHTING_POSITION_OPTION: ExpertWeightingPositionOptions = (
+    ExpertWeightingPositionOptions.BEFORE_EXPERTS
+)
+ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = RoutingInitializationMode.LAYER
+SAMPLER_THRESHOLD: float = 0.0
+SAMPLER_FILTER_ABOVE_THRESHOLD: bool = False
+SAMPLER_NUM_TOPK_SAMPLES: int = 0
 NORMALIZE_PROBABILITIES_FLAG = True
+SAMPLER_NOISY_TOPK_FLAG: bool = False
+COEFFICIENT_OF_VARIATION_LOSS_WEIGHT: float = 0.0
 SWITCH_LOSS_WEIGHT = 0.0
+ZERO_CENTRED_LOSS_WEIGHT: float = 0.0
+MUTUAL_INFORMATION_LOSS_WEIGHT: float = 0.0
 CAPACITY_FACTOR = 0.0
+ROUTER_NOISY_TOPK_FLAG: bool = False
 
 # Controller Options
 STACK_GATE_FLAG = False
@@ -394,10 +415,20 @@ for _target_prefix in (
     _copy_path_runtime_defaults("ATTN_", _target_prefix)
 for _target_prefix in ("ENCODER_FF_", "DECODER_FF_"):
     _copy_path_runtime_defaults("FF_", _target_prefix)
+for _target_prefix in ("ROUTER_", "EXPERT_"):
+    _copy_path_runtime_defaults("FF_", _target_prefix)
 
 ENCODER_FF_STACK_HIDDEN_DIM = ENCODER_FEED_FORWARD_HIDDEN_DIM
 DECODER_FF_STACK_HIDDEN_DIM = DECODER_FEED_FORWARD_HIDDEN_DIM
 ENCODER_FF_NUM_LAYERS = ENCODER_FEED_FORWARD_NUM_LAYERS
 DECODER_FF_NUM_LAYERS = DECODER_FEED_FORWARD_NUM_LAYERS
+ROUTER_STACK_NUM_LAYERS = FF_NUM_LAYERS
+EXPERT_STACK_NUM_LAYERS = FF_NUM_LAYERS
+ROUTER_STACK_HIDDEN_DIM = MODEL_DIM
+ROUTER_STACK_NUM_LAYERS = 2
+ROUTER_STACK_ACTIVATION = ActivationOptions.GELU
+EXPERT_STACK_HIDDEN_DIM = MODEL_DIM
+EXPERT_STACK_NUM_LAYERS = 1
+EXPERT_STACK_ACTIVATION = ActivationOptions.RELU
 
 del _target_prefix
