@@ -417,3 +417,35 @@ CALLBACK_CHECKPOINT_FLAG = False
 DATA_NUM_WORKERS = 0
 RUN_TEST_AFTER_FIT = True
 SEED = 0
+
+
+_CONFIG_FIELD_METADATA_ALIASES: dict[str, str] = {}
+
+
+def _copy_path_runtime_defaults(source_prefix: str, target_prefix: str) -> None:
+    annotations = globals().setdefault("__annotations__", {})
+    for name, value in tuple(globals().items()):
+        if not name.isupper() or not name.startswith(source_prefix):
+            continue
+        target = f"{target_prefix}{name.removeprefix(source_prefix)}"
+        globals()[target] = value
+        _CONFIG_FIELD_METADATA_ALIASES[target] = name
+        if name in annotations:
+            annotations[target] = annotations[name]
+
+
+for _target_prefix in (
+    "ENCODER_ATTN_",
+    "DECODER_SELF_ATTN_",
+    "DECODER_CROSS_ATTN_",
+):
+    _copy_path_runtime_defaults("ATTN_", _target_prefix)
+for _target_prefix in ("ENCODER_FF_", "DECODER_FF_"):
+    _copy_path_runtime_defaults("FF_", _target_prefix)
+
+ENCODER_FF_STACK_HIDDEN_DIM = ENCODER_FEED_FORWARD_HIDDEN_DIM
+DECODER_FF_STACK_HIDDEN_DIM = DECODER_FEED_FORWARD_HIDDEN_DIM
+ENCODER_FF_NUM_LAYERS = ENCODER_FEED_FORWARD_NUM_LAYERS
+DECODER_FF_NUM_LAYERS = DECODER_FEED_FORWARD_NUM_LAYERS
+
+del _target_prefix

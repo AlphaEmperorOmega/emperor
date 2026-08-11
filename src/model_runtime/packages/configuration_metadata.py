@@ -156,11 +156,37 @@ def configuration_field_metadata(
     *,
     include_search_space: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    return _configuration_field_metadata_for_module(
+    metadata = _configuration_field_metadata_for_module(
         config_module.__name__,
         include_search_space=include_search_space,
         visited=set(),
     )
+    aliases = getattr(config_module, "_CONFIG_FIELD_METADATA_ALIASES", {})
+    if not isinstance(aliases, dict):
+        return metadata
+
+    def resolve_alias(key: str, active: set[str]) -> dict[str, Any] | None:
+        entry = metadata.get(key)
+        if entry is not None:
+            return entry
+        if key in active:
+            return None
+        source = aliases.get(key)
+        if not isinstance(source, str):
+            return None
+        return resolve_alias(source, {*active, key})
+
+    for index, target in enumerate(aliases):
+        if target in metadata:
+            continue
+        source_entry = resolve_alias(target, set())
+        if source_entry is None:
+            continue
+        metadata[target] = {
+            **source_entry,
+            "sortKey": [*source_entry.get("sortKey", [10**9]), index],
+        }
+    return metadata
 
 
 def _configuration_field_metadata_for_module(
