@@ -570,11 +570,29 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_residual_model_flag=config.RECURRENT_RESIDUAL_MODEL_FLAG,
     )
     experts = ExpertOptions(
+        use_kv_expert_models_flag=(config.EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG),
         num_experts=config.NUM_EXPERTS,
         top_k=config.TOP_K,
+        dropped_token_behavior=config.DROPPED_TOKEN_BEHAVIOR,
+        compute_expert_mixture_flag=config.COMPUTE_EXPERT_MIXTURE_FLAG,
+        weighted_parameters_flag=config.WEIGHTED_PARAMETERS_FLAG,
+        weighting_position_option=config.WEIGHTING_POSITION_OPTION,
+        routing_initialization_mode=config.ROUTING_INITIALIZATION_MODE,
+        sampler_threshold=config.SAMPLER_THRESHOLD,
+        sampler_filter_above_threshold=config.SAMPLER_FILTER_ABOVE_THRESHOLD,
+        sampler_num_topk_samples=config.SAMPLER_NUM_TOPK_SAMPLES,
         normalize_probabilities_flag=config.NORMALIZE_PROBABILITIES_FLAG,
+        sampler_noisy_topk_flag=config.SAMPLER_NOISY_TOPK_FLAG,
+        coefficient_of_variation_loss_weight=(
+            config.COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
+        ),
         switch_loss_weight=config.SWITCH_LOSS_WEIGHT,
+        zero_centred_loss_weight=config.ZERO_CENTRED_LOSS_WEIGHT,
+        mutual_information_loss_weight=config.MUTUAL_INFORMATION_LOSS_WEIGHT,
         capacity_factor=config.CAPACITY_FACTOR,
+        router_noisy_topk_flag=config.ROUTER_NOISY_TOPK_FLAG,
+        router_path_options=feed_forward_options_from_config(config, "ROUTER"),
+        expert_path_options=feed_forward_options_from_config(config, "EXPERT"),
     )
 
     def adaptive_options(prefix: str) -> AdaptiveParameterOptions:
@@ -731,6 +749,10 @@ def runtime_from_flat(
             decoder_feed_forward_options=runtime.decoder_feed_forward_options,
         ),
     )
+    if "expert_attention_use_kv_expert_models_flag" in values:
+        values["use_kv_expert_models_flag"] = values.pop(
+            "expert_attention_use_kv_expert_models_flag"
+        )
     expert_broadcast = {
         key: values.pop(key) for key in list(values) if key in _EXPERT_FIELDS
     }
@@ -755,6 +777,35 @@ def runtime_from_flat(
             attention_experts = replace(current, **updates)
         else:
             feed_forward_experts = replace(current, **updates)
+
+    router_updates = _pop_updates(values, "router_", _FEED_FORWARD_FIELD_MAP)
+    expert_path_updates = _pop_updates(values, "expert_", _FEED_FORWARD_FIELD_MAP)
+    attention_experts = replace(
+        attention_experts,
+        router_path_options=_apply_path_updates(
+            attention_experts.router_path_options,
+            router_updates,
+            attention=False,
+        ),
+        expert_path_options=_apply_path_updates(
+            attention_experts.expert_path_options,
+            expert_path_updates,
+            attention=False,
+        ),
+    )
+    feed_forward_experts = replace(
+        feed_forward_experts,
+        router_path_options=_apply_path_updates(
+            feed_forward_experts.router_path_options,
+            router_updates,
+            attention=False,
+        ),
+        expert_path_options=_apply_path_updates(
+            feed_forward_experts.expert_path_options,
+            expert_path_updates,
+            attention=False,
+        ),
+    )
 
     adaptive_groups = {
         "attention_projection_adaptive_": (
