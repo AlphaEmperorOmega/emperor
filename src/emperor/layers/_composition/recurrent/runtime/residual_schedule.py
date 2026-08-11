@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 
 class RecurrentResidualSchedule(nn.Module, ABC):
-    """Select and apply residual connections across recurrent transitions."""
+    """Own residual selection across recurrent transitions."""
 
     VALIDATOR = RecurrentResidualScheduleValidator
 

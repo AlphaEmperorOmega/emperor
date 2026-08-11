@@ -32,7 +32,7 @@ _RECURRENT_CONTROLLER_OPTIONAL_FIELDS = {
 }
 
 if TYPE_CHECKING:
-    from emperor.layers._composition.recurrent.schedule import (
+    from emperor.layers._composition.recurrent.runtime.residual_schedule import (
         DepthwiseRecurrentResidualSchedule,
         RecurrentResidualSchedule,
     )
