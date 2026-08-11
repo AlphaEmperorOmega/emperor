@@ -44,7 +44,7 @@ from emperor.layers import (
     WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._composition.recurrent.schedule import (
+from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     DepthwiseRecurrentResidualSchedule,
     RecurrentResidualSchedule,
     SharedRecurrentResidualSchedule,
