@@ -4,6 +4,7 @@ import models.gpt.expert_linear_adaptive.config as config
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
+from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.experts import MixtureOfExpertsModelConfig
 from models.gpt.expert_linear_adaptive._base_config_builder import (
     GptBackendConfigBuilder,
@@ -337,6 +338,16 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             apply_output_pipeline_flag=True,
         )
 
+    def _build_linear_layer_config(
+        self,
+        *,
+        bias_flag: bool,
+    ) -> AdaptiveLinearLayerConfig:
+        adaptive_bias_enabled = self.hidden_adaptive_bias_options.option_flag
+        return self._control_config_factory(
+            self._attention_experts_stack_options()
+        ).build_hidden_adaptive_linear_layer_config(bias_flag or adaptive_bias_enabled)
+
     def _build_expert_model_config(
         self,
         *,
@@ -347,7 +358,16 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             if use_feed_forward_stack_options
             else self._attention_experts_stack_options()
         )
-        factory = ControlConfigFactory(
+        model_config = self._control_config_factory(stack_options).build()
+        if isinstance(model_config, MixtureOfExpertsModelConfig):
+            return model_config
+        return model_config.block_config
+
+    def _control_config_factory(
+        self,
+        stack_options: ExpertsStackOptions,
+    ) -> ControlConfigFactory:
+        return ControlConfigFactory(
             ControlConfigDependencies(
                 stack_options=stack_options,
                 submodule_stack_options=self.submodule_stack_options,
@@ -388,10 +408,6 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
                 output_dim=self.hidden_dim,
             )
         )
-        model_config = factory.build()
-        if isinstance(model_config, MixtureOfExpertsModelConfig):
-            return model_config
-        return model_config.block_config
 
 
 class GptExpertLinearAdaptiveConfigBuilder(

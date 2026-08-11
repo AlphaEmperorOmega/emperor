@@ -333,6 +333,59 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsInstance(attention_config, MixtureOfAttentionHeadsConfig)
         self.assertIsInstance(attention_expert_layer_config, AdaptiveLinearLayerConfig)
 
+    def test_dense_attention_kv_uses_the_expert_adaptive_augmentation(self):
+        cfg = self._config(
+            ExperimentPreset.BASELINE,
+            {
+                "expert_attention_use_kv_expert_models_flag": False,
+                "weight_option_flag": True,
+                "weight_option": config.LowRankDynamicWeightConfig,
+            },
+        )
+        attention_config = self._encoder_layer_config(cfg).attention_config
+        expert_stack = attention_config.experts_config.expert_model_config
+        expert_layer = expert_stack.layer_config.layer_model_config
+        dense_kv_stack = attention_config.projection_model_config
+        dense_kv_layer = dense_kv_stack.layer_config.layer_model_config
+
+        self.assertIsInstance(expert_layer, AdaptiveLinearLayerConfig)
+        self.assertIsInstance(dense_kv_layer, AdaptiveLinearLayerConfig)
+        self.assertEqual(
+            dense_kv_layer.adaptive_augmentation_config,
+            expert_layer.adaptive_augmentation_config,
+        )
+
+        model = Model(cfg)
+        mlm_logits, nsp_logits, auxiliary_loss = model(*self._fake_bert_inputs(cfg))
+        (
+            mlm_logits.square().mean() + nsp_logits.square().mean() + auxiliary_loss
+        ).backward()
+        attention = next(
+            module
+            for module in model.modules()
+            if isinstance(module, _MIXTURE_ATTENTION_TYPE)
+        )
+        self.assertFalse(attention.cfg.use_kv_expert_models_flag)
+        for role, projection_model in {
+            "key": attention.projector.key_model,
+            "value": attention.projector.value_model,
+        }.items():
+            with self.subTest(role=role):
+                self.assertNotIsInstance(
+                    projection_model,
+                    _MIXTURE_OF_EXPERTS_LAYER_TYPE,
+                )
+                adaptive_layers = tuple(
+                    module
+                    for module in projection_model.modules()
+                    if type(module).__name__ == "AdaptiveLinearLayer"
+                )
+                self.assertTrue(adaptive_layers)
+                self.assertTrue(
+                    all(layer.has_adaptive_augmentation for layer in adaptive_layers)
+                )
+                self._assert_nonzero_parameter_gradients(projection_model, role)
+
     def test_all_presets_forward_one_batch(self):
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
