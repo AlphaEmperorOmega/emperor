@@ -9,7 +9,7 @@ import torch
 from torch import Tensor, nn
 
 from emperor.layers._composition.gate import LayerGate
-from emperor.layers._composition.recurrent.schedule import (
+from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     RecurrentResidualSchedule,
     build_recurrent_residual_schedule,
 )
