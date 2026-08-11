@@ -1,5 +1,10 @@
 import unittest
+from collections.abc import Iterator, Mapping
+from dataclasses import fields, is_dataclass
+from importlib import import_module
+from inspect import isclass
 
+from emperor.layers import RecurrentLayerConfig
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from models.catalog import discover_model_packages
 
@@ -13,6 +18,14 @@ MINIMUM_AND_PONDER_CONTROL_KEYS = frozenset(
     {
         "RECURRENT_MIN_STEPS",
         "RECURRENT_PONDER_COST_WEIGHT",
+    }
+)
+ITERATION_SCHEDULE_CONTROL_KEYS = frozenset(
+    {
+        "RECURRENT_INITIAL_ITERATIONS",
+        "RECURRENT_GRADIENT_TRANSITION_COUNT",
+        "RECURRENT_ITERATION_INCREMENT",
+        "RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
     }
 )
 RECURRENT_MODEL_PACKAGES = frozenset(
@@ -49,7 +62,177 @@ RECURRENT_MODEL_PACKAGES = frozenset(
 )
 
 
+def _recurrent_iteration_schedule_values(
+    value: object,
+) -> Iterator[tuple[object, ...]]:
+    seen: set[int] = set()
+
+    def visit(candidate: object) -> Iterator[tuple[object, ...]]:
+        candidate_id = id(candidate)
+        if candidate_id in seen:
+            return
+        seen.add(candidate_id)
+
+        recurrent_fields = (
+            "recurrent_initial_iterations",
+            "recurrent_gradient_transition_count",
+            "recurrent_iteration_increment",
+            "recurrent_forward_calls_before_iteration_increment",
+        )
+        nested_fields = (
+            "initial_iterations",
+            "gradient_transition_count",
+            "iteration_increment",
+            "forward_calls_before_iteration_increment",
+        )
+        for field_names in (recurrent_fields, nested_fields):
+            if all(hasattr(candidate, name) for name in field_names):
+                yield tuple(getattr(candidate, name) for name in field_names)
+
+        if is_dataclass(candidate) and not isinstance(candidate, type):
+            for field in fields(candidate):
+                yield from visit(getattr(candidate, field.name))
+        elif isinstance(candidate, Mapping):
+            for item in candidate.values():
+                yield from visit(item)
+        elif isinstance(candidate, (list, tuple)):
+            for item in candidate:
+                yield from visit(item)
+
+    yield from visit(value)
+
+
+def _standard_recurrent_configs(value: object) -> Iterator[RecurrentLayerConfig]:
+    seen: set[int] = set()
+
+    def visit(candidate: object) -> Iterator[RecurrentLayerConfig]:
+        candidate_id = id(candidate)
+        if candidate_id in seen:
+            return
+        seen.add(candidate_id)
+
+        if isinstance(candidate, RecurrentLayerConfig):
+            yield candidate
+        if is_dataclass(candidate) and not isinstance(candidate, type):
+            for field in fields(candidate):
+                yield from visit(getattr(candidate, field.name))
+        elif isinstance(candidate, Mapping):
+            for item in candidate.values():
+                yield from visit(item)
+        elif isinstance(candidate, (list, tuple)):
+            for item in candidate:
+                yield from visit(item)
+
+    yield from visit(value)
+
+
+def _config_builder_type(catalog_key: str) -> type:
+    module_name = f"models.{catalog_key.replace('/', '.')}.config_builder"
+    module = import_module(module_name)
+    builder_types = [
+        candidate
+        for candidate in vars(module).values()
+        if isclass(candidate)
+        and candidate.__module__ == module_name
+        and candidate.__name__.endswith("ConfigBuilder")
+    ]
+    if len(builder_types) != 1:
+        raise AssertionError(
+            f"Expected one public ConfigBuilder in {module_name}, got "
+            f"{[candidate.__name__ for candidate in builder_types]}"
+        )
+    return builder_types[0]
+
+
 class TestRecurrentRuntimeControlScope(unittest.TestCase):
+    def test_iteration_schedule_controls_cover_every_recurrent_package(self) -> None:
+        supported_keys = {
+            package.catalog_key: frozenset(
+                runtime_defaults_spec(package).supported_keys
+            )
+            for package in discover_model_packages()
+        }
+
+        self.assertEqual(
+            {
+                catalog_key
+                for catalog_key, keys in supported_keys.items()
+                if ITERATION_SCHEDULE_CONTROL_KEYS <= keys
+            },
+            RECURRENT_MODEL_PACKAGES,
+        )
+
+    def test_iteration_schedule_values_bind_in_every_recurrent_package(self) -> None:
+        expected = (2, 2, 3, 4)
+        overrides = {
+            "recurrent_initial_iterations": expected[0],
+            "recurrent_gradient_transition_count": expected[1],
+            "recurrent_iteration_increment": expected[2],
+            "recurrent_forward_calls_before_iteration_increment": expected[3],
+        }
+
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key):
+                runtime = package.bind_runtime_defaults(overrides)
+                self.assertIn(
+                    expected,
+                    set(_recurrent_iteration_schedule_values(runtime)),
+                )
+
+    def test_iteration_schedule_builds_in_every_recurrent_package(self) -> None:
+        overrides = {
+            "recurrent_flag": True,
+            "recurrent_max_steps": 10,
+            "recurrent_initial_iterations": 2,
+            "recurrent_gradient_transition_count": 2,
+            "recurrent_iteration_increment": 3,
+            "recurrent_forward_calls_before_iteration_increment": 4,
+        }
+
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key):
+                runtime = package.bind_runtime_defaults(overrides)
+                configuration = _config_builder_type(package.catalog_key)(
+                    runtime=runtime
+                ).build()
+                recurrent_configs = list(_standard_recurrent_configs(configuration))
+                self.assertTrue(
+                    any(
+                        recurrent.max_steps == 10
+                        and recurrent.gradient_transition_count == 2
+                        and recurrent.initial_iterations == 2
+                        and recurrent.iteration_increment == 3
+                        and recurrent.forward_calls_before_iteration_increment == 4
+                        for recurrent in recurrent_configs
+                    ),
+                    "top-level recurrent config did not receive the iteration schedule",
+                )
+
+    def test_iteration_schedule_starts_at_two_iterations_in_every_package(
+        self,
+    ) -> None:
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key):
+                runtime = package.bind_runtime_defaults({"recurrent_flag": True})
+                configuration = _config_builder_type(package.catalog_key)(
+                    runtime=runtime
+                ).build()
+                recurrent_configs = list(_standard_recurrent_configs(configuration))
+                self.assertTrue(recurrent_configs)
+                self.assertTrue(
+                    all(
+                        recurrent.gradient_transition_count is None
+                        and recurrent.initial_iterations == 2
+                        for recurrent in recurrent_configs
+                    )
+                )
+
     def test_minimum_and_ponder_controls_have_an_explicit_package_scope(self) -> None:
         supported_keys = {
             package.catalog_key: frozenset(

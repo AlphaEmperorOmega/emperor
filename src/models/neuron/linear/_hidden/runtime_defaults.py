@@ -141,6 +141,12 @@ def _flat_defaults() -> dict[str, object]:
         ),
         "recurrent_flag": config.RECURRENT_FLAG,
         "recurrent_max_steps": config.RECURRENT_MAX_STEPS,
+        "recurrent_initial_iterations": config.RECURRENT_INITIAL_ITERATIONS,
+        "recurrent_gradient_transition_count": config.RECURRENT_GRADIENT_TRANSITION_COUNT,
+        "recurrent_iteration_increment": config.RECURRENT_ITERATION_INCREMENT,
+        "recurrent_forward_calls_before_iteration_increment": (
+            config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+        ),
         "recurrent_layer_norm_position": config.RECURRENT_LAYER_NORM_POSITION,
         "recurrent_stack_gate_flag": config.RECURRENT_STACK_GATE_FLAG,
         "recurrent_gate_option": config.RECURRENT_GATE_OPTION,
@@ -504,9 +510,7 @@ def runtime_from_flat(
         )
     residual_stack_options = resolve_residual_stack_options(
         ResidualStackSource(
-            independent_flag=_bool(
-                values, sources, "residual_stack_independent_flag"
-            ),
+            independent_flag=_bool(values, sources, "residual_stack_independent_flag"),
             hidden_dim=residual_stack_hidden_dim,
             num_layers=residual_stack_num_layers,
             activation=_optional_enum(
@@ -654,6 +658,18 @@ def runtime_from_flat(
     recurrence = RecurrenceOptions(
         enabled=_bool(values, sources, "recurrent_flag"),
         max_steps=recurrent_max_steps,
+        initial_iterations=_optional_int(
+            values, sources, "recurrent_initial_iterations"
+        ),
+        gradient_transition_count=_optional_int(
+            values, sources, "recurrent_gradient_transition_count"
+        ),
+        iteration_increment=_int(values, sources, "recurrent_iteration_increment"),
+        forward_calls_before_iteration_increment=_int(
+            values,
+            sources,
+            "recurrent_forward_calls_before_iteration_increment",
+        ),
         layer_norm_position=_enum(
             values,
             sources,

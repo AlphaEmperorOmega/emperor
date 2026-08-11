@@ -58,6 +58,10 @@ class TransformerStackOptions:
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
+    recurrent_initial_iterations: int = 2
+    recurrent_gradient_transition_count: int | None = None
+    recurrent_iteration_increment: int = 1
+    recurrent_forward_calls_before_iteration_increment: int = 1
     stack_residual_connection_option: type[ResidualConfig] | None = None
     stack_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_residual_connection_option: type[ResidualConfig] | None = None

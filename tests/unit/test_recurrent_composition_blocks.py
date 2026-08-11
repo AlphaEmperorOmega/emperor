@@ -125,6 +125,9 @@ def _runtime(block_config: TransformerEncoderBlockLayerConfig):
         block_config=block_config,
         latent_updates_per_answer_update=1,
         answer_update_count=1,
+        initial_iterations=1,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         initialization_standard_deviation=0.0,
     ).build()
 
@@ -139,6 +142,9 @@ def _hierarchical_reasoning_model_runtime(
         high_block_config=block_config,
         low_block_config=block_config,
         high_cycles=1,
+        initial_iterations=1,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         low_cycles=1,
         initialization_standard_deviation=0.0,
     ).build()
@@ -325,6 +331,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             block_config=_linear_stack(model_dim, model_dim),
             latent_updates_per_answer_update=1,
             answer_update_count=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
         feed_forward = FeedForwardConfig(
@@ -351,6 +360,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             high_block_config=_linear_stack(model_dim, model_dim),
             low_block_config=_linear_stack(model_dim, model_dim),
             high_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             low_cycles=1,
             initialization_standard_deviation=0.0,
         )
@@ -379,6 +391,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             block_config=_linear_stack(sequence_length, sequence_length),
             latent_updates_per_answer_update=1,
             answer_update_count=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
         mixer = MixerAttentionConfig(
@@ -408,6 +423,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             high_block_config=_linear_stack(sequence_length, sequence_length),
             low_block_config=_linear_stack(sequence_length, sequence_length),
             high_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             low_cycles=1,
             initialization_standard_deviation=0.0,
         )
@@ -441,6 +459,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             ),
             latent_updates_per_answer_update=1,
             answer_update_count=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
         transformer = TransformerConfig(
@@ -475,6 +496,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             high_block_config=block_config,
             low_block_config=block_config,
             high_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             low_cycles=1,
             initialization_standard_deviation=0.0,
         )
@@ -506,6 +530,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             block_config=_linear_stack(model_dim, model_dim),
             latent_updates_per_answer_update=1,
             answer_update_count=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
         attention_config = _self_attention(
@@ -542,6 +569,9 @@ class TestRecurrentCompositionConsumers(unittest.TestCase):
             high_block_config=_linear_stack(model_dim, model_dim),
             low_block_config=_linear_stack(model_dim, model_dim),
             high_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             low_cycles=1,
             initialization_standard_deviation=0.0,
         )

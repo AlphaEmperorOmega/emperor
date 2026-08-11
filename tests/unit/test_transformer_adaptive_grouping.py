@@ -372,6 +372,9 @@ class TransformerAdaptiveGroupingTests(unittest.TestCase):
                 input_dim=4,
                 output_dim=4,
                 max_steps=2,
+                initial_iterations=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
                 recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                 block_config=TransformerEncoderBlockLayerConfig(
                     input_dim=4,

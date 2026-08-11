@@ -469,6 +469,26 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
     value = provided or options.ExpertsRecurrentControllerOptions(
         recurrent_flag=getattr(config, f"{recurrent_config}FLAG"),
         recurrent_max_steps=getattr(config, f"{recurrent_config}MAX_STEPS"),
+        recurrent_initial_iterations=getattr(
+            config,
+            f"{recurrent_config}INITIAL_ITERATIONS",
+            2,
+        ),
+        recurrent_gradient_transition_count=getattr(
+            config,
+            f"{recurrent_config}GRADIENT_TRANSITION_COUNT",
+            None,
+        ),
+        recurrent_iteration_increment=getattr(
+            config,
+            f"{recurrent_config}ITERATION_INCREMENT",
+            1,
+        ),
+        recurrent_forward_calls_before_iteration_increment=getattr(
+            config,
+            f"{recurrent_config}FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
+            1,
+        ),
         recurrent_layer_norm_position=getattr(
             config, f"{recurrent_config}LAYER_NORM_POSITION"
         ),
@@ -497,6 +517,12 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
         {
             f"{recurrent_flat}flag": "recurrent_flag",
             f"{recurrent_flat}max_steps": "recurrent_max_steps",
+            f"{recurrent_flat}initial_iterations": "recurrent_initial_iterations",
+            f"{recurrent_flat}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{recurrent_flat}iteration_increment": "recurrent_iteration_increment",
+            f"{recurrent_flat}forward_calls_before_iteration_increment": (
+                "recurrent_forward_calls_before_iteration_increment"
+            ),
             f"{recurrent_flat}layer_norm_position": "recurrent_layer_norm_position",
             f"{recurrent_flat}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{recurrent_flat}gate_option": "recurrent_gate_option",

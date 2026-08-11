@@ -970,6 +970,12 @@ def _recurrent_controller_options_from_kwargs(
     options = provided or ExpertsRecurrentControllerOptions(
         recurrent_flag=config_module.RECURRENT_FLAG,
         recurrent_max_steps=config_module.RECURRENT_MAX_STEPS,
+        recurrent_initial_iterations=config_module.RECURRENT_INITIAL_ITERATIONS,
+        recurrent_gradient_transition_count=config_module.RECURRENT_GRADIENT_TRANSITION_COUNT,
+        recurrent_iteration_increment=config_module.RECURRENT_ITERATION_INCREMENT,
+        recurrent_forward_calls_before_iteration_increment=(
+            config_module.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+        ),
         recurrent_min_steps=config_module.RECURRENT_MIN_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
         recurrent_residual_connection_option=(
@@ -997,6 +1003,12 @@ def _recurrent_controller_options_from_kwargs(
         {
             "recurrent_flag": "recurrent_flag",
             "recurrent_max_steps": "recurrent_max_steps",
+            "recurrent_initial_iterations": "recurrent_initial_iterations",
+            "recurrent_gradient_transition_count": "recurrent_gradient_transition_count",
+            "recurrent_iteration_increment": "recurrent_iteration_increment",
+            "recurrent_forward_calls_before_iteration_increment": (
+                "recurrent_forward_calls_before_iteration_increment"
+            ),
             "recurrent_min_steps": "recurrent_min_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
             "recurrent_residual_connection_option": (

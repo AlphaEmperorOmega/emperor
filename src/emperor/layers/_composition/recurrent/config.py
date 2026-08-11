@@ -25,6 +25,27 @@ class RecurrentCompositionConfig(ConfigBase):
         "Optional number of initial transition invocations executed without "
         "gradient tracking. Every subsequently executed transition uses gradients."
     )
+    gradient_transition_count: int | None = optional_field(
+        "Number of final active recurrent transitions in each forward call that "
+        "track gradients. Earlier active transitions run under torch.no_grad(). "
+        "This controls gradient tracking, not loop growth. Set to None to use the "
+        "variant default. Mutually exclusive with no_gradient_transition_count."
+    )
+    initial_iterations: int | None = optional_field(
+        "Starting number of complete outer-loop recurrent iterations executed per "
+        "forward call. Required. Set it equal to the variant's maximum iteration "
+        "count to use a fixed loop length without gradual growth."
+    )
+    iteration_increment: int | None = optional_field(
+        "Number of complete outer-loop recurrent iterations added to the active loop "
+        "length whenever the successful-forward threshold is reached. Growth stops "
+        "at the variant's maximum iteration count. Required."
+    )
+    forward_calls_before_iteration_increment: int | None = optional_field(
+        "Number of successful recurrent forward calls required before the active loop "
+        "length increases by iteration_increment. The counter advances after each "
+        "completed call; failed calls do not count. Required."
+    )
     recurrent_layer_norm_position: LayerNormPositionOptions | None = optional_field(
         "Where layer normalization is applied within each recurrent transition. "
         "Set to None to disable."

@@ -877,6 +877,12 @@ def _recurrent_controller_options_from_kwargs(
         {
             f"{prefix}flag": "recurrent_flag",
             f"{prefix}max_steps": "recurrent_max_steps",
+            f"{prefix}initial_iterations": "recurrent_initial_iterations",
+            f"{prefix}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{prefix}iteration_increment": "recurrent_iteration_increment",
+            f"{prefix}forward_calls_before_iteration_increment": (
+                "recurrent_forward_calls_before_iteration_increment"
+            ),
             f"{prefix}layer_norm_position": "recurrent_layer_norm_position",
             f"{prefix}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{prefix}gate_option": "recurrent_gate_option",
@@ -1227,6 +1233,10 @@ def _factory_relevant_keys(
             {
                 f"{flat_prefix}_flag",
                 f"{flat_prefix}_max_steps",
+                f"{flat_prefix}_initial_iterations",
+                f"{flat_prefix}_gradient_transition_count",
+                f"{flat_prefix}_iteration_increment",
+                f"{flat_prefix}_forward_calls_before_iteration_increment",
                 f"{flat_prefix}_layer_norm_position",
                 f"{flat_prefix}_stack_gate_flag",
                 f"{flat_prefix}_gate_option",

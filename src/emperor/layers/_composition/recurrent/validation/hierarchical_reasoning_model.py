@@ -11,10 +11,13 @@ from emperor.layers._composition.recurrent.validation.common import (
     _RecurrentCompositionValidator,
     _validate_initialization_standard_deviation,
     _validate_recurrent_controller_config,
-    _validate_transition_gradient_window,
+    _validate_recurrent_iteration_controls,
     _validate_variant_hidden,
     _validate_variant_state,
     _validate_variant_transition_output,
+)
+from emperor.layers._validation.common import (
+    _validate_halting_required_update_count,
 )
 
 
@@ -52,9 +55,11 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
             high_cycles=config.high_cycles,
             low_cycles=config.low_cycles,
         )
-        _validate_transition_gradient_window(
+        transitions_per_iteration = config.low_cycles + 1
+        _validate_recurrent_iteration_controls(
             config,
-            total_transition_count=(config.high_cycles * (config.low_cycles + 1)),
+            maximum_iterations=config.high_cycles,
+            transitions_per_iteration=transitions_per_iteration,
         )
         if config.input_dim != config.output_dim:
             raise ValueError(
@@ -63,6 +68,18 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
                 f"output_dim={config.output_dim}."
             )
         _validate_recurrent_controller_config(config)
+        if (
+            config.gradient_transition_count is not None
+            and config.halting_config is not None
+        ):
+            required_update_count = (
+                config.gradient_transition_count + transitions_per_iteration - 1
+            ) // transitions_per_iteration
+            _validate_halting_required_update_count(
+                config.halting_config,
+                required_update_count=required_update_count,
+                owner_name=type(config).__name__,
+            )
         for field_name in ("high_block_config", "low_block_config"):
             block_config = getattr(config, field_name)
             if not isinstance(block_config, ConfigBase):

@@ -34,6 +34,14 @@ class RecurrentConfigFactory:
             input_dim=input_dim,
             output_dim=output_dim,
             max_steps=self.recurrent_controller_options.recurrent_max_steps,
+            gradient_transition_count=(
+                self.recurrent_controller_options.recurrent_gradient_transition_count
+            ),
+            initial_iterations=self.recurrent_controller_options.recurrent_initial_iterations,
+            iteration_increment=self.recurrent_controller_options.recurrent_iteration_increment,
+            forward_calls_before_iteration_increment=(
+                self.recurrent_controller_options.recurrent_forward_calls_before_iteration_increment
+            ),
             recurrent_layer_norm_position=(
                 self.recurrent_controller_options.recurrent_layer_norm_position
             ),

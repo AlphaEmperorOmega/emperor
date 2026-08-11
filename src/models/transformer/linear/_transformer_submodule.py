@@ -1,9 +1,11 @@
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
+    HierarchicalReasoningModelRecurrentConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerStackConfig,
+    TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
 
@@ -186,12 +188,24 @@ def configure_transformer_submodule(
     recurrent = path_options.recurrent_controller_options
     if not recurrent.recurrent_flag:
         return model_config
+    initial_iterations = recurrent.recurrent_max_steps
+    if recurrent.recurrent_composition_option is TinyRecursiveModelRecurrentConfig:
+        initial_iterations = recurrent.recurrent_answer_update_count
+    elif (
+        recurrent.recurrent_composition_option
+        is HierarchicalReasoningModelRecurrentConfig
+    ):
+        initial_iterations = recurrent.recurrent_high_cycles
     return build_recurrent_composition(
         option=recurrent.recurrent_composition_option,
         input_dim=model_dim,
         output_dim=model_dim,
         block_config=model_config,
         max_steps=recurrent.recurrent_max_steps,
+        gradient_transition_count=None,
+        initial_iterations=initial_iterations,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
         gate_config=_gate_config(
             path_options,

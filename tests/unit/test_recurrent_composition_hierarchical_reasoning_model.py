@@ -152,6 +152,36 @@ class _TensorReturningBlock(Module):
 
 
 class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
+    def test_gradient_suffix_requires_enough_complete_halting_updates(self) -> None:
+        config = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=1,
+            output_dim=1,
+            high_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            low_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            high_cycles=2,
+            low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+            initialization_standard_deviation=0.0,
+            gradient_transition_count=4,
+            halting_config=_RecordingHaltingConfig(
+                halt_after_updates=10,
+                min_steps=1,
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "required_update_count=2"):
+            config.build()
+
     def test_overrides_do_not_mutate_the_source_config(self) -> None:
         config = HierarchicalReasoningModelRecurrentConfig(
             input_dim=1,
@@ -168,6 +198,9 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
 
@@ -198,6 +231,9 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
             ),
             "high_cycles": 2,
             "low_cycles": 2,
+            "initial_iterations": 2,
+            "iteration_increment": 1,
+            "forward_calls_before_iteration_increment": 1,
             "initialization_standard_deviation": 0.0,
         }
         cases = (
@@ -222,7 +258,7 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
                 "no_gradient_transition_count",
                 6,
                 ValueError,
-                "less than the variant's 6 scheduled transitions",
+                "less than the minimum active 6 transitions",
             ),
             (
                 "initialization_standard_deviation",
@@ -278,6 +314,9 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
 
@@ -306,6 +345,9 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
             ),
             latent_updates_per_answer_update=1,
             answer_update_count=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
         config = HierarchicalReasoningModelRecurrentConfig(
@@ -319,6 +361,9 @@ class TestHierarchicalReasoningModelRecurrentConfig(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
 
@@ -359,6 +404,9 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         )
 
@@ -508,6 +556,85 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
 
 
 class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
+    def test_schedule_grows_only_by_complete_high_cycles(self) -> None:
+        recurrent = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=1,
+            output_dim=1,
+            high_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            low_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            high_cycles=5,
+            low_cycles=2,
+            initialization_standard_deviation=0.0,
+            initial_iterations=1,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=2,
+        ).build()
+
+        executed_transition_counts = []
+        for _ in range(5):
+            transition_count_before = len(recurrent.low_model.inputs) + len(
+                recurrent.high_model.inputs
+            )
+            recurrent(LayerState(hidden=torch.ones(1, 1)))
+            executed_transition_counts.append(
+                len(recurrent.low_model.inputs)
+                + len(recurrent.high_model.inputs)
+                - transition_count_before
+            )
+
+        self.assertEqual(executed_transition_counts, [3, 3, 9, 9, 15])
+        schedule = recurrent.recurrent_iteration_schedule
+        self.assertEqual(schedule.iteration_unit, "high_cycle")
+        self.assertEqual(schedule.active_iterations, 5)
+
+    def test_fixed_gradient_suffix_tracks_scheduled_high_cycles(self) -> None:
+        recurrent = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=1,
+            output_dim=1,
+            high_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            low_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            high_cycles=3,
+            low_cycles=2,
+            initialization_standard_deviation=0.0,
+            gradient_transition_count=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        ).build()
+
+        for active_transition_count in (3, 6, 9):
+            recurrent.low_model.grad_modes.clear()
+            recurrent.high_model.grad_modes.clear()
+            recurrent(LayerState(hidden=torch.ones(1, 1)))
+            gradient_modes = []
+            low_modes = iter(recurrent.low_model.grad_modes)
+            high_modes = iter(recurrent.high_model.grad_modes)
+            for transition_index in range(active_transition_count):
+                if (transition_index + 1) % 3 == 0:
+                    gradient_modes.append(next(high_modes))
+                else:
+                    gradient_modes.append(next(low_modes))
+            self.assertEqual(
+                gradient_modes,
+                [False] * (active_transition_count - 2) + [True, True],
+            )
+
     def test_residual_uses_the_previous_low_and_high_target_states(self) -> None:
         recurrent = HierarchicalReasoningModelRecurrentConfig(
             input_dim=1,
@@ -524,6 +651,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             residual_config=AdditiveResidualConfig(),
         ).build()
@@ -558,6 +688,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=4,
             low_cycles=2,
+            initial_iterations=4,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             no_gradient_transition_count=0,
             halting_config=_RecordingHaltingConfig(halt_after_updates=2),
@@ -594,6 +727,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             no_gradient_transition_count=0,
             halting_config=_RecordingHaltingConfig(halt_after_updates=2),
@@ -628,6 +764,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             no_gradient_transition_count=0,
             memory_config=weighted_memory_config(
@@ -664,6 +803,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
 
@@ -686,6 +828,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=3,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
         inputs = torch.tensor([[1.0], [3.0], [5.0]])
@@ -714,6 +859,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
         recurrent = recurrent.to(dtype=torch.bfloat16)
@@ -743,6 +891,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
 
@@ -770,6 +921,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
         row_layout = RowLayout.sequence(
@@ -819,6 +973,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.2,
         )
         torch.manual_seed(17)
@@ -831,6 +988,7 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
         self.assertEqual(
             set(checkpoint),
             {
+                "recurrent_iteration_schedule.forward_call_progress",
                 "high_initial",
                 "low_initial",
                 "high_model.scale",
@@ -862,6 +1020,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=1,
             low_cycles=1,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
 
@@ -887,6 +1048,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
 
@@ -923,6 +1087,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
         inputs = torch.ones(1, 1, requires_grad=True)
@@ -958,6 +1125,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             no_gradient_transition_count=2,
         ).build()
@@ -989,6 +1159,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             ),
             high_cycles=2,
             low_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             no_gradient_transition_count=2,
         ).build()

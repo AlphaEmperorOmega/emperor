@@ -73,6 +73,25 @@ class _HaltingContractValidator:
                 f"owner_step_limit={owner_step_limit}."
             )
 
+    @classmethod
+    def validate_required_update_count(
+        cls,
+        cfg: "HaltingConfig",
+        *,
+        required_update_count: int,
+        owner_name: str,
+    ) -> None:
+        cls.validate_minimum_step_capability(cfg, owner_name=owner_name)
+        configured_min_steps = getattr(cfg, "min_steps", None)
+        min_steps = 1 if configured_min_steps is None else configured_min_steps
+        if min_steps < required_update_count:
+            raise ValueError(
+                "halting_config.min_steps must be greater than or equal to the "
+                f"required update count for {owner_name}; received "
+                f"min_steps={min_steps} and "
+                f"required_update_count={required_update_count}."
+            )
+
     @staticmethod
     def _validate_ponder_cost_weight(ponder_cost_weight: float | None) -> None:
         if ponder_cost_weight is None:

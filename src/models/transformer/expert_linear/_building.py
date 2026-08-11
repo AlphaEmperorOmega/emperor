@@ -356,6 +356,12 @@ def _controlled_stack(
         input_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         max_steps=options.recurrent_max_steps,
+        gradient_transition_count=options.recurrent_gradient_transition_count,
+        initial_iterations=options.recurrent_initial_iterations,
+        iteration_increment=options.recurrent_iteration_increment,
+        forward_calls_before_iteration_increment=(
+            options.recurrent_forward_calls_before_iteration_increment
+        ),
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),

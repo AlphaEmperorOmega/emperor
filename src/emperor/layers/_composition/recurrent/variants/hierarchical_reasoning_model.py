@@ -50,10 +50,6 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         self.low_block_config: ConfigBase = self.cfg.low_block_config
         self.high_cycles: int = self.cfg.high_cycles
         self.low_cycles: int = self.cfg.low_cycles
-        total_transition_count = self.high_cycles * (self.low_cycles + 1)
-        self._initialize_transition_gradient_window(
-            default_no_gradient_transition_count=total_transition_count - 2,
-        )
         self.initialization_standard_deviation: float = (
             self.cfg.initialization_standard_deviation
         )
@@ -68,10 +64,6 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         )
         self.register_buffer(buffer_name, initial_buffer, persistent=True)
 
-    @property
-    def recurrent_diagnostic_step_limit(self) -> int:
-        return self.high_cycles * (self.low_cycles + 1)
-
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
         fixed_input = state.hidden
@@ -84,7 +76,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         hierarchical_state = self.__initialize_recurrent_state(state, fixed_input)
         auxiliary_losses: list[Tensor] = []
 
-        for _ in range(self.high_cycles):
+        for _ in range(self.recurrent_iteration_schedule.active_iterations):
             hierarchical_state = self.__run_high_cycle(
                 hierarchical_state, auxiliary_losses
             )
@@ -101,6 +93,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         )
         state.hidden = finalized_high
         state.loss = finalized_loss
+        self.recurrent_iteration_schedule.record_successful_forward()
         return state
 
     def __initialize_recurrent_state(
@@ -138,7 +131,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
             hierarchical_state
         )
         transition_index = hierarchical_state.transition_index
-        with self._transition_gradient_context(transition_index):
+        with self.recurrent_iteration_schedule.gradient_context(transition_index):
             previous_low = hierarchical_state.low
             low_transition_input = (
                 previous_low + hierarchical_state.high + hierarchical_state.fixed_input
@@ -171,11 +164,11 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
             hierarchical_state
         )
         transition_index = hierarchical_state.transition_index
-        with self._transition_gradient_context(transition_index):
+        with self.recurrent_iteration_schedule.gradient_context(transition_index):
             previous_high = hierarchical_state.high
             high_transition_input = previous_high + hierarchical_state.low
-            halting_update_enabled = (
-                transition_index >= self.no_gradient_transition_count
+            halting_update_enabled = self.recurrent_iteration_schedule.tracks_gradients(
+                transition_index
             )
             transition_result = self._run_recurrent_transition(
                 hierarchical_state,
@@ -200,7 +193,9 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         self,
         hierarchical_state: _HierarchicalReasoningModelState,
     ) -> _HierarchicalReasoningModelState:
-        if not self._starts_gradient_suffix(hierarchical_state.transition_index):
+        if not self.recurrent_iteration_schedule.starts_gradient_suffix(
+            hierarchical_state.transition_index
+        ):
             return hierarchical_state
         return replace(
             hierarchical_state,

@@ -561,6 +561,12 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
+        recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
+        recurrent_gradient_transition_count=config.RECURRENT_GRADIENT_TRANSITION_COUNT,
+        recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
+        recurrent_forward_calls_before_iteration_increment=(
+            config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+        ),
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
         stack_residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         recurrent_residual_connection_option=(
@@ -601,24 +607,16 @@ def runtime_from_config() -> RuntimeOptions:
         source_sequence_length=config.SOURCE_SEQUENCE_LENGTH,
         target_sequence_length=config.TARGET_SEQUENCE_LENGTH,
         dropout_probability=config.DROPOUT_PROBABILITY,
-        residual_stack_independent_flag=(
-            config.RESIDUAL_STACK_INDEPENDENT_FLAG
-        ),
+        residual_stack_independent_flag=(config.RESIDUAL_STACK_INDEPENDENT_FLAG),
         residual_stack_hidden_dim=config.RESIDUAL_STACK_HIDDEN_DIM,
-        residual_stack_layer_norm_position=(
-            config.RESIDUAL_STACK_LAYER_NORM_POSITION
-        ),
+        residual_stack_layer_norm_position=(config.RESIDUAL_STACK_LAYER_NORM_POSITION),
         residual_stack_num_layers=config.RESIDUAL_STACK_NUM_LAYERS,
         residual_stack_activation=config.RESIDUAL_STACK_ACTIVATION,
         residual_stack_residual_connection_option=(
             config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
         ),
-        residual_stack_residual_model_flag=(
-            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
-        ),
-        residual_stack_dropout_probability=(
-            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
-        ),
+        residual_stack_residual_model_flag=(config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG),
+        residual_stack_dropout_probability=(config.RESIDUAL_STACK_DROPOUT_PROBABILITY),
         residual_stack_last_layer_bias_option=(
             config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
         ),

@@ -302,7 +302,6 @@ RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 RESIDUAL_STACK_BIAS_FLAG: bool | None = None
 
 
-
 #########################################################################
 # Gate Options
 STACK_GATE_FLAG: bool = False
@@ -372,6 +371,10 @@ MEMORY_STACK_BIAS_FLAG: bool | None = None
 # Recurrent Layer Options
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_INITIAL_ITERATIONS: int = 2
+RECURRENT_GRADIENT_TRANSITION_COUNT: int | None = None
+RECURRENT_ITERATION_INCREMENT: int = 1
+RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT: int = 1
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
