@@ -12,13 +12,6 @@ from emperor.attention import (
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
-    BankExpansionFactorOptions,
-    DynamicDepthOptions,
-    MaskDimensionOptions,
-    WeightDecayScheduleOptions,
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
 )
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
@@ -55,6 +48,7 @@ from .runtime_options import (
     RuntimeOptions,
     TransformerFeedForwardOptions,
     TransformerStackOptions,
+    resolve_controller_stack_options,
 )
 
 
@@ -89,47 +83,111 @@ def _leaf_config(option: type | None, values: dict):
     return option(**{key: value for key, value in values.items() if key in accepted})
 
 
-def _adaptive_augmentation(options: AdaptiveParameterOptions):
-    generator = _plain_stack(hidden_dim=64)
-    weight = _leaf_config(
-        options.weight_option,
-        {
-            "generator_depth": DynamicDepthOptions.DEPTH_OF_ONE,
-            "decay_schedule": WeightDecayScheduleOptions.DISABLED,
-            "decay_rate": 0.0,
-            "decay_warmup_batches": 0,
-            "normalization_option": WeightNormalizationOptions.DISABLED,
-            "normalization_position_option": (
-                WeightNormalizationPositionOptions.DISABLED
+def _generator_stack(stack_options, residual_stack_options):
+    return LayerStackConfig(
+        hidden_dim=stack_options.hidden_dim,
+        num_layers=stack_options.num_layers,
+        apply_output_pipeline_flag=stack_options.apply_output_pipeline_flag,
+        last_layer_bias_option=stack_options.last_layer_bias_option,
+        layer_config=LayerConfig(
+            activation=stack_options.activation,
+            residual_config=build_residual_config(
+                stack_options.residual_connection_option,
+                stack_options.residual_model_flag,
+                residual_stack_options,
             ),
-            "bank_expansion_factor": BankExpansionFactorOptions.FACTOR_OF_ONE,
-            "model_config": generator,
+            dropout_probability=stack_options.dropout_probability,
+            layer_norm_position=stack_options.layer_norm_position,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=LinearLayerConfig(bias_flag=stack_options.bias_flag),
+        ),
+    )
+
+
+def _component_generator_stack(
+    source,
+    defaults,
+    residual_stack_options,
+):
+    if not source.independent_flag:
+        return None
+    return _generator_stack(
+        resolve_controller_stack_options(source, defaults),
+        residual_stack_options,
+    )
+
+
+def _adaptive_augmentation(
+    options: AdaptiveParameterOptions,
+    residual_stack_options: ResidualStackOptions,
+):
+    generator = _generator_stack(
+        options.generator_stack_options,
+        residual_stack_options,
+    )
+    weight = _leaf_config(
+        options.weight_option if options.weight_option_flag else None,
+        {
+            "generator_depth": options.generator_depth,
+            "decay_schedule": options.weight_decay_schedule,
+            "decay_rate": options.weight_decay_rate,
+            "decay_warmup_batches": options.weight_decay_warmup_batches,
+            "normalization_option": options.weight_normalization_option,
+            "normalization_position_option": (
+                options.weight_normalization_position_option
+            ),
+            "bank_expansion_factor": options.weight_bank_expansion_factor,
+            "model_config": _component_generator_stack(
+                options.weight_generator_stack_options,
+                options.generator_stack_options,
+                residual_stack_options,
+            ),
         },
     )
     bias = _leaf_config(
-        options.bias_option,
+        options.bias_option if options.bias_option_flag else None,
         {
-            "decay_schedule": WeightDecayScheduleOptions.DISABLED,
-            "decay_rate": 0.0,
-            "decay_warmup_batches": 0,
-            "bank_expansion_factor": BankExpansionFactorOptions.FACTOR_OF_ONE,
-            "model_config": generator,
+            "decay_schedule": options.bias_decay_schedule,
+            "decay_rate": options.bias_decay_rate,
+            "decay_warmup_batches": options.bias_decay_warmup_batches,
+            "bank_expansion_factor": options.bias_bank_expansion_factor,
+            "model_config": _component_generator_stack(
+                options.bias_generator_stack_options,
+                options.generator_stack_options,
+                residual_stack_options,
+            ),
         },
     )
-    diagonal = _leaf_config(options.diagonal_option, {"model_config": generator})
-    mask = _leaf_config(
-        options.row_mask_option,
+    diagonal = _leaf_config(
+        options.diagonal_option if options.diagonal_option_flag else None,
         {
-            "mask_threshold": 0.5,
-            "mask_surrogate_scale": 1.0,
-            "mask_floor": 0.0,
-            "mask_dimension_option": MaskDimensionOptions.ROW,
-            "mask_transition_width": 0.1,
-            "model_config": generator,
+            "model_config": _component_generator_stack(
+                options.diagonal_generator_stack_options,
+                options.generator_stack_options,
+                residual_stack_options,
+            )
+        },
+    )
+    mask = _leaf_config(
+        options.row_mask_option if options.mask_option_flag else None,
+        {
+            "mask_threshold": options.mask_threshold,
+            "mask_surrogate_scale": options.mask_surrogate_scale,
+            "mask_floor": options.mask_floor,
+            "mask_dimension_option": options.mask_dimension_option,
+            "mask_transition_width": options.mask_transition_width,
+            "model_config": _component_generator_stack(
+                options.mask_generator_stack_options,
+                options.generator_stack_options,
+                residual_stack_options,
+            ),
         },
     )
     return AdaptiveParameterAugmentationConfig(
-        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+        grouping_scope=options.grouping_scope,
+        group_count=options.group_count,
         weight_config=weight,
         bias_config=bias,
         diagonal_config=diagonal,
@@ -186,7 +244,10 @@ def _adaptive_stack(
             memory_config=None,
             layer_model_config=AdaptiveLinearLayerConfig(
                 bias_flag=stack_options.bias_flag,
-                adaptive_augmentation_config=_adaptive_augmentation(adaptive_options),
+                adaptive_augmentation_config=_adaptive_augmentation(
+                    adaptive_options,
+                    residual_stack_options,
+                ),
             ),
         ),
     )
@@ -234,12 +295,19 @@ def _memory(model_dim: int, enabled: bool):
 
 
 def _attention_config(
-    runtime, options, *, target_length, source_length, causal, independent=False
+    runtime,
+    options,
+    adaptive_options,
+    *,
+    target_length,
+    source_length,
+    causal,
+    independent=False,
 ):
     config_type = IndependentAttentionConfig if independent else SelfAttentionConfig
     projection_stack = _adaptive_stack(
         stack_options=options.stack_options,
-        adaptive_options=runtime.projection_adaptive_options,
+        adaptive_options=adaptive_options,
         residual_stack_options=_residual_stack(runtime),
     )
     projection_config = configure_transformer_submodule(
@@ -273,10 +341,14 @@ def _attention_config(
     return config_type(**kwargs)
 
 
-def _feed_forward(runtime: RuntimeOptions, options: TransformerFeedForwardOptions):
+def _feed_forward(
+    runtime: RuntimeOptions,
+    options: TransformerFeedForwardOptions,
+    adaptive_options: AdaptiveParameterOptions,
+):
     stack = _adaptive_stack(
         stack_options=options.stack_options,
-        adaptive_options=runtime.feed_forward_adaptive_options,
+        adaptive_options=adaptive_options,
         residual_stack_options=_residual_stack(runtime),
     )
     return FeedForwardConfig(
@@ -343,12 +415,15 @@ def _encoder(runtime: RuntimeOptions):
         attention_config=_attention_config(
             runtime,
             runtime.encoder_attention_options,
+            runtime.encoder_attention_adaptive_options,
             target_length=runtime.source_sequence_length,
             source_length=runtime.source_sequence_length,
             causal=False,
         ),
         feed_forward_config=_feed_forward(
-            runtime, runtime.encoder_feed_forward_options
+            runtime,
+            runtime.encoder_feed_forward_options,
+            runtime.encoder_feed_forward_adaptive_options,
         ),
     )
     layer = TransformerEncoderBlockLayerConfig(
@@ -385,6 +460,7 @@ def _decoder(runtime: RuntimeOptions):
         self_attention_config=_attention_config(
             runtime,
             runtime.decoder_self_attention_options,
+            runtime.decoder_self_attention_adaptive_options,
             target_length=runtime.target_sequence_length,
             source_length=runtime.target_sequence_length,
             causal=True,
@@ -392,13 +468,16 @@ def _decoder(runtime: RuntimeOptions):
         cross_attention_config=_attention_config(
             runtime,
             runtime.decoder_cross_attention_options,
+            runtime.decoder_cross_attention_adaptive_options,
             target_length=runtime.target_sequence_length,
             source_length=runtime.source_sequence_length,
             causal=False,
             independent=True,
         ),
         feed_forward_config=_feed_forward(
-            runtime, runtime.decoder_feed_forward_options
+            runtime,
+            runtime.decoder_feed_forward_options,
+            runtime.decoder_feed_forward_adaptive_options,
         ),
     )
     layer = TransformerDecoderBlockLayerConfig(

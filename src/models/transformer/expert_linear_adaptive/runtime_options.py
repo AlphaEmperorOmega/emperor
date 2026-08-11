@@ -2,6 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterGroupingScopeOptions,
+    AxisMaskConfig,
+    BankExpansionFactorOptions,
+    DynamicBiasConfig,
+    DynamicDepthOptions,
+    DynamicDiagonalConfig,
+    DynamicWeightConfig,
+    MaskDimensionOptions,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
@@ -245,10 +258,55 @@ class ExpertOptions:
 
 @dataclass(frozen=True)
 class AdaptiveParameterOptions:
-    weight_option: type | None = None
-    bias_option: type | None = None
-    diagonal_option: type | None = None
-    row_mask_option: type | None = None
+    grouping_scope: AdaptiveParameterGroupingScopeOptions = (
+        AdaptiveParameterGroupingScopeOptions.DISABLED
+    )
+    group_count: int = 1
+    weight_option_flag: bool = True
+    weight_option: type[DynamicWeightConfig] | None = None
+    generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_ONE
+    weight_decay_schedule: WeightDecayScheduleOptions = (
+        WeightDecayScheduleOptions.DISABLED
+    )
+    weight_decay_rate: float = 0.0
+    weight_decay_warmup_batches: int = 0
+    weight_normalization_option: WeightNormalizationOptions = (
+        WeightNormalizationOptions.DISABLED
+    )
+    weight_normalization_position_option: WeightNormalizationPositionOptions = (
+        WeightNormalizationPositionOptions.DISABLED
+    )
+    weight_bank_expansion_factor: BankExpansionFactorOptions = (
+        BankExpansionFactorOptions.FACTOR_OF_ONE
+    )
+    bias_option_flag: bool = True
+    bias_option: type[DynamicBiasConfig] | None = None
+    bias_decay_schedule: WeightDecayScheduleOptions = (
+        WeightDecayScheduleOptions.DISABLED
+    )
+    bias_decay_rate: float = 0.0
+    bias_decay_warmup_batches: int = 0
+    bias_bank_expansion_factor: BankExpansionFactorOptions = (
+        BankExpansionFactorOptions.FACTOR_OF_ONE
+    )
+    diagonal_option_flag: bool = True
+    diagonal_option: type[DynamicDiagonalConfig] | None = None
+    mask_option_flag: bool = True
+    row_mask_option: type[AxisMaskConfig] | None = None
+    mask_threshold: float = 0.5
+    mask_surrogate_scale: float = 1.0
+    mask_floor: float = 0.0
+    mask_dimension_option: MaskDimensionOptions = MaskDimensionOptions.ROW
+    mask_transition_width: float = 0.1
+    generator_stack_options: SubmoduleStackOptions = SubmoduleStackOptions(
+        hidden_dim=64,
+        num_layers=1,
+        activation=ActivationOptions.RELU,
+    )
+    weight_generator_stack_options: ControllerStackOptions = ControllerStackOptions()
+    bias_generator_stack_options: ControllerStackOptions = ControllerStackOptions()
+    diagonal_generator_stack_options: ControllerStackOptions = ControllerStackOptions()
+    mask_generator_stack_options: ControllerStackOptions = ControllerStackOptions()
 
 
 @dataclass(frozen=True)
@@ -299,6 +357,21 @@ class RuntimeOptions:
     )
     router_adaptive_options: AdaptiveParameterOptions = AdaptiveParameterOptions()
     feed_forward_adaptive_options: AdaptiveParameterOptions = AdaptiveParameterOptions()
+    encoder_attention_adaptive_options: AdaptiveParameterOptions = (
+        AdaptiveParameterOptions()
+    )
+    decoder_self_attention_adaptive_options: AdaptiveParameterOptions = (
+        AdaptiveParameterOptions()
+    )
+    decoder_cross_attention_adaptive_options: AdaptiveParameterOptions = (
+        AdaptiveParameterOptions()
+    )
+    encoder_feed_forward_adaptive_options: AdaptiveParameterOptions = (
+        AdaptiveParameterOptions()
+    )
+    decoder_feed_forward_adaptive_options: AdaptiveParameterOptions = (
+        AdaptiveParameterOptions()
+    )
 
 
 __all__ = [
