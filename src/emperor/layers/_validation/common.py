@@ -111,6 +111,37 @@ def _validate_halting_owner_step_contract(
         )
 
 
+def _validate_halting_required_update_count(
+    halting_config,
+    *,
+    required_update_count: int,
+    owner_name: str,
+) -> None:
+    validator = getattr(halting_config._registry_owner(), "VALIDATOR", None)
+    validate_required_update_count = getattr(
+        validator,
+        "validate_required_update_count",
+        None,
+    )
+    if callable(validate_required_update_count):
+        validate_required_update_count(
+            halting_config,
+            required_update_count=required_update_count,
+            owner_name=owner_name,
+        )
+        return
+
+    configured_min_steps = getattr(halting_config, "min_steps", None)
+    min_steps = 1 if configured_min_steps is None else configured_min_steps
+    if min_steps < required_update_count:
+        raise ValueError(
+            "halting_config.min_steps must be greater than or equal to the "
+            f"required update count for {owner_name}; received "
+            f"min_steps={min_steps} and "
+            f"required_update_count={required_update_count}."
+        )
+
+
 def _matches_config_contract(config: object, field_names: tuple[str, ...]) -> bool:
     return isinstance(config, ConfigBase) and all(
         hasattr(config, field_name) for field_name in field_names

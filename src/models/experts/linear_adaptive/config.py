@@ -262,6 +262,10 @@ MEMORY_STACK_BIAS_FLAG: bool | None = None
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_INITIAL_ITERATIONS: int = 2
+RECURRENT_GRADIENT_TRANSITION_COUNT: int | None = None
+RECURRENT_ITERATION_INCREMENT: int = 1
+RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT: int = 1
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )

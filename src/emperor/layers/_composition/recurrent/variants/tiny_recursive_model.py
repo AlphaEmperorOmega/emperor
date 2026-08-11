@@ -51,12 +51,6 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
             self.cfg.latent_updates_per_answer_update
         )
         self.answer_update_count: int = self.cfg.answer_update_count
-        transitions_per_answer_update = self.latent_updates_per_answer_update + 1
-        self._initialize_transition_gradient_window(
-            default_no_gradient_transition_count=(
-                (self.answer_update_count - 1) * transitions_per_answer_update
-            ),
-        )
         self.initialization_standard_deviation: float = (
             self.cfg.initialization_standard_deviation
         )
@@ -69,10 +63,6 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
             self.initialization_standard_deviation
         )
         self.register_buffer(buffer_name, initial_buffer, persistent=True)
-
-    @property
-    def recurrent_diagnostic_step_limit(self) -> int:
-        return self.answer_update_count * (self.latent_updates_per_answer_update + 1)
 
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
@@ -93,7 +83,7 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
         )
         auxiliary_losses: list[Tensor] = []
 
-        for _ in range(self.answer_update_count):
+        for _ in range(self.recurrent_iteration_schedule.active_iterations):
             tiny_recursive_state = self.__run_answer_cycle(
                 tiny_recursive_state, auxiliary_losses
             )
@@ -110,6 +100,7 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
         )
         state.hidden = finalized_answer
         state.loss = finalized_loss
+        self.recurrent_iteration_schedule.record_successful_forward()
         return state
 
     def __run_answer_cycle(
@@ -135,7 +126,7 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
             answer=tiny_recursive_state.answer,
             latent=tiny_recursive_state.latent,
         )
-        with self._transition_gradient_context(transition_index):
+        with self.recurrent_iteration_schedule.gradient_context(transition_index):
             latent_transition_input = (
                 previous_latent + answer + tiny_recursive_state.fixed_input
             )
@@ -170,10 +161,10 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
             answer=tiny_recursive_state.answer,
             latent=tiny_recursive_state.latent,
         )
-        with self._transition_gradient_context(transition_index):
+        with self.recurrent_iteration_schedule.gradient_context(transition_index):
             answer_transition_input = previous_answer + latent
-            halting_update_enabled = (
-                transition_index >= self.no_gradient_transition_count
+            halting_update_enabled = self.recurrent_iteration_schedule.tracks_gradients(
+                transition_index
             )
             transition_result = self._run_recurrent_transition(
                 tiny_recursive_state,
@@ -202,6 +193,8 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
         answer: Tensor,
         latent: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        if not self._starts_gradient_suffix(transition_index):
+        if not self.recurrent_iteration_schedule.starts_gradient_suffix(
+            transition_index
+        ):
             return answer, latent
         return answer.detach(), latent.detach()

@@ -7,13 +7,16 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import torch
 from torch import nn
 
 from emperor.halting import HaltingHiddenStateModeOptions, SoftHaltingConfig
 from emperor.layers import (
+    ActivationOptions,
     HierarchicalReasoningModelRecurrentConfig,
     LayerConfig,
     LayerNormPositionOptions,
+    LayerState,
     RecurrentLayerConfig,
     TinyRecursiveModelRecurrentConfig,
     WeightedBlendResidualConfig,
@@ -136,6 +139,9 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
                 bias_flag=False,
             ),
             max_steps=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             halting_config=SoftHaltingConfig(
                 input_dim=4,
                 threshold=0.99,
@@ -167,6 +173,51 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
         }
         self.assertEqual(halting_configuration["min_steps"], 2)
 
+    def test_standard_recurrent_iteration_schedule_is_exposed_as_graph_capability(
+        self,
+    ) -> None:
+        recurrent = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            block_config=LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=4,
+                    output_dim=4,
+                    bias_flag=False,
+                ),
+            ),
+            max_steps=10,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=2,
+            forward_calls_before_iteration_increment=3,
+        ).build()
+        for _ in range(3):
+            recurrent(LayerState(hidden=torch.ones(1, 4)))
+
+        graph = inspect_model_graph(recurrent)
+        details = graph.nodes[0].details["recurrent"]
+
+        self.assertEqual(details["max_steps"], 10)
+        self.assertEqual(details["active_steps"], 4)
+        self.assertEqual(details["gradient_transition_count"], 2)
+        self.assertEqual(
+            details["iteration_schedule"],
+            {
+                "unit": "transition",
+                "initial_iterations": 2,
+                "maximum_iterations": 10,
+                "active_iterations": 4,
+                "iteration_increment": 2,
+                "forward_calls_before_iteration_increment": 3,
+                "forward_call_progress": 3,
+                "complete": False,
+            },
+        )
+
     def test_tiny_recursive_model_is_discovered_through_generic_graph_inspection(
         self,
     ) -> None:
@@ -180,6 +231,9 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
             ),
             latent_updates_per_answer_update=2,
             answer_update_count=3,
+            initial_iterations=3,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             recurrent_layer_norm_position=LayerNormPositionOptions.BEFORE,
         ).build()
@@ -229,6 +283,9 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
             low_block_config=transition_config,
             high_cycles=2,
             low_cycles=3,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
         ).build()

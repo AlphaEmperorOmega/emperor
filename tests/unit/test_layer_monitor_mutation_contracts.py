@@ -87,6 +87,9 @@ def _recurrent(
             input_dim=dim,
             output_dim=dim,
             max_steps=max_steps,
+            initial_iterations=max_steps,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
             block_config=_layer_config(dim),
             gate_config=gate_config,
@@ -482,7 +485,7 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
         low_delta_callback._RecurrentLayerMonitorCallback__emit_observation(
             low_delta_module,
             "low",
-            torch.nn.Identity(),
+            recurrent,
             _RecurrentObservation(
                 step_deltas=[torch.tensor([0.5]), torch.tensor([1.0])]
             ),
@@ -495,7 +498,7 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
         self.assert_logged_close(
             low_delta_module,
             "low/recurrent/max_step_fraction",
-            2.0,
+            0.4,
         )
 
         stale_history = MonitorTensorHistory(2)
@@ -581,7 +584,7 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
             pl_module=tensor_capture,
             module_name="device",
             metric_prefix="device/recurrent",
-            recurrent_layer=torch.nn.Identity(),
+            recurrent_layer=recurrent,
             metrics=metrics,
             device=torch.device("meta"),
             experiment=None,

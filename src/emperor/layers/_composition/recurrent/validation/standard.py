@@ -11,9 +11,12 @@ from emperor.layers._composition.recurrent.validation.common import (
     _RECURRENT_CONTROLLER_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
     _validate_recurrent_controller_config,
-    _validate_transition_gradient_window,
+    _validate_recurrent_iteration_controls,
 )
 from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
+from emperor.layers._validation.common import (
+    _validate_halting_required_update_count,
+)
 
 if TYPE_CHECKING:
     from emperor.layers._composition.recurrent.variants.standard import RecurrentLayer
@@ -64,9 +67,10 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             output_dim=cfg.output_dim,
             max_steps=cfg.max_steps,
         )
-        _validate_transition_gradient_window(
+        _validate_recurrent_iteration_controls(
             cfg,
-            total_transition_count=cfg.max_steps,
+            maximum_iterations=cfg.max_steps,
+            transitions_per_iteration=1,
         )
         cls.__validate_reinject_original_hidden_flag(cfg.reinject_original_hidden_flag)
         cls.__validate_stable_dimensions(
@@ -78,6 +82,12 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             cfg,
             supported_residual_requirements=_SUPPORTED_RESIDUAL_REQUIREMENTS,
         )
+        if cfg.gradient_transition_count is not None and cfg.halting_config is not None:
+            _validate_halting_required_update_count(
+                cfg.halting_config,
+                required_update_count=cfg.gradient_transition_count,
+                owner_name=type(cfg).__name__,
+            )
         expected_owner = cfg.registry_owner()
         if not isinstance(model, expected_owner):
             raise TypeError(

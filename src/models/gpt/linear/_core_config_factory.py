@@ -601,6 +601,26 @@ class CoreConfigFactory:
         return RecurrentControllerOptions(
             recurrent_flag=getattr(config, f"{prefix}_FLAG"),
             recurrent_max_steps=getattr(config, f"{prefix}_MAX_STEPS"),
+            recurrent_initial_iterations=getattr(
+                config,
+                f"{prefix}_INITIAL_ITERATIONS",
+                2,
+            ),
+            recurrent_gradient_transition_count=getattr(
+                config,
+                f"{prefix}_GRADIENT_TRANSITION_COUNT",
+                None,
+            ),
+            recurrent_iteration_increment=getattr(
+                config,
+                f"{prefix}_ITERATION_INCREMENT",
+                1,
+            ),
+            recurrent_forward_calls_before_iteration_increment=getattr(
+                config,
+                f"{prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
+                1,
+            ),
             recurrent_layer_norm_position=getattr(
                 config,
                 f"{prefix}_LAYER_NORM_POSITION",

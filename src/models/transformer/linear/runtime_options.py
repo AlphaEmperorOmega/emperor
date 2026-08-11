@@ -42,6 +42,10 @@ class TransformerStackOptions:
     recurrent_halting_option: type[HaltingConfig] = StickBreakingConfig
     recurrent_halting_threshold: float | None = None
     recurrent_max_steps: int = 2
+    recurrent_initial_iterations: int = 2
+    recurrent_gradient_transition_count: int | None = None
+    recurrent_iteration_increment: int = 1
+    recurrent_forward_calls_before_iteration_increment: int = 1
     recurrent_composition_option: type[RecurrentCompositionConfig] = (
         RecurrentLayerConfig
     )

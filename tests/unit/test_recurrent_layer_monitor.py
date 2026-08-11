@@ -127,6 +127,9 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             input_dim=4,
             output_dim=4,
             max_steps=3,
+            initial_iterations=3,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
             block_config=IncrementBlockConfig(
                 input_dim=4,
@@ -161,6 +164,9 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             ),
             latent_updates_per_answer_update=2,
             answer_update_count=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
             gate_config=(
                 GateConfig(
@@ -185,6 +191,9 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             high_block_config=transition_config,
             low_block_config=transition_config,
             high_cycles=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             low_cycles=2,
             initialization_standard_deviation=0.0,
         ).build()
@@ -304,6 +313,9 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
                 input_dim=dim,
                 output_dim=dim,
                 max_steps=5,
+                initial_iterations=5,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=1,
                 recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
                 block_config=IncrementBlockConfig(
                     input_dim=dim,

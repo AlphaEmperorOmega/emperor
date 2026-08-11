@@ -716,6 +716,18 @@ def _configure_controls(
             runtime,
             _option_name(prefix, "recurrent_max_steps"),
         ),
+        gradient_transition_count=(
+            runtime.recurrent_gradient_transition_count if not prefix else None
+        ),
+        initial_iterations=(
+            runtime.recurrent_initial_iterations
+            if not prefix
+            else getattr(runtime, _option_name(prefix, "recurrent_max_steps"))
+        ),
+        iteration_increment=runtime.recurrent_iteration_increment,
+        forward_calls_before_iteration_increment=(
+            runtime.recurrent_forward_calls_before_iteration_increment
+        ),
         recurrent_layer_norm_position=getattr(
             runtime,
             _option_name(prefix, "recurrent_layer_norm_position"),

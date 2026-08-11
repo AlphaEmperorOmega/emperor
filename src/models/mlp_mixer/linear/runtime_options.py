@@ -103,6 +103,13 @@ class RuntimeOptions:
     memory_test_time_training_num_inner_steps: int | None
     recurrent_flag: bool
     recurrent_max_steps: int
+    recurrent_initial_iterations: int = field(default=2, kw_only=True)
+    recurrent_gradient_transition_count: int | None = field(default=None, kw_only=True)
+    recurrent_iteration_increment: int = field(default=1, kw_only=True)
+    recurrent_forward_calls_before_iteration_increment: int = field(
+        default=1,
+        kw_only=True,
+    )
     recurrent_layer_norm_position: LayerNormPositionOptions
     recurrent_residual_connection_option: type[ResidualConfig] | None
     recurrent_residual_model_flag: bool = field(default=False, kw_only=True)

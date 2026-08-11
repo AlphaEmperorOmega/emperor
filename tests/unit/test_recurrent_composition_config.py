@@ -3,6 +3,7 @@ import unittest
 from dataclasses import fields
 from pathlib import Path
 
+from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
@@ -14,8 +15,12 @@ from emperor.layers import (
 from emperor.layers._composition.recurrent.base import (
     RecurrentCompositionAbstract,
 )
+from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
+    RecurrentIterationSchedule,
+)
 from emperor.layers._composition.recurrent.validation import (
     HierarchicalReasoningModelRecurrentValidator,
+    RecurrentIterationScheduleValidator,
     RecurrentLayerValidator,
     TinyRecursiveModelRecurrentValidator,
 )
@@ -86,6 +91,52 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             "emperor.layers._composition.recurrent.variants.standard",
         )
 
+    def test_all_recurrent_configs_own_the_shared_iteration_schedule(self) -> None:
+        for config_type in (
+            RecurrentLayerConfig,
+            TinyRecursiveModelRecurrentConfig,
+            HierarchicalReasoningModelRecurrentConfig,
+        ):
+            with self.subTest(config_type=config_type.__name__):
+                config = config_type(
+                    initial_iterations=2,
+                    gradient_transition_count=3,
+                    iteration_increment=4,
+                    forward_calls_before_iteration_increment=5,
+                )
+
+                self.assertEqual(config.initial_iterations, 2)
+                self.assertEqual(config.gradient_transition_count, 3)
+                self.assertEqual(config.iteration_increment, 4)
+                self.assertEqual(config.forward_calls_before_iteration_increment, 5)
+
+        self.assertIs(RecurrentLayerConfig().registry_owner(), RecurrentLayer)
+
+    def test_recurrent_config_module_contains_only_owner_backed_configs(self) -> None:
+        config_module = importlib.import_module(
+            "emperor.layers._composition.recurrent.config"
+        )
+        config_types = {
+            value
+            for value in vars(config_module).values()
+            if isinstance(value, type)
+            and issubclass(value, ConfigBase)
+            and value.__module__ == config_module.__name__
+        }
+
+        self.assertEqual(
+            config_types,
+            {
+                RecurrentCompositionConfig,
+                RecurrentLayerConfig,
+                TinyRecursiveModelRecurrentConfig,
+                HierarchicalReasoningModelRecurrentConfig,
+            },
+        )
+        for config_type in config_types - {RecurrentCompositionConfig}:
+            with self.subTest(config_type=config_type.__name__):
+                self.assertIsInstance(config_type().registry_owner(), type)
+
     def test_recurrent_validators_live_in_dedicated_validation_modules(self) -> None:
         cases = (
             (
@@ -100,6 +151,10 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 HierarchicalReasoningModelRecurrentValidator,
                 "emperor.layers._composition.recurrent.validation."
                 "hierarchical_reasoning_model",
+            ),
+            (
+                RecurrentIterationScheduleValidator,
+                "emperor.layers._composition.recurrent.validation.iteration_schedule",
             ),
         )
 
@@ -172,14 +227,11 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 "_build_transition_model",
                 "_expand_recurrent_initial",
                 "_finalize_recurrent_halting",
-                "_initialize_transition_gradient_window",
                 "_new_recurrent_initial_buffer",
                 "_observe_recurrent_step",
                 "_recurrent_row_layout_for_transitions",
                 "_run_recurrent_transition",
                 "_set_recurrent_diagnostic_observer",
-                "_starts_gradient_suffix",
-                "_transition_gradient_context",
             },
             RecurrentCompositionConfig: {
                 "_map_transition_configs",
@@ -194,6 +246,8 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             RecurrentLayerValidator: {"_validate_integer_field"},
             TinyRecursiveModelRecurrentValidator: set(),
             HierarchicalReasoningModelRecurrentValidator: set(),
+            RecurrentIterationScheduleValidator: set(),
+            RecurrentIterationSchedule: set(),
             RecurrentLayer: set(),
             TinyRecursiveModelRecurrent: set(),
             HierarchicalReasoningModelRecurrent: set(),

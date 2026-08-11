@@ -45,17 +45,10 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             self.cfg.reinject_original_hidden_flag is True
         )
         self.block_config: ConfigBase | None = self.cfg.block_config
-        self._initialize_transition_gradient_window(
-            default_no_gradient_transition_count=0,
-        )
         self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
             self.max_steps
         )
         self.block_model = self._build_transition_model(self.block_config)
-
-    @property
-    def recurrent_diagnostic_step_limit(self) -> int:
-        return self.max_steps
 
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
@@ -68,6 +61,7 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         )
         state.hidden = finalized_hidden
         state.loss = finalized_loss
+        self.recurrent_iteration_schedule.record_successful_forward()
         return state
 
     def __run_recurrent_steps(
@@ -75,11 +69,12 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         layer_state: LayerState,
     ) -> _RecurrentState:
         recurrent_state = self.__initialize_recurrent_state(layer_state)
-        for transition_index in range(self.max_steps):
+        schedule = self.recurrent_iteration_schedule
+        for transition_index in range(schedule.active_iterations):
             recurrent_state = self.__detach_evolving_state_at_gradient_boundary(
                 recurrent_state, transition_index
             )
-            with self._transition_gradient_context(transition_index):
+            with schedule.gradient_context(transition_index):
                 recurrent_state = self.__run_standard_transition(
                     recurrent_state, transition_index
                 )
@@ -120,7 +115,9 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         recurrent_state: _RecurrentState,
         transition_index: int,
     ) -> _RecurrentState:
-        if not self._starts_gradient_suffix(transition_index):
+        if not self.recurrent_iteration_schedule.starts_gradient_suffix(
+            transition_index
+        ):
             return recurrent_state
         detached_hidden = recurrent_state.hidden.detach()
         return replace(recurrent_state, hidden=detached_hidden)
@@ -134,7 +131,9 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         transition_input = self.__maybe_reinject_original_hidden(
             previous_hidden, recurrent_state.fixed_input
         )
-        halting_update_enabled = transition_index >= self.no_gradient_transition_count
+        halting_update_enabled = self.recurrent_iteration_schedule.tracks_gradients(
+            transition_index
+        )
         transition_result = self._run_recurrent_transition(
             recurrent_state,
             run_transition=self.block_model,

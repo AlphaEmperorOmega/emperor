@@ -162,6 +162,9 @@ def recurrent_layer() -> RecurrentLayer:
             input_dim=2,
             output_dim=2,
             max_steps=3,
+            initial_iterations=3,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
             block_config=TrainableIncrementConfig(
                 input_dim=2,

@@ -106,6 +106,9 @@ def make_adaptive_projection_model_config(
 def make_recurrent_projection_model_config() -> RecurrentLayerConfig:
     return RecurrentLayerConfig(
         max_steps=2,
+        initial_iterations=2,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=make_projection_model_config(),
         gate_config=None,

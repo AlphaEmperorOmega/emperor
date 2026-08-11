@@ -731,6 +731,26 @@ def _modern_recurrent_controller_options(
     options = provided or RecurrentControllerOptions(
         recurrent_flag=getattr(config_module, f"{config_prefix}_FLAG"),
         recurrent_max_steps=getattr(config_module, f"{config_prefix}_MAX_STEPS"),
+        recurrent_initial_iterations=getattr(
+            config_module,
+            f"{config_prefix}_INITIAL_ITERATIONS",
+            2,
+        ),
+        recurrent_gradient_transition_count=getattr(
+            config_module,
+            f"{config_prefix}_GRADIENT_TRANSITION_COUNT",
+            None,
+        ),
+        recurrent_iteration_increment=getattr(
+            config_module,
+            f"{config_prefix}_ITERATION_INCREMENT",
+            1,
+        ),
+        recurrent_forward_calls_before_iteration_increment=getattr(
+            config_module,
+            f"{config_prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
+            1,
+        ),
         recurrent_layer_norm_position=getattr(
             config_module,
             f"{config_prefix}_LAYER_NORM_POSITION",
@@ -781,6 +801,12 @@ def _modern_recurrent_controller_options(
         {
             f"{flat_lead}flag": "recurrent_flag",
             f"{flat_lead}max_steps": "recurrent_max_steps",
+            f"{flat_lead}initial_iterations": "recurrent_initial_iterations",
+            f"{flat_lead}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{flat_lead}iteration_increment": "recurrent_iteration_increment",
+            f"{flat_lead}forward_calls_before_iteration_increment": (
+                "recurrent_forward_calls_before_iteration_increment"
+            ),
             f"{flat_lead}layer_norm_position": "recurrent_layer_norm_position",
             f"{flat_lead}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{flat_lead}gate_option": "recurrent_gate_option",
@@ -968,6 +994,10 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
     keys = {
         f"{prefix}_flag",
         f"{prefix}_max_steps",
+        f"{prefix}_initial_iterations",
+        f"{prefix}_gradient_transition_count",
+        f"{prefix}_iteration_increment",
+        f"{prefix}_forward_calls_before_iteration_increment",
         f"{prefix}_layer_norm_position",
         f"{prefix}_stack_gate_flag",
         f"{prefix}_gate_option",

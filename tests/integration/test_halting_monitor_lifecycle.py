@@ -82,6 +82,9 @@ def recurrent_config(
         input_dim=dim,
         output_dim=dim,
         max_steps=max_steps,
+        initial_iterations=max_steps,
+        iteration_increment=1,
+        forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack_config(
             dim,

@@ -76,6 +76,10 @@ class MemoryOptions:
 class RecurrenceOptions:
     enabled: bool
     max_steps: int
+    initial_iterations: int = field(default=2, kw_only=True)
+    gradient_transition_count: int | None = field(default=None, kw_only=True)
+    iteration_increment: int = field(default=1, kw_only=True)
+    forward_calls_before_iteration_increment: int = field(default=1, kw_only=True)
     layer_norm_position: LayerNormPositionOptions
     gate: GateOptions
     halting: HaltingOptions
