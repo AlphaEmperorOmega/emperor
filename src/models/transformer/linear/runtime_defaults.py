@@ -169,56 +169,97 @@ def _recurrent_from_config(
 
 def attention_options_from_config(
     config_module: ModuleType,
+    prefix: str = "ATTN",
 ) -> TransformerAttentionOptions:
     return TransformerAttentionOptions(
-        num_heads=config_module.ATTN_NUM_HEADS,
-        add_key_value_bias_flag=config_module.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
-        zero_attention_flag=config_module.ATTN_ZERO_ATTENTION_FLAG,
-        stack_options=SubmoduleStackOptions(
-            hidden_dim=config_module.ATTN_STACK_HIDDEN_DIM,
-            num_layers=config_module.ATTN_NUM_LAYERS,
-            last_layer_bias_option=(config_module.ATTN_STACK_LAST_LAYER_BIAS_OPTION),
-            apply_output_pipeline_flag=(
-                config_module.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-            ),
-            activation=config_module.ATTN_STACK_ACTIVATION,
-            layer_norm_position=config_module.ATTN_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=(
-                config_module.ATTN_STACK_RESIDUAL_CONNECTION_OPTION
-            ),
-            residual_model_flag=config_module.ATTN_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=(config_module.ATTN_STACK_DROPOUT_PROBABILITY),
-            bias_flag=config_module.ATTN_BIAS_FLAG,
+        num_heads=getattr(config_module, f"{prefix}_NUM_HEADS"),
+        add_key_value_bias_flag=getattr(
+            config_module,
+            f"{prefix}_ADD_KEY_VALUE_BIAS_FLAG",
         ),
-        layer_controller_options=_layer_controller_from_config(config_module, "ATTN"),
-        dynamic_memory_options=_memory_from_config(config_module, "ATTN"),
-        recurrent_controller_options=_recurrent_from_config(config_module, "ATTN"),
+        zero_attention_flag=getattr(config_module, f"{prefix}_ZERO_ATTENTION_FLAG"),
+        stack_options=SubmoduleStackOptions(
+            hidden_dim=getattr(config_module, f"{prefix}_STACK_HIDDEN_DIM"),
+            num_layers=getattr(config_module, f"{prefix}_NUM_LAYERS"),
+            last_layer_bias_option=getattr(
+                config_module,
+                f"{prefix}_STACK_LAST_LAYER_BIAS_OPTION",
+            ),
+            apply_output_pipeline_flag=(
+                getattr(
+                    config_module,
+                    f"{prefix}_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                )
+            ),
+            activation=getattr(config_module, f"{prefix}_STACK_ACTIVATION"),
+            layer_norm_position=getattr(
+                config_module,
+                f"{prefix}_STACK_LAYER_NORM_POSITION",
+            ),
+            residual_connection_option=(
+                getattr(
+                    config_module,
+                    f"{prefix}_STACK_RESIDUAL_CONNECTION_OPTION",
+                )
+            ),
+            residual_model_flag=getattr(
+                config_module,
+                f"{prefix}_STACK_RESIDUAL_MODEL_FLAG",
+            ),
+            dropout_probability=getattr(
+                config_module,
+                f"{prefix}_STACK_DROPOUT_PROBABILITY",
+            ),
+            bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
+        ),
+        layer_controller_options=_layer_controller_from_config(config_module, prefix),
+        dynamic_memory_options=_memory_from_config(config_module, prefix),
+        recurrent_controller_options=_recurrent_from_config(config_module, prefix),
     )
 
 
 def feed_forward_options_from_config(
     config_module: ModuleType,
+    prefix: str = "FF",
 ) -> TransformerFeedForwardOptions:
     return TransformerFeedForwardOptions(
         stack_options=SubmoduleStackOptions(
-            hidden_dim=config_module.FF_STACK_HIDDEN_DIM,
-            num_layers=config_module.FF_NUM_LAYERS,
-            last_layer_bias_option=(config_module.FF_STACK_LAST_LAYER_BIAS_OPTION),
+            hidden_dim=getattr(config_module, f"{prefix}_STACK_HIDDEN_DIM"),
+            num_layers=getattr(config_module, f"{prefix}_NUM_LAYERS"),
+            last_layer_bias_option=getattr(
+                config_module,
+                f"{prefix}_STACK_LAST_LAYER_BIAS_OPTION",
+            ),
             apply_output_pipeline_flag=(
-                config_module.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+                getattr(
+                    config_module,
+                    f"{prefix}_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                )
             ),
-            activation=config_module.FF_STACK_ACTIVATION,
-            layer_norm_position=config_module.FF_STACK_LAYER_NORM_POSITION,
+            activation=getattr(config_module, f"{prefix}_STACK_ACTIVATION"),
+            layer_norm_position=getattr(
+                config_module,
+                f"{prefix}_STACK_LAYER_NORM_POSITION",
+            ),
             residual_connection_option=(
-                config_module.FF_STACK_RESIDUAL_CONNECTION_OPTION
+                getattr(
+                    config_module,
+                    f"{prefix}_STACK_RESIDUAL_CONNECTION_OPTION",
+                )
             ),
-            residual_model_flag=config_module.FF_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config_module.FF_STACK_DROPOUT_PROBABILITY,
-            bias_flag=config_module.FF_BIAS_FLAG,
+            residual_model_flag=getattr(
+                config_module,
+                f"{prefix}_STACK_RESIDUAL_MODEL_FLAG",
+            ),
+            dropout_probability=getattr(
+                config_module,
+                f"{prefix}_STACK_DROPOUT_PROBABILITY",
+            ),
+            bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
         ),
-        layer_controller_options=_layer_controller_from_config(config_module, "FF"),
-        dynamic_memory_options=_memory_from_config(config_module, "FF"),
-        recurrent_controller_options=_recurrent_from_config(config_module, "FF"),
+        layer_controller_options=_layer_controller_from_config(config_module, prefix),
+        dynamic_memory_options=_memory_from_config(config_module, prefix),
+        recurrent_controller_options=_recurrent_from_config(config_module, prefix),
     )
 
 
@@ -241,6 +282,8 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
     mapping = {
         "num_layers": ("stack", "num_layers"),
         "bias_flag": ("stack", "bias_flag"),
+        "stack_num_layers": ("stack", "num_layers"),
+        "stack_bias_flag": ("stack", "bias_flag"),
     }
     if attention:
         mapping.update(
@@ -520,6 +563,16 @@ def resolve_transformer_path_options(
     )
     encoder_feed_forward = _apply_path_updates(
         encoder_feed_forward,
+        _pop_updates(values, "encoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        attention=False,
+    )
+    decoder_feed_forward = _apply_path_updates(
+        decoder_feed_forward,
+        _pop_updates(values, "decoder_ff_", _FEED_FORWARD_FIELD_MAP),
+        attention=False,
+    )
+    encoder_feed_forward = _apply_path_updates(
+        encoder_feed_forward,
         _pop_scoped_feed_forward_updates(values, "encoder_feed_forward_"),
         attention=False,
     )
@@ -534,17 +587,6 @@ def resolve_transformer_path_options(
         decoder_cross_attention_options=decoder_cross_attention,
         encoder_feed_forward_options=encoder_feed_forward,
         decoder_feed_forward_options=decoder_feed_forward,
-    )
-
-
-def _scoped_feed_forward(options, *, hidden_dim: int, num_layers: int):
-    return replace(
-        options,
-        stack_options=replace(
-            options.stack_options,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-        ),
     )
 
 
@@ -584,8 +626,6 @@ def runtime_from_config() -> RuntimeOptions:
         ),
         recurrent_residual_model_flag=config.RECURRENT_RESIDUAL_MODEL_FLAG,
     )
-    attention = attention_options_from_config(config)
-    feed_forward = feed_forward_options_from_config(config)
     return RuntimeOptions(
         batch_size=config.BATCH_SIZE,
         learning_rate=config.LEARNING_RATE,
@@ -626,24 +666,22 @@ def runtime_from_config() -> RuntimeOptions:
             num_layers=config.DECODER_NUM_LAYERS,
             layer_norm_position=config.DECODER_LAYER_NORM_POSITION,
         ),
-        encoder_attention_options=replace(
-            attention, num_heads=config.ENCODER_ATTN_NUM_HEADS
+        encoder_attention_options=attention_options_from_config(config, "ENCODER_ATTN"),
+        decoder_self_attention_options=attention_options_from_config(
+            config,
+            "DECODER_SELF_ATTN",
         ),
-        decoder_self_attention_options=replace(
-            attention, num_heads=config.DECODER_SELF_ATTN_NUM_HEADS
+        decoder_cross_attention_options=attention_options_from_config(
+            config,
+            "DECODER_CROSS_ATTN",
         ),
-        decoder_cross_attention_options=replace(
-            attention, num_heads=config.DECODER_CROSS_ATTN_NUM_HEADS
+        encoder_feed_forward_options=feed_forward_options_from_config(
+            config,
+            "ENCODER_FF",
         ),
-        encoder_feed_forward_options=_scoped_feed_forward(
-            feed_forward,
-            hidden_dim=config.ENCODER_FEED_FORWARD_HIDDEN_DIM,
-            num_layers=config.ENCODER_FEED_FORWARD_NUM_LAYERS,
-        ),
-        decoder_feed_forward_options=_scoped_feed_forward(
-            feed_forward,
-            hidden_dim=config.DECODER_FEED_FORWARD_HIDDEN_DIM,
-            num_layers=config.DECODER_FEED_FORWARD_NUM_LAYERS,
+        decoder_feed_forward_options=feed_forward_options_from_config(
+            config,
+            "DECODER_FF",
         ),
     )
 
