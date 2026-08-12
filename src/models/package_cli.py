@@ -7,6 +7,7 @@ from model_runtime.runs import (
     CheckpointContinuation,
     FilesystemRunArtifacts,
     InvalidCheckpointContinuation,
+    PlanningBudget,
     RunRequest,
     SearchAxisSelection,
     SearchSpec,
@@ -127,6 +128,7 @@ def run_model_package_cli(
             search=_search_spec(selection),
         ),
         random_source=random if selection.search_mode is not None else None,
+        budget=PlanningBudget(),
     )
     execute_runs(
         package,

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from model_runtime.runs.progress import JsonlRunProgress, RunProgress
     from model_runtime.runs.records import (
         PlanningBudget,
+        PresetSearch,
         RandomSource,
         RunParameter,
         RunPlan,
@@ -48,6 +49,7 @@ __all__ = [
     "NonFiniteJsonValueError",
     "PlanTooLarge",
     "PlanningBudget",
+    "PresetSearch",
     "RandomSource",
     "RunParameter",
     "RunPlan",
@@ -88,6 +90,7 @@ _JSON_VALUE_EXPORTS = {
 }
 _RECORD_EXPORTS = {
     "PlanningBudget",
+    "PresetSearch",
     "RandomSource",
     "RunParameter",
     "RunPlan",

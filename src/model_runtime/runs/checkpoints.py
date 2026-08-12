@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 import torch
 
 from model_runtime.runs.errors import InvalidCheckpointContinuation
+
+
+class _RunPlanView(Protocol):
+    @property
+    def runs(self) -> Sequence[object]: ...
+
+
+class _TrainingRunView(Protocol):
+    @property
+    def num_epochs(self) -> int: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,14 +30,61 @@ class CheckpointContinuation:
 
 
 @dataclass(frozen=True, slots=True)
-class _LoadedCheckpointContinuation:
+class _LoadedCheckpoint:
     request: CheckpointContinuation
     state_dict: Mapping[str, Any]
     epoch: int
     global_step: int
 
 
-def validate_checkpoint_file(
+@dataclass(frozen=True, slots=True)
+class CheckpointExecution:
+    checkpoint_path: Path | None
+    provenance: Mapping[str, object] | None
+    model_validator: Callable[[object], None] | None
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointContinuationLifecycle:
+    _loaded: _LoadedCheckpoint | None
+
+    @classmethod
+    def admit(
+        cls,
+        continuation: CheckpointContinuation | None,
+        plan: _RunPlanView,
+    ) -> CheckpointContinuationLifecycle:
+        if continuation is None:
+            return cls(None)
+        if len(plan.runs) != 1:
+            raise InvalidCheckpointContinuation(
+                "Checkpoint continuation requires a Run Plan containing exactly "
+                "one Run."
+            )
+        return cls(_load_checkpoint(continuation))
+
+    def bind_training_runs(
+        self,
+        training_runs: Sequence[_TrainingRunView],
+    ) -> CheckpointExecution:
+        loaded = self._loaded
+        if loaded is None:
+            return CheckpointExecution(None, None, None)
+        _validate_target_epochs(loaded, training_runs[0].num_epochs)
+        return CheckpointExecution(
+            checkpoint_path=loaded.request.checkpoint_path,
+            provenance=_resumed_from_payload(loaded),
+            model_validator=self._validate_model,
+        )
+
+    def _validate_model(self, model: object) -> None:
+        loaded = self._loaded
+        if loaded is None:
+            return
+        _validate_model_state(loaded, model)
+
+
+def _validate_checkpoint_file(
     continuation: CheckpointContinuation,
 ) -> CheckpointContinuation:
     path = continuation.checkpoint_path
@@ -45,13 +102,26 @@ def validate_checkpoint_file(
     return continuation
 
 
-def load_checkpoint_continuation(
+def _checkpoint_counter(
+    checkpoint_payload: Mapping[object, object],
+    path: Path,
+    field: str,
+) -> int:
+    value = checkpoint_payload.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise InvalidCheckpointContinuation(
+            f"Checkpoint '{path}' must contain a nonnegative {field}."
+        )
+    return value
+
+
+def _load_checkpoint(
     continuation: CheckpointContinuation,
-) -> _LoadedCheckpointContinuation:
-    validate_checkpoint_file(continuation)
+) -> _LoadedCheckpoint:
+    _validate_checkpoint_file(continuation)
     path = continuation.checkpoint_path
     try:
-        payload = torch.load(
+        payload: object = cast(Any, torch).load(
             path,
             map_location="cpu",
             weights_only=True,
@@ -64,45 +134,40 @@ def load_checkpoint_continuation(
         raise InvalidCheckpointContinuation(
             f"Checkpoint '{path}' must contain a mapping payload."
         )
-    version = payload.get("pytorch-lightning_version")
+    checkpoint_payload = cast(Mapping[object, object], payload)
+    version = checkpoint_payload.get("pytorch-lightning_version")
     if not isinstance(version, str) or not version.strip():
         raise InvalidCheckpointContinuation(
             f"Checkpoint '{path}' must contain a nonempty Lightning version."
         )
-    state_dict = payload.get("state_dict")
+    state_dict = checkpoint_payload.get("state_dict")
     if not isinstance(state_dict, Mapping) or not state_dict:
         raise InvalidCheckpointContinuation(
             f"Checkpoint '{path}' must contain a nonempty state_dict."
         )
-    epoch = payload.get("epoch")
-    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 0:
+    state_mapping = cast(Mapping[object, Any], state_dict)
+    if any(not isinstance(key, str) for key in state_mapping):
         raise InvalidCheckpointContinuation(
-            f"Checkpoint '{path}' must contain a nonnegative epoch."
+            f"Checkpoint '{path}' state_dict keys must be strings."
         )
-    global_step = payload.get("global_step")
-    if (
-        isinstance(global_step, bool)
-        or not isinstance(global_step, int)
-        or global_step < 0
-    ):
-        raise InvalidCheckpointContinuation(
-            f"Checkpoint '{path}' must contain a nonnegative global_step."
-        )
-    optimizer_states = payload.get("optimizer_states")
+    typed_state_dict = {cast(str, key): value for key, value in state_mapping.items()}
+    epoch = _checkpoint_counter(checkpoint_payload, path, "epoch")
+    global_step = _checkpoint_counter(checkpoint_payload, path, "global_step")
+    optimizer_states = checkpoint_payload.get("optimizer_states")
     if not isinstance(optimizer_states, (list, tuple)) or not optimizer_states:
         raise InvalidCheckpointContinuation(
             f"Checkpoint '{path}' must contain nonempty optimizer_states."
         )
-    return _LoadedCheckpointContinuation(
+    return _LoadedCheckpoint(
         request=continuation,
-        state_dict=state_dict,
+        state_dict=typed_state_dict,
         epoch=epoch,
         global_step=global_step,
     )
 
 
-def validate_target_epochs(
-    continuation: _LoadedCheckpointContinuation,
+def _validate_target_epochs(
+    continuation: _LoadedCheckpoint,
     target_epochs: int,
 ) -> None:
     completed_epochs = continuation.epoch + 1
@@ -114,12 +179,15 @@ def validate_target_epochs(
         )
 
 
-def validate_model_state(
-    continuation: _LoadedCheckpointContinuation,
+def _validate_model_state(
+    continuation: _LoadedCheckpoint,
     model: Any,
 ) -> None:
     if isinstance(model, Mapping):
-        _validate_model_state_mapping(continuation, model)
+        _validate_model_state_mapping(
+            continuation,
+            cast(Mapping[str, Any], model),
+        )
         return
 
     load_state_dict = getattr(model, "load_state_dict", None)
@@ -129,7 +197,15 @@ def validate_model_state(
     try:
         load_state_dict(continuation.state_dict, strict=True)
     except RuntimeError as exc:
-        _validate_model_state_mapping(continuation, state_dict())
+        current_state = state_dict()
+        if not isinstance(current_state, Mapping):
+            raise TypeError(
+                "Checkpoint model state_dict must return a mapping."
+            ) from exc
+        _validate_model_state_mapping(
+            continuation,
+            cast(Mapping[str, Any], current_state),
+        )
         raise InvalidCheckpointContinuation(
             "Checkpoint model state could not be loaded strictly into the "
             f"selected Model Package: {exc}"
@@ -137,7 +213,7 @@ def validate_model_state(
 
 
 def _validate_model_state_mapping(
-    continuation: _LoadedCheckpointContinuation,
+    continuation: _LoadedCheckpoint,
     model_state_dict: Mapping[str, Any],
 ) -> None:
     checkpoint_keys = set(continuation.state_dict)
@@ -149,12 +225,17 @@ def _validate_model_state_mapping(
             "Checkpoint model state keys do not exactly match the selected Model "
             f"Package (missing={missing}, unexpected={unexpected})."
         )
-    mismatches = []
+    mismatches: list[str] = []
     for key, model_value in model_state_dict.items():
         checkpoint_value = continuation.state_dict[key]
         checkpoint_shape = getattr(checkpoint_value, "shape", None)
         model_shape = getattr(model_value, "shape", None)
-        if checkpoint_shape is None or tuple(checkpoint_shape) != tuple(model_shape):
+        if (
+            checkpoint_shape is None
+            or model_shape is None
+            or tuple(cast(Sequence[object], checkpoint_shape))
+            != tuple(cast(Sequence[object], model_shape))
+        ):
             mismatches.append(
                 f"{key}: checkpoint={checkpoint_shape}, model={model_shape}"
             )
@@ -165,8 +246,8 @@ def _validate_model_state_mapping(
         )
 
 
-def resumed_from_payload(
-    continuation: _LoadedCheckpointContinuation,
+def _resumed_from_payload(
+    continuation: _LoadedCheckpoint,
 ) -> dict[str, str | int]:
     return {
         "checkpoint": continuation.request.checkpoint_path.name,

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from emperor.experiments import ExperimentTask, experiment_task_name
 from model_runtime.cli._wire_shared import (
@@ -46,10 +47,12 @@ def identity_from_wire(payload: object) -> ModelIdentity:
         path="$.identity",
         required=("model_type", "model"),
     )
-    return ModelIdentity(
-        wire_string(raw["model_type"], "$.identity.model_type"),
-        wire_string(raw["model"], "$.identity.model"),
-    )
+    model_type = wire_string(raw["model_type"], "$.identity.model_type")
+    model = wire_string(raw["model"], "$.identity.model")
+    try:
+        return ModelIdentity(model_type, model)
+    except ValueError as exc:
+        raise WireCodecError(str(exc)) from exc
 
 
 def _runtime_default_to_wire(value: object, path: str) -> object:
@@ -63,11 +66,10 @@ def _runtime_default_to_wire(value: object, path: str) -> object:
 def package_metadata_to_wire(package: ModelPackage) -> dict[str, Any]:
     runtime_defaults = {
         key: _runtime_default_to_wire(value, f"$.runtime_defaults.{key}")
-        for key, value in vars(package.runtime_defaults).items()
-        if key.isupper()
-        and (value is None or isinstance(value, (str, int, float, bool, Enum, type)))
+        for key, value in package.runtime_defaults_spec.default_items()
     }
-    payload = {
+    preset_values = cast(Iterable[Any], package.preset_type)
+    payload: dict[str, Any] = {
         "identity": identity_to_wire(package.identity),
         "catalog_key": package.catalog_key,
         "presets": [
@@ -77,7 +79,7 @@ def package_metadata_to_wire(package: ModelPackage) -> dict[str, Any]:
                 "label": preset.name,
                 "description": package.preset_description(preset),
             }
-            for preset in package.preset_type
+            for preset in preset_values
         ],
         "default_experiment_task": package.task_name(package.default_experiment_task),
         "dataset_groups": [
@@ -104,57 +106,108 @@ def package_metadata_to_wire(package: ModelPackage) -> dict[str, Any]:
     return package_metadata_from_wire(payload)
 
 
-def package_metadata_from_wire(payload: object) -> dict[str, Any]:
-    raw = wire_fields(
-        payload,
-        path="$",
-        required=(
-            "identity",
-            "catalog_key",
-            "presets",
-            "default_experiment_task",
-            "dataset_groups",
-            "monitors",
-            "runtime_defaults",
-        ),
-    )
-    identity = identity_from_wire(raw["identity"])
-    catalog_key = wire_string(raw["catalog_key"], "$.catalog_key")
-    if catalog_key != identity.catalog_key:
-        raise WireCodecError("$.catalog_key must match $.identity.")
+class _PackageMetadataDecoder:
+    __slots__ = ("_raw",)
 
-    presets: list[dict[str, str]] = []
-    for index, item in enumerate(wire_list(raw["presets"], "$.presets")):
-        path = f"$.presets[{index}]"
-        preset = wire_fields(
-            item,
-            path=path,
-            required=("name", "key", "label", "description"),
-        )
-        presets.append(
-            {
-                field: wire_string(preset[field], f"{path}.{field}")
-                for field in ("name", "key", "label", "description")
-            }
+    _raw: Mapping[str, Any]
+
+    def __init__(self, payload: object) -> None:
+        self._raw = wire_fields(
+            payload,
+            path="$",
+            required=(
+                "identity",
+                "catalog_key",
+                "presets",
+                "default_experiment_task",
+                "dataset_groups",
+                "monitors",
+                "runtime_defaults",
+            ),
         )
 
-    dataset_groups: list[dict[str, Any]] = []
-    for group_index, item in enumerate(
-        wire_list(raw["dataset_groups"], "$.dataset_groups")
-    ):
-        path = f"$.dataset_groups[{group_index}]"
-        group = wire_fields(
-            item,
-            path=path,
-            required=("experiment_task", "label", "datasets"),
+    def decode(self) -> dict[str, Any]:
+        identity = identity_from_wire(self._raw["identity"])
+        catalog_key = wire_string(self._raw["catalog_key"], "$.catalog_key")
+        if catalog_key != identity.catalog_key:
+            raise WireCodecError("$.catalog_key must match $.identity.")
+
+        presets = self._presets()
+        dataset_groups = self._dataset_groups()
+        monitors = self._monitors()
+        runtime_defaults = wire_mapping(
+            self._raw["runtime_defaults"],
+            "$.runtime_defaults",
         )
+        return {
+            "identity": identity_to_wire(identity),
+            "catalog_key": catalog_key,
+            "presets": presets,
+            "default_experiment_task": _experiment_task(
+                self._raw["default_experiment_task"],
+                "$.default_experiment_task",
+            ),
+            "dataset_groups": dataset_groups,
+            "monitors": monitors,
+            "runtime_defaults": {
+                key: wire_scalar(value, f"$.runtime_defaults.{key}")
+                for key, value in runtime_defaults.items()
+            },
+        }
+
+    def _presets(self) -> list[dict[str, str]]:
+        presets: list[dict[str, str]] = []
+        for index, item in enumerate(wire_list(self._raw["presets"], "$.presets")):
+            path = f"$.presets[{index}]"
+            preset = wire_fields(
+                item,
+                path=path,
+                required=("name", "key", "label", "description"),
+            )
+            presets.append(
+                {
+                    field: wire_string(preset[field], f"{path}.{field}")
+                    for field in ("name", "key", "label", "description")
+                }
+            )
+        return presets
+
+    def _dataset_groups(self) -> list[dict[str, Any]]:
+        dataset_groups: list[dict[str, Any]] = []
+        for group_index, item in enumerate(
+            wire_list(self._raw["dataset_groups"], "$.dataset_groups")
+        ):
+            path = f"$.dataset_groups[{group_index}]"
+            group = wire_fields(
+                item,
+                path=path,
+                required=("experiment_task", "label", "datasets"),
+            )
+            datasets = self._datasets(group, path)
+            dataset_groups.append(
+                {
+                    "experiment_task": _experiment_task(
+                        group["experiment_task"],
+                        f"{path}.experiment_task",
+                    ),
+                    "label": wire_string(group["label"], f"{path}.label"),
+                    "datasets": datasets,
+                }
+            )
+        return dataset_groups
+
+    def _datasets(
+        self,
+        group: Mapping[str, Any],
+        path: str,
+    ) -> list[dict[str, Any]]:
         datasets: list[dict[str, Any]] = []
-        for dataset_index, dataset_item in enumerate(
+        for dataset_index, item in enumerate(
             wire_list(group["datasets"], f"{path}.datasets")
         ):
             dataset_path = f"{path}.datasets[{dataset_index}]"
             dataset = wire_fields(
-                dataset_item,
+                item,
                 path=dataset_path,
                 required=("name", "label", "input_dim", "output_dim"),
             )
@@ -174,66 +227,43 @@ def package_metadata_from_wire(payload: object) -> dict[str, Any]:
                     ),
                 }
             )
-        dataset_groups.append(
-            {
-                "experiment_task": _experiment_task(
-                    group["experiment_task"],
-                    f"{path}.experiment_task",
-                ),
-                "label": wire_string(group["label"], f"{path}.label"),
-                "datasets": datasets,
-            }
-        )
+        return datasets
 
-    monitors: list[dict[str, Any]] = []
-    for index, item in enumerate(wire_list(raw["monitors"], "$.monitors")):
-        path = f"$.monitors[{index}]"
-        monitor = wire_fields(
-            item,
-            path=path,
-            required=(
-                "name",
-                "label",
-                "description",
-                "kinds",
-                "defaultEnabled",
-            ),
-        )
-        monitors.append(
-            {
-                "name": wire_string(monitor["name"], f"{path}.name"),
-                "label": wire_string(monitor["label"], f"{path}.label"),
-                "description": wire_string(
-                    monitor["description"],
-                    f"{path}.description",
+    def _monitors(self) -> list[dict[str, Any]]:
+        monitors: list[dict[str, Any]] = []
+        for index, item in enumerate(wire_list(self._raw["monitors"], "$.monitors")):
+            path = f"$.monitors[{index}]"
+            monitor = wire_fields(
+                item,
+                path=path,
+                required=(
+                    "name",
+                    "label",
+                    "description",
+                    "kinds",
+                    "defaultEnabled",
                 ),
-                "kinds": list(wire_string_list(monitor["kinds"], f"{path}.kinds")),
-                "defaultEnabled": wire_bool(
-                    monitor["defaultEnabled"],
-                    f"{path}.defaultEnabled",
-                ),
-            }
-        )
+            )
+            monitors.append(
+                {
+                    "name": wire_string(monitor["name"], f"{path}.name"),
+                    "label": wire_string(monitor["label"], f"{path}.label"),
+                    "description": wire_string(
+                        monitor["description"],
+                        f"{path}.description",
+                    ),
+                    "kinds": list(wire_string_list(monitor["kinds"], f"{path}.kinds")),
+                    "defaultEnabled": wire_bool(
+                        monitor["defaultEnabled"],
+                        f"{path}.defaultEnabled",
+                    ),
+                }
+            )
+        return monitors
 
-    runtime_defaults = wire_mapping(
-        raw["runtime_defaults"],
-        "$.runtime_defaults",
-    )
-    return {
-        "identity": identity_to_wire(identity),
-        "catalog_key": catalog_key,
-        "presets": presets,
-        "default_experiment_task": _experiment_task(
-            raw["default_experiment_task"],
-            "$.default_experiment_task",
-        ),
-        "dataset_groups": dataset_groups,
-        "monitors": monitors,
-        "runtime_defaults": {
-            key: wire_scalar(value, f"$.runtime_defaults.{key}")
-            for key, value in runtime_defaults.items()
-        },
-    }
+
+def package_metadata_from_wire(payload: object) -> dict[str, Any]:
+    return _PackageMetadataDecoder(payload).decode()
 
 
 __all__ = [

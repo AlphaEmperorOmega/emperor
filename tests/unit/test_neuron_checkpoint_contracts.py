@@ -1,6 +1,9 @@
+import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -10,8 +13,7 @@ from emperor.neuron import NeuronClusterConfig, NeuronConfig, NucleusConfig
 from emperor.nn import Module
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
-    _LoadedCheckpointContinuation,
-    validate_model_state,
+    CheckpointContinuationLifecycle,
 )
 from unit.test_neuron import NeuronTestCase
 
@@ -51,6 +53,42 @@ class CheckpointContextProjection(Module):
 
     def forward(self, input_tensor: Tensor) -> Tensor:
         return input_tensor @ self.weight
+
+
+@dataclass(frozen=True)
+class _SingleRunPlan:
+    runs: tuple[object, ...] = (object(),)
+
+
+@dataclass(frozen=True)
+class _TargetTrainingRun:
+    num_epochs: int = 2
+
+
+def _validate_checkpoint_model(
+    state_dict: Mapping[str, object],
+    model: object,
+) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        checkpoint = Path(tmp) / "model.ckpt"
+        torch.save(
+            {
+                "pytorch-lightning_version": "2.5.0",
+                "state_dict": dict(state_dict),
+                "epoch": 0,
+                "global_step": 1,
+                "optimizer_states": [{}],
+            },
+            checkpoint,
+        )
+        lifecycle = CheckpointContinuationLifecycle.admit(
+            CheckpointContinuation(checkpoint),
+            _SingleRunPlan(),
+        )
+        execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
+        model_validator = execution_options.model_validator
+        assert model_validator is not None
+        model_validator(model)
 
 
 class TestNeuronCheckpointTopology(NeuronTestCase):
@@ -167,14 +205,7 @@ class TestNeuronCheckpointTopology(NeuronTestCase):
         source = self.build_cluster(capacity=2, initial=1)
         source.cluster["neuron_2_1_1"] = source._initialize_neuron(2, 1, 1)
         target = self.build_cluster(capacity=2, initial=1)
-        continuation = _LoadedCheckpointContinuation(
-            request=CheckpointContinuation(Path("dynamic.ckpt")),
-            state_dict=source.state_dict(),
-            epoch=0,
-            global_step=1,
-        )
-
-        validate_model_state(continuation, target)
+        _validate_checkpoint_model(source.state_dict(), target)
 
         self.assertEqual(set(target.cluster), set(source.cluster))
         target_state = target.state_dict()
@@ -383,14 +414,7 @@ class TestNeuronCheckpointTopology(NeuronTestCase):
             if not key.endswith(".atrophy_counter")
         }
         target = self.build_cluster(capacity=1)
-        continuation = _LoadedCheckpointContinuation(
-            request=CheckpointContinuation(Path("legacy.ckpt")),
-            state_dict=legacy_state,
-            epoch=0,
-            global_step=1,
-        )
-
-        validate_model_state(continuation, target)
+        _validate_checkpoint_model(legacy_state, target)
 
         atrophy_keys = [
             key for key in target.state_dict() if key.endswith(".atrophy_counter")
@@ -491,6 +515,7 @@ class TestNeuronCheckpointTopology(NeuronTestCase):
         self.assertEqual(incompatible.unexpected_keys, [])
         self.assertEqual(int(target_neuron.warmup_remaining_steps), 3)
 
+    @pytest.mark.training
     def test_checkpoint_rebuild_preserves_optimizer_parameter_order(self) -> None:
         source = self.build_cluster(capacity=5, initial=1)
         source.cluster["neuron_4_1_1"] = source._initialize_neuron(4, 1, 1)
@@ -525,6 +550,7 @@ class TestNeuronCheckpointTopology(NeuronTestCase):
                 torch.full_like(parameter, expected_marker),
             )
 
+    @pytest.mark.training
     def test_checkpoint_reorders_preexisting_topology_without_replacing_modules(
         self,
     ) -> None:

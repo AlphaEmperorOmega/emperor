@@ -1,21 +1,33 @@
 from __future__ import annotations
 
 import traceback
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from lightning import Trainer, seed_everything
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
-from emperor.config import BaseOptions, ModelConfig
+from emperor.config import BaseOptions
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
 )
-from model_runtime.packages import ModelPackage
+from model_runtime.packages import ModelPackage, RuntimeDefaultsSpec
+from model_runtime.runs._handoff import (
+    TrainingExecutionRequest,
+    TrainingRun,
+    TrainingRunRequest,
+)
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
+from model_runtime.runs._progress_events import (
+    DatasetCompletedEvent,
+    DatasetStartedEvent,
+    RunProgressEvent,
+    TrainingErrorEvent,
+)
 from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
 from model_runtime.runs.progress import (
     ContextualRunProgress,
@@ -26,18 +38,25 @@ from model_runtime.runs.progress import (
 from model_runtime.task_behavior import experiment_task_behavior
 
 
-@dataclass
-class TrainingRun:
-    experiment_task: ExperimentTask | None
-    preset: BaseOptions
-    dataset_type: type
-    config: ModelConfig
-    config_overrides: dict
-    num_epochs: int
-    parameters: dict[str, object] = field(default_factory=dict)
-    run_id: str | None = None
-    run_index: int | None = None
-    run_total: int | None = None
+@dataclass(frozen=True, slots=True)
+class _TrainingRuntime:
+    trainer_config: dict[str, Any]
+    runtime_config: dict[str, Any]
+    dataset: Any
+    model: Any
+
+
+@dataclass(frozen=True, slots=True)
+class _StartedTrainingRun:
+    logger: Any
+    progress_callbacks: list[Callback]
+
+
+@dataclass(slots=True)
+class _TrainingExecutionState:
+    training_run: TrainingRun
+    options: TrainingExecutionRequest
+    run_progress: ContextualRunProgress | None
 
 
 class ExperimentBase:
@@ -49,7 +68,7 @@ class ExperimentBase:
         model_package: ModelPackage,
         run_artifacts: RunArtifacts | None = None,
     ) -> None:
-        if not isinstance(model_package, ModelPackage):
+        if not isinstance(cast(object, model_package), ModelPackage):
             raise TypeError("Runs require an explicit ModelPackage.")
         self.model_package = model_package
         self.run_artifacts = (
@@ -74,38 +93,48 @@ class ExperimentBase:
     def _dataset_options_for_task(
         self,
         experiment_task: ExperimentTask,
-    ) -> list:
-        return self.model_package.metadata.dataset_options_for_task(experiment_task)
+    ) -> list[type[Any]]:
+        return self.model_package.dataset_options_for_task(experiment_task)
 
-    def _load_trainer_config(self, config_overrides: dict | None = None) -> dict:
-        config = self.model_package.runtime_defaults
+    def _load_trainer_config(
+        self,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        runtime_defaults = self.model_package.runtime_defaults_spec
         config_overrides = config_overrides or {}
         return {
-            "trainer_args": self._trainer_args(config, config_overrides),
-            "callbacks": self._trainer_callbacks(config, config_overrides),
+            "trainer_args": self._trainer_args(runtime_defaults, config_overrides),
+            "callbacks": self._trainer_callbacks(runtime_defaults, config_overrides),
         }
 
-    def _trainer_callbacks(self, config, config_overrides: dict) -> list[Callback]:
-        callbacks = []
-        early_stopping = self._early_stopping_callback(config, config_overrides)
+    def _trainer_callbacks(
+        self,
+        runtime_defaults: RuntimeDefaultsSpec,
+        config_overrides: dict[str, Any],
+    ) -> list[Callback]:
+        callbacks: list[Callback] = []
+        early_stopping = self._early_stopping_callback(
+            runtime_defaults,
+            config_overrides,
+        )
         if early_stopping is not None:
             callbacks.append(early_stopping)
-        checkpoint = self._checkpoint_callback(config, config_overrides)
+        checkpoint = self._checkpoint_callback(runtime_defaults, config_overrides)
         if checkpoint is not None:
             callbacks.append(checkpoint)
 
-        for key, value in vars(config).items():
-            if key.startswith("CALLBACK_") and isinstance(value, Callback):
+        for _key, value in runtime_defaults.items_with_prefix("CALLBACK_"):
+            if isinstance(value, Callback):
                 callbacks.append(value)
         return callbacks
 
     def _early_stopping_callback(
         self,
-        config,
-        config_overrides: dict,
+        runtime_defaults: RuntimeDefaultsSpec,
+        config_overrides: dict[str, Any],
     ) -> EarlyStopping | None:
         early_stopping_patience = self._trainer_config_value(
-            config,
+            runtime_defaults,
             config_overrides,
             "CALLBACK_EARLY_STOPPING_PATIENCE",
             0,
@@ -113,7 +142,7 @@ class ExperimentBase:
         if early_stopping_patience <= 0:
             return None
         early_stopping_metric = self._trainer_config_value(
-            config,
+            runtime_defaults,
             config_overrides,
             "CALLBACK_EARLY_STOPPING_METRIC",
             "validation/loss",
@@ -122,19 +151,19 @@ class ExperimentBase:
             monitor=early_stopping_metric,
             patience=early_stopping_patience,
             min_delta=self._trainer_config_value(
-                config,
+                runtime_defaults,
                 config_overrides,
                 "CALLBACK_EARLY_STOPPING_MIN_DELTA",
                 0.0,
             ),
             strict=self._trainer_config_value(
-                config,
+                runtime_defaults,
                 config_overrides,
                 "CALLBACK_EARLY_STOPPING_STRICT",
                 True,
             ),
             check_finite=self._trainer_config_value(
-                config,
+                runtime_defaults,
                 config_overrides,
                 "CALLBACK_EARLY_STOPPING_CHECK_FINITE",
                 True,
@@ -144,11 +173,11 @@ class ExperimentBase:
 
     def _checkpoint_callback(
         self,
-        config,
-        config_overrides: dict,
+        runtime_defaults: RuntimeDefaultsSpec,
+        config_overrides: dict[str, Any],
     ) -> ModelCheckpoint | None:
         checkpoint_flag = self._trainer_config_value(
-            config,
+            runtime_defaults,
             config_overrides,
             "CALLBACK_CHECKPOINT_FLAG",
             False,
@@ -156,7 +185,7 @@ class ExperimentBase:
         if not checkpoint_flag:
             return None
         early_stopping_metric = self._trainer_config_value(
-            config,
+            runtime_defaults,
             config_overrides,
             "CALLBACK_EARLY_STOPPING_METRIC",
             "validation/loss",
@@ -170,19 +199,27 @@ class ExperimentBase:
 
     def _trainer_config_value(
         self,
-        config,
-        config_overrides: dict,
+        runtime_defaults: RuntimeDefaultsSpec,
+        config_overrides: dict[str, Any],
         key: str,
-        default=None,
-    ):
-        return config_overrides.get(key.lower(), getattr(config, key, default))
+        default: Any = None,
+    ) -> Any:
+        return config_overrides.get(
+            key.lower(),
+            runtime_defaults.current_value_or(key, default),
+        )
 
-    def _load_runtime_config(self, config_overrides: dict | None = None) -> dict:
-        config = self.model_package.runtime_defaults
+    def _load_runtime_config(
+        self,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        runtime_defaults = self.model_package.runtime_defaults_spec
         config_overrides = config_overrides or {}
 
-        def runtime_value(key: str, default):
-            return self._trainer_config_value(config, config_overrides, key, default)
+        def runtime_value(key: str, default: Any) -> Any:
+            return self._trainer_config_value(
+                runtime_defaults, config_overrides, key, default
+            )
 
         return {
             "data_num_workers": runtime_value("DATA_NUM_WORKERS", None),
@@ -190,7 +227,11 @@ class ExperimentBase:
             "seed": runtime_value("SEED", None),
         }
 
-    def _configure_dataset(self, dataset, runtime_config: dict) -> None:
+    def _configure_dataset(
+        self,
+        dataset: Any,
+        runtime_config: dict[str, Any],
+    ) -> None:
         data_num_workers = runtime_config.get("data_num_workers")
         if data_num_workers is None or not hasattr(dataset, "num_workers"):
             pass
@@ -200,7 +241,10 @@ class ExperimentBase:
         if seed is not None and hasattr(dataset, "seed"):
             dataset.seed = int(seed)
 
-    def _dataset_constructor_kwargs(self, training_run: TrainingRun) -> dict:
+    def _dataset_constructor_kwargs(
+        self,
+        training_run: TrainingRun,
+    ) -> dict[str, Any]:
         """Return Experiment Task arguments for a data module."""
 
         task = getattr(training_run, "experiment_task", None) or self.experiment_task
@@ -208,16 +252,18 @@ class ExperimentBase:
             training_run.config
         )
 
-    def _build_dataset(self, training_run: TrainingRun):
+    def _build_dataset(self, training_run: TrainingRun) -> Any:
         return training_run.dataset_type(
             **self._dataset_constructor_kwargs(training_run)
         )
 
-    def _trainer_args(self, config, config_overrides: dict) -> dict:
-        trainer_args = {}
-        for key, value in vars(config).items():
-            if not key.startswith("TRAINER_"):
-                continue
+    def _trainer_args(
+        self,
+        runtime_defaults: RuntimeDefaultsSpec,
+        config_overrides: dict[str, Any],
+    ) -> dict[str, Any]:
+        trainer_args: dict[str, Any] = {}
+        for key, value in runtime_defaults.items_with_prefix("TRAINER_"):
             if value is None:
                 continue
             clean_key = key[len("TRAINER_") :].lower()
@@ -233,18 +279,24 @@ class ExperimentBase:
 
     def materialize_training_runs(
         self,
-        materialized_runs: list[dict],
+        materialized_runs: Sequence[TrainingRunRequest],
     ) -> list[TrainingRun]:
         """Materialize an accepted semantic Run Plan for execution."""
-
-        training_runs = []
-        run_total = len(materialized_runs)
-        for run_index, run in enumerate(materialized_runs, start=1):
-            preset = run["preset"]
-            dataset_type = run["dataset_type"]
-            run_overrides = run.get("config_overrides") or {}
-            run_parameters = run.get("parameters") or {}
-            run_epochs = run_overrides.get("num_epochs", self.num_epochs)
+        untrusted_runs = cast(Sequence[object], materialized_runs)
+        if any(not isinstance(run, TrainingRunRequest) for run in untrusted_runs):
+            raise TypeError(
+                "Run Experiment materialization requires TrainingRunRequest values."
+            )
+        training_runs: list[TrainingRun] = []
+        for run in materialized_runs:
+            preset = cast(BaseOptions, run.preset)
+            dataset_type = run.dataset_type
+            run_overrides = dict(run.config_overrides)
+            run_parameters = run.parameters
+            run_epochs = cast(
+                int,
+                run_overrides.get("num_epochs", self.num_epochs),
+            )
             configs = self.preset_generator.get_config(
                 preset,
                 dataset_type,
@@ -264,9 +316,9 @@ class ExperimentBase:
                     config_overrides=run_overrides,
                     num_epochs=run_epochs,
                     parameters=dict(run_parameters),
-                    run_id=run.get("id"),
-                    run_index=run.get("index", run_index),
-                    run_total=run.get("run_total", run_total),
+                    run_id=run.run_id,
+                    run_index=run.run_index,
+                    run_total=run.run_total,
                 )
             )
         return training_runs
@@ -281,11 +333,11 @@ class ExperimentBase:
         ckpt_path: Path | None = None,
         model_validator: Callable[[object], None] | None = None,
         resumed_from: Mapping[str, object] | None = None,
-    ) -> tuple[dict, str]:
+    ) -> tuple[dict[str, Any], str]:
         """Execute one materialized Run through the public runtime Interface."""
 
-        return self._execute_training_run(
-            training_run,
+        request = TrainingExecutionRequest(
+            training_run=training_run,
             callbacks=callbacks,
             progress=progress,
             progress_step_interval=progress_step_interval,
@@ -293,94 +345,144 @@ class ExperimentBase:
             model_validator=model_validator,
             resumed_from=resumed_from,
         )
+        return self.execute_training(request)
 
-    def _execute_training_run(
+    def execute_training(
         self,
-        training_run: TrainingRun,
-        *,
-        callbacks: list[Callback],
-        progress: RunProgress | None = None,
-        progress_step_interval: int = 1,
-        ckpt_path: Path | None = None,
-        model_validator: Callable[[object], None] | None = None,
-        resumed_from: Mapping[str, object] | None = None,
-    ) -> tuple[dict, str]:
+        request: TrainingExecutionRequest,
+    ) -> tuple[dict[str, Any], str]:
+        if not isinstance(cast(object, request), TrainingExecutionRequest):
+            raise TypeError(
+                "Run Experiment execution requires a TrainingExecutionRequest."
+            )
         run_progress = contextual_run_progress(
-            progress,
-            self._run_progress_context(training_run),
+            request.progress,
+            self._run_progress_context(request.training_run),
+        )
+        state = _TrainingExecutionState(
+            request.training_run,
+            request,
+            run_progress,
         )
         try:
-            trainer_config = self._load_trainer_config(training_run.config_overrides)
-            runtime_config = self._load_runtime_config(training_run.config_overrides)
-            if runtime_config["seed"] is not None:
-                seed_everything(int(runtime_config["seed"]), workers=True)
-            dataset = self._build_dataset(training_run)
-            self._configure_dataset(dataset, runtime_config)
-            model = self.model_package.build_model(training_run.config)
-            if model_validator is not None:
-                model_validator(model)
-            logger = TensorBoardLogger(
-                save_dir=str(self.run_artifacts.root),
-                name=self.run_artifacts.run_name(
-                    self.model_package.identity,
-                    training_run.preset.name,
-                    training_run.dataset_type.__name__,
-                    training_run.parameters,
-                ),
-            )
-            if run_progress is not None:
-                run_progress = run_progress.with_log_dir(logger.log_dir)
-            self._emit_dataset_started(
-                training_run,
-                run_progress,
-                resumed_from=resumed_from,
-            )
-            progress_callbacks = (
-                [
-                    lightning_progress_adapter(
-                        run_progress,
-                        step_interval=progress_step_interval,
-                    )
-                ]
-                if run_progress is not None
-                else []
-            )
-            trainer = Trainer(
-                max_epochs=training_run.num_epochs,
-                logger=logger,
-                callbacks=[
-                    *trainer_config["callbacks"],
-                    *callbacks,
-                    *progress_callbacks,
-                ],
-                **trainer_config["trainer_args"],
-            )
-            if ckpt_path is None:
-                trainer.fit(model, datamodule=dataset)
-            else:
-                trainer.fit(model, datamodule=dataset, ckpt_path=ckpt_path)
-            if runtime_config["run_test_after_fit"]:
-                trainer.test(model, datamodule=dataset)
-            result = self._training_result(
-                training_run,
-                trainer,
-                resumed_from=resumed_from,
-            )
-            self.run_artifacts.write_result(logger.log_dir, result)
-            self.run_artifacts.update_best_results(
-                self.model_package.identity,
-                self.experiment_task,
-                result,
-            )
-            self._emit_dataset_completed(
-                result,
-                run_progress,
-                resumed_from=resumed_from,
-            )
-            return result, logger.log_dir
+            runtime = self._prepare_training_runtime(state)
+            started = self._start_training_execution(state)
+            trainer = self._build_training_trainer(state, runtime, started)
+            self._fit_and_test_training(state, trainer, runtime)
+            return self._complete_training_execution(state, trainer, started)
         except Exception as exc:
-            self._emit_training_error(exc, run_progress)
+            self._emit_training_error_preserving_primary(exc, state.run_progress)
             raise
+
+    def _prepare_training_runtime(
+        self,
+        state: _TrainingExecutionState,
+    ) -> _TrainingRuntime:
+        trainer_config = self._load_trainer_config(state.training_run.config_overrides)
+        runtime_config = self._load_runtime_config(state.training_run.config_overrides)
+        if runtime_config["seed"] is not None:
+            seed_everything(int(runtime_config["seed"]), workers=True)
+        dataset = self._build_dataset(state.training_run)
+        self._configure_dataset(dataset, runtime_config)
+        model = self.model_package.build_model(state.training_run.config)
+        if state.options.model_validator is not None:
+            state.options.model_validator(model)
+        return _TrainingRuntime(
+            trainer_config=trainer_config,
+            runtime_config=runtime_config,
+            dataset=dataset,
+            model=model,
+        )
+
+    def _start_training_execution(
+        self,
+        state: _TrainingExecutionState,
+    ) -> _StartedTrainingRun:
+        logger = TensorBoardLogger(
+            save_dir=str(self.run_artifacts.root),
+            name=self.run_artifacts.run_name(
+                self.model_package.identity,
+                state.training_run.preset.name,
+                state.training_run.dataset_type.__name__,
+                state.training_run.parameters,
+            ),
+        )
+        if state.run_progress is not None:
+            state.run_progress = state.run_progress.with_log_dir(logger.log_dir)
+        self._emit_dataset_started(
+            state.training_run,
+            state.run_progress,
+            resumed_from=state.options.resumed_from,
+        )
+        progress_callbacks = (
+            [
+                lightning_progress_adapter(
+                    state.run_progress,
+                    step_interval=state.options.progress_step_interval,
+                )
+            ]
+            if state.run_progress is not None
+            else []
+        )
+        return _StartedTrainingRun(logger, progress_callbacks)
+
+    def _build_training_trainer(
+        self,
+        state: _TrainingExecutionState,
+        runtime: _TrainingRuntime,
+        started: _StartedTrainingRun,
+    ) -> Trainer:
+        return Trainer(
+            max_epochs=state.training_run.num_epochs,
+            logger=started.logger,
+            callbacks=[
+                *runtime.trainer_config["callbacks"],
+                *state.options.callbacks,
+                *started.progress_callbacks,
+            ],
+            **runtime.trainer_config["trainer_args"],
+        )
+
+    @staticmethod
+    def _fit_and_test_training(
+        state: _TrainingExecutionState,
+        trainer: Trainer,
+        runtime: _TrainingRuntime,
+    ) -> None:
+        if state.options.ckpt_path is None:
+            trainer.fit(runtime.model, datamodule=runtime.dataset)
+        else:
+            trainer.fit(
+                runtime.model,
+                datamodule=runtime.dataset,
+                ckpt_path=state.options.ckpt_path,
+            )
+        if runtime.runtime_config["run_test_after_fit"]:
+            trainer.test(runtime.model, datamodule=runtime.dataset)
+
+    def _complete_training_execution(
+        self,
+        state: _TrainingExecutionState,
+        trainer: Trainer,
+        started: _StartedTrainingRun,
+    ) -> tuple[dict[str, Any], str]:
+        result = self._training_result(
+            state.training_run,
+            trainer,
+            resumed_from=state.options.resumed_from,
+        )
+        self.run_artifacts.write_result(started.logger.log_dir, result)
+        self.run_artifacts.update_best_results(
+            self.model_package.identity,
+            self.experiment_task,
+            result,
+        )
+        self._emit_dataset_completed(
+            result,
+            state.run_progress,
+            resumed_from=state.options.resumed_from,
+        )
+        return result, started.logger.log_dir
 
     def _run_progress_context(
         self,
@@ -412,16 +514,10 @@ class ExperimentBase:
     ) -> None:
         self._write_progress_event(
             progress,
-            {
-                "type": "dataset_started",
-                "status": "running",
-                "params": training_run.parameters,
-                **(
-                    {"resumedFrom": dict(resumed_from)}
-                    if resumed_from is not None
-                    else {}
-                ),
-            },
+            DatasetStartedEvent(
+                params=training_run.parameters,
+                resumed_from=resumed_from,
+            ),
         )
 
     def _emit_training_error(
@@ -431,39 +527,44 @@ class ExperimentBase:
     ) -> None:
         self._write_progress_event(
             progress,
-            {
-                "type": "error",
-                "status": "failed",
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-            },
+            TrainingErrorEvent(
+                error=str(exc),
+                traceback=traceback.format_exc(),
+            ),
         )
+
+    def _emit_training_error_preserving_primary(
+        self,
+        exc: Exception,
+        progress: ContextualRunProgress | None,
+    ) -> None:
+        try:
+            self._emit_training_error(exc, progress)
+        except Exception as progress_exc:
+            exc.add_note(
+                "Failed to persist the training error progress event: "
+                f"{type(progress_exc).__name__}: {progress_exc}"
+            )
 
     def _emit_dataset_completed(
         self,
-        result: dict,
+        result: dict[str, Any],
         progress: ContextualRunProgress | None,
         *,
         resumed_from: Mapping[str, object] | None = None,
     ) -> None:
         self._write_progress_event(
             progress,
-            {
-                "type": "dataset_completed",
-                "status": "running",
-                "metrics": result["metrics"],
-                **(
-                    {"resumedFrom": dict(resumed_from)}
-                    if resumed_from is not None
-                    else {}
-                ),
-            },
+            DatasetCompletedEvent(
+                metrics=result["metrics"],
+                resumed_from=resumed_from,
+            ),
         )
 
     @staticmethod
     def _write_progress_event(
         progress: ContextualRunProgress | None,
-        event: dict,
+        event: RunProgressEvent,
     ) -> None:
         if progress is not None:
             progress.write_event(event)
@@ -471,10 +572,10 @@ class ExperimentBase:
     def _training_result(
         self,
         training_run: TrainingRun,
-        trainer,
+        trainer: Trainer,
         *,
         resumed_from: Mapping[str, object] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         experiment_task = (
             experiment_task_name(training_run.experiment_task)
             if training_run.experiment_task is not None
@@ -494,7 +595,7 @@ class ExperimentBase:
     def _preset_cli_name(self, preset: BaseOptions) -> str:
         cli_name = getattr(type(preset), "cli_name", None)
         if callable(cli_name):
-            return cli_name(preset.name)
+            return cast(str, cli_name(preset.name))
         return preset.name.lower().replace("_", "-")
 
 

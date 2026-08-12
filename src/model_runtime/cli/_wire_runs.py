@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import random
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from emperor.experiments import ExperimentTask, experiment_task_name
 from model_runtime.cli._wire_packages import identity_from_wire, identity_to_wire
+from model_runtime.cli._wire_search import (
+    search_spec_from_wire,
+    search_spec_from_wire_at,
+    search_spec_to_wire,
+    search_spec_to_wire_at,
+)
 from model_runtime.cli._wire_shared import (
     WireCodecError,
     json_mapping_from_wire,
     json_value_from_wire,
     json_value_to_wire,
-    wire_bool,
     wire_fields,
     wire_list,
     wire_literal,
@@ -22,19 +27,31 @@ from model_runtime.cli._wire_shared import (
 )
 from model_runtime.runs import (
     PlanningBudget,
+    PresetSearch,
     RunParameter,
     RunPlan,
     RunRequest,
     RunResult,
     RunSpec,
-    SearchAxisSelection,
-    SearchSpec,
     SubmittedRun,
 )
+from model_runtime.runs.records import RunParameterSource
 
 _EXPERIMENT_TASK_NAMES = {experiment_task_name(task) for task in ExperimentTask}
 _RUN_PARAMETER_SOURCES = {"override", "search"}
-_SEARCH_MODES = {"grid", "random"}
+_DEFAULT_BUDGET = PlanningBudget()
+_MAX_WIRE_RUNS = _DEFAULT_BUDGET.max_materialized_runs or 2_000
+_MAX_WIRE_SELECTIONS = _MAX_WIRE_RUNS
+_MAX_WIRE_PARAMETERS_PER_RUN = 1_024
+
+
+def _require_sequence_limit(
+    values: Sequence[Any],
+    path: str,
+    maximum_items: int,
+) -> None:
+    if len(values) > maximum_items:
+        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
 
 
 def _experiment_task(value: object, path: str) -> str:
@@ -48,99 +65,20 @@ def _mapping_to_wire(value: object, path: str) -> dict[str, Any]:
     encoded = json_value_to_wire(value, path=path)
     if not isinstance(encoded, dict):
         raise WireCodecError(f"{path} must be an object.")
-    return encoded
-
-
-def search_spec_to_wire(search: SearchSpec | None) -> dict[str, Any] | None:
-    if search is None:
-        return None
-    payload = {
-        "mode": wire_literal(search.mode, "$.search.mode", _SEARCH_MODES),
-        "axes": (
-            None
-            if search.axes is None
-            else [
-                {
-                    "key": axis.key,
-                    "values": (
-                        None
-                        if axis.values is None
-                        else [
-                            json_value_to_wire(
-                                value,
-                                path="$.search.axes[].values[]",
-                            )
-                            for value in axis.values
-                        ]
-                    ),
-                    "allow_custom_values": axis.allow_custom_values,
-                }
-                for axis in search.axes
-            ]
-        ),
-        "random_samples": search.random_samples,
-    }
-    search_spec_from_wire(payload)
-    return payload
-
-
-def search_spec_from_wire(payload: object) -> SearchSpec | None:
-    if payload is None:
-        return None
-    raw = wire_fields(
-        payload,
-        path="$.search",
-        required=("mode",),
-        optional=("axes", "random_samples"),
-    )
-    raw_axes = raw.get("axes")
-    axes: tuple[SearchAxisSelection, ...] | None = None
-    if raw_axes is not None:
-        decoded_axes: list[SearchAxisSelection] = []
-        for index, item in enumerate(wire_list(raw_axes, "$.search.axes")):
-            path = f"$.search.axes[{index}]"
-            axis = wire_fields(
-                item,
-                path=path,
-                required=("key",),
-                optional=("values", "allow_custom_values"),
-            )
-            raw_values = axis.get("values")
-            decoded_axes.append(
-                SearchAxisSelection(
-                    key=wire_string(axis["key"], f"{path}.key"),
-                    values=(
-                        None
-                        if raw_values is None
-                        else tuple(
-                            json_value_from_wire(
-                                value,
-                                path=f"{path}.values[{value_index}]",
-                            )
-                            for value_index, value in enumerate(
-                                wire_list(raw_values, f"{path}.values")
-                            )
-                        )
-                    ),
-                    allow_custom_values=wire_bool(
-                        axis.get("allow_custom_values", False),
-                        f"{path}.allow_custom_values",
-                    ),
-                )
-            )
-        axes = tuple(decoded_axes)
-    return SearchSpec(
-        mode=wire_literal(raw["mode"], "$.search.mode", _SEARCH_MODES),
-        axes=axes,
-        random_samples=wire_optional_int(
-            raw.get("random_samples"),
-            "$.search.random_samples",
-            minimum=1,
-        ),
-    )
+    return cast(dict[str, Any], encoded)
 
 
 def run_request_to_wire(request: RunRequest) -> dict[str, Any]:
+    _require_sequence_limit(
+        request.presets,
+        "$.presets",
+        _MAX_WIRE_SELECTIONS,
+    )
+    _require_sequence_limit(
+        request.datasets,
+        "$.datasets",
+        _MAX_WIRE_SELECTIONS,
+    )
     payload = {
         "presets": list(request.presets),
         "datasets": list(request.datasets),
@@ -165,8 +103,22 @@ def run_request_from_wire(payload: object) -> RunRequest:
     )
     experiment_task = raw.get("experiment_task")
     return RunRequest(
-        presets=wire_string_list(raw["presets"], "$.presets"),
-        datasets=wire_string_list(raw["datasets"], "$.datasets"),
+        presets=wire_string_list(
+            wire_list(
+                raw["presets"],
+                "$.presets",
+                maximum_items=_MAX_WIRE_SELECTIONS,
+            ),
+            "$.presets",
+        ),
+        datasets=wire_string_list(
+            wire_list(
+                raw["datasets"],
+                "$.datasets",
+                maximum_items=_MAX_WIRE_SELECTIONS,
+            ),
+            "$.datasets",
+        ),
         experiment_task=(
             None
             if experiment_task is None
@@ -197,19 +149,39 @@ def planning_budget_from_wire(payload: object) -> PlanningBudget:
         required=(),
         optional=("max_axes", "max_values_per_axis", "max_materialized_runs"),
     )
-    return PlanningBudget(
-        max_axes=wire_optional_int(raw.get("max_axes"), "$.max_axes", minimum=1),
-        max_values_per_axis=wire_optional_int(
-            raw.get("max_values_per_axis"),
-            "$.max_values_per_axis",
-            minimum=1,
+    defaults = PlanningBudget()
+    budget = PlanningBudget(
+        max_axes=(
+            defaults.max_axes
+            if "max_axes" not in raw
+            else wire_optional_int(raw["max_axes"], "$.max_axes", minimum=1)
         ),
-        max_materialized_runs=wire_optional_int(
-            raw.get("max_materialized_runs"),
-            "$.max_materialized_runs",
-            minimum=1,
+        max_values_per_axis=(
+            defaults.max_values_per_axis
+            if "max_values_per_axis" not in raw
+            else wire_optional_int(
+                raw["max_values_per_axis"],
+                "$.max_values_per_axis",
+                minimum=1,
+            )
+        ),
+        max_materialized_runs=(
+            defaults.max_materialized_runs
+            if "max_materialized_runs" not in raw
+            else wire_optional_int(
+                raw["max_materialized_runs"],
+                "$.max_materialized_runs",
+                minimum=1,
+            )
         ),
     )
+    run_limit = budget.max_materialized_runs
+    if run_limit is None or run_limit > _MAX_WIRE_RUNS:
+        raise WireCodecError(
+            "Run plan transport requires max_materialized_runs at most "
+            f"{_MAX_WIRE_RUNS}."
+        )
+    return budget
 
 
 def submitted_run_to_wire(run: SubmittedRun) -> dict[str, Any]:
@@ -242,11 +214,19 @@ def submitted_run_from_wire(payload: object) -> SubmittedRun:
 
 
 def submitted_runs_to_wire(runs: Sequence[SubmittedRun]) -> list[dict[str, Any]]:
+    _require_sequence_limit(runs, "$.runs", _MAX_WIRE_RUNS)
     return [submitted_run_to_wire(run) for run in runs]
 
 
 def submitted_runs_from_wire(payload: object) -> tuple[SubmittedRun, ...]:
-    return tuple(submitted_run_from_wire(item) for item in wire_list(payload, "$.runs"))
+    return tuple(
+        submitted_run_from_wire(item)
+        for item in wire_list(
+            payload,
+            "$.runs",
+            maximum_items=_MAX_WIRE_RUNS,
+        )
+    )
 
 
 def _run_parameter_to_wire(parameter: RunParameter) -> dict[str, Any]:
@@ -262,6 +242,11 @@ def _run_parameter_to_wire(parameter: RunParameter) -> dict[str, Any]:
 
 
 def _run_spec_to_wire(run: RunSpec) -> dict[str, Any]:
+    _require_sequence_limit(
+        run.parameters,
+        "$.runs[].parameters",
+        _MAX_WIRE_PARAMETERS_PER_RUN,
+    )
     return {
         "id": run.id,
         "experiment_task": _experiment_task(
@@ -276,7 +261,34 @@ def _run_spec_to_wire(run: RunSpec) -> dict[str, Any]:
     }
 
 
+def _preset_search_to_wire(
+    entry: PresetSearch,
+    index: int,
+) -> dict[str, Any]:
+    path = f"$.preset_searches[{index}]"
+    return {
+        "preset": entry.preset,
+        "search": search_spec_to_wire_at(entry.search, f"{path}.search"),
+    }
+
+
 def run_plan_to_wire(plan: RunPlan) -> dict[str, Any]:
+    _require_sequence_limit(plan.runs, "$.runs", _MAX_WIRE_RUNS)
+    _require_sequence_limit(
+        plan.presets,
+        "$.presets",
+        _MAX_WIRE_SELECTIONS,
+    )
+    _require_sequence_limit(
+        plan.datasets,
+        "$.datasets",
+        _MAX_WIRE_SELECTIONS,
+    )
+    _require_sequence_limit(
+        plan.preset_searches,
+        "$.preset_searches",
+        _MAX_WIRE_SELECTIONS,
+    )
     payload = {
         "identity": identity_to_wire(plan.identity),
         "presets": list(plan.presets),
@@ -287,10 +299,103 @@ def run_plan_to_wire(plan: RunPlan) -> dict[str, Any]:
         "datasets": list(plan.datasets),
         "overrides": _mapping_to_wire(plan.overrides, "$.overrides"),
         "search": search_spec_to_wire(plan.search),
+        "preset_searches": [
+            _preset_search_to_wire(entry, index)
+            for index, entry in enumerate(plan.preset_searches)
+        ],
         "runs": [_run_spec_to_wire(run) for run in plan.runs],
     }
     run_plan_from_wire(payload)
     return payload
+
+
+def _run_parameter_from_wire(item: object, path: str) -> RunParameter:
+    parameter = wire_fields(
+        item,
+        path=path,
+        required=("key", "value", "source"),
+    )
+    return RunParameter(
+        key=wire_string(parameter["key"], f"{path}.key"),
+        value=json_value_from_wire(parameter["value"], path=f"{path}.value"),
+        source=cast(
+            RunParameterSource,
+            wire_literal(
+                parameter["source"],
+                f"{path}.source",
+                _RUN_PARAMETER_SOURCES,
+            ),
+        ),
+    )
+
+
+def _run_parameters_from_wire(payload: object, path: str) -> list[RunParameter]:
+    parameters: list[RunParameter] = []
+    for index, item in enumerate(
+        wire_list(
+            payload,
+            path,
+            maximum_items=_MAX_WIRE_PARAMETERS_PER_RUN,
+        )
+    ):
+        parameters.append(_run_parameter_from_wire(item, f"{path}[{index}]"))
+    return parameters
+
+
+def _run_spec_from_wire(item: object, index: int) -> RunSpec:
+    path = f"$.runs[{index}]"
+    run = wire_fields(
+        item,
+        path=path,
+        required=("id", "experiment_task", "preset", "dataset", "parameters"),
+    )
+    parameters = _run_parameters_from_wire(run["parameters"], f"{path}.parameters")
+    return RunSpec(
+        id=wire_string(run["id"], f"{path}.id"),
+        experiment_task=_experiment_task(
+            run["experiment_task"],
+            f"{path}.experiment_task",
+        ),
+        preset=wire_string(run["preset"], f"{path}.preset"),
+        dataset=wire_string(run["dataset"], f"{path}.dataset"),
+        parameters=tuple(parameters),
+    )
+
+
+def _run_specs_from_wire(payload: object) -> list[RunSpec]:
+    runs: list[RunSpec] = []
+    for index, item in enumerate(
+        wire_list(payload, "$.runs", maximum_items=_MAX_WIRE_RUNS)
+    ):
+        runs.append(_run_spec_from_wire(item, index))
+    return runs
+
+
+def _preset_searches_from_wire(payload: object) -> tuple[PresetSearch, ...]:
+    entries: list[PresetSearch] = []
+    for index, item in enumerate(
+        wire_list(
+            payload,
+            "$.preset_searches",
+            maximum_items=_MAX_WIRE_SELECTIONS,
+        )
+    ):
+        path = f"$.preset_searches[{index}]"
+        raw = wire_fields(
+            item,
+            path=path,
+            required=("preset", "search"),
+        )
+        entries.append(
+            PresetSearch(
+                preset=wire_string(raw["preset"], f"{path}.preset"),
+                search=search_spec_from_wire_at(
+                    raw["search"],
+                    f"{path}.search",
+                ),
+            )
+        )
+    return tuple(entries)
 
 
 def run_plan_from_wire(payload: object) -> RunPlan:
@@ -306,68 +411,46 @@ def run_plan_from_wire(payload: object) -> RunPlan:
             "search",
             "runs",
         ),
+        optional=("preset_searches",),
     )
-    runs: list[RunSpec] = []
-    for run_index, item in enumerate(wire_list(raw["runs"], "$.runs")):
-        path = f"$.runs[{run_index}]"
-        run = wire_fields(
-            item,
-            path=path,
-            required=(
-                "id",
-                "experiment_task",
-                "preset",
-                "dataset",
-                "parameters",
-            ),
-        )
-        parameters: list[RunParameter] = []
-        for parameter_index, parameter_item in enumerate(
-            wire_list(run["parameters"], f"{path}.parameters")
-        ):
-            parameter_path = f"{path}.parameters[{parameter_index}]"
-            parameter = wire_fields(
-                parameter_item,
-                path=parameter_path,
-                required=("key", "value", "source"),
-            )
-            parameters.append(
-                RunParameter(
-                    key=wire_string(parameter["key"], f"{parameter_path}.key"),
-                    value=json_value_from_wire(
-                        parameter["value"],
-                        path=f"{parameter_path}.value",
-                    ),
-                    source=wire_literal(
-                        parameter["source"],
-                        f"{parameter_path}.source",
-                        _RUN_PARAMETER_SOURCES,
-                    ),
-                )
-            )
-        runs.append(
-            RunSpec(
-                id=wire_string(run["id"], f"{path}.id"),
-                experiment_task=_experiment_task(
-                    run["experiment_task"],
-                    f"{path}.experiment_task",
-                ),
-                preset=wire_string(run["preset"], f"{path}.preset"),
-                dataset=wire_string(run["dataset"], f"{path}.dataset"),
-                parameters=tuple(parameters),
-            )
-        )
-    return RunPlan(
-        identity=identity_from_wire(raw["identity"]),
-        presets=wire_string_list(raw["presets"], "$.presets"),
-        experiment_task=_experiment_task(
-            raw["experiment_task"],
-            "$.experiment_task",
+    runs = _run_specs_from_wire(raw["runs"])
+    identity = identity_from_wire(raw["identity"])
+    presets = wire_string_list(
+        wire_list(
+            raw["presets"],
+            "$.presets",
+            maximum_items=_MAX_WIRE_SELECTIONS,
         ),
-        datasets=wire_string_list(raw["datasets"], "$.datasets"),
-        overrides=json_mapping_from_wire(raw["overrides"], path="$.overrides"),
-        search=search_spec_from_wire(raw["search"]),
+        "$.presets",
+    )
+    experiment_task = _experiment_task(
+        raw["experiment_task"],
+        "$.experiment_task",
+    )
+    datasets = wire_string_list(
+        wire_list(
+            raw["datasets"],
+            "$.datasets",
+            maximum_items=_MAX_WIRE_SELECTIONS,
+        ),
+        "$.datasets",
+    )
+    overrides = json_mapping_from_wire(raw["overrides"], path="$.overrides")
+    search = search_spec_from_wire(raw["search"])
+    preset_searches = (
+        ()
+        if "preset_searches" not in raw
+        else _preset_searches_from_wire(raw["preset_searches"])
+    )
+    return RunPlan(
+        identity=identity,
+        presets=presets,
+        experiment_task=experiment_task,
+        datasets=datasets,
+        overrides=overrides,
+        search=search,
         runs=tuple(runs),
+        preset_searches=preset_searches,
     )
 
 
@@ -414,6 +497,7 @@ def run_result_from_wire(payload: object) -> RunResult:
 
 
 def run_results_to_wire(results: Sequence[RunResult]) -> list[dict[str, Any]]:
+    _require_sequence_limit(results, "$.results", _MAX_WIRE_RUNS)
     return [run_result_to_wire(result) for result in results]
 
 
@@ -421,13 +505,14 @@ def random_state_to_wire(state: tuple[Any, ...]) -> list[Any]:
     encoded = json_value_to_wire(state, path="$.random_state")
     if not isinstance(encoded, list):
         raise WireCodecError("$.random_state must be a list.")
-    random_state_from_wire(encoded)
-    return encoded
+    encoded_list = cast(list[Any], encoded)
+    random_state_from_wire(encoded_list)
+    return encoded_list
 
 
 def _tuple_tree(value: Any) -> Any:
     if isinstance(value, list):
-        return tuple(_tuple_tree(item) for item in value)
+        return tuple(_tuple_tree(item) for item in cast(list[Any], value))
     return value
 
 

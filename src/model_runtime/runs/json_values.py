@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,11 +42,13 @@ def non_finite_json_values(
                 invalid.append(NonFiniteJsonValue(current_path, current))
             return
         if isinstance(current, Mapping):
-            for key, child in current.items():
+            mapping = cast(Mapping[object, Any], current)
+            for key, child in mapping.items():
                 visit(child, _child_path(current_path, key))
             return
         if isinstance(current, (list, tuple)):
-            for index, child in enumerate(current):
+            sequence = cast(list[Any] | tuple[Any, ...], current)
+            for index, child in enumerate(sequence):
                 visit(child, _child_path(current_path, index))
 
     visit(value, path)
@@ -77,31 +79,34 @@ def replace_non_finite_json(
             on_replace(invalid)
         return None
     if isinstance(value, Mapping):
+        mapping = cast(Mapping[Any, Any], value)
         return {
             key: replace_non_finite_json(
                 child,
                 path=_child_path(path, key),
                 on_replace=on_replace,
             )
-            for key, child in value.items()
+            for key, child in mapping.items()
         }
     if isinstance(value, list):
+        sequence = cast(list[Any], value)
         return [
             replace_non_finite_json(
                 child,
                 path=_child_path(path, index),
                 on_replace=on_replace,
             )
-            for index, child in enumerate(value)
+            for index, child in enumerate(sequence)
         ]
     if isinstance(value, tuple):
+        sequence = cast(tuple[Any, ...], value)
         return tuple(
             replace_non_finite_json(
                 child,
                 path=_child_path(path, index),
                 on_replace=on_replace,
             )
-            for index, child in enumerate(value)
+            for index, child in enumerate(sequence)
         )
     return value
 

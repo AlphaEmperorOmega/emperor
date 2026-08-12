@@ -32,7 +32,6 @@ from model_runtime.cli.wire import (
     submitted_run_to_wire,
     submitted_runs_from_wire,
     submitted_runs_to_wire,
-    to_wire,
 )
 
 __all__ = [
@@ -69,5 +68,4 @@ __all__ = [
     "submitted_run_to_wire",
     "submitted_runs_from_wire",
     "submitted_runs_to_wire",
-    "to_wire",
 ]

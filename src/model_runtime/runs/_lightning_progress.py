@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from lightning.pytorch.callbacks import Callback
 
 from model_runtime.runs._metrics import portable_metric_values
+from model_runtime.runs._progress_events import (
+    ClusterInitializedEvent,
+    EpochStartedEvent,
+    FitCompletedEvent,
+    NeuronAddedEvent,
+    NeuronsAddedEvent,
+    StepEvent,
+    TestCompletedEvent,
+    ValidationEvent,
+)
 from model_runtime.runs.progress import ContextualRunProgress
 
 CLUSTER_COORDINATE_SAMPLE_LIMIT = 100
@@ -39,8 +49,10 @@ class _LightningRunProgressAdapter(Callback):
 
     @staticmethod
     def _metrics(trainer: Any) -> dict[str, Any]:
-        metrics = getattr(trainer, "callback_metrics", {})
-        return portable_metric_values(metrics if isinstance(metrics, Mapping) else {})
+        metrics: object = getattr(trainer, "callback_metrics", {})
+        if not isinstance(metrics, Mapping):
+            return {}
+        return portable_metric_values(cast(Mapping[Any, Any], metrics))
 
     @staticmethod
     def _capacity(cluster: Any) -> list[int]:
@@ -66,6 +78,24 @@ class _LightningRunProgressAdapter(Callback):
             "coordinatesTruncated": len(coordinates) > len(sampled),
         }
 
+    def _cluster_initialized_event(
+        self,
+        name: str,
+        cluster: Any,
+        names: set[str],
+    ) -> ClusterInitializedEvent:
+        count = len(names)
+        capacity = self._capacity(cluster)
+        coordinate_sample = self._coordinate_sample_payload(names)
+        return ClusterInitializedEvent(
+            node=name,
+            count=count,
+            capacity=capacity,
+            coordinates=coordinate_sample["coordinates"],
+            coordinate_count=coordinate_sample["coordinateCount"],
+            coordinates_truncated=coordinate_sample["coordinatesTruncated"],
+        )
+
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
         from emperor.neuron import NeuronCluster
 
@@ -78,23 +108,15 @@ class _LightningRunProgressAdapter(Callback):
             names = set(cluster.cluster.keys())
             self._known_names[name] = names
             self._progress.write_event(
-                {
-                    "type": "cluster_initialized",
-                    "node": name,
-                    "count": len(names),
-                    "capacity": self._capacity(cluster),
-                    **self._coordinate_sample_payload(names),
-                }
+                self._cluster_initialized_event(name, cluster, names)
             )
 
     def on_train_epoch_start(self, trainer: Any, pl_module: Any) -> None:
         self._progress.write_event(
-            {
-                "type": "epoch_started",
-                "status": "running",
-                "epoch": int(trainer.current_epoch),
-                "step": int(trainer.global_step),
-            }
+            EpochStartedEvent(
+                epoch=int(trainer.current_epoch),
+                step=int(trainer.global_step),
+            )
         )
 
     def on_train_batch_end(
@@ -108,14 +130,12 @@ class _LightningRunProgressAdapter(Callback):
         global_step = int(trainer.global_step)
         if self._step_interval == 1 or global_step % self._step_interval == 0:
             self._progress.write_event(
-                {
-                    "type": "step",
-                    "status": "running",
-                    "epoch": int(trainer.current_epoch),
-                    "step": global_step,
-                    "batch": int(batch_idx),
-                    "metrics": self._metrics(trainer),
-                }
+                StepEvent(
+                    epoch=int(trainer.current_epoch),
+                    step=global_step,
+                    batch=int(batch_idx),
+                    metrics=self._metrics(trainer),
+                )
             )
         self._emit_neuron_growth(trainer)
 
@@ -134,68 +154,65 @@ class _LightningRunProgressAdapter(Callback):
             ]
             if not coordinates:
                 continue
-            common = {
-                "node": name,
-                "count": len(current),
-                "capacity": self._capacity(cluster),
-                "epoch": int(getattr(trainer, "current_epoch", 0)),
-                "step": int(getattr(trainer, "global_step", 0)),
-            }
+            count = len(current)
+            capacity = self._capacity(cluster)
+            epoch = int(getattr(trainer, "current_epoch", 0))
+            step = int(getattr(trainer, "global_step", 0))
             if len(coordinates) > NEURON_ADDED_BURST_LIMIT:
                 self._progress.write_event(
-                    {
-                        "type": "neurons_added",
-                        "coordinates": coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT],
-                        "coordinateCount": len(coordinates),
-                        "coordinatesTruncated": (
+                    NeuronsAddedEvent(
+                        coordinates=coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT],
+                        coordinate_count=len(coordinates),
+                        coordinates_truncated=(
                             len(coordinates) > CLUSTER_COORDINATE_SAMPLE_LIMIT
                         ),
-                        **common,
-                    }
+                        node=name,
+                        count=count,
+                        capacity=capacity,
+                        epoch=epoch,
+                        step=step,
+                    )
                 )
                 continue
             for coordinate in coordinates:
                 self._progress.write_event(
-                    {
-                        "type": "neuron_added",
-                        "coord": coordinate,
-                        **common,
-                    }
+                    NeuronAddedEvent(
+                        coord=coordinate,
+                        node=name,
+                        count=count,
+                        capacity=capacity,
+                        epoch=epoch,
+                        step=step,
+                    )
                 )
 
     def on_validation_epoch_end(self, trainer: Any, pl_module: Any) -> None:
         self._progress.write_event(
-            {
-                "type": "validation",
-                "status": "running",
-                "epoch": int(trainer.current_epoch),
-                "step": int(trainer.global_step),
-                "metrics": self._metrics(trainer),
-            }
+            ValidationEvent(
+                epoch=int(trainer.current_epoch),
+                step=int(trainer.global_step),
+                metrics=self._metrics(trainer),
+            )
         )
 
     def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
         self._progress.write_event(
-            {
-                "type": "fit_completed",
-                "status": "running",
-                "epoch": int(trainer.current_epoch),
-                "step": int(trainer.global_step),
-                "metrics": self._metrics(trainer),
-            }
+            FitCompletedEvent(
+                epoch=int(trainer.current_epoch),
+                step=int(trainer.global_step),
+                metrics=self._metrics(trainer),
+            )
         )
         self._clusters = []
         self._known_names.clear()
 
     def on_test_end(self, trainer: Any, pl_module: Any) -> None:
         self._progress.write_event(
-            {
-                "type": "test_completed",
-                "status": "running",
-                "epoch": int(trainer.current_epoch),
-                "step": int(trainer.global_step),
-                "metrics": self._metrics(trainer),
-            }
+            TestCompletedEvent(
+                epoch=int(trainer.current_epoch),
+                step=int(trainer.global_step),
+                metrics=self._metrics(trainer),
+            )
         )
 
 

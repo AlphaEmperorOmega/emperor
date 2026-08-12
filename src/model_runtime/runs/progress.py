@@ -1,13 +1,21 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from model_runtime.runs._metrics import sanitize_metric_payload, truncate_string
+from model_runtime.runs._progress_events import (
+    MODEL_RUNTIME_PROGRESS_CONTEXT_FIELDS,
+    MODEL_RUNTIME_PROGRESS_EVENT_FIELDS,
+    MODEL_RUNTIME_PROGRESS_EVENT_TYPES,
+    MODEL_RUNTIME_PROGRESS_OPTIONAL_FIELDS,
+    RunProgressEventInput,
+    project_run_progress_context,
+    project_run_progress_event,
+)
 from model_runtime.runs.json_values import require_finite_json
 
 DEFAULT_PROGRESS_METRIC_KEY_LIMIT = 512
@@ -17,9 +25,9 @@ DEFAULT_PROGRESS_STRING_VALUE_LIMIT = 20_000
 
 @runtime_checkable
 class RunProgress(Protocol):
-    """Framework-neutral destination for portable Run progress events."""
+    """Destination accepting typed Run events or explicit legacy wire mappings."""
 
-    def write_event(self, event: Mapping[str, Any]) -> None: ...
+    def write_event(self, event: RunProgressEventInput) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,17 +46,7 @@ class RunProgressContext:
         return replace(self, log_dir=log_dir)
 
     def event_fields(self) -> dict[str, Any]:
-        return {
-            "experimentTask": self.experiment_task,
-            "dataset": self.dataset,
-            "preset": self.preset,
-            "presetKey": self.preset_key,
-            "logDir": self.log_dir,
-            "runId": self.run_id,
-            "runIndex": self.run_index,
-            "runTotal": self.run_total,
-            "totalEpochs": self.total_epochs,
-        }
+        return project_run_progress_context(self)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,12 +57,9 @@ class ContextualRunProgress:
     def with_log_dir(self, log_dir: str) -> ContextualRunProgress:
         return replace(self, context=self.context.with_log_dir(log_dir))
 
-    def write_event(self, event: Mapping[str, Any]) -> None:
+    def write_event(self, event: RunProgressEventInput) -> None:
         self.destination.write_event(
-            {
-                **dict(event),
-                **self.context.event_fields(),
-            }
+            project_run_progress_event(event, context=self.context)
         )
 
 
@@ -114,7 +109,7 @@ class JsonlRunProgress:
             max(0, int(self.string_value_limit)),
         )
 
-    def write_event(self, event: Mapping[str, Any]) -> None:
+    def write_event(self, event: RunProgressEventInput) -> None:
         event_payload = self._sanitize_event(event)
         payload = {
             "timestamp": datetime.now(UTC).isoformat(),
@@ -126,16 +121,17 @@ class JsonlRunProgress:
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, default=str) + "\n")
 
-    def _sanitize_event(self, event: Mapping[str, Any]) -> dict[str, Any]:
-        payload = dict(event)
+    def _sanitize_event(self, event: RunProgressEventInput) -> dict[str, Any]:
+        payload = project_run_progress_event(event)
         for key in ("error", "traceback"):
             value = payload.get(key)
             if isinstance(value, str):
                 payload[key] = truncate_string(value, self.string_value_limit)
         metrics = payload.get("metrics")
         if isinstance(metrics, dict):
+            typed_metrics = cast(dict[str, Any], metrics)
             sanitized, original_count, dropped_count = sanitize_metric_payload(
-                metrics,
+                typed_metrics,
                 metric_key_limit=self.metric_key_limit,
                 string_value_limit=self.string_value_limit,
             )
@@ -149,18 +145,21 @@ class JsonlRunProgress:
         if self.event_byte_limit <= 0:
             return
         metrics = payload.get("metrics")
+        typed_metrics = (
+            cast(dict[str, Any], metrics) if isinstance(metrics, dict) else None
+        )
         while (
-            isinstance(metrics, dict)
-            and metrics
+            typed_metrics is not None
+            and typed_metrics
             and _encoded_size(payload) > self.event_byte_limit
         ):
-            key = next(reversed(metrics))
-            del metrics[key]
+            key = next(reversed(typed_metrics))
+            del typed_metrics[key]
             payload["metricsDroppedCount"] = (
                 int(payload.get("metricsDroppedCount") or 0) + 1
             )
             payload["metricsOriginalCount"] = int(
-                payload.get("metricsOriginalCount") or len(metrics) + 1
+                payload.get("metricsOriginalCount") or len(typed_metrics) + 1
             )
         encoded_size = _encoded_size(payload)
         if encoded_size > self.event_byte_limit:
@@ -176,6 +175,10 @@ __all__ = [
     "DEFAULT_PROGRESS_METRIC_KEY_LIMIT",
     "DEFAULT_PROGRESS_STRING_VALUE_LIMIT",
     "JsonlRunProgress",
+    "MODEL_RUNTIME_PROGRESS_CONTEXT_FIELDS",
+    "MODEL_RUNTIME_PROGRESS_EVENT_FIELDS",
+    "MODEL_RUNTIME_PROGRESS_EVENT_TYPES",
+    "MODEL_RUNTIME_PROGRESS_OPTIONAL_FIELDS",
     "RunProgress",
     "RunProgressContext",
     "contextual_run_progress",

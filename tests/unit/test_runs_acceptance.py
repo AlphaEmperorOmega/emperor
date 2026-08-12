@@ -23,6 +23,37 @@ def _linears_linear():
 
 
 class RunsAcceptanceTests(unittest.TestCase):
+    def test_invalid_falsey_planning_budgets_are_rejected(self) -> None:
+        request = RunRequest(presets=("baseline",), datasets=("Mnist",))
+        submitted = (SubmittedRun("run-1", "baseline", "Mnist"),)
+
+        for invalid in (False, 0, "unlimited"):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaisesRegex(TypeError, "budget must be a PlanningBudget"),
+            ):
+                accept_run_plan(
+                    _linears_linear(),
+                    request,
+                    submitted,
+                    budget=invalid,
+                )
+
+    def test_default_budget_rejects_oversized_submitted_run_plan(self) -> None:
+        submitted = tuple(
+            SubmittedRun(f"run-{index}", "baseline", "Mnist") for index in range(2_001)
+        )
+
+        with self.assertRaisesRegex(
+            InvalidRunPlan,
+            "2001 submitted runs exceeds 2000",
+        ):
+            accept_run_plan(
+                _linears_linear(),
+                RunRequest(presets=("baseline",), datasets=("Mnist",)),
+                submitted,
+            )
+
     def test_submitted_rows_preserve_ids_and_order_without_rematerializing(
         self,
     ) -> None:

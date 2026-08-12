@@ -4,9 +4,10 @@ import json
 import math
 import random
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Final
 
 from model_runtime.cli import (
     PROTOCOL_VERSION,
@@ -39,9 +40,8 @@ from model_runtime.inspection import (
     validate_configuration,
 )
 from model_runtime.packages import (
+    ModelPackage,
     abstract_config_class_error,
-    parse_config_value,
-    serialize_config_value,
 )
 from model_runtime.runs import (
     FilesystemRunArtifacts,
@@ -178,208 +178,266 @@ def _resolve(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _catalog_payload() -> list[dict[str, Any]]:
+    return [
+        {
+            **package.identity.to_payload(),
+            "catalogKey": package.catalog_key,
+        }
+        for package in discover_model_packages()
+    ]
+
+
+def _handle_package_metadata(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    return package_metadata_to_wire(package)
+
+
+def _handle_resolve(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    # Keep resolution behind its existing private Seam, including its package
+    # lookup, so callers patching that Seam observe the same behavior.
+    return _resolve(payload)
+
+
+def _handle_configuration(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    return configuration_schema_to_wire(
+        configuration_schema(
+            package,
+            _optional_string(payload.get("preset"), "preset"),
+        )
+    )
+
+
+def _handle_search_space(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    raw_presets = payload.get("presets")
+    presets = None if raw_presets is None else _strings(raw_presets, "presets")
+    return search_space_to_wire(
+        search_space_schema(
+            package,
+            _optional_string(payload.get("preset"), "preset"),
+            presets,
+        )
+    )
+
+
+def _handle_parse_overrides(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    overrides = _optional_object(payload, "overrides", "overrides")
+    ignore_unknown = _boolean(
+        payload.get("ignore_unknown", False),
+        "ignore_unknown",
+    )
+    return configuration_values_to_wire(
+        parse_overrides(
+            package,
+            overrides,
+            preset=_optional_string(payload.get("preset"), "preset"),
+            ignore_unknown=ignore_unknown,
+        ).values
+    )
+
+
+def _handle_serialize_overrides(
+    package: ModelPackage, payload: Mapping[str, Any]
+) -> Any:
+    overrides = _optional_object(payload, "overrides", "overrides")
+    ignore_unknown = _boolean(
+        payload.get("ignore_unknown", False),
+        "ignore_unknown",
+    )
+    return configuration_values_to_wire(
+        serialize_overrides(
+            package,
+            overrides,
+            ignore_unknown=ignore_unknown,
+        )
+    )
+
+
+def _handle_preset_locks(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    return preset_locks_to_wire(
+        preset_locks(
+            package,
+            _optional_string(payload.get("preset"), "preset"),
+        )
+    )
+
+
+def _handle_reject_locked_overrides(
+    package: ModelPackage, payload: Mapping[str, Any]
+) -> None:
+    preset = payload.get("preset")
+    if not isinstance(preset, str):
+        raise AdapterProtocolError("Locked-override request requires preset.")
+    reject_locked_overrides(
+        package,
+        preset,
+        _optional_object(payload, "overrides", "overrides"),
+    )
+
+
+def _inspection_request(
+    payload: Mapping[str, Any],
+    *,
+    request_name: str,
+) -> InspectionRequest:
+    preset = payload.get("preset")
+    if not isinstance(preset, str):
+        raise AdapterProtocolError(f"{request_name} request requires preset.")
+    return InspectionRequest(
+        preset=preset,
+        overrides=_optional_object(payload, "overrides", "overrides"),
+        dataset=_optional_string(payload.get("dataset"), "dataset"),
+        experiment_task=_optional_string(
+            payload.get("experiment_task"),
+            "experiment_task",
+        ),
+        memory_limit_bytes=_optional_positive_integer(
+            payload.get("memory_limit_bytes"),
+            "memory_limit_bytes",
+        ),
+    )
+
+
+def _handle_validate(package: ModelPackage, payload: Mapping[str, Any]) -> None:
+    validate_configuration(
+        package,
+        _inspection_request(payload, request_name="Validation"),
+    )
+
+
+def _handle_inspect(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    return inspection_result_to_wire(
+        inspect_model(
+            package,
+            _inspection_request(payload, request_name="Inspection"),
+        )
+    )
+
+
+def _handle_parse_search_value(
+    package: ModelPackage, payload: Mapping[str, Any]
+) -> Any:
+    search_key = payload.get("search_key")
+    if not isinstance(search_key, str):
+        raise AdapterProtocolError("Search-value request requires search_key.")
+    parsed = package.runtime_defaults_spec.parse_search_key_value(
+        search_key,
+        str(_scalar(payload.get("value"), "value")),
+    )
+    if isinstance(parsed, type):
+        abstract_error = abstract_config_class_error(parsed)
+        if abstract_error is not None:
+            raise ValueError(abstract_error)
+    return package.runtime_defaults_spec.serialize_value(parsed)
+
+
+def _handle_checkpoint_config_overrides(
+    package: ModelPackage, payload: Mapping[str, Any]
+) -> Any:
+    return configuration_values_to_wire(
+        package.checkpoint_config_overrides(
+            _tensor_shapes(
+                payload.get("tensor_shapes")
+                if payload.get("tensor_shapes") is not None
+                else {}
+            )
+        )
+    )
+
+
+def _handle_plan_runs(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    request = run_request_from_wire(_object(payload.get("request"), "request"))
+    budget = planning_budget_from_wire(_optional_object(payload, "budget", "budget"))
+    raw_state = payload.get("random_state")
+    random_source = None
+    if raw_state is not None:
+        random_source = random.Random()
+        random_source.setstate(random_state_from_wire(raw_state))
+    plan = plan_runs(
+        package,
+        request,
+        random_source=random_source,
+        budget=budget,
+    )
+    return {
+        "plan": run_plan_to_wire(plan),
+        "random_state": (
+            random_state_to_wire(random_source.getstate())
+            if random_source is not None
+            else None
+        ),
+    }
+
+
+def _handle_accept_run_plan(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    request = run_request_from_wire(_object(payload.get("request"), "request"))
+    submitted = submitted_runs_from_wire(
+        payload.get("runs") if payload.get("runs") is not None else []
+    )
+    budget = planning_budget_from_wire(_optional_object(payload, "budget", "budget"))
+    return run_plan_to_wire(accept_run_plan(package, request, submitted, budget=budget))
+
+
+def _handle_execute_run_plan(package: ModelPackage, payload: Mapping[str, Any]) -> Any:
+    plan = run_plan_from_wire(_object(payload.get("plan"), "plan"))
+    progress_path = payload.get("progress_path")
+    progress = (
+        JsonlRunProgress(Path(_string(progress_path, "progress_path")))
+        if progress_path is not None
+        else None
+    )
+    logs_root = _optional_string(payload.get("logs_root"), "logs_root") or "logs"
+    log_folder = _optional_string(payload.get("log_folder"), "log_folder")
+    progress_step_interval = _positive_integer(
+        payload.get("progress_step_interval", 25),
+        "progress_step_interval",
+    )
+    raw_monitors = payload.get("monitors")
+    monitors = () if raw_monitors is None else _strings(raw_monitors, "monitors")
+    return run_results_to_wire(
+        execute_runs(
+            package,
+            plan,
+            artifacts=FilesystemRunArtifacts(
+                root=Path(logs_root),
+                namespace=log_folder,
+            ),
+            progress=progress,
+            progress_step_interval=progress_step_interval,
+            monitors=monitors,
+        )
+    )
+
+
+_OperationHandler = Callable[[ModelPackage, Mapping[str, Any]], Any]
+_OPERATION_HANDLERS: Final[Mapping[str, _OperationHandler]] = MappingProxyType(
+    {
+        "package_metadata": _handle_package_metadata,
+        "resolve": _handle_resolve,
+        "configuration": _handle_configuration,
+        "search_space": _handle_search_space,
+        "parse_overrides": _handle_parse_overrides,
+        "serialize_overrides": _handle_serialize_overrides,
+        "preset_locks": _handle_preset_locks,
+        "reject_locked_overrides": _handle_reject_locked_overrides,
+        "validate": _handle_validate,
+        "inspect": _handle_inspect,
+        "parse_search_value": _handle_parse_search_value,
+        "checkpoint_config_overrides": _handle_checkpoint_config_overrides,
+        "plan_runs": _handle_plan_runs,
+        "accept_run_plan": _handle_accept_run_plan,
+        "execute_run_plan": _handle_execute_run_plan,
+    }
+)
+
+
 def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
     if operation == "catalog":
-        return [
-            {
-                **package.identity.to_payload(),
-                "catalogKey": package.catalog_key,
-            }
-            for package in discover_model_packages()
-        ]
+        return _catalog_payload()
     package = _package(payload)
-    if operation == "package_metadata":
-        return package_metadata_to_wire(package)
-    if operation == "resolve":
-        return _resolve(payload)
-    if operation == "configuration":
-        return configuration_schema_to_wire(
-            configuration_schema(
-                package,
-                _optional_string(payload.get("preset"), "preset"),
-            )
-        )
-    if operation == "search_space":
-        raw_presets = payload.get("presets")
-        presets = None if raw_presets is None else _strings(raw_presets, "presets")
-        return search_space_to_wire(
-            search_space_schema(
-                package,
-                _optional_string(payload.get("preset"), "preset"),
-                presets,
-            )
-        )
-    if operation in {"parse_overrides", "serialize_overrides"}:
-        overrides = _optional_object(payload, "overrides", "overrides")
-        ignore_unknown = _boolean(
-            payload.get("ignore_unknown", False),
-            "ignore_unknown",
-        )
-        if operation == "parse_overrides":
-            return configuration_values_to_wire(
-                parse_overrides(
-                    package,
-                    overrides,
-                    preset=_optional_string(payload.get("preset"), "preset"),
-                    ignore_unknown=ignore_unknown,
-                ).values
-            )
-        return configuration_values_to_wire(
-            serialize_overrides(
-                package,
-                overrides,
-                ignore_unknown=ignore_unknown,
-            )
-        )
-    if operation == "preset_locks":
-        return preset_locks_to_wire(
-            preset_locks(
-                package,
-                _optional_string(payload.get("preset"), "preset"),
-            )
-        )
-    if operation == "reject_locked_overrides":
-        preset = payload.get("preset")
-        if not isinstance(preset, str):
-            raise AdapterProtocolError("Locked-override request requires preset.")
-        reject_locked_overrides(
-            package,
-            preset,
-            _optional_object(payload, "overrides", "overrides"),
-        )
-        return None
-    if operation == "validate":
-        preset = payload.get("preset")
-        if not isinstance(preset, str):
-            raise AdapterProtocolError("Validation request requires preset.")
-        validate_configuration(
-            package,
-            InspectionRequest(
-                preset=preset,
-                overrides=_optional_object(payload, "overrides", "overrides"),
-                dataset=_optional_string(payload.get("dataset"), "dataset"),
-                experiment_task=_optional_string(
-                    payload.get("experiment_task"),
-                    "experiment_task",
-                ),
-                memory_limit_bytes=_optional_positive_integer(
-                    payload.get("memory_limit_bytes"),
-                    "memory_limit_bytes",
-                ),
-            ),
-        )
-        return None
-    if operation == "inspect":
-        preset = payload.get("preset")
-        if not isinstance(preset, str):
-            raise AdapterProtocolError("Inspection request requires preset.")
-        return inspection_result_to_wire(
-            inspect_model(
-                package,
-                InspectionRequest(
-                    preset=preset,
-                    overrides=_optional_object(payload, "overrides", "overrides"),
-                    dataset=_optional_string(payload.get("dataset"), "dataset"),
-                    experiment_task=_optional_string(
-                        payload.get("experiment_task"),
-                        "experiment_task",
-                    ),
-                    memory_limit_bytes=_optional_positive_integer(
-                        payload.get("memory_limit_bytes"),
-                        "memory_limit_bytes",
-                    ),
-                ),
-            )
-        )
-    if operation == "parse_search_value":
-        search_key = payload.get("search_key")
-        if not isinstance(search_key, str):
-            raise AdapterProtocolError("Search-value request requires search_key.")
-        parsed = parse_config_value(
-            package.metadata.search_space,
-            search_key,
-            str(_scalar(payload.get("value"), "value")),
-        )
-        if isinstance(parsed, type):
-            abstract_error = abstract_config_class_error(parsed)
-            if abstract_error is not None:
-                raise ValueError(abstract_error)
-        return serialize_config_value(parsed)
-    if operation == "checkpoint_config_overrides":
-        return configuration_values_to_wire(
-            package.checkpoint_config_overrides(
-                _tensor_shapes(
-                    payload.get("tensor_shapes")
-                    if payload.get("tensor_shapes") is not None
-                    else {}
-                )
-            )
-        )
-    if operation == "plan_runs":
-        request = run_request_from_wire(_object(payload.get("request"), "request"))
-        budget = planning_budget_from_wire(
-            _optional_object(payload, "budget", "budget")
-        )
-        raw_state = payload.get("random_state")
-        random_source = None
-        if raw_state is not None:
-            random_source = random.Random()
-            random_source.setstate(random_state_from_wire(raw_state))
-        plan = plan_runs(
-            package,
-            request,
-            random_source=random_source,
-            budget=budget,
-        )
-        return {
-            "plan": run_plan_to_wire(plan),
-            "random_state": (
-                random_state_to_wire(random_source.getstate())
-                if random_source is not None
-                else None
-            ),
-        }
-    if operation == "accept_run_plan":
-        request = run_request_from_wire(_object(payload.get("request"), "request"))
-        submitted = submitted_runs_from_wire(
-            payload.get("runs") if payload.get("runs") is not None else []
-        )
-        budget = planning_budget_from_wire(
-            _optional_object(payload, "budget", "budget")
-        )
-        return run_plan_to_wire(
-            accept_run_plan(package, request, submitted, budget=budget)
-        )
-    if operation == "execute_run_plan":
-        plan = run_plan_from_wire(_object(payload.get("plan"), "plan"))
-        progress_path = payload.get("progress_path")
-        progress = (
-            JsonlRunProgress(Path(_string(progress_path, "progress_path")))
-            if progress_path is not None
-            else None
-        )
-        logs_root = _optional_string(payload.get("logs_root"), "logs_root") or "logs"
-        log_folder = _optional_string(payload.get("log_folder"), "log_folder")
-        progress_step_interval = _positive_integer(
-            payload.get("progress_step_interval", 25),
-            "progress_step_interval",
-        )
-        raw_monitors = payload.get("monitors")
-        monitors = () if raw_monitors is None else _strings(raw_monitors, "monitors")
-        return run_results_to_wire(
-            execute_runs(
-                package,
-                plan,
-                artifacts=FilesystemRunArtifacts(
-                    root=Path(logs_root),
-                    namespace=log_folder,
-                ),
-                progress=progress,
-                progress_step_interval=progress_step_interval,
-                monitors=monitors,
-            )
-        )
-    raise AdapterProtocolError(f"Unknown Adapter operation: {operation}")
+    handler = _OPERATION_HANDLERS.get(operation)
+    if handler is None:
+        raise AdapterProtocolError(f"Unknown Adapter operation: {operation}")
+    return handler(package, payload)
 
 
 def process_request(request: Mapping[str, Any]) -> dict[str, Any]:

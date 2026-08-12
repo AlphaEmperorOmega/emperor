@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
@@ -15,12 +17,21 @@ from torch.utils.data import DataLoader, TensorDataset
 from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
-    _LoadedCheckpointContinuation,
-    validate_model_state,
+    CheckpointContinuationLifecycle,
 )
 from unit.test_neuron import NeuronTestCase
 
 OPTIMIZER_LAYOUT_CHECKPOINT_KEY = "emperor_neuron_optimizer_layout"
+
+
+@dataclass(frozen=True)
+class _SingleRunPlan:
+    runs: tuple[object, ...] = (object(),)
+
+
+@dataclass(frozen=True)
+class _TargetTrainingRun:
+    num_epochs: int = 3
 
 
 class _GrowingNeuronModule(LightningModule):
@@ -143,6 +154,7 @@ class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
             for key, value in state.items()
         }
 
+    @pytest.mark.training
     def test_grown_parameter_and_adam_state_restore_then_continue_updating(
         self,
     ) -> None:
@@ -171,24 +183,20 @@ class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
                 source_trainer.optimizers[0].state[source_child]
             )
 
-            checkpoint_payload = torch.load(
-                checkpoint, map_location="cpu", weights_only=True
-            )
             resumed_model = _GrowingNeuronModule(config)
-            validate_model_state(
-                _LoadedCheckpointContinuation(
-                    request=CheckpointContinuation(checkpoint),
-                    state_dict=checkpoint_payload["state_dict"],
-                    epoch=int(checkpoint_payload["epoch"]),
-                    global_step=int(checkpoint_payload["global_step"]),
-                ),
-                resumed_model,
+            lifecycle = CheckpointContinuationLifecycle.admit(
+                CheckpointContinuation(checkpoint),
+                _SingleRunPlan(),
             )
+            execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
+            model_validator = execution_options.model_validator
+            assert model_validator is not None
+            model_validator(resumed_model)
             probe = _GrownParameterContinuationProbe()
             resumed_trainer = Trainer(
                 accelerator="cpu",
                 default_root_dir=directory,
-                max_epochs=2,
+                max_epochs=3,
                 limit_train_batches=3,
                 limit_val_batches=0,
                 logger=False,
@@ -242,6 +250,7 @@ class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
                 {"optimizer_states": [optimizer.state_dict()]},
             )
 
+    @pytest.mark.training
     def test_named_layout_restores_custom_parameter_order_by_identity(self) -> None:
         config = self.build_config()
         loader = self.build_loader()
