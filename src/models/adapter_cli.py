@@ -120,6 +120,10 @@ def _positive_integer(value: object, label: str) -> int:
     return value
 
 
+def _optional_positive_integer(value: object, label: str) -> int | None:
+    return None if value is None else _positive_integer(value, label)
+
+
 def _tensor_shapes(value: object) -> dict[str, tuple[int, ...]]:
     raw_shapes = _object(value, "tensor_shapes")
     shapes: dict[str, tuple[int, ...]] = {}
@@ -258,6 +262,10 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
                     payload.get("experiment_task"),
                     "experiment_task",
                 ),
+                memory_limit_bytes=_optional_positive_integer(
+                    payload.get("memory_limit_bytes"),
+                    "memory_limit_bytes",
+                ),
             ),
         )
         return None
@@ -275,6 +283,10 @@ def _handle(operation: str, payload: Mapping[str, Any]) -> Any:
                     experiment_task=_optional_string(
                         payload.get("experiment_task"),
                         "experiment_task",
+                    ),
+                    memory_limit_bytes=_optional_positive_integer(
+                        payload.get("memory_limit_bytes"),
+                        "memory_limit_bytes",
                     ),
                 ),
             )

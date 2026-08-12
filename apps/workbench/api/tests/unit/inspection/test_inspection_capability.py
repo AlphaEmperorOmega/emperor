@@ -26,12 +26,14 @@ from emperor_workbench.inspection import (
 )
 from emperor_workbench.inspection._subprocess import _DEFAULT_WORKER_COMMAND
 from emperor_workbench.inspection._worker_protocol import (
+    InspectionWorkerRequest,
     decode_worker_request,
     decode_worker_response,
     domain_failure_envelope,
     encode_worker_request,
     success_envelope,
 )
+from emperor_workbench.inspection.worker import _run_worker
 from emperor_workbench.model_packages import (
     ModelPackageCatalog,
     SelectedModelPackage,
@@ -279,6 +281,45 @@ class InspectionCapabilityTests(unittest.TestCase):
             inspection_result_to_wire(decoded),
             inspection_result_to_wire(result),
         )
+
+    def test_worker_forwards_its_memory_limit_to_runtime_preflight(self) -> None:
+        selected = Mock()
+        selected.parse_overrides.return_value = {"hidden_dim": 12}
+        catalog = Mock()
+        catalog.select_parts.return_value = selected
+        project_adapter = Mock()
+        project_adapter.__enter__ = Mock(return_value=project_adapter)
+        project_adapter.__exit__ = Mock(return_value=False)
+        request = InspectionWorkerRequest(
+            model_type="linears",
+            model="linear",
+            preset="baseline",
+            overrides={"HIDDEN_DIM": 12},
+            dataset="Mnist",
+            experiment_task="image-classification",
+            memory_bytes=768 * 1024**2,
+            cpu_count=2,
+        )
+
+        with (
+            patch("emperor_workbench.inspection.worker._apply_worker_limits"),
+            patch(
+                "emperor_workbench.project_adapter.ProjectAdapterClient",
+                return_value=project_adapter,
+            ),
+            patch(
+                "emperor_workbench.model_packages.ModelPackageCatalog",
+                return_value=catalog,
+            ),
+            patch(
+                "emperor_workbench.inspection.worker.success_envelope",
+                return_value={"ok": True},
+            ),
+        ):
+            _run_worker(request)
+
+        runtime_request = selected.inspect.call_args.args[0]
+        self.assertEqual(runtime_request.memory_limit_bytes, 768 * 1024**2)
 
     def test_worker_domain_and_malformed_envelopes_are_stable(self) -> None:
         expected = InspectionFailure(

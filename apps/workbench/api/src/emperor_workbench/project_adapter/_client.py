@@ -424,6 +424,7 @@ class ProjectAdapterClient:
                 "overrides": json_value_to_wire(overrides),
                 "dataset": request.dataset,
                 "experiment_task": request.experiment_task,
+                "memory_limit_bytes": request.memory_limit_bytes,
             },
         )
         return _decode_wire_result(
