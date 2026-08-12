@@ -6,6 +6,7 @@ import re
 import stat
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -48,24 +49,42 @@ def _error(message: str) -> int:
     return 1
 
 
-def archive_logs(argv: Sequence[str], *, repository_root: Path | None = None) -> int:
-    arguments = list(argv)
-    if arguments and arguments[0] in {"-h", "--help"}:
-        print(USAGE)
-        return 0
+class _ArchivePlanningError(ValueError):
+    """The requested archive cannot be planned safely."""
+
+
+@dataclass(frozen=True, slots=True)
+class _ArchivePlan:
+    log_root: Path
+    source: Path
+    output: Path
+
+
+def _resolve_project_roots(repository_root: Path | None) -> tuple[Path, Path]:
     root = (repository_root or Path.cwd()).resolve()
     if (
         not (root / "pyproject.toml").is_file()
         or not (root / "src" / "models").is_dir()
     ):
-        return _error("run this command from the project root.")
+        raise _ArchivePlanningError("run this command from the project root.")
     log_root = (root / "logs").resolve()
     if not log_root.is_dir():
-        return _error("./logs not found. Run this command from the project directory.")
+        raise _ArchivePlanningError(
+            "./logs not found. Run this command from the project directory."
+        )
     if _is_link_like(root / "logs"):
-        return _error("./logs must not be a symlink, junction, or reparse point.")
+        raise _ArchivePlanningError(
+            "./logs must not be a symlink, junction, or reparse point."
+        )
+    return root, log_root
 
-    selected = arguments[0] if arguments else ""
+
+def _resolve_archive_source(
+    selected: str,
+    *,
+    root: Path,
+    log_root: Path,
+) -> Path:
     if selected in {"", "logs", "logs/", "logs\\"}:
         source = log_root
     else:
@@ -76,27 +95,58 @@ def archive_logs(argv: Sequence[str], *, repository_root: Path | None = None) ->
         if candidate.is_absolute() or any(
             part in {"", ".", ".."} for part in candidate.parts
         ):
-            return _error(f"log entry must be a folder inside ./logs: {selected}")
+            raise _ArchivePlanningError(
+                f"log entry must be a folder inside ./logs: {selected}"
+            )
         source = (log_root / candidate).resolve()
         try:
             source.relative_to(log_root)
-        except ValueError:
-            return _error(f"log entry must be a folder inside ./logs: {selected}")
+        except ValueError as exc:
+            raise _ArchivePlanningError(
+                f"log entry must be a folder inside ./logs: {selected}"
+            ) from exc
     if not source.is_dir():
-        return _error(f"log folder not found under ./logs: {source.relative_to(root)}")
+        raise _ArchivePlanningError(
+            f"log folder not found under ./logs: {source.relative_to(root)}"
+        )
+    return source
 
+
+def _resolve_archive_output(
+    arguments: Sequence[str],
+    *,
+    root: Path,
+    source: Path,
+) -> Path:
     if len(arguments) >= 2:
         output = Path(arguments[1]).expanduser()
-        output = output.resolve() if output.is_absolute() else (root / output).resolve()
-    else:
-        archive_name = re.sub(r"[^A-Za-z0-9._-]", "_", source.name) or "logs"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output = root / f"{archive_name}_{timestamp}.zip"
-    output.parent.mkdir(parents=True, exist_ok=True)
+        return output.resolve() if output.is_absolute() else (root / output).resolve()
+    archive_name = re.sub(r"[^A-Za-z0-9._-]", "_", source.name) or "logs"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return root / f"{archive_name}_{timestamp}.zip"
 
+
+def _plan_archive(
+    arguments: Sequence[str],
+    *,
+    repository_root: Path | None,
+) -> _ArchivePlan:
+    root, log_root = _resolve_project_roots(repository_root)
+    selected = arguments[0] if arguments else ""
+    source = _resolve_archive_source(selected, root=root, log_root=log_root)
+    output = _resolve_archive_output(arguments, root=root, source=source)
+    return _ArchivePlan(
+        log_root=log_root,
+        source=source,
+        output=output,
+    )
+
+
+def _write_archive(plan: _ArchivePlan) -> int:
+    plan.output.parent.mkdir(parents=True, exist_ok=True)
     file_count = 0
-    with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-        for path in sorted(source.rglob("*")):
+    with ZipFile(plan.output, "w", compression=ZIP_DEFLATED) as archive:
+        for path in sorted(plan.source.rglob("*")):
             if _is_link_like(path):
                 raise SystemExit(
                     "Error: refusing symlink, junction, or reparse point in "
@@ -104,18 +154,31 @@ def archive_logs(argv: Sequence[str], *, repository_root: Path | None = None) ->
                 )
             resolved = path.resolve()
             try:
-                relative = resolved.relative_to(log_root)
+                relative = resolved.relative_to(plan.log_root)
             except ValueError as exc:
                 raise SystemExit(
-                    f"Error: log archive entry resolves outside {log_root}: {path}"
+                    f"Error: log archive entry resolves outside {plan.log_root}: {path}"
                 ) from exc
-            if resolved == output:
+            if resolved == plan.output:
                 continue
             archive.write(path, relative.as_posix())
             if path.is_file():
                 file_count += 1
-    size_mb = output.stat().st_size / (1024 * 1024)
-    print(f"Created archive: {output}")
+    return file_count
+
+
+def archive_logs(argv: Sequence[str], *, repository_root: Path | None = None) -> int:
+    arguments = list(argv)
+    if arguments and arguments[0] in {"-h", "--help"}:
+        print(USAGE)
+        return 0
+    try:
+        plan = _plan_archive(arguments, repository_root=repository_root)
+    except _ArchivePlanningError as exc:
+        return _error(str(exc))
+    file_count = _write_archive(plan)
+    size_mb = plan.output.stat().st_size / (1024 * 1024)
+    print(f"Created archive: {plan.output}")
     print(f"Included files: {file_count}")
     print(f"Archive size: {size_mb:.2f} MiB")
     return 0
