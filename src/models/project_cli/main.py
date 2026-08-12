@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 from models.catalog import (
     discover_model_identities,
@@ -359,15 +360,20 @@ def run_model_command(
     return run_model_package_cli(catalog_key, arguments)
 
 
-def run_experiment(argv: Sequence[str] | None = None) -> int:
-    arguments = list(sys.argv[1:] if argv is None else argv)
-    if not arguments:
-        show_no_argument_usage_help()
-        return 0
-    if not arguments[0].startswith("--"):
-        show_positional_model_error(arguments[0])
-        return 1
+@dataclass(frozen=True, slots=True)
+class _ExperimentInvocation:
+    model_type: str
+    model: str
+    list_model_types_requested: bool
+    list_models_requested: bool
+    list_datasets_requested: bool
+    list_monitors_requested: bool
+    forwarded: tuple[str, ...]
 
+
+def _parse_experiment_invocation(
+    arguments: Sequence[str],
+) -> _ExperimentInvocation | None:
     model_type = ""
     model = ""
     list_model_types_requested = False
@@ -389,7 +395,7 @@ def run_experiment(argv: Sequence[str] | None = None) -> int:
         elif argument in {"--model-type", "--model"}:
             if index + 1 >= len(arguments) or arguments[index + 1] == "":
                 show_missing_flag_value_error(argument)
-                return 1
+                return None
             if argument == "--model-type":
                 model_type = arguments[index + 1]
             else:
@@ -398,35 +404,51 @@ def run_experiment(argv: Sequence[str] | None = None) -> int:
         else:
             forwarded.append(argument)
         index += 1
+    return _ExperimentInvocation(
+        model_type=model_type,
+        model=model,
+        list_model_types_requested=list_model_types_requested,
+        list_models_requested=list_models_requested,
+        list_datasets_requested=list_datasets_requested,
+        list_monitors_requested=list_monitors_requested,
+        forwarded=tuple(forwarded),
+    )
 
-    if list_model_types_requested:
+
+def _dispatch_listing(invocation: _ExperimentInvocation) -> int | None:
+    if invocation.list_model_types_requested:
         show_model_type_list_usage()
         return 0
-    if list_models_requested:
-        if model_type and not model_type_exists(model_type):
-            show_unknown_model_type_error(model_type)
+    if invocation.list_models_requested:
+        if invocation.model_type and not model_type_exists(invocation.model_type):
+            show_unknown_model_type_error(invocation.model_type)
             return 1
-        show_model_list_usage(model_type)
+        show_model_list_usage(invocation.model_type)
         return 0
-    if list_datasets_requested or list_monitors_requested:
-        if not model_type or not model:
-            show_missing_model_selector_error()
-            return 1
-        if model_id_from_parts(model_type, model) is None:
-            show_unknown_model_error(model_type, model)
-            return 1
-        if list_datasets_requested:
-            show_dataset_list_usage(model_type, model)
-        else:
-            show_monitor_list_usage(model_type, model)
-        return 0
-    if not model_type or not model:
+    if not (invocation.list_datasets_requested or invocation.list_monitors_requested):
+        return None
+    if not invocation.model_type or not invocation.model:
         show_missing_model_selector_error()
         return 1
-    model_id = model_id_from_parts(model_type, model)
-    if model_id is None:
-        show_unknown_model_error(model_type, model)
+    if model_id_from_parts(invocation.model_type, invocation.model) is None:
+        show_unknown_model_error(invocation.model_type, invocation.model)
         return 1
+    if invocation.list_datasets_requested:
+        show_dataset_list_usage(invocation.model_type, invocation.model)
+    else:
+        show_monitor_list_usage(invocation.model_type, invocation.model)
+    return 0
+
+
+def _dispatch_selected_model(invocation: _ExperimentInvocation) -> int:
+    if not invocation.model_type or not invocation.model:
+        show_missing_model_selector_error()
+        return 1
+    model_id = model_id_from_parts(invocation.model_type, invocation.model)
+    if model_id is None:
+        show_unknown_model_error(invocation.model_type, invocation.model)
+        return 1
+    forwarded = list(invocation.forwarded)
     if forwarded and forwarded[0] == "--list-presets":
         print_preset_options(model_id)
         return 0
@@ -436,7 +458,28 @@ def run_experiment(argv: Sequence[str] | None = None) -> int:
     if forwarded == ["--preset"]:
         print_preset_options(model_id)
         return 0
-    return run_model_command(model_type, model, forwarded)
+    return run_model_command(
+        invocation.model_type,
+        invocation.model,
+        forwarded,
+    )
+
+
+def run_experiment(argv: Sequence[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        show_no_argument_usage_help()
+        return 0
+    if not arguments[0].startswith("--"):
+        show_positional_model_error(arguments[0])
+        return 1
+    invocation = _parse_experiment_invocation(arguments)
+    if invocation is None:
+        return 1
+    listing_result = _dispatch_listing(invocation)
+    if listing_result is not None:
+        return listing_result
+    return _dispatch_selected_model(invocation)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
