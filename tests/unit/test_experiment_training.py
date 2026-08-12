@@ -5,6 +5,7 @@ import unittest
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 
 from lightning.pytorch.callbacks import Callback
 
@@ -19,6 +20,7 @@ from model_runtime.packages import (
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase, JsonlRunProgress
+from model_runtime.runs._handoff import TrainingRunRequest
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
 from model_runtime.runs.artifacts import (
     DEFAULT_RESULT_METRIC_KEY_LIMIT,
@@ -250,15 +252,15 @@ class TestExperimentTraining(unittest.TestCase):
     ):
         training_run = experiment.materialize_training_runs(
             [
-                {
-                    "id": run_id,
-                    "index": run_index,
-                    "run_total": run_total,
-                    "preset": preset,
-                    "dataset_type": dataset_type,
-                    "parameters": parameters or {},
-                    "config_overrides": config_overrides or {},
-                }
+                TrainingRunRequest(
+                    run_id=run_id,
+                    run_index=run_index,
+                    run_total=run_total,
+                    preset=preset,
+                    dataset_type=dataset_type,
+                    parameters=parameters or {},
+                    config_overrides=config_overrides or {},
+                )
             ]
         )[0]
         return experiment.execute_training_run(
@@ -405,6 +407,380 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(started["totalEpochs"], 3)
         self.assertEqual(started["params"], {"NUM_EPOCHS": 3})
         self.assertEqual(completed["metrics"], {"validation_accuracy": 0.75})
+
+    def test_training_lifecycle_order_is_stable(self):
+        events = []
+        configured_callback = FakeMonitorCallback()
+        explicit_callback = FakeMonitorCallback()
+        progress_callback = FakeMonitorCallback()
+
+        class TracingArtifacts:
+            root = Path("logs")
+
+            def run_name(self, identity, preset_key, dataset, parameters):
+                events.append("run_name")
+                return "trace/model/BASELINE/FakeDatasetA/run"
+
+            def result_metrics_payload(self, metrics):
+                return {
+                    "metrics": {key: value.item() for key, value in metrics.items()}
+                }
+
+            def write_result(self, log_dir, result):
+                events.append("write_result")
+                return Path(log_dir) / "result.json"
+
+            def update_best_results(self, identity, experiment_task, result):
+                events.append("update_best_results")
+                return {}
+
+        class TracingPackageAdapter(FakePackageAdapter):
+            def build_model(self, configuration):
+                events.append("model")
+                return super().build_model(configuration)
+
+        adapter = TracingPackageAdapter()
+        package = ModelPackage(adapter.metadata.identity, adapter)
+
+        class TracingExperiment(FakeExperiment):
+            def _run_progress_context(self, training_run):
+                events.append("progress_context")
+                return super()._run_progress_context(training_run)
+
+            def _load_trainer_config(self, config_overrides=None):
+                events.append("trainer_config")
+                return {
+                    "trainer_args": {"fixture_option": "kept"},
+                    "callbacks": [configured_callback],
+                }
+
+            def _load_runtime_config(self, config_overrides=None):
+                events.append("runtime_config")
+                return {
+                    "data_num_workers": 2,
+                    "run_test_after_fit": True,
+                    "seed": 17,
+                }
+
+            def _build_dataset(self, training_run):
+                events.append("dataset")
+                return super()._build_dataset(training_run)
+
+            def _configure_dataset(self, dataset, runtime_config):
+                events.append("configure_dataset")
+                super()._configure_dataset(dataset, runtime_config)
+
+            def _training_result(self, training_run, trainer, *, resumed_from=None):
+                events.append("training_result")
+                return super()._training_result(
+                    training_run,
+                    trainer,
+                    resumed_from=resumed_from,
+                )
+
+            def _emit_dataset_started(
+                self,
+                training_run,
+                progress,
+                *,
+                resumed_from=None,
+            ):
+                events.append("dataset_started")
+                super()._emit_dataset_started(
+                    training_run,
+                    progress,
+                    resumed_from=resumed_from,
+                )
+
+            def _emit_dataset_completed(
+                self,
+                result,
+                progress,
+                *,
+                resumed_from=None,
+            ):
+                events.append("dataset_completed")
+                super()._emit_dataset_completed(
+                    result,
+                    progress,
+                    resumed_from=resumed_from,
+                )
+
+        class TracingLogger:
+            def __init__(self, save_dir, name):
+                events.append("logger")
+                self.log_dir = str(Path(save_dir) / name)
+
+        class TracingTrainer:
+            instances = []
+
+            def __init__(self, max_epochs, logger, callbacks, **kwargs):
+                events.append("trainer")
+                self.max_epochs = max_epochs
+                self.logger = logger
+                self.callbacks = callbacks
+                self.kwargs = kwargs
+                self.callback_metrics = {"validation_accuracy": FakeMetric(0.75)}
+                type(self).instances.append(self)
+
+            def fit(self, model, datamodule, **kwargs):
+                events.append("fit")
+                self.model = model
+                self.fit_datamodule = datamodule
+                self.fit_kwargs = kwargs
+
+            def test(self, model, datamodule):
+                events.append("test")
+                self.test_datamodule = datamodule
+
+        experiment = TracingExperiment(
+            FakeOption.BASELINE,
+            model_package=package,
+            run_artifacts=TracingArtifacts(),
+        )
+        training_run = experiment.materialize_training_runs(
+            [
+                TrainingRunRequest(
+                    run_id="trace-run",
+                    run_index=1,
+                    run_total=1,
+                    preset=FakeOption.BASELINE,
+                    dataset_type=FakeDatasetA,
+                    parameters={"SEED": 17},
+                    config_overrides={},
+                )
+            ]
+        )[0]
+        progress = CaptureRunProgress()
+        resumed_from = {"checkpoint": "safe-name.ckpt"}
+        original_contextual_progress = experiments_base.contextual_run_progress
+
+        def contextual_progress(writer, context):
+            events.append("contextual_progress")
+            return original_contextual_progress(writer, context)
+
+        def validate_model(model):
+            events.append("validate_model")
+
+        with (
+            patch.object(experiments_base, "Trainer", TracingTrainer),
+            patch.object(experiments_base, "TensorBoardLogger", TracingLogger),
+            patch.object(
+                experiments_base,
+                "seed_everything",
+                side_effect=lambda seed, *, workers: events.append("seed"),
+            ) as seed_everything_mock,
+            patch.object(
+                experiments_base,
+                "contextual_run_progress",
+                side_effect=contextual_progress,
+            ),
+            patch.object(
+                experiments_base,
+                "lightning_progress_adapter",
+                side_effect=lambda selected_progress, *, step_interval: (
+                    events.append("progress_callback") or progress_callback
+                ),
+            ) as progress_adapter,
+        ):
+            result, log_dir = experiment.execute_training_run(
+                training_run,
+                callbacks=[explicit_callback],
+                progress=progress,
+                progress_step_interval=7,
+                ckpt_path=Path("resume.ckpt"),
+                model_validator=validate_model,
+                resumed_from=resumed_from,
+            )
+
+        self.assertEqual(
+            events,
+            [
+                "progress_context",
+                "contextual_progress",
+                "trainer_config",
+                "runtime_config",
+                "seed",
+                "dataset",
+                "configure_dataset",
+                "model",
+                "validate_model",
+                "run_name",
+                "logger",
+                "dataset_started",
+                "progress_callback",
+                "trainer",
+                "fit",
+                "test",
+                "training_result",
+                "write_result",
+                "update_best_results",
+                "dataset_completed",
+            ],
+        )
+        seed_everything_mock.assert_called_once_with(17, workers=True)
+        progress_adapter.assert_called_once()
+        self.assertEqual(progress_adapter.call_args.kwargs, {"step_interval": 7})
+        trainer = TracingTrainer.instances[0]
+        self.assertEqual(
+            trainer.callbacks,
+            [configured_callback, explicit_callback, progress_callback],
+        )
+        self.assertEqual(trainer.kwargs, {"fixture_option": "kept"})
+        self.assertEqual(trainer.fit_kwargs, {"ckpt_path": Path("resume.ckpt")})
+        self.assertEqual(log_dir, "logs/trace/model/BASELINE/FakeDatasetA/run")
+        self.assertEqual(result["resumedFrom"], resumed_from)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed"],
+        )
+
+    def test_progress_context_failure_is_outside_training_error_boundary(self):
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        training_run = experiment.materialize_training_runs(
+            [
+                TrainingRunRequest(
+                    run_id="run-0001",
+                    run_index=1,
+                    run_total=1,
+                    preset=FakeOption.BASELINE,
+                    dataset_type=FakeDatasetA,
+                    parameters={},
+                    config_overrides={},
+                )
+            ]
+        )[0]
+
+        with (
+            patch.object(
+                experiment,
+                "_run_progress_context",
+                side_effect=RuntimeError("progress context exploded"),
+            ),
+            patch.object(experiment, "_emit_training_error") as emit_error,
+            self.assertRaisesRegex(RuntimeError, "progress context exploded"),
+        ):
+            experiment.execute_training_run(training_run, callbacks=[])
+
+        emit_error.assert_not_called()
+
+    def test_training_failure_remains_primary_when_error_event_sink_fails(self):
+        class FailingPreparationExperiment(FakeExperiment):
+            def _prepare_training_runtime(self, state):
+                raise RuntimeError("primary training failure")
+
+        class FailingProgress:
+            def write_event(self, event):
+                raise OSError("progress sink failure")
+
+        experiment = FailingPreparationExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "primary training failure",
+        ) as raised:
+            self._execute_run(experiment, progress=FailingProgress())
+
+        self.assertTrue(
+            any(
+                "OSError: progress sink failure" in note
+                for note in raised.exception.__notes__
+            )
+        )
+
+    def test_dataset_started_sink_failure_is_the_primary_start_failure(self):
+        class FailingStartedProgress:
+            def __init__(self):
+                self.events = []
+
+            def write_event(self, event):
+                payload = dict(event)
+                if payload["type"] == "dataset_started":
+                    raise OSError("dataset-started sink failure")
+                self.events.append(payload)
+
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        progress = FailingStartedProgress()
+
+        with self.assertRaisesRegex(
+            OSError,
+            "dataset-started sink failure",
+        ):
+            self._execute_run(experiment, progress=progress)
+
+        self.assertEqual(FakeTrainer.instances, [])
+        self.assertEqual([event["type"] for event in progress.events], ["error"])
+        self.assertEqual(
+            progress.events[0]["error"],
+            "dataset-started sink failure",
+        )
+
+    def test_healthy_sink_receives_training_error_and_traceback(self):
+        class FailingPreparationExperiment(FakeExperiment):
+            def _prepare_training_runtime(self, state):
+                raise RuntimeError("primary training failure")
+
+        experiment = FailingPreparationExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        progress = CaptureRunProgress()
+
+        with self.assertRaisesRegex(RuntimeError, "primary training failure"):
+            self._execute_run(experiment, progress=progress)
+
+        self.assertEqual(len(progress.events), 1)
+        error_event = progress.events[0]
+        self.assertEqual(error_event["type"], "error")
+        self.assertEqual(error_event["status"], "failed")
+        self.assertEqual(error_event["error"], "primary training failure")
+        self.assertIn("Traceback (most recent call last)", error_event["traceback"])
+        self.assertIn(
+            "RuntimeError: primary training failure",
+            error_event["traceback"],
+        )
+
+    def test_dataset_completed_sink_failure_is_the_primary_completion_failure(self):
+        class FailingCompletedProgress:
+            def __init__(self):
+                self.events = []
+
+            def write_event(self, event):
+                payload = dict(event)
+                if payload["type"] == "dataset_completed":
+                    raise OSError("dataset-completed sink failure")
+                self.events.append(payload)
+
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        progress = FailingCompletedProgress()
+
+        with self.assertRaisesRegex(
+            OSError,
+            "dataset-completed sink failure",
+        ):
+            self._execute_run(experiment, progress=progress)
+
+        self.assertEqual(len(FakeTrainer.instances), 1)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "error"],
+        )
+        self.assertEqual(
+            progress.events[-1]["error"],
+            "dataset-completed sink failure",
+        )
 
     def test_run_execution_rejects_path_like_log_folder(self):
         with self.assertRaises(ValueError):

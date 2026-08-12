@@ -6,61 +6,22 @@ from typing import Any
 
 from model_runtime.inspection import (
     InspectionError,
-    canonicalize_overrides,
     configuration_schema,
-    parse_overrides,
-    reject_locked_overrides,
-    search_space_schema,
-    serialize_overrides,
 )
-from model_runtime.inspection.overrides import reject_conflicting_locked_overrides
-from model_runtime.inspection.runtime_defaults import (
-    RuntimeDefaultsSpec,
-    runtime_defaults_spec,
-)
-from model_runtime.packages import (
-    ModelPackage,
-    abstract_config_class_error,
-    dataset_name,
-    normalize_key,
-)
+from model_runtime.packages import ModelPackage, RuntimeDefaultsError, dataset_name
+from model_runtime.runs._search_parsing import ParsedSearch, SearchValue, parse_search
 from model_runtime.runs.errors import InvalidRunPlan, InvalidRunRequest, PlanTooLarge
 from model_runtime.runs.records import (
     PlanningBudget,
+    PresetSearch,
     RandomSource,
     RunParameter,
+    RunParameterSource,
     RunPlan,
     RunRequest,
     RunSpec,
-    SearchAxisSelection,
-    SearchSpec,
     SubmittedRun,
 )
-from model_runtime.runs.search import PreparedSearch
-
-
-@dataclass(frozen=True, slots=True)
-class _SearchValue:
-    serialized: Any
-    parsed: Any
-
-
-@dataclass(frozen=True, slots=True)
-class _ParsedSearchAxis:
-    key: str
-    model_param: str
-    values: tuple[_SearchValue, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _ParsedSearch:
-    spec: SearchSpec
-    axes: tuple[_ParsedSearchAxis, ...]
-    prepared: PreparedSearch
-
-    @property
-    def model_params(self) -> set[str]:
-        return {axis.model_param for axis in self.axes}
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,15 +29,21 @@ class _ResolvedRequest:
     experiment_task_name: str
     preset_names: tuple[str, ...]
     datasets: tuple[type, ...]
-    searches: tuple[_ParsedSearch | None, ...]
+    searches: tuple[ParsedSearch | None, ...]
     effective_overrides_by_preset: tuple[Mapping[str, Any], ...]
     serialized_overrides: Mapping[str, Any]
 
-    @property
-    def normalized_search(self) -> SearchSpec | None:
-        return next(
-            (search.spec for search in self.searches if search is not None),
-            None,
+    def preset_searches(self) -> tuple[PresetSearch, ...]:
+        return tuple(
+            PresetSearch(
+                preset=preset,
+                search=search.spec if search is not None else None,
+            )
+            for preset, search in zip(
+                self.preset_names,
+                self.searches,
+                strict=True,
+            )
         )
 
 
@@ -88,9 +55,23 @@ def _plan_error(exc: Exception) -> InvalidRunPlan:
     return InvalidRunPlan(str(exc))
 
 
+def _require_model_package(value: object) -> ModelPackage:
+    if not isinstance(value, ModelPackage):
+        raise TypeError("Runs require a selected ModelPackage.")
+    return value
+
+
+def _selected_planning_budget(value: object) -> PlanningBudget:
+    if value is None:
+        return PlanningBudget()
+    if not isinstance(value, PlanningBudget):
+        raise TypeError("Run planning budget must be a PlanningBudget.")
+    return value
+
+
 def _resolve_presets(
     package: ModelPackage,
-    raw_presets: Sequence[str],
+    raw_presets: Sequence[object],
 ) -> tuple[str, ...]:
     selected_names: list[str] = []
     seen: set[str] = set()
@@ -110,218 +91,6 @@ def _resolve_presets(
     return tuple(selected_names)
 
 
-def _parse_search_value(
-    *,
-    runtime_defaults: RuntimeDefaultsSpec,
-    axis_key: str,
-    config_key: str,
-    search_key: str | None,
-    raw_value: Any,
-) -> _SearchValue:
-    try:
-        parsed = runtime_defaults.parse_search_value(
-            config_key,
-            raw_value,
-            search_key=search_key,
-        )
-        if isinstance(parsed, type):
-            abstract_error = abstract_config_class_error(parsed)
-            if abstract_error is not None:
-                raise ValueError(abstract_error)
-    except Exception as exc:
-        raise InvalidRunRequest(
-            f"Invalid search value for axis '{axis_key}': {raw_value!r}. {exc}"
-        ) from exc
-    return _SearchValue(
-        serialized=runtime_defaults.serialize_value(parsed),
-        parsed=parsed,
-    )
-
-
-def _reject_axis_budget(
-    selection: SearchAxisSelection,
-    budget: PlanningBudget,
-) -> None:
-    if (
-        selection.values is not None
-        and budget.max_values_per_axis is not None
-        and len(selection.values) > budget.max_values_per_axis
-    ):
-        raise PlanTooLarge(
-            f"Search axis '{selection.key}' accepts at most "
-            f"{budget.max_values_per_axis} selected values."
-        )
-
-
-def _parse_search(
-    package: ModelPackage,
-    preset_name: str,
-    spec: SearchSpec | None,
-    budget: PlanningBudget,
-) -> _ParsedSearch | None:
-    if spec is None:
-        return None
-    if spec.mode not in {"grid", "random"}:
-        raise InvalidRunRequest("Training search mode must be 'grid' or 'random'.")
-    if spec.axes == ():
-        raise InvalidRunRequest("Training search requires at least one selected axis.")
-    if (
-        spec.axes is not None
-        and budget.max_axes is not None
-        and len(spec.axes) > budget.max_axes
-    ):
-        raise PlanTooLarge(
-            f"Training search accepts at most {budget.max_axes} selected axes."
-        )
-
-    runtime_defaults = runtime_defaults_spec(package)
-    try:
-        search_space = search_space_schema(package, preset_name)
-    except InspectionError as exc:
-        raise _request_error(exc) from exc
-    axes_by_key = {normalize_key(axis.key): axis for axis in search_space.axes}
-    config_keys_by_selection = runtime_defaults.keys_by_alias
-    try:
-        locks = runtime_defaults.preset_locks(preset_name)
-    except InspectionError as exc:
-        raise _request_error(exc) from exc
-    if spec.axes is None:
-        selections = tuple(
-            SearchAxisSelection(key=axis.key)
-            for axis in search_space.axes
-            if not axis.locked
-        )
-    else:
-        selections = spec.axes
-    if spec.axes is None and budget.max_axes is not None:
-        semantic_axes = {
-            normalize_key(runtime_defaults.model_parameter(selection.key))
-            for selection in selections
-        }
-        if len(semantic_axes) > budget.max_axes:
-            raise PlanTooLarge(
-                f"Training search accepts at most {budget.max_axes} selected axes."
-            )
-
-    parsed_axes: list[_ParsedSearchAxis] = []
-    normalized_selections: list[SearchAxisSelection] = []
-    axis_positions: dict[str, int] = {}
-    implicit_full_search = spec.axes is None
-    for selection in selections:
-        _reject_axis_budget(selection, budget)
-        normalized_key = normalize_key(selection.key)
-        axis = axes_by_key.get(normalized_key)
-        if axis is None and selection.allow_custom_values:
-            config_key = config_keys_by_selection.get(normalized_key)
-        else:
-            config_key = None
-        if axis is None and config_key is None:
-            raise InvalidRunRequest(f"Unknown search axis '{selection.key}'.")
-
-        if axis is not None:
-            axis_key = axis.key
-            config_key = axis.key
-            model_param = runtime_defaults.model_parameter(axis.key)
-            search_key = axis.search_key
-            default_values = axis.values
-            allowed_values: tuple[Any, ...] | None = axis.values
-            locked = axis.locked
-            locked_value = axis.locked_value
-        else:
-            assert config_key is not None
-            axis_key = config_key
-            model_param = runtime_defaults.model_parameter(config_key)
-            search_key = None
-            default_values = ()
-            allowed_values = None
-            lock = locks.get(model_param)
-            locked = lock is not None
-            locked_value = runtime_defaults.serialize_value(
-                getattr(lock, "value", None)
-            )
-
-        semantic_axis_key = normalize_key(model_param)
-        existing_position = axis_positions.get(semantic_axis_key)
-        if existing_position is not None and implicit_full_search:
-            continue
-        raw_values = default_values if selection.values is None else selection.values
-        if not raw_values:
-            raise InvalidRunRequest(
-                f"Search axis '{axis_key}' requires at least one selected value."
-            )
-        if (
-            budget.max_values_per_axis is not None
-            and len(raw_values) > budget.max_values_per_axis
-        ):
-            raise PlanTooLarge(
-                f"Search axis '{axis_key}' accepts at most "
-                f"{budget.max_values_per_axis} selected values."
-            )
-        parsed_values = tuple(
-            _parse_search_value(
-                runtime_defaults=runtime_defaults,
-                axis_key=axis_key,
-                config_key=config_key,
-                search_key=search_key,
-                raw_value=raw_value,
-            )
-            for raw_value in raw_values
-        )
-        serialized_values = tuple(value.serialized for value in parsed_values)
-        if locked:
-            lock_is_unchanged = selection.allow_custom_values and all(
-                value == locked_value for value in serialized_values
-            )
-            if not lock_is_unchanged:
-                raise InvalidRunRequest(
-                    f"Search axis '{axis_key}' is locked by preset '{preset_name}'."
-                )
-        if not selection.allow_custom_values and allowed_values is not None:
-            allowed_value_set = set(allowed_values)
-            invalid_values = [
-                value for value in serialized_values if value not in allowed_value_set
-            ]
-            if invalid_values:
-                raise InvalidRunRequest(
-                    f"Search axis '{axis_key}' received values outside its "
-                    f"search space: {invalid_values}."
-                )
-        normalized_selection = SearchAxisSelection(
-            key=axis_key,
-            values=serialized_values,
-        )
-        parsed_axis = _ParsedSearchAxis(
-            key=axis_key,
-            model_param=model_param,
-            values=parsed_values,
-        )
-        if existing_position is None:
-            axis_positions[semantic_axis_key] = len(parsed_axes)
-            normalized_selections.append(normalized_selection)
-            parsed_axes.append(parsed_axis)
-        else:
-            normalized_selections[existing_position] = normalized_selection
-            parsed_axes[existing_position] = parsed_axis
-
-    random_samples: int | None = None
-    if spec.mode == "random":
-        random_samples = 10 if spec.random_samples is None else spec.random_samples
-    prepared = PreparedSearch(
-        axes=tuple(axis.values for axis in parsed_axes),
-        mode=spec.mode,
-        random_samples=random_samples,
-    )
-    return _ParsedSearch(
-        spec=SearchSpec(
-            mode=spec.mode,
-            axes=tuple(normalized_selections),
-            random_samples=random_samples,
-        ),
-        axes=tuple(parsed_axes),
-        prepared=prepared,
-    )
-
-
 def _strip_searched_overrides(
     package: ModelPackage,
     overrides: Mapping[str, Any],
@@ -330,10 +99,10 @@ def _strip_searched_overrides(
     if not searched_model_params:
         return dict(overrides)
     try:
-        canonical = canonicalize_overrides(package, overrides)
-    except InspectionError as exc:
+        runtime_defaults = package.runtime_defaults_spec
+        canonical = runtime_defaults.canonicalize_overrides(overrides)
+    except RuntimeDefaultsError as exc:
         raise _request_error(exc) from exc
-    runtime_defaults = runtime_defaults_spec(package)
     return {
         key: value
         for key, value in canonical.items()
@@ -347,20 +116,18 @@ def _reject_conflicting_locks(
     parsed_overrides: Mapping[str, Any],
 ) -> None:
     try:
-        reject_conflicting_locked_overrides(
-            package,
+        package.runtime_defaults_spec.reject_conflicting_locked_overrides(
             preset_name,
             parsed_overrides,
         )
-    except InspectionError as exc:
+    except RuntimeDefaultsError as exc:
         raise _request_error(exc) from exc
 
 
-def _resolve_request(
+def _resolve_task_and_datasets(
     package: ModelPackage,
     request: RunRequest,
-    budget: PlanningBudget,
-) -> _ResolvedRequest:
+) -> tuple[str, tuple[type[Any], ...]]:
     if not request.datasets:
         raise InvalidRunRequest("Training requires at least one selected dataset.")
     try:
@@ -370,11 +137,15 @@ def _resolve_request(
         )
     except ValueError as exc:
         raise _request_error(exc) from exc
-    preset_names = _resolve_presets(package, request.presets)
-    searches = tuple(
-        _parse_search(package, preset_name, request.search, budget)
-        for preset_name in preset_names
-    )
+    return package.task_name(experiment_task), datasets
+
+
+def _resolve_request_overrides(
+    package: ModelPackage,
+    overrides: Mapping[str, Any],
+    preset_names: tuple[str, ...],
+    searches: tuple[ParsedSearch | None, ...],
+) -> tuple[tuple[Mapping[str, Any], ...], Mapping[str, Any]]:
     searched_model_params = {
         model_param
         for search in searches
@@ -383,39 +154,56 @@ def _resolve_request(
     }
     top_level_effective_overrides = _strip_searched_overrides(
         package,
-        request.overrides,
+        overrides,
         searched_model_params,
     )
     try:
-        serialized_overrides = serialize_overrides(
-            package,
+        runtime_defaults = package.runtime_defaults_spec
+        serialized_overrides = runtime_defaults.serialize_overrides(
             top_level_effective_overrides,
         )
-    except InspectionError as exc:
+    except RuntimeDefaultsError as exc:
         raise _request_error(exc) from exc
 
     effective_overrides_by_preset: list[Mapping[str, Any]] = []
     for preset_name, search in zip(preset_names, searches, strict=True):
         effective_overrides = _strip_searched_overrides(
             package,
-            request.overrides,
+            overrides,
             search.model_params if search is not None else set(),
         )
         try:
-            parsed_overrides = parse_overrides(
-                package,
-                effective_overrides,
-            ).values
-        except InspectionError as exc:
+            parsed_overrides = runtime_defaults.parse_overrides(effective_overrides)
+        except RuntimeDefaultsError as exc:
             raise _request_error(exc) from exc
         _reject_conflicting_locks(package, preset_name, parsed_overrides)
         effective_overrides_by_preset.append(effective_overrides)
+    return tuple(effective_overrides_by_preset), serialized_overrides
+
+
+def _resolve_request(
+    package: ModelPackage,
+    request: RunRequest,
+    budget: PlanningBudget,
+) -> _ResolvedRequest:
+    experiment_task_name, datasets = _resolve_task_and_datasets(package, request)
+    preset_names = _resolve_presets(package, request.presets)
+    searches = tuple(
+        parse_search(package, preset_name, request.search, budget)
+        for preset_name in preset_names
+    )
+    effective_overrides_by_preset, serialized_overrides = _resolve_request_overrides(
+        package,
+        request.overrides,
+        preset_names,
+        searches,
+    )
     return _ResolvedRequest(
-        experiment_task_name=package.task_name(experiment_task),
+        experiment_task_name=experiment_task_name,
         preset_names=preset_names,
         datasets=datasets,
         searches=searches,
-        effective_overrides_by_preset=tuple(effective_overrides_by_preset),
+        effective_overrides_by_preset=effective_overrides_by_preset,
         serialized_overrides=serialized_overrides,
     )
 
@@ -424,13 +212,13 @@ def _ordered_parameters(
     package: ModelPackage,
     overrides: Mapping[str, Any],
     *,
-    source: str,
+    source: RunParameterSource,
 ) -> tuple[RunParameter, ...]:
-    runtime_defaults = runtime_defaults_spec(package)
     try:
-        canonical = canonicalize_overrides(package, overrides)
+        runtime_defaults = package.runtime_defaults_spec
+        canonical = runtime_defaults.canonicalize_overrides(overrides)
         schema = configuration_schema(package)
-    except InspectionError as exc:
+    except (InspectionError, RuntimeDefaultsError) as exc:
         raise _request_error(exc) from exc
     supported_keys = runtime_defaults.supported_keys
     missing_keys = sorted(set(canonical) - set(supported_keys))
@@ -448,7 +236,7 @@ def _ordered_parameters(
         RunParameter(
             key=key,
             value=runtime_defaults.serialize_value(canonical[key]),
-            source=source,  # type: ignore[arg-type]
+            source=source,
         )
         for key in ordered_keys
         if key in canonical
@@ -456,8 +244,8 @@ def _ordered_parameters(
 
 
 def _search_parameters(
-    search: _ParsedSearch,
-    combination: tuple[_SearchValue, ...],
+    search: ParsedSearch,
+    combination: tuple[SearchValue, ...],
 ) -> tuple[RunParameter, ...]:
     return tuple(
         RunParameter(
@@ -489,24 +277,11 @@ def _reject_plan_budget(
         )
 
 
-def plan_runs(
+def _materialize_planned_runs(
     package: ModelPackage,
-    request: RunRequest,
-    *,
-    random_source: RandomSource | None = None,
-    budget: PlanningBudget | None = None,
-) -> RunPlan:
-    if not isinstance(package, ModelPackage):
-        raise TypeError("Runs require a selected ModelPackage.")
-    planning_budget = budget or PlanningBudget()
-    resolved = _resolve_request(package, request, planning_budget)
-    _reject_plan_budget(_planned_run_count(resolved), planning_budget)
-    if random_source is None and any(
-        search is not None and search.spec.mode == "random"
-        for search in resolved.searches
-    ):
-        raise InvalidRunRequest("Random search requires an explicit random source.")
-
+    resolved: _ResolvedRequest,
+    random_source: RandomSource | None,
+) -> tuple[RunSpec, ...]:
     runs: list[RunSpec] = []
     for preset_name, search, effective_overrides in zip(
         resolved.preset_names,
@@ -541,6 +316,25 @@ def plan_runs(
                         ),
                     )
                 )
+    return tuple(runs)
+
+
+def plan_runs(
+    package: ModelPackage,
+    request: RunRequest,
+    *,
+    random_source: RandomSource | None = None,
+    budget: PlanningBudget | None = None,
+) -> RunPlan:
+    package = _require_model_package(package)
+    planning_budget = _selected_planning_budget(budget)
+    resolved = _resolve_request(package, request, planning_budget)
+    _reject_plan_budget(_planned_run_count(resolved), planning_budget)
+    if random_source is None and any(
+        search is not None and search.spec.mode == "random"
+        for search in resolved.searches
+    ):
+        raise InvalidRunRequest("Random search requires an explicit random source.")
 
     return RunPlan(
         identity=package.identity,
@@ -548,8 +342,9 @@ def plan_runs(
         experiment_task=resolved.experiment_task_name,
         datasets=tuple(dataset_name(dataset) for dataset in resolved.datasets),
         overrides=resolved.serialized_overrides,
-        search=resolved.normalized_search,
-        runs=tuple(runs),
+        search=None,
+        runs=_materialize_planned_runs(package, resolved, random_source),
+        preset_searches=resolved.preset_searches(),
     )
 
 
@@ -559,10 +354,11 @@ def _submitted_parameters(
     overrides: Mapping[str, Any],
 ) -> tuple[RunParameter, ...]:
     try:
-        parsed = parse_overrides(package, overrides).values
-        reject_locked_overrides(package, preset_name, parsed)
-        serialized = serialize_overrides(package, overrides)
-    except (InspectionError, ValueError) as exc:
+        runtime_defaults = package.runtime_defaults_spec
+        parsed = runtime_defaults.parse_overrides(overrides)
+        runtime_defaults.reject_locked_overrides(preset_name, parsed)
+        serialized = runtime_defaults.serialize_overrides(overrides)
+    except (RuntimeDefaultsError, ValueError) as exc:
         raise _plan_error(exc) from exc
     return _ordered_parameters(
         package,
@@ -578,9 +374,8 @@ def accept_run_plan(
     *,
     budget: PlanningBudget | None = None,
 ) -> RunPlan:
-    if not isinstance(package, ModelPackage):
-        raise TypeError("Runs require a selected ModelPackage.")
-    planning_budget = budget or PlanningBudget()
+    package = _require_model_package(package)
+    planning_budget = _selected_planning_budget(budget)
     resolved = _resolve_request(package, request, planning_budget)
     if not submitted_runs:
         raise InvalidRunPlan("Run plan requires at least one training run.")
@@ -628,8 +423,9 @@ def accept_run_plan(
         experiment_task=resolved.experiment_task_name,
         datasets=tuple(dataset_name(dataset) for dataset in resolved.datasets),
         overrides=resolved.serialized_overrides,
-        search=resolved.normalized_search,
+        search=None,
         runs=tuple(accepted),
+        preset_searches=resolved.preset_searches(),
     )
 
 

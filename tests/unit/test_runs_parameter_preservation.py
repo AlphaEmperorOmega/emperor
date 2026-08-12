@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import FrozenInstanceError
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 from unittest.mock import patch
 
 from emperor.config import BaseOptions
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelIdentity, ModelMetadata, ModelPackage
 from model_runtime.runs import execution, experiment
+from model_runtime.runs._handoff import TrainingRunRequest
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.experiment import ExperimentBase
 from model_runtime.runs.records import RunParameter, RunPlan, RunSpec
+from models.catalog import model_package
 
 
 class SyntheticDataset:
@@ -153,12 +156,13 @@ class _ParameterExperiment(ExperimentBase):
 
 class RunsParameterPreservationTests(unittest.TestCase):
     def test_materialized_run_retains_requested_parameter_names(self) -> None:
-        package = _parameter_model_package()
+        package = model_package("linears/linear")
+        assert package is not None
         run = RunSpec(
             id="run-0001",
             experiment_task="image-classification",
             preset="baseline",
-            dataset="SyntheticDataset",
+            dataset="Mnist",
             parameters=(
                 RunParameter(
                     key="NUM_EPOCHS",
@@ -171,27 +175,25 @@ class RunsParameterPreservationTests(unittest.TestCase):
             identity=package.identity,
             presets=("baseline",),
             experiment_task="image-classification",
-            datasets=("SyntheticDataset",),
+            datasets=("Mnist",),
             overrides={"NUM_EPOCHS": 3},
             search=None,
             runs=(run,),
         )
 
-        with (
-            patch.object(
-                execution,
-                "parse_overrides",
-                return_value=SimpleNamespace(values={"num_epochs": 3}),
-            ),
-            patch.object(execution, "reject_conflicting_locked_overrides"),
-        ):
-            _task, _presets, materialized = execution._validated_materialized_runs(
-                package,
-                plan,
-            )
+        _task, _presets, materialized = execution._validated_materialized_runs(
+            package,
+            plan,
+        )
 
-        self.assertEqual(materialized[0]["parameters"], {"NUM_EPOCHS": 3})
-        self.assertEqual(materialized[0]["config_overrides"], {"num_epochs": 3})
+        request = materialized[0]
+        self.assertIsInstance(request, TrainingRunRequest)
+        self.assertEqual(request.parameters, {"NUM_EPOCHS": 3})
+        self.assertEqual(request.config_overrides, {"num_epochs": 3})
+        with self.assertRaises(FrozenInstanceError):
+            request.run_id = "changed"  # type: ignore[misc]
+        with self.assertRaises(TypeError):
+            request.parameters["NUM_EPOCHS"] = 4  # type: ignore[index]
 
     def test_requested_parameters_drive_artifacts_and_progress(self) -> None:
         package = _parameter_model_package()
@@ -206,13 +208,15 @@ class RunsParameterPreservationTests(unittest.TestCase):
             )
             training_run = runtime.materialize_training_runs(
                 [
-                    {
-                        "id": "run-0001",
-                        "preset": _Preset.BASELINE,
-                        "dataset_type": SyntheticDataset,
-                        "parameters": {"NUM_EPOCHS": 3},
-                        "config_overrides": {"num_epochs": 3},
-                    }
+                    TrainingRunRequest(
+                        run_id="run-0001",
+                        run_index=1,
+                        run_total=1,
+                        preset=_Preset.BASELINE,
+                        dataset_type=SyntheticDataset,
+                        parameters={"NUM_EPOCHS": 3},
+                        config_overrides={"num_epochs": 3},
+                    )
                 ]
             )[0]
             progress = _Progress()

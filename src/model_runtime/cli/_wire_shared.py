@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 PROTOCOL_VERSION = 1
+_MAX_JSON_NESTING_DEPTH = 64
 
 
 class WireCodecError(ValueError):
@@ -14,16 +15,25 @@ class WireCodecError(ValueError):
 def wire_mapping(value: object, path: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise WireCodecError(f"{path} must be an object.")
-    for key in value:
+    mapping = cast(Mapping[object, Any], value)
+    for key in mapping:
         if not isinstance(key, str):
             raise WireCodecError(f"{path} object keys must be strings.")
-    return value
+    return cast(Mapping[str, Any], mapping)
 
 
-def wire_list(value: object, path: str) -> list[Any]:
+def wire_list(
+    value: object,
+    path: str,
+    *,
+    maximum_items: int | None = None,
+) -> list[Any]:
     if not isinstance(value, list):
         raise WireCodecError(f"{path} must be a list.")
-    return value
+    items = cast(list[Any], value)
+    if maximum_items is not None and len(items) > maximum_items:
+        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
+    return items
 
 
 def wire_fields(
@@ -134,7 +144,31 @@ def wire_scalar_list(
     )
 
 
+def _require_json_container_depth(path: str, container_depth: int) -> None:
+    if container_depth >= _MAX_JSON_NESTING_DEPTH:
+        raise WireCodecError(
+            f"{path} maximum JSON nesting depth of {_MAX_JSON_NESTING_DEPTH} exceeded."
+        )
+
+
 def json_value_to_wire(value: Any, *, path: str = "$") -> Any:
+    """Project a JSON value with at most 64 nested container levels."""
+
+    return _json_value_to_wire(
+        value,
+        path=path,
+        container_depth=0,
+        active_containers=set(),
+    )
+
+
+def _json_value_to_wire(
+    value: Any,
+    *,
+    path: str,
+    container_depth: int,
+    active_containers: set[int],
+) -> Any:
     if (
         value is None
         or type(value) is bool
@@ -147,20 +181,79 @@ def json_value_to_wire(value: Any, *, path: str = "$") -> Any:
             raise WireCodecError(f"{path} must be finite.")
         return value
     if isinstance(value, Mapping):
-        payload = wire_mapping(value, path)
+        payload = wire_mapping(cast(object, value), path)
+        return _json_mapping_payload_to_wire(
+            payload,
+            path=path,
+            container_depth=container_depth,
+            active_containers=active_containers,
+        )
+    if isinstance(value, (list, tuple)):
+        sequence = cast(list[Any] | tuple[Any, ...], value)
+        _require_json_container_depth(path, container_depth)
+        container_id = id(cast(object, value))
+        if container_id in active_containers:
+            raise WireCodecError(f"{path} contains a cyclic JSON container reference.")
+        active_containers.add(container_id)
+        try:
+            return [
+                _json_value_to_wire(
+                    item,
+                    path=f"{path}[{index}]",
+                    container_depth=container_depth + 1,
+                    active_containers=active_containers,
+                )
+                for index, item in enumerate(sequence)
+            ]
+        finally:
+            active_containers.remove(container_id)
+    raise WireCodecError(f"{path} contains unsupported value {type(value).__name__}.")
+
+
+def _json_mapping_payload_to_wire(
+    payload: Mapping[str, Any],
+    *,
+    path: str,
+    container_depth: int,
+    active_containers: set[int],
+) -> dict[str, Any]:
+    _require_json_container_depth(path, container_depth)
+    container_id = id(payload)
+    if container_id in active_containers:
+        raise WireCodecError(f"{path} contains a cyclic JSON container reference.")
+    active_containers.add(container_id)
+    try:
         return {
-            key: json_value_to_wire(item, path=f"{path}.{key}")
+            key: _json_value_to_wire(
+                item,
+                path=f"{path}.{key}",
+                container_depth=container_depth + 1,
+                active_containers=active_containers,
+            )
             for key, item in payload.items()
         }
-    if isinstance(value, (list, tuple)):
-        return [
-            json_value_to_wire(item, path=f"{path}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    raise WireCodecError(f"{path} contains unsupported value {type(value).__name__}.")
+    finally:
+        active_containers.remove(container_id)
 
 
 def json_value_from_wire(value: object, *, path: str = "$") -> Any:
+    """Decode a JSON value with at most 64 nested container levels."""
+
+    return _json_value_from_wire(
+        value,
+        path=path,
+        container_depth=0,
+        active_containers=set(),
+    )
+
+
+def _json_value_from_wire(
+    value: object,
+    *,
+    path: str,
+    container_depth: int,
+    active_containers: set[int],
+) -> Any:
     if (
         value is None
         or type(value) is bool
@@ -173,25 +266,69 @@ def json_value_from_wire(value: object, *, path: str = "$") -> Any:
             raise WireCodecError(f"{path} must be finite.")
         return value
     if isinstance(value, Mapping):
-        payload = wire_mapping(value, path)
+        payload = wire_mapping(cast(object, value), path)
+        return _json_mapping_payload_from_wire(
+            payload,
+            path=path,
+            container_depth=container_depth,
+            active_containers=active_containers,
+        )
+    if isinstance(value, list):
+        sequence = cast(list[Any], value)
+        _require_json_container_depth(path, container_depth)
+        container_id = id(cast(object, value))
+        if container_id in active_containers:
+            raise WireCodecError(f"{path} contains a cyclic JSON container reference.")
+        active_containers.add(container_id)
+        try:
+            return [
+                _json_value_from_wire(
+                    item,
+                    path=f"{path}[{index}]",
+                    container_depth=container_depth + 1,
+                    active_containers=active_containers,
+                )
+                for index, item in enumerate(sequence)
+            ]
+        finally:
+            active_containers.remove(container_id)
+    raise WireCodecError(f"{path} contains unsupported value {type(value).__name__}.")
+
+
+def _json_mapping_payload_from_wire(
+    payload: Mapping[str, Any],
+    *,
+    path: str,
+    container_depth: int,
+    active_containers: set[int],
+) -> dict[str, Any]:
+    _require_json_container_depth(path, container_depth)
+    container_id = id(payload)
+    if container_id in active_containers:
+        raise WireCodecError(f"{path} contains a cyclic JSON container reference.")
+    active_containers.add(container_id)
+    try:
         return {
-            key: json_value_from_wire(item, path=f"{path}.{key}")
+            key: _json_value_from_wire(
+                item,
+                path=f"{path}.{key}",
+                container_depth=container_depth + 1,
+                active_containers=active_containers,
+            )
             for key, item in payload.items()
         }
-    if isinstance(value, list):
-        return [
-            json_value_from_wire(item, path=f"{path}[{index}]")
-            for index, item in enumerate(value)
-        ]
-    raise WireCodecError(f"{path} contains unsupported value {type(value).__name__}.")
+    finally:
+        active_containers.remove(container_id)
 
 
 def json_mapping_from_wire(value: object, *, path: str) -> dict[str, Any]:
     payload = wire_mapping(value, path)
-    return {
-        key: json_value_from_wire(item, path=f"{path}.{key}")
-        for key, item in payload.items()
-    }
+    return _json_mapping_payload_from_wire(
+        payload,
+        path=path,
+        container_depth=0,
+        active_containers=set(),
+    )
 
 
 __all__ = [

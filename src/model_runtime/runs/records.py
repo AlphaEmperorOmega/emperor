@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar, cast
 
 from model_runtime.packages.identity import ModelIdentity
 
@@ -24,11 +24,13 @@ class RandomSource(Protocol):
 
 def _freeze_value(value: Any) -> Any:
     if isinstance(value, Mapping):
+        mapping = cast(Mapping[object, Any], value)
         return MappingProxyType(
-            {str(key): _freeze_value(item) for key, item in value.items()}
+            {str(key): _freeze_value(item) for key, item in mapping.items()}
         )
     if isinstance(value, (list, tuple)):
-        return tuple(_freeze_value(item) for item in value)
+        sequence = cast(list[Any] | tuple[Any, ...], value)
+        return tuple(_freeze_value(item) for item in sequence)
     return value
 
 
@@ -59,11 +61,17 @@ class SearchSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class PresetSearch:
+    preset: str
+    search: SearchSpec | None
+
+
+@dataclass(frozen=True, slots=True)
 class RunRequest:
     presets: tuple[str, ...]
     datasets: tuple[str, ...]
     experiment_task: str | None = None
-    overrides: Mapping[str, Any] = field(default_factory=dict)
+    overrides: Mapping[str, Any] = field(default_factory=dict[str, Any])
     search: SearchSpec | None = None
 
     def __post_init__(self) -> None:
@@ -74,9 +82,28 @@ class RunRequest:
 
 @dataclass(frozen=True, slots=True)
 class PlanningBudget:
-    max_axes: int | None = None
-    max_values_per_axis: int | None = None
-    max_materialized_runs: int | None = None
+    max_axes: int | None = 16
+    max_values_per_axis: int | None = 50
+    max_materialized_runs: int | None = 2_000
+
+    def __post_init__(self) -> None:
+        limits = {
+            "max_axes": self.max_axes,
+            "max_values_per_axis": self.max_values_per_axis,
+            "max_materialized_runs": self.max_materialized_runs,
+        }
+        for name, value in limits.items():
+            if value is not None and (type(value) is not int or value < 1):
+                raise ValueError(f"{name} must be a positive integer or None.")
+
+    @classmethod
+    def unlimited(cls) -> PlanningBudget:
+        """Create an explicit opt-in budget with no planning ceilings."""
+        return cls(
+            max_axes=None,
+            max_values_per_axis=None,
+            max_materialized_runs=None,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,12 +143,35 @@ class RunPlan:
     overrides: Mapping[str, Any]
     search: SearchSpec | None
     runs: tuple[RunSpec, ...]
+    preset_searches: tuple[PresetSearch, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "presets", tuple(self.presets))
+        presets = tuple(self.presets)
+        preset_searches = tuple(self.preset_searches)
+        if not preset_searches:
+            preset_searches = tuple(
+                PresetSearch(preset=preset, search=self.search) for preset in presets
+            )
+        if tuple(entry.preset for entry in preset_searches) != presets:
+            raise ValueError(
+                "Run Plan per-preset Search provenance must match presets in order."
+            )
+        summary = next(
+            (entry.search for entry in preset_searches if entry.search is not None),
+            None,
+        )
+        object.__setattr__(self, "presets", presets)
         object.__setattr__(self, "datasets", tuple(self.datasets))
         object.__setattr__(self, "overrides", _freeze_value(self.overrides))
+        object.__setattr__(self, "search", summary)
         object.__setattr__(self, "runs", tuple(self.runs))
+        object.__setattr__(self, "preset_searches", preset_searches)
+
+    def search_for_preset(self, preset: str) -> SearchSpec | None:
+        for entry in self.preset_searches:
+            if entry.preset == preset:
+                return entry.search
+        raise KeyError(f"Run Plan does not contain preset {preset!r}.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,7 +179,7 @@ class SubmittedRun:
     id: str | None
     preset: str
     dataset: str
-    overrides: Mapping[str, Any] = field(default_factory=dict)
+    overrides: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "overrides", _freeze_value(self.overrides))
@@ -150,6 +200,7 @@ class RunResult:
 
 __all__ = [
     "PlanningBudget",
+    "PresetSearch",
     "RandomSource",
     "RunParameter",
     "RunParameterSource",

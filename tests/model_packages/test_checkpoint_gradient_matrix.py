@@ -21,25 +21,91 @@ CHECKPOINT_REPRESENTATIVES = {
     "vit": "vit/linear",
 }
 EXPECTED_STATE_TOPOLOGY_DIGESTS = {
+    "bert/expert_linear": (
+        "671b1ac905bc592db01f3ed2448e1828b054308923c98d80b58da0f9e8beaeca"
+    ),
+    "bert/expert_linear_adaptive": (
+        "671b1ac905bc592db01f3ed2448e1828b054308923c98d80b58da0f9e8beaeca"
+    ),
     "bert/linear": "2364fb8a377892d1c8f69f73dfa917624e6ceb4ba3ae3018f708c5070b88fe77",
+    "bert/linear_adaptive": (
+        "1494841f5d1261d9abba80ab6c4d285b741389c5b0d63c4e3595dba73322cd91"
+    ),
     "experts/linear": (
         "a1fabf86f7668f95cbeecce54693e51562d69a28eb307bca350bd46233ee05c4"
     ),
+    "experts/linear_adaptive": (
+        "9264d450fcb207980dcc38a0a2e40b17a4e3f25c998abc5048c1af70830fff63"
+    ),
+    "gpt/expert_linear": (
+        "c668d3e4ac6ec87e2a89f1cb0b53ebf8b655d5df5e2d1398158e63377a0f7a1b"
+    ),
+    "gpt/expert_linear_adaptive": (
+        "c668d3e4ac6ec87e2a89f1cb0b53ebf8b655d5df5e2d1398158e63377a0f7a1b"
+    ),
     "gpt/linear": "54c78200bb9174a43c25b60945796f9575af9dceb22a9ae8a6a9fd55a64205de",
+    "gpt/linear_adaptive": (
+        "afa7109da6391eb15dd26c59b6fad07c25add1b80a24f10119d7c3bde98bc8fd"
+    ),
     "linears/linear": (
         "b2581d7521ca8f3662e48bd8bfa81414d694d734633d5a901e5b3133d9163f56"
+    ),
+    "linears/linear_adaptive": (
+        "b2581d7521ca8f3662e48bd8bfa81414d694d734633d5a901e5b3133d9163f56"
+    ),
+    "mlp_mixer/expert_linear": (
+        "bb4a9a2023e893493e81d1c7ba759001185289f98737b12f500c170f4458566d"
+    ),
+    "mlp_mixer/expert_linear_adaptive": (
+        "08cf78efb97dadbc83a795f305b1d99937dabb417bfef295c9e8dca88e90b13f"
     ),
     "mlp_mixer/linear": (
         "11177135f206d6071e1447b47a6d89fdce2f7f96ec2a4ea5fde649b583dad10b"
     ),
+    "mlp_mixer/linear_adaptive": (
+        "5bfecc7f0b5da8add8873ae8a6d682b76a32515f9d926499f29d7b0d8eb69077"
+    ),
+    "neuron/expert_linear": (
+        "4661155abc583ef02100f4f1593ffd325824a83516240301c00dfc62882e75fe"
+    ),
+    "neuron/expert_linear_adaptive": (
+        "1bca9cb38caff7822d4f6a642d84ed26a811e0fde53cb078e3e11ac445f26a5a"
+    ),
     "neuron/linear": "13dbc77f380c5cb91816620c01167d6904e9f50084d43d6b291b6ff587d0d5a4",
+    "neuron/linear_adaptive": (
+        "13dbc77f380c5cb91816620c01167d6904e9f50084d43d6b291b6ff587d0d5a4"
+    ),
+    "parametric/parametric_generator": (
+        "86ee37a7fe511e6bcdb99a6d95604c6a27c590f040bf7a6dd6765e8be0f930ca"
+    ),
+    "parametric/parametric_matrix": (
+        "fcc0060a3a33635fa427ff438ea1d4838d360fa9827791cb2e8977a88ff203f5"
+    ),
     "parametric/parametric_vector": (
         "813b5c878296fb417680b6e2d08124704da450c12a144911f0fa006e7ae13902"
+    ),
+    "transformer/expert_linear": (
+        "da51d64fb0a396d465b4a9e49acdefa8994789112938e42832da55f72c985d90"
+    ),
+    "transformer/expert_linear_adaptive": (
+        "da51d64fb0a396d465b4a9e49acdefa8994789112938e42832da55f72c985d90"
     ),
     "transformer/linear": (
         "ad9f6e30e19b24247cba778fb75e3ee25c17eecd56551e595c00e39034e39db7"
     ),
+    "transformer/linear_adaptive": (
+        "ad9f6e30e19b24247cba778fb75e3ee25c17eecd56551e595c00e39034e39db7"
+    ),
+    "vit/expert_linear": (
+        "681abc260f64b79eda52b9b4fdf2fac8f0ad6d876ed5d76e9f8c239b0458e3b8"
+    ),
+    "vit/expert_linear_adaptive": (
+        "681abc260f64b79eda52b9b4fdf2fac8f0ad6d876ed5d76e9f8c239b0458e3b8"
+    ),
     "vit/linear": "c1394b219688fffe506dd30dbc2d4c4ceafcc4fdbef293f95e19860684b3d357",
+    "vit/linear_adaptive": (
+        "073d86cbf22b04b74c91cc9309e7fb69783cfa7568b9dd98cc52d758c664a4bf"
+    ),
 }
 PERSISTENT_BUFFER_FAMILIES = {"experts", "neuron", "parametric"}
 GRADIENT_PACKAGES = (
@@ -63,18 +129,21 @@ NEURON_GRADIENT_PACKAGES = (
 
 
 class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
-    def test_representative_package_from_every_family_round_trips_checkpoint(
-        self,
-    ) -> None:
+    def test_every_package_round_trips_a_strict_cpu_checkpoint(self) -> None:
+        discovered_packages = discover_model_packages()
         self.assertEqual(
             set(CHECKPOINT_REPRESENTATIVES),
-            {package.identity.model_type for package in discover_model_packages()},
+            {package.identity.model_type for package in discovered_packages},
+        )
+        self.assertEqual(
+            set(EXPECTED_STATE_TOPOLOGY_DIGESTS),
+            {package.catalog_key for package in discovered_packages},
         )
 
-        for family, model_id in CHECKPOINT_REPRESENTATIVES.items():
+        for package in discovered_packages:
+            family = package.identity.model_type
+            model_id = package.catalog_key
             with self.subTest(family=family, model_package=model_id):
-                package = model_package(model_id)
-                self.assertIsNotNone(package)
                 config = package.build_configuration()
                 model = package.build_model(config)
                 state = model.state_dict()
@@ -107,6 +176,8 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
                 self.assertTrue(state_names.issubset(parameter_names | buffer_names))
                 if family in PERSISTENT_BUFFER_FAMILIES:
                     self.assertTrue(state_names & buffer_names)
+                for tensor in state.values():
+                    self.assertEqual(tensor.device.type, "cpu")
 
                 checkpoint = io.BytesIO()
                 torch.save(state, checkpoint)
@@ -130,6 +201,7 @@ class ModelPackageCheckpointGradientMatrixTests(unittest.TestCase):
                     with self.subTest(state=name):
                         self.assertEqual(restored[name].dtype, tensor.dtype)
                         self.assertEqual(restored[name].shape, tensor.shape)
+                        self.assertEqual(restored[name].device.type, "cpu")
                         torch.testing.assert_close(restored[name], tensor)
 
     def test_required_packages_produce_finite_end_to_end_gradients(self) -> None:

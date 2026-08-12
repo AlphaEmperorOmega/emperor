@@ -15,7 +15,7 @@ def _combination_count(axes: Sequence[Sequence[Any]]) -> int:
 
 def _combination_at_index(
     axes: Sequence[Sequence[Any]],
-    index: int,
+    index: object,
 ) -> tuple[Any, ...]:
     combination_count = _combination_count(axes)
     if isinstance(index, bool) or not isinstance(index, int):

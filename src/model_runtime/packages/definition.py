@@ -145,12 +145,6 @@ class ModelPackage:
         )
 
     @property
-    def runtime_defaults(self) -> Any:
-        """Expose the legacy defaults module while downstream owners migrate."""
-
-        return self.runtime_defaults_spec._config_module
-
-    @property
     def runtime_options_type(self) -> type[Any]:
         return self._initialize_once(
             "_runtime_options_type",

@@ -3,11 +3,18 @@ from __future__ import annotations
 import os
 import random
 import unittest
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
+from types import ModuleType
+from typing import Any
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from model_runtime.packages import config_key_to_model_param
+from model_runtime.packages import (
+    ModelMetadata,
+    ModelPackage,
+    config_key_to_model_param,
+)
 from model_runtime.runs import (
     InvalidRunRequest,
     PlanningBudget,
@@ -18,6 +25,9 @@ from model_runtime.runs import (
     plan_runs,
 )
 from models.catalog import model_package
+from models.linears.linear import config as linears_linear_config
+from models.linears.linear import dataset_options as linears_linear_datasets
+from models.linears.linear import monitor_options as linears_linear_monitors
 
 
 def _linears_linear():
@@ -48,6 +58,80 @@ def _gpt_expert_linear():
     return package
 
 
+def _gpt_linear_adaptive():
+    package = model_package("gpt/linear_adaptive")
+    if package is None:
+        raise AssertionError("Expected the gpt/linear_adaptive Model Package.")
+    return package
+
+
+class _SearchMetadataAdapter:
+    def __init__(self, package: ModelPackage, metadata: ModelMetadata) -> None:
+        self._package = package
+        self._metadata = metadata
+
+    def load_metadata(self) -> ModelMetadata:
+        return self._metadata
+
+    def load_runtime_options_type(self) -> type[Any]:
+        return self._package.runtime_options_type
+
+    def bind_runtime_defaults(self, values: Mapping[str, object] | None) -> Any:
+        return self._package.bind_runtime_defaults(values)
+
+    def load_preset_type(self) -> type[Any]:
+        return self._package.preset_type
+
+    def load_presets(self) -> Any:
+        return self._package.presets
+
+    def build_configuration(
+        self,
+        presets: Any,
+        preset: Any,
+        dataset: type[Any],
+        **kwargs: Any,
+    ) -> Any:
+        del presets
+        return self._package.build_configuration(preset, dataset, **kwargs)
+
+    def build_model(self, configuration: Any) -> Any:
+        return self._package.build_model(configuration)
+
+    def build_experiment(
+        self,
+        preset: Any,
+        *,
+        experiment_task: Any,
+        model_package: ModelPackage,
+        run_artifacts: Any,
+    ) -> Any:
+        del model_package
+        return self._package.build_experiment(
+            preset,
+            experiment_task=experiment_task,
+            run_artifacts=run_artifacts,
+        )
+
+
+def _linears_linear_with_duplicate_implicit_axes() -> ModelPackage:
+    package = _linears_linear()
+    search_space = ModuleType("models.linears.linear.search_space")
+    search_space.SEARCH_SPACE_HIDDEN_DIM = [64]
+    setattr(search_space, "SEARCH_SPACE_HIDDEN-DIM", [128])
+    metadata = ModelMetadata(
+        identity=package.identity,
+        runtime_defaults=linears_linear_config,
+        dataset_options=linears_linear_datasets,
+        monitor_options_source=linears_linear_monitors,
+        search_space=search_space,
+    )
+    return ModelPackage(
+        package.identity,
+        _SearchMetadataAdapter(package, metadata),
+    )
+
+
 class _ForbiddenRandom:
     def sample(self, population, k):
         raise AssertionError("Random selection must not run over budget.")
@@ -57,6 +141,20 @@ class _ForbiddenRandom:
 
 
 class RunsPlanningTests(unittest.TestCase):
+    def test_planning_budget_requires_positive_plain_integers_or_none(self) -> None:
+        for field_name in (
+            "max_axes",
+            "max_values_per_axis",
+            "max_materialized_runs",
+        ):
+            for invalid_value in (True, False, 0, -1, 1.5, "2"):
+                with self.subTest(field=field_name, value=invalid_value):
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        f"{field_name} must be a positive integer or None",
+                    ):
+                        PlanningBudget(**{field_name: invalid_value})
+
     def test_cli_only_runtime_default_is_retained_by_executable_run(self) -> None:
         plan = plan_runs(
             _gpt_expert_linear(),
@@ -166,6 +264,177 @@ class RunsPlanningTests(unittest.TestCase):
                 budget=PlanningBudget(max_values_per_axis=2),
             )
 
+    def test_search_validation_precedence_is_stable(self) -> None:
+        package = _linears_linear()
+        request_values = {
+            "presets": ("baseline",),
+            "datasets": ("Mnist",),
+        }
+
+        with self.assertRaisesRegex(InvalidRunRequest, "mode must be 'grid'"):
+            plan_runs(
+                package,
+                RunRequest(
+                    **request_values,
+                    search=SearchSpec(mode="invalid", axes=()),
+                ),
+                budget=PlanningBudget(max_axes=1),
+            )
+
+        with self.assertRaisesRegex(InvalidRunRequest, "at least one selected axis"):
+            plan_runs(
+                package,
+                RunRequest(
+                    **request_values,
+                    search=SearchSpec(mode="grid", axes=()),
+                ),
+                budget=PlanningBudget(max_axes=1),
+            )
+
+        with self.assertRaisesRegex(PlanTooLarge, "at most 1 selected axes"):
+            plan_runs(
+                package,
+                RunRequest(
+                    **request_values,
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(
+                            SearchAxisSelection("unknown-a", (1,)),
+                            SearchAxisSelection("unknown-b", (1,)),
+                        ),
+                    ),
+                ),
+                budget=PlanningBudget(max_axes=1),
+            )
+
+        with self.assertRaisesRegex(PlanTooLarge, "at most 1 selected values"):
+            plan_runs(
+                package,
+                RunRequest(
+                    **request_values,
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(SearchAxisSelection("unknown", (1, 2)),),
+                    ),
+                ),
+                budget=PlanningBudget(max_values_per_axis=1),
+            )
+
+        locked_package = _transformer_expert_linear()
+        locked_request_values = {
+            "presets": ("top1-switch-aux",),
+            "datasets": ("Multi30kDeEn",),
+        }
+        with self.assertRaisesRegex(
+            InvalidRunRequest,
+            "Invalid search value for axis 'TOP_K'",
+        ):
+            plan_runs(
+                locked_package,
+                RunRequest(
+                    **locked_request_values,
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(SearchAxisSelection("top_k", ("invalid",)),),
+                    ),
+                ),
+            )
+
+        with self.assertRaisesRegex(InvalidRunRequest, "TOP_K.*locked by preset"):
+            plan_runs(
+                locked_package,
+                RunRequest(
+                    **locked_request_values,
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(SearchAxisSelection("top_k", (999,)),),
+                    ),
+                ),
+            )
+
+    def test_default_budget_rejects_implicit_search_before_random_selection(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            PlanTooLarge,
+            "at most 16 selected axes",
+        ):
+            plan_runs(
+                _gpt_linear_adaptive(),
+                RunRequest(
+                    presets=("baseline",),
+                    datasets=("WikiText2",),
+                    search=SearchSpec(mode="random", random_samples=1),
+                ),
+                random_source=_ForbiddenRandom(),
+            )
+
+    def test_default_budget_rejects_oversized_grid_before_materialization(
+        self,
+    ) -> None:
+        request = RunRequest(
+            presets=("baseline",),
+            datasets=("Mnist",),
+            search=SearchSpec(
+                mode="grid",
+                axes=(
+                    SearchAxisSelection(
+                        "hidden_dim",
+                        tuple(range(45)),
+                        allow_custom_values=True,
+                    ),
+                    SearchAxisSelection(
+                        "stack_num_layers",
+                        tuple(range(1, 46)),
+                        allow_custom_values=True,
+                    ),
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(
+            PlanTooLarge,
+            "2025 planned runs exceeds 2000",
+        ):
+            plan_runs(_linears_linear(), request)
+
+    def test_unlimited_budget_requires_explicit_opt_in(self) -> None:
+        plan = plan_runs(
+            _linears_linear(),
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                search=SearchSpec(
+                    mode="grid",
+                    axes=(
+                        SearchAxisSelection(
+                            "hidden_dim",
+                            tuple(range(45)),
+                            allow_custom_values=True,
+                        ),
+                        SearchAxisSelection(
+                            "stack_num_layers",
+                            tuple(range(1, 46)),
+                            allow_custom_values=True,
+                        ),
+                    ),
+                ),
+            ),
+            budget=PlanningBudget.unlimited(),
+        )
+
+        self.assertEqual(len(plan.runs), 2_025)
+
+    def test_invalid_falsey_planning_budgets_are_rejected(self) -> None:
+        request = RunRequest(presets=("baseline",), datasets=("Mnist",))
+
+        for invalid in (False, 0, "unlimited"):
+            with (
+                self.subTest(invalid=invalid),
+                self.assertRaisesRegex(TypeError, "budget must be a PlanningBudget"),
+            ):
+                plan_runs(_linears_linear(), request, budget=invalid)
+
     def test_implicit_search_does_not_strip_fixed_override_from_locked_preset(
         self,
     ) -> None:
@@ -181,29 +450,83 @@ class RunsPlanningTests(unittest.TestCase):
                     overrides={"layer_norm_position": "BEFORE"},
                     search=SearchSpec(mode="grid"),
                 ),
-                budget=PlanningBudget(max_materialized_runs=1),
+                budget=PlanningBudget(
+                    max_axes=None,
+                    max_values_per_axis=None,
+                    max_materialized_runs=1,
+                ),
             )
+
+    def test_run_plan_preserves_each_presets_effective_search_provenance(
+        self,
+    ) -> None:
+        plan = plan_runs(
+            _linears_linear_adaptive(),
+            RunRequest(
+                presets=("baseline", "post-norm"),
+                datasets=("Mnist",),
+                overrides={"layer_norm_position": "AFTER"},
+                search=SearchSpec(mode="random", random_samples=1),
+            ),
+            random_source=random.Random(17),
+            budget=PlanningBudget(
+                max_axes=None,
+                max_values_per_axis=None,
+                max_materialized_runs=2,
+            ),
+        )
+
+        self.assertEqual(
+            [entry.preset for entry in plan.preset_searches],
+            ["baseline", "post-norm"],
+        )
+        baseline_search = plan.search_for_preset("baseline")
+        post_norm_search = plan.search_for_preset("post-norm")
+        self.assertIs(plan.search, baseline_search)
+        self.assertIsNotNone(baseline_search)
+        self.assertIsNotNone(post_norm_search)
+        assert baseline_search is not None
+        assert post_norm_search is not None
+        self.assertEqual(len(baseline_search.axes or ()), 31)
+        self.assertEqual(len(post_norm_search.axes or ()), 30)
+        self.assertIn(
+            "LAYER_NORM_POSITION",
+            {axis.key for axis in baseline_search.axes or ()},
+        )
+        self.assertNotIn(
+            "LAYER_NORM_POSITION",
+            {axis.key for axis in post_norm_search.axes or ()},
+        )
+
+        post_norm_run = next(run for run in plan.runs if run.preset == "post-norm")
+        layer_norm_parameter = next(
+            parameter
+            for parameter in post_norm_run.parameters
+            if parameter.key == "LAYER_NORM_POSITION"
+        )
+        self.assertEqual(layer_norm_parameter.value, "AFTER")
+        self.assertEqual(layer_norm_parameter.source, "override")
+        with self.assertRaisesRegex(KeyError, "unknown"):
+            plan.search_for_preset("unknown")
 
     def test_implicit_full_search_deduplicates_model_parameter_aliases(self) -> None:
         plan = plan_runs(
-            _linears_linear(),
+            _linears_linear_with_duplicate_implicit_axes(),
             RunRequest(
                 presets=("baseline",),
                 datasets=("Mnist",),
-                search=SearchSpec(mode="random", random_samples=1),
+                search=SearchSpec(mode="grid"),
             ),
-            random_source=random.Random(7),
         )
 
         self.assertEqual(len(plan.runs), 1)
         self.assertIsNotNone(plan.search)
         assert plan.search is not None
-        model_params = [
-            config_key_to_model_param(axis.key) for axis in plan.search.axes or ()
-        ]
-        self.assertEqual(len(model_params), len(set(model_params)))
-        self.assertIn("LAYER_NORM_POSITION", plan.runs[0].overrides)
-        self.assertNotIn("STACK_LAYER_NORM_POSITION", plan.runs[0].overrides)
+        self.assertEqual(
+            [(axis.key, axis.values) for axis in plan.search.axes or ()],
+            [("HIDDEN-DIM", (128,))],
+        )
+        self.assertEqual(dict(plan.runs[0].overrides), {"HIDDEN-DIM": 128})
 
     def test_supported_experiment_tasks_resolve_only_package_datasets(self) -> None:
         cases = (
@@ -344,6 +667,108 @@ class RunsPlanningTests(unittest.TestCase):
                 for parameter in run.parameters
             )
         )
+
+    def test_normalized_search_preserves_custom_value_authorization(self) -> None:
+        plan = plan_runs(
+            _linears_linear(),
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                search=SearchSpec(
+                    mode="grid",
+                    axes=(
+                        SearchAxisSelection(
+                            "hidden_dim",
+                            (65,),
+                            allow_custom_values=True,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertIsNotNone(plan.search)
+        assert plan.search is not None
+        self.assertEqual(
+            plan.search.axes,
+            (
+                SearchAxisSelection(
+                    "HIDDEN_DIM",
+                    (65,),
+                    allow_custom_values=True,
+                ),
+            ),
+        )
+        effective_search = plan.search_for_preset("baseline")
+        self.assertEqual(effective_search, plan.search)
+
+        replayed = plan_runs(
+            _linears_linear(),
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                search=effective_search,
+            ),
+        )
+        self.assertEqual(replayed.search_for_preset("baseline"), effective_search)
+
+    def test_explicit_duplicate_axis_alias_keeps_position_and_last_values(
+        self,
+    ) -> None:
+        plan = plan_runs(
+            _linears_linear(),
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                search=SearchSpec(
+                    mode="grid",
+                    axes=(
+                        SearchAxisSelection("hidden_dim", (64,)),
+                        SearchAxisSelection("stack_activation", ("RELU",)),
+                        SearchAxisSelection("HIDDEN-DIM", (128,)),
+                    ),
+                ),
+            ),
+        )
+
+        self.assertIsNotNone(plan.search)
+        assert plan.search is not None
+        self.assertEqual(
+            [(axis.key, axis.values) for axis in plan.search.axes or ()],
+            [
+                ("HIDDEN_DIM", (128,)),
+                ("STACK_ACTIVATION", ("RELU",)),
+            ],
+        )
+        self.assertEqual(
+            dict(plan.runs[0].overrides),
+            {"HIDDEN_DIM": 128, "STACK_ACTIVATION": "RELU"},
+        )
+
+    def test_explicit_duplicate_axis_validates_values_before_replacement(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            InvalidRunRequest,
+            "Invalid search value for axis 'HIDDEN_DIM'",
+        ):
+            plan_runs(
+                _linears_linear(),
+                RunRequest(
+                    presets=("baseline",),
+                    datasets=("Mnist",),
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(
+                            SearchAxisSelection(
+                                "hidden_dim",
+                                ("not-an-integer",),
+                            ),
+                            SearchAxisSelection("HIDDEN-DIM", (128,)),
+                        ),
+                    ),
+                ),
+            )
 
     def test_seeded_random_search_resamples_per_preset_dataset_block(self) -> None:
         plan = plan_runs(
