@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
 from model_runtime.packages import normalize_key
 from model_runtime.runs import (
     PlanningBudget,
+    PresetSearch,
     RunPlan,
     RunRequest,
     SearchAxisSelection,
@@ -46,7 +47,10 @@ from emperor_workbench.run_plans._progress_projection import (
     RunPlanProgressProjector,
 )
 from emperor_workbench.run_plans._records import TrainingRunPlanView
-from emperor_workbench.run_plans._search import search_from_spec
+from emperor_workbench.run_plans._search import (
+    preset_searches_from_plan,
+    search_from_spec,
+)
 
 
 def _bounded_names(
@@ -77,13 +81,17 @@ def _bounded_names(
     return list(raw_names)
 
 
-def _search_spec(raw_search: object) -> SearchSpec | None:
+def _search_spec(
+    raw_search: object,
+    *,
+    allow_empty: bool = False,
+) -> SearchSpec | None:
     if raw_search is None:
         return None
     if not isinstance(raw_search, Mapping):
         raise ValueError("Training search must be an object.")
     raw_values = raw_search.get("values")
-    if not isinstance(raw_values, Mapping) or not raw_values:
+    if not isinstance(raw_values, Mapping) or (not raw_values and not allow_empty):
         raise ValueError("Training search requires at least one selected axis.")
     if len(raw_values) > MAX_TRAINING_SEARCH_AXES:
         raise ValueError(
@@ -105,6 +113,19 @@ def _search_spec(raw_search: object) -> SearchSpec | None:
         )
     if mode == "grid" and random_samples is not None:
         raise ValueError("Grid search must not include a random sample count.")
+    raw_custom_value_axes = raw_search.get("customValueAxes", [])
+    if not isinstance(raw_custom_value_axes, list) or any(
+        not isinstance(key, str) or not key.strip() for key in raw_custom_value_axes
+    ):
+        raise ValueError("Training search customValueAxes must be a list of names.")
+    normalized_custom_axes: set[str] = set()
+    for key in raw_custom_value_axes:
+        normalized_key = normalize_key(key)
+        if normalized_key in normalized_custom_axes:
+            raise ValueError(
+                f"Training search customValueAxes contains duplicate axis '{key}'."
+            )
+        normalized_custom_axes.add(normalized_key)
     axes: list[SearchAxisSelection] = []
     normalized_axes: set[str] = set()
     for key, values in raw_values.items():
@@ -128,11 +149,56 @@ def _search_spec(raw_search: object) -> SearchSpec | None:
                 value,
                 path=f"Training search axis '{key}' value {index + 1}",
             )
-        axes.append(SearchAxisSelection(key=key, values=tuple(values)))
+        axes.append(
+            SearchAxisSelection(
+                key=key,
+                values=tuple(values),
+                allow_custom_values=normalized_axis in normalized_custom_axes,
+            )
+        )
+    unknown_custom_axes = normalized_custom_axes - normalized_axes
+    if unknown_custom_axes:
+        raise ValueError("Training search customValueAxes contains an unknown axis.")
     return SearchSpec(
         mode=mode,
         axes=tuple(axes),
         random_samples=random_samples,
+    )
+
+
+def _preset_search_payloads(
+    run_plan: Mapping[str, Any],
+) -> dict[str, object]:
+    presets = [str(preset) for preset in run_plan["presets"]]
+    raw_preset_searches = run_plan.get("presetSearches")
+    if raw_preset_searches is None:
+        return {preset: run_plan.get("search") for preset in presets}
+    if not isinstance(raw_preset_searches, Mapping):
+        raise ValueError("Run plan presetSearches must be an object.")
+    if set(raw_preset_searches) != set(presets):
+        raise ValueError("Run plan presetSearches must exactly match its presets.")
+    payloads: dict[str, object] = {}
+    for preset in presets:
+        search = raw_preset_searches[preset]
+        if search is not None and not isinstance(search, Mapping):
+            raise ValueError(
+                f"Run plan presetSearches.{preset} must be an object or null."
+            )
+        _search_spec(search, allow_empty=True)
+        payloads[preset] = search
+    return payloads
+
+
+def _preset_searches_from_payload(
+    run_plan: Mapping[str, Any],
+) -> tuple[PresetSearch, ...]:
+    payloads = _preset_search_payloads(run_plan)
+    return tuple(
+        PresetSearch(
+            preset=preset,
+            search=_search_spec(payloads[preset], allow_empty=True),
+        )
+        for preset in run_plan["presets"]
     )
 
 
@@ -154,7 +220,7 @@ def _run_request(run_plan: Mapping[str, Any]) -> RunRequest:
         datasets=tuple(str(dataset) for dataset in raw_datasets),
         experiment_task=(str(experiment_task) if experiment_task is not None else None),
         overrides=dict(raw_overrides),
-        search=_search_spec(run_plan.get("search")),
+        search=None,
     )
 
 
@@ -277,6 +343,8 @@ def _validate_envelope(
     )
     if run_plan["search"] is not None and not isinstance(run_plan["search"], Mapping):
         raise ValueError("Run plan search must be an object or null.")
+    _search_spec(run_plan["search"])
+    _preset_search_payloads(run_plan)
     if not isinstance(run_plan["logFolder"], str):
         raise ValueError("Run plan log folder must be a string.")
     plan_identity = ModelPackageIdentity.from_mapping(run_plan)
@@ -299,9 +367,19 @@ def _validate_authoritative_metadata(
     datasets = set(run_plan["datasets"])
     envelope_overrides = dict(run_plan["overrides"])
     raw_search = run_plan["search"]
-    search_values = (
-        dict(raw_search.get("values") or {}) if isinstance(raw_search, Mapping) else {}
+    preset_searches = _preset_search_payloads(run_plan)
+    expected_search = next(
+        (
+            preset_searches[str(preset)]
+            for preset in run_plan["presets"]
+            if preset_searches[str(preset)] is not None
+        ),
+        None,
     )
+    if raw_search != expected_search:
+        raise ValueError(
+            "Run plan search does not match its per-preset Search provenance."
+        )
     expected_random = bool(
         isinstance(raw_search, Mapping) and raw_search.get("mode") == "random"
     )
@@ -341,6 +419,12 @@ def _validate_authoritative_metadata(
                 raise ValueError(
                     f"Run plan overrides do not match row {index} overrides."
                 )
+        preset_search = preset_searches[str(row["preset"])]
+        search_values = (
+            dict(preset_search.get("values") or {})
+            if isinstance(preset_search, Mapping)
+            else {}
+        )
         for key, values in search_values.items():
             row_value = normalized_row_overrides.get(normalize_key(str(key)))
             if not isinstance(values, list) or row_value not in values:
@@ -381,6 +465,7 @@ def _expected_plan(
         runs=runs,
         summary=RunPlanProgressProjector.summarize(runs),
         snapshot_revisions=snapshot_revisions,
+        preset_searches=preset_searches_from_plan(semantic_plan),
     )
 
 
@@ -473,6 +558,11 @@ class RunPlanWorkerAcceptance:
         except ProjectAdapterFailure as exc:
             raise ValueError(exc.detail) from exc
 
+        semantic_plan = replace(
+            semantic_plan,
+            preset_searches=_preset_searches_from_payload(persisted_plan),
+        )
+
         model_packages = ModelPackageCatalog(package.client)
         expected_rows: list[dict[str, Any]] = []
         for index, (raw_row, semantic_run) in enumerate(
@@ -489,7 +579,7 @@ class RunPlanWorkerAcceptance:
                     index=index,
                     log_folder=str(persisted_plan["logFolder"]),
                     monitors=monitors,
-                    search=semantic_plan.search,
+                    search=semantic_plan.search_for_preset(semantic_run.preset),
                 )
             )
             for field_name in ("snapshotId", "snapshotName"):

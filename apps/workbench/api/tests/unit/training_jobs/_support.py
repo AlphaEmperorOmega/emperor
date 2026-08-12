@@ -238,6 +238,7 @@ def make_record(job_id: str = "job-1") -> TrainingJobRecord:
             is_random_search=False,
             runs=[],
             summary=TrainingRunPlanSummaryView(),
+            preset_searches={"baseline": None},
         ),
         monitors=[],
         log_folder="test_model",

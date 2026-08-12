@@ -3,12 +3,44 @@ from __future__ import annotations
 import copy
 import math
 import unittest
+from dataclasses import replace
 
-from emperor_workbench.run_plans import RunPlanPersistenceCodec
+from emperor_workbench.run_plans import RunPlanPersistenceCodec, TrainingSearch
 from tests.unit.training_jobs._support import make_record
 
 
 class RunPlanPersistenceCodecTests(unittest.TestCase):
+    def test_custom_value_authorization_survives_persistence(self) -> None:
+        custom_search = TrainingSearch(
+            mode="grid",
+            values={"HIDDEN_DIM": [65]},
+            custom_value_axes=("HIDDEN_DIM",),
+        )
+        source = make_record().run_plan
+        plan = replace(
+            source,
+            search=custom_search,
+            preset_searches={"baseline": custom_search},
+        )
+
+        payload = RunPlanPersistenceCodec.encode(plan)
+        self.assertEqual(payload["search"]["customValueAxes"], ["HIDDEN_DIM"])
+        self.assertEqual(
+            payload["presetSearches"]["baseline"]["customValueAxes"],
+            ["HIDDEN_DIM"],
+        )
+
+        restored = RunPlanPersistenceCodec.decode(payload)
+        self.assertEqual(restored.search, custom_search)
+        self.assertEqual(restored.preset_searches["baseline"], custom_search)
+
+        legacy_payload = copy.deepcopy(payload)
+        del legacy_payload["search"]["customValueAxes"]
+        del legacy_payload["presetSearches"]["baseline"]["customValueAxes"]
+        legacy = RunPlanPersistenceCodec.decode(legacy_payload)
+        self.assertEqual(legacy.search.custom_value_axes, ())
+        self.assertEqual(legacy.preset_searches["baseline"].custom_value_axes, ())
+
     def test_run_plan_codec_rejects_retired_command_field(self) -> None:
         payload = RunPlanPersistenceCodec.encode(make_record().run_plan)
         payload["runs"].append(
@@ -77,6 +109,16 @@ class RunPlanPersistenceCodecTests(unittest.TestCase):
                 },
             },
             {"mode": "grid", "values": {"HIDDEN_DIM": [math.nan]}},
+            {
+                "mode": "grid",
+                "values": {"HIDDEN_DIM": [64]},
+                "customValueAxes": ["UNKNOWN"],
+            },
+            {
+                "mode": "grid",
+                "values": {"HIDDEN_DIM": [64]},
+                "customValueAxes": ["hidden_dim", "HIDDEN_DIM"],
+            },
         ):
             with (
                 self.subTest(search=malformed_search),

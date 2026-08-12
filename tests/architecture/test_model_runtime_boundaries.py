@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import tomllib
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ INSPECTION_ROOT = MODEL_RUNTIME_ROOT / "inspection"
 RUNS_ROOT = MODEL_RUNTIME_ROOT / "runs"
 CLI_ROOT = MODEL_RUNTIME_ROOT / "cli"
 WORKBENCH_SOURCE_ROOT = PROJECT_ROOT / "apps" / "workbench" / "api" / "src"
+WORKBENCH_WEB_ROOT = PROJECT_ROOT / "apps" / "workbench" / "web"
 PROJECT_CLI_ROOT = SOURCE_ROOT / "models" / "project_cli"
 PUBLIC_RUNTIME_PACKAGES = ("packages", "inspection", "runs", "cli")
 
@@ -159,6 +161,270 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
                 )
 
         self.assertEqual(violations, [])
+
+    def test_runs_consume_runtime_defaults_through_model_package_interface(
+        self,
+    ) -> None:
+        forbidden_modules = {
+            "model_runtime.inspection.overrides",
+            "model_runtime.inspection.runtime_defaults",
+        }
+        violations = [
+            (
+                source_path.relative_to(PROJECT_ROOT).as_posix(),
+                imported_module,
+            )
+            for source_path, imported_module in _imports_under(RUNS_ROOT)
+            if imported_module in forbidden_modules
+        ]
+
+        self.assertEqual(violations, [])
+
+    def test_runs_own_a_typed_run_to_experiment_handoff(self) -> None:
+        handoff_path = RUNS_ROOT / "_handoff.py"
+        self.assertTrue(handoff_path.is_file())
+        tree = ast.parse(
+            handoff_path.read_text(encoding="utf-8"),
+            handoff_path.as_posix(),
+        )
+        classes = {
+            node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
+        }
+
+        request = classes["TrainingRunRequest"]
+        request_decorators = {
+            ast.unparse(decorator) for decorator in request.decorator_list
+        }
+        self.assertIn("dataclass(frozen=True, slots=True)", request_decorators)
+        execution_request = classes["TrainingExecutionRequest"]
+        execution_request_decorators = {
+            ast.unparse(decorator) for decorator in execution_request.decorator_list
+        }
+        self.assertIn(
+            "dataclass(frozen=True, slots=True)",
+            execution_request_decorators,
+        )
+        experiment_port = classes["RunExperiment"]
+        self.assertEqual(
+            {
+                node.name
+                for node in experiment_port.body
+                if isinstance(node, ast.FunctionDef)
+            },
+            {"execute_training", "materialize_training_runs"},
+        )
+        self.assertIn("Protocol", {ast.unparse(base) for base in experiment_port.bases})
+        materialize_operation = next(
+            node
+            for node in experiment_port.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "materialize_training_runs"
+        )
+        materialize_contract = ast.get_docstring(materialize_operation) or ""
+        self.assertIn("same order", materialize_contract)
+        for identity_field in (
+            "run id",
+            "run index",
+            "run total",
+            "preset identity",
+            "Dataset identity",
+        ):
+            with self.subTest(identity_field=identity_field):
+                self.assertIn(identity_field, materialize_contract)
+
+        execution_source = (RUNS_ROOT / "execution.py").read_text(encoding="utf-8")
+        experiment_source = (RUNS_ROOT / "experiment.py").read_text(encoding="utf-8")
+        package_source = (MODEL_RUNTIME_ROOT / "packages" / "definition.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('run["config_overrides"]', execution_source)
+        self.assertNotIn('run["preset"]', experiment_source)
+        self.assertNotIn('run["dataset_type"]', experiment_source)
+        self.assertIn(") -> RunExperiment:", package_source)
+
+    def test_runs_own_one_checkpoint_continuation_lifecycle(self) -> None:
+        checkpoint_path = RUNS_ROOT / "checkpoints.py"
+        checkpoint_tree = ast.parse(
+            checkpoint_path.read_text(encoding="utf-8"),
+            checkpoint_path.as_posix(),
+        )
+        checkpoint_classes = {
+            node.name: node
+            for node in checkpoint_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        lifecycle = checkpoint_classes["CheckpointContinuationLifecycle"]
+        lifecycle_methods = {
+            node.name
+            for node in lifecycle.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        }
+
+        self.assertTrue({"admit", "bind_training_runs"} <= lifecycle_methods)
+
+        execution_source = (RUNS_ROOT / "execution.py").read_text(encoding="utf-8")
+        leaked_implementation = {
+            "_LoadedCheckpointContinuation",
+            "load_checkpoint_continuation",
+            "resumed_from_payload",
+            "validate_model_state",
+            "validate_target_epochs",
+            "_ContinuationExecution",
+        }
+        self.assertTrue(
+            all(name not in execution_source for name in leaked_implementation)
+        )
+
+    def test_run_projection_uses_each_presets_search_provenance(self) -> None:
+        records_source = (RUNS_ROOT / "records.py").read_text(encoding="utf-8")
+        planning_source = (RUNS_ROOT / "planning.py").read_text(encoding="utf-8")
+        service_source = (
+            WORKBENCH_SOURCE_ROOT.parent
+            / "src"
+            / "emperor_workbench"
+            / "run_plans"
+            / "_service.py"
+        ).read_text(encoding="utf-8")
+        worker_source = (
+            WORKBENCH_SOURCE_ROOT.parent
+            / "src"
+            / "emperor_workbench"
+            / "run_plans"
+            / "_worker_acceptance.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("class PresetSearch", records_source)
+        self.assertIn("def search_for_preset", records_source)
+        self.assertNotIn("def normalized_search", planning_source)
+        self.assertNotIn("search=semantic_plan.search,", service_source)
+        self.assertNotIn("search=semantic_plan.search,", worker_source)
+
+    def test_package_experiments_do_not_repeat_obsolete_construction_hooks(
+        self,
+    ) -> None:
+        obsolete_hooks = {
+            "_dataset_options",
+            "_experiment_preset_enum",
+            "_model_type",
+            "_preset_generator_instance",
+        }
+        violations: list[tuple[str, str]] = []
+        for source_path in sorted((SOURCE_ROOT / "models").glob("*/*/presets.py")):
+            tree = ast.parse(
+                source_path.read_text(encoding="utf-8"),
+                source_path.as_posix(),
+            )
+            experiment = next(
+                (
+                    node
+                    for node in tree.body
+                    if isinstance(node, ast.ClassDef) and node.name == "Experiment"
+                ),
+                None,
+            )
+            if experiment is None:
+                continue
+            violations.extend(
+                (
+                    source_path.relative_to(PROJECT_ROOT).as_posix(),
+                    node.name,
+                )
+                for node in experiment.body
+                if isinstance(node, ast.FunctionDef) and node.name in obsolete_hooks
+            )
+
+        self.assertEqual(violations, [])
+
+    def test_run_progress_producers_use_the_typed_event_vocabulary(self) -> None:
+        vocabulary_path = RUNS_ROOT / "_progress_events.py"
+        self.assertTrue(vocabulary_path.is_file())
+        raw_event_mappings: list[tuple[str, int]] = []
+        for source_path in (
+            RUNS_ROOT / "experiment.py",
+            RUNS_ROOT / "_lightning_progress.py",
+        ):
+            tree = ast.parse(
+                source_path.read_text(encoding="utf-8"),
+                source_path.as_posix(),
+            )
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Dict):
+                    continue
+                if any(
+                    isinstance(key, ast.Constant) and key.value == "type"
+                    for key in node.keys
+                ):
+                    raw_event_mappings.append(
+                        (
+                            source_path.relative_to(PROJECT_ROOT).as_posix(),
+                            node.lineno,
+                        )
+                    )
+
+        self.assertEqual(raw_event_mappings, [])
+
+    def test_workbench_manifest_matches_the_runtime_progress_vocabulary(self) -> None:
+        from model_runtime.runs.progress import (
+            MODEL_RUNTIME_PROGRESS_CONTEXT_FIELDS,
+            MODEL_RUNTIME_PROGRESS_EVENT_FIELDS,
+            MODEL_RUNTIME_PROGRESS_OPTIONAL_FIELDS,
+        )
+
+        manifest_path = (
+            WORKBENCH_WEB_ROOT
+            / "src"
+            / "lib"
+            / "api"
+            / "model-runtime-progress-events.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected = {
+            "contextFields": list(MODEL_RUNTIME_PROGRESS_CONTEXT_FIELDS),
+            "events": {
+                event_type: {
+                    "fields": list(fields),
+                    "optionalFields": list(
+                        MODEL_RUNTIME_PROGRESS_OPTIONAL_FIELDS[event_type]
+                    ),
+                }
+                for event_type, fields in MODEL_RUNTIME_PROGRESS_EVENT_FIELDS.items()
+            },
+        }
+
+        self.assertEqual(manifest, expected)
+        web_contract = (
+            WORKBENCH_WEB_ROOT / "src" / "lib" / "api" / "training-jobs.ts"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'import modelRuntimeProgressEvents from "./model-runtime-progress-events.json";',
+            web_contract,
+        )
+        self.assertIn("Object.keys(modelRuntimeProgressEvents.events)", web_contract)
+
+    def test_inspection_owns_explicit_semantic_graph_adapters(self) -> None:
+        semantics_path = INSPECTION_ROOT / "_graph_semantics.py"
+        self.assertTrue(semantics_path.is_file())
+        semantics = ast.parse(
+            semantics_path.read_text(encoding="utf-8"),
+            semantics_path.as_posix(),
+        )
+        adapter_classes = {
+            node.name
+            for node in semantics.body
+            if isinstance(node, ast.ClassDef) and node.name.endswith("DetailsAdapter")
+        }
+        self.assertGreaterEqual(len(adapter_classes), 2)
+
+        model_graph_source = (INSPECTION_ROOT / "model_graph.py").read_text(
+            encoding="utf-8"
+        )
+        for bare_name_policy in (
+            "COMPONENT_DESCRIPTION_BY_CLASS_NAME",
+            "INTERNAL_GRAPH_TYPE_NAMES",
+            "RUNTIME_GRAPH_TYPE_NAMES",
+        ):
+            self.assertNotIn(bare_name_policy, model_graph_source)
+        self.assertIn("ModuleSemanticAdapter", model_graph_source)
 
     def test_inspection_root_does_not_export_graph_implementation_helpers(
         self,

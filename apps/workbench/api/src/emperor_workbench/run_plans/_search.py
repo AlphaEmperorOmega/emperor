@@ -8,7 +8,7 @@ from model_runtime.packages import (
     normalize_key,
     serialize_config_value,
 )
-from model_runtime.runs import SearchAxisSelection, SearchSpec
+from model_runtime.runs import RunPlan, SearchAxisSelection, SearchSpec
 
 from emperor_workbench.model_packages import ModelPackageFailure, SelectedModelPackage
 from emperor_workbench.project_adapter import ModelPackageReference
@@ -152,7 +152,18 @@ def search_from_spec(search: SearchSpec | None) -> TrainingSearch | None:
         mode=search.mode,
         values={axis.key: list(axis.values or ()) for axis in (search.axes or ())},
         random_samples=search.random_samples,
+        custom_value_axes=tuple(
+            axis.key for axis in (search.axes or ()) if axis.allow_custom_values
+        ),
     )
 
 
-__all__ = ["adapt_search", "search_from_spec"]
+def preset_searches_from_plan(
+    plan: RunPlan,
+) -> dict[str, TrainingSearch | None]:
+    return {
+        entry.preset: search_from_spec(entry.search) for entry in plan.preset_searches
+    }
+
+
+__all__ = ["adapt_search", "preset_searches_from_plan", "search_from_spec"]

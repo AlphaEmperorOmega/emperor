@@ -112,6 +112,7 @@ function runPlan({
     datasets: ["Mnist"],
     overrides: {},
     search,
+    presetSearches: { baseline: search },
     logFolder: "runs",
     isRandomSearch: search?.mode === "random",
     runs: Array.from({ length: totalRuns }, (_, offset) => ({

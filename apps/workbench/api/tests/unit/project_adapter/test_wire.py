@@ -5,8 +5,16 @@ import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from model_runtime.cli import PROTOCOL_VERSION
+from model_runtime.cli import PROTOCOL_VERSION, WireCodecError, run_plan_to_wire
 from model_runtime.inspection import InspectionRequest
+from model_runtime.packages import ModelIdentity
+from model_runtime.runs import (
+    PlanningBudget,
+    RunParameter,
+    RunPlan,
+    RunRequest,
+    RunSpec,
+)
 
 from emperor_workbench.failures import FailureKind
 from emperor_workbench.project_adapter import (
@@ -19,6 +27,45 @@ from ._support import _FakeOneShotProcess, _response
 
 
 class ProjectAdapterWireTests(unittest.TestCase):
+    def test_overdepth_run_plan_is_an_invalid_protocol_result(self) -> None:
+        request = RunRequest(presets=("baseline",), datasets=("Mnist",))
+        plan = RunPlan(
+            identity=ModelIdentity("linears", "linear"),
+            presets=request.presets,
+            experiment_task="image-classification",
+            datasets=request.datasets,
+            overrides={},
+            search=None,
+            runs=(
+                RunSpec(
+                    id="run-0001",
+                    experiment_task="image-classification",
+                    preset="baseline",
+                    dataset="Mnist",
+                    parameters=(RunParameter("HIDDEN_DIM", 64, "override"),),
+                ),
+            ),
+        )
+        payload = run_plan_to_wire(plan)
+        nested_value: object = 0
+        for _ in range(65):
+            nested_value = [nested_value]
+        payload["runs"][0]["parameters"][0]["value"] = nested_value
+        client = ProjectAdapterClient(("adapter",), persistent=False)
+        client.call = Mock(  # type: ignore[method-assign]
+            return_value={"plan": payload, "random_state": None}
+        )
+
+        with self.assertRaises(ProjectAdapterFailure) as raised:
+            client.plan_runs(
+                "linears/linear",
+                request,
+                budget=PlanningBudget(),
+            )
+
+        self.assertEqual(raised.exception.kind, FailureKind.UNAVAILABLE)
+        self.assertIsInstance(raised.exception.__cause__, WireCodecError)
+
     def test_inspection_memory_limit_crosses_client_protocol_seam(self) -> None:
         client = ProjectAdapterClient(("adapter",), persistent=False)
         client.call = Mock(return_value={})  # type: ignore[method-assign]

@@ -64,6 +64,7 @@ EXPECTED_TRAINING_RUN_PLAN_RESPONSE_FIELDS = (
     "datasets",
     "overrides",
     "search",
+    "presetSearches",
     "logFolder",
     "isRandomSearch",
     "runs",

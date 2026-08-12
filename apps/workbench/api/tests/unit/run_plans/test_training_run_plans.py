@@ -6,13 +6,22 @@ import random
 import tempfile
 import unittest
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from model_runtime.runs import RunRequest, plan_runs
+from model_runtime.runs import (
+    PlanningBudget,
+    PresetSearch,
+    RunParameter,
+    RunRequest,
+    SearchAxisSelection,
+    SearchSpec,
+    plan_runs,
+)
 from models.catalog import model_package
 from models.package_cli import _search_spec
 
@@ -433,6 +442,213 @@ class TrainingRunPlanTests(unittest.TestCase):
                     "ADAPTIVE_GENERATOR_STACK_NUM_LAYERS": [1, 2],
                 },
             },
+        )
+
+    def test_workbench_preserves_each_presets_effective_search_provenance(
+        self,
+    ) -> None:
+        package = model_package("linears/linear_adaptive")
+        if package is None:
+            self.fail("Expected the linears/linear_adaptive Model Package.")
+        semantic_plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "post-norm"),
+                datasets=("Mnist",),
+                overrides={"layer_norm_position": "AFTER"},
+                search=SearchSpec(mode="random", random_samples=1),
+            ),
+            random_source=random.Random(17),
+            budget=PlanningBudget(
+                max_axes=None,
+                max_values_per_axis=None,
+                max_materialized_runs=2,
+            ),
+        )
+        baseline_search = semantic_plan.search_for_preset("baseline")
+        post_norm_search = semantic_plan.search_for_preset("post-norm")
+        assert baseline_search is not None
+        assert post_norm_search is not None
+        layer_norm_axis = next(
+            axis
+            for axis in baseline_search.axes or ()
+            if axis.key == "LAYER_NORM_POSITION"
+        )
+        post_norm_axis = next(iter(post_norm_search.axes or ()))
+        semantic_plan = replace(
+            semantic_plan,
+            preset_searches=(
+                PresetSearch(
+                    preset="baseline",
+                    search=SearchSpec(
+                        mode="random",
+                        axes=(layer_norm_axis,),
+                        random_samples=1,
+                    ),
+                ),
+                PresetSearch(
+                    preset="post-norm",
+                    search=SearchSpec(
+                        mode="random",
+                        axes=(post_norm_axis,),
+                        random_samples=1,
+                    ),
+                ),
+            ),
+        )
+        project_adapter = project_adapter_client()
+        service = _run_plan_service(project_adapter=project_adapter)
+
+        with patch.object(
+            project_adapter,
+            "plan_runs",
+            return_value=semantic_plan,
+        ):
+            plan = service.preview(
+                CreateTrainingRunPlanCommand(
+                    model="linears/linear_adaptive",
+                    preset="baseline",
+                    presets=["baseline", "post-norm"],
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="per_preset_search",
+                )
+            )
+
+        payload = run_plan_payload(plan)
+        preset_searches = payload["presetSearches"]
+        self.assertEqual(list(preset_searches), ["baseline", "post-norm"])
+        self.assertEqual(payload["search"], preset_searches["baseline"])
+        self.assertIn(
+            "LAYER_NORM_POSITION",
+            preset_searches["baseline"]["values"],
+        )
+        self.assertNotIn(
+            "LAYER_NORM_POSITION",
+            preset_searches["post-norm"]["values"],
+        )
+        post_norm_run = next(
+            run for run in payload["runs"] if run["preset"] == "post-norm"
+        )
+        layer_norm_change = next(
+            change
+            for change in post_norm_run["changes"]
+            if change["key"] == "LAYER_NORM_POSITION"
+        )
+        self.assertEqual(layer_norm_change["value"], "AFTER")
+        self.assertEqual(layer_norm_change["source"], "override")
+
+        encoded = RunPlanPersistenceCodec.encode(plan)
+        restored = RunPlanPersistenceCodec.decode(encoded)
+        self.assertEqual(
+            list(restored.preset_searches),
+            ["baseline", "post-norm"],
+        )
+        legacy_payload = dict(encoded)
+        del legacy_payload["presetSearches"]
+        legacy = RunPlanPersistenceCodec.decode(legacy_payload)
+        self.assertTrue(
+            all(search == legacy.search for search in legacy.preset_searches.values())
+        )
+
+    def test_worker_acceptance_uses_each_presets_search_provenance(self) -> None:
+        package = model_package("linears/linear")
+        if package is None:
+            self.fail("Expected the linears/linear Model Package.")
+        semantic_plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+        )
+        semantic_plan = replace(
+            semantic_plan,
+            runs=(
+                replace(
+                    semantic_plan.runs[0],
+                    parameters=(
+                        RunParameter(
+                            key="HIDDEN_DIM",
+                            value=64,
+                            source="search",
+                        ),
+                    ),
+                ),
+                replace(
+                    semantic_plan.runs[1],
+                    parameters=(
+                        RunParameter(
+                            key="STACK_ACTIVATION",
+                            value="RELU",
+                            source="search",
+                        ),
+                    ),
+                ),
+            ),
+            preset_searches=(
+                PresetSearch(
+                    preset="baseline",
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(
+                            SearchAxisSelection(
+                                key="HIDDEN_DIM",
+                                values=(64,),
+                            ),
+                        ),
+                    ),
+                ),
+                PresetSearch(
+                    preset="gating",
+                    search=SearchSpec(
+                        mode="grid",
+                        axes=(
+                            SearchAxisSelection(
+                                key="STACK_ACTIVATION",
+                                values=("RELU",),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        project_adapter = project_adapter_client()
+        service = _run_plan_service(project_adapter=project_adapter)
+        with patch.object(
+            project_adapter,
+            "plan_runs",
+            return_value=semantic_plan,
+        ):
+            plan = service.preview(
+                CreateTrainingRunPlanCommand(
+                    model="linears/linear",
+                    preset="baseline",
+                    presets=["baseline", "gating"],
+                    datasets=["Mnist"],
+                    overrides={},
+                    log_folder="worker_per_preset_search",
+                )
+            )
+
+        reference = (
+            ModelPackageCatalog(project_adapter).select("linears/linear").reference
+        )
+        accepted = RunPlanWorkerAcceptance.accept(
+            reference,
+            {
+                "id": "job-per-preset-search",
+                "plannedRunCount": len(plan.runs),
+                "monitors": [],
+                "runPlan": RunPlanPersistenceCodec.encode(plan),
+            },
+        )
+        gating_search = accepted.search_for_preset("gating")
+        self.assertIsNotNone(gating_search)
+        assert gating_search is not None
+        self.assertEqual(
+            [axis.key for axis in gating_search.axes or ()],
+            ["STACK_ACTIVATION"],
         )
 
     def test_training_run_plan_materializes_grid_rows_and_commands(self) -> None:
