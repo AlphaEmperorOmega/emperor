@@ -10,6 +10,7 @@ export function buildHierarchy(graph: InspectResponse | undefined) {
     graph.nodes.map((node) => [node.id, { node, children: [] as HierarchyNode[] }]),
   );
   const childIds = new Set<string>();
+  const attachedNodeIds = new Set<string>();
 
   for (const edge of graph.edges) {
     const parent = nodesById.get(edge.source);
@@ -17,7 +18,12 @@ export function buildHierarchy(graph: InspectResponse | undefined) {
     if (!parent || !child) {
       continue;
     }
-    parent.children.push(child);
+    if (attachedNodeIds.has(edge.target)) {
+      parent.children.push({ node: child.node, children: [], isReference: true });
+    } else {
+      parent.children.push(child);
+      attachedNodeIds.add(edge.target);
+    }
     childIds.add(edge.target);
   }
 

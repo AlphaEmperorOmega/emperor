@@ -26,11 +26,13 @@ function descendantExpertCount(
   nodesById: Map<string, GraphNode>,
 ) {
   const queue = [...(navigation.childrenById.get(nodeId) ?? [])];
+  const visitedNodeIds = new Set<string>([nodeId]);
   while (queue.length > 0) {
     const childId = queue.shift();
-    if (!childId) {
+    if (!childId || visitedNodeIds.has(childId)) {
       continue;
     }
+    visitedNodeIds.add(childId);
     const child = nodesById.get(childId);
     if (!child) {
       continue;

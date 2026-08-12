@@ -1081,6 +1081,36 @@ describe("buildHierarchy", () => {
     expect(roots[0].node.id).toBe("a");
     expect(roots[0].children.map((child) => child.node.id)).toEqual(["b"]);
   });
+
+  it("expands each node once in a layered shared-module DAG", () => {
+    const layerCount = 17;
+    const nodes = [node("root")];
+    const edges: Array<[string, string]> = [];
+    let previousIds = ["root"];
+
+    for (let layerIndex = 0; layerIndex < layerCount; layerIndex += 1) {
+      const layerIds = [`layer-${layerIndex}-left`, `layer-${layerIndex}-right`];
+      nodes.push(...layerIds.map((id) => node(id)));
+      for (const parentId of previousIds) {
+        for (const childId of layerIds) {
+          edges.push([parentId, childId]);
+        }
+      }
+      previousIds = layerIds;
+    }
+
+    const roots = buildHierarchy(graph(nodes, edges));
+    const occurrences = roots.flatMap(function flatten(
+      item: (typeof roots)[number],
+    ): typeof roots {
+      return [item, ...item.children.flatMap(flatten)];
+    });
+
+    expect(occurrences).toHaveLength(edges.length + 1);
+    expect(occurrences.filter((item) => item.isReference)).toHaveLength(
+      edges.length - (nodes.length - 1),
+    );
+  });
 });
 
 describe("buildChildSummaries", () => {
