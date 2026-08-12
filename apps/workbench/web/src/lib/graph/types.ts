@@ -66,6 +66,7 @@ export type WorkbenchNodeData = {
 export type HierarchyNode = {
   node: GraphNode;
   children: HierarchyNode[];
+  isReference?: boolean;
 };
 
 export type GraphNavigation = {

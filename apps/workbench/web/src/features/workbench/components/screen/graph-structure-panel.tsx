@@ -71,8 +71,8 @@ function StructureTreeItem({
   onToggleNode: (nodeId: string) => void;
   onRevealNode: (nodeId: string) => void;
 }) {
-  const { node, children } = item;
-  const hasChildren = children.length > 0;
+  const { node, children, isReference = false } = item;
+  const hasChildren = !isReference && children.length > 0;
   const isExpanded = expandedNodeIds.has(node.id);
   const isSelected = selectedNodeId === node.id;
 
@@ -119,7 +119,9 @@ function StructureTreeItem({
           <span className="min-w-0 truncate font-mono type-caption text-ink-faint">
             {node.path}
           </span>
-          {node.parameterCount > 0 ? (
+          {isReference ? (
+            <StructureBadge>reference</StructureBadge>
+          ) : node.parameterCount > 0 ? (
             <StructureBadge>{formatCompactCount(node.parameterCount)}</StructureBadge>
           ) : (
             <span aria-hidden />
@@ -128,9 +130,9 @@ function StructureTreeItem({
       </div>
       {hasChildren && isExpanded && (
         <ol className="mt-1 grid gap-1">
-          {children.map((child) => (
+          {children.map((child, index) => (
             <StructureTreeItem
-              key={child.node.id}
+              key={`${child.node.id}:${child.isReference ? "reference" : "node"}:${index}`}
               item={child}
               depth={depth + 1}
               expandedNodeIds={expandedNodeIds}
