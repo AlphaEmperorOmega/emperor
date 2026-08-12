@@ -6,6 +6,7 @@ import sys
 import unittest
 from dataclasses import fields
 
+import pytest
 import torch
 
 from emperor.convs import Conv2dLayerConfig
@@ -344,6 +345,7 @@ class Conv2dBehaviorTests(unittest.TestCase):
         self.assertEqual(incompatible.missing_keys, [])
         self.assertEqual(incompatible.unexpected_keys, [])
 
+    @pytest.mark.training
     def test_float64_non_contiguous_backward_and_optimizer_step(self) -> None:
         model = Conv2dLayer(
             make_config(

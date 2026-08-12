@@ -3,6 +3,7 @@ from copy import deepcopy
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -65,6 +66,7 @@ class MemoryDispatchHarness(LayerModuleBase):
 
 
 class LayerBehavioralContractTests(unittest.TestCase):
+    @pytest.mark.training
     def test_strict_checkpoint_round_trip_preserves_optimizer_continuation(
         self,
     ) -> None:

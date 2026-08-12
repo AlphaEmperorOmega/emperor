@@ -2,7 +2,9 @@ import importlib
 import inspect
 import unittest
 
+import pytest
 import torch
+from torch import nn
 
 import models.bert.expert_linear_adaptive.config as config
 import models.bert.expert_linear_adaptive.dataset_options as dataset_options
@@ -38,7 +40,7 @@ from models.bert.expert_linear_adaptive.presets import (
     ExperimentPresets,
 )
 from models.catalog import model_package
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
@@ -50,6 +52,38 @@ _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
 class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
+    def test_embedding_mlm_and_nsp_runtime_options_reach_the_model(self):
+        cfg = self._config(
+            ExperimentPreset.BASELINE,
+            {
+                "token_type_vocab_size": 4,
+                "embedding_layer_norm_flag": False,
+                "embedding_dropout_probability": 0.25,
+                "mlm_activation": ActivationOptions.RELU,
+                "mlm_dense_bias_flag": False,
+                "mlm_layer_norm_flag": False,
+                "mlm_decoder_bias_flag": False,
+                "mlm_decoder_weight_tying_flag": False,
+                "nsp_pooler_activation": ActivationOptions.RELU,
+                "nsp_pooler_bias_flag": False,
+                "nsp_head_bias_flag": False,
+            },
+        )
+        model = Model(cfg)
+
+        self.assertEqual(model.token_type_embedding.num_embeddings, 4)
+        self.assertIsInstance(model.embedding_layer_norm, nn.Identity)
+        self.assertEqual(model.embedding_dropout.p, 0.25)
+        self.assertIsInstance(model.mlm_activation, nn.ReLU)
+        self.assertIsNone(model.mlm_dense.bias)
+        self.assertIsInstance(model.mlm_layer_norm, nn.Identity)
+        self.assertIsNone(model.mlm_decoder_bias)
+        self.assertIsNot(model.mlm_decoder.weight, model.token_embedding.weight)
+        self.assertIsInstance(model.pooler_activation, nn.ReLU)
+        self.assertIsNone(model.pooler.bias)
+        self.assertEqual(model.nsp_head.out_features, 2)
+        self.assertIsNone(model.nsp_head.bias)
+
     def test_runtime_defaults_describe_a_conventional_bert_block(self):
         self.assertEqual(
             config.LAYER_NORM_POSITION,
@@ -284,6 +318,7 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertEqual(tuple(nsp_logits.shape), (2, 2))
         self.assertEqual(tuple(auxiliary_loss.shape), ())
 
+    @pytest.mark.training
     def test_single_layer_recurrent_attention_residual_preset_trains_one_batch(self):
         torch.manual_seed(449)
         cfg = self._config(ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL)
@@ -514,6 +549,7 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
         torch.testing.assert_close(original_mlm[:, 0], changed_mlm[:, 0])
         torch.testing.assert_close(original_nsp, changed_nsp)
 
+    @pytest.mark.training
     def test_representative_presets_train_one_tiny_epoch(self):
         for preset in (
             ExperimentPreset.BASELINE,

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import Callback, LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -267,6 +268,7 @@ class SamplerMonitorLifecycleTests(unittest.TestCase):
             torch.testing.assert_close(logged[metric_name], expected_value)
             self.assertTrue(torch.isfinite(logged[metric_name]), metric_name)
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_metrics_for_every_variant_and_updates(
         self,
     ) -> None:
@@ -312,6 +314,7 @@ class SamplerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._usage_history, {})
         self.assertEqual(monitor._mass_history, {})
 
+    @pytest.mark.training
     def test_real_trainer_uses_cadence_and_bounded_history(self) -> None:
         model = _SamplerTrainingModule(learning_rate=0.0)
         monitor = SamplerMonitorCallback(log_every_n_steps=2, history_size=1)
@@ -332,6 +335,7 @@ class SamplerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual({step for step, _, _ in model.logged_calls}, {1, 3})
         self.assertEqual(observer.lengths, [1, 1, 1])
 
+    @pytest.mark.training
     def test_real_tensorboard_logger_receives_histograms_and_heatmaps(self) -> None:
         model = _SamplerTrainingModule(learning_rate=0.0)
         monitor = SamplerMonitorCallback(log_every_n_steps=1)
@@ -367,6 +371,7 @@ class SamplerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(events.Images(usage_heatmap)[0].step, 1)
         self.assertEqual(events.Images(mass_heatmap)[0].step, 1)
 
+    @pytest.mark.training
     def test_real_trainer_exception_invokes_monitor_cleanup(self) -> None:
         model = _SamplerTrainingModule(
             fail_after_forward=True,

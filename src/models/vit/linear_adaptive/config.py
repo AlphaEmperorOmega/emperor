@@ -61,9 +61,9 @@ from emperor.memory import (
 )
 
 # Trainer
-TRAINER_ACCELERATOR: str = "auto"
-TRAINER_DEVICES: str | int = "auto"
-TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_DEVICES: int = 1
+TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
 TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
 TRAINER_PRECISION: str = "32-true"
@@ -86,6 +86,7 @@ MONITOR_LOG_EVERY_N_STEPS: int = 100
 # Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
+SEED: int | None = None
 
 # Callback
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
@@ -102,11 +103,6 @@ OUTPUT_DIM: int = 10
 BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 10
-
-# Trainer
-TRAINER_ACCELERATOR: str = "cpu"
-TRAINER_DEVICES: int = 1
-TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 
 #########################################################################
 # IMAGE PATCHES

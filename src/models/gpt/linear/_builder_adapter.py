@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal
 
+from models.gpt.linear import _config_defaults as config_defaults
 from models.gpt.linear._residual import (
     ResidualStackSource,
     resolve_residual_stack_options,
@@ -204,7 +205,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="attn",
-                    config_prefix="ATTN",
+                    role="attention",
                     provided=kwargs.get(
                         "attention_projection_layer_controller_options"
                     ),
@@ -215,7 +216,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="attn",
-                    config_prefix="ATTN",
+                    role="attention",
                     provided=kwargs.get("attention_projection_dynamic_memory_options"),
                 )
             ),
@@ -224,7 +225,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="attn_recurrent",
-                    config_prefix="ATTN_RECURRENT",
+                    role="attention",
                     provided=kwargs.get(
                         "attention_projection_recurrent_controller_options"
                     ),
@@ -236,7 +237,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="ff",
-                    config_prefix="FF",
+                    role="feed_forward",
                     provided=kwargs.get("feed_forward_layer_controller_options"),
                 )
             ),
@@ -245,7 +246,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="ff",
-                    config_prefix="FF",
+                    role="feed_forward",
                     provided=kwargs.get("feed_forward_dynamic_memory_options"),
                 )
             ),
@@ -254,7 +255,7 @@ def linear_builder_kwargs_from_flat(
                     kwargs,
                     config_module,
                     flat_prefix="ff_recurrent",
-                    config_prefix="FF_RECURRENT",
+                    role="feed_forward",
                     provided=kwargs.get("feed_forward_recurrent_controller_options"),
                 )
             ),
@@ -264,21 +265,21 @@ def linear_builder_kwargs_from_flat(
                 kwargs,
                 config_module,
                 flat_prefix="",
-                config_prefix="",
+                role="main",
                 provided=kwargs.get("layer_controller_options"),
             ),
             "dynamic_memory_options": _modern_dynamic_memory_options(
                 kwargs,
                 config_module,
                 flat_prefix="",
-                config_prefix="",
+                role="main",
                 provided=kwargs.get("dynamic_memory_options"),
             ),
             "recurrent_controller_options": _modern_recurrent_controller_options(
                 kwargs,
                 config_module,
                 flat_prefix="recurrent",
-                config_prefix="RECURRENT",
+                role="main",
                 provided=kwargs.get("recurrent_controller_options"),
             ),
         }
@@ -300,10 +301,7 @@ def _modern_embedding_options(
     *,
     provided: GptEmbeddingOptions | None,
 ) -> GptEmbeddingOptions:
-    options = provided or GptEmbeddingOptions(
-        layer_norm_flag=config_module.EMBEDDING_LAYER_NORM_FLAG,
-        dropout_probability=config_module.EMBEDDING_DROPOUT_PROBABILITY,
-    )
+    options = provided or config_defaults.gpt_embedding_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -322,13 +320,7 @@ def _modern_decoder_options(
     *,
     provided: TransformerDecoderOptions | None,
 ) -> TransformerDecoderOptions:
-    options = provided or TransformerDecoderOptions(
-        hidden_dim=config_module.HIDDEN_DIM,
-        num_layers=config_module.STACK_NUM_LAYERS,
-        activation=config_module.STACK_ACTIVATION,
-        dropout_probability=config_module.STACK_DROPOUT_PROBABILITY,
-        layer_norm_position=config_module.LAYER_NORM_POSITION,
-    )
+    options = provided or config_defaults.gpt_decoder_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -350,10 +342,8 @@ def _modern_positional_embedding_options(
     *,
     provided: TransformerPositionalEmbeddingOptions | None,
 ) -> TransformerPositionalEmbeddingOptions:
-    options = provided or TransformerPositionalEmbeddingOptions(
-        option=config_module.POSITIONAL_EMBEDDING_OPTION,
-        padding_idx=config_module.POSITIONAL_EMBEDDING_PADDING_IDX,
-        auto_expand_flag=config_module.POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG,
+    options = provided or config_defaults.gpt_positional_embedding_options(
+        config_module
     )
     return replace(
         options,
@@ -374,12 +364,7 @@ def _modern_attention_options(
     *,
     provided: TransformerAttentionOptions | None,
 ) -> TransformerAttentionOptions:
-    options = provided or TransformerAttentionOptions(
-        num_heads=config_module.ATTN_NUM_HEADS,
-        num_layers=config_module.ATTN_NUM_LAYERS,
-        bias_flag=config_module.ATTN_BIAS_FLAG,
-        add_key_value_bias_flag=config_module.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
-    )
+    options = provided or config_defaults.gpt_attention_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -400,10 +385,7 @@ def _modern_feed_forward_options(
     *,
     provided: TransformerFeedForwardOptions | None,
 ) -> TransformerFeedForwardOptions:
-    options = provided or TransformerFeedForwardOptions(
-        num_layers=config_module.FF_NUM_LAYERS,
-        bias_flag=config_module.FF_BIAS_FLAG,
-    )
+    options = provided or config_defaults.gpt_feed_forward_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -422,10 +404,7 @@ def _modern_lm_head_options(
     *,
     provided: GptLmHeadOptions | None,
 ) -> GptLmHeadOptions:
-    options = provided or GptLmHeadOptions(
-        weight_tying_flag=config_module.LM_HEAD_WEIGHT_TYING_FLAG,
-        bias_flag=config_module.LM_HEAD_BIAS_FLAG,
-    )
+    options = provided or config_defaults.gpt_lm_head_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -444,17 +423,7 @@ def _modern_main_stack_options(
     *,
     provided: MainLayerStackOptions | None,
 ) -> MainLayerStackOptions:
-    options = provided or MainLayerStackOptions(
-        bias_flag=config_module.STACK_BIAS_FLAG,
-        layer_norm_position=config_module.LAYER_NORM_POSITION,
-        num_layers=config_module.STACK_NUM_LAYERS,
-        activation=config_module.STACK_ACTIVATION,
-        residual_connection_option=config_module.STACK_RESIDUAL_CONNECTION_OPTION,
-        residual_model_flag=config_module.STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=config_module.STACK_DROPOUT_PROBABILITY,
-        last_layer_bias_option=config_module.STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config_module.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-    )
+    options = provided or config_defaults.main_layer_stack_options(config_module)
     return replace(
         options,
         **_modern_option_updates(
@@ -481,21 +450,9 @@ def _modern_submodule_stack_options(
     stack_options: MainLayerStackOptions,
     provided: SubmoduleStackOptions | None,
 ) -> SubmoduleStackOptions:
-    options = provided or SubmoduleStackOptions(
-        hidden_dim=config_module.SUBMODULE_STACK_HIDDEN_DIM,
-        num_layers=config_module.SUBMODULE_STACK_NUM_LAYERS,
-        last_layer_bias_option=config_module.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        activation=config_module.SUBMODULE_STACK_ACTIVATION,
-        layer_norm_position=config_module.SUBMODULE_STACK_LAYER_NORM_POSITION,
-        residual_connection_option=(
-            config_module.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        residual_model_flag=config_module.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=config_module.SUBMODULE_STACK_DROPOUT_PROBABILITY,
-        bias_flag=stack_options.bias_flag,
+    options = provided or config_defaults.submodule_stack_options(
+        config_module,
+        stack_options,
     )
     return _modern_submodule_stack_options_with_prefix(
         options,
@@ -512,21 +469,10 @@ def _modern_attention_projection_stack_options(
     attention_options: TransformerAttentionOptions,
     provided: SubmoduleStackOptions | None,
 ) -> SubmoduleStackOptions:
-    options = provided or SubmoduleStackOptions(
-        hidden_dim=decoder_options.hidden_dim,
-        num_layers=attention_options.num_layers,
-        last_layer_bias_option=config_module.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        activation=decoder_options.activation,
-        layer_norm_position=config_module.ATTN_STACK_LAYER_NORM_POSITION,
-        residual_connection_option=(
-            config_module.ATTN_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        residual_model_flag=config_module.ATTN_STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=config_module.ATTN_STACK_DROPOUT_PROBABILITY,
-        bias_flag=attention_options.bias_flag,
+    options = provided or config_defaults.attention_projection_stack_options(
+        config_module,
+        decoder_options,
+        attention_options,
     )
     updates = _modern_option_updates(
         kwargs,
@@ -547,20 +493,10 @@ def _modern_feed_forward_stack_options(
     feed_forward_options: TransformerFeedForwardOptions,
     provided: SubmoduleStackOptions | None,
 ) -> SubmoduleStackOptions:
-    options = provided or SubmoduleStackOptions(
-        hidden_dim=_modern_scaled_feed_forward_hidden_dim(
-            decoder_options.hidden_dim,
-            config_module,
-        ),
-        num_layers=feed_forward_options.num_layers,
-        last_layer_bias_option=config_module.FF_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config_module.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        activation=decoder_options.activation,
-        layer_norm_position=config_module.FF_STACK_LAYER_NORM_POSITION,
-        residual_connection_option=config_module.FF_STACK_RESIDUAL_CONNECTION_OPTION,
-        residual_model_flag=config_module.FF_STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=decoder_options.dropout_probability,
-        bias_flag=feed_forward_options.bias_flag,
+    options = provided or config_defaults.feed_forward_stack_options(
+        config_module,
+        decoder_options,
+        feed_forward_options,
     )
     updates = _modern_option_updates(
         kwargs,
@@ -593,43 +529,15 @@ def _modern_layer_controller_options(
     config_module: ModuleType,
     *,
     flat_prefix: str,
-    config_prefix: str,
+    role: Literal["main", "attention", "feed_forward"],
     provided: LayerControllerOptions | None,
 ) -> LayerControllerOptions:
     flat_lead = f"{flat_prefix}_" if flat_prefix else ""
-    config_lead = f"{config_prefix}_" if config_prefix else ""
     gate_stack_flat_prefix = f"{flat_lead}gate_stack"
     halting_stack_flat_prefix = f"{flat_lead}halting_stack"
-    options = provided or LayerControllerOptions(
-        stack_gate_flag=getattr(config_module, f"{config_lead}STACK_GATE_FLAG"),
-        gate_option=getattr(config_module, f"{config_lead}GATE_OPTION"),
-        gate_activation=getattr(config_module, f"{config_lead}GATE_ACTIVATION"),
-        gate_stack_source=_modern_default_controller_stack_source(
-            config_module,
-            f"{config_lead}GATE_STACK",
-        ),
-        stack_halting_flag=getattr(config_module, f"{config_lead}STACK_HALTING_FLAG"),
-        halting_option=getattr(
-            config_module,
-            f"{config_lead}HALTING_OPTION",
-            LayerControllerOptions.halting_option,
-        ),
-        halting_threshold=getattr(
-            config_module,
-            f"{config_lead}HALTING_THRESHOLD",
-        ),
-        halting_dropout=getattr(
-            config_module,
-            f"{config_lead}HALTING_DROPOUT",
-        ),
-        halting_hidden_state_mode=getattr(
-            config_module,
-            f"{config_lead}HALTING_HIDDEN_STATE_MODE",
-        ),
-        halting_stack_source=_modern_default_controller_stack_source(
-            config_module,
-            f"{config_lead}HALTING_STACK",
-        ),
+    options = provided or config_defaults.linears_layer_controller_options(
+        config_module,
+        role,
     )
     if flat_prefix:
         field_map = {
@@ -672,30 +580,13 @@ def _modern_dynamic_memory_options(
     config_module: ModuleType,
     *,
     flat_prefix: str,
-    config_prefix: str,
+    role: Literal["main", "attention", "feed_forward"],
     provided: DynamicMemoryOptions | None,
 ) -> DynamicMemoryOptions:
     flat_lead = f"{flat_prefix}_" if flat_prefix else ""
-    config_lead = f"{config_prefix}_" if config_prefix else ""
-    options = provided or DynamicMemoryOptions(
-        memory_flag=getattr(config_module, f"{config_lead}MEMORY_FLAG"),
-        memory_option=getattr(config_module, f"{config_lead}MEMORY_OPTION"),
-        memory_position_option=getattr(
-            config_module,
-            f"{config_lead}MEMORY_POSITION_OPTION",
-        ),
-        memory_test_time_training_learning_rate=getattr(
-            config_module,
-            f"{config_lead}MEMORY_TEST_TIME_TRAINING_LEARNING_RATE",
-        ),
-        memory_test_time_training_num_inner_steps=getattr(
-            config_module,
-            f"{config_lead}MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS",
-        ),
-        memory_stack_source=_modern_default_controller_stack_source(
-            config_module,
-            f"{config_lead}MEMORY_STACK",
-        ),
+    options = provided or config_defaults.linears_dynamic_memory_options(
+        config_module,
+        role,
     )
     updates = _modern_option_updates(
         kwargs,
@@ -724,77 +615,13 @@ def _modern_recurrent_controller_options(
     config_module: ModuleType,
     *,
     flat_prefix: str,
-    config_prefix: str,
+    role: Literal["main", "attention", "feed_forward"],
     provided: RecurrentControllerOptions | None,
 ) -> RecurrentControllerOptions:
     flat_lead = f"{flat_prefix}_"
-    options = provided or RecurrentControllerOptions(
-        recurrent_flag=getattr(config_module, f"{config_prefix}_FLAG"),
-        recurrent_max_steps=getattr(config_module, f"{config_prefix}_MAX_STEPS"),
-        recurrent_initial_iterations=getattr(
-            config_module,
-            f"{config_prefix}_INITIAL_ITERATIONS",
-            2,
-        ),
-        recurrent_gradient_transition_count=getattr(
-            config_module,
-            f"{config_prefix}_GRADIENT_TRANSITION_COUNT",
-            None,
-        ),
-        recurrent_iteration_increment=getattr(
-            config_module,
-            f"{config_prefix}_ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_forward_calls_before_iteration_increment=getattr(
-            config_module,
-            f"{config_prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_layer_norm_position=getattr(
-            config_module,
-            f"{config_prefix}_LAYER_NORM_POSITION",
-        ),
-        recurrent_stack_gate_flag=getattr(
-            config_module, f"{config_prefix}_STACK_GATE_FLAG"
-        ),
-        recurrent_gate_option=getattr(
-            config_module,
-            f"{config_prefix}_GATE_OPTION",
-        ),
-        recurrent_gate_activation=getattr(
-            config_module,
-            f"{config_prefix}_GATE_ACTIVATION",
-        ),
-        recurrent_gate_stack_source=_modern_default_controller_stack_source(
-            config_module,
-            f"{config_prefix}_GATE_STACK",
-        ),
-        recurrent_stack_halting_flag=getattr(
-            config_module,
-            f"{config_prefix}_STACK_HALTING_FLAG",
-        ),
-        recurrent_halting_option=getattr(
-            config_module,
-            f"{config_prefix}_HALTING_OPTION",
-            RecurrentControllerOptions.recurrent_halting_option,
-        ),
-        recurrent_halting_threshold=getattr(
-            config_module,
-            f"{config_prefix}_HALTING_THRESHOLD",
-        ),
-        recurrent_halting_dropout=getattr(
-            config_module,
-            f"{config_prefix}_HALTING_DROPOUT",
-        ),
-        recurrent_halting_hidden_state_mode=getattr(
-            config_module,
-            f"{config_prefix}_HALTING_HIDDEN_STATE_MODE",
-        ),
-        recurrent_halting_stack_source=_modern_default_controller_stack_source(
-            config_module,
-            f"{config_prefix}_HALTING_STACK",
-        ),
+    options = provided or config_defaults.linears_recurrent_controller_options(
+        config_module,
+        role,
     )
     updates = _modern_option_updates(
         kwargs,
@@ -802,7 +629,9 @@ def _modern_recurrent_controller_options(
             f"{flat_lead}flag": "recurrent_flag",
             f"{flat_lead}max_steps": "recurrent_max_steps",
             f"{flat_lead}initial_iterations": "recurrent_initial_iterations",
-            f"{flat_lead}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{flat_lead}gradient_transition_count": (
+                "recurrent_gradient_transition_count"
+            ),
             f"{flat_lead}iteration_increment": "recurrent_iteration_increment",
             f"{flat_lead}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
@@ -837,42 +666,6 @@ def _modern_recurrent_controller_options(
     return replace(options, **updates)
 
 
-def _modern_default_controller_stack_source(
-    config_module: ModuleType,
-    config_prefix: str,
-) -> SubmoduleStackSource:
-    return SubmoduleStackSource(
-        independent_flag=getattr(config_module, f"{config_prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config_module, f"{config_prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config_module, f"{config_prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(
-            config_module,
-            f"{config_prefix}_LAST_LAYER_BIAS_OPTION",
-        ),
-        apply_output_pipeline_flag=getattr(
-            config_module,
-            f"{config_prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
-        ),
-        activation=getattr(config_module, f"{config_prefix}_ACTIVATION"),
-        layer_norm_position=getattr(
-            config_module,
-            f"{config_prefix}_LAYER_NORM_POSITION",
-        ),
-        residual_connection_option=getattr(
-            config_module,
-            f"{config_prefix}_RESIDUAL_CONNECTION_OPTION",
-        ),
-        residual_model_flag=getattr(
-            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
-        ),
-        dropout_probability=getattr(
-            config_module,
-            f"{config_prefix}_DROPOUT_PROBABILITY",
-        ),
-        bias_flag=getattr(config_module, f"{config_prefix}_BIAS_FLAG"),
-    )
-
-
 def _modern_controller_stack_source_from_kwargs(
     source: SubmoduleStackSource,
     kwargs: dict[str, Any],
@@ -885,20 +678,6 @@ def _modern_controller_stack_source_from_kwargs(
             {f"{flat_prefix}_{field}": field for field in _CONTROLLER_STACK_FIELD_MAP},
         ),
     )
-
-
-def _modern_scaled_feed_forward_hidden_dim(
-    hidden_dim: int,
-    config_module: ModuleType,
-) -> int:
-    if (
-        config_module.HIDDEN_DIM > 0
-        and config_module.FF_STACK_HIDDEN_DIM % config_module.HIDDEN_DIM == 0
-    ):
-        return hidden_dim * (
-            config_module.FF_STACK_HIDDEN_DIM // config_module.HIDDEN_DIM
-        )
-    return config_module.FF_STACK_HIDDEN_DIM
 
 
 def _modern_option_updates(
@@ -972,6 +751,7 @@ def _modern_role_control_flat_keys(prefix: str) -> set[str]:
         f"{lead}gate_option",
         f"{lead}gate_activation",
         f"{lead}stack_halting_flag",
+        f"{lead}halting_option",
         f"{lead}halting_threshold",
         f"{lead}halting_dropout",
         f"{lead}halting_hidden_state_mode",
@@ -1003,6 +783,7 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
         f"{prefix}_gate_option",
         f"{prefix}_gate_activation",
         f"{prefix}_stack_halting_flag",
+        f"{prefix}_halting_option",
         f"{prefix}_halting_threshold",
         f"{prefix}_halting_dropout",
         f"{prefix}_halting_hidden_state_mode",

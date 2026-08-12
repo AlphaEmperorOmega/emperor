@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from model_runtime.inspection.capture_limits import InspectionCaptureLimits
 from model_runtime.packages.identity import ModelIdentity
 
 GraphRole = Literal["architecture", "internal", "runtime"]
@@ -12,29 +13,56 @@ GraphRole = Literal["architecture", "internal", "runtime"]
 
 def freeze_value(value: Any) -> Any:
     if isinstance(value, Mapping):
+        mapping = cast(Mapping[object, Any], value)
         return MappingProxyType(
-            {str(key): freeze_value(item) for key, item in value.items()}
+            {str(key): freeze_value(item) for key, item in mapping.items()}
         )
     if isinstance(value, (list, tuple)):
-        return tuple(freeze_value(item) for item in value)
+        sequence = cast(list[Any] | tuple[Any, ...], value)
+        return tuple(freeze_value(item) for item in sequence)
     return value
+
+
+def _validated_memory_limit(value: object | None) -> int | None:
+    if value is not None and (
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+    ):
+        raise ValueError("Inspection memory limit must be a positive integer.")
+    return value
+
+
+def _validate_capture_limits(value: object) -> None:
+    if not isinstance(value, InspectionCaptureLimits):
+        raise TypeError("Inspection capture limits must be InspectionCaptureLimits.")
 
 
 @dataclass(frozen=True)
 class InspectionRequest:
     preset: str
-    overrides: Mapping[str, Any] | ParsedOverrides = field(default_factory=dict)
+    overrides: Mapping[str, Any] | ParsedOverrides = field(
+        default_factory=dict[str, Any]
+    )
     dataset: str | None = None
     experiment_task: str | None = None
+    memory_limit_bytes: int | None = None
+    capture_limits: InspectionCaptureLimits = field(
+        default_factory=InspectionCaptureLimits
+    )
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "memory_limit_bytes",
+            _validated_memory_limit(self.memory_limit_bytes),
+        )
+        _validate_capture_limits(self.capture_limits)
         if not isinstance(self.overrides, ParsedOverrides):
             object.__setattr__(self, "overrides", freeze_value(self.overrides))
 
 
 @dataclass(frozen=True)
 class ParsedOverrides:
-    values: Mapping[str, Any] = field(default_factory=dict)
+    values: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "values", freeze_value(self.values))

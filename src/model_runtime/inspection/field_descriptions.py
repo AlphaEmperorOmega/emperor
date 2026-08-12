@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 EXPLICIT_FIELD_DESCRIPTIONS = {
@@ -286,6 +287,157 @@ INHERITED_STACK_SECTIONS = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class _DescriptionRule:
+    template: str
+    adds_caveat: bool = True
+
+
+_DESCRIPTION_RULES = {
+    "independent": _DescriptionRule(
+        "Controls whether the {context} uses its own stack settings instead of "
+        "inheriting shared submodule settings."
+    ),
+    "residual_model": _DescriptionRule(
+        "Uses the Residual Stack Options as a data-dependent coefficient model "
+        "for the {context}. This is supported only when the paired residual "
+        "selector uses a weighted or weighted-blend residual."
+    ),
+    "bias": _DescriptionRule(
+        "Controls whether linear layers in the {context} include bias terms."
+    ),
+    "flag": _DescriptionRule(""),
+    "hidden_dimension": _DescriptionRule(
+        "Sets the hidden feature width used by the {context}. Larger values "
+        "increase capacity and memory use."
+    ),
+    "layer_count": _DescriptionRule(
+        "Sets how many layers are built for the {context}. More layers add "
+        "capacity and compute cost."
+    ),
+    "dropout": _DescriptionRule(
+        "Sets the dropout rate used by the {context}. Increase it for more "
+        "regularization, or use 0 to disable dropout."
+    ),
+    "layer_norm": _DescriptionRule(
+        "Chooses where layer normalization is applied in the {context}. This "
+        "changes training stability and the ordering of stack operations."
+    ),
+    "activation": _DescriptionRule(
+        "Selects the nonlinearity used by the {context}. The activation affects "
+        "gradient flow and model expressiveness."
+    ),
+    "option": _DescriptionRule(
+        "Selects which implementation or behavior the {context} uses."
+    ),
+    "threshold": _DescriptionRule(
+        "Sets the decision threshold used by the {context}. Higher values make "
+        "activation or stopping conditions stricter."
+    ),
+    "trainer": _DescriptionRule(
+        "Passes the {subject} setting through to the PyTorch Lightning trainer. "
+        "Adjust it to control runtime training behavior rather than model "
+        "architecture.",
+        adds_caveat=False,
+    ),
+    "callback": _DescriptionRule(
+        "Configures the {subject} callback setting used around training. These "
+        "values affect monitoring, early stopping, and checkpoint behavior "
+        "rather than the model forward pass.",
+        adds_caveat=False,
+    ),
+    "data": _DescriptionRule(
+        "Configures the {subject} data-loading setting for supported data "
+        "modules. These values affect input pipeline behavior, not the model "
+        "architecture.",
+        adds_caveat=False,
+    ),
+    "numeric": _DescriptionRule(
+        "Sets the numeric {subject} value for the {context}. Tune it when "
+        "changing capacity, regularization, or runtime limits."
+    ),
+    "boolean": _DescriptionRule(
+        "Turns the {subject} behavior on or off for the {context}."
+    ),
+    "generic": _DescriptionRule("Configures the {subject} setting for the {context}."),
+}
+
+_SUFFIX_DESCRIPTION_RULES = (
+    ("_INDEPENDENT_FLAG", "independent"),
+    ("_RESIDUAL_MODEL_FLAG", "residual_model"),
+    ("_BIAS_FLAG", "bias"),
+    ("_FLAG", "flag"),
+    ("_HIDDEN_DIM", "hidden_dimension"),
+    ("_NUM_LAYERS", "layer_count"),
+    ("_DROPOUT_PROBABILITY", "dropout"),
+    ("_DROPOUT", "dropout"),
+    ("_LAYER_NORM_POSITION", "layer_norm"),
+    ("_ACTIVATION", "activation"),
+    ("_OPTION", "option"),
+    ("_THRESHOLD", "threshold"),
+)
+
+_PREFIX_DESCRIPTION_RULES = (
+    ("TRAINER_", "trainer"),
+    ("CALLBACK_", "callback"),
+    ("DATA_", "data"),
+)
+
+_PREFIX_APPLICABILITY_CAVEATS = (
+    ("FF_GATE_", "Only applies when the feed-forward gate feature is enabled."),
+    (
+        "FF_HALTING_",
+        "Only applies when the feed-forward halting feature is enabled.",
+    ),
+    (
+        "FF_MEMORY_",
+        "Only applies when the feed-forward memory feature is enabled.",
+    ),
+    ("FF_RECURRENT_", "Only applies when feed-forward recurrence is enabled."),
+    (
+        "ATTN_GATE_",
+        "Only applies when the attention projection gate feature is enabled.",
+    ),
+    (
+        "ATTN_HALTING_",
+        "Only applies when the attention projection halting feature is enabled.",
+    ),
+    (
+        "ATTN_MEMORY_",
+        "Only applies when the attention projection memory feature is enabled.",
+    ),
+    (
+        "ATTN_RECURRENT_",
+        "Only applies when attention projection recurrence is enabled.",
+    ),
+)
+
+
+def _description_rule_key(key: str, kind: str) -> str:
+    for suffix, rule_key in _SUFFIX_DESCRIPTION_RULES:
+        if key.endswith(suffix):
+            return rule_key
+    for prefix, rule_key in _PREFIX_DESCRIPTION_RULES:
+        if key.startswith(prefix):
+            return rule_key
+    if kind in {"int", "float"}:
+        return "numeric"
+    if kind == "bool":
+        return "boolean"
+    return "generic"
+
+
+def _render_description(rule_key: str, subject: str, context: str) -> str:
+    if rule_key == "flag":
+        if subject == context:
+            return f"Enables or disables the {context}."
+        return f"Enables or disables {subject} for the {context}."
+    return _DESCRIPTION_RULES[rule_key].template.format(
+        subject=subject,
+        context=context,
+    )
+
+
 def config_field_description(
     key: str,
     *,
@@ -296,115 +448,17 @@ def config_field_description(
 ) -> str:
     """Return practical help text for a public config field."""
 
-    if key in EXPLICIT_FIELD_DESCRIPTIONS:
-        return EXPLICIT_FIELD_DESCRIPTIONS[key]
+    explicit_description = EXPLICIT_FIELD_DESCRIPTIONS.get(key)
+    if explicit_description is not None:
+        return explicit_description
 
     subject = _subject_for_key(key, section)
     context = SECTION_CONTEXT.get(section, _humanize_section(section))
     caveat = _applicability_caveat(key, section, nullable, default)
-
-    if key.endswith("_INDEPENDENT_FLAG"):
-        return _with_caveat(
-            f"Controls whether the {context} uses its own stack settings instead "
-            "of inheriting shared submodule settings.",
-            caveat,
-        )
-    if key.endswith("_RESIDUAL_MODEL_FLAG"):
-        return _with_caveat(
-            f"Uses the Residual Stack Options as a data-dependent coefficient "
-            f"model for the {context}. This is supported only when the paired "
-            "residual selector uses a weighted or weighted-blend residual.",
-            caveat,
-        )
-    if key.endswith("_BIAS_FLAG"):
-        return _with_caveat(
-            f"Controls whether linear layers in the {context} include bias terms.",
-            caveat,
-        )
-    if key.endswith("_FLAG"):
-        if subject == context:
-            return _with_caveat(
-                f"Enables or disables the {context}.",
-                caveat,
-            )
-        return _with_caveat(
-            f"Enables or disables {subject} for the {context}.",
-            caveat,
-        )
-    if key.endswith("_HIDDEN_DIM"):
-        return _with_caveat(
-            f"Sets the hidden feature width used by the {context}. Larger values "
-            "increase capacity and memory use.",
-            caveat,
-        )
-    if key.endswith("_NUM_LAYERS"):
-        return _with_caveat(
-            f"Sets how many layers are built for the {context}. More layers add "
-            "capacity and compute cost.",
-            caveat,
-        )
-    if key.endswith("_DROPOUT_PROBABILITY") or key.endswith("_DROPOUT"):
-        return _with_caveat(
-            f"Sets the dropout rate used by the {context}. Increase it for more "
-            "regularization, or use 0 to disable dropout.",
-            caveat,
-        )
-    if key.endswith("_LAYER_NORM_POSITION"):
-        return _with_caveat(
-            f"Chooses where layer normalization is applied in the {context}. This "
-            "changes training stability and the ordering of stack operations.",
-            caveat,
-        )
-    if key.endswith("_ACTIVATION"):
-        return _with_caveat(
-            f"Selects the nonlinearity used by the {context}. The activation "
-            "affects gradient flow and model expressiveness.",
-            caveat,
-        )
-    if key.endswith("_OPTION"):
-        return _with_caveat(
-            f"Selects which implementation or behavior the {context} uses.",
-            caveat,
-        )
-    if key.endswith("_THRESHOLD"):
-        return _with_caveat(
-            f"Sets the decision threshold used by the {context}. Higher values "
-            "make activation or stopping conditions stricter.",
-            caveat,
-        )
-    if key.startswith("TRAINER_"):
-        return (
-            f"Passes the {subject} setting through to the PyTorch Lightning "
-            "trainer. Adjust it to control runtime training behavior rather than "
-            "model architecture."
-        )
-    if key.startswith("CALLBACK_"):
-        return (
-            f"Configures the {subject} callback setting used around training. "
-            "These values affect monitoring, early stopping, and checkpoint "
-            "behavior rather than the model forward pass."
-        )
-    if key.startswith("DATA_"):
-        return (
-            f"Configures the {subject} data-loading setting for supported data "
-            "modules. These values affect input pipeline behavior, not the model "
-            "architecture."
-        )
-    if kind in {"int", "float"}:
-        return _with_caveat(
-            f"Sets the numeric {subject} value for the {context}. Tune it when "
-            "changing capacity, regularization, or runtime limits.",
-            caveat,
-        )
-    if kind == "bool":
-        return _with_caveat(
-            f"Turns the {subject} behavior on or off for the {context}.",
-            caveat,
-        )
-    return _with_caveat(
-        f"Configures the {subject} setting for the {context}.",
-        caveat,
-    )
+    rule_key = _description_rule_key(key, kind)
+    rule = _DESCRIPTION_RULES[rule_key]
+    description = _render_description(rule_key, subject, context)
+    return _with_caveat(description, caveat) if rule.adds_caveat else description
 
 
 def _subject_for_key(key: str, section: str) -> str:
@@ -431,24 +485,11 @@ def _applicability_caveat(
 ) -> str:
     if key.endswith("_INDEPENDENT_FLAG"):
         return ""
-    if section in INHERITED_STACK_SECTIONS and not key.endswith("_INDEPENDENT_FLAG"):
+    if section in INHERITED_STACK_SECTIONS:
         return "Only matters when this stack is configured independently."
-    if key.startswith("FF_GATE_") and not key.endswith("_FLAG"):
-        return "Only applies when the feed-forward gate feature is enabled."
-    if key.startswith("FF_HALTING_") and not key.endswith("_FLAG"):
-        return "Only applies when the feed-forward halting feature is enabled."
-    if key.startswith("FF_MEMORY_") and not key.endswith("_FLAG"):
-        return "Only applies when the feed-forward memory feature is enabled."
-    if key.startswith("FF_RECURRENT_") and not key.endswith("_FLAG"):
-        return "Only applies when feed-forward recurrence is enabled."
-    if key.startswith("ATTN_GATE_") and not key.endswith("_FLAG"):
-        return "Only applies when the attention projection gate feature is enabled."
-    if key.startswith("ATTN_HALTING_") and not key.endswith("_FLAG"):
-        return "Only applies when the attention projection halting feature is enabled."
-    if key.startswith("ATTN_MEMORY_") and not key.endswith("_FLAG"):
-        return "Only applies when the attention projection memory feature is enabled."
-    if key.startswith("ATTN_RECURRENT_") and not key.endswith("_FLAG"):
-        return "Only applies when attention projection recurrence is enabled."
+    for prefix, caveat in _PREFIX_APPLICABILITY_CAVEATS:
+        if key.startswith(prefix) and not key.endswith("_FLAG"):
+            return caveat
     if (
         any(key.startswith(prefix) for prefix in FLAG_DISABLED_PREFIXES)
         and not key.endswith("_FLAG")

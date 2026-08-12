@@ -9,9 +9,7 @@ from model_runtime.packages import (
     dataset_cli_name,
     dataset_label,
     dataset_name,
-    iter_supported_config_keys,
     normalize_dataset_name,
-    parse_config_value,
 )
 from models.catalog import model_package
 
@@ -182,15 +180,11 @@ class ModelPackageInspectionCapabilityTests(unittest.TestCase):
             self.package.resolve_dataset("UnknownDataset")
 
     def test_runtime_configuration_parsing_is_public_package_behavior(self) -> None:
-        keys = iter_supported_config_keys(self.package.runtime_defaults)
+        runtime_defaults = self.package.runtime_defaults_spec
 
-        self.assertIn("HIDDEN_DIM", keys)
+        self.assertIn("HIDDEN_DIM", runtime_defaults.supported_keys)
         self.assertEqual(
-            parse_config_value(
-                self.package.runtime_defaults,
-                "HIDDEN_DIM",
-                "128",
-            ),
+            runtime_defaults.parse_value("HIDDEN_DIM", "128"),
             128,
         )
         self.assertEqual(
@@ -200,10 +194,9 @@ class ModelPackageInspectionCapabilityTests(unittest.TestCase):
     def test_selected_package_supplies_ordered_configuration_field_metadata(
         self,
     ) -> None:
-        metadata = self.package.configuration_field_metadata()
-        search_metadata = self.package.configuration_field_metadata(
-            include_search_space=True
-        )
+        runtime_defaults = self.package.runtime_defaults_spec
+        metadata = runtime_defaults.configuration_metadata
+        search_metadata = runtime_defaults.search_metadata
 
         self.assertEqual(metadata["BATCH_SIZE"]["sectionPath"], ["Global"])
         self.assertIn("SEARCH_SPACE_HIDDEN_DIM", search_metadata)

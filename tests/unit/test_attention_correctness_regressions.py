@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import replace
 
+import pytest
 import torch
 
 from emperor.attention import (
@@ -1035,6 +1036,7 @@ class TestMixtureRoutingStateLifecycle(unittest.TestCase):
             atol=0,
         )
 
+    @pytest.mark.training
     def test_public_forward_clears_transient_state_after_processor_failure(
         self,
     ) -> None:
@@ -1132,6 +1134,7 @@ class TestMixtureRoutingStateLifecycle(unittest.TestCase):
         self.assert_retry_matches_fresh_model(model, fresh_model)
         self.assertEqual(sampler_skip_masks, [None, None])
 
+    @pytest.mark.training
     def test_public_forward_clears_transient_state_at_each_mutating_stage(
         self,
     ) -> None:

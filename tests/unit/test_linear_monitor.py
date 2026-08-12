@@ -4,6 +4,7 @@ import unittest
 from collections.abc import Callable
 from unittest.mock import patch
 
+import pytest
 import torch
 from torch import nn
 from torch.multiprocessing.spawn import ProcessRaisedException
@@ -1197,6 +1198,7 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertEqual(names.count("linear/input/mean"), 1)
         callback.on_fit_end(trainer, module)
 
+    @pytest.mark.training
     def test_replacement_after_forward_preserves_the_layer_that_ran(self):
         module = build_module(input_dim=1, output_dim=1, bias_flag=False)
         original_layer = module.linear

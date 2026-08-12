@@ -1,6 +1,5 @@
-from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Protocol
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -43,7 +42,7 @@ class ExpertsStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
@@ -61,7 +60,7 @@ class ExpertsSubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     bias_flag: bool
@@ -247,7 +246,7 @@ class ExpertsAdaptiveGeneratorStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     residual_stack_options: ResidualStackOptions | None = field(
@@ -276,7 +275,7 @@ class AdaptiveGeneratorStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
@@ -331,6 +330,29 @@ class HiddenAdaptiveMaskOptions:
     generator_stack_source: AdaptiveGeneratorStackSource
 
 
+class AdaptiveBoundaryModelOptions(Protocol):
+    weight_option: type[DynamicWeightConfig] | None
+    generator_depth: DynamicDepthOptions
+    weight_decay_schedule: WeightDecayScheduleOptions
+    weight_decay_rate: float
+    weight_decay_warmup_batches: int
+    weight_normalization_option: WeightNormalizationOptions
+    weight_normalization_position_option: WeightNormalizationPositionOptions
+    weight_bank_expansion_factor: BankExpansionFactorOptions
+    bias_option: type[DynamicBiasConfig] | None
+    bias_decay_schedule: WeightDecayScheduleOptions
+    bias_decay_rate: float
+    bias_decay_warmup_batches: int
+    bias_bank_expansion_factor: BankExpansionFactorOptions
+    diagonal_option: type[DynamicDiagonalConfig] | None
+    row_mask_option: type[AxisMaskConfig] | None
+    mask_dimension_option: MaskDimensionOptions
+    mask_threshold: float
+    mask_surrogate_scale: float
+    mask_floor: float
+    mask_transition_width: float
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
     batch_size: int
@@ -357,11 +379,10 @@ class RuntimeOptions:
     hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions
     hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions
     hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions
-    input_boundary_options: Any
-    output_boundary_options: Any
+    input_boundary_options: AdaptiveBoundaryModelOptions
+    output_boundary_options: AdaptiveBoundaryModelOptions
     router_adaptive_weight_options: HiddenAdaptiveWeightOptions
     router_adaptive_bias_options: HiddenAdaptiveBiasOptions
     router_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions
     router_adaptive_mask_options: HiddenAdaptiveMaskOptions
     recurrent_controller_options: ExpertsRecurrentControllerOptions
-    _resolved_state: Mapping[str, Any] = field(repr=False, compare=False)

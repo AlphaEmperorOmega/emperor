@@ -5,7 +5,7 @@ import importlib.util
 import re
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, cast
 
 
 def _assignment_key(node: ast.AST) -> str | None:
@@ -80,7 +80,7 @@ def _star_import_module_names(
     *,
     include_search_space: bool,
 ) -> list[tuple[int, str]]:
-    module_names = []
+    module_names: list[tuple[int, str]] = []
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom):
             continue
@@ -105,11 +105,11 @@ def _explicit_uppercase_imports(
     tree: ast.Module,
     current_module_name: str,
 ) -> list[tuple[int, str, list[str]]]:
-    imports = []
+    imports: list[tuple[int, str, list[str]]] = []
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom):
             continue
-        imported_names = []
+        imported_names: list[str] = []
         for alias in node.names:
             if alias.name == "*" or not alias.name.isupper():
                 continue
@@ -132,7 +132,7 @@ def _config_module_alias_imports(
     tree: ast.Module,
     current_module_name: str,
 ) -> list[tuple[int, str]]:
-    module_names = []
+    module_names: list[tuple[int, str]] = []
     for node in tree.body:
         if not isinstance(node, ast.Import):
             continue
@@ -164,6 +164,7 @@ def configuration_field_metadata(
     aliases = getattr(config_module, "_CONFIG_FIELD_METADATA_ALIASES", {})
     if not isinstance(aliases, dict):
         return metadata
+    alias_mapping = cast(dict[str, object], aliases)
 
     def resolve_alias(key: str, active: set[str]) -> dict[str, Any] | None:
         entry = metadata.get(key)
@@ -171,12 +172,12 @@ def configuration_field_metadata(
             return entry
         if key in active:
             return None
-        source = aliases.get(key)
+        source = alias_mapping.get(key)
         if not isinstance(source, str):
             return None
         return resolve_alias(source, {*active, key})
 
-    for index, target in enumerate(aliases):
+    for index, target in enumerate(alias_mapping):
         if target in metadata:
             continue
         source_entry = resolve_alias(target, set())
@@ -187,6 +188,121 @@ def configuration_field_metadata(
             "sortKey": [*source_entry.get("sortKey", [10**9]), index],
         }
     return metadata
+
+
+class _ModuleMetadataParser:
+    def __init__(
+        self,
+        module_name: str,
+        include_search_space: bool,
+        visited: set[str],
+        source: str,
+        tree: ast.Module,
+    ) -> None:
+        self._module_name = module_name
+        self._include_search_space = include_search_space
+        self._visited = visited
+        self._source = source
+        self._tree = tree
+        self._metadata: dict[str, dict[str, Any]] = {}
+
+    def parse(self) -> dict[str, dict[str, Any]]:
+        self._import_star_metadata()
+        self._import_explicit_metadata()
+        self._import_config_alias_metadata()
+        self._add_local_metadata(self._assignments_by_line())
+        return self._metadata
+
+    def _metadata_for(self, imported_module: str) -> dict[str, dict[str, Any]]:
+        return _configuration_field_metadata_for_module(
+            imported_module,
+            include_search_space=self._include_search_space,
+            visited=set(self._visited),
+        )
+
+    def _merge_imported_metadata(
+        self,
+        line_number: int,
+        source_metadata: dict[str, dict[str, Any]],
+        imported_names: set[str] | None = None,
+        *,
+        overwrite: bool,
+    ) -> None:
+        for key, entry in source_metadata.items():
+            if imported_names is not None and key not in imported_names:
+                continue
+            if not overwrite and key in self._metadata:
+                continue
+            self._metadata[key] = {
+                **entry,
+                "sortKey": [line_number, *entry.get("sortKey", [entry.get("line", 0)])],
+            }
+
+    def _import_star_metadata(self) -> None:
+        imports = _star_import_module_names(
+            self._tree,
+            self._module_name,
+            include_search_space=self._include_search_space,
+        )
+        for line_number, imported_module in imports:
+            self._merge_imported_metadata(
+                line_number,
+                self._metadata_for(imported_module),
+                overwrite=True,
+            )
+
+    def _import_explicit_metadata(self) -> None:
+        imports = _explicit_uppercase_imports(self._tree, self._module_name)
+        for line_number, imported_module, imported_names in imports:
+            self._merge_imported_metadata(
+                line_number,
+                self._metadata_for(imported_module),
+                set(imported_names),
+                overwrite=True,
+            )
+
+    def _import_config_alias_metadata(self) -> None:
+        imports = _config_module_alias_imports(self._tree, self._module_name)
+        for line_number, imported_module in imports:
+            self._merge_imported_metadata(
+                line_number,
+                self._metadata_for(imported_module),
+                overwrite=False,
+            )
+
+    def _assignments_by_line(self) -> dict[int, list[str]]:
+        assignments: dict[int, list[str]] = {}
+        for node in self._tree.body:
+            key = _assignment_key(node)
+            if key is None or not key.isupper():
+                continue
+            if key.startswith("SEARCH_SPACE_") and not self._include_search_space:
+                continue
+            assignments.setdefault(node.lineno, []).append(key)
+        return assignments
+
+    def _add_local_metadata(self, assignments_by_line: dict[int, list[str]]) -> None:
+        current_path: list[str] = []
+        for line_number, line in enumerate(self._source.splitlines(), start=1):
+            heading = _markdown_heading(line.strip())
+            if heading is not None:
+                level, title = heading
+                current_path = [*current_path[: level - 1], title]
+            for key in assignments_by_line.get(line_number, []):
+                if not current_path:
+                    if self._include_search_space:
+                        self._metadata[key] = {
+                            "line": line_number,
+                            "sortKey": [line_number],
+                        }
+                    continue
+                section_path = list(current_path)
+                self._metadata[key] = {
+                    "line": line_number,
+                    "sortKey": [line_number],
+                    "section": section_path[-1],
+                    "sectionPath": section_path,
+                }
 
 
 def _configuration_field_metadata_for_module(
@@ -207,101 +323,13 @@ def _configuration_field_metadata_for_module(
         tree = ast.parse(source)
     except (OSError, SyntaxError):
         return {}
-
-    metadata: dict[str, dict[str, Any]] = {}
-
-    def import_metadata(
-        line_number: int,
-        source_metadata: dict[str, dict[str, Any]],
-        imported_names: set[str] | None = None,
-        *,
-        overwrite: bool,
-    ) -> None:
-        for key, entry in source_metadata.items():
-            if imported_names is not None and key not in imported_names:
-                continue
-            if not overwrite and key in metadata:
-                continue
-            metadata[key] = {
-                **entry,
-                "sortKey": [line_number, *entry.get("sortKey", [entry.get("line", 0)])],
-            }
-
-    for line_number, imported_module in _star_import_module_names(
-        tree,
+    return _ModuleMetadataParser(
         module_name,
-        include_search_space=include_search_space,
-    ):
-        import_metadata(
-            line_number,
-            _configuration_field_metadata_for_module(
-                imported_module,
-                include_search_space=include_search_space,
-                visited=set(visited),
-            ),
-            overwrite=True,
-        )
-
-    for line_number, imported_module, imported_names in _explicit_uppercase_imports(
+        include_search_space,
+        visited,
+        source,
         tree,
-        module_name,
-    ):
-        import_metadata(
-            line_number,
-            _configuration_field_metadata_for_module(
-                imported_module,
-                include_search_space=include_search_space,
-                visited=set(visited),
-            ),
-            set(imported_names),
-            overwrite=True,
-        )
-
-    for line_number, imported_module in _config_module_alias_imports(
-        tree,
-        module_name,
-    ):
-        import_metadata(
-            line_number,
-            _configuration_field_metadata_for_module(
-                imported_module,
-                include_search_space=include_search_space,
-                visited=set(visited),
-            ),
-            overwrite=False,
-        )
-
-    assignments_by_line: dict[int, list[str]] = {}
-    for node in tree.body:
-        key = _assignment_key(node)
-        if key is None or not key.isupper():
-            continue
-        if key.startswith("SEARCH_SPACE_") and not include_search_space:
-            continue
-        assignments_by_line.setdefault(node.lineno, []).append(key)
-
-    current_path: list[str] = []
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        heading = _markdown_heading(line.strip())
-        if heading is not None:
-            level, title = heading
-            current_path = [*current_path[: level - 1], title]
-        for key in assignments_by_line.get(line_number, []):
-            if not current_path:
-                if include_search_space:
-                    metadata[key] = {
-                        "line": line_number,
-                        "sortKey": [line_number],
-                    }
-                continue
-            section_path = list(current_path)
-            metadata[key] = {
-                "line": line_number,
-                "sortKey": [line_number],
-                "section": section_path[-1],
-                "sectionPath": section_path,
-            }
-    return metadata
+    ).parse()
 
 
 __all__ = ["configuration_field_metadata"]

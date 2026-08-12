@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import os
+import sys
 import unittest
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 import torch
+from torch import nn
 
 from emperor.experiments import ExperimentTask
-from model_runtime.inspection import InspectionRequest, shape_trace
+from model_runtime.inspection import (
+    InspectionCaptureLimits,
+    InspectionError,
+    InspectionRequest,
+    shape_trace,
+)
+from model_runtime.inspection._shape_runtime import ShapeTraceRuntime
+from model_runtime.inspection.capture_limits import InspectionCapture
 from model_runtime.inspection.materialization import (
     MaterializedConfiguration,
     MaterializedInspection,
@@ -85,7 +95,682 @@ class TraceModel(nn.Module):
     return fixture_module.TraceModel()
 
 
+def _shared_trace_fixture_model():
+    fixture_module = ModuleType("acme_networks.shared_shape_trace_fixture")
+    source = """
+from torch import nn
+
+
+class SharedBlock(nn.Module):
+    def forward(self, value):
+        return value + 1
+
+
+class Branch(nn.Module):
+    def __init__(self, shared):
+        super().__init__()
+        self.shared = shared
+
+    def forward(self, value):
+        return self.shared(value)
+
+
+class SharedModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        shared = SharedBlock()
+        self.left = Branch(shared)
+        self.right = Branch(shared)
+
+    def forward(self, value):
+        return self.left(value) + self.right(value)
+"""
+    exec(
+        compile(
+            source,
+            "/virtual/acme_networks/shared_shape_trace_fixture.py",
+            "exec",
+        ),
+        fixture_module.__dict__,
+    )
+    return fixture_module.SharedModel()
+
+
 class InspectionShapeTraceCoreTests(unittest.TestCase):
+    def test_tensor_shapes_are_materialized_before_later_capture_failure(
+        self,
+    ) -> None:
+        converted_names: list[str] = []
+        original_tensor_shape = shape_trace._tensor_shape
+
+        def record_tensor_shape(name: str, tensor: torch.Tensor):
+            converted_names.append(name)
+            return original_tensor_shape(name, tensor)
+
+        with (
+            patch.object(
+                shape_trace,
+                "_tensor_shape",
+                side_effect=record_tensor_shape,
+            ),
+            self.assertRaisesRegex(
+                InspectionError,
+                "tensor observation limit of 2 exceeded",
+            ),
+        ):
+            shape_trace._tensor_observations(
+                [torch.zeros(1), torch.ones(1)],
+                "value",
+                capture=InspectionCapture(
+                    InspectionCaptureLimits(maximum_tensor_observations=2)
+                ),
+            )
+
+        self.assertEqual(converted_names, ["value[0]"])
+
+    def test_capture_limits_abort_trace_and_restore_all_runtime_state(self) -> None:
+        cases = (
+            (
+                "module call",
+                InspectionCaptureLimits(maximum_module_calls=1),
+                "outputs",
+                "module call limit of 1 exceeded",
+            ),
+            (
+                "method",
+                InspectionCaptureLimits(maximum_methods=1),
+                "variables",
+                "method limit of 1 exceeded",
+            ),
+            (
+                "variable event",
+                InspectionCaptureLimits(maximum_variable_events=1),
+                "variables",
+                "variable event limit of 1 exceeded",
+            ),
+            (
+                "tensor observation",
+                InspectionCaptureLimits(maximum_tensor_observations=1),
+                "outputs",
+                "tensor observation limit of 1 exceeded",
+            ),
+            (
+                "trace event",
+                InspectionCaptureLimits(maximum_trace_events=1),
+                "variables",
+                "trace event limit of 1 exceeded",
+            ),
+            (
+                "output byte",
+                InspectionCaptureLimits(maximum_output_bytes=1_000),
+                "variables",
+                "output byte limit of 1000 exceeded",
+            ),
+        )
+        for label, limits, detail, message in cases:
+            with self.subTest(limit=label):
+                package = _FixturePackage(
+                    ModelIdentity("fixtures", "shape_trace"),
+                    _UnusedPackageAdapter(),  # type: ignore[arg-type]
+                )
+                model = _trace_fixture_model()
+                model.train()
+                sample_input = torch.zeros((1, 4))
+                request = InspectionRequest(
+                    preset="baseline",
+                    capture_limits=limits,
+                )
+                prepared = MaterializedConfiguration(
+                    package=package,
+                    request=request,
+                    preset="baseline",
+                    experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+                    dataset=_ImageDataset,
+                    overrides=ParsedOverrides(),
+                    configuration=SimpleNamespace(),
+                )
+                previous_trace = sys.gettrace()
+                random_state = torch.random.get_rng_state().clone()
+
+                with (
+                    patch.object(
+                        shape_trace,
+                        "materialize_inspection",
+                        return_value=MaterializedInspection(
+                            prepared=prepared,
+                            model=model,
+                        ),
+                    ),
+                    patch.object(
+                        shape_trace,
+                        "_sample_inputs",
+                        return_value=(
+                            "SyntheticDataset",
+                            "image-classification",
+                            (sample_input,),
+                        ),
+                    ),
+                    self.assertRaisesRegex(
+                        InspectionError,
+                        message,
+                    ),
+                ):
+                    shape_trace.inspect_model_shapes(
+                        package,
+                        request,
+                        detail=detail,
+                    )
+
+                self.assertIs(sys.gettrace(), previous_trace)
+                self.assertTrue(model.training)
+                self.assertTrue(torch.equal(torch.random.get_rng_state(), random_state))
+                for module in model.modules():
+                    self.assertEqual(module._forward_pre_hooks, {})
+                    self.assertEqual(module._forward_hooks, {})
+
+    def test_output_trace_skips_variable_distribution_discovery(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _trace_fixture_model()
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (sample_input,),
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_trace_module_names",
+                side_effect=RuntimeError("variable discovery must not run"),
+            ),
+        ):
+            _, trace = shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="outputs",
+            )
+
+        self.assertGreater(len(trace.modules), 0)
+
+    def test_trace_setup_failure_removes_registered_hooks(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _trace_fixture_model()
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (sample_input,),
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_trace_module_names",
+                side_effect=RuntimeError("trace-name failure"),
+            ),
+            self.assertRaisesRegex(InspectionError, "trace-name failure"),
+        ):
+            shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="variables",
+            )
+
+        for module in model.modules():
+            self.assertEqual(module._forward_pre_hooks, {})
+            self.assertEqual(module._forward_hooks, {})
+
+    def test_model_failure_is_wrapped_after_all_runtime_state_is_restored(self) -> None:
+        class FailingModel(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.block = nn.Identity()
+
+            def forward(self, value: torch.Tensor) -> torch.Tensor:
+                self.block(value)
+                raise RuntimeError("fixture forward failure")
+
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = FailingModel()
+        model.train()
+        model.block.eval()
+        training_flags = {id(module): module.training for module in model.modules()}
+        previous_trace = sys.gettrace()
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (torch.zeros((1, 4)),),
+                ),
+            ),
+            self.assertRaisesRegex(
+                InspectionError,
+                "Failed to execute shape trace.*fixture forward failure",
+            ),
+        ):
+            shape_trace.inspect_model_shapes(package, request, detail="outputs")
+
+        self.assertIs(sys.gettrace(), previous_trace)
+        self.assertEqual(
+            {id(module): module.training for module in model.modules()},
+            training_flags,
+        )
+        for module in model.modules():
+            self.assertEqual(module._forward_pre_hooks, {})
+            self.assertEqual(module._forward_hooks, {})
+
+    def test_runtime_restoration_failure_is_not_translated(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _trace_fixture_model()
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+        original_restore = ShapeTraceRuntime.restore
+
+        def restore_then_fail(runtime: ShapeTraceRuntime) -> None:
+            original_restore(runtime)
+            raise RuntimeError("fixture runtime restoration failure")
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (torch.zeros((1, 4)),),
+                ),
+            ),
+            patch.object(ShapeTraceRuntime, "restore", restore_then_fail),
+            self.assertRaisesRegex(
+                RuntimeError,
+                "fixture runtime restoration failure",
+            ),
+        ):
+            shape_trace.inspect_model_shapes(package, request, detail="outputs")
+
+        for module in model.modules():
+            self.assertEqual(module._forward_pre_hooks, {})
+            self.assertEqual(module._forward_hooks, {})
+
+    def test_successful_trace_restores_each_module_training_flag(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _trace_fixture_model()
+        model.train()
+        model.block.eval()
+        training_flags = {id(module): module.training for module in model.modules()}
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (sample_input,),
+                ),
+            ),
+        ):
+            shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="outputs",
+            )
+
+        self.assertEqual(
+            {id(module): module.training for module in model.modules()},
+            training_flags,
+        )
+
+    def test_successful_trace_restores_preexisting_python_trace(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _trace_fixture_model()
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        def existing_trace(frame, event, argument):
+            del frame, event, argument
+            return existing_trace
+
+        previous_trace = sys.gettrace()
+        try:
+            sys.settrace(existing_trace)
+            with (
+                patch.object(
+                    shape_trace,
+                    "materialize_inspection",
+                    return_value=MaterializedInspection(
+                        prepared=prepared,
+                        model=model,
+                    ),
+                ),
+                patch.object(
+                    shape_trace,
+                    "_sample_inputs",
+                    return_value=(
+                        "SyntheticDataset",
+                        "image-classification",
+                        (sample_input,),
+                    ),
+                ),
+            ):
+                shape_trace.inspect_model_shapes(
+                    package,
+                    request,
+                    detail="outputs",
+                )
+
+            self.assertIs(sys.gettrace(), existing_trace)
+        finally:
+            sys.settrace(previous_trace)
+
+    def test_shared_module_calls_belong_to_one_canonical_graph_node(self) -> None:
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = _shared_trace_fixture_model()
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (sample_input,),
+                ),
+            ),
+        ):
+            _, trace = shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="outputs",
+            )
+
+        shared_traces = [
+            module_trace
+            for module_trace in trace.modules
+            if module_trace.node_id.endswith(".shared")
+        ]
+        self.assertEqual(len(shared_traces), 1)
+        self.assertEqual(len(shared_traces[0].calls), 2)
+
+    @unittest.skipIf(
+        os.environ.get("MODEL_RUNTIME_COVERAGE") == "1",
+        "requires an interpreter without an active coverage trace",
+    )
+    def test_outputs_only_trace_does_not_change_sys_trace_observable_behavior(
+        self,
+    ) -> None:
+        class TraceSensitive(nn.Module):
+            def forward(self, value):
+                if sys.gettrace() is None:
+                    return value
+                return value.unsqueeze(0)
+
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = TraceSensitive()
+        sample_input = torch.zeros((1, 4))
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (sample_input,),
+                ),
+            ),
+        ):
+            _, trace = shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="outputs",
+            )
+
+        root_trace = next(
+            module_trace
+            for module_trace in trace.modules
+            if module_trace.node_id == "__root__"
+        )
+        self.assertEqual(root_trace.calls[0].outputs[0].shape, (1, 4))
+
+    def test_zero_tensor_call_structure_obeys_whole_trace_output_limit(self) -> None:
+        class Null(nn.Module):
+            def forward(self):
+                return None
+
+        class RepeatedCalls(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.null = Null()
+
+            def forward(self):
+                for _ in range(500):
+                    self.null()
+                return None
+
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = RepeatedCalls()
+        request = InspectionRequest(
+            preset="baseline",
+            capture_limits=InspectionCaptureLimits(
+                maximum_module_calls=5_000,
+                maximum_output_bytes=10_000,
+            ),
+        )
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (),
+                ),
+            ),
+            self.assertRaisesRegex(
+                InspectionError,
+                "output byte limit of 10000 exceeded",
+            ),
+        ):
+            shape_trace.inspect_model_shapes(
+                package,
+                request,
+                detail="outputs",
+            )
+
     def test_synthetic_inputs_cover_every_supported_task_family(self) -> None:
         token_config = SimpleNamespace(sequence_length=7, input_dim=11)
         translation_config = SimpleNamespace(
@@ -214,6 +899,10 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
             ),
             2,
         )
+        self.assertTrue(model.training)
+        for module in model.modules():
+            self.assertEqual(module._forward_pre_hooks, {})
+            self.assertEqual(module._forward_hooks, {})
 
 
 if __name__ == "__main__":

@@ -16,10 +16,10 @@ from emperor.experiments.translation._metrics import _translation_step_metrics
 from emperor.experiments.translation._records import TranslationStepOutput
 from model_runtime.task_behavior import experiment_task_behavior
 from models.catalog import model_package
-from models.training_test_utils import RandomTranslationDataModule
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
 from models.transformer.linear.presets import Experiment
+from tests.model_packages.training_test_utils import RandomTranslationDataModule
 
 
 class StaticTranslationExperiment(TranslationExperiment):
@@ -465,6 +465,10 @@ class TestTranslationExperiment(unittest.TestCase):
         dataset = SimpleNamespace(num_workers=4, seed=99)
         experiment._configure_dataset(dataset, runtime_config)
         self.assertEqual(dataset.seed, 0)
+
+        seeded_runtime_config = experiment._load_runtime_config({"seed": 17})
+        experiment._configure_dataset(dataset, seeded_runtime_config)
+        self.assertEqual(dataset.seed, 17)
 
 
 if __name__ == "__main__":

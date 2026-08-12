@@ -1,5 +1,6 @@
 import unittest
 
+import pytest
 import torch
 
 from emperor.halting import (
@@ -1066,6 +1067,7 @@ class TestLayerStack(unittest.TestCase):
             all(layer.gate_model.model is shared_gate_model for layer in gated_layers)
         )
 
+    @pytest.mark.training
     def test_shared_gate_receives_shared_gradients(self):
         batch_size = 4
         dim = 8
@@ -1410,6 +1412,7 @@ class TestLayerStack(unittest.TestCase):
         self.assertIsNotNone(state.halting_state)
         self.assertIsNotNone(state.loss)
 
+    @pytest.mark.training
     def test_shared_halting_remains_shared_after_training_step(self):
         batch_size = 4
         dim = 8

@@ -6,6 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 from lightning.pytorch.strategies import DDPStrategy
 from torch import nn
@@ -693,6 +694,7 @@ def _distributed_ddp_growth_history_worker(
     "gloo process group support is required",
 )
 class TestNeuronDistributedOptimizerSync(NeuronTestCase):
+    @pytest.mark.training
     def test_lightning_ddp_configuration_supports_repeated_conditional_routes(
         self,
     ) -> None:
@@ -716,6 +718,7 @@ class TestNeuronDistributedOptimizerSync(NeuronTestCase):
                 join=True,
             )
 
+    @pytest.mark.training
     def test_ddp_pruning_removes_optimizer_state_and_allows_later_backwards(
         self,
     ) -> None:
@@ -740,6 +743,7 @@ class TestNeuronDistributedOptimizerSync(NeuronTestCase):
                 join=True,
             )
 
+    @pytest.mark.training
     def test_grown_parameter_gradient_is_averaged_outside_ddp_reducer(self) -> None:
         config = NeuronClusterConfig(
             x_axis_total_neurons=2,

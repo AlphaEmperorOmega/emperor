@@ -6,6 +6,7 @@ import sys
 import unittest
 from operator import attrgetter
 
+import pytest
 import torch
 
 from emperor.convs import Conv2dLayerConfig
@@ -444,10 +445,7 @@ class ConvPatchEmbeddingBehaviorTests(unittest.TestCase):
                     config.conv_stack_config.num_layers,
                 )
                 self.assertTrue(
-                    all(
-                        layer.model.kernel_size == 2
-                        for layer in model.patch_model
-                    )
+                    all(layer.model.kernel_size == 2 for layer in model.patch_model)
                 )
 
     def test_rectangular_multichannel_convolution_is_exact_and_isolated(
@@ -675,6 +673,7 @@ class PatchTrainingAndStateBehaviorTests(unittest.TestCase):
                 self.assertEqual(noncontiguous_output.device.type, "cpu")
                 self.assertTrue(torch.isfinite(noncontiguous_output).all())
 
+    @pytest.mark.training
     def test_all_trainable_paths_have_finite_nonzero_gradients_and_update(
         self,
     ) -> None:

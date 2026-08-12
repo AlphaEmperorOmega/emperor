@@ -1,6 +1,9 @@
 from dataclasses import dataclass, fields
 
 import models.gpt.expert_linear.config as config
+from models.gpt.expert_linear._config_defaults import (
+    gpt_positional_embedding_options,
+)
 from models.gpt.expert_linear.runtime_options import (
     TransformerPositionalEmbeddingOptions,
 )
@@ -20,20 +23,10 @@ class PositionalEmbeddingConfigFactory:
     ) -> None:
         self.hidden_dim = dependencies.hidden_dim
         self.sequence_length = dependencies.sequence_length
-        self.positional_embedding_options = self.__default_positional_embedding_options(
-            dependencies.positional_embedding_options
-        )
-
-    def __default_positional_embedding_options(
-        self,
-        positional_embedding_options: TransformerPositionalEmbeddingOptions | None,
-    ) -> TransformerPositionalEmbeddingOptions:
-        if positional_embedding_options is not None:
-            return positional_embedding_options
-        return TransformerPositionalEmbeddingOptions(
-            option=config.POSITIONAL_EMBEDDING_OPTION,
-            padding_idx=config.POSITIONAL_EMBEDDING_PADDING_IDX,
-            auto_expand_flag=config.POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG,
+        self.positional_embedding_options = (
+            gpt_positional_embedding_options(config)
+            if dependencies.positional_embedding_options is None
+            else dependencies.positional_embedding_options
         )
 
     def build_positional_embedding_config(self):

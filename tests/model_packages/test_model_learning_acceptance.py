@@ -1,5 +1,6 @@
 import unittest
 
+import pytest
 import torch
 
 from models.bert.linear.config_builder import BertLinearConfigBuilder
@@ -28,6 +29,7 @@ def _classifier_loss(model, batch) -> torch.Tensor:
 
 
 class TestModelLearningAcceptance(unittest.TestCase):
+    @pytest.mark.training
     def test_all_mlp_mixer_backends_learn_a_fixed_two_class_image_batch(self):
         model_ids = (
             "mlp_mixer/linear",
@@ -95,6 +97,7 @@ class TestModelLearningAcceptance(unittest.TestCase):
                     )
                 )
 
+    @pytest.mark.training
     def test_bert_overfits_a_fixed_pretraining_batch(self):
         torch.manual_seed(103)
         flat_options = {
@@ -128,6 +131,7 @@ class TestModelLearningAcceptance(unittest.TestCase):
 
         self.assertLess(final_loss, initial_loss * 0.2)
 
+    @pytest.mark.training
     def test_gpt_overfits_a_fixed_next_token_batch(self):
         torch.manual_seed(101)
         flat_options = {
@@ -156,6 +160,7 @@ class TestModelLearningAcceptance(unittest.TestCase):
 
         self.assertLess(final_loss, initial_loss * 0.2)
 
+    @pytest.mark.training
     def test_transformer_overfits_a_fixed_copy_batch(self):
         torch.manual_seed(107)
         runtime = model_package("transformer/linear").bind_runtime_defaults(

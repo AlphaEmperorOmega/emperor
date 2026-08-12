@@ -1,9 +1,15 @@
+from collections.abc import Mapping
 from dataclasses import fields, replace
 from types import ModuleType
 from typing import Any, Final
 
 import models.experts.linear.config as config
 from models.experts.linear import runtime_options as options
+from models.experts.linear._control_defaults import (
+    expert_control_defaults,
+    main_control_defaults,
+    router_stack_defaults,
+)
 from models.experts.linear._residual import (
     ResidualStackSource,
     resolve_residual_stack_options,
@@ -40,6 +46,8 @@ def builder_kwargs_from_flat(
         config_module,
         kwargs.pop("submodule_stack_options", None),
     )
+    main_control = main_control_defaults(config_module)
+    expert_control = expert_control_defaults(config_module)
     residual_stack_options = resolve_residual_stack_options(
         ResidualStackSource(
             independent_flag=kwargs.pop(
@@ -103,18 +111,11 @@ def builder_kwargs_from_flat(
         mixture_options=_mixture_options(
             kwargs, config_module, kwargs.pop("mixture_options", None)
         ),
-        expert_stack_options=_role_stack_options(
+        expert_stack_options=_expert_stack_options(
             kwargs,
-            "expert_stack",
             submodule,
             kwargs.pop("expert_stack_options", None),
-            extra={"expert_bias_flag": "bias_flag"},
-            defaults={
-                "layer_norm_position": config_module.EXPERT_STACK_LAYER_NORM_POSITION,
-                "apply_output_pipeline_flag": (
-                    config_module.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-                ),
-            },
+            config_module,
         ),
         sampler_options=_sampler_options(
             kwargs, config_module, kwargs.pop("sampler_options", None)
@@ -122,54 +123,46 @@ def builder_kwargs_from_flat(
         router_options=_router_options(
             kwargs, config_module, kwargs.pop("router_options", None)
         ),
-        router_stack_options=_role_stack_options(
+        router_stack_options=_router_stack_options(
             kwargs,
-            "router_stack",
-            _router_stack_defaults(config_module),
+            router_stack_defaults(config_module),
             kwargs.pop("router_stack_options", None),
-            extra={"router_bias_flag": "bias_flag"},
         ),
         layer_controller_options=_layer_controller_options(
             kwargs,
-            config_module,
             kwargs.pop("layer_controller_options", None),
+            main_control.layer,
             flat_prefix="",
-            config_prefix="",
         ),
         dynamic_memory_options=_memory_options(
             kwargs,
-            config_module,
             kwargs.pop("dynamic_memory_options", None),
+            main_control.memory,
             flat_prefix="",
-            config_prefix="",
         ),
         recurrent_controller_options=_recurrent_options(
             kwargs,
-            config_module,
             kwargs.pop("recurrent_controller_options", None),
+            main_control.recurrent,
             flat_prefix="",
-            config_prefix="",
         ),
         expert_layer_controller_options=_layer_controller_options(
             kwargs,
-            config_module,
             kwargs.pop("expert_layer_controller_options", None),
+            expert_control.layer,
             flat_prefix="expert_",
-            config_prefix="EXPERT_",
         ),
         expert_dynamic_memory_options=_memory_options(
             kwargs,
-            config_module,
             kwargs.pop("expert_dynamic_memory_options", None),
+            expert_control.memory,
             flat_prefix="expert_",
-            config_prefix="EXPERT_",
         ),
         expert_recurrent_controller_options=_recurrent_options(
             kwargs,
-            config_module,
             kwargs.pop("expert_recurrent_controller_options", None),
+            expert_control.recurrent,
             flat_prefix="expert_",
-            config_prefix="EXPERT_",
         ),
     )
     for stack_key in (
@@ -186,7 +179,11 @@ def builder_kwargs_from_flat(
     return result
 
 
-def _stack_options(kwargs, config, provided):
+def _stack_options(
+    kwargs: dict[str, Any],
+    config: ModuleType,
+    provided: options.ExpertsStackOptions | None,
+) -> options.ExpertsStackOptions:
     value = provided or options.ExpertsStackOptions(
         hidden_dim=config.HIDDEN_DIM,
         bias_flag=config.STACK_BIAS_FLAG,
@@ -217,7 +214,11 @@ def _stack_options(kwargs, config, provided):
     return replace(value, **updates) if updates else value
 
 
-def _submodule_stack_options(kwargs, config, provided):
+def _submodule_stack_options(
+    kwargs: dict[str, Any],
+    config: ModuleType,
+    provided: options.ExpertsSubmoduleStackOptions | None,
+) -> options.ExpertsSubmoduleStackOptions:
     value = provided or options.ExpertsSubmoduleStackOptions(
         hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
         num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
@@ -237,38 +238,68 @@ def _submodule_stack_options(kwargs, config, provided):
     return replace(value, **updates) if updates else value
 
 
-def _role_stack_options(
-    kwargs,
-    prefix,
-    inherited,
-    provided,
-    *,
-    extra=None,
-    defaults=None,
-):
-    value = provided or replace(inherited, **(defaults or {}))
-    mapping = {f"{prefix}_{key}": field for key, field in _STACK_FIELDS.items()}
-    mapping.update(extra or {})
-    updates = _pop_updates(kwargs, mapping)
+def _expert_stack_options(
+    kwargs: dict[str, Any],
+    inherited: options.ExpertsSubmoduleStackOptions,
+    provided: options.ExpertsSubmoduleStackOptions | None,
+    config_module: ModuleType,
+) -> options.ExpertsSubmoduleStackOptions:
+    value = provided or replace(
+        inherited,
+        layer_norm_position=config_module.EXPERT_STACK_LAYER_NORM_POSITION,
+        apply_output_pipeline_flag=(
+            config_module.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+    )
+    updates = _pop_updates(
+        kwargs,
+        {
+            "expert_stack_hidden_dim": "hidden_dim",
+            "expert_stack_num_layers": "num_layers",
+            "expert_stack_last_layer_bias_option": "last_layer_bias_option",
+            "expert_stack_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            "expert_stack_activation": "activation",
+            "expert_stack_layer_norm_position": "layer_norm_position",
+            "expert_stack_residual_connection_option": ("residual_connection_option"),
+            "expert_stack_residual_model_flag": "residual_model_flag",
+            "expert_stack_dropout_probability": "dropout_probability",
+            "expert_stack_bias_flag": "bias_flag",
+            "expert_bias_flag": "bias_flag",
+        },
+    )
     return replace(value, **updates) if updates else value
 
 
-def _router_stack_defaults(config):
-    return options.ExpertsSubmoduleStackOptions(
-        hidden_dim=config.ROUTER_STACK_HIDDEN_DIM,
-        num_layers=config.ROUTER_STACK_NUM_LAYERS,
-        last_layer_bias_option=config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        activation=config.ROUTER_STACK_ACTIVATION,
-        layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
-        residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
-        residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
-        bias_flag=config.ROUTER_BIAS_FLAG,
+def _router_stack_options(
+    kwargs: dict[str, Any],
+    defaults: options.ExpertsSubmoduleStackOptions,
+    provided: options.ExpertsSubmoduleStackOptions | None,
+) -> options.ExpertsSubmoduleStackOptions:
+    value = provided or defaults
+    updates = _pop_updates(
+        kwargs,
+        {
+            "router_stack_hidden_dim": "hidden_dim",
+            "router_stack_num_layers": "num_layers",
+            "router_stack_last_layer_bias_option": "last_layer_bias_option",
+            "router_stack_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            "router_stack_activation": "activation",
+            "router_stack_layer_norm_position": "layer_norm_position",
+            "router_stack_residual_connection_option": ("residual_connection_option"),
+            "router_stack_residual_model_flag": "residual_model_flag",
+            "router_stack_dropout_probability": "dropout_probability",
+            "router_stack_bias_flag": "bias_flag",
+            "router_bias_flag": "bias_flag",
+        },
     )
+    return replace(value, **updates) if updates else value
 
 
-def _mixture_options(kwargs, config, provided):
+def _mixture_options(
+    kwargs: dict[str, Any],
+    config: ModuleType,
+    provided: options.ExpertsMixtureOptions | None,
+) -> options.ExpertsMixtureOptions:
     value = provided or options.ExpertsMixtureOptions(
         top_k=config.TOP_K,
         num_experts=config.NUM_EXPERTS,
@@ -293,7 +324,11 @@ def _mixture_options(kwargs, config, provided):
     return replace(value, **updates) if updates else value
 
 
-def _sampler_options(kwargs, config, provided):
+def _sampler_options(
+    kwargs: dict[str, Any],
+    config: ModuleType,
+    provided: options.ExpertsSamplerOptions | None,
+) -> options.ExpertsSamplerOptions:
     value = provided or options.ExpertsSamplerOptions(
         threshold=config.SAMPLER_THRESHOLD,
         filter_above_threshold=config.SAMPLER_FILTER_ABOVE_THRESHOLD,
@@ -328,7 +363,11 @@ def _sampler_options(kwargs, config, provided):
     return replace(value, **updates) if updates else value
 
 
-def _router_options(kwargs, config, provided):
+def _router_options(
+    kwargs: dict[str, Any],
+    config: ModuleType,
+    provided: options.ExpertsRouterOptions | None,
+) -> options.ExpertsRouterOptions:
     value = provided or options.ExpertsRouterOptions(
         noisy_topk_flag=config.ROUTER_NOISY_TOPK_FLAG
     )
@@ -337,62 +376,44 @@ def _router_options(kwargs, config, provided):
     return replace(value, noisy_topk_flag=kwargs.pop("router_noisy_topk_flag"))
 
 
-def _stack_source(kwargs, config, flat_prefix, config_prefix, role, provided=None):
-    flat = f"{flat_prefix}{role}_stack"
-    config_name = f"{config_prefix}{role.upper()}_STACK"
-    value = provided or options.ExpertsSubmoduleStackSource(
-        independent_flag=getattr(config, f"{config_name}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config, f"{config_name}_HIDDEN_DIM"),
-        num_layers=getattr(config, f"{config_name}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(config, f"{config_name}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{config_name}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config, f"{config_name}_ACTIVATION"),
-        layer_norm_position=getattr(config, f"{config_name}_LAYER_NORM_POSITION"),
-        residual_connection_option=getattr(
-            config, f"{config_name}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{config_name}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{config_name}_DROPOUT_PROBABILITY"),
-        bias_flag=getattr(config, f"{config_name}_BIAS_FLAG"),
+def _stack_source_updates(
+    kwargs: dict[str, Any],
+    flat_prefix: str,
+    source: options.ExpertsSubmoduleStackSource,
+) -> options.ExpertsSubmoduleStackSource:
+    updates = _pop_updates(
+        kwargs,
+        {
+            f"{flat_prefix}_independent_flag": "independent_flag",
+            f"{flat_prefix}_hidden_dim": "hidden_dim",
+            f"{flat_prefix}_num_layers": "num_layers",
+            f"{flat_prefix}_last_layer_bias_option": "last_layer_bias_option",
+            f"{flat_prefix}_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            f"{flat_prefix}_activation": "activation",
+            f"{flat_prefix}_layer_norm_position": "layer_norm_position",
+            f"{flat_prefix}_residual_connection_option": ("residual_connection_option"),
+            f"{flat_prefix}_residual_model_flag": "residual_model_flag",
+            f"{flat_prefix}_dropout_probability": "dropout_probability",
+            f"{flat_prefix}_bias_flag": "bias_flag",
+        },
     )
-    mapping = {
-        f"{flat}_{key}": field
-        for key, field in {
-            "independent_flag": "independent_flag",
-            **_STACK_FIELDS,
-        }.items()
-    }
-    updates = _pop_updates(kwargs, mapping)
-    return replace(value, **updates) if updates else value
+    return replace(source, **updates) if updates else source
 
 
-def _layer_controller_options(kwargs, config, provided, *, flat_prefix, config_prefix):
+def _layer_controller_options(
+    kwargs: dict[str, Any],
+    provided: options.ExpertsLayerControllerOptions | None,
+    defaults: options.ExpertsLayerControllerOptions,
+    *,
+    flat_prefix: str,
+) -> options.ExpertsLayerControllerOptions:
     gate_flag_key = (
         f"{flat_prefix}stack_gate_flag" if flat_prefix else "stack_gate_flag"
     )
     halting_flag_key = (
         f"{flat_prefix}stack_halting_flag" if flat_prefix else "stack_halting_flag"
     )
-    value = provided or options.ExpertsLayerControllerOptions(
-        stack_gate_flag=getattr(config, f"{config_prefix}STACK_GATE_FLAG"),
-        gate_option=getattr(config, f"{config_prefix}GATE_OPTION"),
-        gate_activation=getattr(config, f"{config_prefix}GATE_ACTIVATION"),
-        gate_stack_source=_stack_source(
-            kwargs, config, flat_prefix, config_prefix, "gate"
-        ),
-        stack_halting_flag=getattr(config, f"{config_prefix}STACK_HALTING_FLAG"),
-        halting_threshold=getattr(config, f"{config_prefix}HALTING_THRESHOLD"),
-        halting_dropout=getattr(config, f"{config_prefix}HALTING_DROPOUT"),
-        halting_hidden_state_mode=getattr(
-            config, f"{config_prefix}HALTING_HIDDEN_STATE_MODE"
-        ),
-        halting_stack_source=_stack_source(
-            kwargs, config, flat_prefix, config_prefix, "halting"
-        ),
-        halting_output_dim=getattr(config, f"{config_prefix}HALTING_OUTPUT_DIM"),
-    )
+    value = provided or defaults
     updates = _pop_updates(
         kwargs,
         {
@@ -400,6 +421,7 @@ def _layer_controller_options(kwargs, config, provided, *, flat_prefix, config_p
             f"{flat_prefix}gate_option": "gate_option",
             f"{flat_prefix}gate_activation": "gate_activation",
             halting_flag_key: "stack_halting_flag",
+            f"{flat_prefix}halting_option": "halting_option",
             f"{flat_prefix}halting_threshold": "halting_threshold",
             f"{flat_prefix}halting_dropout": "halting_dropout",
             f"{flat_prefix}halting_hidden_state_mode": "halting_hidden_state_mode",
@@ -407,37 +429,23 @@ def _layer_controller_options(kwargs, config, provided, *, flat_prefix, config_p
             **({"shared_gate_config": "shared_gate_config"} if not flat_prefix else {}),
         },
     )
-    updates["gate_stack_source"] = _stack_source(
-        kwargs, config, flat_prefix, config_prefix, "gate", value.gate_stack_source
+    updates["gate_stack_source"] = _stack_source_updates(
+        kwargs, f"{flat_prefix}gate_stack", value.gate_stack_source
     )
-    updates["halting_stack_source"] = _stack_source(
-        kwargs,
-        config,
-        flat_prefix,
-        config_prefix,
-        "halting",
-        value.halting_stack_source,
+    updates["halting_stack_source"] = _stack_source_updates(
+        kwargs, f"{flat_prefix}halting_stack", value.halting_stack_source
     )
     return replace(value, **updates)
 
 
-def _memory_options(kwargs, config, provided, *, flat_prefix, config_prefix):
-    value = provided or options.ExpertsDynamicMemoryOptions(
-        memory_flag=getattr(config, f"{config_prefix}MEMORY_FLAG"),
-        memory_option=getattr(config, f"{config_prefix}MEMORY_OPTION"),
-        memory_position_option=getattr(
-            config, f"{config_prefix}MEMORY_POSITION_OPTION"
-        ),
-        memory_test_time_training_learning_rate=getattr(
-            config, f"{config_prefix}MEMORY_TEST_TIME_TRAINING_LEARNING_RATE"
-        ),
-        memory_test_time_training_num_inner_steps=getattr(
-            config, f"{config_prefix}MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS"
-        ),
-        memory_stack_source=_stack_source(
-            kwargs, config, flat_prefix, config_prefix, "memory"
-        ),
-    )
+def _memory_options(
+    kwargs: dict[str, Any],
+    provided: options.ExpertsDynamicMemoryOptions | None,
+    defaults: options.ExpertsDynamicMemoryOptions,
+    *,
+    flat_prefix: str,
+) -> options.ExpertsDynamicMemoryOptions:
+    value = provided or defaults
     updates = _pop_updates(
         kwargs,
         {
@@ -452,66 +460,21 @@ def _memory_options(kwargs, config, provided, *, flat_prefix, config_prefix):
             ),
         },
     )
-    updates["memory_stack_source"] = _stack_source(
-        kwargs,
-        config,
-        flat_prefix,
-        config_prefix,
-        "memory",
-        value.memory_stack_source,
+    updates["memory_stack_source"] = _stack_source_updates(
+        kwargs, f"{flat_prefix}memory_stack", value.memory_stack_source
     )
     return replace(value, **updates)
 
 
-def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
+def _recurrent_options(
+    kwargs: dict[str, Any],
+    provided: options.ExpertsRecurrentControllerOptions | None,
+    defaults: options.ExpertsRecurrentControllerOptions,
+    *,
+    flat_prefix: str,
+) -> options.ExpertsRecurrentControllerOptions:
     recurrent_flat = f"{flat_prefix}recurrent_"
-    recurrent_config = f"{config_prefix}RECURRENT_"
-    value = provided or options.ExpertsRecurrentControllerOptions(
-        recurrent_flag=getattr(config, f"{recurrent_config}FLAG"),
-        recurrent_max_steps=getattr(config, f"{recurrent_config}MAX_STEPS"),
-        recurrent_initial_iterations=getattr(
-            config,
-            f"{recurrent_config}INITIAL_ITERATIONS",
-            2,
-        ),
-        recurrent_gradient_transition_count=getattr(
-            config,
-            f"{recurrent_config}GRADIENT_TRANSITION_COUNT",
-            None,
-        ),
-        recurrent_iteration_increment=getattr(
-            config,
-            f"{recurrent_config}ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_forward_calls_before_iteration_increment=getattr(
-            config,
-            f"{recurrent_config}FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_layer_norm_position=getattr(
-            config, f"{recurrent_config}LAYER_NORM_POSITION"
-        ),
-        recurrent_stack_gate_flag=getattr(config, f"{recurrent_config}STACK_GATE_FLAG"),
-        recurrent_gate_option=getattr(config, f"{recurrent_config}GATE_OPTION"),
-        recurrent_gate_activation=getattr(config, f"{recurrent_config}GATE_ACTIVATION"),
-        recurrent_gate_stack_source=_stack_source(
-            kwargs, config, recurrent_flat, recurrent_config, "gate"
-        ),
-        recurrent_stack_halting_flag=getattr(
-            config, f"{recurrent_config}STACK_HALTING_FLAG"
-        ),
-        recurrent_halting_threshold=getattr(
-            config, f"{recurrent_config}HALTING_THRESHOLD"
-        ),
-        recurrent_halting_dropout=getattr(config, f"{recurrent_config}HALTING_DROPOUT"),
-        recurrent_halting_hidden_state_mode=getattr(
-            config, f"{recurrent_config}HALTING_HIDDEN_STATE_MODE"
-        ),
-        recurrent_halting_stack_source=_stack_source(
-            kwargs, config, recurrent_flat, recurrent_config, "halting"
-        ),
-    )
+    value = provided or defaults
     updates = _pop_updates(
         kwargs,
         {
@@ -528,6 +491,7 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
             f"{recurrent_flat}gate_option": "recurrent_gate_option",
             f"{recurrent_flat}gate_activation": "recurrent_gate_activation",
             f"{recurrent_flat}stack_halting_flag": "recurrent_stack_halting_flag",
+            f"{recurrent_flat}halting_option": "recurrent_halting_option",
             f"{recurrent_flat}halting_threshold": "recurrent_halting_threshold",
             f"{recurrent_flat}halting_dropout": "recurrent_halting_dropout",
             f"{recurrent_flat}halting_hidden_state_mode": (
@@ -535,26 +499,21 @@ def _recurrent_options(kwargs, config, provided, *, flat_prefix, config_prefix):
             ),
         },
     )
-    updates["recurrent_gate_stack_source"] = _stack_source(
-        kwargs,
-        config,
-        recurrent_flat,
-        recurrent_config,
-        "gate",
-        value.recurrent_gate_stack_source,
+    updates["recurrent_gate_stack_source"] = _stack_source_updates(
+        kwargs, f"{recurrent_flat}gate_stack", value.recurrent_gate_stack_source
     )
-    updates["recurrent_halting_stack_source"] = _stack_source(
+    updates["recurrent_halting_stack_source"] = _stack_source_updates(
         kwargs,
-        config,
-        recurrent_flat,
-        recurrent_config,
-        "halting",
+        f"{recurrent_flat}halting_stack",
         value.recurrent_halting_stack_source,
     )
     return replace(value, **updates)
 
 
-def _pop_updates(kwargs, mapping):
+def _pop_updates(
+    kwargs: dict[str, Any],
+    mapping: Mapping[str, str],
+) -> dict[str, Any]:
     return {field: kwargs.pop(key) for key, field in mapping.items() if key in kwargs}
 
 

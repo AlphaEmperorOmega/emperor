@@ -25,6 +25,10 @@ from emperor.transformer import (
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
+from models.bert.expert_linear_adaptive._boundary_config_factory import (
+    BoundaryConfigDependencies,
+    BoundaryConfigFactory,
+)
 from models.bert.expert_linear_adaptive._control_support import (
     ExpertsGateConfigFactory as BertGateConfigFactory,
 )
@@ -38,6 +42,9 @@ from models.bert.expert_linear_adaptive._control_support import (
     ExpertsRecurrentConfigFactory as BertRecurrentConfigFactory,
 )
 from models.bert.expert_linear_adaptive.runtime_options import (
+    BertEmbeddingOptions,
+    BertMlmHeadOptions,
+    BertNspHeadOptions,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsRecurrentControllerOptions,
@@ -64,7 +71,9 @@ class BertBackendConfigBuilder:
         input_dim: int,
         output_dim: int,
         sequence_length: int,
-        embedding_dropout_probability: float,
+        embedding_options: BertEmbeddingOptions,
+        mlm_head_options: BertMlmHeadOptions,
+        nsp_head_options: BertNspHeadOptions,
         encoder_options: TransformerEncoderOptions,
         positional_embedding_options: TransformerPositionalEmbeddingOptions,
         attention_options: TransformerAttentionOptions,
@@ -98,7 +107,9 @@ class BertBackendConfigBuilder:
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.sequence_length = sequence_length
-        self.embedding_dropout_probability = embedding_dropout_probability
+        self.embedding_options = embedding_options
+        self.mlm_head_options = mlm_head_options
+        self.nsp_head_options = nsp_head_options
         self.encoder_options = encoder_options
         self.hidden_dim = encoder_options.hidden_dim
         self.stack_num_layers = encoder_options.num_layers
@@ -148,6 +159,7 @@ class BertBackendConfigBuilder:
         from emperor.config import ModelConfig
 
         positional_embedding_config = self._build_positional_embedding_config()
+        boundary_config = self._build_boundary_config()
         encoder_config = self._build_encoder_config()
         return ModelConfig(
             learning_rate=self.learning_rate,
@@ -158,10 +170,22 @@ class BertBackendConfigBuilder:
             sequence_length=self.sequence_length,
             experiment_config=self.experiment_config_type(
                 positional_embedding_config=positional_embedding_config,
-                embedding_dropout_probability=self.embedding_dropout_probability,
+                boundary_config=boundary_config,
                 encoder_config=encoder_config,
             ),
         )
+
+    def _build_boundary_config(self):
+        return BoundaryConfigFactory(
+            BoundaryConfigDependencies(
+                input_dim=self.input_dim,
+                output_dim=self.output_dim,
+                sequence_length=self.sequence_length,
+                embedding_options=self.embedding_options,
+                mlm_head_options=self.mlm_head_options,
+                nsp_head_options=self.nsp_head_options,
+            )
+        ).build_boundary_config()
 
     def _build_positional_embedding_config(
         self,

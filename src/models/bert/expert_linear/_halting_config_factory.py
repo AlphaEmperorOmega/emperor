@@ -3,10 +3,8 @@ from dataclasses import replace
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     LastLayerBiasOptions,
-    LayerConfig,
     LayerStackConfig,
 )
-from emperor.linears import LinearLayerConfig
 from models.bert.expert_linear.runtime_options import (
     LayerControllerOptions,
     RecurrentControllerOptions,
@@ -14,7 +12,7 @@ from models.bert.expert_linear.runtime_options import (
     resolve_controller_stack_options,
 )
 
-from ._residual import build_residual_config
+from ._controller_stack_config import build_controller_stack_config
 
 STICK_BREAKING_GATE_OUTPUT_DIM = 2
 
@@ -92,41 +90,10 @@ class HaltingConfigFactory:
         options: SubmoduleStackOptions,
     ) -> LayerStackConfig:
         halting_hidden_dim = options.hidden_dim or self.output_dim
-        return self.__build_controller_stack(
+        return build_controller_stack_config(
             options,
             hidden_dim=halting_hidden_dim,
             output_dim=STICK_BREAKING_GATE_OUTPUT_DIM,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: SubmoduleStackOptions,
-        *,
-        hidden_dim: int | None = None,
-        output_dim: int | None = None,
-    ) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=options.activation,
-                layer_norm_position=options.layer_norm_position,
-                residual_config=build_residual_config(
-                    options.residual_connection_option,
-                    options.residual_model_flag,
-                    options.residual_stack_options,
-                ),
-                dropout_probability=options.dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(
-                    bias_flag=options.bias_flag,
-                ),
-            ),
         )
 
     def __submodule_stack_defaults(

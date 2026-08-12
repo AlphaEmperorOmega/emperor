@@ -4,6 +4,7 @@ import unittest
 from inspect import signature
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from emperor.augmentations.adaptive_parameters import (
@@ -812,6 +813,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         self.assertEqual(tuple(grouped_members.shape), (2, 2, 2))
         self.assertEqual(tuple(generated_weights.shape), (2, 2, 2))
 
+    @pytest.mark.training
     def test_generated_weight_gradients_drive_exact_generator_updates(self):
         for dtype in (torch.float32, torch.float64):
             with self.subTest(dtype=dtype):

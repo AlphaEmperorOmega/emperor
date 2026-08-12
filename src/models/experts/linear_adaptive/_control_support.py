@@ -1,5 +1,4 @@
 from dataclasses import replace
-from typing import Any
 
 from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig
@@ -42,7 +41,7 @@ def build_linear_controller_stack(
 def build_controller_stack(
     options: ExpertsSubmoduleStackOptions | ExpertsAdaptiveGeneratorStackOptions,
     *,
-    layer_model_config: Any,
+    layer_model_config: ConfigBase,
     hidden_dim: int | None = None,
     output_dim: int | None = None,
 ) -> LayerStackConfig:

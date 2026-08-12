@@ -97,11 +97,7 @@ def _independent_stack_config(
     options: GeneratorStackOptions,
     residual_stack: ResidualStackOptions,
 ) -> LayerStackConfig | None:
-    return (
-        _stack_config(options.stack, residual_stack)
-        if options.independent
-        else None
-    )
+    return _stack_config(options.stack, residual_stack) if options.independent else None
 
 
 class AdaptiveParameterConfigFactory:

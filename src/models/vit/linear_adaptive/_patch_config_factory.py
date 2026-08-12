@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import models.vit.linear_adaptive.config as config
 from emperor.layers import LayerNormPositionOptions
 from emperor.patch import LinearPatchEmbeddingConfig
+from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._linear_layer_config_factory import (
     LinearLayerConfigFactory,
 )
@@ -23,9 +24,15 @@ class PatchConfigDependencies:
 class PatchConfigFactory:
     def __init__(self, dependencies: PatchConfigDependencies) -> None:
         self.hidden_dim = dependencies.hidden_dim
-        self.patch_options = self.__default_patch_options(dependencies.patch_options)
-        self.encoder_options = self.__default_encoder_options(
-            dependencies.encoder_options
+        self.patch_options = (
+            config_defaults.vit_patch_options(config)
+            if dependencies.patch_options is None
+            else dependencies.patch_options
+        )
+        self.encoder_options = (
+            config_defaults.vit_encoder_options(config)
+            if dependencies.encoder_options is None
+            else dependencies.encoder_options
         )
         self.linear_layer_config_factory = dependencies.linear_layer_config_factory
 
@@ -46,35 +53,6 @@ class PatchConfigFactory:
             self.patch_options.image_height // self.patch_options.patch_size
         )
         return patches_per_axis * patches_per_axis + 1
-
-    def __default_patch_options(
-        self,
-        patch_options: VitPatchOptions | None,
-    ) -> VitPatchOptions:
-        if patch_options is not None:
-            return patch_options
-        return VitPatchOptions(
-            patch_size=config.IMAGE_PATCH_SIZE,
-            input_channels=config.INPUT_CHANNELS,
-            image_height=config.IMAGE_HEIGHT,
-            dropout_probability=config.PATCH_DROPOUT_PROBABILITY,
-            bias_flag=config.PATCH_BIAS_FLAG,
-        )
-
-    def __default_encoder_options(
-        self,
-        encoder_options: TransformerEncoderOptions | None,
-    ) -> TransformerEncoderOptions:
-        if encoder_options is not None:
-            return encoder_options
-        return TransformerEncoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            causal_attention_mask_flag=False,
-        )
 
     def build_patch_config(self) -> LinearPatchEmbeddingConfig:
         options = self.patch_options

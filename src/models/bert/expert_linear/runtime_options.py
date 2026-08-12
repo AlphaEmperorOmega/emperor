@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import ModuleType
+from typing import cast
 
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
 from emperor.experts import (
@@ -420,5 +422,179 @@ class ExpertsRecurrentControllerOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class _ConstructionOptions:
+    batch_size: int
+    learning_rate: float
+    input_dim: int
+    output_dim: int
+    sequence_length: int
+    embedding_options: BertEmbeddingOptions | None
+    encoder_options: TransformerEncoderOptions | None
+    positional_embedding_options: TransformerPositionalEmbeddingOptions | None
+    attention_options: TransformerAttentionOptions | None
+    feed_forward_options: TransformerFeedForwardOptions | None
+    mlm_head_options: BertMlmHeadOptions | None
+    nsp_head_options: BertNspHeadOptions | None
+    attention_projection_stack_options: SubmoduleStackOptions | None
+    attention_projection_layer_controller_options: LayerControllerOptions | None
+    attention_projection_dynamic_memory_options: DynamicMemoryOptions | None
+    attention_projection_recurrent_controller_options: RecurrentControllerOptions | None
+    feed_forward_stack_options: SubmoduleStackOptions | None
+    feed_forward_layer_controller_options: LayerControllerOptions | None
+    feed_forward_dynamic_memory_options: DynamicMemoryOptions | None
+    feed_forward_recurrent_controller_options: RecurrentControllerOptions | None
+    stack_options: MainLayerStackOptions | None
+    submodule_stack_options: SubmoduleStackOptions | None
+    layer_controller_options: LayerControllerOptions | None
+    dynamic_memory_options: DynamicMemoryOptions | None
+    recurrent_controller_options: RecurrentControllerOptions | None
+    mixture_options: ExpertsMixtureOptions | None
+    expert_stack_options: ExpertsSubmoduleStackOptions | None
+    sampler_options: ExpertsSamplerOptions | None
+    router_options: ExpertsRouterOptions | None
+    router_stack_options: ExpertsSubmoduleStackOptions | None
+    expert_layer_controller_options: ExpertsLayerControllerOptions | None
+    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    expert_attention_use_kv_expert_models_flag: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeOptions(ResolvedRuntimeOptions):
-    pass
+    def _construction_options(
+        self,
+        config_module: ModuleType,
+    ) -> _ConstructionOptions:
+        values = self._values
+        return _ConstructionOptions(
+            batch_size=cast(int, values.get("batch_size", config_module.BATCH_SIZE)),
+            learning_rate=cast(
+                float,
+                values.get("learning_rate", config_module.LEARNING_RATE),
+            ),
+            input_dim=cast(int, values.get("input_dim", config_module.INPUT_DIM)),
+            output_dim=cast(int, values.get("output_dim", config_module.OUTPUT_DIM)),
+            sequence_length=cast(
+                int,
+                values.get("sequence_length", config_module.SEQUENCE_LENGTH),
+            ),
+            embedding_options=cast(
+                BertEmbeddingOptions | None,
+                values.get("embedding_options"),
+            ),
+            encoder_options=cast(
+                TransformerEncoderOptions | None,
+                values.get("encoder_options"),
+            ),
+            positional_embedding_options=cast(
+                TransformerPositionalEmbeddingOptions | None,
+                values.get("positional_embedding_options"),
+            ),
+            attention_options=cast(
+                TransformerAttentionOptions | None,
+                values.get("attention_options"),
+            ),
+            feed_forward_options=cast(
+                TransformerFeedForwardOptions | None,
+                values.get("feed_forward_options"),
+            ),
+            mlm_head_options=cast(
+                BertMlmHeadOptions | None,
+                values.get("mlm_head_options"),
+            ),
+            nsp_head_options=cast(
+                BertNspHeadOptions | None,
+                values.get("nsp_head_options"),
+            ),
+            attention_projection_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("attention_projection_stack_options"),
+            ),
+            attention_projection_layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("attention_projection_layer_controller_options"),
+            ),
+            attention_projection_dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("attention_projection_dynamic_memory_options"),
+            ),
+            attention_projection_recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("attention_projection_recurrent_controller_options"),
+            ),
+            feed_forward_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("feed_forward_stack_options"),
+            ),
+            feed_forward_layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("feed_forward_layer_controller_options"),
+            ),
+            feed_forward_dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("feed_forward_dynamic_memory_options"),
+            ),
+            feed_forward_recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("feed_forward_recurrent_controller_options"),
+            ),
+            stack_options=cast(
+                MainLayerStackOptions | None,
+                values.get("stack_options"),
+            ),
+            submodule_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("submodule_stack_options"),
+            ),
+            layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("layer_controller_options"),
+            ),
+            dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("dynamic_memory_options"),
+            ),
+            recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("recurrent_controller_options"),
+            ),
+            mixture_options=cast(
+                ExpertsMixtureOptions | None,
+                values.get("mixture_options"),
+            ),
+            expert_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("expert_stack_options"),
+            ),
+            sampler_options=cast(
+                ExpertsSamplerOptions | None,
+                values.get("sampler_options"),
+            ),
+            router_options=cast(
+                ExpertsRouterOptions | None,
+                values.get("router_options"),
+            ),
+            router_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("router_stack_options"),
+            ),
+            expert_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("expert_layer_controller_options"),
+            ),
+            expert_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("expert_dynamic_memory_options"),
+            ),
+            expert_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("expert_recurrent_controller_options"),
+            ),
+            expert_attention_use_kv_expert_models_flag=cast(
+                bool,
+                values.get(
+                    "expert_attention_use_kv_expert_models_flag",
+                    config_module.EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG,
+                ),
+            ),
+        )

@@ -9,7 +9,7 @@ SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 SEARCH_SPACE_HIDDEN_DIM: list = [16, 32, 64, 128]
 
 # Image patches
-SEARCH_SPACE_IMAGE_PATCH_SIZE: list = [4, 8, 16]
+SEARCH_SPACE_IMAGE_PATCH_SIZE: list = [1, 2, 4]
 
 # Mixer blocks
 SEARCH_SPACE_STACK_NUM_LAYERS: list = [1, 2, 4, 8]

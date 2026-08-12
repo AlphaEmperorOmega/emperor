@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 
 import models.bert.expert_linear.config as config
+from models.bert.expert_linear._config_defaults import (
+    bert_embedding_options,
+    bert_mlm_head_options,
+    bert_nsp_head_options,
+)
 from models.bert.expert_linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
@@ -32,14 +37,20 @@ class BoundaryConfigFactory:
         self.hidden_dim = dependencies.hidden_dim
         self.output_dim = dependencies.output_dim
         self.sequence_length = dependencies.sequence_length
-        self.embedding_options = self.__default_embedding_options(
-            dependencies.embedding_options
+        self.embedding_options = (
+            bert_embedding_options(config)
+            if dependencies.embedding_options is None
+            else dependencies.embedding_options
         )
-        self.mlm_head_options = self.__default_mlm_head_options(
-            dependencies.mlm_head_options
+        self.mlm_head_options = (
+            bert_mlm_head_options(config)
+            if dependencies.mlm_head_options is None
+            else dependencies.mlm_head_options
         )
-        self.nsp_head_options = self.__default_nsp_head_options(
-            dependencies.nsp_head_options
+        self.nsp_head_options = (
+            bert_nsp_head_options(config)
+            if dependencies.nsp_head_options is None
+            else dependencies.nsp_head_options
         )
 
     def build_boundary_config(self) -> BertBoundaryConfig:
@@ -50,47 +61,9 @@ class BoundaryConfigFactory:
             nsp_head_options=self.nsp_head_options,
         )
 
-    def __default_embedding_options(
-        self,
-        embedding_options: BertEmbeddingOptions | None,
-    ) -> BertEmbeddingOptions:
-        if embedding_options is not None:
-            return embedding_options
-        return BertEmbeddingOptions(
-            token_type_vocab_size=config.TOKEN_TYPE_VOCAB_SIZE,
-            layer_norm_flag=config.EMBEDDING_LAYER_NORM_FLAG,
-            dropout_probability=config.EMBEDDING_DROPOUT_PROBABILITY,
-        )
-
-    def __default_mlm_head_options(
-        self,
-        mlm_head_options: BertMlmHeadOptions | None,
-    ) -> BertMlmHeadOptions:
-        if mlm_head_options is not None:
-            return mlm_head_options
-        return BertMlmHeadOptions(
-            activation=config.MLM_ACTIVATION,
-            dense_bias_flag=config.MLM_DENSE_BIAS_FLAG,
-            layer_norm_flag=config.MLM_LAYER_NORM_FLAG,
-            decoder_bias_flag=config.MLM_DECODER_BIAS_FLAG,
-            decoder_weight_tying_flag=config.MLM_DECODER_WEIGHT_TYING_FLAG,
-        )
-
-    def __default_nsp_head_options(
-        self,
-        nsp_head_options: BertNspHeadOptions | None,
-    ) -> BertNspHeadOptions:
-        if nsp_head_options is not None:
-            return nsp_head_options
-        return BertNspHeadOptions(
-            pooler_activation=config.NSP_POOLER_ACTIVATION,
-            pooler_bias_flag=config.NSP_POOLER_BIAS_FLAG,
-            output_dim=config.NSP_OUTPUT_DIM,
-            head_bias_flag=config.NSP_HEAD_BIAS_FLAG,
-        )
-
     def __validate(self) -> None:
         self.__validate_positive_dimensions()
+        self.__validate_binary_nsp_output()
         self.__validate_embedding_dropout_probability()
         self.__validate_tied_vocabulary_dimensions()
 
@@ -106,6 +79,13 @@ class BoundaryConfigFactory:
         for name, value in dimensions.items():
             if value <= 0:
                 raise ValueError(f"{name} must be greater than 0, received {value}.")
+
+    def __validate_binary_nsp_output(self) -> None:
+        if self.nsp_head_options.output_dim != 2:
+            raise ValueError(
+                "BERT next-sentence prediction requires exactly 2 output "
+                f"classes, received {self.nsp_head_options.output_dim}."
+            )
 
     def __validate_embedding_dropout_probability(self) -> None:
         probability = self.embedding_options.dropout_probability

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn.functional as F
 from lightning import Trainer, seed_everything
@@ -68,6 +69,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
                 token_count += valid_tokens
         return weighted_nll / token_count
 
+    @pytest.mark.training
     @unittest.skipUnless(
         os.environ.get("EMPEROR_RUN_TRANSLATION_OVERFIT") == "1",
         "Set EMPEROR_RUN_TRANSLATION_OVERFIT=1 for the learning acceptance test.",
@@ -112,6 +114,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
                 self.assertGreaterEqual(accuracy.item(), 0.98)
                 torch.testing.assert_close(generated, batch)
 
+    @pytest.mark.training
     @unittest.skipUnless(
         os.environ.get("EMPEROR_RUN_MULTI30K_SMOKE") == "1",
         "Set EMPEROR_RUN_MULTI30K_SMOKE=1 for the real-corpus smoke test.",
@@ -170,6 +173,7 @@ class TestTransformerTranslationIntegration(unittest.TestCase):
                 )
                 self.assertTrue(torch.all(generated[:, 0] == model.bos_token_id))
 
+    @pytest.mark.training
     @unittest.skipUnless(
         os.environ.get("EMPEROR_RUN_TRANSLATION_QUALITY") == "1",
         "Set EMPEROR_RUN_TRANSLATION_QUALITY=1 for the full quality acceptance.",

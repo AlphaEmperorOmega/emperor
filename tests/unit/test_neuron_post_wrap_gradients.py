@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 from torch import nn
 
@@ -210,6 +211,7 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
     "gloo process group support is required",
 )
 class TestRealPostWrapSync(NeuronTestCase):
+    @pytest.mark.training
     def test_callback_averages_only_post_wrap_parameters(self) -> None:
         config = NeuronClusterConfig(
             x_axis_total_neurons=2,

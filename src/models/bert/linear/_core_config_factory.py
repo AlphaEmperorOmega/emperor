@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Literal
 
 import torch
 
@@ -18,6 +19,7 @@ from emperor.transformer import (
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
+from models.bert.linear import _config_defaults as config_defaults
 from models.bert.linear._encoder_control_config_factory import (
     GateConfigFactory,
     HaltingConfigFactory,
@@ -31,7 +33,6 @@ from models.bert.linear.runtime_options import (
     MainLayerStackOptions,
     RecurrentControllerOptions,
     SubmoduleStackOptions,
-    SubmoduleStackSource,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
@@ -68,75 +69,83 @@ class CoreConfigFactory:
         self.batch_size = dependencies.batch_size
         self.sequence_length = dependencies.sequence_length
         self.linear_layer_config_factory = dependencies.linear_layer_config_factory
-        self.encoder_options = self.__default_encoder_options(
-            dependencies.encoder_options
+        self.encoder_options = (
+            dependencies.encoder_options or config_defaults.bert_encoder_options(config)
         )
         self.hidden_dim = self.encoder_options.hidden_dim
-        self.attention_options = self.__default_attention_options(
+        self.attention_options = (
             dependencies.attention_options
+            or config_defaults.bert_attention_options(config)
         )
-        self.feed_forward_options = self.__default_feed_forward_options(
+        self.feed_forward_options = (
             dependencies.feed_forward_options
+            or config_defaults.bert_feed_forward_options(config)
         )
-        self.stack_options = self.__default_stack_options(dependencies.stack_options)
-        self.submodule_stack_options = self.__default_submodule_stack_options(
+        self.stack_options = (
+            dependencies.stack_options
+            or config_defaults.main_layer_stack_options(config)
+        )
+        self.submodule_stack_options = (
             dependencies.submodule_stack_options
+            or config_defaults.submodule_stack_options(config, self.stack_options)
         )
-        self.layer_controller_options = self.__default_layer_controller_options(
-            dependencies.layer_controller_options,
-            prefix="",
+        self.layer_controller_options = (
+            dependencies.layer_controller_options
+            or self.__layer_controller_options(
+                role="main",
+            )
         )
-        self.dynamic_memory_options = self.__default_dynamic_memory_options(
-            dependencies.dynamic_memory_options,
-            prefix="",
+        self.dynamic_memory_options = (
+            dependencies.dynamic_memory_options
+            or self.__dynamic_memory_options(role="main")
         )
-        self.recurrent_controller_options = self.__default_recurrent_controller_options(
-            dependencies.recurrent_controller_options,
-            prefix="RECURRENT",
+        self.recurrent_controller_options = (
+            dependencies.recurrent_controller_options
+            or self.__recurrent_controller_options(role="main")
         )
         self.attention_projection_stack_options = (
-            self.__default_attention_projection_stack_options(
-                dependencies.attention_projection_stack_options
+            dependencies.attention_projection_stack_options
+            or config_defaults.attention_projection_stack_options(
+                config,
+                self.encoder_options,
+                self.attention_options,
             )
         )
         self.attention_projection_layer_controller_options = (
-            self.__default_layer_controller_options(
-                dependencies.attention_projection_layer_controller_options,
-                prefix="ATTN",
+            dependencies.attention_projection_layer_controller_options
+            or self.__layer_controller_options(
+                role="attention",
             )
         )
         self.attention_projection_dynamic_memory_options = (
-            self.__default_dynamic_memory_options(
-                dependencies.attention_projection_dynamic_memory_options,
-                prefix="ATTN",
-            )
+            dependencies.attention_projection_dynamic_memory_options
+            or self.__dynamic_memory_options(role="attention")
         )
         self.attention_projection_recurrent_controller_options = (
-            self.__default_recurrent_controller_options(
-                dependencies.attention_projection_recurrent_controller_options,
-                prefix="ATTN_RECURRENT",
+            dependencies.attention_projection_recurrent_controller_options
+            or self.__recurrent_controller_options(role="attention")
+        )
+        self.feed_forward_stack_options = (
+            dependencies.feed_forward_stack_options
+            or config_defaults.feed_forward_stack_options(
+                config,
+                self.encoder_options,
+                self.feed_forward_options,
             )
         )
-        self.feed_forward_stack_options = self.__default_feed_forward_stack_options(
-            dependencies.feed_forward_stack_options
-        )
         self.feed_forward_layer_controller_options = (
-            self.__default_layer_controller_options(
-                dependencies.feed_forward_layer_controller_options,
-                prefix="FF",
+            dependencies.feed_forward_layer_controller_options
+            or self.__layer_controller_options(
+                role="feed_forward",
             )
         )
         self.feed_forward_dynamic_memory_options = (
-            self.__default_dynamic_memory_options(
-                dependencies.feed_forward_dynamic_memory_options,
-                prefix="FF",
-            )
+            dependencies.feed_forward_dynamic_memory_options
+            or self.__dynamic_memory_options(role="feed_forward")
         )
         self.feed_forward_recurrent_controller_options = (
-            self.__default_recurrent_controller_options(
-                dependencies.feed_forward_recurrent_controller_options,
-                prefix="FF_RECURRENT",
-            )
+            dependencies.feed_forward_recurrent_controller_options
+            or self.__recurrent_controller_options(role="feed_forward")
         )
 
     def build_encoder_config(self):
@@ -403,283 +412,39 @@ class CoreConfigFactory:
             halting_config_factory=self.__feed_forward_halting_factory(),
         )
 
-    def __default_encoder_options(
+    def __layer_controller_options(
         self,
-        options: TransformerEncoderOptions | None,
-    ) -> TransformerEncoderOptions:
-        if options is not None:
-            return options
-        return TransformerEncoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            causal_attention_mask_flag=config.CAUSAL_ATTENTION_MASK_FLAG,
-        )
-
-    def __default_attention_options(
-        self,
-        options: TransformerAttentionOptions | None,
-    ) -> TransformerAttentionOptions:
-        if options is not None:
-            return options
-        return TransformerAttentionOptions(
-            num_heads=config.ATTN_NUM_HEADS,
-            num_layers=config.ATTN_NUM_LAYERS,
-            bias_flag=config.ATTN_BIAS_FLAG,
-            add_key_value_bias_flag=config.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
-        )
-
-    def __default_feed_forward_options(
-        self,
-        options: TransformerFeedForwardOptions | None,
-    ) -> TransformerFeedForwardOptions:
-        if options is not None:
-            return options
-        return TransformerFeedForwardOptions(
-            num_layers=config.FF_NUM_LAYERS,
-            bias_flag=config.FF_BIAS_FLAG,
-        )
-
-    def __default_stack_options(
-        self,
-        options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if options is not None:
-            return options
-        return MainLayerStackOptions(
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_submodule_stack_options(
-        self,
-        options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if options is not None:
-            return options
-        return SubmoduleStackOptions(
-            hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
-            num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
-            last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-            ),
-            activation=config.SUBMODULE_STACK_ACTIVATION,
-            layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=(
-                config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
-            ),
-            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
-            bias_flag=self.stack_options.bias_flag,
-        )
-
-    def __default_attention_projection_stack_options(
-        self,
-        options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if options is not None:
-            return options
-        return SubmoduleStackOptions(
-            hidden_dim=self.hidden_dim,
-            num_layers=self.attention_options.num_layers,
-            last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG),
-            activation=self.encoder_options.activation,
-            layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=(config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION),
-            residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
-            bias_flag=self.attention_options.bias_flag,
-        )
-
-    def __default_feed_forward_stack_options(
-        self,
-        options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if options is not None:
-            return options
-        return SubmoduleStackOptions(
-            hidden_dim=self.__scaled_feed_forward_hidden_dim(),
-            num_layers=self.feed_forward_options.num_layers,
-            last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-            activation=self.encoder_options.activation,
-            layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=(config.FF_STACK_RESIDUAL_CONNECTION_OPTION),
-            residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=self.encoder_options.dropout_probability,
-            bias_flag=self.feed_forward_options.bias_flag,
-        )
-
-    def __scaled_feed_forward_hidden_dim(self) -> int:
-        if (
-            config.HIDDEN_DIM > 0
-            and config.FF_STACK_HIDDEN_DIM % config.HIDDEN_DIM == 0
-        ):
-            return self.hidden_dim * (config.FF_STACK_HIDDEN_DIM // config.HIDDEN_DIM)
-        return config.FF_STACK_HIDDEN_DIM
-
-    def __default_layer_controller_options(
-        self,
-        options: LayerControllerOptions | None,
         *,
-        prefix: str,
+        role: Literal["main", "attention", "feed_forward"],
     ) -> LayerControllerOptions:
-        if options is not None:
-            return options
-        config_prefix = f"{prefix}_" if prefix else ""
-        return LayerControllerOptions(
-            stack_gate_flag=getattr(config, f"{config_prefix}STACK_GATE_FLAG"),
-            gate_option=getattr(config, f"{config_prefix}GATE_OPTION"),
-            gate_activation=getattr(config, f"{config_prefix}GATE_ACTIVATION"),
-            gate_stack_source=self.__controller_stack_source(
-                f"{config_prefix}GATE_STACK"
-            ),
-            stack_halting_flag=getattr(config, f"{config_prefix}STACK_HALTING_FLAG"),
-            halting_threshold=getattr(
-                config,
-                f"{config_prefix}HALTING_THRESHOLD",
-            ),
-            halting_dropout=getattr(config, f"{config_prefix}HALTING_DROPOUT"),
-            halting_hidden_state_mode=getattr(
-                config,
-                f"{config_prefix}HALTING_HIDDEN_STATE_MODE",
-            ),
-            halting_stack_source=self.__controller_stack_source(
-                f"{config_prefix}HALTING_STACK"
-            ),
+        defaults = config_defaults.linears_layer_controller_options(
+            config,
+            role,
         )
+        return replace(defaults, halting_option=LayerControllerOptions.halting_option)
 
-    def __default_dynamic_memory_options(
+    def __dynamic_memory_options(
         self,
-        options: DynamicMemoryOptions | None,
         *,
-        prefix: str,
+        role: Literal["main", "attention", "feed_forward"],
     ) -> DynamicMemoryOptions:
-        if options is not None:
-            return options
-        config_prefix = f"{prefix}_" if prefix else ""
-        memory_prefix = f"{config_prefix}MEMORY"
-        return DynamicMemoryOptions(
-            memory_flag=getattr(config, f"{memory_prefix}_FLAG"),
-            memory_option=getattr(config, f"{memory_prefix}_OPTION"),
-            memory_position_option=getattr(
-                config,
-                f"{memory_prefix}_POSITION_OPTION",
-            ),
-            memory_test_time_training_learning_rate=getattr(
-                config,
-                f"{memory_prefix}_TEST_TIME_TRAINING_LEARNING_RATE",
-            ),
-            memory_test_time_training_num_inner_steps=getattr(
-                config,
-                f"{memory_prefix}_TEST_TIME_TRAINING_NUM_INNER_STEPS",
-            ),
-            memory_stack_source=self.__controller_stack_source(
-                f"{memory_prefix}_STACK"
-            ),
+        return config_defaults.linears_dynamic_memory_options(
+            config,
+            role,
         )
 
-    def __default_recurrent_controller_options(
+    def __recurrent_controller_options(
         self,
-        options: RecurrentControllerOptions | None,
         *,
-        prefix: str,
+        role: Literal["main", "attention", "feed_forward"],
     ) -> RecurrentControllerOptions:
-        if options is not None:
-            return options
-        return RecurrentControllerOptions(
-            recurrent_flag=getattr(config, f"{prefix}_FLAG"),
-            recurrent_max_steps=getattr(config, f"{prefix}_MAX_STEPS"),
-            recurrent_initial_iterations=getattr(
-                config,
-                f"{prefix}_INITIAL_ITERATIONS",
-                2,
-            ),
-            recurrent_gradient_transition_count=getattr(
-                config,
-                f"{prefix}_GRADIENT_TRANSITION_COUNT",
-                None,
-            ),
-            recurrent_iteration_increment=getattr(
-                config,
-                f"{prefix}_ITERATION_INCREMENT",
-                1,
-            ),
-            recurrent_forward_calls_before_iteration_increment=getattr(
-                config,
-                f"{prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
-                1,
-            ),
-            recurrent_layer_norm_position=getattr(
-                config,
-                f"{prefix}_LAYER_NORM_POSITION",
-            ),
-            recurrent_stack_gate_flag=getattr(config, f"{prefix}_STACK_GATE_FLAG"),
-            recurrent_gate_option=getattr(config, f"{prefix}_GATE_OPTION"),
-            recurrent_gate_activation=getattr(
-                config,
-                f"{prefix}_GATE_ACTIVATION",
-            ),
-            recurrent_gate_stack_source=self.__controller_stack_source(
-                f"{prefix}_GATE_STACK"
-            ),
-            recurrent_stack_halting_flag=getattr(
-                config, f"{prefix}_STACK_HALTING_FLAG"
-            ),
-            recurrent_halting_threshold=getattr(
-                config,
-                f"{prefix}_HALTING_THRESHOLD",
-            ),
-            recurrent_halting_dropout=getattr(
-                config,
-                f"{prefix}_HALTING_DROPOUT",
-            ),
-            recurrent_halting_hidden_state_mode=getattr(
-                config,
-                f"{prefix}_HALTING_HIDDEN_STATE_MODE",
-            ),
-            recurrent_halting_stack_source=self.__controller_stack_source(
-                f"{prefix}_HALTING_STACK"
-            ),
+        defaults = config_defaults.linears_recurrent_controller_options(
+            config,
+            role,
         )
-
-    def __controller_stack_source(self, prefix: str) -> SubmoduleStackSource:
-        return SubmoduleStackSource(
-            independent_flag=getattr(config, f"{prefix}_INDEPENDENT_FLAG"),
-            hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-            num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-            last_layer_bias_option=getattr(
-                config,
-                f"{prefix}_LAST_LAYER_BIAS_OPTION",
+        return replace(
+            defaults,
+            recurrent_halting_option=(
+                RecurrentControllerOptions.recurrent_halting_option
             ),
-            apply_output_pipeline_flag=getattr(
-                config,
-                f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
-            ),
-            activation=getattr(config, f"{prefix}_ACTIVATION"),
-            layer_norm_position=getattr(
-                config,
-                f"{prefix}_LAYER_NORM_POSITION",
-            ),
-            residual_connection_option=getattr(
-                config,
-                f"{prefix}_RESIDUAL_CONNECTION_OPTION",
-            ),
-            residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-            dropout_probability=getattr(
-                config,
-                f"{prefix}_DROPOUT_PROBABILITY",
-            ),
-            bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
         )

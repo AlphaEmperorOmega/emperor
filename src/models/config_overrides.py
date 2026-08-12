@@ -21,13 +21,7 @@ from model_runtime.packages import (
     dataset_cli_name as _dataset_cli_name,
 )
 from model_runtime.packages import (
-    iter_supported_config_keys as _iter_supported_config_keys,
-)
-from model_runtime.packages import (
     normalize_key as _normalize_key,
-)
-from model_runtime.packages import (
-    parse_config_value as _parse_config_value,
 )
 from model_runtime.packages import (
     search_key_to_config_key as _search_key_to_config_key,
@@ -63,17 +57,25 @@ def parse_search_set(
     if not values:
         raise argparse.ArgumentTypeError("--search-set requires at least one value")
 
-    config_module = package.runtime_defaults
-    search_space = package.metadata.search_space
+    runtime_defaults = package.runtime_defaults_spec
     config_key = _canonical_config_key(raw_key)
-    supported_keys = set(_iter_supported_config_keys(config_module))
+    supported_keys = set(runtime_defaults.supported_keys)
     search_key = _search_key_to_config_key(config_key)
-    if not hasattr(search_space, search_key) and config_key not in supported_keys:
+    if (
+        not runtime_defaults.has_search_value(search_key)
+        and config_key not in supported_keys
+    ):
         raise argparse.ArgumentTypeError(f"unknown Runtime Defaults key '{raw_key}'")
-    parse_key = search_key if hasattr(search_space, search_key) else config_key
-    parse_module = search_space if parse_key == search_key else config_module
+    selected_search_key = (
+        search_key if runtime_defaults.has_search_value(search_key) else None
+    )
     return _config_key_to_model_param(config_key), [
-        _parse_config_value(parse_module, parse_key, value) for value in values
+        runtime_defaults.parse_search_value(
+            config_key,
+            value,
+            search_key=selected_search_key,
+        )
+        for value in values
     ]
 
 
@@ -84,7 +86,7 @@ def add_config_override_arguments(
     if not isinstance(package, ModelPackage):
         raise TypeError("CLI overrides require a selected ModelPackage.")
     dest_to_key: dict[str, str] = {}
-    for key in _iter_supported_config_keys(package.runtime_defaults):
+    for key in package.runtime_defaults_spec.supported_keys:
         dest = f"override_{key.lower()}"
         parser.add_argument(
             _config_key_to_flag(key),
@@ -115,10 +117,8 @@ def extract_config_overrides(
     for dest, key in dest_to_key.items():
         value = getattr(args, dest, None)
         if value is not None:
-            overrides[_config_key_to_model_param(key)] = _parse_config_value(
-                package.runtime_defaults,
-                key,
-                value,
+            overrides[_config_key_to_model_param(key)] = (
+                package.runtime_defaults_spec.parse_value(key, value)
             )
 
     search_overrides: dict[str, list[Any]] = {}
@@ -149,12 +149,12 @@ def _display_model_selector(package: ModelPackage) -> str:
 
 def print_config_options(catalog_key: str) -> None:
     package = _selected_package(catalog_key)
-    config_module = package.runtime_defaults
+    runtime_defaults = package.runtime_defaults_spec
     print(f"Runtime Defaults for {_display_model_selector(package)}:")
-    for key in _iter_supported_config_keys(config_module):
+    for key in runtime_defaults.supported_keys:
         print(
             f"  {_config_key_to_flag(key):45} "
-            f"{_display_config_default(getattr(config_module, key))}"
+            f"{_display_config_default(runtime_defaults.current_value(key))}"
         )
 
     search_items = package.search_metadata

@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -50,11 +51,12 @@ from models.gpt.expert_linear_adaptive.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
-from models.gpt.expert_linear_adaptive.runtime_defaults import (
-    expert_linear_adaptive_builder_kwargs_from_flat,
+from models.gpt.expert_linear_adaptive.runtime_options import (
+    GptEmbeddingOptions,
+    GptLmHeadOptions,
+    TransformerDecoderOptions,
 )
-from models.gpt.expert_linear_adaptive.runtime_options import RuntimeOptions
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
@@ -599,6 +601,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         )
         self.assertEqual(tuple(auxiliary_loss.shape), ())
 
+    @pytest.mark.training
     def test_single_layer_recurrent_attention_residual_preset_trains_one_batch(self):
         torch.manual_seed(449)
         cfg = self._preset_config(
@@ -872,15 +875,15 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNone(spy.state.target_attention_mask)
 
     def test_boundary_options_are_plain_and_fully_configurable(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cfg = self._direct_config(
             embedding_options=replace(
-                defaults["embedding_options"],
+                defaults.embedding_options,
                 layer_norm_flag=False,
                 dropout_probability=0.25,
             ),
             lm_head_options=replace(
-                defaults["lm_head_options"],
+                defaults.lm_head_options,
                 weight_tying_flag=False,
                 bias_flag=True,
             ),
@@ -894,12 +897,12 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNotNone(model.lm_head.bias)
 
     def test_untied_head_allows_mismatched_vocabularies(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cfg = self._direct_config(
             input_dim=29,
             output_dim=31,
             lm_head_options=replace(
-                defaults["lm_head_options"],
+                defaults.lm_head_options,
                 weight_tying_flag=False,
             ),
         )
@@ -909,19 +912,19 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
             self._direct_config(input_dim=29, output_dim=31)
 
     def test_invalid_dimensions_and_dropout_are_rejected(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cases = {
             "input_dim": {"input_dim": 0},
             "hidden_dim": {
                 "decoder_options": replace(
-                    defaults["decoder_options"],
+                    defaults.decoder_options,
                     hidden_dim=0,
                 )
             },
             "output_dim": {
                 "output_dim": 0,
                 "lm_head_options": replace(
-                    defaults["lm_head_options"],
+                    defaults.lm_head_options,
                     weight_tying_flag=False,
                 ),
             },
@@ -936,7 +939,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
                     self._direct_config(
                         embedding_options=replace(
-                            defaults["embedding_options"],
+                            defaults.embedding_options,
                             dropout_probability=probability,
                         )
                     )
@@ -958,6 +961,7 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
                 self.assertEqual(logits.shape[-1], dataset.num_classes)
                 self.assertEqual(tuple(auxiliary_loss.shape), ())
 
+    @pytest.mark.training
     def test_representative_presets_train_tiny_epochs(self):
         for preset in (
             ExperimentPreset.BASELINE,
@@ -1002,15 +1006,39 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
             },
         )[0]
 
-    def _direct_config(self, **overrides):
-        kwargs = expert_linear_adaptive_builder_kwargs_from_flat(
-            self._small_flat_overrides(),
-            config,
+    def _direct_config(
+        self,
+        *,
+        embedding_options: GptEmbeddingOptions | None = None,
+        decoder_options: TransformerDecoderOptions | None = None,
+        lm_head_options: GptLmHeadOptions | None = None,
+        **overrides,
+    ):
+        flat_overrides = {
+            **self._small_flat_overrides(),
+            **overrides,
+        }
+        if embedding_options is not None:
+            flat_overrides.update(
+                embedding_layer_norm_flag=embedding_options.layer_norm_flag,
+                embedding_dropout_probability=embedding_options.dropout_probability,
+            )
+        if decoder_options is not None:
+            flat_overrides.update(
+                hidden_dim=decoder_options.hidden_dim,
+                stack_num_layers=decoder_options.num_layers,
+                stack_activation=decoder_options.activation,
+                stack_dropout_probability=decoder_options.dropout_probability,
+                layer_norm_position=decoder_options.layer_norm_position,
+            )
+        if lm_head_options is not None:
+            flat_overrides.update(
+                lm_head_weight_tying_flag=lm_head_options.weight_tying_flag,
+                lm_head_bias_flag=lm_head_options.bias_flag,
+            )
+        return model_package("gpt/expert_linear_adaptive").build_configuration(
+            config_overrides=flat_overrides
         )
-        kwargs.update(overrides)
-        return GptExpertLinearAdaptiveConfigBuilder(
-            runtime=RuntimeOptions(kwargs)
-        ).build()
 
     def _small_flat_overrides(self) -> dict:
         return {
@@ -1026,8 +1054,9 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
             "recurrent_max_steps": 2,
         }
 
-    def _default_builder_kwargs(self) -> dict:
-        return expert_linear_adaptive_builder_kwargs_from_flat({}, config)
+    def _default_builder(self) -> GptExpertLinearAdaptiveConfigBuilder:
+        runtime = model_package("gpt/expert_linear_adaptive").bind_runtime_defaults()
+        return GptExpertLinearAdaptiveConfigBuilder(runtime=runtime)
 
     def _input_ids(self, cfg) -> torch.Tensor:
         return torch.randint(0, cfg.input_dim, (2, cfg.sequence_length))

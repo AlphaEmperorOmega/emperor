@@ -10,6 +10,7 @@ from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import torch
 
 import models.linears.linear.config as config
@@ -66,7 +67,7 @@ from models.linears.linear.runtime_options import (
     RecurrenceOptions,
     RuntimeOptions,
 )
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
@@ -82,6 +83,7 @@ _NON_MODEL_KEYS = {
     "HALTING_OPTION",
     "NUM_EPOCHS",
     "RECURRENT_HALTING_OPTION",
+    "SEED",
 }
 _NEW_PRESET_EXPECTATIONS = {
     "WEIGHTED_RESIDUAL": (
@@ -460,6 +462,11 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             runtime.stack.layer_norm_position,
             LayerNormPositionOptions.AFTER,
         )
+
+    def test_recurrent_initial_iterations_preserves_none(self):
+        runtime = runtime_from_flat({"recurrent_initial_iterations": None})
+
+        self.assertIsNone(runtime.recurrence.initial_iterations)
 
     def test_noncanonical_runtime_key_spellings_are_rejected(self):
         for retired_key in (
@@ -1749,6 +1756,7 @@ class TestLinearModelBehavior(unittest.TestCase):
                 ):
                     torch.testing.assert_close(actual, expected)
 
+    @pytest.mark.training
     def test_all_presets_train_one_tiny_epoch(self):
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK

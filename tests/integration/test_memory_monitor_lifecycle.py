@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from torch import Tensor, nn
@@ -179,6 +180,7 @@ class MemoryMonitorLifecycleTests(unittest.TestCase):
         self.assertIn(name, logged)
         torch.testing.assert_close(logged[name], expected)
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_metrics_for_every_variant_and_updates(
         self,
     ) -> None:
@@ -273,6 +275,7 @@ class MemoryMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._latest_gate_logits, {})
 
+    @pytest.mark.training
     def test_real_trainer_uses_forward_global_step_cadence_without_duplicates(
         self,
     ) -> None:
@@ -301,6 +304,7 @@ class MemoryMonitorLifecycleTests(unittest.TestCase):
                 expected_names,
             )
 
+    @pytest.mark.training
     def test_real_trainer_exception_removes_every_monitor_hook(self) -> None:
         model = _MemoryTrainingModule(
             variants=("gated",),

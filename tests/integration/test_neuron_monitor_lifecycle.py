@@ -7,6 +7,7 @@ from pathlib import Path
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -83,6 +84,7 @@ class _FitStartRecordingMonitor(NeuronClusterMonitorCallback):
 
 
 class NeuronMonitorLifecycleIntegrationTests(NeuronTestCase):
+    @pytest.mark.training
     def test_real_trainer_captures_and_emits_route_metrics_on_step_two(self) -> None:
         config = NeuronClusterConfig(
             x_axis_total_neurons=1,
@@ -120,6 +122,7 @@ class NeuronMonitorLifecycleIntegrationTests(NeuronTestCase):
         )
         self.assertNotIn("forward", model.cluster.__dict__)
 
+    @pytest.mark.training
     def test_real_trainer_resume_emits_once_per_documented_step(self) -> None:
         config = NeuronClusterConfig(
             x_axis_total_neurons=1,

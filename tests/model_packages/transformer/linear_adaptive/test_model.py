@@ -4,6 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from emperor.augmentations.adaptive_parameters import (
@@ -14,10 +15,6 @@ from emperor.experiments.translation import TranslationExperiment
 from emperor.linears import LinearLayer
 from model_runtime.packages import PresetLock
 from models.catalog import model_package
-from models.training_test_utils import (
-    RandomTranslationDataModule,
-    tiny_cpu_trainer,
-)
 from models.transformer.linear_adaptive import dataset_options
 from models.transformer.linear_adaptive.config_builder import (
     TransformerLinearAdaptiveConfigBuilder,
@@ -26,6 +23,10 @@ from models.transformer.linear_adaptive.model import Model
 from models.transformer.linear_adaptive.presets import (
     Experiment,
     ExperimentPreset,
+)
+from tests.model_packages.training_test_utils import (
+    RandomTranslationDataModule,
+    tiny_cpu_trainer,
 )
 
 _ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
@@ -268,6 +269,7 @@ class TestTransformerLinearAdaptiveModel(unittest.TestCase):
         ]
         self.assertTrue(controller_modules)
 
+    @pytest.mark.training
     def test_baseline_lifecycle_and_low_rank_signature_train(self):
         baseline_cfg = self._config()
         baseline = Model(baseline_cfg)

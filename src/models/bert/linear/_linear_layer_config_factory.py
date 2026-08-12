@@ -10,6 +10,7 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
+from models.bert.linear._config_defaults import bert_encoder_options
 from models.bert.linear._residual import ResidualStackOptions
 from models.bert.linear.runtime_options import TransformerEncoderOptions
 
@@ -23,25 +24,12 @@ class LinearLayerConfigDependencies:
 
 class LinearLayerConfigFactory:
     def __init__(self, dependencies: LinearLayerConfigDependencies) -> None:
-        self.encoder_options = self.__default_encoder_options(
-            dependencies.encoder_options
+        self.encoder_options = (
+            bert_encoder_options(config)
+            if dependencies.encoder_options is None
+            else dependencies.encoder_options
         )
         self.hidden_dim = self.encoder_options.hidden_dim
-
-    def __default_encoder_options(
-        self,
-        encoder_options: TransformerEncoderOptions | None,
-    ) -> TransformerEncoderOptions:
-        if encoder_options is not None:
-            return encoder_options
-        return TransformerEncoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            causal_attention_mask_flag=config.CAUSAL_ATTENTION_MASK_FLAG,
-        )
 
     def build_backend_linear_layer_config(
         self,

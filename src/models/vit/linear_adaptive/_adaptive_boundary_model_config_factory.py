@@ -22,8 +22,8 @@ from emperor.layers import (
     GateConfig,
     LayerConfig,
     LayerNormPositionOptions,
-    LayerStackConfig,
 )
+from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -76,7 +76,11 @@ class BoundaryModelConfigDependencies:
 
 class BoundaryModelConfigFactory:
     def __init__(self, dependencies: BoundaryModelConfigDependencies) -> None:
-        stack_options = self.__default_stack_options(dependencies.stack_options)
+        stack_options = (
+            config_defaults.main_layer_stack_options(config)
+            if dependencies.stack_options is None
+            else dependencies.stack_options
+        )
         input_boundary_options = self.__default_input_boundary_options(
             dependencies.input_boundary_options
         )
@@ -84,9 +88,9 @@ class BoundaryModelConfigFactory:
             dependencies.output_boundary_options
         )
         adaptive_generator_stack_options = (
-            self.__default_adaptive_generator_stack_options(
-                dependencies.adaptive_generator_stack_options
-            )
+            config_defaults.adaptive_generator_stack_options(config)
+            if dependencies.adaptive_generator_stack_options is None
+            else dependencies.adaptive_generator_stack_options
         )
         adaptive_generator_stack_config_factory = AdaptiveGeneratorStackConfigFactory(
             adaptive_generator_stack_options
@@ -100,53 +104,10 @@ class BoundaryModelConfigFactory:
             adaptive_generator_stack_config_factory
         )
         shared_adaptive_generator_stack_config = (
-            self.__build_shared_adaptive_generator_stack_config()
+            self.adaptive_generator_stack_config_factory.build_shared_config()
         )
         self.shared_adaptive_generator_stack_config = (
             shared_adaptive_generator_stack_config
-        )
-
-    def __default_stack_options(
-        self,
-        stack_options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return MainLayerStackOptions(
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_adaptive_generator_stack_options(
-        self,
-        adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None,
-    ) -> AdaptiveGeneratorStackOptions:
-        if adaptive_generator_stack_options is not None:
-            return adaptive_generator_stack_options
-        return AdaptiveGeneratorStackOptions(
-            hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
-            layer_norm_position=(config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION),
-            num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
-            activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-            residual_connection_option=(
-                config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
-            ),
-            residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=(config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY),
-            last_layer_bias_option=(
-                config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-            ),
-            apply_output_pipeline_flag=(
-                config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-            ),
-            bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
         )
 
     def __default_input_boundary_options(
@@ -305,6 +266,3 @@ class BoundaryModelConfigFactory:
             bias_flag=self.stack_options.bias_flag,
             adaptive_augmentation_config=adaptive_augmentation_config,
         )
-
-    def __build_shared_adaptive_generator_stack_config(self) -> LayerStackConfig:
-        return self.adaptive_generator_stack_config_factory.build_shared_config()
