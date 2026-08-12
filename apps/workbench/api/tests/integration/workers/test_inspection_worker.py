@@ -65,6 +65,33 @@ class InspectionWorkerTests(unittest.TestCase):
         self.assertEqual(result.identity.catalog_key, "linears/linear")
         self.assertGreater(result.parameter_count, 0)
 
+    def test_worker_memory_limit_reaches_runtime_preflight_end_to_end(self) -> None:
+        package = ModelPackageCatalog(project_adapter_client()).select(
+            "transformer/linear"
+        )
+        executor = SubprocessInspectionExecutor(
+            InspectionWorkerLimits(
+                memory_bytes=(4 * 1024**3) - (256 * 1024**2),
+                cpu_count=1,
+                timeout_seconds=20,
+            )
+        )
+
+        with self.assertRaisesRegex(
+            InspectionFailure,
+            "memory-derived maximum",
+        ):
+            executor.inspect(
+                package,
+                InspectionRequest(
+                    preset="baseline",
+                    overrides={
+                        "vocab_size": 160_000,
+                        "model_dim": 1_024,
+                    },
+                ),
+            )
+
     def test_timeout_kills_the_worker_and_subsequent_inspection_works(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             child_pid_path = Path(tmp) / "child.pid"

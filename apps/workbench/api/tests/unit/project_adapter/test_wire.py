@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from model_runtime.cli import PROTOCOL_VERSION
+from model_runtime.inspection import InspectionRequest
 
 from emperor_workbench.failures import FailureKind
 from emperor_workbench.project_adapter import (
@@ -18,6 +19,37 @@ from ._support import _FakeOneShotProcess, _response
 
 
 class ProjectAdapterWireTests(unittest.TestCase):
+    def test_inspection_memory_limit_crosses_client_protocol_seam(self) -> None:
+        client = ProjectAdapterClient(("adapter",), persistent=False)
+        client.call = Mock(return_value={})  # type: ignore[method-assign]
+
+        with patch(
+            "emperor_workbench.project_adapter._client._decode_wire_result",
+            return_value=Mock(),
+        ):
+            client.inspect(
+                "linears/linear",
+                InspectionRequest(
+                    preset="baseline",
+                    overrides={"hidden_dim": 12},
+                    dataset="Mnist",
+                    experiment_task="image-classification",
+                    memory_limit_bytes=768 * 1024**2,
+                ),
+            )
+
+        client.call.assert_called_once_with(
+            "inspect",
+            {
+                "model_id": "linears/linear",
+                "preset": "baseline",
+                "overrides": {"hidden_dim": 12},
+                "dataset": "Mnist",
+                "experiment_task": "image-classification",
+                "memory_limit_bytes": 768 * 1024**2,
+            },
+        )
+
     def test_model_package_references_require_exact_identity_segments(self) -> None:
         client = ProjectAdapterClient(("adapter",), persistent=False)
         for model_type, model in (

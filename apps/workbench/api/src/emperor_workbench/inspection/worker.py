@@ -62,6 +62,7 @@ def _run_worker(request: InspectionWorkerRequest) -> dict[str, Any]:
                     overrides=parsed_overrides,
                     dataset=request.dataset,
                     experiment_task=request.experiment_task,
+                    memory_limit_bytes=request.memory_bytes,
                 )
             )
         except ModelPackageFailure as exc:
