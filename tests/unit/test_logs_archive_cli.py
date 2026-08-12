@@ -5,9 +5,23 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
-from models.project_cli.logs_archive import archive_logs
+from models.project_cli.logs_archive import USAGE, archive_logs
+
+
+class _FixedDatetime:
+    @classmethod
+    def now(cls) -> _FixedDatetime:
+        return cls()
+
+    def strftime(self, date_format: str) -> str:
+        if date_format != "%Y%m%d_%H%M%S":
+            raise AssertionError(date_format)
+        return "20240102_030405"
 
 
 class PortableLogArchiveCliTests(unittest.TestCase):
@@ -36,6 +50,60 @@ class PortableLogArchiveCliTests(unittest.TestCase):
                     "experiment space Ω/version_0/event",
                     archive.namelist(),
                 )
+
+    def test_help_and_planning_failure_keep_exact_streams_and_return_codes(
+        self,
+    ) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            result = archive_logs(["--help"])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(stdout.getvalue(), f"{USAGE}\n")
+        self.assertEqual(stderr.getvalue(), "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._project(root)
+            stdout = StringIO()
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = archive_logs([], repository_root=root)
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(
+            stderr.getvalue(),
+            "Error: ./logs not found. Run this command from the project "
+            f"directory.\n\n{USAGE}\n",
+        )
+
+    def test_default_archive_plan_keeps_name_and_success_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._project(root)
+            (root / "logs").mkdir()
+            expected_output = root / "logs_20240102_030405.zip"
+            stdout = StringIO()
+            stderr = StringIO()
+
+            with (
+                patch("models.project_cli.logs_archive.datetime", _FixedDatetime),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                result = archive_logs([], repository_root=root)
+
+            self.assertEqual(result, 0)
+            self.assertTrue(expected_output.is_file())
+            self.assertEqual(stderr.getvalue(), "")
+            self.assertEqual(
+                stdout.getvalue(),
+                f"Created archive: {expected_output}\n"
+                "Included files: 0\n"
+                "Archive size: 0.00 MiB\n",
+            )
 
     def test_archive_rejects_symlink_escape(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
