@@ -38,7 +38,10 @@ from emperor_workbench.run_plans._records import (
     TrainingRunPlanView,
     TrainingRunView,
 )
-from emperor_workbench.run_plans._search import search_from_spec
+from emperor_workbench.run_plans._search import (
+    preset_searches_from_plan,
+    search_from_spec,
+)
 from emperor_workbench.run_plans._selection import (
     SelectedTrainingInputs,
     require_package,
@@ -305,7 +308,7 @@ class RunPlanService:
                 index=index,
                 log_folder=log_folder,
                 monitors=monitor_names,
-                search=semantic_plan.search,
+                search=semantic_plan.search_for_preset(run.preset),
             )
             for index, run in enumerate(semantic_plan.runs, start=1)
         ]
@@ -376,7 +379,7 @@ class RunPlanService:
                 index=index,
                 log_folder=log_folder,
                 monitors=monitor_names,
-                search=semantic_plan.search,
+                search=semantic_plan.search_for_preset(semantic_run.preset),
             )
             runs.append(
                 replace(
@@ -420,6 +423,7 @@ class RunPlanService:
             runs=runs,
             summary=RunPlanProgressProjector.summarize(runs),
             snapshot_revisions=snapshot_revisions,
+            preset_searches=preset_searches_from_plan(semantic_plan),
         )
 
 

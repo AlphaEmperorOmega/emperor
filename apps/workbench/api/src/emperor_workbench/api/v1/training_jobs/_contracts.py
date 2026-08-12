@@ -161,12 +161,14 @@ class TrainingDatasetStartedProgressEventResponse(TrainingProgressEventBaseRespo
     type: Literal["dataset_started"]
     status: Literal["running"] | None = None
     params: TrainingProgressParams | None = None
+    resumedFrom: JsonObject | None = None
 
 
 class TrainingDatasetCompletedProgressEventResponse(TrainingProgressEventBaseResponse):
     type: Literal["dataset_completed"]
     status: Literal["running"] | None = None
     metrics: TrainingProgressMetricMap | None = None
+    resumedFrom: JsonObject | None = None
 
 
 class TrainingRunProgressEventResponse(TrainingProgressEventBaseResponse):

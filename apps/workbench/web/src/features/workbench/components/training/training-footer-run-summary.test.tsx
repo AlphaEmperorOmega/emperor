@@ -64,6 +64,7 @@ function plan(runs: TrainingRun[]): TrainingRunPlan {
     datasets: ["Mnist"],
     overrides: {},
     search: null,
+    presetSearches: { baseline: null },
     logFolder: "summary",
     isRandomSearch: false,
     runs,

@@ -12,6 +12,7 @@ import {
   type ConfigValue,
 } from "@/lib/api/schemas";
 import { modelIdentitySegmentSchema } from "@/lib/api/model-identity-schema";
+import modelRuntimeProgressEvents from "./model-runtime-progress-events.json";
 
 type ApiRequestOptions = {
   signal?: AbortSignal;
@@ -89,6 +90,18 @@ export const trainingRunPlanSchema = z.object({
       randomSamples: z.number().nullable().optional(),
     })
     .nullable(),
+  presetSearches: z
+    .record(
+      z
+        .object({
+          mode: z.enum(["grid", "random"]),
+          values: z.record(z.array(configValueSchema)),
+          randomSamples: z.number().nullable().optional(),
+        })
+        .nullable(),
+    )
+    .optional()
+    .default({}),
   logFolder: z.string(),
   isRandomSearch: z.boolean(),
   runs: z.array(trainingRunSchema),
@@ -112,23 +125,16 @@ export const trainingJobStatusSchema = z.enum([
   "cancelled",
 ]);
 
-const knownTrainingProgressEventTypes = [
+const workbenchProgressEventTypes = [
   "job_started",
   "started",
   "completed",
   "cancelled",
-  "error",
-  "dataset_started",
-  "dataset_completed",
-  "epoch_started",
-  "step",
-  "validation",
-  "fit_completed",
-  "test_completed",
-  "cluster_initialized",
-  "neuron_added",
-  "neurons_added",
 ] as const;
+const knownTrainingProgressEventTypes = [
+  ...workbenchProgressEventTypes,
+  ...Object.keys(modelRuntimeProgressEvents.events),
+];
 const knownTrainingProgressEventTypeSet: ReadonlySet<string> = new Set(
   knownTrainingProgressEventTypes,
 );
@@ -188,12 +194,14 @@ const trainingDatasetStartedEventSchema = trainingProgressEventBaseSchema.extend
   type: z.literal("dataset_started"),
   status: z.literal("running").nullable().optional(),
   params: jsonObjectSchema.nullable().optional(),
+  resumedFrom: jsonObjectSchema.nullable().optional(),
 });
 
 const trainingDatasetCompletedEventSchema = trainingProgressEventBaseSchema.extend({
   type: z.literal("dataset_completed"),
   status: z.enum(["running", "completed"]).nullable().optional(),
   metrics: jsonObjectSchema.nullable().optional(),
+  resumedFrom: jsonObjectSchema.nullable().optional(),
 });
 
 const trainingRunProgressEventSchema = trainingProgressEventBaseSchema.extend({

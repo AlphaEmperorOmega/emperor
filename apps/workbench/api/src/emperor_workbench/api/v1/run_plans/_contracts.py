@@ -143,6 +143,9 @@ class TrainingRunPlanResponse(ApiResponseModel):
     datasets: list[str] = Field(default_factory=list)
     overrides: ConfigOverrides = Field(default_factory=dict)
     search: TrainingSearchResponse | None = None
+    presetSearches: dict[str, TrainingSearchResponse | None] = Field(
+        default_factory=dict
+    )
     logFolder: str = ""
     isRandomSearch: bool = False
     runs: list[TrainingRunResponse] = Field(default_factory=list)

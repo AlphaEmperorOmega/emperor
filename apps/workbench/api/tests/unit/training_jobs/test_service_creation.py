@@ -217,6 +217,7 @@ class TrainingJobCreationTests(unittest.TestCase):
                     "datasets",
                     "overrides",
                     "search",
+                    "presetSearches",
                     "logFolder",
                     "isRandomSearch",
                     "runs",

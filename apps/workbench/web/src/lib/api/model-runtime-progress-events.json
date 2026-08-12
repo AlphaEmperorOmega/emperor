@@ -1,0 +1,77 @@
+{
+  "contextFields": [
+    "experimentTask",
+    "dataset",
+    "preset",
+    "presetKey",
+    "logDir",
+    "runId",
+    "runIndex",
+    "runTotal",
+    "totalEpochs"
+  ],
+  "events": {
+    "dataset_started": {
+      "fields": ["type", "status", "params", "resumedFrom"],
+      "optionalFields": ["resumedFrom"]
+    },
+    "dataset_completed": {
+      "fields": ["type", "status", "metrics", "resumedFrom"],
+      "optionalFields": ["resumedFrom"]
+    },
+    "error": {
+      "fields": ["type", "status", "error", "traceback"],
+      "optionalFields": []
+    },
+    "epoch_started": {
+      "fields": ["type", "status", "epoch", "step"],
+      "optionalFields": []
+    },
+    "step": {
+      "fields": ["type", "status", "epoch", "step", "batch", "metrics"],
+      "optionalFields": []
+    },
+    "validation": {
+      "fields": ["type", "status", "epoch", "step", "metrics"],
+      "optionalFields": []
+    },
+    "fit_completed": {
+      "fields": ["type", "status", "epoch", "step", "metrics"],
+      "optionalFields": []
+    },
+    "test_completed": {
+      "fields": ["type", "status", "epoch", "step", "metrics"],
+      "optionalFields": []
+    },
+    "cluster_initialized": {
+      "fields": [
+        "type",
+        "node",
+        "count",
+        "capacity",
+        "coordinates",
+        "coordinateCount",
+        "coordinatesTruncated"
+      ],
+      "optionalFields": []
+    },
+    "neuron_added": {
+      "fields": ["type", "coord", "node", "count", "capacity", "epoch", "step"],
+      "optionalFields": []
+    },
+    "neurons_added": {
+      "fields": [
+        "type",
+        "coordinates",
+        "coordinateCount",
+        "coordinatesTruncated",
+        "node",
+        "count",
+        "capacity",
+        "epoch",
+        "step"
+      ],
+      "optionalFields": []
+    }
+  }
+}
