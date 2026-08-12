@@ -114,6 +114,7 @@ class SelectedModelPackage:
                 "overrides": dict(raw_overrides),
                 "dataset": request.dataset,
                 "experiment_task": request.experiment_task,
+                "memory_limit_bytes": request.memory_limit_bytes,
             },
         )
 
