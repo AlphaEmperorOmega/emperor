@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import Callback, LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -229,6 +230,7 @@ def loader(num_batches: int = 1) -> DataLoader:
 
 
 class HaltingMonitorLifecycleTests(unittest.TestCase):
+    @pytest.mark.training
     def test_real_trainer_logs_exact_survival_metrics_and_updates_gate(self) -> None:
         torch.manual_seed(7)
         model = _HaltingTrainingModule(max_steps=3, threshold=1.0)
@@ -273,6 +275,7 @@ class HaltingMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._halting_layers, [])
         self.assertEqual(monitor._survival_history, {})
 
+    @pytest.mark.training
     def test_real_trainer_uses_global_step_cadence_and_bounded_history(self) -> None:
         torch.manual_seed(11)
         model = _HaltingTrainingModule(learning_rate=0.0)
@@ -294,6 +297,7 @@ class HaltingMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(len(model.logged_calls), len(SCALAR_SUFFIXES))
         self.assertEqual(observer.lengths, [0, 1, 1])
 
+    @pytest.mark.training
     def test_real_tensorboard_logger_receives_histograms_and_heatmap(self) -> None:
         torch.manual_seed(13)
         model = _HaltingTrainingModule(max_steps=1, learning_rate=0.0)
@@ -327,6 +331,7 @@ class HaltingMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(events.Histograms(ponder_tag)[0].step, 1)
         self.assertEqual(events.Images(heatmap_tag)[0].step, 1)
 
+    @pytest.mark.training
     def test_real_tensorboard_logger_skips_empty_histograms(self) -> None:
         model = _IdleHaltingTrainingModule()
         monitor = HaltingMonitorCallback(log_every_n_steps=1)
@@ -356,6 +361,7 @@ class HaltingMonitorLifecycleTests(unittest.TestCase):
         for metric in fit_trainer.logged_metrics.values():
             torch.testing.assert_close(metric, torch.zeros_like(metric))
 
+    @pytest.mark.training
     def test_real_trainer_exception_invokes_monitor_cleanup(self) -> None:
         model = _HaltingTrainingModule(
             fail_after_forward=True,

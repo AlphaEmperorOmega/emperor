@@ -11,9 +11,6 @@ from emperor.experiments import (
     experiment_task_name,
     resolve_experiment_task,
 )
-from model_runtime.packages.configuration_metadata import (
-    configuration_field_metadata,
-)
 from model_runtime.packages.datasets import (
     dataset_cli_name,
     dataset_name,
@@ -28,7 +25,17 @@ from model_runtime.packages.metadata import ModelMetadata
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
+    from model_runtime.packages.runtime_defaults import RuntimeDefaultsSpec
+    from model_runtime.runs._handoff import RunExperiment
     from model_runtime.runs.artifacts import RunArtifacts
+
+
+def _runtime_default_values(
+    value: object,
+) -> Mapping[str, object] | None:
+    if value is not None and not isinstance(value, Mapping):
+        raise TypeError("Runtime Defaults values must be a mapping.")
+    return cast(Mapping[str, object] | None, value)
 
 
 class _PackageAdapter(Protocol):
@@ -36,11 +43,11 @@ class _PackageAdapter(Protocol):
 
     def load_metadata(self) -> ModelMetadata: ...
 
-    def load_runtime_options_type(self) -> type: ...
+    def load_runtime_options_type(self) -> type[Any]: ...
 
     def bind_runtime_defaults(self, values: Mapping[str, object] | None) -> Any: ...
 
-    def load_preset_type(self) -> type: ...
+    def load_preset_type(self) -> type[Any]: ...
 
     def load_presets(self) -> Any: ...
 
@@ -48,7 +55,7 @@ class _PackageAdapter(Protocol):
         self,
         presets: Any,
         preset: Any,
-        dataset: type,
+        dataset: type[Any],
         **kwargs: Any,
     ) -> ModelConfig: ...
 
@@ -61,7 +68,7 @@ class _PackageAdapter(Protocol):
         experiment_task: ExperimentTask,
         model_package: ModelPackage,
         run_artifacts: RunArtifacts,
-    ) -> Any: ...
+    ) -> RunExperiment: ...
 
 
 _INITIALIZATION_MISSING = object()
@@ -85,12 +92,17 @@ class ModelPackage:
     )
 
     def __post_init__(self) -> None:
-        if not isinstance(self.identity, ModelIdentity):
+        self._validate_identity(self.identity)
+        self._validate_inspection_limits(self.inspection_construction_limits)
+
+    @staticmethod
+    def _validate_identity(identity: object) -> None:
+        if not isinstance(identity, ModelIdentity):
             raise TypeError("ModelPackage identity must be a ModelIdentity.")
-        if not isinstance(
-            self.inspection_construction_limits,
-            InspectionConstructionLimits,
-        ):
+
+    @staticmethod
+    def _validate_inspection_limits(limits: object) -> None:
+        if not isinstance(limits, InspectionConstructionLimits):
             raise TypeError(
                 "ModelPackage inspection limits must be InspectionConstructionLimits."
             )
@@ -122,11 +134,24 @@ class ModelPackage:
         return self._initialize_once("_metadata", self._adapter.load_metadata)
 
     @property
-    def runtime_defaults(self):
-        return self.metadata.runtime_defaults
+    def runtime_defaults_spec(self) -> RuntimeDefaultsSpec:
+        from model_runtime.packages.runtime_defaults import (
+            runtime_defaults_spec_for_package,
+        )
+
+        return self._initialize_once(
+            "_runtime_defaults_spec",
+            lambda: runtime_defaults_spec_for_package(self),
+        )
 
     @property
-    def runtime_options_type(self) -> type:
+    def runtime_defaults(self) -> Any:
+        """Expose the legacy defaults module while downstream owners migrate."""
+
+        return self.runtime_defaults_spec._config_module
+
+    @property
+    def runtime_options_type(self) -> type[Any]:
         return self._initialize_once(
             "_runtime_options_type",
             self._adapter.load_runtime_options_type,
@@ -136,9 +161,8 @@ class ModelPackage:
         self,
         values: Mapping[str, object] | None = None,
     ) -> Any:
-        if values is not None and not isinstance(values, Mapping):
-            raise TypeError("Runtime Defaults values must be a mapping.")
-        runtime = self._adapter.bind_runtime_defaults(values)
+        runtime_values = _runtime_default_values(values)
+        runtime = self._adapter.bind_runtime_defaults(runtime_values)
         if type(runtime) is not self.runtime_options_type:
             raise TypeError(
                 f"Model Package '{self.catalog_key}' returned "
@@ -164,7 +188,7 @@ class ModelPackage:
         return self.metadata.search_space_items
 
     @property
-    def preset_type(self) -> type:
+    def preset_type(self) -> type[Any]:
         return self._initialize_once("_preset_type", self._adapter.load_preset_type)
 
     @property
@@ -190,19 +214,23 @@ class ModelPackage:
                 "interpreter."
             )
         overrides = interpreter(tensor_shapes)
-        if not isinstance(overrides, Mapping) or any(
-            not isinstance(key, str) for key in overrides
-        ):
+        if not isinstance(overrides, Mapping):
             raise ValueError(
                 f"Model package '{self.catalog_key}' returned invalid checkpoint "
                 "configuration overrides."
             )
-        return dict(overrides)
+        overrides_mapping = cast(Mapping[object, Any], overrides)
+        if any(not isinstance(key, str) for key in overrides_mapping):
+            raise ValueError(
+                f"Model package '{self.catalog_key}' returned invalid checkpoint "
+                "configuration overrides."
+            )
+        return {cast(str, key): value for key, value in overrides_mapping.items()}
 
     def build_configuration(
         self,
         preset: Any = None,
-        dataset: type | None = None,
+        dataset: type[Any] | None = None,
         **kwargs: Any,
     ) -> ModelConfig:
         selected_preset = self.default_preset if preset is None else preset
@@ -223,7 +251,7 @@ class ModelPackage:
         *,
         experiment_task: ExperimentTask,
         run_artifacts: RunArtifacts,
-    ) -> Any:
+    ) -> RunExperiment:
         return self._adapter.build_experiment(
             preset,
             experiment_task=experiment_task,
@@ -231,9 +259,9 @@ class ModelPackage:
             run_artifacts=run_artifacts,
         )
 
-    def resolve_preset(self, preset_name: str):
+    def resolve_preset(self, preset_name: str) -> Any:
         try:
-            return self.preset_type.get_member(preset_name)
+            return cast(Any, self.preset_type).get_member(preset_name)
         except ValueError as exc:
             raise ValueError(
                 f"Unknown preset '{preset_name}' for model '{self.catalog_key}'."
@@ -242,7 +270,7 @@ class ModelPackage:
     def preset_name(self, preset: Any) -> str:
         cli_name = getattr(self.preset_type, "cli_name", None)
         if callable(cli_name):
-            return cli_name(preset.name)
+            return cast(str, cli_name(preset.name))
         return preset.name.lower().replace("_", "-")
 
     def preset_description(self, preset: Any) -> str:
@@ -258,7 +286,7 @@ class ModelPackage:
         locked_fields = getattr(self.presets, "locked_fields", None)
         if not callable(locked_fields):
             return {}
-        return dict(locked_fields(preset))
+        return dict(cast(Mapping[str, Any], locked_fields(preset)))
 
     def resolve_experiment_task(
         self,
@@ -290,7 +318,7 @@ class ModelPackage:
     def dataset_options_for_task(
         self,
         experiment_task: str | ExperimentTask | None = None,
-    ) -> list[type]:
+    ) -> list[type[Any]]:
         task = self.resolve_experiment_task(experiment_task)
         return list(self.dataset_metadata[task])
 
@@ -304,7 +332,7 @@ class ModelPackage:
         self,
         dataset: str | None,
         experiment_task: str | ExperimentTask | None = None,
-    ) -> type:
+    ) -> type[Any]:
         options = self.dataset_options_for_task(experiment_task)
         if dataset is None:
             return options[0]
@@ -334,13 +362,13 @@ class ModelPackage:
         self,
         datasets: list[str] | None,
         experiment_task: str | ExperimentTask | None = None,
-    ) -> list[type]:
+    ) -> list[type[Any]]:
         if not datasets:
             return [self.resolve_dataset(None, experiment_task)]
         resolved = [
             self.resolve_dataset(dataset, experiment_task) for dataset in datasets
         ]
-        unique: list[type] = []
+        unique: list[type[Any]] = []
         seen: set[str] = set()
         for dataset in resolved:
             name = dataset_name(dataset)
@@ -349,14 +377,14 @@ class ModelPackage:
                 unique.append(dataset)
         return unique
 
-    def monitor_options(self):
+    def monitor_options(self) -> list[Any]:
         return list(self.monitor_metadata)
 
-    def resolve_monitors(self, monitor_names: list[str] | None):
+    def resolve_monitors(self, monitor_names: list[str] | None) -> list[Any]:
         if not monitor_names:
             return []
         options_by_name = {option.name: option for option in self.monitor_options()}
-        selected = []
+        selected: list[Any] = []
         seen: set[str] = set()
         unknown: list[str] = []
         for name in monitor_names:
@@ -375,21 +403,6 @@ class ModelPackage:
                 f"{', '.join(unknown)}. Valid monitors: {valid}."
             )
         return selected
-
-    def configuration_field_metadata(
-        self,
-        *,
-        include_search_space: bool = False,
-    ) -> dict[str, dict[str, Any]]:
-        module = (
-            self.metadata.search_space
-            if include_search_space
-            else self.runtime_defaults
-        )
-        return configuration_field_metadata(
-            module,
-            include_search_space=include_search_space,
-        )
 
 
 __all__ = ["ModelPackage"]

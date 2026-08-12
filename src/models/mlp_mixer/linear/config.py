@@ -56,6 +56,7 @@ MONITOR_LOG_EVERY_N_STEPS: int = 100
 # Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
+SEED: int | None = None
 
 # Callback
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0

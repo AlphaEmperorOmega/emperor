@@ -30,14 +30,12 @@ from emperor.layers import (
 )
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
-    ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
 
-from . import config, dataset_options
+from . import config
 from .config_builder import TransformerLinearAdaptiveConfigBuilder
-from .model import Model
 from .runtime_defaults import runtime_from_flat
 
 
@@ -164,9 +162,7 @@ _COMMON_OVERRIDES = {
         "recurrent_halting_threshold": _RECOMMENDED_HALTING_THRESHOLD,
         "memory_flag": True,
     },
-    "RESIDUAL": {
-        "stack_residual_connection_option": AdditiveResidualConfig
-    },
+    "RESIDUAL": {"stack_residual_connection_option": AdditiveResidualConfig},
     "RESIDUAL_POST_NORM": {
         "stack_residual_connection_option": AdditiveResidualConfig,
         "encoder_layer_norm_position": LayerNormPositionOptions.AFTER,
@@ -319,17 +315,3 @@ class Experiment(ExperimentBase):
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
-
-    def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[
-            dataset_options.DEFAULT_EXPERIMENT_TASK
-        ]
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_preset_enum(self) -> type[BaseOptions]:
-        return ExperimentPreset

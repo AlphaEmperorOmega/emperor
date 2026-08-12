@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from emperor.attention import MixerAttentionConfig
 from emperor.experts import (
     MixtureOfExpertsConfig,
@@ -18,7 +16,6 @@ from emperor.layers import (
     LayerStackConfig,
     MirroredLayerStackConfig,
     RecurrentLayerConfig,
-    ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.patch import LinearPatchEmbeddingConfig
@@ -29,26 +26,25 @@ from emperor.transformer import (
     TransformerEncoderLayerConfig,
 )
 
+from ._control_options import (
+    ControllerStackSource,
+    ControlOptions,
+    GateOptions,
+    HaltingOptions,
+    MemoryOptions,
+    StackOptions,
+    channel_mixer_control_options,
+    expert_control_options,
+    main_control_options,
+    submodule_stack_options,
+    token_mixer_control_options,
+)
 from ._residual import (
     ResidualStackSource,
     build_residual_config,
     resolve_residual_stack_options,
 )
 from .runtime_options import RuntimeOptions
-
-
-@dataclass(frozen=True)
-class _StackOptions:
-    hidden_dim: int
-    num_layers: int
-    activation: ActivationOptions
-    dropout_probability: float
-    layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig] | None
-    residual_model_flag: bool
-    last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
-    bias_flag: bool
 
 
 def sequence_length(runtime: RuntimeOptions) -> int:
@@ -87,7 +83,7 @@ def _residual(runtime: RuntimeOptions, option, model_flag):
                 ),
                 bias_flag=runtime.residual_stack_bias_flag,
             ),
-            _submodule_stack_defaults(runtime),
+            submodule_stack_options(runtime),
         ),
     )
 
@@ -121,7 +117,8 @@ def _affine_stack(
     bias_flag: bool,
     mirrored: bool = False,
     backend: bool = True,
-    control_prefix: str | None = None,
+    control_options: ControlOptions | None = None,
+    control_name: str | None = None,
 ):
     stack_type = MirroredLayerStackConfig if mirrored else LayerStackConfig
     stack_depth = num_layers
@@ -160,14 +157,14 @@ def _affine_stack(
             layer_model_config=linear_config,
         ),
     )
-    if control_prefix is None:
+    if control_options is None:
         return stack
     if input_dim is None or output_dim is None or input_dim != output_dim:
         raise ValueError(
-            f"{control_prefix} controls require equal concrete input/output "
+            f"{control_name} controls require equal concrete input/output "
             f"dimensions, got input_dim={input_dim}, output_dim={output_dim}"
         )
-    defaults = _StackOptions(
+    defaults = StackOptions(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         activation=activation,
@@ -181,7 +178,7 @@ def _affine_stack(
     )
     return _configure_controls(
         runtime,
-        prefix=control_prefix,
+        options=control_options,
         model_config=stack,
         control_stack=stack,
         defaults=defaults,
@@ -280,7 +277,7 @@ def _expert_stack(
         bias_flag=runtime.expert_bias_flag,
         backend=True,
     )
-    defaults = _StackOptions(
+    defaults = StackOptions(
         hidden_dim=runtime.expert_stack_hidden_dim,
         num_layers=runtime.expert_stack_num_layers,
         activation=runtime.expert_stack_activation,
@@ -294,7 +291,7 @@ def _expert_stack(
     )
     return _configure_controls(
         runtime,
-        prefix="expert",
+        options=expert_control_options(runtime),
         model_config=stack,
         control_stack=stack,
         defaults=defaults,
@@ -319,7 +316,7 @@ def _mixture_model_config(
     last_layer_bias_option,
     apply_output_pipeline_flag: bool,
     mirrored: bool,
-    control_prefix: str,
+    control_options: ControlOptions,
 ) -> MixtureOfExpertsModelConfig:
     if runtime.routing_initialization_mode not in (
         RoutingInitializationMode.LAYER,
@@ -392,7 +389,7 @@ def _mixture_model_config(
         ),
         stack_config=mixture_stack,
     )
-    defaults = _StackOptions(
+    defaults = StackOptions(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         activation=activation,
@@ -406,7 +403,7 @@ def _mixture_model_config(
     )
     return _configure_controls(
         runtime,
-        prefix=control_prefix,
+        options=control_options,
         model_config=model_config,
         control_stack=mixture_stack,
         defaults=defaults,
@@ -433,7 +430,7 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
             runtime.token_mixer_stack_apply_output_pipeline_flag
         ),
         mirrored=False,
-        control_prefix="token_mixer",
+        control_options=token_mixer_control_options(runtime),
     )
 
 
@@ -456,68 +453,18 @@ def _channel_mixing_model(runtime: RuntimeOptions):
             runtime.channel_mixer_stack_apply_output_pipeline_flag
         ),
         mirrored=True,
-        control_prefix="channel_mixer",
-    )
-
-
-def _option_name(prefix: str, suffix: str) -> str:
-    return f"{prefix}_{suffix}" if prefix else suffix
-
-
-def _submodule_stack_defaults(runtime: RuntimeOptions) -> _StackOptions:
-    return _StackOptions(
-        hidden_dim=runtime.submodule_stack_hidden_dim,
-        num_layers=runtime.submodule_stack_num_layers,
-        activation=runtime.submodule_stack_activation,
-        dropout_probability=runtime.submodule_stack_dropout_probability,
-        layer_norm_position=runtime.submodule_stack_layer_norm_position,
-        residual_connection_option=(runtime.submodule_stack_residual_connection_option),
-        residual_model_flag=runtime.submodule_stack_residual_model_flag,
-        last_layer_bias_option=runtime.submodule_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(runtime.submodule_stack_apply_output_pipeline_flag),
-        bias_flag=runtime.submodule_stack_bias_flag,
-    )
-
-
-def _resolved_controller_options(
-    runtime: RuntimeOptions,
-    *,
-    source_prefix: str,
-    defaults: _StackOptions,
-) -> _StackOptions:
-    if not getattr(runtime, f"{source_prefix}_independent_flag"):
-        return defaults
-
-    def resolved(field_name: str):
-        value = getattr(runtime, f"{source_prefix}_{field_name}")
-        return getattr(defaults, field_name) if value is None else value
-
-    return _StackOptions(
-        hidden_dim=resolved("hidden_dim"),
-        num_layers=resolved("num_layers"),
-        activation=resolved("activation"),
-        dropout_probability=resolved("dropout_probability"),
-        layer_norm_position=resolved("layer_norm_position"),
-        residual_connection_option=resolved("residual_connection_option"),
-        residual_model_flag=resolved("residual_model_flag"),
-        last_layer_bias_option=resolved("last_layer_bias_option"),
-        apply_output_pipeline_flag=resolved("apply_output_pipeline_flag"),
-        bias_flag=resolved("bias_flag"),
+        control_options=channel_mixer_control_options(runtime),
     )
 
 
 def _controller_stack_config(
     runtime: RuntimeOptions,
     *,
-    source_prefix: str,
-    defaults: _StackOptions,
+    source: ControllerStackSource,
+    defaults: StackOptions,
     output_dim: int | None = None,
 ) -> LayerStackConfig:
-    options = _resolved_controller_options(
-        runtime,
-        source_prefix=source_prefix,
-        defaults=defaults,
-    )
+    options = source.resolve(defaults)
     return _affine_stack(
         runtime,
         input_dim=None,
@@ -543,24 +490,19 @@ def _controller_stack_config(
 def _configured_gate(
     runtime: RuntimeOptions,
     *,
-    prefix: str,
-    defaults: _StackOptions,
+    options: GateOptions,
+    defaults: StackOptions,
     model_dim: int | None,
-    recurrent: bool,
 ):
-    role = "recurrent_" if recurrent else ""
-    if not getattr(runtime, _option_name(prefix, f"{role}stack_gate_flag")):
+    if not options.enabled:
         return None
     return GateConfig(
         gate_dim=model_dim,
-        option=getattr(runtime, _option_name(prefix, f"{role}gate_option")),
-        activation=getattr(
-            runtime,
-            _option_name(prefix, f"{role}gate_activation"),
-        ),
+        option=options.option,
+        activation=options.activation,
         model_config=_controller_stack_config(
             runtime,
-            source_prefix=_option_name(prefix, f"{role}gate_stack"),
+            source=options.stack,
             defaults=defaults,
         ),
     )
@@ -569,34 +511,22 @@ def _configured_gate(
 def _configured_halting(
     runtime: RuntimeOptions,
     *,
-    prefix: str,
-    defaults: _StackOptions,
+    options: HaltingOptions,
+    defaults: StackOptions,
     model_dim: int | None,
-    recurrent: bool,
 ):
-    role = "recurrent_" if recurrent else ""
-    if not getattr(runtime, _option_name(prefix, f"{role}stack_halting_flag")):
+    if not options.enabled:
         return None
-    option = getattr(runtime, _option_name(prefix, f"{role}halting_option"))
-    return option(
+    return options.implementation(
         input_dim=model_dim,
-        threshold=getattr(
-            runtime,
-            _option_name(prefix, f"{role}halting_threshold"),
-        ),
+        threshold=options.threshold,
         min_steps=1,
         ponder_cost_weight=1.0,
-        dropout_probability=getattr(
-            runtime,
-            _option_name(prefix, f"{role}halting_dropout"),
-        ),
-        hidden_state_mode=getattr(
-            runtime,
-            _option_name(prefix, f"{role}halting_hidden_state_mode"),
-        ),
+        dropout_probability=options.dropout_probability,
+        hidden_state_mode=options.hidden_state_mode,
         halting_gate_config=_controller_stack_config(
             runtime,
-            source_prefix=_option_name(prefix, f"{role}halting_stack"),
+            source=options.stack,
             defaults=defaults,
             output_dim=2,
         ),
@@ -606,42 +536,21 @@ def _configured_halting(
 def _configured_memory(
     runtime: RuntimeOptions,
     *,
-    prefix: str,
-    defaults: _StackOptions,
+    options: MemoryOptions | None,
+    defaults: StackOptions,
     model_dim: int | None,
-    recurrent: bool,
 ):
-    if recurrent:
-        if prefix or not runtime.recurrent_memory_flag:
-            return None
-    elif not getattr(runtime, _option_name(prefix, "memory_flag")):
+    if options is None or not options.enabled:
         return None
-    option_prefix = prefix
-    option = getattr(runtime, _option_name(option_prefix, "memory_option"))
-    return option(
+    return options.implementation(
         input_dim=model_dim,
         output_dim=model_dim,
-        memory_position_option=getattr(
-            runtime,
-            _option_name(option_prefix, "memory_position_option"),
-        ),
-        test_time_training_learning_rate=getattr(
-            runtime,
-            _option_name(
-                option_prefix,
-                "memory_test_time_training_learning_rate",
-            ),
-        ),
-        test_time_training_num_inner_steps=getattr(
-            runtime,
-            _option_name(
-                option_prefix,
-                "memory_test_time_training_num_inner_steps",
-            ),
-        ),
+        memory_position_option=options.position,
+        test_time_training_learning_rate=(options.test_time_training_learning_rate),
+        test_time_training_num_inner_steps=(options.test_time_training_num_inner_steps),
         model_config=_controller_stack_config(
             runtime,
-            source_prefix=_option_name(option_prefix, "memory_stack"),
+            source=options.stack,
             defaults=defaults,
         ),
     )
@@ -650,27 +559,25 @@ def _configured_memory(
 def _configure_controls(
     runtime: RuntimeOptions,
     *,
-    prefix: str,
+    options: ControlOptions,
     model_config,
     control_stack,
-    defaults: _StackOptions,
+    defaults: StackOptions,
     model_dim: int | None,
     shared_halting: bool = True,
     shared_memory: bool = True,
 ):
     control_stack.layer_config.gate_config = _configured_gate(
         runtime,
-        prefix=prefix,
+        options=options.gate,
         defaults=defaults,
         model_dim=model_dim,
-        recurrent=False,
     )
     halting_config = _configured_halting(
         runtime,
-        prefix=prefix,
+        options=options.halting,
         defaults=defaults,
         model_dim=model_dim,
-        recurrent=False,
     )
     if shared_halting:
         control_stack.shared_halting_config = halting_config
@@ -678,69 +585,51 @@ def _configure_controls(
         control_stack.layer_config.halting_config = halting_config
     memory_config = _configured_memory(
         runtime,
-        prefix=prefix,
+        options=options.memory,
         defaults=defaults,
         model_dim=model_dim,
-        recurrent=False,
     )
     if shared_memory:
         control_stack.shared_memory_config = memory_config
     else:
         control_stack.layer_config.memory_config = memory_config
-    if not getattr(runtime, _option_name(prefix, "recurrent_flag")):
+    recurrent = options.recurrent
+    if not recurrent.enabled:
         return model_config
     return RecurrentLayerConfig(
         input_dim=model_dim,
         output_dim=model_dim,
-        max_steps=getattr(
-            runtime,
-            _option_name(prefix, "recurrent_max_steps"),
-        ),
-        gradient_transition_count=(
-            runtime.recurrent_gradient_transition_count if not prefix else None
-        ),
-        initial_iterations=(
-            runtime.recurrent_initial_iterations
-            if not prefix
-            else getattr(runtime, _option_name(prefix, "recurrent_max_steps"))
-        ),
-        iteration_increment=runtime.recurrent_iteration_increment,
+        max_steps=recurrent.max_steps,
+        gradient_transition_count=recurrent.gradient_transition_count,
+        initial_iterations=recurrent.initial_iterations,
+        iteration_increment=recurrent.iteration_increment,
         forward_calls_before_iteration_increment=(
-            runtime.recurrent_forward_calls_before_iteration_increment
+            recurrent.forward_calls_before_iteration_increment
         ),
-        recurrent_layer_norm_position=getattr(
-            runtime,
-            _option_name(prefix, "recurrent_layer_norm_position"),
-        ),
+        recurrent_layer_norm_position=recurrent.layer_norm_position,
         block_config=model_config,
         gate_config=_configured_gate(
             runtime,
-            prefix=prefix,
+            options=recurrent.gate,
             defaults=defaults,
             model_dim=model_dim,
-            recurrent=True,
         ),
         residual_config=_residual(
             runtime,
-            getattr(
-                runtime,
-                _option_name(prefix, "recurrent_residual_connection_option"),
-            ),
-            getattr(runtime, _option_name(prefix, "recurrent_residual_model_flag")),
+            recurrent.residual_connection_option,
+            recurrent.residual_model_flag,
         ),
         halting_config=_configured_halting(
             runtime,
-            prefix=prefix,
+            options=recurrent.halting,
             defaults=defaults,
             model_dim=model_dim,
-            recurrent=True,
         ),
         memory_config=_configured_memory(
             runtime,
-            prefix=prefix,
+            options=recurrent.memory,
             defaults=defaults,
             model_dim=model_dim,
-            recurrent=True,
         ),
     )
 
@@ -795,10 +684,10 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
     )
     return _configure_controls(
         runtime,
-        prefix="",
+        options=main_control_options(runtime),
         model_config=stack,
         control_stack=stack,
-        defaults=_submodule_stack_defaults(runtime),
+        defaults=submodule_stack_options(runtime),
         model_dim=runtime.hidden_dim,
     )
 

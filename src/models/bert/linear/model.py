@@ -184,33 +184,17 @@ class Model(BertPretrainingExperiment):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
-        input_ids, attention_mask, token_type_ids = self.__prepare_inputs(
+        input_ids, attention_mask, token_type_ids = self._prepare_model_inputs(
             input_ids,
             attention_mask,
             token_type_ids,
+            token_type_vocab_size=self.token_type_embedding.num_embeddings,
         )
         hidden = self.__build_input_embeddings(input_ids, token_type_ids)
         sequence_output, auxiliary_loss = self.__run_encoder(hidden, attention_mask)
         mlm_logits = self.__build_mlm_logits(sequence_output)
         nsp_logits = self.__build_nsp_logits(sequence_output)
         return mlm_logits, nsp_logits, auxiliary_loss
-
-    def __prepare_inputs(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor | None,
-        token_type_ids: Tensor | None,
-    ) -> tuple[Tensor, Tensor, Tensor]:
-        input_ids = input_ids.to(self.device)
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-        else:
-            attention_mask = attention_mask.to(self.device)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros_like(input_ids)
-        else:
-            token_type_ids = token_type_ids.to(self.device)
-        return input_ids, attention_mask, token_type_ids
 
     def __build_input_embeddings(
         self,

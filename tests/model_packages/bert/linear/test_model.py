@@ -7,6 +7,7 @@ from dataclasses import replace
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
 import torch
 from torch import nn
 
@@ -35,7 +36,6 @@ from model_runtime.packages import (
     PresetLock,
     iter_supported_config_keys,
 )
-from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.bert.linear.config_builder import (
     BertLinearConfigBuilder,
 )
@@ -45,7 +45,7 @@ from models.bert.linear.presets import (
     ExperimentPreset,
     ExperimentPresets,
 )
-from models.bert.linear.runtime_defaults import runtime_from_config, runtime_from_flat
+from models.bert.linear.runtime_defaults import runtime_from_config
 from models.bert.linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
@@ -60,7 +60,7 @@ from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.config_overrides import print_config_options
 from models.experiment_cli_parser import get_experiment_parser
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
@@ -71,8 +71,10 @@ _TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE = (
 _TRANSFORMER_ENCODER_LAYER_TYPE = TransformerEncoderLayerConfig().registry_owner()
 
 
-def _default_builder_kwargs() -> dict:
-    return linear_builder_kwargs_from_flat({}, config)
+def _default_runtime() -> RuntimeOptions:
+    runtime = model_package("bert/linear").bind_runtime_defaults()
+    assert isinstance(runtime, RuntimeOptions)
+    return runtime
 
 
 def _build_typed_config(**overrides):
@@ -86,31 +88,31 @@ def _presets() -> ExperimentPresets:
 
 
 def _embedding_options() -> BertEmbeddingOptions:
-    return _default_builder_kwargs()["embedding_options"]
+    return _default_runtime().embedding_options
 
 
 def _encoder_options() -> TransformerEncoderOptions:
-    return _default_builder_kwargs()["encoder_options"]
+    return _default_runtime().encoder_options
 
 
 def _positional_embedding_options() -> TransformerPositionalEmbeddingOptions:
-    return _default_builder_kwargs()["positional_embedding_options"]
+    return _default_runtime().positional_embedding_options
 
 
 def _attention_options() -> TransformerAttentionOptions:
-    return _default_builder_kwargs()["attention_options"]
+    return _default_runtime().attention_options
 
 
 def _feed_forward_options() -> TransformerFeedForwardOptions:
-    return _default_builder_kwargs()["feed_forward_options"]
+    return _default_runtime().feed_forward_options
 
 
 def _mlm_head_options() -> BertMlmHeadOptions:
-    return _default_builder_kwargs()["mlm_head_options"]
+    return _default_runtime().mlm_head_options
 
 
 def _nsp_head_options() -> BertNspHeadOptions:
-    return _default_builder_kwargs()["nsp_head_options"]
+    return _default_runtime().nsp_head_options
 
 
 class TestBertLinearModel(unittest.TestCase):
@@ -194,7 +196,7 @@ class TestBertLinearModel(unittest.TestCase):
         nsp_head_options = BertNspHeadOptions(
             pooler_activation=ActivationOptions.SIGMOID,
             pooler_bias_flag=False,
-            output_dim=3,
+            output_dim=2,
             head_bias_flag=False,
         )
         flat_kwargs = {
@@ -234,34 +236,31 @@ class TestBertLinearModel(unittest.TestCase):
             ),
             "nsp_pooler_activation": nsp_head_options.pooler_activation,
             "nsp_pooler_bias_flag": nsp_head_options.pooler_bias_flag,
-            "nsp_output_dim": nsp_head_options.output_dim,
             "nsp_head_bias_flag": nsp_head_options.head_bias_flag,
         }
 
-        builder_kwargs = linear_builder_kwargs_from_flat(flat_kwargs, config)
-        self.assertEqual(builder_kwargs["embedding_options"], embedding_options)
-        self.assertEqual(builder_kwargs["mlm_head_options"], mlm_head_options)
-        self.assertEqual(builder_kwargs["nsp_head_options"], nsp_head_options)
-        self.assertNotIn("embedding_dropout_probability", builder_kwargs)
-
-        flat_runtime = runtime_from_flat(flat_kwargs, config)
-        typed_runtime = replace(runtime_from_config(), **builder_kwargs)
-        self.assertEqual(flat_runtime, typed_runtime)
+        package = model_package("bert/linear")
+        flat_runtime = package.bind_runtime_defaults(flat_kwargs)
+        self.assertEqual(flat_runtime.embedding_options, embedding_options)
+        self.assertEqual(flat_runtime.mlm_head_options, mlm_head_options)
+        self.assertEqual(flat_runtime.nsp_head_options, nsp_head_options)
+        self.assertFalse(hasattr(flat_runtime, "embedding_dropout_probability"))
 
         flat_cfg = BertLinearConfigBuilder(runtime=flat_runtime).build()
-        typed_cfg = BertLinearConfigBuilder(runtime=typed_runtime).build()
-
-        self.assertEqual(flat_cfg, typed_cfg)
         self.assertEqual(
-            typed_cfg.experiment_config.boundary_config.embedding_options,
+            flat_cfg,
+            package.build_configuration(config_overrides=flat_kwargs),
+        )
+        self.assertEqual(
+            flat_cfg.experiment_config.boundary_config.embedding_options,
             embedding_options,
         )
         self.assertEqual(
-            typed_cfg.experiment_config.boundary_config.mlm_head_options,
+            flat_cfg.experiment_config.boundary_config.mlm_head_options,
             mlm_head_options,
         )
         self.assertEqual(
-            typed_cfg.experiment_config.boundary_config.nsp_head_options,
+            flat_cfg.experiment_config.boundary_config.nsp_head_options,
             nsp_head_options,
         )
 
@@ -278,23 +277,19 @@ class TestBertLinearModel(unittest.TestCase):
         with self.assertRaises(TypeError):
             BertLinearConfigBuilder(2)
 
-    def test_typed_runtime_builds_the_flat_configuration(self):
+    def test_bound_runtime_builds_the_flat_configuration(self):
         flat_options = {
             "batch_size": 2,
             "hidden_dim": 16,
             "stack_gate_flag": True,
         }
-        runtime = runtime_from_flat(flat_options, config)
+        package = model_package("bert/linear")
+        runtime = package.bind_runtime_defaults(flat_options)
 
         self.assertIsInstance(runtime, RuntimeOptions)
         self.assertEqual(
             BertLinearConfigBuilder(runtime=runtime).build(),
-            BertLinearConfigBuilder(
-                runtime=replace(
-                    runtime_from_config(),
-                    **linear_builder_kwargs_from_flat(flat_options, config),
-                )
-            ).build(),
+            package.build_configuration(config_overrides=flat_options),
         )
 
     def test_bert_defaults_build_conventional_encoder_profile(self):
@@ -341,9 +336,9 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(config.HALTING_OUTPUT_DIM, 2)
 
     def test_main_stack_controls_build_into_encoder_stack(self):
-        builder_kwargs = _default_builder_kwargs()
-        builder_kwargs["stack_options"] = replace(
-            builder_kwargs["stack_options"],
+        runtime = _default_runtime()
+        stack_options = replace(
+            runtime.stack_options,
             residual_connection_option=AdditiveResidualConfig,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             apply_output_pipeline_flag=False,
@@ -351,7 +346,7 @@ class TestBertLinearModel(unittest.TestCase):
         )
 
         cfg = BertLinearConfigBuilder(
-            runtime=replace(runtime_from_config(), **builder_kwargs)
+            runtime=replace(runtime, stack_options=stack_options)
         ).build()
         encoder_stack = self._encoder_stack_config(cfg)
 
@@ -366,10 +361,10 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertFalse(encoder_stack.apply_output_pipeline_flag)
 
     def test_submodule_bias_inherits_main_stack_unless_explicitly_overridden(self):
-        defaults = _default_builder_kwargs()
-        stack_options = replace(defaults["stack_options"], bias_flag=False)
+        defaults = _default_runtime()
+        stack_options = replace(defaults.stack_options, bias_flag=False)
         layer_controller_options = replace(
-            defaults["layer_controller_options"],
+            defaults.layer_controller_options,
             stack_gate_flag=True,
         )
 
@@ -380,7 +375,7 @@ class TestBertLinearModel(unittest.TestCase):
         explicit_cfg = _build_typed_config(
             stack_options=stack_options,
             submodule_stack_options=replace(
-                defaults["submodule_stack_options"],
+                defaults.submodule_stack_options,
                 bias_flag=True,
             ),
             layer_controller_options=layer_controller_options,
@@ -397,49 +392,46 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertFalse(self._encoder_gate_bias_flag(flat_cfg))
 
     def test_independent_encoder_controller_stacks_override_dimensions(self):
-        builder_kwargs = _default_builder_kwargs()
-        layer_controller_options = builder_kwargs["layer_controller_options"]
-        dynamic_memory_options = builder_kwargs["dynamic_memory_options"]
-        builder_kwargs.update(
-            {
-                "submodule_stack_options": replace(
-                    builder_kwargs["submodule_stack_options"],
-                    hidden_dim=17,
+        runtime = _default_runtime()
+        layer_controller_options = runtime.layer_controller_options
+        dynamic_memory_options = runtime.dynamic_memory_options
+        runtime = replace(
+            runtime,
+            submodule_stack_options=replace(
+                runtime.submodule_stack_options,
+                hidden_dim=17,
+            ),
+            layer_controller_options=replace(
+                layer_controller_options,
+                stack_gate_flag=True,
+                gate_stack_source=replace(
+                    layer_controller_options.gate_stack_source,
+                    independent_flag=True,
+                    hidden_dim=23,
+                    num_layers=3,
+                    activation=ActivationOptions.TANH,
                 ),
-                "layer_controller_options": replace(
-                    layer_controller_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_controller_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
-                        activation=ActivationOptions.TANH,
-                    ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_controller_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
-                    ),
+                stack_halting_flag=True,
+                halting_stack_source=replace(
+                    layer_controller_options.halting_stack_source,
+                    independent_flag=True,
+                    hidden_dim=19,
+                    num_layers=2,
                 ),
-                "dynamic_memory_options": replace(
-                    dynamic_memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        dynamic_memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
-                    ),
+            ),
+            dynamic_memory_options=replace(
+                dynamic_memory_options,
+                memory_flag=True,
+                memory_stack_source=replace(
+                    dynamic_memory_options.memory_stack_source,
+                    independent_flag=True,
+                    hidden_dim=31,
+                    num_layers=4,
                 ),
-            }
+            ),
         )
 
-        cfg = BertLinearConfigBuilder(
-            runtime=replace(runtime_from_config(), **builder_kwargs)
-        ).build()
+        cfg = BertLinearConfigBuilder(runtime=runtime).build()
         stack = self._encoder_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.shared_halting_config.halting_gate_config
@@ -518,53 +510,46 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(stack.hidden_dim, cfg.hidden_dim)
 
     def test_independent_attention_controller_stacks_do_not_leak(self):
-        builder_kwargs = _default_builder_kwargs()
-        stack_options = builder_kwargs["attention_projection_stack_options"]
-        layer_controller_options = builder_kwargs[
-            "attention_projection_layer_controller_options"
-        ]
-        dynamic_memory_options = builder_kwargs[
-            "attention_projection_dynamic_memory_options"
-        ]
-        builder_kwargs.update(
-            {
-                "attention_projection_stack_options": replace(
-                    stack_options,
-                    hidden_dim=17,
+        runtime = _default_runtime()
+        stack_options = runtime.attention_projection_stack_options
+        layer_controller_options = runtime.attention_projection_layer_controller_options
+        dynamic_memory_options = runtime.attention_projection_dynamic_memory_options
+        runtime = replace(
+            runtime,
+            attention_projection_stack_options=replace(
+                stack_options,
+                hidden_dim=17,
+            ),
+            attention_projection_layer_controller_options=replace(
+                layer_controller_options,
+                stack_gate_flag=True,
+                gate_stack_source=replace(
+                    layer_controller_options.gate_stack_source,
+                    independent_flag=True,
+                    hidden_dim=23,
+                    num_layers=3,
                 ),
-                "attention_projection_layer_controller_options": replace(
-                    layer_controller_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_controller_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
-                    ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_controller_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
-                    ),
+                stack_halting_flag=True,
+                halting_stack_source=replace(
+                    layer_controller_options.halting_stack_source,
+                    independent_flag=True,
+                    hidden_dim=19,
+                    num_layers=2,
                 ),
-                "attention_projection_dynamic_memory_options": replace(
-                    dynamic_memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        dynamic_memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
-                    ),
+            ),
+            attention_projection_dynamic_memory_options=replace(
+                dynamic_memory_options,
+                memory_flag=True,
+                memory_stack_source=replace(
+                    dynamic_memory_options.memory_stack_source,
+                    independent_flag=True,
+                    hidden_dim=31,
+                    num_layers=4,
                 ),
-            }
+            ),
         )
 
-        cfg = BertLinearConfigBuilder(
-            runtime=replace(runtime_from_config(), **builder_kwargs)
-        ).build()
+        cfg = BertLinearConfigBuilder(runtime=runtime).build()
         stack = self._attention_projection_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.layer_config.halting_config.halting_gate_config
@@ -671,51 +656,46 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(stack.hidden_dim, cfg.hidden_dim * 4)
 
     def test_independent_feed_forward_controller_stacks_do_not_leak(self):
-        builder_kwargs = _default_builder_kwargs()
-        stack_options = builder_kwargs["feed_forward_stack_options"]
-        layer_controller_options = builder_kwargs[
-            "feed_forward_layer_controller_options"
-        ]
-        dynamic_memory_options = builder_kwargs["feed_forward_dynamic_memory_options"]
-        builder_kwargs.update(
-            {
-                "feed_forward_stack_options": replace(
-                    stack_options,
-                    hidden_dim=17,
+        runtime = _default_runtime()
+        stack_options = runtime.feed_forward_stack_options
+        layer_controller_options = runtime.feed_forward_layer_controller_options
+        dynamic_memory_options = runtime.feed_forward_dynamic_memory_options
+        runtime = replace(
+            runtime,
+            feed_forward_stack_options=replace(
+                stack_options,
+                hidden_dim=17,
+            ),
+            feed_forward_layer_controller_options=replace(
+                layer_controller_options,
+                stack_gate_flag=True,
+                gate_stack_source=replace(
+                    layer_controller_options.gate_stack_source,
+                    independent_flag=True,
+                    hidden_dim=23,
+                    num_layers=3,
                 ),
-                "feed_forward_layer_controller_options": replace(
-                    layer_controller_options,
-                    stack_gate_flag=True,
-                    gate_stack_source=replace(
-                        layer_controller_options.gate_stack_source,
-                        independent_flag=True,
-                        hidden_dim=23,
-                        num_layers=3,
-                    ),
-                    stack_halting_flag=True,
-                    halting_stack_source=replace(
-                        layer_controller_options.halting_stack_source,
-                        independent_flag=True,
-                        hidden_dim=19,
-                        num_layers=2,
-                    ),
+                stack_halting_flag=True,
+                halting_stack_source=replace(
+                    layer_controller_options.halting_stack_source,
+                    independent_flag=True,
+                    hidden_dim=19,
+                    num_layers=2,
                 ),
-                "feed_forward_dynamic_memory_options": replace(
-                    dynamic_memory_options,
-                    memory_flag=True,
-                    memory_stack_source=replace(
-                        dynamic_memory_options.memory_stack_source,
-                        independent_flag=True,
-                        hidden_dim=31,
-                        num_layers=4,
-                    ),
+            ),
+            feed_forward_dynamic_memory_options=replace(
+                dynamic_memory_options,
+                memory_flag=True,
+                memory_stack_source=replace(
+                    dynamic_memory_options.memory_stack_source,
+                    independent_flag=True,
+                    hidden_dim=31,
+                    num_layers=4,
                 ),
-            }
+            ),
         )
 
-        cfg = BertLinearConfigBuilder(
-            runtime=replace(runtime_from_config(), **builder_kwargs)
-        ).build()
+        cfg = BertLinearConfigBuilder(runtime=runtime).build()
         stack = self._feed_forward_stack_config(cfg)
         gate_stack = stack.layer_config.gate_config.model_config
         halting_stack = stack.layer_config.halting_config.halting_gate_config
@@ -862,11 +842,11 @@ class TestBertLinearModel(unittest.TestCase):
                 "mlm_decoder_weight_tying_flag",
                 "nsp_pooler_activation",
                 "nsp_pooler_bias_flag",
-                "nsp_output_dim",
                 "nsp_head_bias_flag",
             }
             <= supported_keys
         )
+        self.assertNotIn("nsp_output_dim", supported_keys)
 
         package = model_package("bert/linear")
         parser = get_experiment_parser(package)
@@ -894,8 +874,6 @@ class TestBertLinearModel(unittest.TestCase):
                 "0.2",
                 "--mlm-decoder-bias-flag",
                 "false",
-                "--nsp-output-dim",
-                "3",
             ]
         )
         mode = resolve_cli_selection(args, package, ExperimentPreset)
@@ -909,7 +887,7 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertEqual(boundary.embedding_options.token_type_vocab_size, 4)
         self.assertEqual(boundary.embedding_options.dropout_probability, 0.2)
         self.assertFalse(boundary.mlm_head_options.decoder_bias_flag)
-        self.assertEqual(boundary.nsp_head_options.output_dim, 3)
+        self.assertEqual(boundary.nsp_head_options.output_dim, 2)
 
         output = StringIO()
         with redirect_stdout(output):
@@ -918,7 +896,7 @@ class TestBertLinearModel(unittest.TestCase):
 
         self.assertIn("--embedding-dropout-probability", listing)
         self.assertIn("--mlm-decoder-weight-tying-flag", listing)
-        self.assertIn("--nsp-output-dim", listing)
+        self.assertNotIn("--nsp-output-dim", listing)
         self.assertNotIn("--embedding-options", listing)
         self.assertNotIn("--mlm-head-options", listing)
         self.assertNotIn("--nsp-head-options", listing)
@@ -1007,39 +985,27 @@ class TestBertLinearModel(unittest.TestCase):
                 "memory_flag": True,
             },
             ExperimentPreset.RESIDUAL: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             },
             ExperimentPreset.RESIDUAL_POST_NORM: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             },
             ExperimentPreset.RESIDUAL_GATING: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_gate_flag": True,
             },
             ExperimentPreset.RESIDUAL_HALTING: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_halting_flag": True,
             },
             ExperimentPreset.RESIDUAL_MEMORY: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT_RESIDUAL: {
                 "recurrent_flag": True,
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             },
             ExperimentPreset.RECURRENT_POST_NORM: {
                 "recurrent_flag": True,
@@ -1201,6 +1167,7 @@ class TestBertLinearModel(unittest.TestCase):
                 self.assertEqual(nsp_logits.shape, (batch_size, 2))
                 self.assertIsNotNone(auxiliary_loss)
 
+    @pytest.mark.training
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
         presets = _presets()
@@ -1365,7 +1332,8 @@ class TestBertLinearModel(unittest.TestCase):
         )
         nsp_head_options = replace(
             _nsp_head_options(),
-            output_dim=3,
+            pooler_activation=ActivationOptions.SIGMOID,
+            head_bias_flag=False,
         )
         cfg = _presets().get_config(
             ExperimentPreset.BASELINE,
@@ -1633,7 +1601,7 @@ class TestBertLinearModel(unittest.TestCase):
         nsp_head_options = BertNspHeadOptions(
             pooler_activation=ActivationOptions.SIGMOID,
             pooler_bias_flag=False,
-            output_dim=3,
+            output_dim=2,
             head_bias_flag=False,
         )
         cfg = self._direct_config(
@@ -1665,14 +1633,14 @@ class TestBertLinearModel(unittest.TestCase):
         self.assertIsNot(model.mlm_decoder.weight, model.token_embedding.weight)
         self.assertIsNone(model.pooler.bias)
         self.assertIsInstance(model.pooler_activation, nn.Sigmoid)
-        self.assertEqual(model.nsp_head.out_features, 3)
+        self.assertEqual(model.nsp_head.out_features, 2)
         self.assertIsNone(model.nsp_head.bias)
 
         batch = self._fake_bert_inputs(cfg, batch_size=2)
         mlm_logits, nsp_logits, auxiliary_loss = model(*batch)
 
         self.assertEqual(mlm_logits.shape, (2, 8, 32))
-        self.assertEqual(nsp_logits.shape, (2, 3))
+        self.assertEqual(nsp_logits.shape, (2, 2))
         self.assertEqual(auxiliary_loss.shape, torch.Size([]))
 
     def test_mlm_decoder_weight_tying_can_be_enabled_or_disabled(self):
@@ -2042,9 +2010,9 @@ class TestBertLinearModel(unittest.TestCase):
         recurrent_key: str,
         independent_recurrent_flag: bool,
     ):
-        builder_kwargs = _default_builder_kwargs()
-        layer_controller_options = builder_kwargs[layer_key]
-        recurrent_controller_options = builder_kwargs[recurrent_key]
+        runtime = _default_runtime()
+        layer_controller_options = getattr(runtime, layer_key)
+        recurrent_controller_options = getattr(runtime, recurrent_key)
         recurrent_gate_stack_source = (
             recurrent_controller_options.recurrent_gate_stack_source
         )
@@ -2063,9 +2031,10 @@ class TestBertLinearModel(unittest.TestCase):
                 hidden_dim=31,
             )
 
-        builder_kwargs.update(
-            {
-                stack_key: replace(builder_kwargs[stack_key], hidden_dim=17),
+        runtime = replace(
+            runtime,
+            **{
+                stack_key: replace(getattr(runtime, stack_key), hidden_dim=17),
                 layer_key: replace(
                     layer_controller_options,
                     gate_stack_source=replace(
@@ -2087,11 +2056,9 @@ class TestBertLinearModel(unittest.TestCase):
                     recurrent_stack_halting_flag=True,
                     recurrent_halting_stack_source=(recurrent_halting_stack_source),
                 ),
-            }
+            },
         )
-        return BertLinearConfigBuilder(
-            runtime=replace(runtime_from_config(), **builder_kwargs)
-        ).build()
+        return BertLinearConfigBuilder(runtime=runtime).build()
 
     def _recurrent_controller_dimensions(
         self,

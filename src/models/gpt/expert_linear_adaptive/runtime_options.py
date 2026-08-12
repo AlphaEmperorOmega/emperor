@@ -1,4 +1,6 @@
 from dataclasses import dataclass, field
+from types import ModuleType
+from typing import cast
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -482,5 +484,251 @@ class GptLmHeadOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class _ConstructionOptions:
+    batch_size: int
+    learning_rate: float
+    input_dim: int
+    output_dim: int
+    sequence_length: int
+    embedding_options: GptEmbeddingOptions | None
+    lm_head_options: GptLmHeadOptions | None
+    decoder_options: TransformerDecoderOptions | None
+    positional_embedding_options: TransformerPositionalEmbeddingOptions | None
+    attention_options: TransformerAttentionOptions | None
+    feed_forward_options: TransformerFeedForwardOptions | None
+    attention_projection_stack_options: ExpertsSubmoduleStackOptions | None
+    attention_projection_layer_controller_options: ExpertsLayerControllerOptions | None
+    attention_projection_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    attention_projection_recurrent_controller_options: (
+        ExpertsRecurrentControllerOptions | None
+    )
+    feed_forward_stack_options: ExpertsSubmoduleStackOptions | None
+    feed_forward_layer_controller_options: ExpertsLayerControllerOptions | None
+    feed_forward_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    feed_forward_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    submodule_stack_options: ExpertsSubmoduleStackOptions | None
+    layer_controller_options: ExpertsLayerControllerOptions | None
+    dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    mixture_options: ExpertsMixtureOptions | None
+    mixture_submodule_stack_options: ExpertsSubmoduleStackOptions | None
+    mixture_layer_controller_options: ExpertsLayerControllerOptions | None
+    mixture_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    mixture_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    expert_stack_options: ExpertsSubmoduleStackOptions | None
+    sampler_options: ExpertsSamplerOptions | None
+    router_options: ExpertsRouterOptions | None
+    router_stack_options: ExpertsSubmoduleStackOptions | None
+    router_layer_controller_options: ExpertsLayerControllerOptions | None
+    router_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    router_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    expert_layer_controller_options: ExpertsLayerControllerOptions | None
+    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
+    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
+    hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
+    router_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    router_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    router_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    router_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
+    expert_attention_use_kv_expert_models_flag: bool
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeOptions(ResolvedRuntimeOptions):
-    pass
+    def _construction_options(
+        self,
+        config_module: ModuleType,
+    ) -> _ConstructionOptions:
+        values = self._values
+        return _ConstructionOptions(
+            batch_size=cast(int, values.get("batch_size", config_module.BATCH_SIZE)),
+            learning_rate=cast(
+                float,
+                values.get("learning_rate", config_module.LEARNING_RATE),
+            ),
+            input_dim=cast(int, values.get("input_dim", config_module.INPUT_DIM)),
+            output_dim=cast(int, values.get("output_dim", config_module.OUTPUT_DIM)),
+            sequence_length=cast(
+                int,
+                values.get("sequence_length", config_module.SEQUENCE_LENGTH),
+            ),
+            embedding_options=cast(
+                GptEmbeddingOptions | None,
+                values.get("embedding_options"),
+            ),
+            lm_head_options=cast(
+                GptLmHeadOptions | None,
+                values.get("lm_head_options"),
+            ),
+            decoder_options=cast(
+                TransformerDecoderOptions | None,
+                values.get("decoder_options"),
+            ),
+            positional_embedding_options=cast(
+                TransformerPositionalEmbeddingOptions | None,
+                values.get("positional_embedding_options"),
+            ),
+            attention_options=cast(
+                TransformerAttentionOptions | None,
+                values.get("attention_options"),
+            ),
+            feed_forward_options=cast(
+                TransformerFeedForwardOptions | None,
+                values.get("feed_forward_options"),
+            ),
+            attention_projection_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("attention_projection_stack_options"),
+            ),
+            attention_projection_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("attention_projection_layer_controller_options"),
+            ),
+            attention_projection_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("attention_projection_dynamic_memory_options"),
+            ),
+            attention_projection_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("attention_projection_recurrent_controller_options"),
+            ),
+            feed_forward_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("feed_forward_stack_options"),
+            ),
+            feed_forward_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("feed_forward_layer_controller_options"),
+            ),
+            feed_forward_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("feed_forward_dynamic_memory_options"),
+            ),
+            feed_forward_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("feed_forward_recurrent_controller_options"),
+            ),
+            submodule_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("submodule_stack_options"),
+            ),
+            layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("layer_controller_options"),
+            ),
+            dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("dynamic_memory_options"),
+            ),
+            recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("recurrent_controller_options"),
+            ),
+            mixture_options=cast(
+                ExpertsMixtureOptions | None,
+                values.get("mixture_options"),
+            ),
+            mixture_submodule_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("mixture_submodule_stack_options"),
+            ),
+            mixture_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("mixture_layer_controller_options"),
+            ),
+            mixture_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("mixture_dynamic_memory_options"),
+            ),
+            mixture_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("mixture_recurrent_controller_options"),
+            ),
+            expert_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("expert_stack_options"),
+            ),
+            sampler_options=cast(
+                ExpertsSamplerOptions | None,
+                values.get("sampler_options"),
+            ),
+            router_options=cast(
+                ExpertsRouterOptions | None,
+                values.get("router_options"),
+            ),
+            router_stack_options=cast(
+                ExpertsSubmoduleStackOptions | None,
+                values.get("router_stack_options"),
+            ),
+            router_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("router_layer_controller_options"),
+            ),
+            router_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("router_dynamic_memory_options"),
+            ),
+            router_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("router_recurrent_controller_options"),
+            ),
+            expert_layer_controller_options=cast(
+                ExpertsLayerControllerOptions | None,
+                values.get("expert_layer_controller_options"),
+            ),
+            expert_dynamic_memory_options=cast(
+                ExpertsDynamicMemoryOptions | None,
+                values.get("expert_dynamic_memory_options"),
+            ),
+            expert_recurrent_controller_options=cast(
+                ExpertsRecurrentControllerOptions | None,
+                values.get("expert_recurrent_controller_options"),
+            ),
+            adaptive_generator_stack_options=cast(
+                AdaptiveGeneratorStackOptions | None,
+                values.get("adaptive_generator_stack_options"),
+            ),
+            hidden_adaptive_weight_options=cast(
+                HiddenAdaptiveWeightOptions | None,
+                values.get("hidden_adaptive_weight_options"),
+            ),
+            hidden_adaptive_bias_options=cast(
+                HiddenAdaptiveBiasOptions | None,
+                values.get("hidden_adaptive_bias_options"),
+            ),
+            hidden_adaptive_diagonal_options=cast(
+                HiddenAdaptiveDiagonalOptions | None,
+                values.get("hidden_adaptive_diagonal_options"),
+            ),
+            hidden_adaptive_mask_options=cast(
+                HiddenAdaptiveMaskOptions | None,
+                values.get("hidden_adaptive_mask_options"),
+            ),
+            router_adaptive_weight_options=cast(
+                HiddenAdaptiveWeightOptions | None,
+                values.get("router_adaptive_weight_options"),
+            ),
+            router_adaptive_bias_options=cast(
+                HiddenAdaptiveBiasOptions | None,
+                values.get("router_adaptive_bias_options"),
+            ),
+            router_adaptive_diagonal_options=cast(
+                HiddenAdaptiveDiagonalOptions | None,
+                values.get("router_adaptive_diagonal_options"),
+            ),
+            router_adaptive_mask_options=cast(
+                HiddenAdaptiveMaskOptions | None,
+                values.get("router_adaptive_mask_options"),
+            ),
+            expert_attention_use_kv_expert_models_flag=cast(
+                bool,
+                values.get(
+                    "expert_attention_use_kv_expert_models_flag",
+                    config_module.EXPERT_ATTENTION_USE_KV_EXPERT_MODELS_FLAG,
+                ),
+            ),
+        )

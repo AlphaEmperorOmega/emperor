@@ -3,7 +3,7 @@ import contextlib
 import io
 import unittest
 from dataclasses import fields
-from typing import get_args, get_type_hints
+from typing import get_args
 
 from lightning.pytorch.callbacks import EarlyStopping
 
@@ -229,10 +229,11 @@ class TestExperimentConfigOverrideParsing(
         exercised_overrides = []
 
         for package in discover_model_packages():
-            annotations = get_type_hints(package.runtime_defaults)
+            runtime_defaults = package.runtime_defaults_spec
+            annotations = runtime_defaults.annotations
             dynamic_bias_keys = [
                 key
-                for key in iter_supported_config_keys(package.runtime_defaults)
+                for key in runtime_defaults.supported_keys
                 if annotation_contains_type(
                     annotations.get(key),
                     DynamicBiasConfig,
@@ -850,7 +851,7 @@ class TestExperimentConfigOverrideParsing(
         self.assertIn("MLM_DECODER_WEIGHT_TYING_FLAG", bert_keys)
         self.assertIn("NSP_POOLER_ACTIVATION", bert_keys)
         self.assertIn("NSP_POOLER_BIAS_FLAG", bert_keys)
-        self.assertIn("NSP_OUTPUT_DIM", bert_keys)
+        self.assertNotIn("NSP_OUTPUT_DIM", bert_keys)
         self.assertIn("NSP_HEAD_BIAS_FLAG", bert_keys)
         self.assertNotIn("BERT_PRETRAINING_TARGET_VOCAB_SIZE", bert_keys)
         self.assertIn("SEQUENCE_LENGTH", gpt_keys)

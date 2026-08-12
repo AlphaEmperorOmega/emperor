@@ -1,6 +1,7 @@
 import copy
 import unittest
 
+import pytest
 import torch
 import torch.nn.functional as F
 
@@ -605,6 +606,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                 self.assertTrue(torch.isfinite(differentiable_vectors.grad).all())
                 self.assertTrue(torch.any(differentiable_vectors.grad != 0))
 
+    @pytest.mark.training
     def test_each_leaf_strictly_restores_model_and_adam_state(self):
         input_dim = 2
         cases = (

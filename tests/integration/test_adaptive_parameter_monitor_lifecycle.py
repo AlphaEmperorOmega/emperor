@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -188,6 +189,7 @@ class AdaptiveParameterMonitorLifecycleTests(unittest.TestCase):
         torch.testing.assert_close(logged[name], expected)
         self.assertTrue(torch.isfinite(logged[name]), name)
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_metrics_visuals_and_updates_parameters(self):
         model = AdaptiveParameterTrainingModule()
         adaptive_callback = AdaptiveParameterMonitorCallback(
@@ -306,6 +308,7 @@ class AdaptiveParameterMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(bank._forward_hooks, {})
         self.assertEqual(bank.model._forward_hooks, {})
 
+    @pytest.mark.training
     def test_real_trainer_applies_monitor_cadence_without_duplicate_emission(self):
         model = AdaptiveParameterTrainingModule(learning_rate=0.0)
         adaptive_callback = AdaptiveParameterMonitorCallback(log_every_n_steps=2)
@@ -334,6 +337,7 @@ class AdaptiveParameterMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(adaptive_callback._hooks, [])
         self.assertEqual(bank_callback._hooks, [])
 
+    @pytest.mark.training
     def test_real_trainer_exception_cleans_both_monitor_callbacks(self):
         model = AdaptiveParameterTrainingModule(
             fail_after_forward=True,

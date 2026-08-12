@@ -80,7 +80,7 @@ class CoreConfigDependencies:
     feed_forward_layer_controller_options: LayerControllerOptions | None
     feed_forward_dynamic_memory_options: DynamicMemoryOptions | None
     feed_forward_recurrent_controller_options: RecurrentControllerOptions | None
-    stack_options: MainLayerStackOptions | None
+    stack_options: MainLayerStackOptions
     submodule_stack_options: SubmoduleStackOptions | None
     layer_controller_options: LayerControllerOptions | None
     dynamic_memory_options: DynamicMemoryOptions | None
@@ -161,11 +161,7 @@ class VitCoreConfigFactory:
         residual_config = build_residual_config(
             stack_residual_connection_option,
             stack_residual_model_flag,
-            (
-                self.encoder_stack_options.residual_stack_options
-                if self.encoder_stack_options is not None
-                else None
-            ),
+            self.encoder_stack_options.residual_stack_options,
         )
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -423,45 +419,22 @@ class VitCoreConfigFactory:
             f"MixtureOfExpertsModelConfig, got {type(stack_config).__name__}."
         )
 
-    def _stack_residual_connection_option(self) -> type[ResidualConfig]:
-        if self.encoder_stack_options is None:
-            return None
+    def _stack_residual_connection_option(self) -> type[ResidualConfig] | None:
         return self.encoder_stack_options.residual_connection_option
 
     def _stack_residual_model_flag(self) -> bool:
-        if self.encoder_stack_options is None:
-            return False
         return self.encoder_stack_options.residual_model_flag
 
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
-        if self.encoder_stack_options is None:
-            return LastLayerBiasOptions.DEFAULT
         return self.encoder_stack_options.last_layer_bias_option
 
     def _stack_apply_output_pipeline_flag(self) -> bool:
-        if self.encoder_stack_options is None:
-            return True
         return self.encoder_stack_options.apply_output_pipeline_flag
 
     def _shared_gate_config(self):
         if self.encoder_layer_controller_options is None:
             return None
         return self.encoder_layer_controller_options.shared_gate_config
-
-    def _effective_stack_options(self) -> MainLayerStackOptions:
-        if self.encoder_stack_options is not None:
-            return self.encoder_stack_options
-        return MainLayerStackOptions(
-            bias_flag=True,
-            layer_norm_position=self.encoder_options.layer_norm_position,
-            num_layers=self.encoder_options.num_layers,
-            activation=self.encoder_options.activation,
-            residual_connection_option=None,
-            residual_model_flag=False,
-            dropout_probability=self.encoder_options.dropout_probability,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
-        )
 
     def _effective_attention_projection_stack_options(self) -> SubmoduleStackOptions:
         return self.attention_projection_stack_options
@@ -472,7 +445,7 @@ class VitCoreConfigFactory:
     def _control_factory_dependencies(self) -> VitControlFactoryDependencies:
         return VitControlFactoryDependencies(
             hidden_dim=self.hidden_dim,
-            encoder_stack_options=self._effective_stack_options(),
+            encoder_stack_options=self.encoder_stack_options,
             encoder_submodule_stack_options=self.encoder_submodule_stack_options,
             attention_projection_stack_options=(
                 self._effective_attention_projection_stack_options()

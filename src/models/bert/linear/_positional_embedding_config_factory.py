@@ -1,6 +1,7 @@
 from dataclasses import dataclass, fields
 
 import models.bert.linear.config as config
+from models.bert.linear import _config_defaults as config_defaults
 from models.bert.linear.runtime_options import (
     TransformerPositionalEmbeddingOptions,
 )
@@ -20,20 +21,9 @@ class PositionalEmbeddingConfigFactory:
     ) -> None:
         self.hidden_dim = dependencies.hidden_dim
         self.sequence_length = dependencies.sequence_length
-        self.positional_embedding_options = self.__default_positional_embedding_options(
+        self.positional_embedding_options = (
             dependencies.positional_embedding_options
-        )
-
-    def __default_positional_embedding_options(
-        self,
-        positional_embedding_options: TransformerPositionalEmbeddingOptions | None,
-    ) -> TransformerPositionalEmbeddingOptions:
-        if positional_embedding_options is not None:
-            return positional_embedding_options
-        return TransformerPositionalEmbeddingOptions(
-            option=config.POSITIONAL_EMBEDDING_OPTION,
-            padding_idx=config.POSITIONAL_EMBEDDING_PADDING_IDX,
-            auto_expand_flag=config.POSITIONAL_EMBEDDING_AUTO_EXPAND_FLAG,
+            or config_defaults.bert_positional_embedding_options(config)
         )
 
     def build_positional_embedding_config(self):

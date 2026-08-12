@@ -4,11 +4,9 @@ from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
     LastLayerBiasOptions,
-    LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
 )
-from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
 from models.gpt.linear.runtime_options import (
     DynamicMemoryOptions,
@@ -19,7 +17,7 @@ from models.gpt.linear.runtime_options import (
     resolve_controller_stack_options,
 )
 
-from ._residual import build_residual_config
+from ._controller_stack_config import build_controller_stack_config
 
 
 class GateConfigFactory:
@@ -56,7 +54,7 @@ class GateConfigFactory:
         resolved_recurrent_gate_stack_options = resolve_controller_stack_options(
             recurrent_gate_stack_source, resolved_gate_stack_defaults
         )
-        model_config = self.__build_controller_stack(
+        model_config = build_controller_stack_config(
             resolved_recurrent_gate_stack_options
         )
         return GateConfig(
@@ -71,7 +69,7 @@ class GateConfigFactory:
         resolved_gate_stack_options = resolve_controller_stack_options(
             gate_stack_source, submodule_stack_defaults
         )
-        return self.__build_controller_stack(resolved_gate_stack_options)
+        return build_controller_stack_config(resolved_gate_stack_options)
 
     def __recurrent_gate_stack_defaults(self) -> SubmoduleStackOptions:
         if not self.recurrent_stack_inherits_gate_stack:
@@ -79,35 +77,6 @@ class GateConfigFactory:
         return resolve_controller_stack_options(
             self.layer_controller_options.gate_stack_source,
             self.submodule_stack_options,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: SubmoduleStackOptions,
-        *,
-        hidden_dim: int | None = None,
-        output_dim: int | None = None,
-    ) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=options.activation,
-                layer_norm_position=options.layer_norm_position,
-                residual_config=build_residual_config(
-                    options.residual_connection_option,
-                    options.residual_model_flag,
-                    options.residual_stack_options,
-                ),
-                dropout_probability=options.dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(bias_flag=options.bias_flag),
-            ),
         )
 
 
@@ -182,39 +151,10 @@ class HaltingConfigFactory:
         self, options: SubmoduleStackOptions
     ) -> LayerStackConfig:
         halting_hidden_dim = options.hidden_dim or self.output_dim
-        return self.__build_controller_stack(
+        return build_controller_stack_config(
             options,
             hidden_dim=halting_hidden_dim,
             output_dim=STICK_BREAKING_GATE_OUTPUT_DIM,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: SubmoduleStackOptions,
-        *,
-        hidden_dim: int | None = None,
-        output_dim: int | None = None,
-    ) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=options.activation,
-                layer_norm_position=options.layer_norm_position,
-                residual_config=build_residual_config(
-                    options.residual_connection_option,
-                    options.residual_model_flag,
-                    options.residual_stack_options,
-                ),
-                dropout_probability=options.dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(bias_flag=options.bias_flag),
-            ),
         )
 
     def __submodule_stack_defaults(
@@ -261,7 +201,7 @@ class MemoryConfigFactory:
         resolved_memory_stack_options = resolve_controller_stack_options(
             memory_stack_source, submodule_stack_defaults
         )
-        model_config = self.__build_controller_stack(resolved_memory_stack_options)
+        model_config = build_controller_stack_config(resolved_memory_stack_options)
         return self.dynamic_memory_options.memory_option(
             input_dim=self.hidden_dim,
             output_dim=self.hidden_dim,
@@ -269,35 +209,6 @@ class MemoryConfigFactory:
             test_time_training_learning_rate=self.dynamic_memory_options.memory_test_time_training_learning_rate,
             test_time_training_num_inner_steps=self.dynamic_memory_options.memory_test_time_training_num_inner_steps,
             model_config=model_config,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: SubmoduleStackOptions,
-        *,
-        hidden_dim: int | None = None,
-        output_dim: int | None = None,
-    ) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=options.activation,
-                layer_norm_position=options.layer_norm_position,
-                residual_config=build_residual_config(
-                    options.residual_connection_option,
-                    options.residual_model_flag,
-                    options.residual_stack_options,
-                ),
-                dropout_probability=options.dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(bias_flag=options.bias_flag),
-            ),
         )
 
 

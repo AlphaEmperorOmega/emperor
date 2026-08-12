@@ -6,6 +6,7 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -304,6 +305,7 @@ def trainer(
 
 
 class LayerMonitorLifecycleTests(unittest.TestCase):
+    @pytest.mark.training
     def test_real_trainer_logs_exact_layer_controller_metrics_and_updates(
         self,
     ) -> None:
@@ -374,6 +376,7 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
             )
         )
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_recurrent_metrics_visuals_and_updates(
         self,
     ) -> None:
@@ -462,6 +465,7 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
             )
         )
 
+    @pytest.mark.training
     def test_real_trainer_exception_restores_both_monitor_types(self) -> None:
         layer_model = LayerTrainingModule(fail_after_forward=True)
         layer_callback = LayerControllerMonitorCallback(log_every_n_steps=1)

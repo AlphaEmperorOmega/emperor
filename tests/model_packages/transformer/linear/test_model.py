@@ -4,6 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
@@ -19,16 +20,16 @@ from emperor.layers import (
 from emperor.linears import LinearLayer
 from model_runtime.packages import PresetLock
 from models.catalog import model_package
-from models.training_test_utils import (
-    RandomTranslationDataModule,
-    tiny_cpu_trainer,
-)
 from models.transformer.linear import dataset_options
 from models.transformer.linear.config_builder import TransformerLinearConfigBuilder
 from models.transformer.linear.model import Model
 from models.transformer.linear.presets import (
     Experiment,
     ExperimentPreset,
+)
+from tests.model_packages.training_test_utils import (
+    RandomTranslationDataModule,
+    tiny_cpu_trainer,
 )
 
 _ADAPTIVE_LINEAR_LAYER_TYPE = AdaptiveLinearLayerConfig().registry_owner()
@@ -644,6 +645,7 @@ class TestTransformerLinearModel(unittest.TestCase):
         self.assertIsNotNone(model.shared_embedding.weight.grad)
         self.assertGreater(model.shared_embedding.weight.grad.abs().sum().item(), 0)
 
+    @pytest.mark.training
     def test_baseline_lifecycle_and_recurrent_signature_train(self):
         baseline_cfg = self._config()
         baseline = Model(baseline_cfg)

@@ -6,6 +6,7 @@ import sys
 import unittest
 from dataclasses import fields
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -367,6 +368,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
         self.assertEqual(meta_positions.dtype, torch.long)
         self.assertEqual(meta_positions.shape, meta_tokens.shape)
 
+    @pytest.mark.training
     def test_text_learned_exact_positions_gradients_optimizer_and_state(
         self,
     ) -> None:
@@ -504,6 +506,7 @@ class LearnedEmbeddingBehaviorTests(unittest.TestCase):
             atol=0,
         )
 
+    @pytest.mark.training
     def test_image_learned_padding_row_stays_zero_after_optimizer_step(
         self,
     ) -> None:
@@ -861,6 +864,7 @@ class RelativeEmbeddingBehaviorTests(unittest.TestCase):
         torch.testing.assert_close(output, expected, rtol=0, atol=0)
         self.assertEqual(output.shape, (2, 2, 2, 3))
 
+    @pytest.mark.training
     def test_selected_offsets_receive_gradients_and_optimizer_updates(
         self,
     ) -> None:

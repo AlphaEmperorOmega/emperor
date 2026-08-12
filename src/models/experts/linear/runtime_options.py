@@ -29,7 +29,7 @@ class ExpertsStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
@@ -47,7 +47,7 @@ class ExpertsSubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     bias_flag: bool
@@ -233,7 +233,7 @@ class ExpertsAdaptiveGeneratorStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     residual_stack_options: ResidualStackOptions | None = field(

@@ -76,8 +76,7 @@ def monitor_settings_from_package(
     package: ModelPackage,
     config_overrides: dict | None = None,
 ) -> MonitorSettings:
-    default_log_every_n_steps = getattr(
-        package.runtime_defaults,
+    default_log_every_n_steps = package.runtime_defaults_spec.current_value_or(
         "MONITOR_LOG_EVERY_N_STEPS",
         100,
     )

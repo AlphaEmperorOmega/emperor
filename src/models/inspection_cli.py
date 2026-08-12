@@ -4,18 +4,22 @@ import argparse
 import json
 import sys
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from model_runtime.inspection import (
     InspectionError,
     InspectionRequest,
+    InspectionResult,
+    MethodShapeTrace,
     ModelShapeTrace,
     ParsedOverrides,
     TensorShape,
     inspect_model,
     inspect_model_shapes,
 )
+from model_runtime.packages import ModelPackage
 from models.catalog import model_id_from_parts, model_package
 from models.cli_selection import resolve_cli_selection
 from models.experiment_cli_parser import get_experiment_parser
@@ -212,6 +216,7 @@ def _print_tree(payload: Mapping[str, Any], module_traces=()) -> None:
     root_trace = trace_by_node_id.get(root["id"])
     root_shapes = _module_shape_suffix(root_trace.calls) if root_trace else ""
     print(f"model: {root['typeName']}{_details_suffix(root['details'])}{root_shapes}")
+    expanded_node_ids = {root["id"]}
 
     def walk(node_id: str, prefix: str) -> None:
         child_ids = children.get(node_id, [])
@@ -222,6 +227,13 @@ def _print_tree(payload: Mapping[str, Any], module_traces=()) -> None:
             next_prefix = prefix + ("   " if last else "|  ")
             trace = trace_by_node_id.get(child_id)
             shape_suffix = _module_shape_suffix(trace.calls) if trace else ""
+            if child_id in expanded_node_ids:
+                print(
+                    f"{prefix}{branch}{child['path'].split('.')[-1]}: "
+                    f"{child['typeName']} [reference]"
+                )
+                continue
+            expanded_node_ids.add(child_id)
             print(
                 f"{prefix}{branch}{child['path'].split('.')[-1]}: "
                 f"{child['typeName']}{_details_suffix(child['details'])}"
@@ -232,51 +244,69 @@ def _print_tree(payload: Mapping[str, Any], module_traces=()) -> None:
     walk(root["id"], "")
 
 
-def _print_method_tree(methods) -> None:
-    method_by_id = {method.id: method for method in methods}
-    children: dict[int | None, list[int]] = {}
-    for method in methods:
-        children.setdefault(method.parent_id, []).append(method.id)
+class _MethodTreeRenderer:
+    def __init__(self, methods: Sequence[MethodShapeTrace]) -> None:
+        self._method_by_id = {method.id: method for method in methods}
+        self._children: dict[int | None, list[int]] = {}
+        for method in methods:
+            self._children.setdefault(method.parent_id, []).append(method.id)
+        self._relevant: dict[int, bool] = {}
 
-    relevant: dict[int, bool] = {}
+    def render(self) -> None:
+        root_ids = [
+            method_id
+            for method_id in self._children.get(None, [])
+            if self._has_tensor_content(method_id)
+        ]
+        print("tensor variables (executed Python):")
+        for index, method_id in enumerate(root_ids):
+            branch = "`- " if index == len(root_ids) - 1 else "|- "
+            self._walk(method_id, "", branch)
 
-    def has_tensor_content(method_id: int) -> bool:
-        if method_id in relevant:
-            return relevant[method_id]
-        method = method_by_id[method_id]
+    def _has_tensor_content(self, method_id: int) -> bool:
+        cached = self._relevant.get(method_id)
+        if cached is not None:
+            return cached
+        method = self._method_by_id[method_id]
         result = bool(method.inputs or method.variables or method.outputs) or any(
-            has_tensor_content(child_id) for child_id in children.get(method_id, [])
+            self._has_tensor_content(child_id)
+            for child_id in self._children.get(method_id, [])
         )
-        relevant[method_id] = result
+        self._relevant[method_id] = result
         return result
 
-    def method_label(method) -> str:
+    @staticmethod
+    def _method_label(method: MethodShapeTrace) -> str:
         location = f"{method.source_path}:{method.first_line}"
         owner = f"{method.module_path} :: " if method.module_path else ""
         output = f" -> {_format_tensors(method.outputs)}" if method.outputs else ""
         return f"{owner}{method.qualified_name} ({location}){output}"
 
-    def walk(method_id: int, prefix: str, branch: str) -> None:
-        method = method_by_id[method_id]
-        print(f"{prefix}{branch}{method_label(method)}")
-        entries: list[tuple[int, str, object]] = []
+    def _ordered_entries(self, method: MethodShapeTrace) -> list[tuple[int, str, Any]]:
+        entries: list[tuple[int, str, Any]] = []
         if method.inputs:
             entries.append((method.order, "inputs", method.inputs))
         entries.extend(
             (variable.order, "variable", variable) for variable in method.variables
         )
         entries.extend(
-            (method_by_id[child_id].order, "method", child_id)
-            for child_id in children.get(method_id, [])
-            if has_tensor_content(child_id)
+            (self._method_by_id[child_id].order, "method", child_id)
+            for child_id in self._children.get(method.id, [])
+            if self._has_tensor_content(child_id)
         )
         entries.sort(key=lambda entry: entry[0])
+        return entries
+
+    def _walk(self, method_id: int, prefix: str, branch: str) -> None:
+        method = self._method_by_id[method_id]
+        print(f"{prefix}{branch}{self._method_label(method)}")
+        entries = self._ordered_entries(method)
         child_prefix = prefix + ("   " if branch == "`- " else "|  ")
         for index, (_order, kind, value) in enumerate(entries):
             last = index == len(entries) - 1
             child_branch = "`- " if last else "|- "
             if kind == "method":
-                walk(int(value), child_prefix, child_branch)
+                self._walk(int(value), child_prefix, child_branch)
                 continue
             if kind == "inputs":
                 label = f"inputs: {_format_tensors(value)}"
@@ -285,17 +315,14 @@ def _print_method_tree(methods) -> None:
                 label = f"{line}: {_format_tensors(value.tensors)}"
             print(f"{child_prefix}{child_branch}{label}")
 
-    root_ids = [
-        method_id
-        for method_id in children.get(None, [])
-        if has_tensor_content(method_id)
-    ]
-    print("tensor variables (executed Python):")
-    for index, method_id in enumerate(root_ids):
-        walk(method_id, "", "`- " if index == len(root_ids) - 1 else "|- ")
+
+def _print_method_tree(methods: Sequence[MethodShapeTrace]) -> None:
+    _MethodTreeRenderer(methods).render()
 
 
-def _parse_args(argv: Sequence[str]):
+def _parse_args(
+    argv: Sequence[str],
+) -> tuple[argparse.Namespace, ModelPackage]:
     selector = argparse.ArgumentParser(add_help=False)
     selector.add_argument("--model-type", required=True)
     selector.add_argument("--model", required=True)
@@ -326,68 +353,130 @@ def _parse_args(argv: Sequence[str]):
     return args, package
 
 
+@dataclass(frozen=True, slots=True)
+class _ResolvedInspection:
+    package: ModelPackage
+    preset: Any
+    request: InspectionRequest
+    output_format: str
+    shape_trace: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _InspectionExecution:
+    result: InspectionResult
+    trace: ModelShapeTrace | None
+
+
+def _resolve_inspection_request(argv: Sequence[str]) -> _ResolvedInspection:
+    args, package = _parse_args(argv)
+    if getattr(args, "monitors", None):
+        raise InspectionError("Model inspection does not support --monitors.")
+    selection = resolve_cli_selection(args, package, package.preset_type)
+    if (
+        selection.search_mode is not None
+        or selection.search_keys
+        or selection.search_overrides
+    ):
+        raise InspectionError("Model inspection does not support search modes.")
+    if selection.selected_presets is not None:
+        raise InspectionError("Model inspection requires one --preset.")
+    preset = package.resolve_preset(args.preset)
+    datasets = package.resolve_datasets(
+        args.datasets,
+        selection.experiment_task,
+    )
+    request = InspectionRequest(
+        preset=package.preset_name(preset),
+        dataset=datasets[0].__name__,
+        experiment_task=package.task_name(selection.experiment_task),
+        overrides=ParsedOverrides(selection.config_overrides),
+    )
+    return _ResolvedInspection(
+        package=package,
+        preset=preset,
+        request=request,
+        output_format=args.format,
+        shape_trace=args.shape_trace,
+    )
+
+
+def _execute_inspection(
+    resolved: _ResolvedInspection,
+) -> _InspectionExecution:
+    if resolved.shape_trace is None:
+        return _InspectionExecution(
+            result=inspect_model(resolved.package, resolved.request),
+            trace=None,
+        )
+    result, trace = inspect_model_shapes(
+        resolved.package,
+        resolved.request,
+        detail=resolved.shape_trace,
+    )
+    return _InspectionExecution(result=result, trace=trace)
+
+
+def _execution_payload(execution: _InspectionExecution) -> dict[str, Any]:
+    payload = _result_payload(execution.result)
+    if execution.trace is not None:
+        payload["shapeTrace"] = _shape_trace_payload(execution.trace)
+    return payload
+
+
+def _render_json_inspection(
+    payload: Mapping[str, Any],
+    request: InspectionRequest,
+) -> None:
+    encoded = json.dumps(payload, separators=(",", ":"))
+    maximum_output_bytes = request.capture_limits.maximum_output_bytes
+    encoded_size = len(encoded.encode("utf-8")) + 1
+    if encoded_size > maximum_output_bytes:
+        raise InspectionError(
+            f"Inspection output byte limit of {maximum_output_bytes} exceeded."
+        )
+    print(encoded)
+
+
+def _preset_description(package: ModelPackage, preset: Any) -> str:
+    description_for_preset = getattr(package.presets, "description_for_preset", None)
+    if callable(description_for_preset):
+        return description_for_preset(preset)
+    return preset.value if isinstance(preset.value, str) else ""
+
+
+def _render_text_inspection(
+    resolved: _ResolvedInspection,
+    execution: _InspectionExecution,
+    payload: Mapping[str, Any],
+) -> None:
+    print("=" * 100)
+    print(resolved.preset.name)
+    description = _preset_description(resolved.package, resolved.preset)
+    if description:
+        print(f"description: {description}")
+    trace = execution.trace
+    if trace is not None:
+        print(
+            "shape sample: "
+            f"dataset={trace.dataset}, task={trace.experiment_task}, "
+            f"batch={trace.batch_size}, mode=eval/no_grad"
+        )
+    _print_tree(payload, trace.modules if trace is not None else ())
+    if trace is not None and resolved.shape_trace == "variables":
+        print()
+        _print_method_tree(trace.methods)
+
+
 def run_inspection(argv: Sequence[str]) -> int:
     try:
-        args, package = _parse_args(argv)
-        if getattr(args, "monitors", None):
-            raise InspectionError("Model inspection does not support --monitors.")
-        selection = resolve_cli_selection(args, package, package.preset_type)
-        if (
-            selection.search_mode is not None
-            or selection.search_keys
-            or selection.search_overrides
-        ):
-            raise InspectionError("Model inspection does not support search modes.")
-        if selection.selected_presets is not None:
-            raise InspectionError("Model inspection requires one --preset.")
-        preset = package.resolve_preset(args.preset)
-        datasets = package.resolve_datasets(
-            args.datasets,
-            selection.experiment_task,
-        )
-        request = InspectionRequest(
-            preset=package.preset_name(preset),
-            dataset=datasets[0].__name__,
-            experiment_task=package.task_name(selection.experiment_task),
-            overrides=ParsedOverrides(selection.config_overrides),
-        )
-        trace = None
-        if args.shape_trace is None:
-            result = inspect_model(package, request)
+        resolved = _resolve_inspection_request(argv)
+        execution = _execute_inspection(resolved)
+        payload = _execution_payload(execution)
+        if resolved.output_format == "json":
+            _render_json_inspection(payload, resolved.request)
         else:
-            result, trace = inspect_model_shapes(
-                package,
-                request,
-                detail=args.shape_trace,
-            )
-        payload = _result_payload(result)
-        if trace is not None:
-            payload["shapeTrace"] = _shape_trace_payload(trace)
-        if args.format == "json":
-            print(json.dumps(payload, indent=2))
-            return 0
-        print("=" * 100)
-        print(preset.name)
-        description_for_preset = getattr(
-            package.presets, "description_for_preset", None
-        )
-        description = (
-            description_for_preset(preset)
-            if callable(description_for_preset)
-            else (preset.value if isinstance(preset.value, str) else "")
-        )
-        if description:
-            print(f"description: {description}")
-        if trace is not None:
-            print(
-                "shape sample: "
-                f"dataset={trace.dataset}, task={trace.experiment_task}, "
-                f"batch={trace.batch_size}, mode=eval/no_grad"
-            )
-        _print_tree(payload, trace.modules if trace is not None else ())
-        if trace is not None and args.shape_trace == "variables":
-            print()
-            _print_method_tree(trace.methods)
+            _render_text_inspection(resolved, execution, payload)
         return 0
     except InspectionError as exc:
         print(str(exc), file=sys.stderr)

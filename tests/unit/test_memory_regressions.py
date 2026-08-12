@@ -1,6 +1,7 @@
 import copy
 import unittest
 
+import pytest
 import torch
 
 from emperor.memory import MemoryPositionOptions
@@ -97,6 +98,7 @@ class MemoryRegressionTests(unittest.TestCase):
                 self.assertTrue(torch.isfinite(together).all())
                 torch.testing.assert_close(together, separately)
 
+    @pytest.mark.training
     def test_real_optimizer_updates_every_active_generator(self) -> None:
         inputs = torch.tensor([[1.0, -2.0, 0.5, 3.0], [-1.0, 0.25, 2.0, -0.5]])
         for config_cls, _ in MEMORY_CASES:
@@ -149,6 +151,7 @@ class MemoryRegressionTests(unittest.TestCase):
                             child_name,
                         )
 
+    @pytest.mark.training
     def test_strict_model_and_optimizer_checkpoint_continuation(self) -> None:
         inputs = torch.tensor([[1.0, -2.0, 0.5, 3.0], [-1.0, 0.25, 2.0, -0.5]])
         for config_cls, _ in MEMORY_CASES:
@@ -205,6 +208,7 @@ class MemoryRegressionTests(unittest.TestCase):
                         restored.state_dict()[name],
                     )
 
+    @pytest.mark.training
     def test_ttt_optimizer_reaches_memory_decoder_and_meta_parameters(self) -> None:
         model = make_memory_config(
             input_dim=1,

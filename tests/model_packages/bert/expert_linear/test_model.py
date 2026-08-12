@@ -3,6 +3,7 @@ import inspect
 import unittest
 from dataclasses import replace
 
+import pytest
 import torch
 from torch import nn
 
@@ -25,9 +26,6 @@ from emperor.layers import (
     RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
-from models.bert.expert_linear._builder_adapter import (
-    expert_linear_builder_kwargs_from_flat,
-)
 from models.bert.expert_linear.config_builder import (
     BertExpertLinearConfigBuilder,
 )
@@ -41,14 +39,13 @@ from models.bert.expert_linear.runtime_options import (
     BertEmbeddingOptions,
     BertMlmHeadOptions,
     BertNspHeadOptions,
-    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
     TransformerFeedForwardOptions,
     TransformerPositionalEmbeddingOptions,
 )
 from models.catalog import model_package
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
@@ -59,8 +56,9 @@ _MIXTURE_OF_EXPERTS_LAYER_TYPE = MixtureOfExpertsConfig().registry_owner()
 _SELF_ATTENTION_TYPE = SelfAttentionConfig().registry_owner()
 
 
-def _default_builder_kwargs() -> dict:
-    return expert_linear_builder_kwargs_from_flat({}, config)
+def _default_builder() -> BertExpertLinearConfigBuilder:
+    runtime = model_package("bert/expert_linear").bind_runtime_defaults()
+    return BertExpertLinearConfigBuilder(runtime=runtime)
 
 
 class TestBertExpertLinearModel(unittest.TestCase):
@@ -242,7 +240,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         nsp_head_options = BertNspHeadOptions(
             pooler_activation=ActivationOptions.SIGMOID,
             pooler_bias_flag=False,
-            output_dim=3,
+            output_dim=2,
             head_bias_flag=False,
         )
         flat_kwargs = {
@@ -276,53 +274,31 @@ class TestBertExpertLinearModel(unittest.TestCase):
             "mlm_decoder_weight_tying_flag": True,
             "nsp_pooler_activation": ActivationOptions.SIGMOID,
             "nsp_pooler_bias_flag": False,
-            "nsp_output_dim": 3,
             "nsp_head_bias_flag": False,
             "num_experts": 4,
             "top_k": 2,
             "expert_stack_hidden_dim": 12,
             "router_stack_hidden_dim": 10,
         }
-        adapted = expert_linear_builder_kwargs_from_flat(flat_kwargs, config)
+        package = model_package("bert/expert_linear")
+        runtime = package.bind_runtime_defaults(flat_kwargs)
+        builder = BertExpertLinearConfigBuilder(runtime=runtime)
 
-        self.assertEqual(adapted["embedding_options"], embedding_options)
-        self.assertEqual(adapted["encoder_options"], encoder_options)
+        self.assertEqual(builder.embedding_options, embedding_options)
+        self.assertEqual(builder.encoder_options, encoder_options)
         self.assertEqual(
-            adapted["positional_embedding_options"],
+            builder.positional_embedding_options,
             positional_embedding_options,
         )
-        self.assertEqual(adapted["attention_options"], attention_options)
-        self.assertEqual(adapted["feed_forward_options"], feed_forward_options)
-        self.assertEqual(adapted["mlm_head_options"], mlm_head_options)
-        self.assertEqual(adapted["nsp_head_options"], nsp_head_options)
-        self.assertNotIn("embedding_dropout_probability", adapted)
-
-        flat_config = BertExpertLinearConfigBuilder(
-            runtime=RuntimeOptions(adapted)
-        ).build()
-        typed_config = BertExpertLinearConfigBuilder(
-            runtime=RuntimeOptions(
-                {
-                    "batch_size": 2,
-                    "learning_rate": 0.02,
-                    "input_dim": 32,
-                    "output_dim": 32,
-                    "sequence_length": 8,
-                    "embedding_options": embedding_options,
-                    "encoder_options": encoder_options,
-                    "positional_embedding_options": positional_embedding_options,
-                    "attention_options": attention_options,
-                    "feed_forward_options": feed_forward_options,
-                    "mlm_head_options": mlm_head_options,
-                    "nsp_head_options": nsp_head_options,
-                    "mixture_options": adapted["mixture_options"],
-                    "expert_stack_options": adapted["expert_stack_options"],
-                    "router_stack_options": adapted["router_stack_options"],
-                }
-            )
-        ).build()
-
-        self.assertEqual(flat_config, typed_config)
+        self.assertEqual(builder.attention_options, attention_options)
+        self.assertEqual(builder.feed_forward_options, feed_forward_options)
+        self.assertEqual(builder.mlm_head_options, mlm_head_options)
+        self.assertEqual(builder.nsp_head_options, nsp_head_options)
+        self.assertFalse(hasattr(runtime, "embedding_dropout_probability"))
+        self.assertEqual(
+            builder.build(),
+            package.build_configuration(config_overrides=flat_kwargs),
+        )
 
     def test_feed_forward_stack_is_expert_backed(self):
         cfg = self._config(ExperimentPreset.TOP1_SWITCH_AUX)
@@ -658,7 +634,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         nsp_head_options = BertNspHeadOptions(
             pooler_activation=ActivationOptions.SIGMOID,
             pooler_bias_flag=False,
-            output_dim=3,
+            output_dim=2,
             head_bias_flag=False,
         )
         cfg = self._direct_config(
@@ -679,7 +655,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         self.assertIsNot(model.mlm_decoder.weight, model.token_embedding.weight)
         self.assertIsNone(model.pooler.bias)
         self.assertIsInstance(model.pooler_activation, nn.Sigmoid)
-        self.assertEqual(model.nsp_head.out_features, 3)
+        self.assertEqual(model.nsp_head.out_features, 2)
         self.assertIsNone(model.nsp_head.bias)
 
         mlm_logits, nsp_logits, auxiliary_loss = model(*self._fake_bert_inputs(cfg))
@@ -687,7 +663,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
             mlm_logits.shape,
             (2, cfg.sequence_length, cfg.output_dim),
         )
-        self.assertEqual(nsp_logits.shape, (2, 3))
+        self.assertEqual(nsp_logits.shape, (2, 2))
         self.assertEqual(auxiliary_loss.dim(), 0)
 
     def test_mlm_decoder_tying_is_conditional(self):
@@ -695,7 +671,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
         untied = Model(
             self._direct_config(
                 mlm_head_options=replace(
-                    _default_builder_kwargs()["mlm_head_options"],
+                    _default_builder().mlm_head_options,
                     decoder_weight_tying_flag=False,
                 )
             )
@@ -708,7 +684,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
             input_dim=29,
             output_dim=31,
             mlm_head_options=replace(
-                _default_builder_kwargs()["mlm_head_options"],
+                _default_builder().mlm_head_options,
                 decoder_weight_tying_flag=False,
             ),
         )
@@ -719,33 +695,27 @@ class TestBertExpertLinearModel(unittest.TestCase):
             self._direct_config(input_dim=29, output_dim=31)
 
     def test_invalid_dimensions_and_dropout_are_rejected(self):
-        defaults = _default_builder_kwargs()
+        defaults = _default_builder()
         cases = {
             "input_dim": {"input_dim": 0},
             "hidden_dim": {
                 "encoder_options": replace(
-                    defaults["encoder_options"],
+                    defaults.encoder_options,
                     hidden_dim=0,
                 )
             },
             "output_dim": {
                 "output_dim": 0,
                 "mlm_head_options": replace(
-                    defaults["mlm_head_options"],
+                    defaults.mlm_head_options,
                     decoder_weight_tying_flag=False,
                 ),
             },
             "sequence_length": {"sequence_length": 0},
             "token_type_vocab_size": {
                 "embedding_options": replace(
-                    defaults["embedding_options"],
+                    defaults.embedding_options,
                     token_type_vocab_size=0,
-                )
-            },
-            "nsp_output_dim": {
-                "nsp_head_options": replace(
-                    defaults["nsp_head_options"],
-                    output_dim=0,
                 )
             },
         }
@@ -759,7 +729,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
                     self._direct_config(
                         embedding_options=replace(
-                            defaults["embedding_options"],
+                            defaults.embedding_options,
                             dropout_probability=probability,
                         )
                     )
@@ -767,7 +737,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
                     Model(
                         self._direct_config(
                             encoder_options=replace(
-                                defaults["encoder_options"],
+                                defaults.encoder_options,
                                 hidden_dim=8,
                                 num_layers=2,
                                 dropout_probability=probability,
@@ -775,6 +745,7 @@ class TestBertExpertLinearModel(unittest.TestCase):
                         )
                     )
 
+    @pytest.mark.training
     def test_representative_presets_train_one_tiny_epoch(self):
         for preset in (
             ExperimentPreset.BASELINE,
@@ -803,15 +774,53 @@ class TestBertExpertLinearModel(unittest.TestCase):
             config_overrides=overrides,
         )[0]
 
-    def _direct_config(self, **overrides):
-        builder_kwargs = expert_linear_builder_kwargs_from_flat(
-            self._small_overrides(),
-            config,
+    def _direct_config(
+        self,
+        *,
+        embedding_options: BertEmbeddingOptions | None = None,
+        encoder_options: TransformerEncoderOptions | None = None,
+        mlm_head_options: BertMlmHeadOptions | None = None,
+        nsp_head_options: BertNspHeadOptions | None = None,
+        **overrides,
+    ):
+        flat_overrides = {
+            **self._small_overrides(),
+            **overrides,
+        }
+        if embedding_options is not None:
+            flat_overrides.update(
+                token_type_vocab_size=embedding_options.token_type_vocab_size,
+                embedding_layer_norm_flag=embedding_options.layer_norm_flag,
+                embedding_dropout_probability=embedding_options.dropout_probability,
+            )
+        if encoder_options is not None:
+            flat_overrides.update(
+                hidden_dim=encoder_options.hidden_dim,
+                stack_num_layers=encoder_options.num_layers,
+                stack_activation=encoder_options.activation,
+                stack_dropout_probability=encoder_options.dropout_probability,
+                layer_norm_position=encoder_options.layer_norm_position,
+                causal_attention_mask_flag=encoder_options.causal_attention_mask_flag,
+            )
+        if mlm_head_options is not None:
+            flat_overrides.update(
+                mlm_activation=mlm_head_options.activation,
+                mlm_dense_bias_flag=mlm_head_options.dense_bias_flag,
+                mlm_layer_norm_flag=mlm_head_options.layer_norm_flag,
+                mlm_decoder_bias_flag=mlm_head_options.decoder_bias_flag,
+                mlm_decoder_weight_tying_flag=(
+                    mlm_head_options.decoder_weight_tying_flag
+                ),
+            )
+        if nsp_head_options is not None:
+            flat_overrides.update(
+                nsp_pooler_activation=nsp_head_options.pooler_activation,
+                nsp_pooler_bias_flag=nsp_head_options.pooler_bias_flag,
+                nsp_head_bias_flag=nsp_head_options.head_bias_flag,
+            )
+        return model_package("bert/expert_linear").build_configuration(
+            config_overrides=flat_overrides
         )
-        builder_kwargs.update(overrides)
-        return BertExpertLinearConfigBuilder(
-            runtime=RuntimeOptions(builder_kwargs)
-        ).build()
 
     def _small_overrides(self) -> dict:
         return {

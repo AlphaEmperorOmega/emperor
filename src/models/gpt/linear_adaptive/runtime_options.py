@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import ModuleType
+from typing import cast
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -298,5 +300,201 @@ class HiddenAdaptiveMaskOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class _ConstructionOptions:
+    batch_size: int
+    learning_rate: float
+    input_dim: int
+    output_dim: int
+    sequence_length: int
+    embedding_options: GptEmbeddingOptions | None
+    decoder_options: TransformerDecoderOptions | None
+    positional_embedding_options: TransformerPositionalEmbeddingOptions | None
+    attention_options: TransformerAttentionOptions | None
+    feed_forward_options: TransformerFeedForwardOptions | None
+    lm_head_options: GptLmHeadOptions | None
+    attention_projection_stack_options: SubmoduleStackOptions | None
+    attention_projection_layer_controller_options: LayerControllerOptions | None
+    attention_projection_dynamic_memory_options: DynamicMemoryOptions | None
+    attention_projection_recurrent_controller_options: RecurrentControllerOptions | None
+    feed_forward_stack_options: SubmoduleStackOptions | None
+    feed_forward_layer_controller_options: LayerControllerOptions | None
+    feed_forward_dynamic_memory_options: DynamicMemoryOptions | None
+    feed_forward_recurrent_controller_options: RecurrentControllerOptions | None
+    stack_options: MainLayerStackOptions | None
+    submodule_stack_options: SubmoduleStackOptions | None
+    layer_controller_options: LayerControllerOptions | None
+    dynamic_memory_options: DynamicMemoryOptions | None
+    recurrent_controller_options: RecurrentControllerOptions | None
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
+    hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
+    attention_adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
+    attention_hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    attention_hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    attention_hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    attention_hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
+    feed_forward_adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
+    feed_forward_hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    feed_forward_hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    feed_forward_hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    feed_forward_hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeOptions(ResolvedRuntimeOptions):
-    pass
+    def _construction_options(
+        self,
+        config_module: ModuleType,
+    ) -> _ConstructionOptions:
+        values = self._values
+        return _ConstructionOptions(
+            batch_size=cast(int, values.get("batch_size", config_module.BATCH_SIZE)),
+            learning_rate=cast(
+                float,
+                values.get("learning_rate", config_module.LEARNING_RATE),
+            ),
+            input_dim=cast(int, values.get("input_dim", config_module.INPUT_DIM)),
+            output_dim=cast(int, values.get("output_dim", config_module.OUTPUT_DIM)),
+            sequence_length=cast(
+                int,
+                values.get("sequence_length", config_module.SEQUENCE_LENGTH),
+            ),
+            embedding_options=cast(
+                GptEmbeddingOptions | None,
+                values.get("embedding_options"),
+            ),
+            decoder_options=cast(
+                TransformerDecoderOptions | None,
+                values.get("decoder_options"),
+            ),
+            positional_embedding_options=cast(
+                TransformerPositionalEmbeddingOptions | None,
+                values.get("positional_embedding_options"),
+            ),
+            attention_options=cast(
+                TransformerAttentionOptions | None,
+                values.get("attention_options"),
+            ),
+            feed_forward_options=cast(
+                TransformerFeedForwardOptions | None,
+                values.get("feed_forward_options"),
+            ),
+            lm_head_options=cast(
+                GptLmHeadOptions | None,
+                values.get("lm_head_options"),
+            ),
+            attention_projection_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("attention_projection_stack_options"),
+            ),
+            attention_projection_layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("attention_projection_layer_controller_options"),
+            ),
+            attention_projection_dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("attention_projection_dynamic_memory_options"),
+            ),
+            attention_projection_recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("attention_projection_recurrent_controller_options"),
+            ),
+            feed_forward_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("feed_forward_stack_options"),
+            ),
+            feed_forward_layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("feed_forward_layer_controller_options"),
+            ),
+            feed_forward_dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("feed_forward_dynamic_memory_options"),
+            ),
+            feed_forward_recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("feed_forward_recurrent_controller_options"),
+            ),
+            stack_options=cast(
+                MainLayerStackOptions | None,
+                values.get("stack_options"),
+            ),
+            submodule_stack_options=cast(
+                SubmoduleStackOptions | None,
+                values.get("submodule_stack_options"),
+            ),
+            layer_controller_options=cast(
+                LayerControllerOptions | None,
+                values.get("layer_controller_options"),
+            ),
+            dynamic_memory_options=cast(
+                DynamicMemoryOptions | None,
+                values.get("dynamic_memory_options"),
+            ),
+            recurrent_controller_options=cast(
+                RecurrentControllerOptions | None,
+                values.get("recurrent_controller_options"),
+            ),
+            adaptive_generator_stack_options=cast(
+                AdaptiveGeneratorStackOptions | None,
+                values.get("adaptive_generator_stack_options"),
+            ),
+            hidden_adaptive_weight_options=cast(
+                HiddenAdaptiveWeightOptions | None,
+                values.get("hidden_adaptive_weight_options"),
+            ),
+            hidden_adaptive_bias_options=cast(
+                HiddenAdaptiveBiasOptions | None,
+                values.get("hidden_adaptive_bias_options"),
+            ),
+            hidden_adaptive_diagonal_options=cast(
+                HiddenAdaptiveDiagonalOptions | None,
+                values.get("hidden_adaptive_diagonal_options"),
+            ),
+            hidden_adaptive_mask_options=cast(
+                HiddenAdaptiveMaskOptions | None,
+                values.get("hidden_adaptive_mask_options"),
+            ),
+            attention_adaptive_generator_stack_options=cast(
+                AdaptiveGeneratorStackOptions | None,
+                values.get("attention_adaptive_generator_stack_options"),
+            ),
+            attention_hidden_adaptive_weight_options=cast(
+                HiddenAdaptiveWeightOptions | None,
+                values.get("attention_hidden_adaptive_weight_options"),
+            ),
+            attention_hidden_adaptive_bias_options=cast(
+                HiddenAdaptiveBiasOptions | None,
+                values.get("attention_hidden_adaptive_bias_options"),
+            ),
+            attention_hidden_adaptive_diagonal_options=cast(
+                HiddenAdaptiveDiagonalOptions | None,
+                values.get("attention_hidden_adaptive_diagonal_options"),
+            ),
+            attention_hidden_adaptive_mask_options=cast(
+                HiddenAdaptiveMaskOptions | None,
+                values.get("attention_hidden_adaptive_mask_options"),
+            ),
+            feed_forward_adaptive_generator_stack_options=cast(
+                AdaptiveGeneratorStackOptions | None,
+                values.get("feed_forward_adaptive_generator_stack_options"),
+            ),
+            feed_forward_hidden_adaptive_weight_options=cast(
+                HiddenAdaptiveWeightOptions | None,
+                values.get("feed_forward_hidden_adaptive_weight_options"),
+            ),
+            feed_forward_hidden_adaptive_bias_options=cast(
+                HiddenAdaptiveBiasOptions | None,
+                values.get("feed_forward_hidden_adaptive_bias_options"),
+            ),
+            feed_forward_hidden_adaptive_diagonal_options=cast(
+                HiddenAdaptiveDiagonalOptions | None,
+                values.get("feed_forward_hidden_adaptive_diagonal_options"),
+            ),
+            feed_forward_hidden_adaptive_mask_options=cast(
+                HiddenAdaptiveMaskOptions | None,
+                values.get("feed_forward_hidden_adaptive_mask_options"),
+            ),
+        )

@@ -248,43 +248,6 @@ def feed_forward_options_from_config(
     )
 
 
-def _adaptive_controller_stack_from_config(
-    config_module: ModuleType,
-    prefix: str,
-) -> ControllerStackOptions:
-    return ControllerStackOptions(
-        independent_flag=getattr(config_module, f"{prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config_module, f"{prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config_module, f"{prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(
-            config_module,
-            f"{prefix}_LAST_LAYER_BIAS_OPTION",
-        ),
-        apply_output_pipeline_flag=getattr(
-            config_module,
-            f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
-        ),
-        activation=getattr(config_module, f"{prefix}_ACTIVATION"),
-        layer_norm_position=getattr(
-            config_module,
-            f"{prefix}_LAYER_NORM_POSITION",
-        ),
-        residual_connection_option=getattr(
-            config_module,
-            f"{prefix}_RESIDUAL_CONNECTION_OPTION",
-        ),
-        residual_model_flag=getattr(
-            config_module,
-            f"{prefix}_RESIDUAL_MODEL_FLAG",
-        ),
-        dropout_probability=getattr(
-            config_module,
-            f"{prefix}_DROPOUT_PROBABILITY",
-        ),
-        bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
-    )
-
-
 def adaptive_options_from_config(
     config_module: ModuleType,
     prefix: str,
@@ -394,19 +357,19 @@ def adaptive_options_from_config(
                 f"{prefix}_GENERATOR_STACK_BIAS_FLAG",
             ),
         ),
-        weight_generator_stack_options=_adaptive_controller_stack_from_config(
+        weight_generator_stack_options=_controller_stack_from_config(
             config_module,
             f"{prefix}_WEIGHT_GENERATOR_STACK",
         ),
-        bias_generator_stack_options=_adaptive_controller_stack_from_config(
+        bias_generator_stack_options=_controller_stack_from_config(
             config_module,
             f"{prefix}_BIAS_GENERATOR_STACK",
         ),
-        diagonal_generator_stack_options=_adaptive_controller_stack_from_config(
+        diagonal_generator_stack_options=_controller_stack_from_config(
             config_module,
             f"{prefix}_DIAGONAL_GENERATOR_STACK",
         ),
-        mask_generator_stack_options=_adaptive_controller_stack_from_config(
+        mask_generator_stack_options=_controller_stack_from_config(
             config_module,
             f"{prefix}_MASK_GENERATOR_STACK",
         ),
@@ -543,17 +506,38 @@ _ATTENTION_FIELD_MAP = _path_field_map(attention=True)
 _FEED_FORWARD_FIELD_MAP = _path_field_map(attention=False)
 
 
-def _replace_nested(source: Any, dotted_field: str, value: Any) -> Any:
-    outer_field, inner_field = dotted_field.split(".", 1)
-    return replace(
-        source,
-        **{
-            outer_field: replace(
-                getattr(source, outer_field),
-                **{inner_field: value},
-            )
-        },
+_PATH_COMPONENT_FIELDS: Final[dict[str, str]] = {
+    "path": "",
+    "stack": "stack_options",
+    "controller": "layer_controller_options",
+    "memory": "dynamic_memory_options",
+    "recurrent": "recurrent_controller_options",
+    "gate_stack": "layer_controller_options",
+    "halting_stack": "layer_controller_options",
+    "memory_stack": "dynamic_memory_options",
+    "recurrent_gate_stack": "recurrent_controller_options",
+    "recurrent_halting_stack": "recurrent_controller_options",
+}
+
+
+def _replace_dataclass_path(source: Any, dotted_field: str, value: Any) -> Any:
+    field_name, separator, nested_field = dotted_field.partition(".")
+    if not separator:
+        return replace(source, **{field_name: value})
+    nested = _replace_dataclass_path(
+        getattr(source, field_name),
+        nested_field,
+        value,
     )
+    return replace(source, **{field_name: nested})
+
+
+def _component_field_path(component: str, field_name: str) -> str:
+    try:
+        component_field = _PATH_COMPONENT_FIELDS[component]
+    except KeyError:
+        raise ValueError(component) from None
+    return f"{component_field}.{field_name}" if component_field else field_name
 
 
 def _apply_path_updates(
@@ -564,41 +548,14 @@ def _apply_path_updates(
 ) -> TransformerAttentionOptions | TransformerFeedForwardOptions:
     field_map = _ATTENTION_FIELD_MAP if attention else _FEED_FORWARD_FIELD_MAP
     path = options
-    stack = path.stack_options
-    controller = path.layer_controller_options
-    memory = path.dynamic_memory_options
-    recurrent = path.recurrent_controller_options
     for suffix, value in updates.items():
         component, field_name = field_map[suffix]
-        if component == "path":
-            path = replace(path, **{field_name: value})
-        elif component == "stack":
-            stack = replace(stack, **{field_name: value})
-        elif component == "controller":
-            controller = replace(controller, **{field_name: value})
-        elif component == "memory":
-            memory = replace(memory, **{field_name: value})
-        elif component == "recurrent":
-            recurrent = replace(recurrent, **{field_name: value})
-        elif component == "gate_stack":
-            controller = _replace_nested(controller, field_name, value)
-        elif component == "halting_stack":
-            controller = _replace_nested(controller, field_name, value)
-        elif component == "memory_stack":
-            memory = _replace_nested(memory, field_name, value)
-        elif component == "recurrent_gate_stack":
-            recurrent = _replace_nested(recurrent, field_name, value)
-        elif component == "recurrent_halting_stack":
-            recurrent = _replace_nested(recurrent, field_name, value)
-        else:
-            raise ValueError(component)
-    return replace(
-        path,
-        stack_options=stack,
-        layer_controller_options=controller,
-        dynamic_memory_options=memory,
-        recurrent_controller_options=recurrent,
-    )
+        path = _replace_dataclass_path(
+            path,
+            _component_field_path(component, field_name),
+            value,
+        )
+    return replace(path)
 
 
 def _pop_updates(
@@ -938,130 +895,153 @@ _PATH_FIELDS = {
 _EXPERT_FIELDS = {item.name for item in fields(ExpertOptions)}
 
 
-def runtime_from_flat(
-    values: dict[str, Any] | None = None,
-    base: RuntimeOptions | None = None,
+@dataclass(frozen=True)
+class _ResolvedTransformerStacks:
+    encoder: TransformerStackOptions
+    decoder: TransformerStackOptions
+
+
+@dataclass(frozen=True)
+class _ResolvedExpertOptions:
+    attention: ExpertOptions
+    feed_forward: ExpertOptions
+
+
+def _resolve_top_level_runtime(
+    values: MutableMapping[str, Any],
+    runtime: RuntimeOptions,
 ) -> RuntimeOptions:
-    values = validate_runtime_default_values(
-        values,
-        package="models.transformer.expert_linear_adaptive",
-        config_module=config,
-    )
-    runtime = DEFAULT_RUNTIME if base is None else base
     scalar_updates: dict[str, Any] = {}
     model_dim_changed = False
     dropout_changed = False
     for key in list(values):
-        target = key
-        if target == "sequence_length":
+        if key == "sequence_length":
             length = values.pop(key)
             scalar_updates.update(
                 source_sequence_length=length,
                 target_sequence_length=length,
             )
-        elif target in _TOP_LEVEL_FIELDS - _PATH_FIELDS - {
+        elif key in _TOP_LEVEL_FIELDS - _PATH_FIELDS - {
             "encoder_options",
             "decoder_options",
         }:
-            value = values.pop(key)
-            scalar_updates[target] = value
-            model_dim_changed |= target == "model_dim"
-            dropout_changed |= target == "dropout_probability"
-    runtime = replace(runtime, **scalar_updates)
-    if model_dim_changed:
-        values.setdefault("attn_stack_hidden_dim", runtime.model_dim)
-    if dropout_changed:
-        values.setdefault("ff_stack_dropout_probability", runtime.dropout_probability)
+            scalar_updates[key] = values.pop(key)
+            model_dim_changed |= key == "model_dim"
+            dropout_changed |= key == "dropout_probability"
 
-    stack_broadcast = {
-        key: values.pop(key) for key in list(values) if key in _STACK_FIELDS
-    }
+    resolved = replace(runtime, **scalar_updates)
+    if model_dim_changed:
+        values.setdefault("attn_stack_hidden_dim", resolved.model_dim)
+    if dropout_changed:
+        values.setdefault(
+            "ff_stack_dropout_probability",
+            resolved.dropout_probability,
+        )
+    return resolved
+
+
+def _resolve_scoped_stack(
+    values: MutableMapping[str, Any],
+    prefix: str,
+    current: TransformerStackOptions,
+) -> TransformerStackOptions:
+    updates = {}
+    for field_name in _STACK_FIELDS:
+        key = f"{prefix}{field_name}"
+        if key in values:
+            updates[field_name] = values.pop(key)
+    return replace(current, **updates)
+
+
+def _resolve_transformer_stacks(
+    values: MutableMapping[str, Any],
+    runtime: RuntimeOptions,
+) -> _ResolvedTransformerStacks:
+    broadcast = {key: values.pop(key) for key in list(values) if key in _STACK_FIELDS}
     encoder = replace(
-        values.pop("encoder_options", runtime.encoder_options), **stack_broadcast
+        values.pop("encoder_options", runtime.encoder_options),
+        **broadcast,
     )
     decoder = replace(
-        values.pop("decoder_options", runtime.decoder_options), **stack_broadcast
+        values.pop("decoder_options", runtime.decoder_options),
+        **broadcast,
     )
-    for prefix, current in (("encoder_", encoder), ("decoder_", decoder)):
-        updates = {}
-        for field_name in _STACK_FIELDS:
-            key = f"{prefix}{field_name}"
-            if key in values:
-                updates[field_name] = values.pop(key)
-        if prefix == "encoder_":
-            encoder = replace(current, **updates)
-        else:
-            decoder = replace(current, **updates)
+    return _ResolvedTransformerStacks(
+        encoder=_resolve_scoped_stack(values, "encoder_", encoder),
+        decoder=_resolve_scoped_stack(values, "decoder_", decoder),
+    )
 
-    paths = resolve_transformer_path_options(
-        values,
-        TransformerPathOptions(
-            encoder_attention_options=runtime.encoder_attention_options,
-            decoder_self_attention_options=runtime.decoder_self_attention_options,
-            decoder_cross_attention_options=runtime.decoder_cross_attention_options,
-            encoder_feed_forward_options=runtime.encoder_feed_forward_options,
-            decoder_feed_forward_options=runtime.decoder_feed_forward_options,
-        ),
+
+def _runtime_path_options(runtime: RuntimeOptions) -> TransformerPathOptions:
+    return TransformerPathOptions(
+        encoder_attention_options=runtime.encoder_attention_options,
+        decoder_self_attention_options=runtime.decoder_self_attention_options,
+        decoder_cross_attention_options=runtime.decoder_cross_attention_options,
+        encoder_feed_forward_options=runtime.encoder_feed_forward_options,
+        decoder_feed_forward_options=runtime.decoder_feed_forward_options,
     )
+
+
+def _resolve_scoped_experts(
+    values: MutableMapping[str, Any],
+    prefix: str,
+    current: ExpertOptions,
+) -> ExpertOptions:
+    updates = {}
+    for field_name in _EXPERT_FIELDS:
+        key = f"{prefix}{field_name}"
+        if key in values:
+            updates[field_name] = values.pop(key)
+    return replace(current, **updates)
+
+
+def _resolve_expert_options(
+    values: MutableMapping[str, Any],
+    runtime: RuntimeOptions,
+) -> _ResolvedExpertOptions:
     if "expert_attention_use_kv_expert_models_flag" in values:
         values["use_kv_expert_models_flag"] = values.pop(
             "expert_attention_use_kv_expert_models_flag"
         )
-    expert_broadcast = {
-        key: values.pop(key) for key in list(values) if key in _EXPERT_FIELDS
-    }
-    attention_experts = replace(
-        values.pop("attention_expert_options", runtime.attention_expert_options),
-        **expert_broadcast,
+    broadcast = {key: values.pop(key) for key in list(values) if key in _EXPERT_FIELDS}
+    attention = replace(runtime.attention_expert_options, **broadcast)
+    feed_forward = replace(runtime.feed_forward_expert_options, **broadcast)
+    attention = _resolve_scoped_experts(values, "attention_expert_", attention)
+    feed_forward = _resolve_scoped_experts(
+        values,
+        "feed_forward_expert_",
+        feed_forward,
     )
-    feed_forward_experts = replace(
-        values.pop("feed_forward_expert_options", runtime.feed_forward_expert_options),
-        **expert_broadcast,
-    )
-    for prefix, current in (
-        ("attention_expert_", attention_experts),
-        ("feed_forward_expert_", feed_forward_experts),
-    ):
-        updates = {}
-        for field_name in _EXPERT_FIELDS:
-            key = f"{prefix}{field_name}"
-            if key in values:
-                updates[field_name] = values.pop(key)
-        if prefix == "attention_expert_":
-            attention_experts = replace(current, **updates)
-        else:
-            feed_forward_experts = replace(current, **updates)
 
     router_updates = _pop_updates(values, "router_", _FEED_FORWARD_FIELD_MAP)
     expert_path_updates = _pop_updates(values, "expert_", _FEED_FORWARD_FIELD_MAP)
-    attention_experts = replace(
-        attention_experts,
-        router_path_options=_apply_path_updates(
-            attention_experts.router_path_options,
-            router_updates,
-            attention=False,
-        ),
-        expert_path_options=_apply_path_updates(
-            attention_experts.expert_path_options,
-            expert_path_updates,
-            attention=False,
-        ),
-    )
-    feed_forward_experts = replace(
-        feed_forward_experts,
-        router_path_options=_apply_path_updates(
-            feed_forward_experts.router_path_options,
-            router_updates,
-            attention=False,
-        ),
-        expert_path_options=_apply_path_updates(
-            feed_forward_experts.expert_path_options,
-            expert_path_updates,
-            attention=False,
-        ),
+
+    def with_path_updates(options: ExpertOptions) -> ExpertOptions:
+        return replace(
+            options,
+            router_path_options=_apply_path_updates(
+                options.router_path_options,
+                router_updates,
+                attention=False,
+            ),
+            expert_path_options=_apply_path_updates(
+                options.expert_path_options,
+                expert_path_updates,
+                attention=False,
+            ),
+        )
+
+    return _ResolvedExpertOptions(
+        attention=with_path_updates(attention),
+        feed_forward=with_path_updates(feed_forward),
     )
 
-    adaptive_groups = {
+
+def _resolve_adaptive_groups(
+    values: MutableMapping[str, Any],
+    runtime: RuntimeOptions,
+) -> dict[str, AdaptiveParameterOptions]:
+    groups = {
         "attention_projection": runtime.attention_projection_adaptive_options,
         "attention_expert": runtime.attention_expert_adaptive_options,
         "router": runtime.router_adaptive_options,
@@ -1072,12 +1052,7 @@ def runtime_from_flat(
         "encoder_feed_forward": runtime.encoder_feed_forward_adaptive_options,
         "decoder_feed_forward": runtime.decoder_feed_forward_adaptive_options,
     }
-    _pop_adaptive_broadcast(
-        values,
-        "",
-        adaptive_groups,
-        tuple(adaptive_groups),
-    )
+    _pop_adaptive_broadcast(values, "", groups, tuple(groups))
     for prefix, names in (
         (
             "attention_projection_adaptive_",
@@ -1125,12 +1100,7 @@ def runtime_from_flat(
             ),
         ),
     ):
-        _pop_adaptive_broadcast(
-            values,
-            prefix,
-            adaptive_groups,
-            names,
-        )
+        _pop_adaptive_broadcast(values, prefix, groups, names)
     for name, prefixes in (
         ("encoder_attention", ("encoder_attn_", "encoder_attn_adaptive_")),
         (
@@ -1145,11 +1115,11 @@ def runtime_from_flat(
         ("decoder_feed_forward", ("decoder_ff_", "decoder_ff_adaptive_")),
     ):
         for prefix in prefixes:
-            adaptive_groups[name] = _pop_adaptive_options(
-                values,
-                prefix,
-                adaptive_groups[name],
-            )
+            groups[name] = _pop_adaptive_options(values, prefix, groups[name])
+    return groups
+
+
+def _reject_unknown_runtime_default(values: MutableMapping[str, Any]) -> None:
     if values:
         unknown = sorted(values)[0]
         raise TypeError(
@@ -1157,17 +1127,40 @@ def runtime_from_flat(
             "unexpected keyword "
             f"argument {unknown!r}"
         )
+
+
+def runtime_from_flat(
+    values: dict[str, Any] | None = None,
+    base: RuntimeOptions | None = None,
+) -> RuntimeOptions:
+    values = validate_runtime_default_values(
+        values,
+        package="models.transformer.expert_linear_adaptive",
+        config_module=config,
+    )
+    runtime = _resolve_top_level_runtime(
+        values,
+        DEFAULT_RUNTIME if base is None else base,
+    )
+    stacks = _resolve_transformer_stacks(values, runtime)
+    paths = resolve_transformer_path_options(
+        values,
+        _runtime_path_options(runtime),
+    )
+    experts = _resolve_expert_options(values, runtime)
+    adaptive_groups = _resolve_adaptive_groups(values, runtime)
+    _reject_unknown_runtime_default(values)
     return replace(
         runtime,
-        encoder_options=encoder,
-        decoder_options=decoder,
+        encoder_options=stacks.encoder,
+        decoder_options=stacks.decoder,
         encoder_attention_options=paths.encoder_attention_options,
         decoder_self_attention_options=paths.decoder_self_attention_options,
         decoder_cross_attention_options=paths.decoder_cross_attention_options,
         encoder_feed_forward_options=paths.encoder_feed_forward_options,
         decoder_feed_forward_options=paths.decoder_feed_forward_options,
-        attention_expert_options=attention_experts,
-        feed_forward_expert_options=feed_forward_experts,
+        attention_expert_options=experts.attention,
+        feed_forward_expert_options=experts.feed_forward,
         attention_projection_adaptive_options=adaptive_groups["attention_projection"],
         attention_expert_adaptive_options=adaptive_groups["attention_expert"],
         router_adaptive_options=adaptive_groups["router"],

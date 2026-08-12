@@ -1,19 +1,15 @@
 from dataclasses import replace
-from typing import Any
 
 from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
     LastLayerBiasOptions,
-    LayerConfig,
     LayerStackConfig,
     RecurrentLayerConfig,
 )
-from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
 from models.bert.expert_linear_adaptive.runtime_options import (
-    ExpertsAdaptiveGeneratorStackOptions,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsRecurrentControllerOptions,
@@ -22,51 +18,8 @@ from models.bert.expert_linear_adaptive.runtime_options import (
     resolve_experts_controller_stack_options,
 )
 
+from ._controller_stack_config import build_controller_stack_config
 from ._residual import build_residual_config
-
-
-def build_linear_controller_stack(
-    options: ExpertsSubmoduleStackOptions,
-    *,
-    hidden_dim: int | None = None,
-    output_dim: int | None = None,
-) -> LayerStackConfig:
-    return build_controller_stack(
-        options,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        layer_model_config=LinearLayerConfig(bias_flag=options.bias_flag),
-    )
-
-
-def build_controller_stack(
-    options: ExpertsSubmoduleStackOptions | ExpertsAdaptiveGeneratorStackOptions,
-    *,
-    layer_model_config: Any,
-    hidden_dim: int | None = None,
-    output_dim: int | None = None,
-) -> LayerStackConfig:
-    return LayerStackConfig(
-        hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-        output_dim=output_dim,
-        num_layers=options.num_layers,
-        last_layer_bias_option=options.last_layer_bias_option,
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-        layer_config=LayerConfig(
-            activation=options.activation,
-            layer_norm_position=options.layer_norm_position,
-            residual_config=build_residual_config(
-                options.residual_connection_option,
-                options.residual_model_flag,
-                options.residual_stack_options,
-            ),
-            dropout_probability=options.dropout_probability,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            layer_model_config=layer_model_config,
-        ),
-    )
 
 
 class ExpertsGateConfigFactory:
@@ -100,7 +53,7 @@ class ExpertsGateConfigFactory:
             self.__recurrent_gate_stack_defaults(),
         )
         return GateConfig(
-            model_config=build_linear_controller_stack(options),
+            model_config=build_controller_stack_config(options),
             option=self.recurrent_controller_options.recurrent_gate_option,
             activation=self.recurrent_controller_options.recurrent_gate_activation,
         )
@@ -110,7 +63,7 @@ class ExpertsGateConfigFactory:
             self.layer_controller_options.gate_stack_source,
             self.submodule_stack_options,
         )
-        return build_linear_controller_stack(options)
+        return build_controller_stack_config(options)
 
     def __recurrent_gate_stack_defaults(self) -> ExpertsSubmoduleStackOptions:
         if not self.recurrent_stack_inherits_gate_stack:
@@ -178,7 +131,7 @@ class ExpertsHaltingConfigFactory:
     def __build_halting_gate_stack(
         self, options: ExpertsSubmoduleStackOptions
     ) -> LayerStackConfig:
-        return build_linear_controller_stack(
+        return build_controller_stack_config(
             options,
             hidden_dim=options.hidden_dim or self.output_dim,
             output_dim=self.layer_controller_options.halting_output_dim,
@@ -230,7 +183,7 @@ class ExpertsMemoryConfigFactory:
             test_time_training_num_inner_steps=(
                 self.dynamic_memory_options.memory_test_time_training_num_inner_steps
             ),
-            model_config=build_linear_controller_stack(options),
+            model_config=build_controller_stack_config(options),
         )
 
 

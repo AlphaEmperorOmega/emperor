@@ -1,7 +1,5 @@
 from dataclasses import dataclass, replace
-from typing import Any
 
-import models.neuron.expert_linear.config as config
 from emperor.config import ConfigBase
 from emperor.experts import (
     MixtureOfExpertsConfig,
@@ -29,9 +27,7 @@ from models.neuron.expert_linear._hidden.runtime_options import (
     ExpertsSamplerOptions,
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
-    ExpertsSubmoduleStackSource,
     resolve_experts_controller_stack_options,
-    resolve_experts_submodule_stack_options,
 )
 
 from .._residual import build_residual_config
@@ -54,7 +50,7 @@ def build_linear_controller_stack(
 def build_controller_stack(
     options: ExpertsSubmoduleStackOptions | ExpertsAdaptiveGeneratorStackOptions,
     *,
-    layer_model_config: Any,
+    layer_model_config: ConfigBase,
     hidden_dim: int | None = None,
     output_dim: int | None = None,
 ) -> LayerStackConfig:
@@ -278,66 +274,40 @@ class ExpertsRecurrentConfigFactory:
 
 @dataclass(frozen=True)
 class HiddenModelConfigDependencies:
-    hidden_dim: int
-    stack_options: ExpertsStackOptions | None
-    submodule_stack_options: ExpertsSubmoduleStackOptions | None
-    mixture_options: ExpertsMixtureOptions | None
-    expert_stack_options: ExpertsSubmoduleStackOptions | None
-    sampler_options: ExpertsSamplerOptions | None
-    router_options: ExpertsRouterOptions | None
-    router_stack_options: ExpertsSubmoduleStackOptions | None
-    layer_controller_options: ExpertsLayerControllerOptions | None
-    dynamic_memory_options: ExpertsDynamicMemoryOptions | None
-    recurrent_controller_options: ExpertsRecurrentControllerOptions | None
-    expert_layer_controller_options: ExpertsLayerControllerOptions | None
-    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions | None
-    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions | None
+    stack_options: ExpertsStackOptions
+    submodule_stack_options: ExpertsSubmoduleStackOptions
+    mixture_options: ExpertsMixtureOptions
+    expert_stack_options: ExpertsSubmoduleStackOptions
+    sampler_options: ExpertsSamplerOptions
+    router_options: ExpertsRouterOptions
+    router_stack_options: ExpertsSubmoduleStackOptions
+    layer_controller_options: ExpertsLayerControllerOptions
+    dynamic_memory_options: ExpertsDynamicMemoryOptions
+    recurrent_controller_options: ExpertsRecurrentControllerOptions
+    expert_layer_controller_options: ExpertsLayerControllerOptions
+    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions
     output_dim: int
 
 
 class HiddenModelConfigFactory:
     def __init__(self, dependencies: HiddenModelConfigDependencies) -> None:
-        self._hidden_dim = dependencies.hidden_dim
-        self.stack_options = self.__default_stack_options(dependencies.stack_options)
-        self.submodule_stack_options = self.__default_submodule_stack_options(
-            dependencies.submodule_stack_options
-        )
-        self.mixture_options = self.__default_mixture_options(
-            dependencies.mixture_options
-        )
-        self.expert_stack_options = self.__default_expert_stack_options(
-            dependencies.expert_stack_options
-        )
-        self.sampler_options = self.__default_sampler_options(
-            dependencies.sampler_options
-        )
-        self.router_options = self.__default_router_options(dependencies.router_options)
-        self.router_stack_options = self.__default_router_stack_options(
-            dependencies.router_stack_options
-        )
-        self.layer_controller_options = self.__default_layer_controller_options(
-            dependencies.layer_controller_options
-        )
-        self.dynamic_memory_options = self.__default_dynamic_memory_options(
-            dependencies.dynamic_memory_options
-        )
-        self.recurrent_controller_options = self.__default_recurrent_controller_options(
-            dependencies.recurrent_controller_options
-        )
+        self.stack_options = dependencies.stack_options
+        self.submodule_stack_options = dependencies.submodule_stack_options
+        self.mixture_options = dependencies.mixture_options
+        self.expert_stack_options = dependencies.expert_stack_options
+        self.sampler_options = dependencies.sampler_options
+        self.router_options = dependencies.router_options
+        self.router_stack_options = dependencies.router_stack_options
+        self.layer_controller_options = dependencies.layer_controller_options
+        self.dynamic_memory_options = dependencies.dynamic_memory_options
+        self.recurrent_controller_options = dependencies.recurrent_controller_options
         self.expert_layer_controller_options = (
-            self.__default_expert_layer_controller_options(
-                dependencies.expert_layer_controller_options
-            )
+            dependencies.expert_layer_controller_options
         )
-        self.expert_dynamic_memory_options = (
-            self.__default_expert_dynamic_memory_options(
-                dependencies.expert_dynamic_memory_options
-            )
-        )
+        self.expert_dynamic_memory_options = dependencies.expert_dynamic_memory_options
         self.expert_recurrent_controller_options = (
-            self.__default_expert_recurrent_controller_options(
-                dependencies.expert_recurrent_controller_options
-            )
+            dependencies.expert_recurrent_controller_options
         )
         self.hidden_dim = self.stack_options.hidden_dim
         self.output_dim = dependencies.output_dim
@@ -385,258 +355,6 @@ class HiddenModelConfigFactory:
             recurrent_controller_options=self.expert_recurrent_controller_options,
             gate_config_factory=self.expert_gate_config_factory,
             halting_config_factory=self.expert_halting_config_factory,
-        )
-
-    def __default_stack_options(
-        self, stack_options: ExpertsStackOptions | None
-    ) -> ExpertsStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return ExpertsStackOptions(
-            hidden_dim=self._hidden_dim,
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_submodule_stack_options(
-        self, submodule_stack_options: ExpertsSubmoduleStackOptions | None
-    ) -> ExpertsSubmoduleStackOptions:
-        if submodule_stack_options is not None:
-            return submodule_stack_options
-        return ExpertsSubmoduleStackOptions(
-            hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
-            num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
-            last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-            activation=config.SUBMODULE_STACK_ACTIVATION,
-            layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
-            bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
-        )
-
-    def __default_mixture_options(
-        self, mixture_options: ExpertsMixtureOptions | None
-    ) -> ExpertsMixtureOptions:
-        if mixture_options is not None:
-            return mixture_options
-        return ExpertsMixtureOptions(
-            top_k=config.TOP_K,
-            num_experts=config.NUM_EXPERTS,
-            capacity_factor=config.CAPACITY_FACTOR,
-            dropped_token_behavior=config.DROPPED_TOKEN_BEHAVIOR,
-            compute_expert_mixture_flag=config.COMPUTE_EXPERT_MIXTURE_FLAG,
-            weighted_parameters_flag=config.WEIGHTED_PARAMETERS_FLAG,
-            weighting_position_option=config.WEIGHTING_POSITION_OPTION,
-            routing_initialization_mode=config.ROUTING_INITIALIZATION_MODE,
-        )
-
-    def __default_expert_stack_options(
-        self, expert_stack_options: ExpertsSubmoduleStackOptions | None
-    ) -> ExpertsSubmoduleStackOptions:
-        if expert_stack_options is not None:
-            return expert_stack_options
-        return resolve_experts_submodule_stack_options(
-            self.submodule_stack_options,
-            layer_norm_position=config.EXPERT_STACK_LAYER_NORM_POSITION,
-            apply_output_pipeline_flag=config.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_sampler_options(
-        self, sampler_options: ExpertsSamplerOptions | None
-    ) -> ExpertsSamplerOptions:
-        if sampler_options is not None:
-            return sampler_options
-        return ExpertsSamplerOptions(
-            threshold=config.SAMPLER_THRESHOLD,
-            filter_above_threshold=config.SAMPLER_FILTER_ABOVE_THRESHOLD,
-            num_topk_samples=config.SAMPLER_NUM_TOPK_SAMPLES,
-            normalize_probabilities_flag=config.SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
-            noisy_topk_flag=config.SAMPLER_NOISY_TOPK_FLAG,
-            coefficient_of_variation_loss_weight=config.SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
-            switch_loss_weight=config.SAMPLER_SWITCH_LOSS_WEIGHT,
-            zero_centred_loss_weight=config.SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
-            mutual_information_loss_weight=config.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
-        )
-
-    def __default_router_options(
-        self, router_options: ExpertsRouterOptions | None
-    ) -> ExpertsRouterOptions:
-        if router_options is not None:
-            return router_options
-        return ExpertsRouterOptions(noisy_topk_flag=config.ROUTER_NOISY_TOPK_FLAG)
-
-    def __default_router_stack_options(
-        self, router_stack_options: ExpertsSubmoduleStackOptions | None
-    ) -> ExpertsSubmoduleStackOptions:
-        if router_stack_options is not None:
-            return router_stack_options
-        return ExpertsSubmoduleStackOptions(
-            hidden_dim=config.ROUTER_STACK_HIDDEN_DIM,
-            num_layers=config.ROUTER_STACK_NUM_LAYERS,
-            last_layer_bias_option=config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-            activation=config.ROUTER_STACK_ACTIVATION,
-            layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
-            bias_flag=config.ROUTER_BIAS_FLAG,
-        )
-
-    def __default_layer_controller_options(
-        self, layer_controller_options: ExpertsLayerControllerOptions | None
-    ) -> ExpertsLayerControllerOptions:
-        if layer_controller_options is not None:
-            return layer_controller_options
-        return ExpertsLayerControllerOptions(
-            stack_gate_flag=config.STACK_GATE_FLAG,
-            gate_option=config.GATE_OPTION,
-            gate_activation=config.GATE_ACTIVATION,
-            gate_stack_source=self.__default_controller_stack_source("GATE_STACK"),
-            stack_halting_flag=config.STACK_HALTING_FLAG,
-            halting_threshold=config.HALTING_THRESHOLD,
-            halting_dropout=config.HALTING_DROPOUT,
-            halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
-            halting_stack_source=self.__default_controller_stack_source(
-                "HALTING_STACK"
-            ),
-            halting_output_dim=config.HALTING_OUTPUT_DIM,
-        )
-
-    def __default_dynamic_memory_options(
-        self, dynamic_memory_options: ExpertsDynamicMemoryOptions | None
-    ) -> ExpertsDynamicMemoryOptions:
-        if dynamic_memory_options is not None:
-            return dynamic_memory_options
-        return ExpertsDynamicMemoryOptions(
-            memory_flag=config.MEMORY_FLAG,
-            memory_option=config.MEMORY_OPTION,
-            memory_position_option=config.MEMORY_POSITION_OPTION,
-            memory_test_time_training_learning_rate=config.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-            memory_test_time_training_num_inner_steps=config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-            memory_stack_source=self.__default_controller_stack_source("MEMORY_STACK"),
-        )
-
-    def __default_recurrent_controller_options(
-        self, recurrent_controller_options: ExpertsRecurrentControllerOptions | None
-    ) -> ExpertsRecurrentControllerOptions:
-        if recurrent_controller_options is not None:
-            return recurrent_controller_options
-        return ExpertsRecurrentControllerOptions(
-            recurrent_flag=config.RECURRENT_FLAG,
-            recurrent_max_steps=config.RECURRENT_MAX_STEPS,
-            recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
-            recurrent_gradient_transition_count=config.RECURRENT_GRADIENT_TRANSITION_COUNT,
-            recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
-            recurrent_forward_calls_before_iteration_increment=(
-                config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
-            ),
-            recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
-            recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
-            recurrent_gate_option=config.RECURRENT_GATE_OPTION,
-            recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
-            recurrent_gate_stack_source=self.__default_controller_stack_source(
-                "RECURRENT_GATE_STACK"
-            ),
-            recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
-            recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
-            recurrent_halting_dropout=config.RECURRENT_HALTING_DROPOUT,
-            recurrent_halting_hidden_state_mode=config.RECURRENT_HALTING_HIDDEN_STATE_MODE,
-            recurrent_halting_stack_source=self.__default_controller_stack_source(
-                "RECURRENT_HALTING_STACK"
-            ),
-        )
-
-    def __default_expert_layer_controller_options(
-        self, layer_controller_options: ExpertsLayerControllerOptions | None
-    ) -> ExpertsLayerControllerOptions:
-        if layer_controller_options is not None:
-            return layer_controller_options
-        return ExpertsLayerControllerOptions(
-            stack_gate_flag=config.EXPERT_STACK_GATE_FLAG,
-            gate_option=config.EXPERT_GATE_OPTION,
-            gate_activation=config.EXPERT_GATE_ACTIVATION,
-            gate_stack_source=self.__default_controller_stack_source(
-                "EXPERT_GATE_STACK"
-            ),
-            stack_halting_flag=config.EXPERT_STACK_HALTING_FLAG,
-            halting_threshold=config.EXPERT_HALTING_THRESHOLD,
-            halting_dropout=config.EXPERT_HALTING_DROPOUT,
-            halting_hidden_state_mode=config.EXPERT_HALTING_HIDDEN_STATE_MODE,
-            halting_stack_source=self.__default_controller_stack_source(
-                "EXPERT_HALTING_STACK"
-            ),
-            halting_output_dim=config.EXPERT_HALTING_OUTPUT_DIM,
-        )
-
-    def __default_expert_dynamic_memory_options(
-        self, dynamic_memory_options: ExpertsDynamicMemoryOptions | None
-    ) -> ExpertsDynamicMemoryOptions:
-        if dynamic_memory_options is not None:
-            return dynamic_memory_options
-        return ExpertsDynamicMemoryOptions(
-            memory_flag=config.EXPERT_MEMORY_FLAG,
-            memory_option=config.EXPERT_MEMORY_OPTION,
-            memory_position_option=config.EXPERT_MEMORY_POSITION_OPTION,
-            memory_test_time_training_learning_rate=config.EXPERT_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-            memory_test_time_training_num_inner_steps=config.EXPERT_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-            memory_stack_source=self.__default_controller_stack_source(
-                "EXPERT_MEMORY_STACK"
-            ),
-        )
-
-    def __default_expert_recurrent_controller_options(
-        self, recurrent_controller_options: ExpertsRecurrentControllerOptions | None
-    ) -> ExpertsRecurrentControllerOptions:
-        if recurrent_controller_options is not None:
-            return recurrent_controller_options
-        return ExpertsRecurrentControllerOptions(
-            recurrent_flag=config.EXPERT_RECURRENT_FLAG,
-            recurrent_max_steps=config.EXPERT_RECURRENT_MAX_STEPS,
-            recurrent_layer_norm_position=config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
-            recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
-            recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
-            recurrent_gate_activation=config.EXPERT_RECURRENT_GATE_ACTIVATION,
-            recurrent_gate_stack_source=self.__default_controller_stack_source(
-                "EXPERT_RECURRENT_GATE_STACK"
-            ),
-            recurrent_stack_halting_flag=config.EXPERT_RECURRENT_STACK_HALTING_FLAG,
-            recurrent_halting_threshold=config.EXPERT_RECURRENT_HALTING_THRESHOLD,
-            recurrent_halting_dropout=config.EXPERT_RECURRENT_HALTING_DROPOUT,
-            recurrent_halting_hidden_state_mode=config.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE,
-            recurrent_halting_stack_source=self.__default_controller_stack_source(
-                "EXPERT_RECURRENT_HALTING_STACK"
-            ),
-        )
-
-    def __default_controller_stack_source(
-        self, prefix: str
-    ) -> ExpertsSubmoduleStackSource:
-        return ExpertsSubmoduleStackSource(
-            independent_flag=getattr(config, f"{prefix}_INDEPENDENT_FLAG"),
-            hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-            num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-            last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-            apply_output_pipeline_flag=getattr(
-                config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-            ),
-            activation=getattr(config, f"{prefix}_ACTIVATION"),
-            layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-            residual_connection_option=getattr(
-                config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-            ),
-            residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-            dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-            bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
         )
 
     def build(self) -> MixtureOfExpertsModelConfig | RecurrentLayerConfig:
@@ -767,15 +485,10 @@ class HiddenModelConfigFactory:
     def __build_router_config(self) -> RouterConfig:
         mixture_options = self.mixture_options
         router_options = self.router_options
-        model_config = self.__build_controller_stack(self.router_stack_options)
+        model_config = build_linear_controller_stack(self.router_stack_options)
         return RouterConfig(
             input_dim=self.hidden_dim,
             num_experts=mixture_options.num_experts,
             noisy_topk_flag=router_options.noisy_topk_flag,
             model_config=model_config,
         )
-
-    def __build_controller_stack(
-        self, options: ExpertsSubmoduleStackOptions
-    ) -> LayerStackConfig:
-        return build_linear_controller_stack(options)

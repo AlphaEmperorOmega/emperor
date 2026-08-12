@@ -72,23 +72,20 @@ class CoreConfigFactory:
             dependencies.submodule_stack_options
             or config_defaults.linears_submodule_stack_options(
                 config,
-                "SUBMODULE_STACK",
+                config_defaults.LinearRole.MAIN,
             )
         )
         self.layer_controller_options = (
             dependencies.layer_controller_options
-            or self.__layer_controller_options(
-                gate_prefix="GATE",
-                halting_prefix="HALTING",
-            )
+            or self.__layer_controller_options(config_defaults.LinearRole.MAIN)
         )
         self.dynamic_memory_options = (
             dependencies.dynamic_memory_options
-            or self.__dynamic_memory_options(memory_prefix="MEMORY")
+            or self.__dynamic_memory_options(config_defaults.LinearRole.MAIN)
         )
         self.recurrent_controller_options = (
             dependencies.recurrent_controller_options
-            or self.__recurrent_controller_options(recurrent_prefix="RECURRENT")
+            or self.__recurrent_controller_options(config_defaults.LinearRole.MAIN)
         )
         self.attention_projection_stack_options = (
             dependencies.attention_projection_stack_options
@@ -96,18 +93,15 @@ class CoreConfigFactory:
         )
         self.attention_projection_layer_controller_options = (
             dependencies.attention_projection_layer_controller_options
-            or self.__layer_controller_options(
-                gate_prefix="ATTN_GATE",
-                halting_prefix="ATTN_HALTING",
-            )
+            or self.__layer_controller_options(config_defaults.LinearRole.ATTENTION)
         )
         self.attention_projection_dynamic_memory_options = (
             dependencies.attention_projection_dynamic_memory_options
-            or self.__dynamic_memory_options(memory_prefix="ATTN_MEMORY")
+            or self.__dynamic_memory_options(config_defaults.LinearRole.ATTENTION)
         )
         self.attention_projection_recurrent_controller_options = (
             dependencies.attention_projection_recurrent_controller_options
-            or self.__recurrent_controller_options(recurrent_prefix="ATTN_RECURRENT")
+            or self.__recurrent_controller_options(config_defaults.LinearRole.ATTENTION)
         )
         self.feed_forward_stack_options = (
             dependencies.feed_forward_stack_options
@@ -115,18 +109,17 @@ class CoreConfigFactory:
         )
         self.feed_forward_layer_controller_options = (
             dependencies.feed_forward_layer_controller_options
-            or self.__layer_controller_options(
-                gate_prefix="FF_GATE",
-                halting_prefix="FF_HALTING",
-            )
+            or self.__layer_controller_options(config_defaults.LinearRole.FEED_FORWARD)
         )
         self.feed_forward_dynamic_memory_options = (
             dependencies.feed_forward_dynamic_memory_options
-            or self.__dynamic_memory_options(memory_prefix="FF_MEMORY")
+            or self.__dynamic_memory_options(config_defaults.LinearRole.FEED_FORWARD)
         )
         self.feed_forward_recurrent_controller_options = (
             dependencies.feed_forward_recurrent_controller_options
-            or self.__recurrent_controller_options(recurrent_prefix="FF_RECURRENT")
+            or self.__recurrent_controller_options(
+                config_defaults.LinearRole.FEED_FORWARD
+            )
         )
 
     def build_decoder_config(self):
@@ -135,9 +128,7 @@ class CoreConfigFactory:
     def __attention_projection_stack_options(self) -> SubmoduleStackOptions:
         defaults = config_defaults.linears_submodule_stack_options(
             config,
-            "ATTN_STACK",
-            num_layers_key="ATTN_NUM_LAYERS",
-            bias_key="ATTN_BIAS_FLAG",
+            config_defaults.LinearRole.ATTENTION,
         )
         return replace(
             defaults,
@@ -150,9 +141,7 @@ class CoreConfigFactory:
     def __feed_forward_stack_options(self) -> SubmoduleStackOptions:
         defaults = config_defaults.linears_submodule_stack_options(
             config,
-            "FF_STACK",
-            num_layers_key="FF_NUM_LAYERS",
-            bias_key="FF_BIAS_FLAG",
+            config_defaults.LinearRole.FEED_FORWARD,
         )
         return replace(
             defaults,
@@ -175,40 +164,21 @@ class CoreConfigFactory:
 
     def __layer_controller_options(
         self,
-        *,
-        gate_prefix: str,
-        halting_prefix: str,
+        role: config_defaults.LinearRole,
     ) -> LayerControllerOptions:
-        return config_defaults.linears_layer_controller_options(
-            config,
-            gate_prefix=gate_prefix,
-            gate_stack_prefix=f"{gate_prefix}_STACK",
-            halting_prefix=halting_prefix,
-            halting_stack_prefix=f"{halting_prefix}_STACK",
-        )
+        return config_defaults.linears_layer_controller_options(config, role)
 
     def __dynamic_memory_options(
         self,
-        *,
-        memory_prefix: str,
+        role: config_defaults.LinearRole,
     ) -> DynamicMemoryOptions:
-        return config_defaults.linears_dynamic_memory_options(
-            config,
-            memory_prefix=memory_prefix,
-            memory_stack_prefix=f"{memory_prefix}_STACK",
-        )
+        return config_defaults.linears_dynamic_memory_options(config, role)
 
     def __recurrent_controller_options(
         self,
-        *,
-        recurrent_prefix: str,
+        role: config_defaults.LinearRole,
     ) -> RecurrentControllerOptions:
-        return config_defaults.linears_recurrent_controller_options(
-            config,
-            recurrent_prefix=recurrent_prefix,
-            gate_stack_prefix=f"{recurrent_prefix}_GATE_STACK",
-            halting_stack_prefix=f"{recurrent_prefix}_HALTING_STACK",
-        )
+        return config_defaults.linears_recurrent_controller_options(config, role)
 
     def __core_dependencies(self) -> _CoreDependencies:
         dependencies = self.dependencies

@@ -2,6 +2,7 @@ import math
 import unittest
 from dataclasses import dataclass
 
+import pytest
 import torch
 from lightning import LightningModule
 
@@ -531,6 +532,7 @@ class SamplerConstructionAndRouterTests(unittest.TestCase):
             (5, 4),
         )
 
+    @pytest.mark.training
     def test_router_computes_exact_affine_values_and_backpropagates(self) -> None:
         model = RouterModel(router_config(input_dim=2, num_experts=3)).double()
         linear = model.model.layers[0].model

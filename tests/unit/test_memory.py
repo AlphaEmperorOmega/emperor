@@ -1,6 +1,7 @@
 import unittest
 from dataclasses import dataclass
 
+import pytest
 import torch
 import torch.nn as nn
 from lightning import LightningModule, Trainer
@@ -1194,6 +1195,7 @@ class TestMemoryHandlers(unittest.TestCase):
         ):
             model._extract_model_hidden(object())
 
+    @pytest.mark.training
     def test_ttt_succeeds_through_lightning_validate_and_test(self):
         data_loader = DataLoader(
             TensorDataset(

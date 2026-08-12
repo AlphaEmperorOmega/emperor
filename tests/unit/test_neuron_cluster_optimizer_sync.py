@@ -3,6 +3,7 @@ import unittest
 import warnings
 from types import SimpleNamespace
 
+import pytest
 import torch
 import torch.nn as nn
 from lightning.pytorch.trainer.states import TrainerFn
@@ -227,6 +228,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
             all(id(parameter) in after_sync_param_ids for parameter in new_params)
         )
 
+    @pytest.mark.training
     def test_frozen_growth_stays_optimizer_owned_across_later_unfreeze(self):
         cluster = self.build_growing_cluster()
         cluster.requires_grad_(False)
@@ -580,6 +582,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
                 msg=lambda message, name=name: f"{name}: {message}",
             )
 
+    @pytest.mark.training
     def test_named_load_removes_optimizer_orphans_from_reconciled_topology(
         self,
     ) -> None:
@@ -666,6 +669,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
                         expected_value,
                     )
 
+    @pytest.mark.training
     def test_named_role_load_rolls_back_same_cardinality_scheduler_failure(
         self,
     ) -> None:
@@ -735,6 +739,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
         scheduler.step()
         self.assertEqual(scheduler.last_epoch, 1)
 
+    @pytest.mark.training
     def test_cyclic_scheduler_failure_restores_callable_and_full_payload(
         self,
     ) -> None:
@@ -1261,6 +1266,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
             torch.ones_like(live_parameter),
         )
 
+    @pytest.mark.training
     def test_named_stateless_sgd_prunes_neuron_and_preserves_external_parameter(
         self,
     ) -> None:
@@ -1508,6 +1514,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
             )
         )
 
+    @pytest.mark.training
     def test_sync_drops_empty_param_group_after_prune(self):
         cluster = self.build_pruning_cluster()
         idle_neuron = self.plant_idle_neuron(cluster)
@@ -1566,6 +1573,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
         optimizer.step()
         scheduler.step()
 
+    @pytest.mark.training
     def test_prune_preserves_preexisting_unrelated_empty_optimizer_group(
         self,
     ) -> None:

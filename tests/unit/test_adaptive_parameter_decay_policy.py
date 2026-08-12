@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import unittest
 
+import pytest
 import torch
 from torch import Tensor, nn
 
@@ -560,6 +561,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         self.assertEqual(failing_bias_generator.calls, 1)
         self.assertEqual(bias.decay_step.item(), 1.0)
 
+    @pytest.mark.training
     def test_active_additive_bias_model_and_adam_state_continue_after_restore(
         self,
     ) -> None:

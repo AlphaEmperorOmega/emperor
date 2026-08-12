@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
     BankExpansionFactorOptions,
@@ -22,6 +24,8 @@ from emperor.augmentations.adaptive_parameters import (
     WeightNormalizationPositionOptions,
 )
 from emperor.layers import LayerStackConfig
+
+_AdaptiveParameterConfigT = TypeVar("_AdaptiveParameterConfigT")
 
 _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
     SingleModelDynamicWeightConfig: (
@@ -51,6 +55,22 @@ _MASK_OPTION_FIELDS: dict[type[AxisMaskConfig], tuple[str, ...]] = {
     ),
     DiagonalAxisMaskConfig: ("mask_transition_width",),
 }
+
+
+def resolve_enabled_adaptive_parameter_option(
+    *,
+    option_flag: bool,
+    option: type[_AdaptiveParameterConfigT] | None,
+    option_flag_name: str,
+    option_name: str,
+) -> type[_AdaptiveParameterConfigT] | None:
+    """Resolve an optional adaptive parameter type guarded by its enable flag."""
+
+    if not option_flag:
+        return None
+    if option is None:
+        raise ValueError(f"{option_name} must be set when {option_flag_name} is True.")
+    return option
 
 
 def build_weight_config(

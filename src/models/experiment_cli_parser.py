@@ -8,10 +8,6 @@ from model_runtime.packages import ModelPackage
 from models.config_overrides import add_config_override_arguments
 
 
-class _ExperimentParser(argparse.ArgumentParser):
-    pass
-
-
 def preset_name_to_cli(name: str) -> str:
     return BaseOptions.cli_name(name)
 
@@ -19,10 +15,10 @@ def preset_name_to_cli(name: str) -> str:
 def get_experiment_parser(
     package: ModelPackage,
     config_choices: list | None = None,
-) -> _ExperimentParser:
+) -> argparse.ArgumentParser:
     if not isinstance(package, ModelPackage):
         raise TypeError("Experiment parsing requires a selected ModelPackage.")
-    parser = _ExperimentParser(
+    parser = argparse.ArgumentParser(
         description="Run an experiment with a named configuration.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -137,4 +133,4 @@ def get_experiment_parser(
     return parser
 
 
-__all__ = ["_ExperimentParser", "get_experiment_parser", "preset_name_to_cli"]
+__all__ = ["get_experiment_parser", "preset_name_to_cli"]

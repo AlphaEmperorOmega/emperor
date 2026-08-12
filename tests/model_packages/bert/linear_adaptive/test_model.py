@@ -1,9 +1,9 @@
 import importlib
 import inspect
 import unittest
-from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -12,10 +12,6 @@ import models.bert.linear_adaptive.dataset_options as dataset_options
 import models.bert.linear_adaptive.runtime_options as runtime_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
 from emperor.layers import ActivationOptions, LayerNormPositionOptions
-from models.bert.linear_adaptive import _config_defaults as config_defaults
-from models.bert.linear_adaptive._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat,
-)
 from models.bert.linear_adaptive.config_builder import (
     BertLinearAdaptiveConfigBuilder,
 )
@@ -26,7 +22,7 @@ from models.bert.linear_adaptive.presets import (
 )
 from models.bert.linear_adaptive.runtime_options import RuntimeOptions
 from models.catalog import model_package
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomBertPretrainingDataModule,
     tiny_cpu_trainer,
 )
@@ -160,17 +156,11 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
 
     def test_config_builder_uses_supplied_local_adaptive_defaults(self):
         local_hidden_dim = config.HIDDEN_DIM + 11
-        adaptive_generator_stack_options = replace(
-            self._default_builder_kwargs()["adaptive_generator_stack_options"],
-            hidden_dim=local_hidden_dim,
-        )
-
-        builder_kwargs = self._default_builder_kwargs()
-        builder_kwargs["adaptive_generator_stack_options"] = (
-            adaptive_generator_stack_options
+        runtime = model_package("bert/linear_adaptive").bind_runtime_defaults(
+            {"adaptive_generator_stack_hidden_dim": local_hidden_dim}
         )
         builder = BertLinearAdaptiveConfigBuilder(
-            runtime=RuntimeOptions(builder_kwargs),
+            runtime=runtime,
         )
 
         self.assertEqual(
@@ -221,65 +211,27 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
                         f"models.bert.linear_adaptive.{module_name}"
                     )
 
-    def test_flat_adapter_matches_explicit_typed_runtime_configuration(self):
+    def test_flat_runtime_defaults_reach_configuration(self):
         flat_options = {
             **self._test_overrides(),
             "weight_option": config.LowRankDynamicWeightConfig,
             "stack_gate_flag": True,
         }
-        encoder_options = replace(
-            config_defaults.bert_encoder_options(config),
-            hidden_dim=flat_options["hidden_dim"],
-            num_layers=flat_options["stack_num_layers"],
-            dropout_probability=flat_options["stack_dropout_probability"],
-        )
-        attention_options = replace(
-            config_defaults.bert_attention_options(config),
-            num_heads=flat_options["attn_num_heads"],
-        )
-        recurrent_controller_options = replace(
-            config_defaults.linears_recurrent_controller_options(
-                config,
-                recurrent_prefix="RECURRENT",
-                gate_stack_prefix="RECURRENT_GATE_STACK",
-                halting_stack_prefix="RECURRENT_HALTING_STACK",
-            ),
-            recurrent_max_steps=flat_options["recurrent_max_steps"],
-        )
-        layer_controller_options = replace(
-            config_defaults.linears_layer_controller_options(
-                config,
-                gate_prefix="GATE",
-                gate_stack_prefix="GATE_STACK",
-                halting_prefix="HALTING",
-                halting_stack_prefix="HALTING_STACK",
-            ),
-            stack_gate_flag=True,
-        )
-        weight_options = replace(
-            config_defaults.hidden_adaptive_weight_options(config),
-            option_flag=True,
-            option=config.LowRankDynamicWeightConfig,
-        )
+        original = dict(flat_options)
+        package = model_package("bert/linear_adaptive")
+        runtime = package.bind_runtime_defaults(flat_options)
+        configuration = BertLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
-        adapted = linear_adaptive_builder_kwargs_from_flat(flat_options, config)
-        self.assertEqual(adapted["encoder_options"], encoder_options)
-        self.assertEqual(adapted["attention_options"], attention_options)
+        self.assertEqual(flat_options, original)
         self.assertEqual(
-            adapted["recurrent_controller_options"],
-            recurrent_controller_options,
+            configuration,
+            package.build_configuration(config_overrides=flat_options),
         )
-        self.assertEqual(adapted["layer_controller_options"], layer_controller_options)
-        self.assertEqual(adapted["hidden_adaptive_weight_options"], weight_options)
-
-        runtime = model_package("bert/linear_adaptive").bind_runtime_defaults(
-            flat_options
-        )
-        self.assertEqual(runtime, RuntimeOptions(adapted))
-        self.assertIsInstance(
-            BertLinearAdaptiveConfigBuilder(runtime=runtime).build().hidden_dim,
-            int,
-        )
+        self.assertEqual(configuration.hidden_dim, flat_options["hidden_dim"])
+        encoder_config = configuration.experiment_config.encoder_config
+        encoder_stack = getattr(encoder_config, "block_config", encoder_config)
+        self.assertEqual(encoder_stack.num_layers, flat_options["stack_num_layers"])
+        self.assertIsNotNone(encoder_stack.layer_config.gate_config)
 
     def test_unknown_runtime_default_is_rejected_at_package_boundary(self):
         with self.assertRaisesRegex(ValueError, "unknown_option"):
@@ -473,7 +425,6 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
                 "mlm_decoder_weight_tying_flag": False,
                 "nsp_pooler_activation": ActivationOptions.RELU,
                 "nsp_pooler_bias_flag": False,
-                "nsp_output_dim": 3,
                 "nsp_head_bias_flag": False,
             },
         )
@@ -489,7 +440,7 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
         self.assertIsNot(model.mlm_decoder.weight, model.token_embedding.weight)
         self.assertIsInstance(model.pooler_activation, nn.ReLU)
         self.assertIsNone(model.pooler.bias)
-        self.assertEqual(model.nsp_head.out_features, 3)
+        self.assertEqual(model.nsp_head.out_features, 2)
         self.assertIsNone(model.nsp_head.bias)
 
     def test_all_presets_forward_one_batch(self):
@@ -507,6 +458,7 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
                 self.assertEqual(auxiliary_loss.dim(), 0)
                 self.assertTrue(torch.isfinite(auxiliary_loss))
 
+    @pytest.mark.training
     def test_baseline_trains_one_tiny_epoch(self):
         cfg = self._config(ExperimentPreset.BASELINE)
         model = Model(cfg)
@@ -526,47 +478,6 @@ class TestBertLinearAdaptiveModel(unittest.TestCase):
             ][0],
             config_overrides=config_overrides or self._test_overrides(),
         )[0]
-
-    def _default_builder_kwargs(self) -> dict:
-        return {
-            "adaptive_generator_stack_options": (
-                config_defaults.adaptive_generator_stack_options(config)
-            ),
-            "feed_forward_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "FF_STACK",
-                    num_layers_key="FF_NUM_LAYERS",
-                    bias_key="FF_BIAS_FLAG",
-                )
-            ),
-            "feed_forward_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="FF_GATE",
-                    gate_stack_prefix="FF_GATE_STACK",
-                    halting_prefix="FF_HALTING",
-                    halting_stack_prefix="FF_HALTING_STACK",
-                )
-            ),
-            "attention_projection_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "ATTN_STACK",
-                    num_layers_key="ATTN_NUM_LAYERS",
-                    bias_key="ATTN_BIAS_FLAG",
-                )
-            ),
-            "attention_projection_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="ATTN_GATE",
-                    gate_stack_prefix="ATTN_GATE_STACK",
-                    halting_prefix="ATTN_HALTING",
-                    halting_stack_prefix="ATTN_HALTING_STACK",
-                )
-            ),
-        }
 
     def _test_overrides(self) -> dict:
         return {

@@ -3,6 +3,7 @@ import inspect
 import unittest
 from dataclasses import replace
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -29,9 +30,6 @@ from emperor.transformer import (
     TransformerDecoderLayerState,
 )
 from models.catalog import model_package
-from models.gpt.expert_linear._builder_adapter import (
-    expert_linear_builder_kwargs_from_flat,
-)
 from models.gpt.expert_linear.config_builder import GptExpertLinearConfigBuilder
 from models.gpt.expert_linear.experiment_config import ExperimentConfig
 from models.gpt.expert_linear.model import Model
@@ -43,13 +41,12 @@ from models.gpt.expert_linear.presets import (
 from models.gpt.expert_linear.runtime_options import (
     GptEmbeddingOptions,
     GptLmHeadOptions,
-    RuntimeOptions,
     TransformerAttentionOptions,
     TransformerDecoderOptions,
     TransformerFeedForwardOptions,
     TransformerPositionalEmbeddingOptions,
 )
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
@@ -343,16 +340,19 @@ class TestGptExpertLinearModel(unittest.TestCase):
             "expert_stack_hidden_dim": 12,
             "router_stack_hidden_dim": 10,
         }
-        adapted = expert_linear_builder_kwargs_from_flat(flat_kwargs, config)
-        self.assertEqual(adapted["embedding_options"], embedding_options)
-        self.assertEqual(adapted["decoder_options"], decoder_options)
-        self.assertEqual(adapted["positional_embedding_options"], positional_options)
-        self.assertEqual(adapted["attention_options"], attention_options)
-        self.assertEqual(adapted["feed_forward_options"], feed_forward_options)
-        self.assertEqual(adapted["lm_head_options"], lm_head_options)
-        runtime = model_package("gpt/expert_linear").bind_runtime_defaults(flat_kwargs)
-        self.assertEqual(runtime, RuntimeOptions(adapted))
-        GptExpertLinearConfigBuilder(runtime=runtime).build()
+        package = model_package("gpt/expert_linear")
+        runtime = package.bind_runtime_defaults(flat_kwargs)
+        builder = GptExpertLinearConfigBuilder(runtime=runtime)
+        self.assertEqual(builder.embedding_options, embedding_options)
+        self.assertEqual(builder.decoder_options, decoder_options)
+        self.assertEqual(builder.positional_embedding_options, positional_options)
+        self.assertEqual(builder.attention_options, attention_options)
+        self.assertEqual(builder.feed_forward_options, feed_forward_options)
+        self.assertEqual(builder.lm_head_options, lm_head_options)
+        self.assertEqual(
+            builder.build(),
+            package.build_configuration(config_overrides=flat_kwargs),
+        )
 
     def test_feed_forward_stack_is_expert_backed(self):
         cfg = self._preset_config(ExperimentPreset.TOP1_SWITCH_AUX)
@@ -584,14 +584,14 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertIsNone(spy.state.target_attention_mask)
 
     def test_boundary_options_and_tying_are_fully_configurable(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cfg = self._direct_config(
             embedding_options=GptEmbeddingOptions(
                 layer_norm_flag=False,
                 dropout_probability=0.25,
             ),
             lm_head_options=replace(
-                defaults["lm_head_options"],
+                defaults.lm_head_options,
                 weight_tying_flag=False,
                 bias_flag=True,
             ),
@@ -609,12 +609,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertEqual(tuple(auxiliary_loss.shape), ())
 
     def test_untied_head_allows_mismatched_vocabularies(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cfg = self._direct_config(
             input_dim=29,
             output_dim=31,
             lm_head_options=replace(
-                defaults["lm_head_options"],
+                defaults.lm_head_options,
                 weight_tying_flag=False,
             ),
         )
@@ -624,19 +624,19 @@ class TestGptExpertLinearModel(unittest.TestCase):
             self._direct_config(input_dim=29, output_dim=31)
 
     def test_invalid_dimensions_and_dropout_are_rejected(self):
-        defaults = self._default_builder_kwargs()
+        defaults = self._default_builder()
         cases = {
             "input_dim": {"input_dim": 0},
             "hidden_dim": {
                 "decoder_options": replace(
-                    defaults["decoder_options"],
+                    defaults.decoder_options,
                     hidden_dim=0,
                 )
             },
             "output_dim": {
                 "output_dim": 0,
                 "lm_head_options": replace(
-                    defaults["lm_head_options"],
+                    defaults.lm_head_options,
                     weight_tying_flag=False,
                 ),
             },
@@ -651,7 +651,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "dropout_probability"):
                     self._direct_config(
                         embedding_options=replace(
-                            defaults["embedding_options"],
+                            defaults.embedding_options,
                             dropout_probability=probability,
                         )
                     )
@@ -673,6 +673,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
                 self.assertEqual(logits.shape[-1], dataset.num_classes)
                 self.assertEqual(tuple(auxiliary_loss.shape), ())
 
+    @pytest.mark.training
     def test_representative_presets_train_tiny_epochs(self):
         for preset in (
             ExperimentPreset.BASELINE,
@@ -705,13 +706,39 @@ class TestGptExpertLinearModel(unittest.TestCase):
             },
         )[0]
 
-    def _direct_config(self, **overrides):
-        kwargs = expert_linear_builder_kwargs_from_flat(
-            self._small_overrides(),
-            config,
+    def _direct_config(
+        self,
+        *,
+        embedding_options: GptEmbeddingOptions | None = None,
+        decoder_options: TransformerDecoderOptions | None = None,
+        lm_head_options: GptLmHeadOptions | None = None,
+        **overrides,
+    ):
+        flat_overrides = {
+            **self._small_overrides(),
+            **overrides,
+        }
+        if embedding_options is not None:
+            flat_overrides.update(
+                embedding_layer_norm_flag=embedding_options.layer_norm_flag,
+                embedding_dropout_probability=embedding_options.dropout_probability,
+            )
+        if decoder_options is not None:
+            flat_overrides.update(
+                hidden_dim=decoder_options.hidden_dim,
+                stack_num_layers=decoder_options.num_layers,
+                stack_activation=decoder_options.activation,
+                stack_dropout_probability=decoder_options.dropout_probability,
+                layer_norm_position=decoder_options.layer_norm_position,
+            )
+        if lm_head_options is not None:
+            flat_overrides.update(
+                lm_head_weight_tying_flag=lm_head_options.weight_tying_flag,
+                lm_head_bias_flag=lm_head_options.bias_flag,
+            )
+        return model_package("gpt/expert_linear").build_configuration(
+            config_overrides=flat_overrides
         )
-        kwargs.update(overrides)
-        return GptExpertLinearConfigBuilder(runtime=RuntimeOptions(kwargs)).build()
 
     def _small_overrides(self) -> dict:
         return {
@@ -732,8 +759,9 @@ class TestGptExpertLinearModel(unittest.TestCase):
             "recurrent_max_steps": 2,
         }
 
-    def _default_builder_kwargs(self) -> dict:
-        return expert_linear_builder_kwargs_from_flat({}, config)
+    def _default_builder(self) -> GptExpertLinearConfigBuilder:
+        runtime = model_package("gpt/expert_linear").bind_runtime_defaults()
+        return GptExpertLinearConfigBuilder(runtime=runtime)
 
     def _input_ids(self, cfg) -> torch.Tensor:
         return torch.randint(0, cfg.input_dim, (2, cfg.sequence_length))

@@ -44,12 +44,17 @@ class MaterializedInspection:
         )
 
 
+def _require_model_package(value: object) -> ModelPackage:
+    if not isinstance(value, ModelPackage):
+        raise TypeError("Inspection requires a selected ModelPackage.")
+    return value
+
+
 def materialize_configuration(
     package: ModelPackage,
     request: InspectionRequest,
 ) -> MaterializedConfiguration:
-    if not isinstance(package, ModelPackage):
-        raise TypeError("Inspection requires a selected ModelPackage.")
+    package = _require_model_package(package)
     try:
         preset = package.resolve_preset(request.preset)
     except ValueError as exc:
@@ -75,6 +80,7 @@ def materialize_configuration(
             package,
             parsed_overrides.values,
             preset,
+            memory_limit_bytes=request.memory_limit_bytes,
         )
         experiment_task = package.resolve_experiment_task(request.experiment_task)
         dataset = package.resolve_dataset(request.dataset, experiment_task)

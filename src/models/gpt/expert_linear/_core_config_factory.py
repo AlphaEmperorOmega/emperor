@@ -1,11 +1,21 @@
 from dataclasses import dataclass
-from typing import Any
 
 import models.gpt.expert_linear.config as config
+from models.gpt.expert_linear._config_defaults import (
+    attention_projection_stack_options,
+    feed_forward_stack_options,
+    gpt_attention_options,
+    gpt_decoder_options,
+    gpt_feed_forward_options,
+    main_layer_stack_options,
+)
 from models.gpt.expert_linear._gpt_core_config_factory import (
     CoreConfigDependencies as _CoreDependencies,
 )
 from models.gpt.expert_linear._gpt_core_config_factory import GptCoreConfigFactory
+from models.gpt.expert_linear._gpt_core_config_factory import (
+    _GptExpertConfigFactory as _ExpertConfigFactory,
+)
 from models.gpt.expert_linear._linear_layer_config_factory import (
     LinearLayerConfigFactory,
 )
@@ -42,138 +52,52 @@ class CoreConfigDependencies:
     dynamic_memory_options: DynamicMemoryOptions | None
     recurrent_controller_options: RecurrentControllerOptions | None
     linear_layer_config_factory: LinearLayerConfigFactory
-    expert_config_factory: Any | None = None
+    expert_config_factory: _ExpertConfigFactory | None = None
 
 
 class CoreConfigFactory:
     def __init__(self, dependencies: CoreConfigDependencies) -> None:
         self.dependencies = dependencies
-        self.decoder_options = self.__default_decoder_options(
-            dependencies.decoder_options
+        self.decoder_options = (
+            gpt_decoder_options(config)
+            if dependencies.decoder_options is None
+            else dependencies.decoder_options
         )
-        self.attention_options = self.__default_attention_options(
-            dependencies.attention_options
+        self.attention_options = (
+            gpt_attention_options(config)
+            if dependencies.attention_options is None
+            else dependencies.attention_options
         )
-        self.feed_forward_options = self.__default_feed_forward_options(
-            dependencies.feed_forward_options
+        self.feed_forward_options = (
+            gpt_feed_forward_options(config)
+            if dependencies.feed_forward_options is None
+            else dependencies.feed_forward_options
         )
-        self.stack_options = self.__default_stack_options(dependencies.stack_options)
+        self.stack_options = (
+            main_layer_stack_options(config)
+            if dependencies.stack_options is None
+            else dependencies.stack_options
+        )
         self.attention_projection_stack_options = (
-            self.__default_attention_projection_stack_options(
-                dependencies.attention_projection_stack_options
+            dependencies.attention_projection_stack_options
+            or attention_projection_stack_options(
+                config,
+                self.decoder_options,
+                self.attention_options,
             )
         )
-        self.feed_forward_stack_options = self.__default_feed_forward_stack_options(
+        self.feed_forward_stack_options = (
             dependencies.feed_forward_stack_options
+            or feed_forward_stack_options(
+                config,
+                self.decoder_options,
+                self.feed_forward_options,
+            )
         )
 
     def build_decoder_config(self):
         core_factory = GptCoreConfigFactory(self.__core_dependencies())
         return core_factory.build_decoder_config()
-
-    def __default_decoder_options(
-        self,
-        decoder_options: TransformerDecoderOptions | None,
-    ) -> TransformerDecoderOptions:
-        if decoder_options is not None:
-            return decoder_options
-        return TransformerDecoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-        )
-
-    def __default_attention_options(
-        self,
-        attention_options: TransformerAttentionOptions | None,
-    ) -> TransformerAttentionOptions:
-        if attention_options is not None:
-            return attention_options
-        return TransformerAttentionOptions(
-            num_heads=config.ATTN_NUM_HEADS,
-            num_layers=config.ATTN_NUM_LAYERS,
-            bias_flag=config.ATTN_BIAS_FLAG,
-            add_key_value_bias_flag=config.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
-        )
-
-    def __default_feed_forward_options(
-        self,
-        feed_forward_options: TransformerFeedForwardOptions | None,
-    ) -> TransformerFeedForwardOptions:
-        if feed_forward_options is not None:
-            return feed_forward_options
-        return TransformerFeedForwardOptions(
-            num_layers=config.FF_NUM_LAYERS,
-            bias_flag=config.FF_BIAS_FLAG,
-        )
-
-    def __default_stack_options(
-        self,
-        stack_options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return MainLayerStackOptions(
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_attention_projection_stack_options(
-        self,
-        stack_options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return SubmoduleStackOptions(
-            hidden_dim=self.decoder_options.hidden_dim,
-            num_layers=self.attention_options.num_layers,
-            last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-            activation=self.decoder_options.activation,
-            layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
-            bias_flag=self.attention_options.bias_flag,
-        )
-
-    def __default_feed_forward_stack_options(
-        self,
-        stack_options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return SubmoduleStackOptions(
-            hidden_dim=self.__scaled_feed_forward_hidden_dim(),
-            num_layers=self.feed_forward_options.num_layers,
-            last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-            activation=self.decoder_options.activation,
-            layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=self.decoder_options.dropout_probability,
-            bias_flag=self.feed_forward_options.bias_flag,
-        )
-
-    def __scaled_feed_forward_hidden_dim(self) -> int:
-        if (
-            config.HIDDEN_DIM > 0
-            and config.FF_STACK_HIDDEN_DIM % config.HIDDEN_DIM == 0
-        ):
-            return self.decoder_options.hidden_dim * (
-                config.FF_STACK_HIDDEN_DIM // config.HIDDEN_DIM
-            )
-        return config.FF_STACK_HIDDEN_DIM
 
     def __core_dependencies(self) -> _CoreDependencies:
         dependencies = self.dependencies

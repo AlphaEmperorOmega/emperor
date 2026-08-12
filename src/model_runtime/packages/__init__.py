@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from model_runtime.packages.inspection_limits import (
         DEFAULT_INSPECTION_CONSTRUCTION_LIMITS,
         InspectionConstructionLimits,
+        InspectionFieldProductLimit,
     )
     from model_runtime.packages.metadata import ModelMetadata
     from model_runtime.packages.presets import (
@@ -46,6 +47,10 @@ if TYPE_CHECKING:
         ExperimentPresetsBase,
         PresetDefinition,
         PresetLock,
+    )
+    from model_runtime.packages.runtime_defaults import (
+        RuntimeDefaultsError,
+        RuntimeDefaultsSpec,
     )
 
 __all__ = [
@@ -55,11 +60,14 @@ __all__ = [
     "ConfigValueError",
     "ExperimentPresetsBase",
     "InspectionConstructionLimits",
+    "InspectionFieldProductLimit",
     "ModelIdentity",
     "ModelMetadata",
     "ModelPackage",
     "PresetDefinition",
     "PresetLock",
+    "RuntimeDefaultsError",
+    "RuntimeDefaultsSpec",
     "abstract_config_class_error",
     "canonical_config_key",
     "config_key_to_flag",
@@ -117,6 +125,7 @@ _IDENTITY_EXPORTS = {
 _INSPECTION_LIMIT_EXPORTS = {
     "DEFAULT_INSPECTION_CONSTRUCTION_LIMITS",
     "InspectionConstructionLimits",
+    "InspectionFieldProductLimit",
 }
 _METADATA_EXPORTS = {
     "ModelMetadata",
@@ -126,6 +135,10 @@ _PRESET_EXPORTS = {
     "ExperimentPresetsBase",
     "PresetDefinition",
     "PresetLock",
+}
+_RUNTIME_DEFAULTS_EXPORTS = {
+    "RuntimeDefaultsError",
+    "RuntimeDefaultsSpec",
 }
 
 
@@ -146,6 +159,8 @@ def __getattr__(name: str) -> Any:
         module_name = "model_runtime.packages.metadata"
     elif name in _PRESET_EXPORTS:
         module_name = "model_runtime.packages.presets"
+    elif name in _RUNTIME_DEFAULTS_EXPORTS:
+        module_name = "model_runtime.packages.runtime_defaults"
     else:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     value = getattr(import_module(module_name), name)

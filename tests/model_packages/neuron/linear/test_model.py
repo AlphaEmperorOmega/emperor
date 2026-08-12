@@ -26,7 +26,6 @@ from models.neuron.linear.presets import (
     Experiment,
     ExperimentPreset,
 )
-from models.neuron.linear.runtime_options import NeuronClusterCapacityOptions
 
 
 def _build_config(**runtime_defaults):
@@ -166,36 +165,28 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertFalse(halting_stack.layer_config.layer_model_config.bias_flag)
 
-    def test_flat_cluster_capacity_binds_to_typed_runtime_options(self):
-        capacity = NeuronClusterCapacityOptions(
-            x_axis_total_neurons=6,
-            y_axis_total_neurons=5,
-            z_axis_total_neurons=2,
-            initial_x_axis_total_neurons=2,
-            initial_y_axis_total_neurons=2,
-            initial_z_axis_total_neurons=1,
-            max_steps=3,
-            growth_threshold=99,
-        )
-        runtime = model_package("neuron/linear").bind_runtime_defaults(
-            {
+    def test_flat_cluster_capacity_reaches_final_configuration(self):
+        expected = {
+            "x_axis_total_neurons": 6,
+            "y_axis_total_neurons": 5,
+            "z_axis_total_neurons": 2,
+            "initial_x_axis_total_neurons": 2,
+            "initial_y_axis_total_neurons": 2,
+            "initial_z_axis_total_neurons": 1,
+            "max_steps": 3,
+            "growth_threshold": 99,
+        }
+        configuration = model_package("neuron/linear").build_configuration(
+            config_overrides={
                 "hidden_dim": 12,
-                "cluster_x_axis_total_neurons": 6,
-                "cluster_y_axis_total_neurons": 5,
-                "cluster_z_axis_total_neurons": 2,
-                "cluster_initial_x_axis_total_neurons": 2,
-                "cluster_initial_y_axis_total_neurons": 2,
-                "cluster_initial_z_axis_total_neurons": 1,
-                "cluster_max_steps": 3,
-                "cluster_growth_threshold": 99,
+                **{f"cluster_{key}": value for key, value in expected.items()},
             }
         )
+        cluster_config = configuration.experiment_config.neuron_cluster_config
 
-        self.assertEqual(
-            runtime._as_construction_kwargs()["cluster_capacity_options"],
-            capacity,
-        )
-        NeuronLinearConfigBuilder(runtime=runtime).build()
+        for field, value in expected.items():
+            with self.subTest(field=field):
+                self.assertEqual(getattr(cluster_config, field), value)
 
     def test_cluster_terminal_top_k_is_clamped(self):
         maximum = _build_config(

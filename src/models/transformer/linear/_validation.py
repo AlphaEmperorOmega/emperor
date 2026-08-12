@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import math
-from dataclasses import fields
+from collections.abc import Callable
+from dataclasses import dataclass, fields
 from numbers import Integral, Real
+from typing import Final
 
 from emperor.layers import RecurrentCompositionConfig
 
@@ -69,6 +71,68 @@ def _validate_controller_stack(name: str, options) -> None:
         )
 
 
+@dataclass(frozen=True)
+class _RecurrentFieldRule:
+    option_field: str
+    runtime_field: str
+    validator: Callable[[str, object], None]
+
+
+_RECURRENT_FIELD_RULES: Final[tuple[_RecurrentFieldRule, ...]] = (
+    _RecurrentFieldRule("max_steps", "recurrent_max_steps", _positive_integer),
+    _RecurrentFieldRule(
+        "latent_updates_per_answer_update",
+        "recurrent_latent_updates_per_answer_update",
+        _positive_integer,
+    ),
+    _RecurrentFieldRule(
+        "answer_update_count",
+        "recurrent_answer_update_count",
+        _positive_integer,
+    ),
+    _RecurrentFieldRule("high_cycles", "recurrent_high_cycles", _positive_integer),
+    _RecurrentFieldRule("low_cycles", "recurrent_low_cycles", _positive_integer),
+    _RecurrentFieldRule(
+        "initialization_standard_deviation",
+        "recurrent_initialization_standard_deviation",
+        _nonnegative_number,
+    ),
+)
+
+
+def _selected_transition_count(options, option_fields: set[str]) -> int | None:
+    if "max_steps" in option_fields:
+        return options.recurrent_max_steps
+    if {"answer_update_count", "latent_updates_per_answer_update"} <= option_fields:
+        return options.recurrent_answer_update_count * (
+            options.recurrent_latent_updates_per_answer_update + 1
+        )
+    if {"high_cycles", "low_cycles"} <= option_fields:
+        return options.recurrent_high_cycles * (options.recurrent_low_cycles + 1)
+    return None
+
+
+def _validate_no_gradient_transition_count(
+    name: str,
+    options,
+    option_fields: set[str],
+) -> None:
+    transition_count = options.recurrent_no_gradient_transition_count
+    if transition_count is None:
+        return
+    field_name = f"{name}_recurrent_no_gradient_transition_count"
+    _nonnegative_integer(field_name, transition_count)
+    total_transition_count = _selected_transition_count(options, option_fields)
+    if (
+        total_transition_count is not None
+        and transition_count >= total_transition_count
+    ):
+        raise ValueError(
+            f"{field_name} must be less than the selected recurrent "
+            f"schedule's {total_transition_count} transitions."
+        )
+
+
 def _validate_recurrent_options(name: str, options) -> None:
     _boolean(
         f"{name}_recurrent_reinject_original_hidden_flag",
@@ -90,61 +154,13 @@ def _validate_recurrent_options(name: str, options) -> None:
             "recurrent config."
         ) from exc
     option_fields = {field.name for field in fields(option)}
-    if "max_steps" in option_fields:
-        _positive_integer(f"{name}_recurrent_max_steps", options.recurrent_max_steps)
-    if "latent_updates_per_answer_update" in option_fields:
-        _positive_integer(
-            f"{name}_recurrent_latent_updates_per_answer_update",
-            options.recurrent_latent_updates_per_answer_update,
-        )
-    if "answer_update_count" in option_fields:
-        _positive_integer(
-            f"{name}_recurrent_answer_update_count",
-            options.recurrent_answer_update_count,
-        )
-    if "high_cycles" in option_fields:
-        _positive_integer(
-            f"{name}_recurrent_high_cycles",
-            options.recurrent_high_cycles,
-        )
-    if "low_cycles" in option_fields:
-        _positive_integer(
-            f"{name}_recurrent_low_cycles",
-            options.recurrent_low_cycles,
-        )
-    if "initialization_standard_deviation" in option_fields:
-        _nonnegative_number(
-            f"{name}_recurrent_initialization_standard_deviation",
-            options.recurrent_initialization_standard_deviation,
-        )
-
-    no_gradient_transition_count = options.recurrent_no_gradient_transition_count
-    if no_gradient_transition_count is not None:
-        field_name = f"{name}_recurrent_no_gradient_transition_count"
-        _nonnegative_integer(field_name, no_gradient_transition_count)
-        if "max_steps" in option_fields:
-            total_transition_count = options.recurrent_max_steps
-        elif {
-            "answer_update_count",
-            "latent_updates_per_answer_update",
-        } <= option_fields:
-            total_transition_count = options.recurrent_answer_update_count * (
-                options.recurrent_latent_updates_per_answer_update + 1
+    for rule in _RECURRENT_FIELD_RULES:
+        if rule.option_field in option_fields:
+            rule.validator(
+                f"{name}_{rule.runtime_field}",
+                getattr(options, rule.runtime_field),
             )
-        elif {"high_cycles", "low_cycles"} <= option_fields:
-            total_transition_count = options.recurrent_high_cycles * (
-                options.recurrent_low_cycles + 1
-            )
-        else:
-            total_transition_count = None
-        if (
-            total_transition_count is not None
-            and no_gradient_transition_count >= total_transition_count
-        ):
-            raise ValueError(
-                f"{field_name} must be less than the selected recurrent "
-                f"schedule's {total_transition_count} transitions."
-            )
+    _validate_no_gradient_transition_count(name, options, option_fields)
 
     if (
         "reinject_original_hidden_flag" not in option_fields

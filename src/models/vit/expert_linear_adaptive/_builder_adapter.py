@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import fields, is_dataclass, replace
+from dataclasses import replace
+from enum import Enum, auto
 from types import ModuleType
-from typing import Any
+from typing import Any, TypeVar
 
 from models.vit.expert_linear_adaptive import _config_defaults as config_defaults
 from models.vit.expert_linear_adaptive import (
     _experts_builder_adapter as experts_builder_adapter,
 )
 from models.vit.expert_linear_adaptive._experts_builder_adapter import (
-    _dynamic_memory_options_from_kwargs as _experts_dynamic_memory_options_from_kwargs,
-)
-from models.vit.expert_linear_adaptive._experts_builder_adapter import (
+    _SUBMODULE_STACK_FIELD_MAP,
     _expert_dynamic_memory_options_from_kwargs,
     _expert_layer_controller_options_from_kwargs,
     _expert_recurrent_controller_options_from_kwargs,
@@ -25,6 +24,12 @@ from models.vit.expert_linear_adaptive._experts_builder_adapter import (
     _router_options_from_kwargs,
     _router_recurrent_controller_options_from_kwargs,
     _sampler_options_from_kwargs,
+)
+from models.vit.expert_linear_adaptive._experts_builder_adapter import (
+    _dynamic_memory_options_from_kwargs as _experts_dynamic_memory_options_from_kwargs,
+)
+from models.vit.expert_linear_adaptive._flat_updates import (
+    pop_updates as _pop_updates,
 )
 from models.vit.expert_linear_adaptive._linears_builder_adapter import (
     _adaptive_generator_stack_options_from_kwargs,
@@ -39,15 +44,32 @@ from models.vit.expert_linear_adaptive._residual import (
 )
 from models.vit.expert_linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
+    AdaptiveGeneratorStackSource,
     DynamicMemoryOptions,
     ExpertsAdaptiveGeneratorStackOptions,
+    ExpertsDynamicMemoryOptions,
+    ExpertsLayerControllerOptions,
+    ExpertsMixtureOptions,
+    ExpertsRecurrentControllerOptions,
+    ExpertsRouterOptions,
+    ExpertsSamplerOptions,
     ExpertsStackOptions,
     ExpertsSubmoduleStackOptions,
+    HiddenAdaptiveBiasOptions,
+    HiddenAdaptiveDiagonalOptions,
+    HiddenAdaptiveMaskOptions,
+    HiddenAdaptiveWeightOptions,
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
     SubmoduleStackOptions,
     SubmoduleStackSource,
+    TransformerAttentionOptions,
+    TransformerEncoderOptions,
+    TransformerFeedForwardOptions,
+    TransformerPositionalEmbeddingOptions,
+    VitOutputOptions,
+    VitPatchOptions,
 )
 
 _experts_layer_controller_options_from_kwargs = (
@@ -84,18 +106,6 @@ _VIT_GROUPED_KEYS = {
 }
 _CONTROLLER_STACK_FIELD_MAP = {
     "independent_flag": "independent_flag",
-    "hidden_dim": "hidden_dim",
-    "num_layers": "num_layers",
-    "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
-    "activation": "activation",
-    "layer_norm_position": "layer_norm_position",
-    "residual_connection_option": "residual_connection_option",
-    "residual_model_flag": "residual_model_flag",
-    "dropout_probability": "dropout_probability",
-    "bias_flag": "bias_flag",
-}
-_SUBMODULE_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
     "num_layers": "num_layers",
     "last_layer_bias_option": "last_layer_bias_option",
@@ -171,7 +181,9 @@ def _attach_residual_stack_options(
     }
     defaults = builder_kwargs.get("submodule_stack_options")
     if defaults is None:
-        defaults = _default_config_options(config_module, "SUBMODULE_STACK_OPTIONS")
+        defaults = config_defaults.linears_submodule_stack_options(
+            config_module, config_defaults.LinearRole.MAIN
+        )
     residual_stack_options = resolve_residual_stack_options(
         ResidualStackSource(
             independent_flag=kwargs.get(
@@ -249,206 +261,360 @@ def _vit_builder_kwargs(
     kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
 ) -> dict[str, Any]:
     builder_kwargs: dict[str, Any] = {}
-    _maybe_set(
-        builder_kwargs,
-        "patch_options",
-        _patch_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "PATCH_OPTIONS",
+    _set_vit_structure_options(builder_kwargs, kwargs, config_module, consumed)
+    _set_main_control_options(builder_kwargs, kwargs, config_module, consumed)
+    _set_attention_control_options(builder_kwargs, kwargs, config_module, consumed)
+    _set_feed_forward_control_options(builder_kwargs, kwargs, config_module, consumed)
+    _ensure_control_dependencies(builder_kwargs, config_module)
+    return builder_kwargs
+
+
+def _set_vit_structure_options(
+    builder_kwargs: dict[str, Any],
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    consumed: set[str],
+) -> None:
+    patch_options = _resolve_patch_options(kwargs, config_module, consumed)
+    if patch_options is not None:
+        builder_kwargs["patch_options"] = patch_options
+    encoder_options = _resolve_encoder_options(kwargs, config_module, consumed)
+    if encoder_options is not None:
+        builder_kwargs["encoder_options"] = encoder_options
+    positional_embedding_options = _resolve_positional_embedding_options(
+        kwargs, config_module, consumed
     )
-    _maybe_set(
-        builder_kwargs,
-        "encoder_options",
-        _encoder_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "ENCODER_OPTIONS",
+    if positional_embedding_options is not None:
+        builder_kwargs["positional_embedding_options"] = positional_embedding_options
+    attention_options = _resolve_attention_options(kwargs, config_module, consumed)
+    if attention_options is not None:
+        builder_kwargs["attention_options"] = attention_options
+    feed_forward_options = _resolve_feed_forward_options(
+        kwargs, config_module, consumed
     )
-    _maybe_set(
-        builder_kwargs,
-        "positional_embedding_options",
-        _positional_embedding_options_from_kwargs,
+    if feed_forward_options is not None:
+        builder_kwargs["feed_forward_options"] = feed_forward_options
+    output_options = _resolve_output_options(kwargs, config_module, consumed)
+    if output_options is not None:
+        builder_kwargs["output_options"] = output_options
+
+
+def _set_main_control_options(
+    builder_kwargs: dict[str, Any],
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    consumed: set[str],
+) -> None:
+    stack_options = _resolve_main_stack_options(kwargs, config_module, consumed)
+    if stack_options is not None:
+        builder_kwargs["stack_options"] = stack_options
+    submodule_stack_options = _resolve_submodule_stack_options(
         kwargs,
         consumed,
-        config_module,
-        "POSITIONAL_EMBEDDING_OPTIONS",
-    )
-    _maybe_set(
-        builder_kwargs,
-        "attention_options",
-        _attention_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "ATTENTION_OPTIONS",
-    )
-    _maybe_set(
-        builder_kwargs,
-        "feed_forward_options",
-        _feed_forward_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "FEED_FORWARD_OPTIONS",
-    )
-    _maybe_set(
-        builder_kwargs,
-        "output_options",
-        _output_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "OUTPUT_OPTIONS",
-    )
-    _maybe_set(
-        builder_kwargs,
-        "stack_options",
-        _main_stack_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "STACK_OPTIONS",
-    )
-    _maybe_set(
-        builder_kwargs,
-        "submodule_stack_options",
-        _submodule_stack_options_from_kwargs,
-        kwargs,
-        consumed,
-        config_module,
-        "SUBMODULE_STACK_OPTIONS",
+        option_key="submodule_stack_options",
+        provided=kwargs.get("submodule_stack_options"),
+        defaults_factory=lambda: config_defaults.linears_submodule_stack_options(
+            config_module, config_defaults.LinearRole.MAIN
+        ),
         flat_prefix="submodule_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "layer_controller_options",
-        _layer_controller_options_from_kwargs,
+    if submodule_stack_options is not None:
+        builder_kwargs["submodule_stack_options"] = submodule_stack_options
+    layer_controller_options = _resolve_layer_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "LAYER_CONTROLLER_OPTIONS",
+        option_key="layer_controller_options",
+        provided=kwargs.get("layer_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_layer_controller_options(
+            config_module, config_defaults.LinearRole.MAIN
+        ),
         flat_prefix="",
         gate_stack_prefix="gate_stack",
         halting_stack_prefix="halting_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "dynamic_memory_options",
-        _dynamic_memory_options_from_kwargs,
+    if layer_controller_options is not None:
+        builder_kwargs["layer_controller_options"] = layer_controller_options
+    dynamic_memory_options = _resolve_dynamic_memory_options(
         kwargs,
         consumed,
-        config_module,
-        "DYNAMIC_MEMORY_OPTIONS",
+        option_key="dynamic_memory_options",
+        provided=kwargs.get("dynamic_memory_options"),
+        defaults_factory=lambda: config_defaults.linears_dynamic_memory_options(
+            config_module, config_defaults.LinearRole.MAIN
+        ),
         flat_prefix="",
         memory_stack_prefix="memory_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "recurrent_controller_options",
-        _recurrent_controller_options_from_kwargs,
+    if dynamic_memory_options is not None:
+        builder_kwargs["dynamic_memory_options"] = dynamic_memory_options
+    recurrent_controller_options = _resolve_recurrent_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "RECURRENT_CONTROLLER_OPTIONS",
+        option_key="recurrent_controller_options",
+        provided=kwargs.get("recurrent_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_recurrent_controller_options(
+            config_module, config_defaults.LinearRole.MAIN
+        ),
         flat_prefix="recurrent",
         gate_stack_prefix="recurrent_gate_stack",
         halting_stack_prefix="recurrent_halting_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "attention_projection_stack_options",
-        _submodule_stack_options_from_kwargs,
+    if recurrent_controller_options is not None:
+        builder_kwargs["recurrent_controller_options"] = recurrent_controller_options
+
+
+def _set_attention_control_options(
+    builder_kwargs: dict[str, Any],
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    consumed: set[str],
+) -> None:
+    stack_options = _resolve_submodule_stack_options(
         kwargs,
         consumed,
-        config_module,
-        "ATTENTION_PROJECTION_STACK_OPTIONS",
+        option_key="attention_projection_stack_options",
+        provided=kwargs.get("attention_projection_stack_options"),
+        defaults_factory=lambda: config_defaults.linears_submodule_stack_options(
+            config_module, config_defaults.LinearRole.ATTENTION
+        ),
         flat_prefix="attn_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "attention_projection_layer_controller_options",
-        _layer_controller_options_from_kwargs,
+    if stack_options is not None:
+        builder_kwargs["attention_projection_stack_options"] = stack_options
+    layer_controller_options = _resolve_layer_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "ATTENTION_PROJECTION_LAYER_CONTROLLER_OPTIONS",
+        option_key="attention_projection_layer_controller_options",
+        provided=kwargs.get("attention_projection_layer_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_layer_controller_options(
+            config_module, config_defaults.LinearRole.ATTENTION
+        ),
         flat_prefix="attn",
         gate_stack_prefix="attn_gate_stack",
         halting_stack_prefix="attn_halting_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "attention_projection_dynamic_memory_options",
-        _dynamic_memory_options_from_kwargs,
+    if layer_controller_options is not None:
+        builder_kwargs["attention_projection_layer_controller_options"] = (
+            layer_controller_options
+        )
+    dynamic_memory_options = _resolve_dynamic_memory_options(
         kwargs,
         consumed,
-        config_module,
-        "ATTENTION_PROJECTION_DYNAMIC_MEMORY_OPTIONS",
+        option_key="attention_projection_dynamic_memory_options",
+        provided=kwargs.get("attention_projection_dynamic_memory_options"),
+        defaults_factory=lambda: config_defaults.linears_dynamic_memory_options(
+            config_module, config_defaults.LinearRole.ATTENTION
+        ),
         flat_prefix="attn",
         memory_stack_prefix="attn_memory_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "attention_projection_recurrent_controller_options",
-        _recurrent_controller_options_from_kwargs,
+    if dynamic_memory_options is not None:
+        builder_kwargs["attention_projection_dynamic_memory_options"] = (
+            dynamic_memory_options
+        )
+    recurrent_controller_options = _resolve_recurrent_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "ATTENTION_PROJECTION_RECURRENT_CONTROLLER_OPTIONS",
+        option_key="attention_projection_recurrent_controller_options",
+        provided=kwargs.get("attention_projection_recurrent_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_recurrent_controller_options(
+            config_module, config_defaults.LinearRole.ATTENTION
+        ),
         flat_prefix="attn_recurrent",
         gate_stack_prefix="attn_recurrent_gate_stack",
         halting_stack_prefix="attn_recurrent_halting_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "feed_forward_stack_options",
-        _submodule_stack_options_from_kwargs,
+    if recurrent_controller_options is not None:
+        builder_kwargs["attention_projection_recurrent_controller_options"] = (
+            recurrent_controller_options
+        )
+
+
+def _set_feed_forward_control_options(
+    builder_kwargs: dict[str, Any],
+    kwargs: dict[str, Any],
+    config_module: ModuleType,
+    consumed: set[str],
+) -> None:
+    stack_options = _resolve_submodule_stack_options(
         kwargs,
         consumed,
-        config_module,
-        "FEED_FORWARD_STACK_OPTIONS",
+        option_key="feed_forward_stack_options",
+        provided=kwargs.get("feed_forward_stack_options"),
+        defaults_factory=lambda: config_defaults.linears_submodule_stack_options(
+            config_module, config_defaults.LinearRole.FEED_FORWARD
+        ),
         flat_prefix="ff_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "feed_forward_layer_controller_options",
-        _layer_controller_options_from_kwargs,
+    if stack_options is not None:
+        builder_kwargs["feed_forward_stack_options"] = stack_options
+    layer_controller_options = _resolve_layer_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "FEED_FORWARD_LAYER_CONTROLLER_OPTIONS",
+        option_key="feed_forward_layer_controller_options",
+        provided=kwargs.get("feed_forward_layer_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_layer_controller_options(
+            config_module, config_defaults.LinearRole.FEED_FORWARD
+        ),
         flat_prefix="ff",
         gate_stack_prefix="ff_gate_stack",
         halting_stack_prefix="ff_halting_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "feed_forward_dynamic_memory_options",
-        _dynamic_memory_options_from_kwargs,
+    if layer_controller_options is not None:
+        builder_kwargs["feed_forward_layer_controller_options"] = (
+            layer_controller_options
+        )
+    dynamic_memory_options = _resolve_dynamic_memory_options(
         kwargs,
         consumed,
-        config_module,
-        "FEED_FORWARD_DYNAMIC_MEMORY_OPTIONS",
+        option_key="feed_forward_dynamic_memory_options",
+        provided=kwargs.get("feed_forward_dynamic_memory_options"),
+        defaults_factory=lambda: config_defaults.linears_dynamic_memory_options(
+            config_module, config_defaults.LinearRole.FEED_FORWARD
+        ),
         flat_prefix="ff",
         memory_stack_prefix="ff_memory_stack",
     )
-    _maybe_set(
-        builder_kwargs,
-        "feed_forward_recurrent_controller_options",
-        _recurrent_controller_options_from_kwargs,
+    if dynamic_memory_options is not None:
+        builder_kwargs["feed_forward_dynamic_memory_options"] = dynamic_memory_options
+    recurrent_controller_options = _resolve_recurrent_controller_options(
         kwargs,
         consumed,
-        config_module,
-        "FEED_FORWARD_RECURRENT_CONTROLLER_OPTIONS",
+        option_key="feed_forward_recurrent_controller_options",
+        provided=kwargs.get("feed_forward_recurrent_controller_options"),
+        defaults_factory=lambda: config_defaults.linears_recurrent_controller_options(
+            config_module, config_defaults.LinearRole.FEED_FORWARD
+        ),
         flat_prefix="ff_recurrent",
         gate_stack_prefix="ff_recurrent_gate_stack",
         halting_stack_prefix="ff_recurrent_halting_stack",
     )
-    _ensure_control_dependencies(builder_kwargs, config_module)
-    return builder_kwargs
+    if recurrent_controller_options is not None:
+        builder_kwargs["feed_forward_recurrent_controller_options"] = (
+            recurrent_controller_options
+        )
+
+
+def _record_consumed_helper_keys(
+    kwargs: dict[str, Any], remaining: dict[str, Any], consumed: set[str]
+) -> None:
+    consumed.update(kwargs.keys() - remaining.keys())
+
+
+def _resolved_adaptive_generator_stack_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: AdaptiveGeneratorStackOptions | None,
+    flat_prefix: str | None = None,
+) -> AdaptiveGeneratorStackOptions:
+    remaining = dict(kwargs)
+    if flat_prefix is None:
+        options = _adaptive_generator_stack_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    else:
+        options = _adaptive_generator_stack_options_with_prefix_from_kwargs(
+            remaining,
+            config_module,
+            provided=provided,
+            flat_prefix=flat_prefix,
+        )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_hidden_adaptive_weight_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: HiddenAdaptiveWeightOptions | None,
+    flat_prefix: str = "",
+    stack_prefix: str = "weight_generator_stack",
+    role: config_defaults.AdaptiveRole = config_defaults.AdaptiveRole.MAIN,
+) -> HiddenAdaptiveWeightOptions:
+    remaining = dict(kwargs)
+    options = _hidden_adaptive_weight_options_from_kwargs(
+        remaining,
+        config_module,
+        provided=provided,
+        flat_prefix=flat_prefix,
+        stack_prefix=stack_prefix,
+        role=role,
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_hidden_adaptive_bias_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: HiddenAdaptiveBiasOptions | None,
+    flat_prefix: str = "",
+    stack_prefix: str = "bias_generator_stack",
+    role: config_defaults.AdaptiveRole = config_defaults.AdaptiveRole.MAIN,
+) -> HiddenAdaptiveBiasOptions:
+    remaining = dict(kwargs)
+    options = _hidden_adaptive_bias_options_from_kwargs(
+        remaining,
+        config_module,
+        provided=provided,
+        flat_prefix=flat_prefix,
+        stack_prefix=stack_prefix,
+        role=role,
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_hidden_adaptive_diagonal_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: HiddenAdaptiveDiagonalOptions | None,
+    flat_prefix: str = "",
+    stack_prefix: str = "diagonal_generator_stack",
+    role: config_defaults.AdaptiveRole = config_defaults.AdaptiveRole.MAIN,
+) -> HiddenAdaptiveDiagonalOptions:
+    remaining = dict(kwargs)
+    options = _hidden_adaptive_diagonal_options_from_kwargs(
+        remaining,
+        config_module,
+        provided=provided,
+        flat_prefix=flat_prefix,
+        stack_prefix=stack_prefix,
+        role=role,
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_hidden_adaptive_mask_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: HiddenAdaptiveMaskOptions | None,
+    flat_prefix: str = "",
+    stack_prefix: str = "mask_generator_stack",
+    role: config_defaults.AdaptiveRole = config_defaults.AdaptiveRole.MAIN,
+) -> HiddenAdaptiveMaskOptions:
+    remaining = dict(kwargs)
+    options = _hidden_adaptive_mask_options_from_kwargs(
+        remaining,
+        config_module,
+        provided=provided,
+        flat_prefix=flat_prefix,
+        stack_prefix=stack_prefix,
+        role=role,
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
 
 
 def _adaptive_builder_kwargs(
@@ -458,36 +624,31 @@ def _adaptive_builder_kwargs(
     *,
     include_role_overrides: bool = False,
 ) -> dict[str, Any]:
-    adaptive_generator_stack_options = _private_helper_value(
-        _adaptive_generator_stack_options_from_kwargs,
+    adaptive_generator_stack_options = _resolved_adaptive_generator_stack_options(
         kwargs,
         consumed,
         config_module,
         provided=kwargs.get("adaptive_generator_stack_options"),
     )
-    hidden_adaptive_weight_options = _private_helper_value(
-        _hidden_adaptive_weight_options_from_kwargs,
+    hidden_adaptive_weight_options = _resolved_hidden_adaptive_weight_options(
         kwargs,
         consumed,
         config_module,
         provided=kwargs.get("hidden_adaptive_weight_options"),
     )
-    hidden_adaptive_bias_options = _private_helper_value(
-        _hidden_adaptive_bias_options_from_kwargs,
+    hidden_adaptive_bias_options = _resolved_hidden_adaptive_bias_options(
         kwargs,
         consumed,
         config_module,
         provided=kwargs.get("hidden_adaptive_bias_options"),
     )
-    hidden_adaptive_diagonal_options = _private_helper_value(
-        _hidden_adaptive_diagonal_options_from_kwargs,
+    hidden_adaptive_diagonal_options = _resolved_hidden_adaptive_diagonal_options(
         kwargs,
         consumed,
         config_module,
         provided=kwargs.get("hidden_adaptive_diagonal_options"),
     )
-    hidden_adaptive_mask_options = _private_helper_value(
-        _hidden_adaptive_mask_options_from_kwargs,
+    hidden_adaptive_mask_options = _resolved_hidden_adaptive_mask_options(
         kwargs,
         consumed,
         config_module,
@@ -509,7 +670,7 @@ def _adaptive_builder_kwargs(
             consumed,
             builder_prefix="attention",
             flat_prefix="attn_",
-            config_prefix="ATTN_",
+            role=config_defaults.AdaptiveRole.ATTENTION,
             adaptive_generator_stack_options=adaptive_generator_stack_options,
             hidden_adaptive_weight_options=hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=hidden_adaptive_bias_options,
@@ -524,7 +685,7 @@ def _adaptive_builder_kwargs(
             consumed,
             builder_prefix="feed_forward",
             flat_prefix="ff_",
-            config_prefix="FF_",
+            role=config_defaults.AdaptiveRole.FEED_FORWARD,
             adaptive_generator_stack_options=adaptive_generator_stack_options,
             hidden_adaptive_weight_options=hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=hidden_adaptive_bias_options,
@@ -542,16 +703,15 @@ def _role_adaptive_builder_kwargs(
     *,
     builder_prefix: str,
     flat_prefix: str,
-    config_prefix: str,
-    adaptive_generator_stack_options: Any,
-    hidden_adaptive_weight_options: Any,
-    hidden_adaptive_bias_options: Any,
-    hidden_adaptive_diagonal_options: Any,
-    hidden_adaptive_mask_options: Any,
+    role: config_defaults.AdaptiveRole,
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions,
+    hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions,
+    hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions,
+    hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions,
+    hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions,
 ) -> dict[str, Any]:
     return {
-        f"{builder_prefix}_adaptive_generator_stack_options": _private_helper_value(
-            _adaptive_generator_stack_options_with_prefix_from_kwargs,
+        f"{builder_prefix}_adaptive_generator_stack_options": _resolved_adaptive_generator_stack_options(
             kwargs,
             consumed,
             config_module,
@@ -559,93 +719,61 @@ def _role_adaptive_builder_kwargs(
             or adaptive_generator_stack_options,
             flat_prefix=f"{flat_prefix}adaptive_generator_stack",
         ),
-        f"{builder_prefix}_hidden_adaptive_weight_options": _private_helper_value(
-            _hidden_adaptive_weight_options_from_kwargs,
+        f"{builder_prefix}_hidden_adaptive_weight_options": _resolved_hidden_adaptive_weight_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get(f"{builder_prefix}_hidden_adaptive_weight_options")
-            or _role_config_default(
+            or _role_hidden_adaptive_weight_default(
                 hidden_adaptive_weight_options,
                 config_module,
-                global_default_factory=config_defaults.hidden_adaptive_weight_options,
-                role_default_factory=lambda config_object: (
-                    config_defaults.hidden_adaptive_weight_options(
-                        config_object,
-                        prefix=config_prefix,
-                        stack_prefix=f"{flat_prefix}weight_generator_stack".upper(),
-                    )
-                ),
+                role,
             ),
             flat_prefix=flat_prefix,
-            config_prefix=config_prefix,
             stack_prefix=f"{flat_prefix}weight_generator_stack",
+            role=role,
         ),
-        f"{builder_prefix}_hidden_adaptive_bias_options": _private_helper_value(
-            _hidden_adaptive_bias_options_from_kwargs,
+        f"{builder_prefix}_hidden_adaptive_bias_options": _resolved_hidden_adaptive_bias_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get(f"{builder_prefix}_hidden_adaptive_bias_options")
-            or _role_config_default(
+            or _role_hidden_adaptive_bias_default(
                 hidden_adaptive_bias_options,
                 config_module,
-                global_default_factory=config_defaults.hidden_adaptive_bias_options,
-                role_default_factory=lambda config_object: (
-                    config_defaults.hidden_adaptive_bias_options(
-                        config_object,
-                        prefix=config_prefix,
-                        stack_prefix=f"{flat_prefix}bias_generator_stack".upper(),
-                    )
-                ),
+                role,
             ),
             flat_prefix=flat_prefix,
-            config_prefix=config_prefix,
             stack_prefix=f"{flat_prefix}bias_generator_stack",
+            role=role,
         ),
-        f"{builder_prefix}_hidden_adaptive_diagonal_options": _private_helper_value(
-            _hidden_adaptive_diagonal_options_from_kwargs,
+        f"{builder_prefix}_hidden_adaptive_diagonal_options": _resolved_hidden_adaptive_diagonal_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get(f"{builder_prefix}_hidden_adaptive_diagonal_options")
-            or _role_config_default(
+            or _role_hidden_adaptive_diagonal_default(
                 hidden_adaptive_diagonal_options,
                 config_module,
-                global_default_factory=config_defaults.hidden_adaptive_diagonal_options,
-                role_default_factory=lambda config_object: (
-                    config_defaults.hidden_adaptive_diagonal_options(
-                        config_object,
-                        prefix=config_prefix,
-                        stack_prefix=f"{flat_prefix}diagonal_generator_stack".upper(),
-                    )
-                ),
+                role,
             ),
             flat_prefix=flat_prefix,
-            config_prefix=config_prefix,
             stack_prefix=f"{flat_prefix}diagonal_generator_stack",
+            role=role,
         ),
-        f"{builder_prefix}_hidden_adaptive_mask_options": _private_helper_value(
-            _hidden_adaptive_mask_options_from_kwargs,
+        f"{builder_prefix}_hidden_adaptive_mask_options": _resolved_hidden_adaptive_mask_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get(f"{builder_prefix}_hidden_adaptive_mask_options")
-            or _role_config_default(
+            or _role_hidden_adaptive_mask_default(
                 hidden_adaptive_mask_options,
                 config_module,
-                global_default_factory=config_defaults.hidden_adaptive_mask_options,
-                role_default_factory=lambda config_object: (
-                    config_defaults.hidden_adaptive_mask_options(
-                        config_object,
-                        prefix=config_prefix,
-                        stack_prefix=f"{flat_prefix}mask_generator_stack".upper(),
-                    )
-                ),
+                role,
             ),
             flat_prefix=flat_prefix,
-            config_prefix=config_prefix,
             stack_prefix=f"{flat_prefix}mask_generator_stack",
+            role=role,
         ),
     }
 
@@ -654,9 +782,9 @@ def _adaptive_generator_stack_options_with_prefix_from_kwargs(
     kwargs: dict[str, Any],
     config_module: ModuleType,
     *,
-    provided: Any,
+    provided: AdaptiveGeneratorStackOptions | None,
     flat_prefix: str,
-) -> Any:
+) -> AdaptiveGeneratorStackOptions:
     options = provided or config_defaults.adaptive_generator_stack_options(
         config_module
     )
@@ -670,160 +798,545 @@ def _adaptive_generator_stack_options_with_prefix_from_kwargs(
     return replace(options, **updates) if updates else options
 
 
-def _role_config_default(
-    global_options: Any,
+_RoleValue = TypeVar("_RoleValue")
+
+
+def _role_value(
+    base: _RoleValue,
+    global_default: _RoleValue,
+    role_default: _RoleValue,
+) -> _RoleValue:
+    return role_default if role_default != global_default else base
+
+
+def _merge_generator_stack_source(
+    base: AdaptiveGeneratorStackSource,
+    global_default: AdaptiveGeneratorStackSource,
+    role_default: AdaptiveGeneratorStackSource,
+) -> AdaptiveGeneratorStackSource:
+    merged = replace(
+        base,
+        independent_flag=_role_value(
+            base.independent_flag,
+            global_default.independent_flag,
+            role_default.independent_flag,
+        ),
+        hidden_dim=_role_value(
+            base.hidden_dim, global_default.hidden_dim, role_default.hidden_dim
+        ),
+        layer_norm_position=_role_value(
+            base.layer_norm_position,
+            global_default.layer_norm_position,
+            role_default.layer_norm_position,
+        ),
+        num_layers=_role_value(
+            base.num_layers, global_default.num_layers, role_default.num_layers
+        ),
+        activation=_role_value(
+            base.activation, global_default.activation, role_default.activation
+        ),
+        residual_connection_option=_role_value(
+            base.residual_connection_option,
+            global_default.residual_connection_option,
+            role_default.residual_connection_option,
+        ),
+        residual_model_flag=_role_value(
+            base.residual_model_flag,
+            global_default.residual_model_flag,
+            role_default.residual_model_flag,
+        ),
+        dropout_probability=_role_value(
+            base.dropout_probability,
+            global_default.dropout_probability,
+            role_default.dropout_probability,
+        ),
+        last_layer_bias_option=_role_value(
+            base.last_layer_bias_option,
+            global_default.last_layer_bias_option,
+            role_default.last_layer_bias_option,
+        ),
+        apply_output_pipeline_flag=_role_value(
+            base.apply_output_pipeline_flag,
+            global_default.apply_output_pipeline_flag,
+            role_default.apply_output_pipeline_flag,
+        ),
+        bias_flag=_role_value(
+            base.bias_flag, global_default.bias_flag, role_default.bias_flag
+        ),
+    )
+    return base if merged == base else merged
+
+
+def _merge_hidden_adaptive_weight_options(
+    base: HiddenAdaptiveWeightOptions,
+    global_default: HiddenAdaptiveWeightOptions,
+    role_default: HiddenAdaptiveWeightOptions,
+) -> HiddenAdaptiveWeightOptions:
+    merged = replace(
+        base,
+        generator_depth=_role_value(
+            base.generator_depth,
+            global_default.generator_depth,
+            role_default.generator_depth,
+        ),
+        option_flag=_role_value(
+            base.option_flag, global_default.option_flag, role_default.option_flag
+        ),
+        option=_role_value(base.option, global_default.option, role_default.option),
+        normalization_option=_role_value(
+            base.normalization_option,
+            global_default.normalization_option,
+            role_default.normalization_option,
+        ),
+        normalization_position_option=_role_value(
+            base.normalization_position_option,
+            global_default.normalization_position_option,
+            role_default.normalization_position_option,
+        ),
+        decay_schedule=_role_value(
+            base.decay_schedule,
+            global_default.decay_schedule,
+            role_default.decay_schedule,
+        ),
+        decay_rate=_role_value(
+            base.decay_rate, global_default.decay_rate, role_default.decay_rate
+        ),
+        decay_warmup_batches=_role_value(
+            base.decay_warmup_batches,
+            global_default.decay_warmup_batches,
+            role_default.decay_warmup_batches,
+        ),
+        bank_expansion_factor=_role_value(
+            base.bank_expansion_factor,
+            global_default.bank_expansion_factor,
+            role_default.bank_expansion_factor,
+        ),
+        generator_stack_source=_merge_generator_stack_source(
+            base.generator_stack_source,
+            global_default.generator_stack_source,
+            role_default.generator_stack_source,
+        ),
+    )
+    return base if merged == base else merged
+
+
+def _merge_hidden_adaptive_bias_options(
+    base: HiddenAdaptiveBiasOptions,
+    global_default: HiddenAdaptiveBiasOptions,
+    role_default: HiddenAdaptiveBiasOptions,
+) -> HiddenAdaptiveBiasOptions:
+    merged = replace(
+        base,
+        option_flag=_role_value(
+            base.option_flag, global_default.option_flag, role_default.option_flag
+        ),
+        option=_role_value(base.option, global_default.option, role_default.option),
+        decay_schedule=_role_value(
+            base.decay_schedule,
+            global_default.decay_schedule,
+            role_default.decay_schedule,
+        ),
+        decay_rate=_role_value(
+            base.decay_rate, global_default.decay_rate, role_default.decay_rate
+        ),
+        decay_warmup_batches=_role_value(
+            base.decay_warmup_batches,
+            global_default.decay_warmup_batches,
+            role_default.decay_warmup_batches,
+        ),
+        bank_expansion_factor=_role_value(
+            base.bank_expansion_factor,
+            global_default.bank_expansion_factor,
+            role_default.bank_expansion_factor,
+        ),
+        generator_stack_source=_merge_generator_stack_source(
+            base.generator_stack_source,
+            global_default.generator_stack_source,
+            role_default.generator_stack_source,
+        ),
+    )
+    return base if merged == base else merged
+
+
+def _merge_hidden_adaptive_diagonal_options(
+    base: HiddenAdaptiveDiagonalOptions,
+    global_default: HiddenAdaptiveDiagonalOptions,
+    role_default: HiddenAdaptiveDiagonalOptions,
+) -> HiddenAdaptiveDiagonalOptions:
+    merged = replace(
+        base,
+        option_flag=_role_value(
+            base.option_flag, global_default.option_flag, role_default.option_flag
+        ),
+        option=_role_value(base.option, global_default.option, role_default.option),
+        generator_stack_source=_merge_generator_stack_source(
+            base.generator_stack_source,
+            global_default.generator_stack_source,
+            role_default.generator_stack_source,
+        ),
+    )
+    return base if merged == base else merged
+
+
+def _merge_hidden_adaptive_mask_options(
+    base: HiddenAdaptiveMaskOptions,
+    global_default: HiddenAdaptiveMaskOptions,
+    role_default: HiddenAdaptiveMaskOptions,
+) -> HiddenAdaptiveMaskOptions:
+    merged = replace(
+        base,
+        option_flag=_role_value(
+            base.option_flag, global_default.option_flag, role_default.option_flag
+        ),
+        row_mask_option=_role_value(
+            base.row_mask_option,
+            global_default.row_mask_option,
+            role_default.row_mask_option,
+        ),
+        mask_dimension_option=_role_value(
+            base.mask_dimension_option,
+            global_default.mask_dimension_option,
+            role_default.mask_dimension_option,
+        ),
+        mask_threshold=_role_value(
+            base.mask_threshold,
+            global_default.mask_threshold,
+            role_default.mask_threshold,
+        ),
+        mask_surrogate_scale=_role_value(
+            base.mask_surrogate_scale,
+            global_default.mask_surrogate_scale,
+            role_default.mask_surrogate_scale,
+        ),
+        mask_floor=_role_value(
+            base.mask_floor, global_default.mask_floor, role_default.mask_floor
+        ),
+        mask_transition_width=_role_value(
+            base.mask_transition_width,
+            global_default.mask_transition_width,
+            role_default.mask_transition_width,
+        ),
+        generator_stack_source=_merge_generator_stack_source(
+            base.generator_stack_source,
+            global_default.generator_stack_source,
+            role_default.generator_stack_source,
+        ),
+    )
+    return base if merged == base else merged
+
+
+def _role_hidden_adaptive_weight_default(
+    global_options: HiddenAdaptiveWeightOptions,
     config_module: ModuleType,
-    *,
-    global_default_factory: Callable[[ModuleType], Any],
-    role_default_factory: Callable[[ModuleType], Any],
-) -> Any:
-    return _merge_role_config_overrides(
+    role: config_defaults.AdaptiveRole,
+) -> HiddenAdaptiveWeightOptions:
+    return _merge_hidden_adaptive_weight_options(
         global_options,
-        global_default_factory(config_module),
-        role_default_factory(config_module),
+        config_defaults.hidden_adaptive_weight_options(config_module),
+        config_defaults.hidden_adaptive_weight_options(config_module, role),
     )
 
 
-def _merge_role_config_overrides(
-    base: Any, global_default: Any, role_default: Any
-) -> Any:
-    if (
-        not is_dataclass(base)
-        or not is_dataclass(global_default)
-        or (not is_dataclass(role_default))
-    ):
-        return role_default if role_default != global_default else base
-    updates: dict[str, Any] = {}
-    for field in fields(role_default):
-        base_value = getattr(base, field.name)
-        global_value = getattr(global_default, field.name)
-        role_value = getattr(role_default, field.name)
-        if (
-            is_dataclass(base_value)
-            and is_dataclass(global_value)
-            and is_dataclass(role_value)
-        ):
-            merged_value = _merge_role_config_overrides(
-                base_value, global_value, role_value
-            )
-            if merged_value != base_value:
-                updates[field.name] = merged_value
-        elif role_value != global_value:
-            updates[field.name] = role_value
-    return replace(base, **updates) if updates else base
+def _role_hidden_adaptive_bias_default(
+    global_options: HiddenAdaptiveBiasOptions,
+    config_module: ModuleType,
+    role: config_defaults.AdaptiveRole,
+) -> HiddenAdaptiveBiasOptions:
+    return _merge_hidden_adaptive_bias_options(
+        global_options,
+        config_defaults.hidden_adaptive_bias_options(config_module),
+        config_defaults.hidden_adaptive_bias_options(config_module, role),
+    )
+
+
+def _role_hidden_adaptive_diagonal_default(
+    global_options: HiddenAdaptiveDiagonalOptions,
+    config_module: ModuleType,
+    role: config_defaults.AdaptiveRole,
+) -> HiddenAdaptiveDiagonalOptions:
+    return _merge_hidden_adaptive_diagonal_options(
+        global_options,
+        config_defaults.hidden_adaptive_diagonal_options(config_module),
+        config_defaults.hidden_adaptive_diagonal_options(config_module, role),
+    )
+
+
+def _role_hidden_adaptive_mask_default(
+    global_options: HiddenAdaptiveMaskOptions,
+    config_module: ModuleType,
+    role: config_defaults.AdaptiveRole,
+) -> HiddenAdaptiveMaskOptions:
+    return _merge_hidden_adaptive_mask_options(
+        global_options,
+        config_defaults.hidden_adaptive_mask_options(config_module),
+        config_defaults.hidden_adaptive_mask_options(config_module, role),
+    )
 
 
 def _router_adaptive_builder_kwargs(
     kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
 ) -> dict[str, Any]:
     return {
-        "router_adaptive_weight_options": _private_helper_value(
-            _hidden_adaptive_weight_options_from_kwargs,
+        "router_adaptive_weight_options": _resolved_hidden_adaptive_weight_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("router_adaptive_weight_options"),
             flat_prefix="router_",
-            config_prefix="ROUTER_",
             stack_prefix="router_weight_generator_stack",
+            role=config_defaults.AdaptiveRole.ROUTER,
         ),
-        "router_adaptive_bias_options": _private_helper_value(
-            _hidden_adaptive_bias_options_from_kwargs,
+        "router_adaptive_bias_options": _resolved_hidden_adaptive_bias_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("router_adaptive_bias_options"),
             flat_prefix="router_",
-            config_prefix="ROUTER_",
             stack_prefix="router_bias_generator_stack",
+            role=config_defaults.AdaptiveRole.ROUTER,
         ),
-        "router_adaptive_diagonal_options": _private_helper_value(
-            _hidden_adaptive_diagonal_options_from_kwargs,
+        "router_adaptive_diagonal_options": _resolved_hidden_adaptive_diagonal_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("router_adaptive_diagonal_options"),
             flat_prefix="router_",
-            config_prefix="ROUTER_",
             stack_prefix="router_diagonal_generator_stack",
+            role=config_defaults.AdaptiveRole.ROUTER,
         ),
-        "router_adaptive_mask_options": _private_helper_value(
-            _hidden_adaptive_mask_options_from_kwargs,
+        "router_adaptive_mask_options": _resolved_hidden_adaptive_mask_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("router_adaptive_mask_options"),
             flat_prefix="router_",
-            config_prefix="ROUTER_",
             stack_prefix="router_mask_generator_stack",
+            role=config_defaults.AdaptiveRole.ROUTER,
         ),
     }
+
+
+class _ExpertsControlRole(Enum):
+    MIXTURE = auto()
+    EXPERT = auto()
+    ROUTER = auto()
+
+
+def _resolved_mixture_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: ExpertsMixtureOptions | None,
+) -> ExpertsMixtureOptions:
+    remaining = dict(kwargs)
+    options = _mixture_options_from_kwargs(remaining, config_module, provided=provided)
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_role_stack_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    prefix: str,
+    *,
+    defaults: ExpertsSubmoduleStackOptions,
+    provided: ExpertsSubmoduleStackOptions | None,
+    extra_mapping: dict[str, str] | None = None,
+) -> ExpertsSubmoduleStackOptions:
+    remaining = dict(kwargs)
+    options = _role_stack_options_from_kwargs(
+        remaining,
+        config_module,
+        prefix,
+        defaults=defaults,
+        provided=provided,
+        extra_mapping=extra_mapping,
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_sampler_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: ExpertsSamplerOptions | None,
+) -> ExpertsSamplerOptions:
+    remaining = dict(kwargs)
+    options = _sampler_options_from_kwargs(remaining, config_module, provided=provided)
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_router_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: ExpertsRouterOptions | None,
+) -> ExpertsRouterOptions:
+    remaining = dict(kwargs)
+    options = _router_options_from_kwargs(remaining, config_module, provided=provided)
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_experts_submodule_stack_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    provided: ExpertsSubmoduleStackOptions | None,
+) -> ExpertsSubmoduleStackOptions:
+    remaining = dict(kwargs)
+    options = _experts_submodule_stack_options_from_kwargs(
+        remaining, config_module, provided=provided
+    )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_experts_layer_controller_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    role: _ExpertsControlRole,
+    provided: ExpertsLayerControllerOptions | None,
+) -> ExpertsLayerControllerOptions:
+    remaining = dict(kwargs)
+    if role is _ExpertsControlRole.MIXTURE:
+        options = _experts_layer_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    elif role is _ExpertsControlRole.EXPERT:
+        options = _expert_layer_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    else:
+        options = _router_layer_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_experts_dynamic_memory_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    role: _ExpertsControlRole,
+    provided: ExpertsDynamicMemoryOptions | None,
+) -> ExpertsDynamicMemoryOptions:
+    remaining = dict(kwargs)
+    if role is _ExpertsControlRole.MIXTURE:
+        options = _experts_dynamic_memory_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    elif role is _ExpertsControlRole.EXPERT:
+        options = _expert_dynamic_memory_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    else:
+        options = _router_dynamic_memory_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
+
+
+def _resolved_experts_recurrent_controller_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    config_module: ModuleType,
+    *,
+    role: _ExpertsControlRole,
+    provided: ExpertsRecurrentControllerOptions | None,
+) -> ExpertsRecurrentControllerOptions:
+    remaining = dict(kwargs)
+    if role is _ExpertsControlRole.MIXTURE:
+        options = _experts_recurrent_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    elif role is _ExpertsControlRole.EXPERT:
+        options = _expert_recurrent_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    else:
+        options = _router_recurrent_controller_options_from_kwargs(
+            remaining, config_module, provided=provided
+        )
+    _record_consumed_helper_keys(kwargs, remaining, consumed)
+    return options
 
 
 def _expert_builder_kwargs(
     kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
 ) -> dict[str, Any]:
     builder_kwargs = {
-        "mixture_options": _private_helper_value(
-            _mixture_options_from_kwargs,
+        "mixture_options": _resolved_mixture_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("mixture_options"),
         ),
-        "expert_stack_options": _private_helper_value(
-            _role_stack_options_from_kwargs,
+        "expert_stack_options": _resolved_role_stack_options(
             kwargs,
             consumed,
             config_module,
             "expert_stack",
-            defaults=_default_config_options(config_module, "EXPERT_STACK_OPTIONS"),
+            defaults=config_defaults.experts_submodule_stack_options(
+                config_module, config_defaults.ExpertStackRole.EXPERT
+            ),
             provided=kwargs.get("expert_stack_options"),
             extra_mapping={"expert_bias_flag": "bias_flag"},
         ),
-        "sampler_options": _private_helper_value(
-            _sampler_options_from_kwargs,
+        "sampler_options": _resolved_sampler_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("sampler_options"),
         ),
-        "router_options": _private_helper_value(
-            _router_options_from_kwargs,
+        "router_options": _resolved_router_options(
             kwargs,
             consumed,
             config_module,
             provided=kwargs.get("router_options"),
         ),
-        "router_stack_options": _private_helper_value(
-            _role_stack_options_from_kwargs,
+        "router_stack_options": _resolved_role_stack_options(
             kwargs,
             consumed,
             config_module,
             "router_stack",
-            defaults=_default_config_options(config_module, "ROUTER_STACK_OPTIONS"),
+            defaults=config_defaults.experts_submodule_stack_options(
+                config_module, config_defaults.ExpertStackRole.ROUTER
+            ),
             provided=kwargs.get("router_stack_options"),
             extra_mapping={"router_bias_flag": "bias_flag"},
         ),
-        "expert_layer_controller_options": _private_helper_value(
-            _expert_layer_controller_options_from_kwargs,
+        "expert_layer_controller_options": _resolved_experts_layer_controller_options(
             kwargs,
             consumed,
             config_module,
+            role=_ExpertsControlRole.EXPERT,
             provided=kwargs.get("expert_layer_controller_options"),
         ),
-        "expert_dynamic_memory_options": _private_helper_value(
-            _expert_dynamic_memory_options_from_kwargs,
+        "expert_dynamic_memory_options": _resolved_experts_dynamic_memory_options(
             kwargs,
             consumed,
             config_module,
+            role=_ExpertsControlRole.EXPERT,
             provided=kwargs.get("expert_dynamic_memory_options"),
         ),
-        "expert_recurrent_controller_options": _private_helper_value(
-            _expert_recurrent_controller_options_from_kwargs,
+        "expert_recurrent_controller_options": _resolved_experts_recurrent_controller_options(
             kwargs,
             consumed,
             config_module,
+            role=_ExpertsControlRole.EXPERT,
             provided=kwargs.get("expert_recurrent_controller_options"),
         ),
     }
@@ -842,53 +1355,52 @@ def _expert_adaptive_builder_kwargs(
     builder_kwargs = _expert_builder_kwargs(kwargs, config_module, consumed)
     builder_kwargs.update(
         {
-            "mixture_submodule_stack_options": _private_helper_value(
-                _experts_submodule_stack_options_from_kwargs,
+            "mixture_submodule_stack_options": _resolved_experts_submodule_stack_options(
                 kwargs,
                 consumed,
                 config_module,
                 provided=kwargs.get("mixture_submodule_stack_options"),
             ),
-            "mixture_layer_controller_options": _private_helper_value(
-                _experts_layer_controller_options_from_kwargs,
+            "mixture_layer_controller_options": _resolved_experts_layer_controller_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.MIXTURE,
                 provided=kwargs.get("mixture_layer_controller_options"),
             ),
-            "mixture_dynamic_memory_options": _private_helper_value(
-                _experts_dynamic_memory_options_from_kwargs,
+            "mixture_dynamic_memory_options": _resolved_experts_dynamic_memory_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.MIXTURE,
                 provided=kwargs.get("mixture_dynamic_memory_options"),
             ),
-            "mixture_recurrent_controller_options": _private_helper_value(
-                _experts_recurrent_controller_options_from_kwargs,
+            "mixture_recurrent_controller_options": _resolved_experts_recurrent_controller_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.MIXTURE,
                 provided=kwargs.get("mixture_recurrent_controller_options"),
             ),
-            "router_layer_controller_options": _private_helper_value(
-                _router_layer_controller_options_from_kwargs,
+            "router_layer_controller_options": _resolved_experts_layer_controller_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.ROUTER,
                 provided=kwargs.get("router_layer_controller_options"),
             ),
-            "router_dynamic_memory_options": _private_helper_value(
-                _router_dynamic_memory_options_from_kwargs,
+            "router_dynamic_memory_options": _resolved_experts_dynamic_memory_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.ROUTER,
                 provided=kwargs.get("router_dynamic_memory_options"),
             ),
-            "router_recurrent_controller_options": _private_helper_value(
-                _router_recurrent_controller_options_from_kwargs,
+            "router_recurrent_controller_options": _resolved_experts_recurrent_controller_options(
                 kwargs,
                 consumed,
                 config_module,
+                role=_ExpertsControlRole.ROUTER,
                 provided=kwargs.get("router_recurrent_controller_options"),
             ),
         }
@@ -896,7 +1408,9 @@ def _expert_adaptive_builder_kwargs(
     return builder_kwargs
 
 
-def _patch_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _patch_options_from_kwargs(
+    options: VitPatchOptions, kwargs: dict[str, Any]
+) -> VitPatchOptions:
     return replace(
         options,
         **_updates(
@@ -912,7 +1426,9 @@ def _patch_options_from_kwargs(options, kwargs: dict[str, Any]):
     )
 
 
-def _encoder_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _encoder_options_from_kwargs(
+    options: TransformerEncoderOptions, kwargs: dict[str, Any]
+) -> TransformerEncoderOptions:
     return replace(
         options,
         **_updates(
@@ -928,7 +1444,10 @@ def _encoder_options_from_kwargs(options, kwargs: dict[str, Any]):
     )
 
 
-def _positional_embedding_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _positional_embedding_options_from_kwargs(
+    options: TransformerPositionalEmbeddingOptions,
+    kwargs: dict[str, Any],
+) -> TransformerPositionalEmbeddingOptions:
     return replace(
         options,
         **_updates(
@@ -942,7 +1461,9 @@ def _positional_embedding_options_from_kwargs(options, kwargs: dict[str, Any]):
     )
 
 
-def _attention_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _attention_options_from_kwargs(
+    options: TransformerAttentionOptions, kwargs: dict[str, Any]
+) -> TransformerAttentionOptions:
     return replace(
         options,
         **_updates(
@@ -957,7 +1478,9 @@ def _attention_options_from_kwargs(options, kwargs: dict[str, Any]):
     )
 
 
-def _feed_forward_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _feed_forward_options_from_kwargs(
+    options: TransformerFeedForwardOptions, kwargs: dict[str, Any]
+) -> TransformerFeedForwardOptions:
     return replace(
         options,
         **_updates(
@@ -966,13 +1489,15 @@ def _feed_forward_options_from_kwargs(options, kwargs: dict[str, Any]):
     )
 
 
-def _output_options_from_kwargs(options, kwargs: dict[str, Any]):
+def _output_options_from_kwargs(
+    options: VitOutputOptions, kwargs: dict[str, Any]
+) -> VitOutputOptions:
     return replace(options, **_updates(kwargs, {"output_bias_flag": "bias_flag"}))
 
 
 def _main_stack_options_from_kwargs(
     options: MainLayerStackOptions, kwargs: dict[str, Any]
-):
+) -> MainLayerStackOptions:
     return replace(
         options,
         **_updates(
@@ -994,7 +1519,7 @@ def _main_stack_options_from_kwargs(
 
 def _submodule_stack_options_from_kwargs(
     options: SubmoduleStackOptions, kwargs: dict[str, Any], *, flat_prefix: str
-):
+) -> SubmoduleStackOptions:
     return replace(
         options,
         **_updates(
@@ -1014,7 +1539,7 @@ def _layer_controller_options_from_kwargs(
     flat_prefix: str,
     gate_stack_prefix: str,
     halting_stack_prefix: str,
-):
+) -> LayerControllerOptions:
     prefix = f"{flat_prefix}_" if flat_prefix else ""
     flag_map = (
         {
@@ -1055,7 +1580,7 @@ def _dynamic_memory_options_from_kwargs(
     *,
     flat_prefix: str,
     memory_stack_prefix: str,
-):
+) -> DynamicMemoryOptions:
     prefix = f"{flat_prefix}_" if flat_prefix else ""
     updates = _updates(
         kwargs,
@@ -1080,7 +1605,7 @@ def _recurrent_controller_options_from_kwargs(
     flat_prefix: str,
     gate_stack_prefix: str,
     halting_stack_prefix: str,
-):
+) -> RecurrentControllerOptions:
     prefix = f"{flat_prefix}_"
     updates = _updates(
         kwargs,
@@ -1115,7 +1640,7 @@ def _recurrent_controller_options_from_kwargs(
 
 def _controller_stack_source_from_kwargs(
     source: SubmoduleStackSource, kwargs: dict[str, Any], flat_prefix: str
-):
+) -> SubmoduleStackSource:
     return replace(
         source,
         **_updates(
@@ -1128,382 +1653,427 @@ def _controller_stack_source_from_kwargs(
     )
 
 
-def _maybe_set(
-    builder_kwargs: dict[str, Any],
-    builder_key: str,
-    factory: Callable,
+_PATCH_FLAT_KEYS = frozenset(
+    {
+        "image_patch_size",
+        "input_channels",
+        "image_height",
+        "patch_dropout_probability",
+        "patch_bias_flag",
+    }
+)
+_ENCODER_FLAT_KEYS = frozenset(
+    {
+        "hidden_dim",
+        "stack_num_layers",
+        "stack_activation",
+        "stack_dropout_probability",
+        "layer_norm_position",
+    }
+)
+_POSITIONAL_EMBEDDING_FLAT_KEYS = frozenset(
+    {
+        "positional_embedding_option",
+        "positional_embedding_padding_idx",
+        "positional_embedding_auto_expand_flag",
+    }
+)
+_ATTENTION_FLAT_KEYS = frozenset(
+    {
+        "attn_num_heads",
+        "attn_num_layers",
+        "attn_bias_flag",
+        "attn_add_key_value_bias_flag",
+    }
+)
+_FEED_FORWARD_FLAT_KEYS = frozenset({"ff_num_layers", "ff_bias_flag"})
+_OUTPUT_FLAT_KEYS = frozenset({"output_bias_flag"})
+_MAIN_STACK_FLAT_KEYS = frozenset(
+    {
+        "stack_bias_flag",
+        "layer_norm_position",
+        "stack_num_layers",
+        "stack_activation",
+        "stack_residual_connection_option",
+        "stack_residual_model_flag",
+        "stack_dropout_probability",
+        "stack_last_layer_bias_option",
+        "stack_apply_output_pipeline_flag",
+    }
+)
+
+
+def _resolve_patch_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> VitPatchOptions | None:
+    provided: VitPatchOptions | None = kwargs.get("patch_options")
+    if provided is None and not _PATCH_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_patch_options(config_module)
+    consumed.add("patch_options")
+    consumed.update(_PATCH_FLAT_KEYS.intersection(kwargs))
+    return _patch_options_from_kwargs(options, kwargs)
+
+
+def _resolve_encoder_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> TransformerEncoderOptions | None:
+    provided: TransformerEncoderOptions | None = kwargs.get("encoder_options")
+    if provided is None and not _ENCODER_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_encoder_options(config_module)
+    consumed.add("encoder_options")
+    consumed.update(_ENCODER_FLAT_KEYS.intersection(kwargs))
+    return _encoder_options_from_kwargs(options, kwargs)
+
+
+def _resolve_positional_embedding_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> TransformerPositionalEmbeddingOptions | None:
+    provided: TransformerPositionalEmbeddingOptions | None = kwargs.get(
+        "positional_embedding_options"
+    )
+    if provided is None and not _POSITIONAL_EMBEDDING_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_positional_embedding_options(
+        config_module
+    )
+    consumed.add("positional_embedding_options")
+    consumed.update(_POSITIONAL_EMBEDDING_FLAT_KEYS.intersection(kwargs))
+    return _positional_embedding_options_from_kwargs(options, kwargs)
+
+
+def _resolve_attention_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> TransformerAttentionOptions | None:
+    provided: TransformerAttentionOptions | None = kwargs.get("attention_options")
+    if provided is None and not _ATTENTION_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_attention_options(config_module)
+    consumed.add("attention_options")
+    consumed.update(_ATTENTION_FLAT_KEYS.intersection(kwargs))
+    return _attention_options_from_kwargs(options, kwargs)
+
+
+def _resolve_feed_forward_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> TransformerFeedForwardOptions | None:
+    provided: TransformerFeedForwardOptions | None = kwargs.get("feed_forward_options")
+    if provided is None and not _FEED_FORWARD_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_feed_forward_options(config_module)
+    consumed.add("feed_forward_options")
+    consumed.update(_FEED_FORWARD_FLAT_KEYS.intersection(kwargs))
+    return _feed_forward_options_from_kwargs(options, kwargs)
+
+
+def _resolve_output_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> VitOutputOptions | None:
+    provided: VitOutputOptions | None = kwargs.get("output_options")
+    if provided is None and not _OUTPUT_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.vit_output_options(config_module)
+    consumed.add("output_options")
+    consumed.update(_OUTPUT_FLAT_KEYS.intersection(kwargs))
+    return _output_options_from_kwargs(options, kwargs)
+
+
+def _resolve_main_stack_options(
+    kwargs: dict[str, Any], config_module: ModuleType, consumed: set[str]
+) -> MainLayerStackOptions | None:
+    provided: MainLayerStackOptions | None = kwargs.get("stack_options")
+    if provided is None and not _MAIN_STACK_FLAT_KEYS.intersection(kwargs):
+        return None
+    options = provided or config_defaults.main_layer_stack_options(config_module)
+    consumed.add("stack_options")
+    consumed.update(_MAIN_STACK_FLAT_KEYS.intersection(kwargs))
+    return _main_stack_options_from_kwargs(options, kwargs)
+
+
+def _resolve_submodule_stack_options(
     kwargs: dict[str, Any],
     consumed: set[str],
-    config_module: ModuleType,
-    config_attr: str,
-    **factory_kwargs,
-) -> None:
-    provided = kwargs.get(builder_key)
-    relevant = _factory_relevant_keys(factory, factory_kwargs)
-    if provided is None and (not any(key in kwargs for key in relevant)):
-        return
-    base = (
-        provided
-        if provided is not None
-        else _default_config_options(config_module, config_attr)
+    *,
+    option_key: str,
+    provided: SubmoduleStackOptions | None,
+    defaults_factory: Callable[[], SubmoduleStackOptions],
+    flat_prefix: str,
+) -> SubmoduleStackOptions | None:
+    relevant = _submodule_stack_relevant_keys(flat_prefix)
+    if provided is None and not relevant.intersection(kwargs):
+        return None
+    consumed.add(option_key)
+    consumed.update(relevant.intersection(kwargs))
+    return _submodule_stack_options_from_kwargs(
+        provided or defaults_factory(), kwargs, flat_prefix=flat_prefix
     )
-    consumed.add(builder_key)
-    consumed.update(key for key in relevant if key in kwargs)
-    builder_kwargs[builder_key] = factory(base, kwargs, **factory_kwargs)
 
 
-def _default_config_options(config_module: ModuleType, config_attr: str) -> Any:
-    option_factories: dict[str, Callable[[ModuleType], Any]] = {
-        "PATCH_OPTIONS": config_defaults.vit_patch_options,
-        "POSITIONAL_EMBEDDING_OPTIONS": config_defaults.vit_positional_embedding_options,
-        "ENCODER_OPTIONS": config_defaults.vit_encoder_options,
-        "ATTENTION_OPTIONS": config_defaults.vit_attention_options,
-        "FEED_FORWARD_OPTIONS": config_defaults.vit_feed_forward_options,
-        "OUTPUT_OPTIONS": config_defaults.vit_output_options,
-        "STACK_OPTIONS": config_defaults.main_layer_stack_options,
-        "SUBMODULE_STACK_OPTIONS": lambda config_object: (
-            config_defaults.linears_submodule_stack_options(
-                config_object, "SUBMODULE_STACK"
-            )
-        ),
-        "ATTENTION_PROJECTION_STACK_OPTIONS": lambda config_object: (
-            config_defaults.linears_submodule_stack_options(
-                config_object,
-                "ATTN_STACK",
-                num_layers_key="ATTN_NUM_LAYERS",
-                bias_key="ATTN_BIAS_FLAG",
-            )
-        ),
-        "FEED_FORWARD_STACK_OPTIONS": lambda config_object: (
-            config_defaults.linears_submodule_stack_options(
-                config_object,
-                "FF_STACK",
-                num_layers_key="FF_NUM_LAYERS",
-                bias_key="FF_BIAS_FLAG",
-            )
-        ),
-        "LAYER_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_layer_controller_options(
-                config_object,
-                gate_prefix="GATE",
-                gate_stack_prefix="GATE_STACK",
-                halting_prefix="HALTING",
-                halting_stack_prefix="HALTING_STACK",
-            )
-        ),
-        "ATTENTION_PROJECTION_LAYER_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_layer_controller_options(
-                config_object,
-                gate_prefix="ATTN_GATE",
-                gate_stack_prefix="ATTN_GATE_STACK",
-                halting_prefix="ATTN_HALTING",
-                halting_stack_prefix="ATTN_HALTING_STACK",
-            )
-        ),
-        "FEED_FORWARD_LAYER_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_layer_controller_options(
-                config_object,
-                gate_prefix="FF_GATE",
-                gate_stack_prefix="FF_GATE_STACK",
-                halting_prefix="FF_HALTING",
-                halting_stack_prefix="FF_HALTING_STACK",
-            )
-        ),
-        "DYNAMIC_MEMORY_OPTIONS": lambda config_object: (
-            config_defaults.linears_dynamic_memory_options(
-                config_object,
-                memory_prefix="MEMORY",
-                memory_stack_prefix="MEMORY_STACK",
-            )
-        ),
-        "ATTENTION_PROJECTION_DYNAMIC_MEMORY_OPTIONS": lambda config_object: (
-            config_defaults.linears_dynamic_memory_options(
-                config_object,
-                memory_prefix="ATTN_MEMORY",
-                memory_stack_prefix="ATTN_MEMORY_STACK",
-            )
-        ),
-        "FEED_FORWARD_DYNAMIC_MEMORY_OPTIONS": lambda config_object: (
-            config_defaults.linears_dynamic_memory_options(
-                config_object,
-                memory_prefix="FF_MEMORY",
-                memory_stack_prefix="FF_MEMORY_STACK",
-            )
-        ),
-        "RECURRENT_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_recurrent_controller_options(
-                config_object,
-                recurrent_prefix="RECURRENT",
-                gate_stack_prefix="RECURRENT_GATE_STACK",
-                halting_stack_prefix="RECURRENT_HALTING_STACK",
-            )
-        ),
-        "ATTENTION_PROJECTION_RECURRENT_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_recurrent_controller_options(
-                config_object,
-                recurrent_prefix="ATTN_RECURRENT",
-                gate_stack_prefix="ATTN_RECURRENT_GATE_STACK",
-                halting_stack_prefix="ATTN_RECURRENT_HALTING_STACK",
-            )
-        ),
-        "FEED_FORWARD_RECURRENT_CONTROLLER_OPTIONS": lambda config_object: (
-            config_defaults.linears_recurrent_controller_options(
-                config_object,
-                recurrent_prefix="FF_RECURRENT",
-                gate_stack_prefix="FF_RECURRENT_GATE_STACK",
-                halting_stack_prefix="FF_RECURRENT_HALTING_STACK",
-            )
-        ),
-        "EXPERT_STACK_OPTIONS": lambda config_object: (
-            config_defaults.experts_submodule_stack_options(
-                config_object, "EXPERT_STACK", bias_key="EXPERT_BIAS_FLAG"
-            )
-        ),
-        "ROUTER_STACK_OPTIONS": lambda config_object: (
-            config_defaults.experts_submodule_stack_options(
-                config_object, "ROUTER_STACK", bias_key="ROUTER_BIAS_FLAG"
-            )
-        ),
-    }
-    try:
-        return option_factories[config_attr](config_module)
-    except KeyError as error:
-        raise AttributeError(
-            f"{config_module.__name__} has no default option factory for {config_attr}"
-        ) from error
+def _resolve_layer_controller_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    *,
+    option_key: str,
+    provided: LayerControllerOptions | None,
+    defaults_factory: Callable[[], LayerControllerOptions],
+    flat_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
+) -> LayerControllerOptions | None:
+    relevant = _layer_controller_relevant_keys(
+        flat_prefix, gate_stack_prefix, halting_stack_prefix
+    )
+    if provided is None and not relevant.intersection(kwargs):
+        return None
+    consumed.add(option_key)
+    consumed.update(relevant.intersection(kwargs))
+    return _layer_controller_options_from_kwargs(
+        provided or defaults_factory(),
+        kwargs,
+        flat_prefix=flat_prefix,
+        gate_stack_prefix=gate_stack_prefix,
+        halting_stack_prefix=halting_stack_prefix,
+    )
+
+
+def _resolve_dynamic_memory_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    *,
+    option_key: str,
+    provided: DynamicMemoryOptions | None,
+    defaults_factory: Callable[[], DynamicMemoryOptions],
+    flat_prefix: str,
+    memory_stack_prefix: str,
+) -> DynamicMemoryOptions | None:
+    relevant = _dynamic_memory_relevant_keys(flat_prefix, memory_stack_prefix)
+    if provided is None and not relevant.intersection(kwargs):
+        return None
+    consumed.add(option_key)
+    consumed.update(relevant.intersection(kwargs))
+    return _dynamic_memory_options_from_kwargs(
+        provided or defaults_factory(),
+        kwargs,
+        flat_prefix=flat_prefix,
+        memory_stack_prefix=memory_stack_prefix,
+    )
+
+
+def _resolve_recurrent_controller_options(
+    kwargs: dict[str, Any],
+    consumed: set[str],
+    *,
+    option_key: str,
+    provided: RecurrentControllerOptions | None,
+    defaults_factory: Callable[[], RecurrentControllerOptions],
+    flat_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
+) -> RecurrentControllerOptions | None:
+    relevant = _recurrent_controller_relevant_keys(
+        flat_prefix, gate_stack_prefix, halting_stack_prefix
+    )
+    if provided is None and not relevant.intersection(kwargs):
+        return None
+    consumed.add(option_key)
+    consumed.update(relevant.intersection(kwargs))
+    return _recurrent_controller_options_from_kwargs(
+        provided or defaults_factory(),
+        kwargs,
+        flat_prefix=flat_prefix,
+        gate_stack_prefix=gate_stack_prefix,
+        halting_stack_prefix=halting_stack_prefix,
+    )
 
 
 def _ensure_control_dependencies(
     builder_kwargs: dict[str, Any], config_module: ModuleType
 ) -> None:
-    encoder_control_keys = {
+    _ensure_main_control_dependencies(builder_kwargs, config_module)
+    _ensure_attention_control_dependencies(builder_kwargs, config_module)
+    _ensure_feed_forward_control_dependencies(builder_kwargs, config_module)
+
+
+def _ensure_main_control_dependencies(
+    builder_kwargs: dict[str, Any], config_module: ModuleType
+) -> None:
+    control_keys = {
         "submodule_stack_options",
         "layer_controller_options",
         "dynamic_memory_options",
         "recurrent_controller_options",
     }
-    if encoder_control_keys & set(builder_kwargs):
-        _ensure_default(
-            builder_kwargs,
-            "submodule_stack_options",
-            config_module,
-            "SUBMODULE_STACK_OPTIONS",
+    if not control_keys.intersection(builder_kwargs):
+        return
+    if "submodule_stack_options" not in builder_kwargs:
+        builder_kwargs["submodule_stack_options"] = (
+            config_defaults.linears_submodule_stack_options(
+                config_module, config_defaults.LinearRole.MAIN
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "layer_controller_options",
-            config_module,
-            "LAYER_CONTROLLER_OPTIONS",
+    if "layer_controller_options" not in builder_kwargs:
+        builder_kwargs["layer_controller_options"] = (
+            config_defaults.linears_layer_controller_options(
+                config_module, config_defaults.LinearRole.MAIN
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "dynamic_memory_options",
-            config_module,
-            "DYNAMIC_MEMORY_OPTIONS",
+    if "dynamic_memory_options" not in builder_kwargs:
+        builder_kwargs["dynamic_memory_options"] = (
+            config_defaults.linears_dynamic_memory_options(
+                config_module, config_defaults.LinearRole.MAIN
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "recurrent_controller_options",
-            config_module,
-            "RECURRENT_CONTROLLER_OPTIONS",
+    if "recurrent_controller_options" not in builder_kwargs:
+        builder_kwargs["recurrent_controller_options"] = (
+            config_defaults.linears_recurrent_controller_options(
+                config_module, config_defaults.LinearRole.MAIN
+            )
         )
-    attention_control_keys = {
+
+
+def _ensure_attention_control_dependencies(
+    builder_kwargs: dict[str, Any], config_module: ModuleType
+) -> None:
+    control_keys = {
         "attention_projection_layer_controller_options",
         "attention_projection_dynamic_memory_options",
         "attention_projection_recurrent_controller_options",
     }
-    if attention_control_keys & set(builder_kwargs):
-        _ensure_default(
-            builder_kwargs,
-            "attention_projection_layer_controller_options",
-            config_module,
-            "ATTENTION_PROJECTION_LAYER_CONTROLLER_OPTIONS",
+    if not control_keys.intersection(builder_kwargs):
+        return
+    if "attention_projection_layer_controller_options" not in builder_kwargs:
+        builder_kwargs["attention_projection_layer_controller_options"] = (
+            config_defaults.linears_layer_controller_options(
+                config_module, config_defaults.LinearRole.ATTENTION
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "attention_projection_dynamic_memory_options",
-            config_module,
-            "ATTENTION_PROJECTION_DYNAMIC_MEMORY_OPTIONS",
+    if "attention_projection_dynamic_memory_options" not in builder_kwargs:
+        builder_kwargs["attention_projection_dynamic_memory_options"] = (
+            config_defaults.linears_dynamic_memory_options(
+                config_module, config_defaults.LinearRole.ATTENTION
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "attention_projection_recurrent_controller_options",
-            config_module,
-            "ATTENTION_PROJECTION_RECURRENT_CONTROLLER_OPTIONS",
+    if "attention_projection_recurrent_controller_options" not in builder_kwargs:
+        builder_kwargs["attention_projection_recurrent_controller_options"] = (
+            config_defaults.linears_recurrent_controller_options(
+                config_module, config_defaults.LinearRole.ATTENTION
+            )
         )
-    feed_forward_control_keys = {
+
+
+def _ensure_feed_forward_control_dependencies(
+    builder_kwargs: dict[str, Any], config_module: ModuleType
+) -> None:
+    control_keys = {
         "feed_forward_layer_controller_options",
         "feed_forward_dynamic_memory_options",
         "feed_forward_recurrent_controller_options",
     }
-    if feed_forward_control_keys & set(builder_kwargs):
-        _ensure_default(
-            builder_kwargs,
-            "feed_forward_layer_controller_options",
-            config_module,
-            "FEED_FORWARD_LAYER_CONTROLLER_OPTIONS",
+    if not control_keys.intersection(builder_kwargs):
+        return
+    if "feed_forward_layer_controller_options" not in builder_kwargs:
+        builder_kwargs["feed_forward_layer_controller_options"] = (
+            config_defaults.linears_layer_controller_options(
+                config_module, config_defaults.LinearRole.FEED_FORWARD
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "feed_forward_dynamic_memory_options",
-            config_module,
-            "FEED_FORWARD_DYNAMIC_MEMORY_OPTIONS",
+    if "feed_forward_dynamic_memory_options" not in builder_kwargs:
+        builder_kwargs["feed_forward_dynamic_memory_options"] = (
+            config_defaults.linears_dynamic_memory_options(
+                config_module, config_defaults.LinearRole.FEED_FORWARD
+            )
         )
-        _ensure_default(
-            builder_kwargs,
-            "feed_forward_recurrent_controller_options",
-            config_module,
-            "FEED_FORWARD_RECURRENT_CONTROLLER_OPTIONS",
-        )
-
-
-def _ensure_default(
-    builder_kwargs: dict[str, Any],
-    builder_key: str,
-    config_module: ModuleType,
-    config_attr: str,
-) -> None:
-    if builder_key not in builder_kwargs:
-        builder_kwargs[builder_key] = _default_config_options(
-            config_module, config_attr
+    if "feed_forward_recurrent_controller_options" not in builder_kwargs:
+        builder_kwargs["feed_forward_recurrent_controller_options"] = (
+            config_defaults.linears_recurrent_controller_options(
+                config_module, config_defaults.LinearRole.FEED_FORWARD
+            )
         )
 
 
-def _factory_relevant_keys(
-    factory: Callable, factory_kwargs: dict[str, Any]
+def _submodule_stack_relevant_keys(flat_prefix: str) -> set[str]:
+    return {f"{flat_prefix}_{flat_field}" for flat_field in _SUBMODULE_STACK_FIELD_MAP}
+
+
+def _layer_controller_relevant_keys(
+    flat_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
 ) -> set[str]:
-    if factory is _patch_options_from_kwargs:
-        return {
-            "image_patch_size",
-            "input_channels",
-            "image_height",
-            "patch_dropout_probability",
-            "patch_bias_flag",
+    if flat_prefix:
+        base = {
+            f"{flat_prefix}_stack_gate_flag",
+            f"{flat_prefix}_gate_option",
+            f"{flat_prefix}_gate_activation",
+            f"{flat_prefix}_stack_halting_flag",
+            f"{flat_prefix}_halting_option",
+            f"{flat_prefix}_halting_threshold",
+            f"{flat_prefix}_halting_dropout",
+            f"{flat_prefix}_halting_hidden_state_mode",
         }
-    if factory is _encoder_options_from_kwargs:
-        return {
-            "hidden_dim",
-            "stack_num_layers",
-            "stack_activation",
-            "stack_dropout_probability",
-            "layer_norm_position",
+    else:
+        base = {
+            "stack_gate_flag",
+            "gate_option",
+            "gate_activation",
+            "stack_halting_flag",
+            "halting_option",
+            "halting_threshold",
+            "halting_dropout",
+            "halting_hidden_state_mode",
         }
-    if factory is _positional_embedding_options_from_kwargs:
-        return {
-            "positional_embedding_option",
-            "positional_embedding_padding_idx",
-            "positional_embedding_auto_expand_flag",
+    return (
+        base
+        | _controller_stack_keys(gate_stack_prefix)
+        | _controller_stack_keys(halting_stack_prefix)
+    )
+
+
+def _dynamic_memory_relevant_keys(
+    flat_prefix: str,
+    memory_stack_prefix: str,
+) -> set[str]:
+    prefix = f"{flat_prefix}_" if flat_prefix else ""
+    return {
+        f"{prefix}memory_flag",
+        f"{prefix}memory_option",
+        f"{prefix}memory_position_option",
+        f"{prefix}memory_test_time_training_learning_rate",
+        f"{prefix}memory_test_time_training_num_inner_steps",
+    } | _controller_stack_keys(memory_stack_prefix)
+
+
+def _recurrent_controller_relevant_keys(
+    flat_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
+) -> set[str]:
+    return (
+        {
+            f"{flat_prefix}_flag",
+            f"{flat_prefix}_max_steps",
+            f"{flat_prefix}_initial_iterations",
+            f"{flat_prefix}_gradient_transition_count",
+            f"{flat_prefix}_iteration_increment",
+            f"{flat_prefix}_forward_calls_before_iteration_increment",
+            f"{flat_prefix}_layer_norm_position",
+            f"{flat_prefix}_stack_gate_flag",
+            f"{flat_prefix}_gate_option",
+            f"{flat_prefix}_gate_activation",
+            f"{flat_prefix}_stack_halting_flag",
+            f"{flat_prefix}_halting_option",
+            f"{flat_prefix}_halting_threshold",
+            f"{flat_prefix}_halting_dropout",
+            f"{flat_prefix}_halting_hidden_state_mode",
         }
-    if factory is _attention_options_from_kwargs:
-        return {
-            "attn_num_heads",
-            "attn_num_layers",
-            "attn_bias_flag",
-            "attn_add_key_value_bias_flag",
-        }
-    if factory is _feed_forward_options_from_kwargs:
-        return {"ff_num_layers", "ff_bias_flag"}
-    if factory is _output_options_from_kwargs:
-        return {"output_bias_flag"}
-    if factory is _main_stack_options_from_kwargs:
-        return {
-            "stack_bias_flag",
-            "layer_norm_position",
-            "stack_num_layers",
-            "stack_activation",
-            "stack_residual_connection_option",
-            "stack_residual_model_flag",
-            "stack_dropout_probability",
-            "stack_last_layer_bias_option",
-            "stack_apply_output_pipeline_flag",
-        }
-    if factory is _submodule_stack_options_from_kwargs:
-        prefix = factory_kwargs["flat_prefix"]
-        return {f"{prefix}_{flat_field}" for flat_field in _SUBMODULE_STACK_FIELD_MAP}
-    if factory is _layer_controller_options_from_kwargs:
-        flat_prefix = factory_kwargs["flat_prefix"]
-        if not flat_prefix:
-            base = {
-                "stack_gate_flag",
-                "gate_option",
-                "gate_activation",
-                "stack_halting_flag",
-                "halting_option",
-                "halting_threshold",
-                "halting_dropout",
-                "halting_hidden_state_mode",
-            }
-        else:
-            base = {
-                f"{flat_prefix}_stack_gate_flag",
-                f"{flat_prefix}_gate_option",
-                f"{flat_prefix}_gate_activation",
-                f"{flat_prefix}_stack_halting_flag",
-                f"{flat_prefix}_halting_option",
-                f"{flat_prefix}_halting_threshold",
-                f"{flat_prefix}_halting_dropout",
-                f"{flat_prefix}_halting_hidden_state_mode",
-            }
-        return (
-            base
-            | _controller_stack_keys(factory_kwargs["gate_stack_prefix"])
-            | _controller_stack_keys(factory_kwargs["halting_stack_prefix"])
-        )
-    if factory is _dynamic_memory_options_from_kwargs:
-        flat_prefix = factory_kwargs["flat_prefix"]
-        prefix = f"{flat_prefix}_" if flat_prefix else ""
-        return {
-            f"{prefix}memory_flag",
-            f"{prefix}memory_option",
-            f"{prefix}memory_position_option",
-            f"{prefix}memory_test_time_training_learning_rate",
-            f"{prefix}memory_test_time_training_num_inner_steps",
-        } | _controller_stack_keys(factory_kwargs["memory_stack_prefix"])
-    if factory is _recurrent_controller_options_from_kwargs:
-        flat_prefix = factory_kwargs["flat_prefix"]
-        return (
-            {
-                f"{flat_prefix}_flag",
-                f"{flat_prefix}_max_steps",
-                f"{flat_prefix}_initial_iterations",
-                f"{flat_prefix}_gradient_transition_count",
-                f"{flat_prefix}_iteration_increment",
-                f"{flat_prefix}_forward_calls_before_iteration_increment",
-                f"{flat_prefix}_layer_norm_position",
-                f"{flat_prefix}_stack_gate_flag",
-                f"{flat_prefix}_gate_option",
-                f"{flat_prefix}_gate_activation",
-                f"{flat_prefix}_stack_halting_flag",
-                f"{flat_prefix}_halting_option",
-                f"{flat_prefix}_halting_threshold",
-                f"{flat_prefix}_halting_dropout",
-                f"{flat_prefix}_halting_hidden_state_mode",
-            }
-            | _controller_stack_keys(factory_kwargs["gate_stack_prefix"])
-            | _controller_stack_keys(factory_kwargs["halting_stack_prefix"])
-        )
-    return set()
+        | _controller_stack_keys(gate_stack_prefix)
+        | _controller_stack_keys(halting_stack_prefix)
+    )
 
 
 def _controller_stack_keys(prefix: str) -> set[str]:
     return {f"{prefix}_{flat_field}" for flat_field in _CONTROLLER_STACK_FIELD_MAP}
-
-
-def _private_helper_value(
-    helper: Callable,
-    kwargs: dict[str, Any],
-    consumed: set[str],
-    config_module: ModuleType,
-    *args,
-    **helper_kwargs,
-) -> Any:
-    temp = dict(kwargs)
-    value = helper(temp, config_module, *args, **helper_kwargs)
-    consumed.update(set(kwargs) - set(temp))
-    for key, value_arg in helper_kwargs.items():
-        if key == "provided" and value_arg is not None:
-            continue
-    return value
 
 
 def _copy_direct(
@@ -1524,14 +2094,6 @@ def _updates(kwargs: dict[str, Any], field_map: dict[str, str]) -> dict[str, Any
         for flat_field, dataclass_field in field_map.items()
         if flat_field in kwargs
     }
-
-
-def _pop_updates(kwargs: dict[str, Any], field_map: dict[str, str]) -> dict[str, Any]:
-    updates: dict[str, Any] = {}
-    for flat_field, dataclass_field in field_map.items():
-        if flat_field in kwargs:
-            updates[dataclass_field] = kwargs.pop(flat_field)
-    return updates
 
 
 def _leftover_kwargs(kwargs: dict[str, Any], consumed: set[str]) -> dict[str, Any]:

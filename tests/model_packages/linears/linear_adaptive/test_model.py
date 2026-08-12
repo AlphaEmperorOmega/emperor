@@ -3,6 +3,7 @@ import inspect
 import unittest
 from dataclasses import FrozenInstanceError, fields, replace
 
+import pytest
 import torch
 
 import models.linears.linear_adaptive.dataset_options as dataset_options
@@ -25,7 +26,7 @@ from models.linears.linear_adaptive import (
     _control_config_factory,
     _hidden_model_config_factory,
     _projection_config_factory,
-    runtime_defaults,
+    _runtime_default_values,
 )
 from models.linears.linear_adaptive.config_builder import (
     LinearAdaptiveConfigBuilder,
@@ -38,7 +39,7 @@ from models.linears.linear_adaptive.runtime_defaults import (
     DEFAULT_RUNTIME,
     runtime_from_flat,
 )
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
@@ -54,10 +55,10 @@ class TestRuntimeDefaults(unittest.TestCase):
         self.assertFalse(hasattr(DEFAULT_RUNTIME, "__dict__"))
         self.assertGreater(len(fields(DEFAULT_RUNTIME)), 1)
 
-    def test_every_supported_flat_default_translates(self):
-        for key, value in runtime_defaults._FLAT_DEFAULTS.items():
+    def test_every_typed_runtime_field_default_translates(self):
+        for key, runtime_field in _runtime_default_values._FIELDS.items():
             with self.subTest(key=key):
-                self.assertIsNotNone(runtime_from_flat({key: value}))
+                self.assertIsNotNone(runtime_from_flat({key: runtime_field.default}))
 
     def test_canonical_key_translates_and_noncanonical_spellings_fail(self):
         runtime = runtime_from_flat(
@@ -290,6 +291,7 @@ class TestModelBehavior(unittest.TestCase):
                 logits = output[0] if isinstance(output, tuple) else output
                 self.assertEqual(logits.shape, (2, dataset.num_classes))
 
+    @pytest.mark.training
     def test_every_preset_trains_for_one_smoke_epoch(self):
         presets = model_package("linears/linear_adaptive").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[

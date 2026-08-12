@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import unittest
 
+import pytest
 import torch
 
 import emperor.augmentations as augmentations
@@ -288,6 +289,7 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
             self.assertTrue(torch.isfinite(parameter.grad).all())
             self.assertTrue(torch.any(parameter.grad != 0))
 
+    @pytest.mark.training
     def test_adam_state_and_model_state_continue_strictly_after_restore(self):
         source = AdaptiveLinearLayer(adaptive_linear_config(adaptive_bias=True))
         set_exact_adaptive_linear_parameters(source)

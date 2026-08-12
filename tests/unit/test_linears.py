@@ -3,6 +3,7 @@ import subprocess
 import sys
 import unittest
 
+import pytest
 import torch
 
 import emperor.linears as linears
@@ -392,6 +393,7 @@ class TestLinearLayer(unittest.TestCase):
                         else:
                             self.assertIsNone(m.bias_params)
 
+    @pytest.mark.training
     def test_backward_and_optimizer_step_match_hand_calculated_values(self):
         model = LinearLayer(self.preset(input_dim=2, output_dim=2, bias_flag=True))
         with torch.no_grad():

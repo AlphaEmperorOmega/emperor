@@ -71,13 +71,11 @@ class LinearConfigBuilder:
 
     def __projection_config_dependencies(self) -> ProjectionConfigDependencies:
         return ProjectionConfigDependencies(
-            hidden_dim=self.hidden_dim,
             stack_options=self.stack_options,
         )
 
     def __hidden_model_config_dependencies(self) -> HiddenModelConfigDependencies:
         return HiddenModelConfigDependencies(
-            hidden_dim=self.hidden_dim,
             stack_options=self.stack_options,
             submodule_stack_options=self.submodule_stack_options,
             mixture_options=self.mixture_options,

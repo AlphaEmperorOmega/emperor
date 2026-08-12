@@ -26,6 +26,13 @@ class NeuronClusterCapacityOptions:
     initial_z_axis_total_neurons: int | None
     max_steps: int
     growth_threshold: int | None
+    beam_width: int | None = None
+    growth_cooldown_steps: int | None = None
+    max_total_growths: int | None = None
+    growth_warmup_steps: int | None = None
+    pruning_threshold: int | None = None
+    escape_driven_growth_flag: bool = False
+    mitosis_initialization_flag: bool = False
 
 
 @dataclass(frozen=True)

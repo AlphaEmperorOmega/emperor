@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Never
 
 from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.records import ParsedOverrides
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.packages import (
     ModelPackage,
-    abstract_config_class_error,
+    RuntimeDefaultsError,
     config_key_to_model_param,
     normalize_key,
 )
+
+
+def _raise_inspection_error(exc: RuntimeDefaultsError) -> Never:
+    raise InspectionError(str(exc)) from (exc.__cause__ or exc)
 
 
 def supported_config_keys(package: ModelPackage) -> dict[str, str]:
@@ -37,16 +41,13 @@ def reject_locked_overrides(
     preset_name: str,
     parsed_overrides: Mapping[str, Any] | None,
 ) -> None:
-    locks = runtime_defaults_spec(package).preset_locks(preset_name)
-    locked_keys = sorted(set(parsed_overrides or {}) & set(locks))
-    if not locked_keys:
-        return
-    details = ", ".join(
-        f"{key} ({getattr(locks[key], 'reason', '')})" for key in locked_keys
-    )
-    raise InspectionError(
-        f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
-    )
+    try:
+        runtime_defaults_spec(package).reject_locked_overrides(
+            preset_name,
+            parsed_overrides,
+        )
+    except RuntimeDefaultsError as exc:
+        _raise_inspection_error(exc)
 
 
 def reject_conflicting_locked_overrides(
@@ -54,20 +55,13 @@ def reject_conflicting_locked_overrides(
     preset_name: str,
     parsed_overrides: Mapping[str, Any],
 ) -> None:
-    locks = runtime_defaults_spec(package).preset_locks(preset_name)
-    conflicts = sorted(
-        key
-        for key, value in parsed_overrides.items()
-        if key in locks and value != getattr(locks[key], "value", None)
-    )
-    if not conflicts:
-        return
-    details = ", ".join(
-        f"{key} ({getattr(locks[key], 'reason', '')})" for key in conflicts
-    )
-    raise InspectionError(
-        f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
-    )
+    try:
+        runtime_defaults_spec(package).reject_conflicting_locked_overrides(
+            preset_name,
+            parsed_overrides,
+        )
+    except RuntimeDefaultsError as exc:
+        _raise_inspection_error(exc)
 
 
 def parse_overrides(
@@ -77,32 +71,14 @@ def parse_overrides(
     preset: str | None = None,
     ignore_unknown: bool = False,
 ) -> ParsedOverrides:
-    spec = runtime_defaults_spec(package)
-    if not overrides:
-        parsed: dict[str, Any] = {}
-    else:
-        parsed = {}
-        for raw_key, raw_value in overrides.items():
-            config_key = spec.resolve_key(raw_key)
-            if config_key is None:
-                if ignore_unknown:
-                    continue
-                raise InspectionError(f"Unknown override '{raw_key}'.")
-            try:
-                parsed_value = spec.parse_value(config_key, raw_value)
-                if isinstance(parsed_value, type):
-                    abstract_error = abstract_config_class_error(parsed_value)
-                    if abstract_error is not None:
-                        raise ValueError(abstract_error)
-                parsed[spec.model_parameter(config_key)] = parsed_value
-            except InspectionError:
-                raise
-            except Exception as exc:
-                raise InspectionError(
-                    f"Invalid value for override '{raw_key}': {raw_value!r}. {exc}"
-                ) from exc
-    if preset is not None:
-        reject_locked_overrides(package, preset, parsed)
+    try:
+        parsed = runtime_defaults_spec(package).parse_overrides(
+            overrides,
+            preset=preset,
+            ignore_unknown=ignore_unknown,
+        )
+    except RuntimeDefaultsError as exc:
+        _raise_inspection_error(exc)
     return ParsedOverrides(parsed)
 
 
@@ -114,16 +90,14 @@ def canonicalize_overrides(
 ) -> dict[str, Any]:
     if not overrides:
         return {}
-    spec = runtime_defaults_spec(package)
-    canonical: dict[str, Any] = {}
-    for raw_key, raw_value in overrides.items():
-        config_key = spec.resolve_key(raw_key)
-        if config_key is None:
-            if ignore_unknown:
-                continue
-            raise InspectionError(f"Unknown override '{raw_key}'.")
-        canonical[config_key] = raw_value
-    return canonical
+    try:
+        return runtime_defaults_spec(package).canonicalize_overrides(
+            overrides,
+            ignore_unknown=ignore_unknown,
+        )
+    except RuntimeDefaultsError as exc:
+        _raise_inspection_error(exc)
+    raise AssertionError("unreachable")
 
 
 def serialize_overrides(
@@ -132,24 +106,14 @@ def serialize_overrides(
     *,
     ignore_unknown: bool = False,
 ) -> dict[str, Any]:
-    spec = runtime_defaults_spec(package)
-    canonical = canonicalize_overrides(
-        package,
-        overrides,
-        ignore_unknown=ignore_unknown,
-    )
-    serialized: dict[str, Any] = {}
-    for config_key, raw_value in canonical.items():
-        try:
-            parsed = spec.parse_value(config_key, raw_value)
-        except InspectionError:
-            raise
-        except Exception as exc:
-            raise InspectionError(
-                f"Invalid value for override '{config_key}': {raw_value!r}. {exc}"
-            ) from exc
-        serialized[config_key] = spec.serialize_value(parsed)
-    return serialized
+    try:
+        return runtime_defaults_spec(package).serialize_overrides(
+            overrides,
+            ignore_unknown=ignore_unknown,
+        )
+    except RuntimeDefaultsError as exc:
+        _raise_inspection_error(exc)
+    raise AssertionError("unreachable")
 
 
 __all__ = [

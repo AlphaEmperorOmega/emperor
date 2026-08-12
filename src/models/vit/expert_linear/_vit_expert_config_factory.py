@@ -1,13 +1,12 @@
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
-from emperor.experts import MixtureOfExpertsModelConfig
-from emperor.layers import LastLayerBiasOptions
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
+from emperor.layers import LastLayerBiasOptions, LayerStackConfig, RecurrentLayerConfig
 from models.vit.expert_linear._expert_control_config_factory import (
     ControlConfigDependencies as ExpertLinearControlConfigDependencies,
 )
@@ -15,7 +14,14 @@ from models.vit.expert_linear._expert_control_config_factory import (
     ControlConfigFactory as ExpertLinearControlConfigFactory,
 )
 from models.vit.expert_linear.runtime_options import (
+    ExpertsDynamicMemoryOptions,
+    ExpertsLayerControllerOptions,
+    ExpertsMixtureOptions,
+    ExpertsRecurrentControllerOptions,
+    ExpertsRouterOptions,
+    ExpertsSamplerOptions,
     ExpertsStackOptions,
+    ExpertsSubmoduleStackOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
@@ -29,36 +35,15 @@ class VitExpertConfigDependencies:
     encoder_options: TransformerEncoderOptions
     attention_options: TransformerAttentionOptions
     feed_forward_options: TransformerFeedForwardOptions
-    mixture_options: Any
-    expert_stack_options: Any
-    sampler_options: Any
-    router_options: Any
-    router_stack_options: Any
-    expert_layer_controller_options: Any
-    expert_dynamic_memory_options: Any
-    expert_recurrent_controller_options: Any
+    mixture_options: ExpertsMixtureOptions
+    expert_stack_options: ExpertsSubmoduleStackOptions
+    sampler_options: ExpertsSamplerOptions
+    router_options: ExpertsRouterOptions
+    router_stack_options: ExpertsSubmoduleStackOptions
+    expert_layer_controller_options: ExpertsLayerControllerOptions
+    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions
     expert_attention_use_kv_expert_models_flag: bool
-
-
-@dataclass(frozen=True)
-class VitExpertAdaptiveConfigDependencies(VitExpertConfigDependencies):
-    expert_attention_flag: bool
-    mixture_submodule_stack_options: Any
-    mixture_layer_controller_options: Any
-    mixture_dynamic_memory_options: Any
-    mixture_recurrent_controller_options: Any
-    router_layer_controller_options: Any
-    router_dynamic_memory_options: Any
-    router_recurrent_controller_options: Any
-    adaptive_generator_stack_options: Any
-    hidden_adaptive_weight_options: Any
-    hidden_adaptive_bias_options: Any
-    hidden_adaptive_diagonal_options: Any
-    hidden_adaptive_mask_options: Any
-    router_adaptive_weight_options: Any
-    router_adaptive_bias_options: Any
-    router_adaptive_diagonal_options: Any
-    router_adaptive_mask_options: Any
 
 
 class _VitExpertConfigFactoryBase:
@@ -80,7 +65,7 @@ class _VitExpertConfigFactoryBase:
         batch_size: int,
         hidden_dim: int,
         sequence_length: int,
-        projection_model_config,
+        projection_model_config: LayerStackConfig | RecurrentLayerConfig,
     ) -> MixtureOfAttentionHeadsConfig:
         dependencies = self.dependencies
         encoder_options = dependencies.encoder_options
@@ -108,7 +93,7 @@ class _VitExpertConfigFactoryBase:
             ),
         )
 
-    def _build_attention_experts_config(self):
+    def _build_attention_experts_config(self) -> MixtureOfExpertsConfig:
         model_config = self._build_expert_model_config(
             None,
             use_feed_forward_stack_options=False,
@@ -174,7 +159,10 @@ class _VitExpertConfigFactoryBase:
             apply_output_pipeline_flag=True,
         )
 
-    def _build_control_config(self, stack_options: ExpertsStackOptions):
+    def _build_control_config(
+        self,
+        stack_options: ExpertsStackOptions,
+    ) -> ExpertLinearControlConfigFactory:
         raise NotImplementedError
 
 

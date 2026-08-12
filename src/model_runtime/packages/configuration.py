@@ -123,18 +123,31 @@ def _parse_from_annotation(
     classes = _annotation_classes(annotation)
     enum_classes = [cls for cls in classes if issubclass(cls, Enum)]
     if enum_classes:
-        return _enum_lookup(enum_classes[0], raw_value)
-    if bool in classes:
-        return _bool_value(raw_value)
-    if int in classes:
-        return int(raw_value)
-    if float in classes:
-        return float(raw_value)
-    if str in classes:
+        parsed: Any = _enum_lookup(enum_classes[0], raw_value)
+    elif bool in classes:
+        parsed = _bool_value(raw_value)
+    elif int in classes:
+        parsed = int(raw_value)
+    elif float in classes:
+        parsed = float(raw_value)
+    elif str in classes:
+        parsed = raw_value
+    elif classes:
+        parsed = _class_lookup(config_module, raw_value)
+    else:
+        parsed = raw_value
+    return parsed
+
+
+def _parse_from_list_value(
+    config_module: ModuleType,
+    values: list[Any],
+    raw_value: str,
+) -> Any:
+    sample = next((value for value in values if value is not None), None)
+    if sample is None:
         return raw_value
-    if classes:
-        return _class_lookup(config_module, raw_value)
-    return raw_value
+    return _parse_from_current_value(config_module, sample, None, raw_value)
 
 
 def _parse_from_current_value(
@@ -146,26 +159,28 @@ def _parse_from_current_value(
     if raw_value.lower() in {"none", "null"}:
         return None
     if isinstance(current_value, list):
-        values = cast(list[Any], current_value)
-        sample = next((value for value in values if value is not None), None)
-        if sample is None:
-            return raw_value
-        return _parse_from_current_value(config_module, sample, None, raw_value)
+        return _parse_from_list_value(
+            config_module,
+            cast(list[Any], current_value),
+            raw_value,
+        )
     if isinstance(current_value, bool):
-        return _bool_value(raw_value)
-    if isinstance(current_value, int) and not isinstance(current_value, bool):
-        return int(raw_value)
-    if isinstance(current_value, float):
-        return float(raw_value)
-    if isinstance(current_value, str):
-        return raw_value
-    if isinstance(current_value, Enum):
-        return _enum_lookup(type(current_value), raw_value)
-    if inspect.isclass(current_value):
-        return _class_lookup(config_module, raw_value)
-    if current_value is None:
-        return _parse_from_annotation(config_module, annotation, raw_value)
-    return raw_value
+        parsed: Any = _bool_value(raw_value)
+    elif isinstance(current_value, int) and not isinstance(current_value, bool):
+        parsed = int(raw_value)
+    elif isinstance(current_value, float):
+        parsed = float(raw_value)
+    elif isinstance(current_value, str):
+        parsed = raw_value
+    elif isinstance(current_value, Enum):
+        parsed = _enum_lookup(type(current_value), raw_value)
+    elif inspect.isclass(current_value):
+        parsed = _class_lookup(config_module, raw_value)
+    elif current_value is None:
+        parsed = _parse_from_annotation(config_module, annotation, raw_value)
+    else:
+        parsed = raw_value
+    return parsed
 
 
 def parse_config_value(

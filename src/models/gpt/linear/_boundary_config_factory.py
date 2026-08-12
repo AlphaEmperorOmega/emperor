@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import models.gpt.linear.config as config
+from models.gpt.linear import _config_defaults as config_defaults
 from models.gpt.linear.runtime_options import GptEmbeddingOptions, GptLmHeadOptions
 
 
@@ -26,13 +27,12 @@ class BoundaryConfigFactory:
         self.hidden_dim = dependencies.hidden_dim
         self.output_dim = dependencies.output_dim
         self.sequence_length = dependencies.sequence_length
-        self.embedding_options = dependencies.embedding_options or GptEmbeddingOptions(
-            layer_norm_flag=config.EMBEDDING_LAYER_NORM_FLAG,
-            dropout_probability=config.EMBEDDING_DROPOUT_PROBABILITY,
+        self.embedding_options = (
+            dependencies.embedding_options
+            or config_defaults.gpt_embedding_options(config)
         )
-        self.lm_head_options = dependencies.lm_head_options or GptLmHeadOptions(
-            weight_tying_flag=config.LM_HEAD_WEIGHT_TYING_FLAG,
-            bias_flag=config.LM_HEAD_BIAS_FLAG,
+        self.lm_head_options = (
+            dependencies.lm_head_options or config_defaults.gpt_lm_head_options(config)
         )
 
     def build_boundary_config(self) -> GptBoundaryConfig:

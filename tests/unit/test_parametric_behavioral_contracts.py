@@ -1,5 +1,6 @@
 import unittest
 
+import pytest
 import torch
 
 from emperor.augmentations.adaptive_parameters import (
@@ -757,6 +758,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
 
 
 class ParametricLayerBehavioralContractTests(unittest.TestCase):
+    @pytest.mark.training
     def test_shared_dense_router_affine_equation_state_and_optimizer_are_exact(
         self,
     ) -> None:
@@ -853,6 +855,7 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
             actual_after_step = restored(inputs.detach())[0]
         torch.testing.assert_close(actual_after_step, expected_after_step)
 
+    @pytest.mark.training
     def test_dense_unweighted_matrix_layer_broadcasts_exact_affine_parameters(
         self,
     ) -> None:
