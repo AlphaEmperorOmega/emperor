@@ -23,7 +23,6 @@ from emperor.layers import (
     LayerStackConfig,
     RecurrentLayerConfig,
 )
-from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
 from models.bert.expert_linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
@@ -39,7 +38,9 @@ from models.bert.expert_linear_adaptive._control_support import (
     ExpertsHaltingConfigFactory,
     ExpertsMemoryConfigFactory,
     ExpertsRecurrentConfigFactory,
-    build_controller_stack,
+)
+from models.bert.expert_linear_adaptive._controller_stack_config import (
+    build_controller_stack_config,
 )
 from models.bert.expert_linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
@@ -432,9 +433,9 @@ class ControlConfigFactory:
                 layer_model_config
             )
         else:
-            model_config = self.__build_controller_stack(
+            model_config = build_controller_stack_config(
                 router_stack_options,
-                layer_model_config,
+                layer_model_config=layer_model_config,
             )
         return RouterConfig(
             input_dim=self.hidden_dim,
@@ -633,13 +634,3 @@ class ControlConfigFactory:
 
     def __build_shared_generator_model_config(self) -> LayerStackConfig:
         return self.adaptive_generator_stack_config_factory.build_shared_config()
-
-    @staticmethod
-    def __build_controller_stack(
-        options: ExpertsSubmoduleStackOptions,
-        layer_model_config: LinearLayerConfig | AdaptiveLinearLayerConfig,
-    ) -> LayerStackConfig:
-        return build_controller_stack(
-            options,
-            layer_model_config=layer_model_config,
-        )

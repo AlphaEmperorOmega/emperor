@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, cast
 
 from emperor.config import ModelConfig
 from emperor.datasets.image.classification import Mnist
@@ -38,6 +39,20 @@ class _PresetLockConflict:
 
 _DEFAULT_MODEL_CONFIG_PRESET = object()
 _DEFAULT_DATASET = object()
+_RUN_OWNED_CONFIG_PREFIXES = (
+    "trainer_",
+    "callback_",
+    "data_",
+    "run_",
+    "monitor_",
+)
+_RUN_OWNED_CONFIG_KEYS = frozenset({"num_epochs", "seed"})
+
+
+def is_run_owned_config_key(key: str) -> bool:
+    """Return whether an override belongs to Run execution, not construction."""
+
+    return key in _RUN_OWNED_CONFIG_KEYS or key.startswith(_RUN_OWNED_CONFIG_PREFIXES)
 
 
 class ExperimentPresetsBase:
@@ -48,28 +63,31 @@ class ExperimentPresetsBase:
         self._preset_definitions = dict(preset_definitions)
 
     @property
-    def default_preset(self):
+    def default_preset(self) -> object:
         raise NotImplementedError(
             "Preset providers must declare one canonical default preset."
         )
 
     def get_config(
         self,
-        model_config_preset,
-        dataset,
+        model_config_preset: object,
+        dataset: type[Any],
         *,
-        config_overrides: dict | None = None,
+        config_overrides: dict[str, Any] | None = None,
     ) -> list[ModelConfig]:
         raise NotImplementedError(
             "Preset providers must implement configuration materialization."
         )
 
-    def _preset(self, *args, **kwargs) -> ModelConfig:
+    def _preset(self, *args: Any, **kwargs: Any) -> ModelConfig:
         raise NotImplementedError(
             "The method '_preset' must be implemented in the subclass."
         )
 
-    def definition_for_preset(self, model_config_preset) -> PresetDefinition:
+    def definition_for_preset(
+        self,
+        model_config_preset: object,
+    ) -> PresetDefinition:
         try:
             return self._preset_definitions[model_config_preset]
         except KeyError as exc:
@@ -78,13 +96,19 @@ class ExperimentPresetsBase:
                 "`ExperimentPreset`."
             ) from exc
 
-    def overrides_for_preset(self, model_config_preset) -> dict[str, object]:
+    def overrides_for_preset(
+        self,
+        model_config_preset: object,
+    ) -> dict[str, object]:
         return dict(self.definition_for_preset(model_config_preset).preset_values)
 
-    def description_for_preset(self, model_config_preset) -> str:
+    def description_for_preset(self, model_config_preset: object) -> str:
         return self.definition_for_preset(model_config_preset).description
 
-    def locks_for_preset(self, model_config_preset) -> dict[str, PresetLock]:
+    def locks_for_preset(
+        self,
+        model_config_preset: object,
+    ) -> dict[str, PresetLock]:
         return {
             field: PresetLock(
                 value=value,
@@ -93,29 +117,36 @@ class ExperimentPresetsBase:
             for field, value in self.overrides_for_preset(model_config_preset).items()
         }
 
-    def _preset_lock_reason(self, model_config_preset, field: str) -> str:
+    def _preset_lock_reason(
+        self,
+        model_config_preset: object,
+        field: str,
+    ) -> str:
+        preset_name = cast(Any, model_config_preset).name
         return (
-            f"Locked by the {model_config_preset.name} preset because this preset "
-            f"locks `{field}`."
+            f"Locked by the {preset_name} preset because this preset locks `{field}`."
         )
 
-    def locked_fields(self, model_config_preset) -> dict[str, PresetLock]:
+    def locked_fields(
+        self,
+        model_config_preset: object,
+    ) -> dict[str, PresetLock]:
         return dict(self.locks_for_preset(model_config_preset))
 
-    def _dataset_config(self, dataset: type) -> dict:
+    def _dataset_config(self, dataset: type[Any]) -> dict[str, Any]:
         return {
             "input_dim": dataset.flattened_input_dim,
             "output_dim": dataset.num_classes,
         }
 
-    def _model_config_overrides(self, config_overrides: dict | None = None) -> dict:
-        ignored_prefixes = ("trainer_", "callback_", "data_", "run_", "monitor_")
-        ignored_keys = {"num_epochs"}
+    def _model_config_overrides(
+        self,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return {
             key: value
             for key, value in (config_overrides or {}).items()
-            if key not in ignored_keys
-            and not any(key.startswith(prefix) for prefix in ignored_prefixes)
+            if not is_run_owned_config_key(key)
         }
 
     def _effective_model_param_name(self, key: str) -> str:
@@ -123,7 +154,7 @@ class ExperimentPresetsBase:
 
     def _effective_locked_fields(
         self,
-        model_config_preset,
+        model_config_preset: object,
     ) -> dict[str, _EffectivePresetLock]:
         return {
             self._effective_model_param_name(field): _EffectivePresetLock(field, lock)
@@ -132,11 +163,11 @@ class ExperimentPresetsBase:
 
     def _validate_preset_config_overrides(
         self,
-        model_config_preset,
-        config_overrides: dict,
+        model_config_preset: object,
+        config_overrides: dict[str, Any],
     ) -> None:
         locked_fields = self._effective_locked_fields(model_config_preset)
-        conflicts = []
+        conflicts: list[_PresetLockConflict] = []
         for key, value in config_overrides.items():
             locked = locked_fields.get(self._effective_model_param_name(key))
             if locked is None or value == locked.lock.value:
@@ -154,17 +185,16 @@ class ExperimentPresetsBase:
 
     def _raise_preset_lock_conflicts(
         self,
-        model_config_preset,
+        model_config_preset: object,
         conflicts: list[_PresetLockConflict],
     ) -> None:
         if not conflicts:
             return
-        preset_name = (
-            model_config_preset.name
-            if hasattr(model_config_preset, "name")
-            else str(model_config_preset)
+        preset_name = cast(
+            str,
+            getattr(model_config_preset, "name", str(model_config_preset)),
         )
-        messages = []
+        messages: list[str] = []
         for conflict in conflicts:
             messages.append(
                 f"{preset_name} locks {conflict.field}="
@@ -180,17 +210,28 @@ class ExperimentPresetsBase:
 
     def _format_preset_lock_value(self, value: object) -> str:
         if isinstance(value, list):
+            list_value = cast(list[object], value)
             return (
-                "[" + ", ".join(self._format_preset_lock_value(v) for v in value) + "]"
+                "["
+                + ", ".join(self._format_preset_lock_value(item) for item in list_value)
+                + "]"
             )
         if isinstance(value, tuple):
+            tuple_value = cast(tuple[object, ...], value)
             return (
-                "(" + ", ".join(self._format_preset_lock_value(v) for v in value) + ")"
+                "("
+                + ", ".join(
+                    self._format_preset_lock_value(item) for item in tuple_value
+                )
+                + ")"
             )
         if isinstance(value, set):
+            set_value = cast(set[object], value)
             return (
                 "{"
-                + ", ".join(sorted(self._format_preset_lock_value(v) for v in value))
+                + ", ".join(
+                    sorted(self._format_preset_lock_value(item) for item in set_value)
+                )
                 + "}"
             )
         if isinstance(value, Enum):
@@ -205,9 +246,9 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
         self,
         preset_definitions: Mapping[object, PresetDefinition],
         *,
-        builder_type: type,
+        builder_type: type[Any],
         default_preset: object,
-        default_dataset: type = Mnist,
+        default_dataset: type[Any] = Mnist,
     ) -> None:
         super().__init__(preset_definitions)
         self._builder_type = builder_type
@@ -215,21 +256,22 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
         self._default_dataset = default_dataset
 
     @property
-    def default_preset(self):
+    def default_preset(self) -> object:
         return self._default_preset
 
     def get_config(
         self,
-        model_config_preset=_DEFAULT_MODEL_CONFIG_PRESET,
-        dataset: type = _DEFAULT_DATASET,
+        model_config_preset: object = _DEFAULT_MODEL_CONFIG_PRESET,
+        dataset: type[Any] | object = _DEFAULT_DATASET,
         *,
-        config_overrides: dict | None = None,
+        config_overrides: dict[str, Any] | None = None,
     ) -> list[ModelConfig]:
         if model_config_preset is _DEFAULT_MODEL_CONFIG_PRESET:
             model_config_preset = self._default_preset
         model_config_preset = self._normalize_model_config_preset(model_config_preset)
         if dataset is _DEFAULT_DATASET:
             dataset = self._default_dataset
+        dataset_type = cast(type[Any], dataset)
         preset_callback = self._preset_callback_for_preset(model_config_preset)
         model_config_overrides = self._model_config_overrides(config_overrides)
         self._validate_preset_config_overrides(
@@ -237,26 +279,36 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
             model_config_overrides,
         )
         base_config = {
-            **self._dataset_config(dataset),
+            **self._dataset_config(dataset_type),
             **model_config_overrides,
         }
         return [preset_callback(**base_config)]
 
-    def _normalize_model_config_preset(self, model_config_preset):
+    def _normalize_model_config_preset(
+        self,
+        model_config_preset: object,
+    ) -> object:
         return model_config_preset
 
-    def _preset_callback_for_preset(self, preset):
+    def _preset_callback_for_preset(
+        self,
+        preset: object,
+    ) -> Callable[..., ModelConfig]:
         self.definition_for_preset(preset)
-        return lambda **kwargs: self._preset_for_preset(preset, **kwargs)
+
+        def materialize_preset(**kwargs: Any) -> ModelConfig:
+            return self._preset_for_preset(preset, **kwargs)
+
+        return materialize_preset
 
     def _preset_for_preset(
         self,
-        preset,
-        **kwargs,
+        preset: object,
+        **kwargs: Any,
     ) -> ModelConfig:
         return self._preset(**{**kwargs, **self.overrides_for_preset(preset)})
 
-    def _preset(self, **kwargs) -> ModelConfig:
+    def _preset(self, **kwargs: Any) -> ModelConfig:
         return self._builder_type(**kwargs).build()
 
 

@@ -23,7 +23,6 @@ from emperor.layers import (
     LayerStackConfig,
     RecurrentLayerConfig,
 )
-from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
 from models.vit.expert_linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
@@ -33,20 +32,22 @@ from models.vit.expert_linear_adaptive._adaptive_parameter_config_factory import
     build_diagonal_config,
     build_mask_config,
     build_weight_config,
+    resolve_enabled_adaptive_parameter_option,
+)
+from models.vit.expert_linear_adaptive._controller_stack_config import (
+    build_controller_stack_config,
 )
 from models.vit.expert_linear_adaptive._expert_control_support import (
     ExpertsGateConfigFactory,
     ExpertsHaltingConfigFactory,
     ExpertsMemoryConfigFactory,
     ExpertsRecurrentConfigFactory,
-    build_controller_stack,
 )
 from models.vit.expert_linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
 )
 from models.vit.expert_linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
-    AdaptiveGeneratorStackSource,
     ExpertsDynamicMemoryOptions,
     ExpertsLayerControllerOptions,
     ExpertsMixtureOptions,
@@ -275,22 +276,6 @@ class ControlConfigFactory:
             model_config=model_config,
         )
 
-    def __resolve_enabled_adaptive_parameter_option(
-        self,
-        *,
-        option_flag: bool,
-        option: type | None,
-        option_flag_name: str,
-        option_name: str,
-    ) -> type | None:
-        if not option_flag:
-            return None
-        if option is None:
-            raise ValueError(
-                f"{option_name} must be set when {option_flag_name} is True."
-            )
-        return option
-
     def __build_main_model_config(self) -> MixtureOfExpertsModelConfig:
         mixture_options = self.mixture_options
         return MixtureOfExpertsModelConfig(
@@ -432,9 +417,9 @@ class ControlConfigFactory:
                 layer_model_config
             )
         else:
-            model_config = self.__build_controller_stack(
+            model_config = build_controller_stack_config(
                 router_stack_options,
-                layer_model_config,
+                layer_model_config=layer_model_config,
             )
         return RouterConfig(
             input_dim=self.hidden_dim,
@@ -529,7 +514,7 @@ class ControlConfigFactory:
         self,
         adaptive_options: HiddenAdaptiveWeightOptions,
     ) -> DynamicWeightConfig | None:
-        weight_option = self.__resolve_enabled_adaptive_parameter_option(
+        weight_option = resolve_enabled_adaptive_parameter_option(
             option_flag=adaptive_options.option_flag,
             option=adaptive_options.option,
             option_flag_name="weight_option_flag",
@@ -537,8 +522,10 @@ class ControlConfigFactory:
         )
         if weight_option is None:
             return None
-        model_config = self.__build_generator_model_config(
-            adaptive_options.generator_stack_source
+        model_config = (
+            self.adaptive_generator_stack_config_factory.build_config_from_source(
+                adaptive_options.generator_stack_source
+            )
         )
         return build_weight_config(
             weight_option,
@@ -558,7 +545,7 @@ class ControlConfigFactory:
         self,
         adaptive_options: HiddenAdaptiveBiasOptions,
     ) -> DynamicBiasConfig | None:
-        bias_option = self.__resolve_enabled_adaptive_parameter_option(
+        bias_option = resolve_enabled_adaptive_parameter_option(
             option_flag=adaptive_options.option_flag,
             option=adaptive_options.option,
             option_flag_name="bias_option_flag",
@@ -566,8 +553,10 @@ class ControlConfigFactory:
         )
         if bias_option is None:
             return None
-        model_config = self.__build_generator_model_config(
-            adaptive_options.generator_stack_source
+        model_config = (
+            self.adaptive_generator_stack_config_factory.build_config_from_source(
+                adaptive_options.generator_stack_source
+            )
         )
         return build_bias_config(
             bias_option,
@@ -582,7 +571,7 @@ class ControlConfigFactory:
         self,
         adaptive_options: HiddenAdaptiveDiagonalOptions,
     ) -> DynamicDiagonalConfig | None:
-        diagonal_option = self.__resolve_enabled_adaptive_parameter_option(
+        diagonal_option = resolve_enabled_adaptive_parameter_option(
             option_flag=adaptive_options.option_flag,
             option=adaptive_options.option,
             option_flag_name="diagonal_option_flag",
@@ -590,8 +579,10 @@ class ControlConfigFactory:
         )
         if diagonal_option is None:
             return None
-        model_config = self.__build_generator_model_config(
-            adaptive_options.generator_stack_source
+        model_config = (
+            self.adaptive_generator_stack_config_factory.build_config_from_source(
+                adaptive_options.generator_stack_source
+            )
         )
         return build_diagonal_config(
             diagonal_option,
@@ -602,7 +593,7 @@ class ControlConfigFactory:
         self,
         adaptive_options: HiddenAdaptiveMaskOptions,
     ) -> AxisMaskConfig | None:
-        row_mask_option = self.__resolve_enabled_adaptive_parameter_option(
+        row_mask_option = resolve_enabled_adaptive_parameter_option(
             option_flag=adaptive_options.option_flag,
             option=adaptive_options.row_mask_option,
             option_flag_name="mask_option_flag",
@@ -610,8 +601,10 @@ class ControlConfigFactory:
         )
         if row_mask_option is None:
             return None
-        model_config = self.__build_generator_model_config(
-            adaptive_options.generator_stack_source
+        model_config = (
+            self.adaptive_generator_stack_config_factory.build_config_from_source(
+                adaptive_options.generator_stack_source
+            )
         )
         return build_mask_config(
             row_mask_option,
@@ -623,23 +616,5 @@ class ControlConfigFactory:
             model_config=model_config,
         )
 
-    def __build_generator_model_config(
-        self,
-        source: AdaptiveGeneratorStackSource,
-    ) -> LayerStackConfig | None:
-        return self.adaptive_generator_stack_config_factory.build_config_from_source(
-            source
-        )
-
     def __build_shared_generator_model_config(self) -> LayerStackConfig:
         return self.adaptive_generator_stack_config_factory.build_shared_config()
-
-    @staticmethod
-    def __build_controller_stack(
-        options: ExpertsSubmoduleStackOptions,
-        layer_model_config: LinearLayerConfig | AdaptiveLinearLayerConfig,
-    ) -> LayerStackConfig:
-        return build_controller_stack(
-            options,
-            layer_model_config=layer_model_config,
-        )

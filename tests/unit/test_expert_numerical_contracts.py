@@ -1,6 +1,7 @@
 import copy
 import unittest
 
+import pytest
 import torch
 
 from emperor.experts import (
@@ -464,6 +465,7 @@ class ExpertNumericalContractTests(unittest.TestCase):
                     self.assertTrue(torch.isfinite(parameter.grad).all())
                     self.assertGreater(parameter.grad.abs().sum().item(), 0.0)
 
+    @pytest.mark.training
     def test_weighted_sparse_routing_gradients_reach_only_selected_experts(
         self,
     ) -> None:
@@ -886,6 +888,7 @@ class ExpertNumericalContractTests(unittest.TestCase):
                         0.0,
                     )
 
+    @pytest.mark.training
     def test_model_and_momentum_optimizer_restore_exact_next_step(self) -> None:
         dtype = torch.float64
         config = _disabled_mixture_model_config()

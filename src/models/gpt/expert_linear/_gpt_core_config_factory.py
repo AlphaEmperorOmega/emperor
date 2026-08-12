@@ -80,7 +80,7 @@ class CoreConfigDependencies:
     feed_forward_layer_controller_options: LayerControllerOptions | None
     feed_forward_dynamic_memory_options: DynamicMemoryOptions | None
     feed_forward_recurrent_controller_options: RecurrentControllerOptions | None
-    stack_options: MainLayerStackOptions | None
+    stack_options: MainLayerStackOptions
     submodule_stack_options: SubmoduleStackOptions | None
     layer_controller_options: LayerControllerOptions | None
     dynamic_memory_options: DynamicMemoryOptions | None
@@ -425,44 +425,21 @@ class GptCoreConfigFactory:
         )
 
     def _stack_residual_connection_option(self) -> type[ResidualConfig]:
-        if self.decoder_stack_options is None:
-            return None
         return self.decoder_stack_options.residual_connection_option
 
     def _stack_residual_model_flag(self) -> bool:
-        if self.decoder_stack_options is None:
-            return False
         return self.decoder_stack_options.residual_model_flag
 
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
-        if self.decoder_stack_options is None:
-            return LastLayerBiasOptions.DEFAULT
         return self.decoder_stack_options.last_layer_bias_option
 
     def _stack_apply_output_pipeline_flag(self) -> bool:
-        if self.decoder_stack_options is None:
-            return True
         return self.decoder_stack_options.apply_output_pipeline_flag
 
     def _shared_gate_config(self):
         if self.decoder_layer_controller_options is None:
             return None
         return self.decoder_layer_controller_options.shared_gate_config
-
-    def _effective_stack_options(self) -> MainLayerStackOptions:
-        if self.decoder_stack_options is not None:
-            return self.decoder_stack_options
-        return MainLayerStackOptions(
-            bias_flag=True,
-            layer_norm_position=self.decoder_options.layer_norm_position,
-            num_layers=self.decoder_options.num_layers,
-            activation=self.decoder_options.activation,
-            residual_connection_option=None,
-            residual_model_flag=False,
-            dropout_probability=self.decoder_options.dropout_probability,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
-        )
 
     def _effective_attention_projection_stack_options(self) -> SubmoduleStackOptions:
         return self.attention_projection_stack_options
@@ -473,7 +450,7 @@ class GptCoreConfigFactory:
     def _control_factory_dependencies(self) -> GptControlFactoryDependencies:
         return GptControlFactoryDependencies(
             hidden_dim=self.hidden_dim,
-            decoder_stack_options=self._effective_stack_options(),
+            decoder_stack_options=self.decoder_stack_options,
             decoder_submodule_stack_options=self.decoder_submodule_stack_options,
             attention_projection_stack_options=(
                 self._effective_attention_projection_stack_options()

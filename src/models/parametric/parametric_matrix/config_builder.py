@@ -46,21 +46,16 @@ class _ParametricMatrixConfigBuilderImplementation:
         residual_stack_independent_flag: bool = (
             config.RESIDUAL_STACK_INDEPENDENT_FLAG
         ),
-        residual_stack_hidden_dim: int | None = (
-            config.RESIDUAL_STACK_HIDDEN_DIM
-        ),
+        residual_stack_hidden_dim: int | None = (config.RESIDUAL_STACK_HIDDEN_DIM),
         residual_stack_layer_norm_position: LayerNormPositionOptions | None = (
             config.RESIDUAL_STACK_LAYER_NORM_POSITION
         ),
-        residual_stack_num_layers: int | None = (
-            config.RESIDUAL_STACK_NUM_LAYERS
-        ),
+        residual_stack_num_layers: int | None = (config.RESIDUAL_STACK_NUM_LAYERS),
         residual_stack_activation: ActivationOptions | None = (
             config.RESIDUAL_STACK_ACTIVATION
         ),
-        residual_stack_residual_connection_option: type[
-            ResidualConfig
-        ] | None = config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_stack_residual_connection_option: type[ResidualConfig]
+        | None = config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_stack_residual_model_flag: bool = (
             config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
         ),
@@ -73,9 +68,7 @@ class _ParametricMatrixConfigBuilderImplementation:
         residual_stack_apply_output_pipeline_flag: bool | None = (
             config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
         ),
-        residual_stack_bias_flag: bool | None = (
-            config.RESIDUAL_STACK_BIAS_FLAG
-        ),
+        residual_stack_bias_flag: bool | None = (config.RESIDUAL_STACK_BIAS_FLAG),
         adaptive_mixture_top_k: int = config.ADAPTIVE_MIXTURE_TOP_K,
         adaptive_mixture_num_experts: int = config.ADAPTIVE_MIXTURE_NUM_EXPERTS,
         adaptive_mixture_weighted_parameters_flag: bool = (
@@ -131,15 +124,9 @@ class _ParametricMatrixConfigBuilderImplementation:
                     residual_connection_option=(
                         residual_stack_residual_connection_option
                     ),
-                    residual_model_flag=(
-                        residual_stack_residual_model_flag
-                    ),
-                    dropout_probability=(
-                        residual_stack_dropout_probability
-                    ),
-                    last_layer_bias_option=(
-                        residual_stack_last_layer_bias_option
-                    ),
+                    residual_model_flag=(residual_stack_residual_model_flag),
+                    dropout_probability=(residual_stack_dropout_probability),
+                    last_layer_bias_option=(residual_stack_last_layer_bias_option),
                     apply_output_pipeline_flag=(
                         residual_stack_apply_output_pipeline_flag
                     ),

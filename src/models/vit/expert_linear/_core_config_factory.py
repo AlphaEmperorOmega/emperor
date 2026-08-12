@@ -1,18 +1,17 @@
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, replace
 
 import models.vit.expert_linear.config as config
-from emperor.layers import (
-    LastLayerBiasOptions,
-    LayerNormPositionOptions,
-)
+from models.vit.expert_linear import _config_defaults as config_defaults
 from models.vit.expert_linear._linear_layer_config_factory import (
     LinearLayerConfigFactory,
 )
 from models.vit.expert_linear._vit_core_config_factory import (
     CoreConfigDependencies as _CoreDependencies,
 )
-from models.vit.expert_linear._vit_core_config_factory import VitCoreConfigFactory
+from models.vit.expert_linear._vit_core_config_factory import (
+    VitCoreConfigFactory,
+    _VitExpertConfigFactory,
+)
 from models.vit.expert_linear.runtime_options import (
     DynamicMemoryOptions,
     LayerControllerOptions,
@@ -46,22 +45,32 @@ class CoreConfigDependencies:
     dynamic_memory_options: DynamicMemoryOptions | None
     recurrent_controller_options: RecurrentControllerOptions | None
     linear_layer_config_factory: LinearLayerConfigFactory
-    expert_config_factory: Any | None = None
+    expert_config_factory: _VitExpertConfigFactory | None = None
 
 
 class CoreConfigFactory:
     def __init__(self, dependencies: CoreConfigDependencies) -> None:
         self.dependencies = dependencies
-        self.encoder_options = self.__default_encoder_options(
-            dependencies.encoder_options
+        self.encoder_options = (
+            config_defaults.vit_encoder_options(config)
+            if dependencies.encoder_options is None
+            else dependencies.encoder_options
         )
-        self.attention_options = self.__default_attention_options(
-            dependencies.attention_options
+        self.attention_options = (
+            config_defaults.vit_attention_options(config)
+            if dependencies.attention_options is None
+            else dependencies.attention_options
         )
-        self.feed_forward_options = self.__default_feed_forward_options(
-            dependencies.feed_forward_options
+        self.feed_forward_options = (
+            config_defaults.vit_feed_forward_options(config)
+            if dependencies.feed_forward_options is None
+            else dependencies.feed_forward_options
         )
-        self.stack_options = self.__default_stack_options(dependencies.stack_options)
+        self.stack_options = (
+            config_defaults.main_layer_stack_options(config)
+            if dependencies.stack_options is None
+            else dependencies.stack_options
+        )
         self.attention_projection_stack_options = (
             self.__default_attention_projection_stack_options(
                 dependencies.attention_projection_stack_options
@@ -75,79 +84,20 @@ class CoreConfigFactory:
         core_factory = VitCoreConfigFactory(self.__core_dependencies())
         return core_factory.build_encoder_config()
 
-    def __default_encoder_options(
-        self,
-        encoder_options: TransformerEncoderOptions | None,
-    ) -> TransformerEncoderOptions:
-        if encoder_options is not None:
-            return encoder_options
-        return TransformerEncoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            causal_attention_mask_flag=False,
-        )
-
-    def __default_attention_options(
-        self,
-        attention_options: TransformerAttentionOptions | None,
-    ) -> TransformerAttentionOptions:
-        if attention_options is not None:
-            return attention_options
-        return TransformerAttentionOptions(
-            num_heads=config.ATTN_NUM_HEADS,
-            num_layers=config.ATTN_NUM_LAYERS,
-            bias_flag=config.ATTN_BIAS_FLAG,
-            add_key_value_bias_flag=config.ATTN_ADD_KEY_VALUE_BIAS_FLAG,
-        )
-
-    def __default_feed_forward_options(
-        self,
-        feed_forward_options: TransformerFeedForwardOptions | None,
-    ) -> TransformerFeedForwardOptions:
-        if feed_forward_options is not None:
-            return feed_forward_options
-        return TransformerFeedForwardOptions(
-            num_layers=config.FF_NUM_LAYERS,
-            bias_flag=config.FF_BIAS_FLAG,
-        )
-
-    def __default_stack_options(
-        self,
-        stack_options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return MainLayerStackOptions(
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
     def __default_attention_projection_stack_options(
         self,
         stack_options: SubmoduleStackOptions | None,
     ) -> SubmoduleStackOptions:
         if stack_options is not None:
             return stack_options
-        return SubmoduleStackOptions(
+        defaults = config_defaults.linears_submodule_stack_options(
+            config, config_defaults.LinearRole.ATTENTION
+        )
+        return replace(
+            defaults,
             hidden_dim=self.encoder_options.hidden_dim,
             num_layers=self.attention_options.num_layers,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            residual_connection_option=None,
-            residual_model_flag=False,
-            dropout_probability=0.0,
             bias_flag=self.attention_options.bias_flag,
         )
 
@@ -157,15 +107,14 @@ class CoreConfigFactory:
     ) -> SubmoduleStackOptions:
         if stack_options is not None:
             return stack_options
-        return SubmoduleStackOptions(
+        defaults = config_defaults.linears_submodule_stack_options(
+            config, config_defaults.LinearRole.FEED_FORWARD
+        )
+        return replace(
+            defaults,
             hidden_dim=self.__scaled_feed_forward_hidden_dim(),
             num_layers=self.feed_forward_options.num_layers,
-            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
             activation=self.encoder_options.activation,
-            layer_norm_position=LayerNormPositionOptions.BEFORE,
-            residual_connection_option=None,
-            residual_model_flag=False,
             dropout_probability=self.encoder_options.dropout_probability,
             bias_flag=self.feed_forward_options.bias_flag,
         )

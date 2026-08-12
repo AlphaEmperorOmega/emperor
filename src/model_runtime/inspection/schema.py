@@ -3,8 +3,8 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping, Sequence
 from enum import Enum
-from types import ModuleType, NoneType, UnionType
-from typing import Any, Union, get_args, get_origin
+from types import NoneType, UnionType
+from typing import Any, Union, cast, get_args, get_origin
 
 from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.field_descriptions import config_field_description
@@ -21,6 +21,7 @@ from model_runtime.inspection.runtime_defaults import (
 )
 from model_runtime.packages import (
     ModelPackage,
+    RuntimeDefaultsError,
     abstract_config_class_error,
     config_key_to_flag,
 )
@@ -40,7 +41,8 @@ def _field_section_path(
 ) -> tuple[str, ...]:
     raw_path = metadata.get("sectionPath")
     if isinstance(raw_path, list):
-        path = tuple(item for item in raw_path if isinstance(item, str) and item)
+        raw_path_items = cast(list[object], raw_path)
+        path = tuple(item for item in raw_path_items if isinstance(item, str) and item)
         if path:
             return path
     raise InspectionError(
@@ -50,7 +52,7 @@ def _field_section_path(
     )
 
 
-def _annotation_classes(annotation: Any) -> list[type]:
+def _annotation_classes(annotation: Any) -> list[type[Any]]:
     if annotation is None:
         return []
     origin = get_origin(annotation)
@@ -60,7 +62,7 @@ def _annotation_classes(annotation: Any) -> list[type]:
     if annotation is NoneType:
         return []
     if origin is type and args and isinstance(args[0], type):
-        return [args[0]]
+        return [cast(type[Any], args[0])]
     if inspect.isclass(annotation):
         return [annotation]
     return []
@@ -81,32 +83,43 @@ def _annotation_primitive_kind(annotation: Any) -> str | None:
     return None
 
 
+def _concrete_value_kind(value: Any) -> str | None:
+    kind: str | None = None
+    if isinstance(value, bool):
+        kind = "bool"
+    elif isinstance(value, int) and not isinstance(value, bool):
+        kind = "int"
+    elif isinstance(value, float):
+        kind = "float"
+    elif isinstance(value, str):
+        kind = "string"
+    elif isinstance(value, Enum):
+        kind = "enum"
+    elif inspect.isclass(value):
+        kind = "class"
+    return kind
+
+
+def _none_value_kind(annotation: Any, annotation_classes: list[type[Any]]) -> str:
+    primitive_kind = _annotation_primitive_kind(annotation)
+    if primitive_kind is not None:
+        return primitive_kind
+    kind = "unknown"
+    if any(issubclass(cls, Enum) for cls in annotation_classes):
+        kind = "enum"
+    elif any(cls not in PRIMITIVE_ANNOTATION_KINDS for cls in annotation_classes):
+        kind = "class"
+    return kind
+
+
 def _value_kind(value: Any, annotation: Any) -> str:
     annotation_classes = _annotation_classes(annotation)
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int) and not isinstance(value, bool):
-        return "int"
-    if isinstance(value, float):
-        return "float"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, Enum):
-        return "enum"
-    if inspect.isclass(value):
-        return "class"
+    kind = _concrete_value_kind(value)
+    if kind is not None:
+        return kind
     if value is None:
-        primitive_kind = _annotation_primitive_kind(annotation)
-        if primitive_kind is not None:
-            return primitive_kind
-        if any(issubclass(cls, Enum) for cls in annotation_classes):
-            return "enum"
-        if any(cls not in PRIMITIVE_ANNOTATION_KINDS for cls in annotation_classes):
-            return "class"
-        return "unknown"
-    if isinstance(value, list):
-        return "list"
-    return "unknown"
+        return _none_value_kind(annotation, annotation_classes)
+    return "list" if isinstance(value, list) else "unknown"
 
 
 def _enum_choices(value: Any, annotation: Any) -> list[str]:
@@ -125,88 +138,85 @@ def _class_choice_name(value: Any) -> str | None:
     return value.__name__ if inspect.isclass(value) else None
 
 
-def _search_space_class_choices(
-    search_space_module: ModuleType,
-    key: str | None,
-    available_choices: set[str],
-) -> list[str]:
-    if key is None:
+class _ChoiceResolver:
+    def __init__(self, spec: RuntimeDefaultsSpec) -> None:
+        self._spec = spec
+
+    def _search_space_class_choices(
+        self,
+        key: str | None,
+        available_choices: set[str],
+    ) -> list[str]:
+        if key is None:
+            return []
+        values = self._spec.search_source_value(f"SEARCH_SPACE_{key}")
+        if not isinstance(values, list):
+            return []
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for value in cast(list[object], values):
+            choice = _class_choice_name(value)
+            if choice is None or choice not in available_choices or choice in seen:
+                continue
+            ordered.append(choice)
+            seen.add(choice)
+        return ordered
+
+    def _class_choices(
+        self,
+        annotation: Any,
+        current_value: Any,
+        key: str | None,
+    ) -> list[str]:
+        expected: list[type[Any]] = [
+            cls
+            for cls in _annotation_classes(annotation)
+            if not issubclass(cls, Enum) and cls not in PRIMITIVE_ANNOTATION_KINDS
+        ]
+        if inspect.isclass(current_value):
+            expected.append(current_value)
+
+        choices: list[str] = []
+        for candidate in self._spec.configuration_values():
+            if not inspect.isclass(candidate):
+                continue
+            if abstract_config_class_error(candidate) is not None:
+                continue
+            if not expected or any(
+                candidate is expected_type or issubclass(candidate, expected_type)
+                for expected_type in expected
+            ):
+                choices.append(candidate.__name__)
+        available = set(choices)
+        ordered = self._search_space_class_choices(key, available)
+        if ordered:
+            return ordered + sorted(available - set(ordered))
+        return sorted(available)
+
+    def choices_for(
+        self,
+        value: Any,
+        annotation: Any,
+        kind: str,
+        key: str | None = None,
+    ) -> list[Any]:
+        if kind == "bool":
+            return [True, False]
+        if kind == "enum":
+            return _enum_choices(value, annotation)
+        if kind == "class":
+            return self._class_choices(annotation, value, key)
         return []
-    values = getattr(search_space_module, f"SEARCH_SPACE_{key}", None)
-    if not isinstance(values, list):
-        return []
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        choice = _class_choice_name(value)
-        if choice is None or choice not in available_choices or choice in seen:
-            continue
-        ordered.append(choice)
-        seen.add(choice)
-    return ordered
-
-
-def _class_choices(
-    config_module: ModuleType,
-    search_space_module: ModuleType,
-    annotation: Any,
-    current_value: Any,
-    key: str | None = None,
-) -> list[str]:
-    expected = [
-        cls
-        for cls in _annotation_classes(annotation)
-        if not issubclass(cls, Enum) and cls not in PRIMITIVE_ANNOTATION_KINDS
-    ]
-    if inspect.isclass(current_value):
-        expected.append(current_value)
-
-    choices = []
-    for candidate in vars(config_module).values():
-        if not inspect.isclass(candidate):
-            continue
-        if abstract_config_class_error(candidate) is not None:
-            continue
-        if not expected or any(
-            candidate is expected_type or issubclass(candidate, expected_type)
-            for expected_type in expected
-        ):
-            choices.append(candidate.__name__)
-    available = set(choices)
-    ordered = _search_space_class_choices(search_space_module, key, available)
-    if ordered:
-        return ordered + sorted(available - set(ordered))
-    return sorted(available)
-
-
-def _choices_for(
-    config_module: ModuleType,
-    search_space_module: ModuleType,
-    value: Any,
-    annotation: Any,
-    kind: str,
-    key: str | None = None,
-) -> list[Any]:
-    if kind == "bool":
-        return [True, False]
-    if kind == "enum":
-        return _enum_choices(value, annotation)
-    if kind == "class":
-        return _class_choices(
-            config_module,
-            search_space_module,
-            annotation,
-            value,
-            key,
-        )
-    return []
 
 
 def preset_locks(
     package: ModelPackage,
     preset_name: str | None,
 ) -> dict[str, Any]:
-    return runtime_defaults_spec(package).preset_locks(preset_name)
+    try:
+        return runtime_defaults_spec(package).preset_locks(preset_name)
+    except RuntimeDefaultsError as exc:
+        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
 
 
 def _unique_presets(
@@ -255,102 +265,170 @@ def _shared_locked_value(
     return first if all(value == first for value in values) else None
 
 
-def _configuration_field_applicability(
-    spec: RuntimeDefaultsSpec,
-    supported_keys: Sequence[str],
-) -> dict[str, tuple[ConfigurationFieldCondition, ...]]:
-    raw_applicability = getattr(
-        spec.config_module,
-        "CONFIG_FIELD_APPLICABILITY",
-        {},
-    )
-    if not isinstance(raw_applicability, Mapping):
-        raise InspectionError(
-            f"Model {spec.package.catalog_key!r} CONFIG_FIELD_APPLICABILITY must "
-            "be a mapping."
-        )
+class _ApplicabilityParser:
+    def __init__(
+        self,
+        spec: RuntimeDefaultsSpec,
+        supported_keys: Sequence[str],
+    ) -> None:
+        self._spec = spec
+        self._supported_keys = supported_keys
+        self._known_keys: set[str] = set()
+        self._dependencies: dict[str, tuple[str, ...]] = {}
+        self._visiting: list[str] = []
+        self._visited: set[str] = set()
 
-    known_keys = set(supported_keys)
-    dependencies: dict[str, tuple[str, ...]] = {}
-    applicability: dict[str, tuple[ConfigurationFieldCondition, ...]] = {}
-    for target_key, raw_conditions in raw_applicability.items():
-        if not isinstance(target_key, str) or target_key not in known_keys:
-            raise InspectionError(
-                f"Model {spec.package.catalog_key!r} CONFIG_FIELD_APPLICABILITY "
-                f"contains unknown target key {target_key!r}."
+    def parse(self) -> dict[str, tuple[ConfigurationFieldCondition, ...]]:
+        raw_applicability = self._raw_applicability()
+        self._known_keys = set(self._supported_keys)
+        applicability: dict[str, tuple[ConfigurationFieldCondition, ...]] = {}
+        for target_value, raw_conditions in raw_applicability.items():
+            target_key = self._target_key(target_value)
+            conditions, controller_keys = self._conditions_for(
+                target_key,
+                raw_conditions,
             )
+            applicability[target_key] = conditions
+            self._dependencies[target_key] = controller_keys
+        self._reject_cycles()
+        return applicability
+
+    def _raw_applicability(self) -> Mapping[object, object]:
+        raw_applicability = self._spec.configuration_applicability()
+        if not isinstance(raw_applicability, Mapping):
+            raise InspectionError(
+                f"Model {self._spec.package.catalog_key!r} "
+                "CONFIG_FIELD_APPLICABILITY must be a mapping."
+            )
+        return cast(Mapping[object, object], raw_applicability)
+
+    def _target_key(self, target_value: object) -> str:
+        if not isinstance(target_value, str) or target_value not in self._known_keys:
+            raise InspectionError(
+                f"Model {self._spec.package.catalog_key!r} "
+                "CONFIG_FIELD_APPLICABILITY contains unknown target key "
+                f"{target_value!r}."
+            )
+        return target_value
+
+    def _conditions_for(
+        self,
+        target_key: str,
+        raw_conditions: object,
+    ) -> tuple[tuple[ConfigurationFieldCondition, ...], tuple[str, ...]]:
         if not isinstance(raw_conditions, Mapping):
             raise InspectionError(
-                f"Applicability metadata for Runtime Defaults field "
+                "Applicability metadata for Runtime Defaults field "
                 f"{target_key!r} must be a mapping of controller keys to values."
             )
-
         conditions: list[ConfigurationFieldCondition] = []
         controller_keys: list[str] = []
-        for controller_key, raw_values in raw_conditions.items():
-            if not isinstance(controller_key, str) or controller_key not in known_keys:
-                raise InspectionError(
-                    f"Applicability metadata for Runtime Defaults field "
-                    f"{target_key!r} contains unknown controller key "
-                    f"{controller_key!r}."
-                )
-            if controller_key == target_key:
-                raise InspectionError(
-                    f"Runtime Defaults field {target_key!r} cannot make its "
-                    "applicability depend on itself."
-                )
-            if not isinstance(raw_values, (list, tuple)):
-                raise InspectionError(
-                    f"Applicability values for Runtime Defaults field "
-                    f"{target_key!r} controlled by {controller_key!r} must be a "
-                    "list or tuple."
-                )
-            if not raw_values:
-                raise InspectionError(
-                    f"Applicability values for Runtime Defaults field "
-                    f"{target_key!r} controlled by {controller_key!r} cannot be "
-                    "empty."
-                )
-            conditions.append(
-                ConfigurationFieldCondition(
-                    key=controller_key,
-                    values=tuple(spec.serialize_value(value) for value in raw_values),
-                )
+        conditions_mapping = cast(Mapping[object, object], raw_conditions)
+        for controller_value, raw_values in conditions_mapping.items():
+            condition = self._condition(target_key, controller_value, raw_values)
+            conditions.append(condition)
+            controller_keys.append(condition.key)
+        return tuple(conditions), tuple(controller_keys)
+
+    def _condition(
+        self,
+        target_key: str,
+        controller_value: object,
+        raw_values: object,
+    ) -> ConfigurationFieldCondition:
+        if (
+            not isinstance(controller_value, str)
+            or controller_value not in self._known_keys
+        ):
+            raise InspectionError(
+                "Applicability metadata for Runtime Defaults field "
+                f"{target_key!r} contains unknown controller key "
+                f"{controller_value!r}."
             )
-            controller_keys.append(controller_key)
-        applicability[target_key] = tuple(conditions)
-        dependencies[target_key] = tuple(controller_keys)
+        if controller_value == target_key:
+            raise InspectionError(
+                f"Runtime Defaults field {target_key!r} cannot make its "
+                "applicability depend on itself."
+            )
+        if not isinstance(raw_values, (list, tuple)):
+            raise InspectionError(
+                "Applicability values for Runtime Defaults field "
+                f"{target_key!r} controlled by {controller_value!r} must be a "
+                "list or tuple."
+            )
+        if not raw_values:
+            raise InspectionError(
+                "Applicability values for Runtime Defaults field "
+                f"{target_key!r} controlled by {controller_value!r} cannot be "
+                "empty."
+            )
+        serialized_values = cast(Sequence[object], raw_values)
+        return ConfigurationFieldCondition(
+            key=controller_value,
+            values=tuple(
+                self._spec.serialize_value(value) for value in serialized_values
+            ),
+        )
 
-    visiting: list[str] = []
-    visited: set[str] = set()
+    def _reject_cycles(self) -> None:
+        for target_key in self._dependencies:
+            self._visit(target_key)
 
-    def visit(key: str) -> None:
-        if key in visited:
+    def _visit(self, key: str) -> None:
+        if key in self._visited:
             return
-        if key in visiting:
-            cycle_start = visiting.index(key)
-            cycle = [*visiting[cycle_start:], key]
+        if key in self._visiting:
+            cycle_start = self._visiting.index(key)
+            cycle = [*self._visiting[cycle_start:], key]
             raise InspectionError(
                 "CONFIG_FIELD_APPLICABILITY contains a dependency cycle: "
                 + " -> ".join(cycle)
                 + "."
             )
-        visiting.append(key)
-        for controller_key in dependencies.get(key, ()):
-            visit(controller_key)
-        visiting.pop()
-        visited.add(key)
+        self._visiting.append(key)
+        for controller_key in self._dependencies.get(key, ()):
+            self._visit(controller_key)
+        self._visiting.pop()
+        self._visited.add(key)
 
-    for target_key in dependencies:
-        visit(target_key)
-    return applicability
+
+def _configuration_field_applicability(
+    spec: RuntimeDefaultsSpec,
+    supported_keys: Sequence[str],
+) -> dict[str, tuple[ConfigurationFieldCondition, ...]]:
+    return _ApplicabilityParser(spec, supported_keys).parse()
 
 
 def configuration_schema(
     package: ModelPackage,
     preset: str | None = None,
 ) -> ConfigurationSchema:
-    return _configuration_schema(runtime_defaults_spec(package), preset)
+    spec = runtime_defaults_spec(package)
+    try:
+        return _configuration_schema(spec, preset)
+    except RuntimeDefaultsError as exc:
+        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
+
+
+def _supported_configuration_keys(
+    spec: RuntimeDefaultsSpec,
+    metadata: Mapping[str, Mapping[str, Any]],
+) -> tuple[
+    list[str],
+    dict[str, tuple[ConfigurationFieldCondition, ...]],
+]:
+    supported_keys = [
+        key for key in spec.supported_keys if key not in spec.skipped_schema_keys
+    ]
+    applicability = _configuration_field_applicability(spec, supported_keys)
+    missing = [key for key in supported_keys if key not in metadata]
+    if missing:
+        raise InspectionError(
+            f"Config fields for model {spec.package.catalog_key!r} are missing "
+            f"source heading metadata: {', '.join(missing)}"
+        )
+    supported_keys.sort(key=lambda key: tuple(metadata[key].get("sortKey", [10**9])))
+    return supported_keys, applicability
 
 
 def _configuration_schema(
@@ -360,18 +438,9 @@ def _configuration_schema(
     package = spec.package
     locks = spec.preset_locks(preset)
     metadata = spec.configuration_metadata
-    supported_keys = [
-        key for key in spec.supported_keys if key not in spec.skipped_schema_keys
-    ]
-    applicability = _configuration_field_applicability(spec, supported_keys)
-    missing = [key for key in supported_keys if key not in metadata]
-    if missing:
-        raise InspectionError(
-            f"Config fields for model {package.catalog_key!r} are missing source "
-            f"heading metadata: {', '.join(missing)}"
-        )
-    supported_keys.sort(key=lambda key: tuple(metadata[key].get("sortKey", [10**9])))
+    supported_keys, applicability = _supported_configuration_keys(spec, metadata)
 
+    choice_resolver = _ChoiceResolver(spec)
     fields: list[ConfigurationField] = []
     for key in supported_keys:
         value = spec.current_value(key)
@@ -398,9 +467,7 @@ def _configuration_schema(
                 nullable=nullable,
                 choices=tuple(
                     spec.serialize_value(choice)
-                    for choice in _choices_for(
-                        spec.config_module,
-                        spec.search_space_module,
+                    for choice in choice_resolver.choices_for(
                         value,
                         annotation,
                         kind,
@@ -424,7 +491,7 @@ def _search_axis_kind(
     config_key: str,
     values: Sequence[Any],
 ) -> str:
-    if hasattr(spec.config_module, config_key):
+    if spec.has_current_value(config_key):
         return _value_kind(
             spec.current_value(config_key),
             spec.annotations.get(config_key),
@@ -442,11 +509,14 @@ def search_space_schema(
     presets: tuple[str, ...] | list[str] | None = None,
 ) -> SearchSpace:
     spec = runtime_defaults_spec(package)
-    lock_details_by_param = _preset_lock_details(spec, preset, presets)
+    try:
+        lock_details_by_param = _preset_lock_details(spec, preset, presets)
+        config_fields = {
+            field.key: field for field in _configuration_schema(spec, preset).fields
+        }
+    except RuntimeDefaultsError as exc:
+        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
     metadata = spec.search_metadata
-    config_fields = {
-        field.key: field for field in _configuration_schema(spec, preset).fields
-    }
     search_keys = sorted(
         spec.search_values,
         key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
@@ -454,8 +524,7 @@ def search_space_schema(
 
     axes: list[SearchAxis] = []
     for search_key in search_keys:
-        prefix = "SEARCH_SPACE_"
-        config_key = search_key[len(prefix) :]
+        config_key = search_key.removeprefix("SEARCH_SPACE_")
         values = spec.search_values[search_key]
         field = config_fields.get(config_key)
         lock_details = lock_details_by_param.get(
@@ -479,11 +548,7 @@ def search_space_schema(
                         metadata.get(search_key, {}).get("section", DEFAULT_SECTION)
                     )
                 ),
-                value_type=_search_axis_kind(
-                    spec,
-                    config_key,
-                    values,
-                ),
+                value_type=_search_axis_kind(spec, config_key, values),
                 values=tuple(spec.serialize_value(value) for value in values),
                 locked=bool(lock_details),
                 locked_value=(

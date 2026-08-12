@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import Callback, LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -448,6 +449,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(logged[name]), name)
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_metrics_visuals_and_updates_parameters(
         self,
     ) -> None:
@@ -584,6 +586,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._observations, {})
         self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_real_trainer_applies_cadence_and_bounded_history(self) -> None:
         model = _ParametricTrainingModule(learning_rate=0.0)
         monitor = ParametricLayerMonitorCallback(
@@ -648,6 +651,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._observations, {})
         self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_real_sparse_weight_only_lifecycle_is_exact_and_asymmetric(
         self,
     ) -> None:
@@ -755,6 +759,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
             tags["images"],
         )
 
+    @pytest.mark.training
     def test_real_top_one_weight_only_entropy_uses_the_weight_slot(self) -> None:
         router_weights = torch.tensor(
             [
@@ -807,6 +812,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._observations, {})
         self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_real_dense_vector_lifecycle_preserves_the_expert_axis(self) -> None:
         layer = _dense_vector_parametric_layer()
         model = _ParametricTrainingModule(
@@ -876,6 +882,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._observations, {})
         self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_real_weight_and_bias_slots_keep_distinct_monitoring_values(
         self,
     ) -> None:
@@ -932,6 +939,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         for metric_name, expected in expected_scalars.items():
             self.assert_logged_close(logged, metric_name, expected)
 
+    @pytest.mark.training
     def test_real_rectangular_affine_omits_delta_metrics(self) -> None:
         affine_weights = torch.tensor([[1.0, -1.0, 2.0], [0.5, 3.0, -2.0]])
         layer = _weight_only_parametric_layer(
@@ -974,6 +982,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
             logged,
         )
 
+    @pytest.mark.training
     def test_real_zero_input_uses_exact_relative_norm_floor(self) -> None:
         model = _ParametricTrainingModule(learning_rate=0.0)
         monitor = ParametricLayerMonitorCallback(log_every_n_steps=1)
@@ -1005,6 +1014,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
             output_norm / 1e-6,
         )
 
+    @pytest.mark.training
     def test_real_trainer_exception_restores_wrappers_and_clears_state(self) -> None:
         model = _ParametricTrainingModule(
             fail_after_forward=True,
@@ -1038,6 +1048,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._observations, {})
         self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_real_trainer_rejects_duplicate_monitors_before_wrapping(
         self,
     ) -> None:
@@ -1087,6 +1098,7 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
             self.assertEqual(monitor._observations, {})
             self.assertEqual(monitor._utilization_histories, {})
 
+    @pytest.mark.training
     def test_caught_layer_failure_releases_observation_immediately(self) -> None:
         model = _CaughtLayerFailureTrainingModule()
         monitor = ParametricLayerMonitorCallback(log_every_n_steps=1)

@@ -18,6 +18,7 @@ from emperor.layers import (
     RecurrentLayerConfig,
 )
 from emperor.memory import DynamicMemoryConfig
+from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
 )
@@ -43,7 +44,6 @@ from models.vit.linear_adaptive.runtime_options import (
     MainLayerStackOptions,
     RecurrentControllerOptions,
     SubmoduleStackOptions,
-    SubmoduleStackSource,
 )
 
 from ._residual import build_residual_config
@@ -81,18 +81,38 @@ class HiddenModelConfigFactory:
         output_dim = dependencies.output_dim
 
         self._hidden_dim = hidden_dim
-        self.stack_options = self.__default_stack_options(stack_options)
-        self.submodule_stack_options = self.__default_submodule_stack_options(
-            submodule_stack_options
+        self.stack_options = (
+            config_defaults.main_layer_stack_options(config)
+            if stack_options is None
+            else stack_options
         )
-        self.layer_controller_options = self.__default_layer_controller_options(
-            layer_controller_options
+        self.submodule_stack_options = (
+            config_defaults.linears_submodule_stack_options(
+                config, config_defaults.LinearRole.MAIN
+            )
+            if submodule_stack_options is None
+            else submodule_stack_options
         )
-        self.dynamic_memory_options = self.__default_dynamic_memory_options(
-            dynamic_memory_options
+        self.layer_controller_options = (
+            config_defaults.linears_layer_controller_options(
+                config, config_defaults.LinearRole.MAIN
+            )
+            if layer_controller_options is None
+            else layer_controller_options
         )
-        self.recurrent_controller_options = self.__default_recurrent_controller_options(
-            recurrent_controller_options
+        self.dynamic_memory_options = (
+            config_defaults.linears_dynamic_memory_options(
+                config, config_defaults.LinearRole.MAIN
+            )
+            if dynamic_memory_options is None
+            else dynamic_memory_options
+        )
+        self.recurrent_controller_options = (
+            config_defaults.linears_recurrent_controller_options(
+                config, config_defaults.LinearRole.MAIN
+            )
+            if recurrent_controller_options is None
+            else recurrent_controller_options
         )
         self.gate_config_factory = GateConfigFactory(
             layer_controller_options=self.layer_controller_options,
@@ -117,25 +137,29 @@ class HiddenModelConfigFactory:
             halting_config_factory=self.halting_config_factory,
         )
         self.hidden_adaptive_weight_options = (
-            self.__default_hidden_adaptive_weight_options(
-                hidden_adaptive_weight_options
-            )
+            config_defaults.hidden_adaptive_weight_options(config)
+            if hidden_adaptive_weight_options is None
+            else hidden_adaptive_weight_options
         )
-        self.hidden_adaptive_bias_options = self.__default_hidden_adaptive_bias_options(
-            hidden_adaptive_bias_options
+        self.hidden_adaptive_bias_options = (
+            config_defaults.hidden_adaptive_bias_options(config)
+            if hidden_adaptive_bias_options is None
+            else hidden_adaptive_bias_options
         )
         self.hidden_adaptive_diagonal_options = (
-            self.__default_hidden_adaptive_diagonal_options(
-                hidden_adaptive_diagonal_options
-            )
+            config_defaults.hidden_adaptive_diagonal_options(config)
+            if hidden_adaptive_diagonal_options is None
+            else hidden_adaptive_diagonal_options
         )
-        self.hidden_adaptive_mask_options = self.__default_hidden_adaptive_mask_options(
-            hidden_adaptive_mask_options
+        self.hidden_adaptive_mask_options = (
+            config_defaults.hidden_adaptive_mask_options(config)
+            if hidden_adaptive_mask_options is None
+            else hidden_adaptive_mask_options
         )
         self.adaptive_generator_stack_options = (
-            self.__default_adaptive_generator_stack_options(
-                adaptive_generator_stack_options
-            )
+            config_defaults.adaptive_generator_stack_options(config)
+            if adaptive_generator_stack_options is None
+            else adaptive_generator_stack_options
         )
         self.adaptive_generator_stack_config_factory = (
             AdaptiveGeneratorStackConfigFactory(self.adaptive_generator_stack_options)
@@ -145,301 +169,6 @@ class HiddenModelConfigFactory:
     @property
     def hidden_dim(self) -> int:
         return self._hidden_dim
-
-    def __default_stack_options(
-        self,
-        stack_options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return MainLayerStackOptions(
-            bias_flag=config.STACK_BIAS_FLAG,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
-            residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        )
-
-    def __default_submodule_stack_options(
-        self,
-        submodule_stack_options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if submodule_stack_options is not None:
-            return submodule_stack_options
-        return SubmoduleStackOptions(
-            hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
-            num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
-            last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-            ),
-            activation=config.SUBMODULE_STACK_ACTIVATION,
-            layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
-            residual_connection_option=(
-                config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
-            ),
-            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
-            bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
-        )
-
-    def __default_layer_controller_options(
-        self,
-        layer_controller_options: LayerControllerOptions | None,
-    ) -> LayerControllerOptions:
-        if layer_controller_options is not None:
-            return layer_controller_options
-        gate_stack_source = self.__default_controller_stack_source("GATE_STACK")
-        halting_stack_source = self.__default_controller_stack_source("HALTING_STACK")
-        return LayerControllerOptions(
-            stack_gate_flag=config.STACK_GATE_FLAG,
-            gate_option=config.GATE_OPTION,
-            gate_activation=config.GATE_ACTIVATION,
-            gate_stack_source=gate_stack_source,
-            stack_halting_flag=config.STACK_HALTING_FLAG,
-            halting_threshold=config.HALTING_THRESHOLD,
-            halting_dropout=config.HALTING_DROPOUT,
-            halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
-            halting_stack_source=halting_stack_source,
-        )
-
-    def __default_dynamic_memory_options(
-        self,
-        dynamic_memory_options: DynamicMemoryOptions | None,
-    ) -> DynamicMemoryOptions:
-        if dynamic_memory_options is not None:
-            return dynamic_memory_options
-        memory_stack_source = self.__default_controller_stack_source("MEMORY_STACK")
-        return DynamicMemoryOptions(
-            memory_flag=config.MEMORY_FLAG,
-            memory_option=config.MEMORY_OPTION,
-            memory_position_option=config.MEMORY_POSITION_OPTION,
-            memory_test_time_training_learning_rate=(
-                config.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
-            ),
-            memory_test_time_training_num_inner_steps=(
-                config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
-            ),
-            memory_stack_source=memory_stack_source,
-        )
-
-    def __default_recurrent_controller_options(
-        self,
-        recurrent_controller_options: RecurrentControllerOptions | None,
-    ) -> RecurrentControllerOptions:
-        if recurrent_controller_options is not None:
-            return recurrent_controller_options
-        recurrent_gate_stack_source = self.__default_controller_stack_source(
-            "RECURRENT_GATE_STACK"
-        )
-        recurrent_halting_stack_source = self.__default_controller_stack_source(
-            "RECURRENT_HALTING_STACK"
-        )
-        return RecurrentControllerOptions(
-            recurrent_flag=config.RECURRENT_FLAG,
-            recurrent_max_steps=config.RECURRENT_MAX_STEPS,
-            recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
-            recurrent_gradient_transition_count=config.RECURRENT_GRADIENT_TRANSITION_COUNT,
-            recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
-            recurrent_forward_calls_before_iteration_increment=(
-                config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
-            ),
-            recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
-            recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
-            recurrent_gate_option=config.RECURRENT_GATE_OPTION,
-            recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
-            recurrent_gate_stack_source=recurrent_gate_stack_source,
-            recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
-            recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
-            recurrent_halting_dropout=config.RECURRENT_HALTING_DROPOUT,
-            recurrent_halting_hidden_state_mode=(
-                config.RECURRENT_HALTING_HIDDEN_STATE_MODE
-            ),
-            recurrent_halting_stack_source=recurrent_halting_stack_source,
-        )
-
-    def __default_adaptive_generator_stack_options(
-        self,
-        adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None,
-    ) -> AdaptiveGeneratorStackOptions:
-        if adaptive_generator_stack_options is not None:
-            return adaptive_generator_stack_options
-        return AdaptiveGeneratorStackOptions(
-            hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
-            layer_norm_position=config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
-            num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
-            activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-            residual_connection_option=(
-                config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
-            ),
-            residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
-            dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
-            last_layer_bias_option=(
-                config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-            ),
-            apply_output_pipeline_flag=(
-                config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-            ),
-            bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
-        )
-
-    def __default_controller_stack_source(
-        self,
-        prefix: str,
-    ) -> SubmoduleStackSource:
-        independent_flag = getattr(config, f"{prefix}_INDEPENDENT_FLAG")
-        hidden_dim = getattr(config, f"{prefix}_HIDDEN_DIM")
-        num_layers = getattr(config, f"{prefix}_NUM_LAYERS")
-        last_layer_bias_option = getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION")
-        apply_output_pipeline_flag = getattr(
-            config,
-            f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
-        )
-        activation = getattr(config, f"{prefix}_ACTIVATION")
-        layer_norm_position = getattr(config, f"{prefix}_LAYER_NORM_POSITION")
-        residual_connection_option = getattr(
-            config,
-            f"{prefix}_RESIDUAL_CONNECTION_OPTION",
-        )
-        residual_model_flag = getattr(
-            config,
-            f"{prefix}_RESIDUAL_MODEL_FLAG",
-        )
-        dropout_probability = getattr(config, f"{prefix}_DROPOUT_PROBABILITY")
-        bias_flag = getattr(config, f"{prefix}_BIAS_FLAG")
-
-        return SubmoduleStackSource(
-            independent_flag=independent_flag,
-            hidden_dim=hidden_dim,
-            num_layers=num_layers,
-            last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
-            activation=activation,
-            layer_norm_position=layer_norm_position,
-            residual_connection_option=residual_connection_option,
-            residual_model_flag=residual_model_flag,
-            dropout_probability=dropout_probability,
-            bias_flag=bias_flag,
-        )
-
-    def __default_hidden_adaptive_weight_options(
-        self,
-        hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None,
-    ) -> HiddenAdaptiveWeightOptions:
-        if hidden_adaptive_weight_options is not None:
-            return hidden_adaptive_weight_options
-        generator_stack_source = self.__default_adaptive_generator_stack_source(
-            "WEIGHT_GENERATOR_STACK"
-        )
-        return HiddenAdaptiveWeightOptions(
-            generator_depth=config.GENERATOR_DEPTH,
-            option_flag=config.WEIGHT_OPTION_FLAG,
-            option=config.WEIGHT_OPTION,
-            normalization_option=config.WEIGHT_NORMALIZATION_OPTION,
-            normalization_position_option=config.WEIGHT_NORMALIZATION_POSITION_OPTION,
-            decay_schedule=config.WEIGHT_DECAY_SCHEDULE,
-            decay_rate=config.WEIGHT_DECAY_RATE,
-            decay_warmup_batches=config.WEIGHT_DECAY_WARMUP_BATCHES,
-            bank_expansion_factor=config.WEIGHT_BANK_EXPANSION_FACTOR,
-            generator_stack_source=generator_stack_source,
-        )
-
-    def __default_hidden_adaptive_bias_options(
-        self,
-        hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None,
-    ) -> HiddenAdaptiveBiasOptions:
-        if hidden_adaptive_bias_options is not None:
-            return hidden_adaptive_bias_options
-        generator_stack_source = self.__default_adaptive_generator_stack_source(
-            "BIAS_GENERATOR_STACK"
-        )
-        return HiddenAdaptiveBiasOptions(
-            option_flag=config.BIAS_OPTION_FLAG,
-            option=config.BIAS_OPTION,
-            decay_schedule=config.BIAS_DECAY_SCHEDULE,
-            decay_rate=config.BIAS_DECAY_RATE,
-            decay_warmup_batches=config.BIAS_DECAY_WARMUP_BATCHES,
-            bank_expansion_factor=config.BIAS_BANK_EXPANSION_FACTOR,
-            generator_stack_source=generator_stack_source,
-        )
-
-    def __default_hidden_adaptive_diagonal_options(
-        self,
-        hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None,
-    ) -> HiddenAdaptiveDiagonalOptions:
-        if hidden_adaptive_diagonal_options is not None:
-            return hidden_adaptive_diagonal_options
-        generator_stack_source = self.__default_adaptive_generator_stack_source(
-            "DIAGONAL_GENERATOR_STACK"
-        )
-        return HiddenAdaptiveDiagonalOptions(
-            option_flag=config.DIAGONAL_OPTION_FLAG,
-            option=config.DIAGONAL_OPTION,
-            generator_stack_source=generator_stack_source,
-        )
-
-    def __default_hidden_adaptive_mask_options(
-        self,
-        hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None,
-    ) -> HiddenAdaptiveMaskOptions:
-        if hidden_adaptive_mask_options is not None:
-            return hidden_adaptive_mask_options
-        generator_stack_source = self.__default_adaptive_generator_stack_source(
-            "MASK_GENERATOR_STACK"
-        )
-        return HiddenAdaptiveMaskOptions(
-            option_flag=config.MASK_OPTION_FLAG,
-            row_mask_option=config.ROW_MASK_OPTION,
-            mask_dimension_option=config.MASK_DIMENSION_OPTION,
-            mask_threshold=config.MASK_THRESHOLD,
-            mask_surrogate_scale=config.MASK_SURROGATE_SCALE,
-            mask_floor=config.MASK_FLOOR,
-            mask_transition_width=config.MASK_TRANSITION_WIDTH,
-            generator_stack_source=generator_stack_source,
-        )
-
-    def __default_adaptive_generator_stack_source(
-        self,
-        prefix: str,
-    ) -> AdaptiveGeneratorStackSource:
-        independent_flag = getattr(config, f"{prefix}_INDEPENDENT_FLAG")
-        hidden_dim = getattr(config, f"{prefix}_HIDDEN_DIM")
-        layer_norm_position = getattr(config, f"{prefix}_LAYER_NORM_POSITION")
-        num_layers = getattr(config, f"{prefix}_NUM_LAYERS")
-        activation = getattr(config, f"{prefix}_ACTIVATION")
-        residual_connection_option = getattr(
-            config,
-            f"{prefix}_RESIDUAL_CONNECTION_OPTION",
-        )
-        residual_model_flag = getattr(
-            config,
-            f"{prefix}_RESIDUAL_MODEL_FLAG",
-        )
-        dropout_probability = getattr(config, f"{prefix}_DROPOUT_PROBABILITY")
-        last_layer_bias_option = getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION")
-        apply_output_pipeline_flag = getattr(
-            config,
-            f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG",
-        )
-        bias_flag = getattr(config, f"{prefix}_BIAS_FLAG")
-
-        return AdaptiveGeneratorStackSource(
-            independent_flag=independent_flag,
-            hidden_dim=hidden_dim,
-            layer_norm_position=layer_norm_position,
-            num_layers=num_layers,
-            activation=activation,
-            residual_connection_option=residual_connection_option,
-            residual_model_flag=residual_model_flag,
-            dropout_probability=dropout_probability,
-            last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
-            bias_flag=bias_flag,
-        )
 
     def build_hidden_model_config(self) -> LayerStackConfig | RecurrentLayerConfig:
         gate_config = self.gate_config_factory.build_gate_config()
@@ -505,7 +234,9 @@ class HiddenModelConfigFactory:
         bias_config = self.__build_bias_config()
         diagonal_config = self.__build_diagonal_config()
         mask_config = self.__build_mask_config()
-        shared_model_config = self.__build_shared_adaptive_generator_stack_config()
+        shared_model_config = (
+            self.adaptive_generator_stack_config_factory.build_shared_config()
+        )
         return AdaptiveParameterAugmentationConfig(
             grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
             weight_config=weight_config,
@@ -640,6 +371,3 @@ class HiddenModelConfigFactory:
         return self.adaptive_generator_stack_config_factory.build_config_from_source(
             source
         )
-
-    def __build_shared_adaptive_generator_stack_config(self) -> LayerStackConfig:
-        return self.adaptive_generator_stack_config_factory.build_shared_config()

@@ -1,875 +1,127 @@
 from __future__ import annotations
 
-import re
-from collections.abc import Iterator
-from dataclasses import fields, is_dataclass
-from enum import Enum
-from inspect import cleandoc
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any
 
-from torch.nn.parameter import is_lazy
-
-from emperor.config import ConfigBase
-from model_runtime.inspection.records import (
-    GraphConfiguration,
-    GraphConfigurationField,
-    GraphEdge,
-    GraphNode,
-    GraphRole,
-    ModelGraph,
+from model_runtime.inspection._graph_accounting import (
+    GraphModule as _GraphModule,
 )
-
-
-class _GraphModule(Protocol):
-    def named_children(self) -> Iterator[tuple[str, _GraphModule]]: ...
-
-    def named_parameters(
-        self,
-        prefix: str = "",
-        recurse: bool = True,
-        remove_duplicate: bool = True,
-    ) -> Iterator[tuple[str, Any]]: ...
-
-
-ROOT_NODE_ID = "__root__"
-ROOT_NODE_PATH = "model"
-
-ARCHITECTURE_ROLE: GraphRole = "architecture"
-INTERNAL_ROLE: GraphRole = "internal"
-RUNTIME_ROLE: GraphRole = "runtime"
-
-INTERNAL_GRAPH_TYPE_NAMES = {
-    "Dropout",
-    "KeyValueBias",
-    "LayerNorm",
-    "RecurrentIterationSchedule",
-    "SamplerAuxiliaryLosses",
-    "SelfAttentionProcessor",
-    "SelfAttentionProjector",
-    "Unfold",
-}
-
-RUNTIME_GRAPH_TYPE_NAMES = {
-    "ClassifierMetricsLogger",
-    "CrossEntropyLoss",
-    "LanguageModelMetricsLogger",
-    "MulticlassAccuracy",
-    "MulticlassF1Score",
-    "SequenceClassifierMetricsLogger",
-}
-
-COMPONENT_DESCRIPTION_BY_CLASS_NAME = {
-    "Model": (
-        "Top-level inspected model wrapper that owns the architecture, loss, "
-        "metrics, and runtime modules for the selected preset."
-    ),
-    "ModuleList": (
-        "Container that stores an ordered list of child modules; execution is "
-        "defined by the parent module."
-    ),
-    "Sequential": (
-        "Container that applies child modules in order, passing each output to "
-        "the next child."
-    ),
-    "Dropout": (
-        "Regularization module that randomly zeroes activations during training "
-        "and is inactive during evaluation."
-    ),
-    "LayerNorm": (
-        "Normalizes features within each sample to stabilize hidden-state "
-        "scale before or after a layer block."
-    ),
-    "RecurrentIterationSchedule": (
-        "Tracks forward-call progress, active recurrent depth, and the "
-        "gradient-enabled transition suffix."
-    ),
-    "CrossEntropyLoss": ("Runtime loss module for multi-class classification targets."),
-    "ClassifierMetricsLogger": (
-        "Runtime module that groups classifier metrics for train, validation, "
-        "and test reporting."
-    ),
-    "LanguageModelMetricsLogger": (
-        "Runtime module that groups language-model metrics for train, "
-        "validation, and test reporting."
-    ),
-    "SequenceClassifierMetricsLogger": (
-        "Runtime module that groups sequence-classifier metrics for train, "
-        "validation, and test reporting."
-    ),
-    "MulticlassAccuracy": (
-        "Runtime metric that reports the share of classified examples whose "
-        "predicted class matches the target class."
-    ),
-    "MulticlassF1Score": (
-        "Runtime metric that reports the harmonic mean of classifier precision "
-        "and recall across classes."
-    ),
-    "KeyValueBias": (
-        "Internal attention helper that adds learned key/value bias terms."
-    ),
-    "SamplerAuxiliaryLosses": (
-        "Internal mixture-of-experts helper that tracks auxiliary routing losses."
-    ),
-    "SelfAttentionProcessor": (
-        "Internal attention helper that prepares attention inputs and masks."
-    ),
-    "SelfAttentionProjector": (
-        "Internal attention helper that projects hidden states into attention "
-        "query, key, and value tensors."
-    ),
-    "Unfold": (
-        "Internal tensor reshaping module that extracts sliding local blocks "
-        "from an input tensor."
-    ),
-    "LinearLayer": (
-        "Applies a learned linear projection with configured input/output "
-        "dimensions and optional bias."
-    ),
-    "LinearLayerConfig": (
-        "Builds a learned linear projection with configured input/output "
-        "dimensions and optional bias."
-    ),
-    "AdaptiveLinearLayer": (
-        "Applies a learned linear projection that can optionally augment "
-        "parameters from the current input."
-    ),
-    "AdaptiveLinearLayerConfig": (
-        "Builds a linear projection that can optionally augment parameters from "
-        "the current input."
-    ),
-    "Layer": (
-        "Applies one configured layer block with optional activation, residuals, "
-        "normalization, gating, halting, and memory hooks."
-    ),
-    "LayerConfig": (
-        "Builds a Layer block with optional activation, residuals, normalization, "
-        "gating, halting, and memory hooks."
-    ),
-    "LayerStack": (
-        "Runs an ordered stack of Layer blocks, with shared dimensions and "
-        "optional shared gate, halting, or memory modules."
-    ),
-    "LayerStackConfig": (
-        "Builds an ordered stack of Layer blocks, with shared dimensions and "
-        "optional shared gate, halting, or memory modules."
-    ),
-    "RecurrentLayer": (
-        "Reuses a configured block for multiple recurrent steps, optionally "
-        "adding recurrent gating, normalization, halting, or memory."
-    ),
-    "RecurrentLayerConfig": (
-        "Builds a recurrent block that can run for multiple steps with optional "
-        "gating, normalization, halting, or memory."
-    ),
-    "RecurrentCompositionConfig": (
-        "Abstract recurrent composition Interface; use a concrete recurrent config."
-    ),
-    "TinyRecursiveModelRecurrent": (
-        "Reuses one transition block for Tiny Recursive Model latent and answer "
-        "updates across a fixed answer-update schedule."
-    ),
-    "TinyRecursiveModelRecurrentConfig": (
-        "Builds Tiny Recursive Model recurrence with one shared transition, a "
-        "latent-update count per answer update, and an answer-update count."
-    ),
-    "HierarchicalReasoningModelRecurrent": (
-        "Runs distinct low- and high-level transitions on nested recurrent clocks."
-    ),
-    "HierarchicalReasoningModelRecurrentConfig": (
-        "Builds Hierarchical Reasoning Model recurrence with separate low- and "
-        "high-level transitions and clock counts."
-    ),
-    "MixtureOfExperts": (
-        "Routes inputs across a set of expert modules using sampler probabilities "
-        "and combines or maps the selected expert outputs."
-    ),
-    "MixtureOfExpertsMap": (
-        "Routes inputs across experts and returns mapped expert outputs."
-    ),
-    "MixtureOfExpertsReduce": (
-        "Routes inputs across experts and reduces selected expert outputs back "
-        "into one representation."
-    ),
-    "MixtureOfExpertsLayer": (
-        "Wraps mixture-of-experts routing in the standard Layer pipeline."
-    ),
-    "MixtureOfExpertsConfig": (
-        "Configures expert count, routing, capacity, weighting, sampler behavior, "
-        "and expert model construction."
-    ),
-    "MixtureOfExpertsLayerConfig": (
-        "Builds a mixture-of-experts layer inside the standard Layer pipeline."
-    ),
-    "MixtureOfExpertsModelConfig": (
-        "Builds a model around a mixture-of-experts layer stack."
-    ),
-    "LayerGate": (
-        "Combines a learned gate output with the current layer value by scaling "
-        "or addition."
-    ),
-    "Gate": (
-        "Combines a learned gate output with the current layer value by scaling "
-        "or addition."
-    ),
-    "GateConfig": (
-        "Configures a layer gate network and how its output is composed with "
-        "the current value."
-    ),
-    "AdditiveResidual": "Adds the current and previous hidden values.",
-    "WeightedResidual": (
-        "Adds the previous hidden value to a learned tanh-weighted current value."
-    ),
-    "WeightedBlendResidual": (
-        "Convexly blends current and previous hidden values with a learned weight."
-    ),
-    "AttentionResidual": (
-        "Routes across forward-local residual-depth sources with learned attention."
-    ),
-    "ResidualConfig": (
-        "Abstract residual configuration Interface; use a concrete residual config."
-    ),
-    "AdditiveResidualConfig": "Builds direct additive residual composition.",
-    "WeightedResidualConfig": (
-        "Builds tanh-weighted residual composition with a scalar or generated "
-        "coefficient."
-    ),
-    "WeightedBlendResidualConfig": (
-        "Builds sigmoid convex residual blending with a scalar or generated "
-        "coefficient."
-    ),
-    "AttentionResidualConfig": (
-        "Builds learned attention routing across residual-depth history."
-    ),
-    "Halting": (
-        "Controls adaptive computation by deciding when recurrent processing has "
-        "accumulated enough probability mass to stop."
-    ),
-    "HaltingConfig": (
-        "Configures adaptive computation halting thresholds, dropout, hidden-state "
-        "mode, and gate network."
-    ),
-    "SoftHalting": (
-        "Accumulates weighted recurrent states until the halting threshold is met."
-    ),
-    "SoftHaltingConfig": (
-        "Builds soft halting, which accumulates weighted recurrent states until "
-        "the threshold is met."
-    ),
-    "StickBreaking": (
-        "Allocates remaining recurrent probability mass step by step until the "
-        "halting threshold is met."
-    ),
-    "StickBreakingConfig": (
-        "Builds stick-breaking halting, which allocates remaining recurrent "
-        "probability mass over steps."
-    ),
-    "NeuronCluster": (
-        "Maintains a 3D cluster of routed neurons that can traverse, branch, and "
-        "grow during training."
-    ),
-    "NeuronClusterConfig": (
-        "Configures a 3D routed neuron cluster, including capacity, traversal, "
-        "sampling, and growth controls."
-    ),
-}
-
-DEFAULT_RESIDUAL_OPTION_DESCRIPTION = (
-    "Residual connection behavior. Enabled options require input_dim == output_dim."
+from model_runtime.inspection._graph_accounting import (
+    GraphParameterAccounting as _ParameterAccounting,
 )
-DEFAULT_RESIDUAL_MODEL_DESCRIPTION = (
-    "Optional model that generates data-dependent coefficients for weighted residual "
-    "modes. When omitted, weighted modes use a learned scalar parameter."
+from model_runtime.inspection._graph_accounting import (
+    parameter_accounting as _parameter_accounting,
 )
-RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME = {
-    "RecurrentLayerConfig": (
-        "Residual connection behavior between recurrent steps. Set to null to "
-        "disable recurrent residuals.",
-        DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
-    ),
-    "TransformerEncoderLayerConfig": (
-        "Residual connection behavior applied to every encoder sub-block join.",
-        "Optional data-dependent coefficient model used at each encoder join.",
-    ),
-    "TransformerDecoderLayerConfig": (
-        "Residual connection behavior applied to every decoder sub-block join.",
-        "Optional data-dependent coefficient model used at each decoder join.",
-    ),
-}
+from model_runtime.inspection._graph_accounting import (
+    parameter_count,
+    parameter_size_bytes,
+)
+from model_runtime.inspection._graph_component_semantics import (
+    ARCHITECTURE_ROLE,
+    INTERNAL_ROLE,
+    RUNTIME_ROLE,
+)
+from model_runtime.inspection._graph_construction import (
+    ROOT_NODE_ID,
+    ROOT_NODE_PATH,
+    GraphConstruction,
+    construct_model_graph,
+)
+from model_runtime.inspection._graph_semantics import ModuleSemanticAdapter
+from model_runtime.inspection.capture_limits import (
+    InspectionCapture,
+    InspectionCaptureLimits,
+)
+from model_runtime.inspection.records import GraphNode, GraphRole, ModelGraph
 
 
-def _display_value(value: Any) -> Any:
-    if isinstance(value, Enum):
-        return value.name
-    if isinstance(value, type):
-        return value.__name__
+def _selected_capture_limits(value: object) -> InspectionCaptureLimits:
+    if value is None:
+        return InspectionCaptureLimits()
+    if not isinstance(value, InspectionCaptureLimits):
+        raise TypeError("Inspection graph limits must be InspectionCaptureLimits.")
     return value
 
 
-def _config_field_value(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, Enum):
-        return value.name
-    if isinstance(value, ConfigBase):
-        return type(value).__name__
-    if isinstance(value, type):
-        return value.__name__
-    if isinstance(value, (str, int, float, bool)):
-        return value
-    if is_dataclass(value):
-        return type(value).__name__
-    return str(value)
-
-
-def _module_config_instance(module: _GraphModule) -> Any | None:
-    config = getattr(module, "_emperor_config", None)
-    if config is None:
-        config = getattr(module, "cfg", None)
-    if config is None or isinstance(config, type) or not is_dataclass(config):
-        return None
-    return config
-
-
-def _metadata_help(metadata: Any) -> str | None:
-    help_text = metadata.get("help") if hasattr(metadata, "get") else None
-    if not isinstance(help_text, str):
-        return None
-    help_text = help_text.strip()
-    return help_text or None
-
-
-def _flattened_residual_configuration_fields(
-    config: Any,
-) -> tuple[GraphConfigurationField, GraphConfigurationField | None]:
-    residual_config = config.residual_config
-    residual_config_type = None if residual_config is None else type(residual_config)
-    option_description, model_description = (
-        RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_NAME.get(
-            type(config).__name__,
-            (
-                DEFAULT_RESIDUAL_OPTION_DESCRIPTION,
-                DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
-            ),
-        )
-    )
-    return (
-        GraphConfigurationField(
-            key="residual_connection_option",
-            value=_config_field_value(residual_config_type),
-            description=option_description,
-        ),
-        (
-            GraphConfigurationField(
-                key="residual_model_config",
-                value=_config_field_value(residual_config.model_config),
-                description=model_description,
-            )
-            if hasattr(residual_config, "model_config")
-            else None
-        ),
-    )
-
-
-def _module_config(module: _GraphModule) -> GraphConfiguration | None:
-    config = _module_config_instance(module)
-    if config is None:
-        return None
-
-    serialized_fields: list[GraphConfigurationField] = []
-    flattened_residual_model_field: GraphConfigurationField | None = None
-    for field in fields(config):
-        if field.name == "residual_config":
-            (
-                residual_option_field,
-                flattened_residual_model_field,
-            ) = _flattened_residual_configuration_fields(config)
-            serialized_fields.append(residual_option_field)
-            continue
-        description = _metadata_help(field.metadata)
-        serialized_fields.append(
-            GraphConfigurationField(
-                key=field.name,
-                value=_config_field_value(getattr(config, field.name)),
-                description=description,
-            )
-        )
-    if flattened_residual_model_field is not None:
-        serialized_fields.append(flattened_residual_model_field)
-
-    return GraphConfiguration(
-        type_name=type(config).__name__,
-        fields=tuple(serialized_fields),
-    )
-
-
-def _explicit_docstring_description(class_type: type[Any]) -> str | None:
-    raw_docstring = class_type.__dict__.get("__doc__")
-    if not isinstance(raw_docstring, str):
-        return None
-    docstring = cleandoc(raw_docstring).strip()
-    if not docstring or docstring.startswith(f"{class_type.__name__}("):
-        return None
-    return docstring.split("\n\n", 1)[0].replace("\n", " ")
-
-
-def _component_description(module: _GraphModule) -> str | None:
-    module_type = type(module)
-    description = COMPONENT_DESCRIPTION_BY_CLASS_NAME.get(module_type.__name__)
-    if description is not None:
-        return description
-
-    config = _module_config_instance(module)
-    if config is not None:
-        description = COMPONENT_DESCRIPTION_BY_CLASS_NAME.get(type(config).__name__)
-        if description is not None:
-            return description
-
-    if not module_type.__module__.startswith("torch."):
-        description = _explicit_docstring_description(module_type)
-        if description is not None:
-            return description
-    if config is not None:
-        return _explicit_docstring_description(type(config))
-    return None
-
-
-def _shape_value(value: Any) -> str | None:
-    if is_lazy(value):
-        return None
-    dimensions = tuple(value.shape)
-    if not dimensions:
-        return "scalar"
-    return " x ".join(str(dimension) for dimension in dimensions)
-
-
-def _bool_from_optional_model(module: _GraphModule, attr_name: str) -> bool | None:
-    if not hasattr(module, attr_name):
-        return None
-    return getattr(module, attr_name) is not None
-
-
-def _first_detail_value(module: _GraphModule, attr_paths: tuple[str, ...]) -> Any:
-    for attr_path in attr_paths:
-        value: Any = module
-        for attr_name in attr_path.split("."):
-            if not hasattr(value, attr_name):
-                value = None
-                break
-            value = getattr(value, attr_name)
-        if value is not None:
-            return value
-    return None
-
-
-def _coordinate_from_neuron_name(name: str) -> list[int] | None:
-    parts = name.split("_")
-    if len(parts) != 4 or parts[0] != "neuron":
-        return None
-    try:
-        return [int(parts[1]), int(parts[2]), int(parts[3])]
-    except ValueError:
-        return None
-
-
-def _neuron_cluster_details(module: _GraphModule) -> dict[str, Any] | None:
-    if not hasattr(module, "x_axis_total_neurons") or not hasattr(module, "cluster"):
-        return None
-    coordinates = sorted(
-        coordinate
-        for coordinate in (
-            _coordinate_from_neuron_name(name) for name in module.cluster.keys()
-        )
-        if coordinate is not None
-    )
-    return {
-        "capacity": [
-            module.x_axis_total_neurons,
-            module.y_axis_total_neurons,
-            module.z_axis_total_neurons,
-        ],
-        "initial": [
-            getattr(module, "initial_x_axis_total_neurons", None),
-            getattr(module, "initial_y_axis_total_neurons", None),
-            getattr(module, "initial_z_axis_total_neurons", None),
-        ],
-        "initialStart": [
-            getattr(module, "initial_x_axis_start", 1),
-            getattr(module, "initial_y_axis_start", 1),
-            getattr(module, "initial_z_axis_start", 1),
-        ],
-        "instantiated": len(coordinates),
-        "coordinates": coordinates,
-        "maxSteps": getattr(module, "max_steps", None),
-        "growthThreshold": getattr(module, "growth_threshold", None),
-    }
-
-
-def _terminal_reach_details(module: _GraphModule) -> dict[str, Any] | None:
-    # The reach lives on a Terminal; surface it on the parent Neuron too so a
-    # neuron click shows the area its sampler can route to.
-    source = module
-    if not hasattr(source, "neuron_connections") and hasattr(module, "terminal"):
-        source = module.terminal
-    connections = getattr(source, "neuron_connections", None)
-    if connections is None or not hasattr(source, "x_axis_position"):
-        return None
-    return {
-        "position": [
-            source.x_axis_position,
-            source.y_axis_position,
-            source.z_axis_position,
-        ],
-        "connections": connections.detach().cpu().tolist(),
-        "total": getattr(source, "total_neuron_connections", connections.shape[0]),
-    }
-
-
-def _parameter_shape_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-    direct_parameters = dict(module.named_parameters(recurse=False))
-    for detail_key, parameter_names in (
-        ("weightShape", ("weight", "weight_params", "weights")),
-        ("biasShape", ("bias", "bias_params", "biases")),
-    ):
-        for parameter_name in parameter_names:
-            parameter = direct_parameters.get(parameter_name)
-            if parameter is None:
-                continue
-            shape = _shape_value(parameter)
-            if shape is not None:
-                details[detail_key] = shape
-                break
-    return details
-
-
-def _dimension_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-    input_dim = getattr(module, "input_dim", None)
-    output_dim = getattr(module, "output_dim", None)
-    hidden_dim = getattr(module, "hidden_dim", None)
-    if input_dim is not None:
-        details["inputDim"] = input_dim
-    if hidden_dim is not None:
-        details["hiddenDim"] = hidden_dim
-    if output_dim is not None:
-        details["outputDim"] = output_dim
-    if input_dim is not None and output_dim is not None:
-        details["dims"] = f"{input_dim} -> {output_dim}"
-    return details
-
-
-def _sequence_or_attention_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-    for source_attr, detail_key in (
-        ("embedding_dim", "embeddingDim"),
-        ("num_heads", "numHeads"),
-        ("num_layers", "numLayers"),
-        ("source_sequence_length", "sourceSequenceLength"),
-        ("target_sequence_length", "targetSequenceLength"),
-    ):
-        value = getattr(module, source_attr, None)
-        if value is not None:
-            details[detail_key] = _display_value(value)
-    return details
-
-
-def _expert_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-    for detail_key, attr_paths in (
-        ("topK", ("top_k", "sampler_config.top_k", "cfg.top_k")),
-        (
-            "numExperts",
-            ("num_experts", "sampler_config.num_experts", "cfg.num_experts"),
-        ),
-        (
-            "routingMode",
-            ("routing_initialization_mode", "cfg.routing_initialization_mode"),
-        ),
-    ):
-        value = _first_detail_value(module, attr_paths)
-        if value is not None:
-            details[detail_key] = _display_value(value)
-    return details
-
-
-def _layer_behavior_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-    dropout = getattr(module, "dropout_probability", None)
-    if dropout is not None:
-        details["dropout"] = dropout
-
-    gate = getattr(module, "gate_model", None)
-    gate_option = getattr(gate, "option", None)
-    if gate_option is None:
-        gate_config = getattr(module, "gate_config", None)
-        gate_option = getattr(gate_config, "option", None)
-    gate_option_name = _display_value(gate_option) if gate_option is not None else None
-    if gate_option_name is not None:
-        details["gateOption"] = gate_option_name
-
-    gate_model = _bool_from_optional_model(module, "gate_model")
-    if gate_model is not None:
-        details["gate"] = gate_model and gate is not None
-
-    halting = _bool_from_optional_model(module, "halting_model")
-    if halting is not None:
-        details["halting"] = halting
-
-    activation = getattr(module, "activation_function", None)
-    if activation is not None:
-        details["activation"] = _display_value(activation)
-
-    layer_norm = getattr(module, "layer_norm_position", None)
-    if layer_norm is not None:
-        details["layerNorm"] = _display_value(layer_norm)
-    return details
-
-
-def _recurrent_details(
+def module_details(
     module: _GraphModule,
-    cluster: dict[str, Any] | None,
+    direct_parameters: dict[str, Any] | None = None,
+    *,
+    limits: InspectionCaptureLimits | None = None,
 ) -> dict[str, Any]:
-    iteration_schedule = getattr(module, "recurrent_iteration_schedule", None)
-    schedule_snapshot = (
-        iteration_schedule.snapshot() if iteration_schedule is not None else None
-    )
-    max_steps = (
-        schedule_snapshot.maximum_transition_count
-        if schedule_snapshot is not None
-        else getattr(module, "max_steps", None)
-    )
-    if max_steps is None:
-        max_steps = getattr(module, "recurrent_diagnostic_step_limit", None)
-    if max_steps is None or cluster is not None:
-        return {}
-    recurrent_gate = getattr(module, "recurrent_gate", None)
-    gate_option = getattr(recurrent_gate, "option", None)
-    if gate_option is None:
-        gate_config = getattr(module, "gate_config", None)
-        gate_option = getattr(gate_config, "option", None)
-    gate_option_name = _display_value(gate_option) if gate_option is not None else None
-    gate = (
-        recurrent_gate is not None
-        and getattr(recurrent_gate, "model", None) is not None
-    )
-    recurrent: dict[str, Any] = {
-        "maxSteps": max_steps,
-        "diagnostics": bool(getattr(module, "supports_recurrent_diagnostics", False)),
-        "gate": gate,
-        "gateOption": gate_option_name,
-        "halting": bool(getattr(module, "halting_model", None) is not None),
-    }
-    if schedule_snapshot is not None:
-        recurrent["activeSteps"] = schedule_snapshot.active_transition_count
-        if schedule_snapshot.gradient_transition_count is not None:
-            recurrent["gradientTransitionCount"] = (
-                schedule_snapshot.gradient_transition_count
-            )
-        recurrent["iterationSchedule"] = {
-            "unit": schedule_snapshot.iteration_unit,
-            "initialIterations": schedule_snapshot.initial_iterations,
-            "maximumIterations": schedule_snapshot.maximum_iterations,
-            "activeIterations": schedule_snapshot.active_iterations,
-            "iterationIncrement": schedule_snapshot.iteration_increment,
-            "forwardCallsBeforeIterationIncrement": (
-                schedule_snapshot.forward_calls_before_iteration_increment
-            ),
-            "forwardCallProgress": schedule_snapshot.forward_call_progress,
-            "complete": schedule_snapshot.complete,
-        }
-    halting_model = getattr(module, "halting_model", None)
-    min_steps = getattr(halting_model, "min_steps", None)
-    if min_steps is not None:
-        recurrent["minSteps"] = min_steps
-    if schedule_snapshot is not None:
-        recurrent["noGradientTransitionCount"] = (
-            schedule_snapshot.no_gradient_transition_count
-        )
-    recurrent_layer_norm = getattr(module, "recurrent_layer_norm_position", None)
-    if recurrent_layer_norm is not None:
-        recurrent["layerNorm"] = _display_value(recurrent_layer_norm)
-    answer_update_count = getattr(module, "answer_update_count", None)
-    if answer_update_count is not None:
-        recurrent["answerUpdateCount"] = answer_update_count
-    latent_updates_per_answer_update = getattr(
+    selected_limits = _selected_capture_limits(limits)
+    return ModuleSemanticAdapter(
         module,
-        "latent_updates_per_answer_update",
-        None,
-    )
-    if latent_updates_per_answer_update is not None:
-        recurrent["latentUpdatesPerAnswerUpdate"] = latent_updates_per_answer_update
-    high_cycles = getattr(module, "high_cycles", None)
-    if high_cycles is not None:
-        recurrent["highCycles"] = high_cycles
-    low_cycles = getattr(module, "low_cycles", None)
-    if low_cycles is not None:
-        recurrent["lowCycles"] = low_cycles
-    return {
-        "recurrent": recurrent,
-    }
-
-
-def _causal_attention_details(module: _GraphModule) -> dict[str, Any]:
-    causal = getattr(module, "causal_attention_mask_flag", None)
-    if causal is None:
-        return {}
-    return {"causalAttention": causal}
-
-
-def module_details(module: _GraphModule) -> dict[str, Any]:
-    details: dict[str, Any] = {}
-
-    details.update(_parameter_shape_details(module))
-    details.update(_dimension_details(module))
-    details.update(_sequence_or_attention_details(module))
-    details.update(_expert_details(module))
-    details.update(_layer_behavior_details(module))
-
-    cluster = _neuron_cluster_details(module)
-    if cluster is not None:
-        details["cluster"] = cluster
-
-    terminal_reach = _terminal_reach_details(module)
-    if terminal_reach is not None:
-        details["terminalReach"] = terminal_reach
-
-    details.update(_recurrent_details(module, cluster))
-    details.update(_causal_attention_details(module))
-
-    return details
+        direct_parameters,
+        selected_limits,
+    ).details()
 
 
 def graph_role(module: _GraphModule) -> GraphRole:
-    type_name = type(module).__name__
-    if type_name in INTERNAL_GRAPH_TYPE_NAMES:
-        return INTERNAL_ROLE
-    if type_name in RUNTIME_GRAPH_TYPE_NAMES:
-        return RUNTIME_ROLE
-    if type(module).__module__.startswith("torchmetrics."):
-        return RUNTIME_ROLE
-    return ARCHITECTURE_ROLE
+    return ModuleSemanticAdapter(module).graph_role()
 
 
-def _unique_registered_parameters(module: _GraphModule):
-    seen_parameter_ids: set[int] = set()
-    for _name, parameter in module.named_parameters(
-        recurse=True,
-        remove_duplicate=False,
-    ):
-        parameter_id = id(parameter)
-        if parameter_id in seen_parameter_ids:
-            continue
-        seen_parameter_ids.add(parameter_id)
-        yield parameter
+@dataclass(frozen=True, slots=True)
+class _GraphNodeFactory:
+    accounting: _ParameterAccounting
+    limits: InspectionCaptureLimits
+    capture: InspectionCapture
+
+    def __call__(
+        self,
+        node_id: str,
+        path: str,
+        module: _GraphModule,
+    ) -> GraphNode:
+        parameter_count_value, parameter_size = self.accounting.statistics_by_module_id[
+            id(module)
+        ]
+        semantic_facts = ModuleSemanticAdapter(
+            module,
+            self.accounting.direct_parameters_by_module_id[id(module)],
+            self.limits,
+        ).facts()
+        node = GraphNode(
+            id=node_id,
+            type_name=semantic_facts.type_name,
+            description=semantic_facts.description,
+            path=path,
+            graph_role=semantic_facts.graph_role,
+            parameter_count=parameter_count_value,
+            parameter_size_bytes=parameter_size,
+            details=semantic_facts.details,
+            configuration=semantic_facts.configuration,
+        )
+        self.capture.reserve_output(node)
+        return node
 
 
-def parameter_count(module: _GraphModule) -> int:
-    count = 0
-    for parameter in _unique_registered_parameters(module):
-        if is_lazy(parameter):
-            continue
-        count += parameter.numel()
-    return count
-
-
-def parameter_size_bytes(module: _GraphModule) -> int:
-    size = 0
-    for parameter in _unique_registered_parameters(module):
-        if is_lazy(parameter):
-            continue
-        size += parameter.numel() * parameter.element_size()
-    return size
-
-
-def _snake_case_key(key: str) -> str:
-    first_pass = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", key)
-    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", first_pass).lower()
-
-
-def _semantic_detail_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            _snake_case_key(str(key)): _semantic_detail_value(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_semantic_detail_value(item) for item in value]
-    return value
-
-
-def _node(node_id: str, path: str, module: _GraphModule) -> GraphNode:
-    type_name = type(module).__name__
-    description = _component_description(module)
-    return GraphNode(
-        id=node_id,
-        type_name=type_name,
-        description=description,
-        path=path,
-        graph_role=graph_role(module),
-        parameter_count=parameter_count(module),
-        parameter_size_bytes=parameter_size_bytes(module),
-        details=_semantic_detail_value(module_details(module)),
-        configuration=_module_config(module),
+def inspect_model_graph(
+    module: _GraphModule,
+    *,
+    limits: InspectionCaptureLimits | None = None,
+    _capture: InspectionCapture | None = None,
+) -> ModelGraph:
+    selected_limits = _selected_capture_limits(
+        _capture.limits if limits is None and _capture is not None else limits
     )
-
-
-def _child_path(parent_path: str, child_name: str) -> str:
-    return child_name if not parent_path else f"{parent_path}.{child_name}"
-
-
-def _is_transparent_graph_container(
-    parent: _GraphModule,
-    child_name: str,
-    child: _GraphModule,
-) -> bool:
-    return (
-        type(parent).__name__ == "LayerStack"
-        and child_name == "layers"
-        and type(child).__name__ == "ModuleList"
+    if _capture is not None and _capture.limits != selected_limits:
+        raise ValueError("Inspection graph limits must match the shared capture.")
+    capture = _capture or InspectionCapture(selected_limits)
+    accounting = _parameter_accounting(module, selected_limits)
+    return construct_model_graph(
+        GraphConstruction(
+            root=module,
+            children_by_module_id=accounting.children_by_module_id,
+            limits=selected_limits,
+            capture=capture,
+            node_factory=_GraphNodeFactory(
+                accounting,
+                selected_limits,
+                capture,
+            ),
+        )
     )
-
-
-def inspect_model_graph(module: _GraphModule) -> ModelGraph:
-    nodes = [_node(ROOT_NODE_ID, ROOT_NODE_PATH, module)]
-    edges: list[GraphEdge] = []
-
-    def visit(parent: _GraphModule, parent_id: str, parent_path: str) -> None:
-        for child_name, child in parent.named_children():
-            child_path = _child_path(parent_path, child_name)
-            if _is_transparent_graph_container(parent, child_name, child):
-                visit_transparent_container(child, parent_id, child_path)
-                continue
-            child_id = child_path
-            nodes.append(_node(child_id, child_path, child))
-            edges.append(
-                GraphEdge(
-                    id=f"{parent_id}-{child_id}",
-                    source=parent_id,
-                    target=child_id,
-                )
-            )
-            visit(child, child_id, child_path)
-
-    def visit_transparent_container(
-        container: _GraphModule,
-        visible_parent_id: str,
-        container_path: str,
-    ) -> None:
-        for child_name, child in container.named_children():
-            child_path = _child_path(container_path, child_name)
-            child_id = child_path
-            nodes.append(_node(child_id, child_path, child))
-            edges.append(
-                GraphEdge(
-                    id=f"{visible_parent_id}-{child_id}",
-                    source=visible_parent_id,
-                    target=child_id,
-                )
-            )
-            visit(child, child_id, child_path)
-
-    visit(module, ROOT_NODE_ID, "")
-    return ModelGraph(nodes=tuple(nodes), edges=tuple(edges))
 
 
 __all__ = [

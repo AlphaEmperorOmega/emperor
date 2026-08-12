@@ -43,7 +43,7 @@ class SubmoduleStackOptions:
     apply_output_pipeline_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
@@ -119,7 +119,7 @@ class MainLayerStackOptions:
     layer_norm_position: LayerNormPositionOptions
     num_layers: int
     activation: ActivationOptions
-    residual_connection_option: type[ResidualConfig]
+    residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True

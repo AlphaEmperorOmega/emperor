@@ -6,6 +6,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -36,10 +37,6 @@ from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.config_overrides import print_config_options
 from models.experiment_cli_parser import get_experiment_parser
-from models.training_test_utils import (
-    RandomImageClassificationDataModule,
-    tiny_cpu_trainer,
-)
 from models.vit.linear.config_builder import VitLinearConfigBuilder
 from models.vit.linear.model import Model
 from models.vit.linear.presets import (
@@ -48,6 +45,10 @@ from models.vit.linear.presets import (
 )
 from models.vit.linear.runtime_defaults import runtime_from_flat
 from models.vit.linear.runtime_options import RuntimeOptions
+from tests.model_packages.training_test_utils import (
+    RandomImageClassificationDataModule,
+    tiny_cpu_trainer,
+)
 
 _TRANSFORMER_ENCODER_BLOCK_LAYER_TYPE = (
     TransformerEncoderBlockLayerConfig().registry_owner()
@@ -774,32 +775,22 @@ class TestVitLinearModel(unittest.TestCase):
                 "memory_flag": True,
             },
             ExperimentPreset.RESIDUAL: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             },
             ExperimentPreset.RESIDUAL_POST_NORM: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             },
             ExperimentPreset.RESIDUAL_GATING: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_gate_flag": True,
             },
             ExperimentPreset.RESIDUAL_HALTING: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_halting_flag": True,
             },
             ExperimentPreset.RESIDUAL_MEMORY: {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "memory_flag": True,
             },
             ExperimentPreset.RECURRENT: {
@@ -840,9 +831,7 @@ class TestVitLinearModel(unittest.TestCase):
             },
             ExperimentPreset.RECURRENT_RESIDUAL: {
                 "recurrent_flag": True,
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             },
             ExperimentPreset.RECURRENT_POST_NORM: {
                 "recurrent_flag": True,
@@ -953,6 +942,7 @@ class TestVitLinearModel(unittest.TestCase):
             1e-6,
         )
 
+    @pytest.mark.training
     def test_all_presets_train_one_epoch(self):
         batch_size = 2
         presets = model_package("vit/linear").presets

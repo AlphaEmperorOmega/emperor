@@ -1,7 +1,6 @@
 # ruff: noqa: E501
 
 import models.neuron.expert_linear_adaptive.config as config
-import models.neuron.expert_linear_adaptive.dataset_options as dataset_options
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
@@ -40,14 +39,12 @@ from emperor.layers import (
 )
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
-    ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
 from models.neuron.expert_linear_adaptive.config_builder import (
     NeuronExpertLinearAdaptiveConfigBuilder,
 )
-from models.neuron.expert_linear_adaptive.model import Model
 from models.neuron.expert_linear_adaptive.runtime_defaults import runtime_from_flat
 
 
@@ -226,9 +223,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
             {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             }
         ),
         description="Default adaptive expert config with residual skip connections.",
@@ -244,9 +239,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_POST_NORM: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
             {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "layer_norm_position": LayerNormPositionOptions.AFTER,
             }
         ),
@@ -256,9 +249,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_GATING: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
             {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_gate_flag": True,
             }
         ),
@@ -268,9 +259,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_HALTING: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
             {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "stack_halting_flag": True,
             }
         ),
@@ -280,9 +269,7 @@ _PRESET_DEFINITIONS = {
     ExperimentPreset.RESIDUAL_MEMORY: PresetDefinition(
         preset_values=_with_adaptive_option_flags(
             {
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
                 "memory_flag": True,
             }
         ),
@@ -802,9 +789,7 @@ _PRESET_DEFINITIONS = {
         preset_values=_with_adaptive_option_flags(
             {
                 "recurrent_flag": True,
-                "stack_residual_connection_option": (
-                    AdditiveResidualConfig
-                ),
+                "stack_residual_connection_option": (AdditiveResidualConfig),
             }
         ),
         description="Default recurrent adaptive expert config using a residual expert "
@@ -920,17 +905,3 @@ class Experiment(ExperimentBase):
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
-
-    def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[
-            dataset_options.DEFAULT_EXPERIMENT_TASK
-        ]
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_preset_enum(self) -> type[BaseOptions]:
-        return ExperimentPreset

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn.functional as F
 from lightning import Trainer
@@ -30,6 +31,7 @@ class _TinyRegressionModule(Module):
 
 
 class ModuleLightningLifecycleTests(unittest.TestCase):
+    @pytest.mark.training
     def test_base_training_step_runs_real_automatic_optimization(self) -> None:
         dataset = TensorDataset(
             torch.tensor([[1.0]]),

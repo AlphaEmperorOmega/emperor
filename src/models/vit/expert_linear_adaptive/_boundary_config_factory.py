@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import models.vit.expert_linear_adaptive.config as config
 from emperor.linears import LinearLayerConfig
+from models.vit.expert_linear_adaptive import _config_defaults as config_defaults
 from models.vit.expert_linear_adaptive.runtime_options import VitOutputOptions
 
 
@@ -16,15 +17,11 @@ class BoundaryConfigFactory:
     def __init__(self, dependencies: BoundaryConfigDependencies) -> None:
         self.hidden_dim = dependencies.hidden_dim
         self.output_dim = dependencies.output_dim
-        self.output_options = self.__default_output_options(dependencies.output_options)
-
-    def __default_output_options(
-        self,
-        output_options: VitOutputOptions | None,
-    ) -> VitOutputOptions:
-        if output_options is not None:
-            return output_options
-        return VitOutputOptions(bias_flag=config.OUTPUT_BIAS_FLAG)
+        self.output_options = (
+            config_defaults.vit_output_options(config)
+            if dependencies.output_options is None
+            else dependencies.output_options
+        )
 
     def build_output_config(self) -> LinearLayerConfig:
         return LinearLayerConfig(

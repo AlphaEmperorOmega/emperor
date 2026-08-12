@@ -21,173 +21,88 @@ from models.gpt.linear_adaptive._positional_embedding_config_factory import (
 )
 from models.gpt.linear_adaptive.experiment_config import ExperimentConfig
 from models.gpt.linear_adaptive.runtime_defaults import DEFAULT_RUNTIME
-from models.gpt.linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
-    DynamicMemoryOptions,
-    GptEmbeddingOptions,
-    GptLmHeadOptions,
-    HiddenAdaptiveBiasOptions,
-    HiddenAdaptiveDiagonalOptions,
-    HiddenAdaptiveMaskOptions,
-    HiddenAdaptiveWeightOptions,
-    LayerControllerOptions,
-    MainLayerStackOptions,
-    RecurrentControllerOptions,
-    RuntimeOptions,
-    SubmoduleStackOptions,
-    TransformerAttentionOptions,
-    TransformerDecoderOptions,
-    TransformerFeedForwardOptions,
-    TransformerPositionalEmbeddingOptions,
-)
+from models.gpt.linear_adaptive.runtime_options import RuntimeOptions
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
 class _GptLinearAdaptiveConfigBuilderImplementation:
-    def __init__(
-        self,
-        *,
-        batch_size: int = config.BATCH_SIZE,
-        learning_rate: float = config.LEARNING_RATE,
-        input_dim: int = config.INPUT_DIM,
-        output_dim: int = config.OUTPUT_DIM,
-        sequence_length: int = config.SEQUENCE_LENGTH,
-        embedding_options: GptEmbeddingOptions | None = None,
-        decoder_options: TransformerDecoderOptions | None = None,
-        positional_embedding_options: (
-            TransformerPositionalEmbeddingOptions | None
-        ) = None,
-        attention_options: TransformerAttentionOptions | None = None,
-        feed_forward_options: TransformerFeedForwardOptions | None = None,
-        lm_head_options: GptLmHeadOptions | None = None,
-        attention_projection_stack_options: SubmoduleStackOptions | None = None,
-        attention_projection_layer_controller_options: (
-            LayerControllerOptions | None
-        ) = None,
-        attention_projection_dynamic_memory_options: (
-            DynamicMemoryOptions | None
-        ) = None,
-        attention_projection_recurrent_controller_options: (
-            RecurrentControllerOptions | None
-        ) = None,
-        feed_forward_stack_options: SubmoduleStackOptions | None = None,
-        feed_forward_layer_controller_options: LayerControllerOptions | None = None,
-        feed_forward_dynamic_memory_options: DynamicMemoryOptions | None = None,
-        feed_forward_recurrent_controller_options: (
-            RecurrentControllerOptions | None
-        ) = None,
-        stack_options: MainLayerStackOptions | None = None,
-        submodule_stack_options: SubmoduleStackOptions | None = None,
-        layer_controller_options: LayerControllerOptions | None = None,
-        dynamic_memory_options: DynamicMemoryOptions | None = None,
-        recurrent_controller_options: RecurrentControllerOptions | None = None,
-        adaptive_generator_stack_options: (AdaptiveGeneratorStackOptions | None) = None,
-        hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None = None,
-        hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
-        hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
-        hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None = None,
-        attention_adaptive_generator_stack_options: (
-            AdaptiveGeneratorStackOptions | None
-        ) = None,
-        attention_hidden_adaptive_weight_options: (
-            HiddenAdaptiveWeightOptions | None
-        ) = None,
-        attention_hidden_adaptive_bias_options: (
-            HiddenAdaptiveBiasOptions | None
-        ) = None,
-        attention_hidden_adaptive_diagonal_options: (
-            HiddenAdaptiveDiagonalOptions | None
-        ) = None,
-        attention_hidden_adaptive_mask_options: (
-            HiddenAdaptiveMaskOptions | None
-        ) = None,
-        feed_forward_adaptive_generator_stack_options: (
-            AdaptiveGeneratorStackOptions | None
-        ) = None,
-        feed_forward_hidden_adaptive_weight_options: (
-            HiddenAdaptiveWeightOptions | None
-        ) = None,
-        feed_forward_hidden_adaptive_bias_options: (
-            HiddenAdaptiveBiasOptions | None
-        ) = None,
-        feed_forward_hidden_adaptive_diagonal_options: (
-            HiddenAdaptiveDiagonalOptions | None
-        ) = None,
-        feed_forward_hidden_adaptive_mask_options: (
-            HiddenAdaptiveMaskOptions | None
-        ) = None,
-    ) -> None:
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.sequence_length = sequence_length
-        self.embedding_options = embedding_options
-        self.decoder_options = decoder_options
+    def __init__(self, runtime: RuntimeOptions) -> None:
+        options = runtime._construction_options(config)
+        self.batch_size = options.batch_size
+        self.learning_rate = options.learning_rate
+        self.input_dim = options.input_dim
+        self.output_dim = options.output_dim
+        self.sequence_length = options.sequence_length
+        self.embedding_options = options.embedding_options
+        self.decoder_options = options.decoder_options
         self.hidden_dim = self.__plain_linear_layer_config_factory().hidden_dim
-        self.positional_embedding_options = positional_embedding_options
-        self.attention_options = attention_options
-        self.feed_forward_options = feed_forward_options
-        self.lm_head_options = lm_head_options
-        self.attention_projection_stack_options = attention_projection_stack_options
+        self.positional_embedding_options = options.positional_embedding_options
+        self.attention_options = options.attention_options
+        self.feed_forward_options = options.feed_forward_options
+        self.lm_head_options = options.lm_head_options
+        self.attention_projection_stack_options = (
+            options.attention_projection_stack_options
+        )
         self.attention_projection_layer_controller_options = (
-            attention_projection_layer_controller_options
+            options.attention_projection_layer_controller_options
         )
         self.attention_projection_dynamic_memory_options = (
-            attention_projection_dynamic_memory_options
+            options.attention_projection_dynamic_memory_options
         )
         self.attention_projection_recurrent_controller_options = (
-            attention_projection_recurrent_controller_options
+            options.attention_projection_recurrent_controller_options
         )
-        self.feed_forward_stack_options = feed_forward_stack_options
+        self.feed_forward_stack_options = options.feed_forward_stack_options
         self.feed_forward_layer_controller_options = (
-            feed_forward_layer_controller_options
+            options.feed_forward_layer_controller_options
         )
-        self.feed_forward_dynamic_memory_options = feed_forward_dynamic_memory_options
+        self.feed_forward_dynamic_memory_options = (
+            options.feed_forward_dynamic_memory_options
+        )
         self.feed_forward_recurrent_controller_options = (
-            feed_forward_recurrent_controller_options
+            options.feed_forward_recurrent_controller_options
         )
-        self.decoder_stack_options = stack_options
-        self.decoder_submodule_stack_options = submodule_stack_options
-        self.decoder_layer_controller_options = layer_controller_options
-        self.decoder_dynamic_memory_options = dynamic_memory_options
-        self.decoder_recurrent_controller_options = recurrent_controller_options
-        self.adaptive_generator_stack_options = adaptive_generator_stack_options
-        self.hidden_adaptive_weight_options = hidden_adaptive_weight_options
-        self.hidden_adaptive_bias_options = hidden_adaptive_bias_options
-        self.hidden_adaptive_diagonal_options = hidden_adaptive_diagonal_options
-        self.hidden_adaptive_mask_options = hidden_adaptive_mask_options
+        self.decoder_stack_options = options.stack_options
+        self.decoder_submodule_stack_options = options.submodule_stack_options
+        self.decoder_layer_controller_options = options.layer_controller_options
+        self.decoder_dynamic_memory_options = options.dynamic_memory_options
+        self.decoder_recurrent_controller_options = options.recurrent_controller_options
+        self.adaptive_generator_stack_options = options.adaptive_generator_stack_options
+        self.hidden_adaptive_weight_options = options.hidden_adaptive_weight_options
+        self.hidden_adaptive_bias_options = options.hidden_adaptive_bias_options
+        self.hidden_adaptive_diagonal_options = options.hidden_adaptive_diagonal_options
+        self.hidden_adaptive_mask_options = options.hidden_adaptive_mask_options
         self.attention_adaptive_generator_stack_options = (
-            attention_adaptive_generator_stack_options
+            options.attention_adaptive_generator_stack_options
         )
         self.attention_hidden_adaptive_weight_options = (
-            attention_hidden_adaptive_weight_options
+            options.attention_hidden_adaptive_weight_options
         )
         self.attention_hidden_adaptive_bias_options = (
-            attention_hidden_adaptive_bias_options
+            options.attention_hidden_adaptive_bias_options
         )
         self.attention_hidden_adaptive_diagonal_options = (
-            attention_hidden_adaptive_diagonal_options
+            options.attention_hidden_adaptive_diagonal_options
         )
         self.attention_hidden_adaptive_mask_options = (
-            attention_hidden_adaptive_mask_options
+            options.attention_hidden_adaptive_mask_options
         )
         self.feed_forward_adaptive_generator_stack_options = (
-            feed_forward_adaptive_generator_stack_options
+            options.feed_forward_adaptive_generator_stack_options
         )
         self.feed_forward_hidden_adaptive_weight_options = (
-            feed_forward_hidden_adaptive_weight_options
+            options.feed_forward_hidden_adaptive_weight_options
         )
         self.feed_forward_hidden_adaptive_bias_options = (
-            feed_forward_hidden_adaptive_bias_options
+            options.feed_forward_hidden_adaptive_bias_options
         )
         self.feed_forward_hidden_adaptive_diagonal_options = (
-            feed_forward_hidden_adaptive_diagonal_options
+            options.feed_forward_hidden_adaptive_diagonal_options
         )
         self.feed_forward_hidden_adaptive_mask_options = (
-            feed_forward_hidden_adaptive_mask_options
+            options.feed_forward_hidden_adaptive_mask_options
         )
         self.adaptive_augmentation_config = self.__adaptive_augmentation_config()
         self.attention_adaptive_augmentation_config = (
@@ -422,4 +337,4 @@ class GptLinearAdaptiveConfigBuilder(_GptLinearAdaptiveConfigBuilderImplementati
                 "models.gpt.linear_adaptive GptLinearAdaptiveConfigBuilder runtime must be RuntimeOptions"
             )
         self.runtime = runtime
-        super().__init__(**runtime._as_construction_kwargs())
+        super().__init__(runtime)

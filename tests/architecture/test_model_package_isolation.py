@@ -22,11 +22,11 @@ _OPERATIONAL_MODEL_MODULES = frozenset(
         "models.config_overrides",
         "models.experiment_cli_parser",
         "models.package_cli",
-        "models.training_test_utils",
     }
 )
 
 _REMOVED_MODEL_MODULES = (
+    "models.training_test_utils",
     "models.model_inspector",
     "models.adaptive_parameter_config_factory",
     "models.trainer_config",
@@ -175,6 +175,87 @@ def _is_allowed(package: str, imported: str) -> bool:
 
 
 class TestModelPackageIsolation(unittest.TestCase):
+    def test_neuron_runtime_defaults_do_not_import_construction_builders(self):
+        violations = []
+        for model_name in (
+            "linear",
+            "linear_adaptive",
+            "expert_linear",
+            "expert_linear_adaptive",
+        ):
+            resolver_path = (
+                SOURCE_ROOT
+                / "models"
+                / "neuron"
+                / model_name
+                / "_runtime_defaults_resolver.py"
+            )
+            violations.extend(
+                f"{resolver_path.relative_to(PROJECT_ROOT)}:{line}: {imported}"
+                for line, imported in _imported_modules(resolver_path)
+                if imported.endswith("._neuron_config_builder")
+            )
+
+        self.assertEqual(
+            violations,
+            [],
+            "Runtime Defaults must not inherit construction-builder behavior.",
+        )
+
+    def test_model_packages_do_not_own_process_wide_torch_execution_policy(self):
+        forbidden_calls = {
+            "compile",
+            "set_default_device",
+            "set_default_dtype",
+            "set_float32_matmul_precision",
+            "set_num_threads",
+            "use_deterministic_algorithms",
+        }
+        violations = []
+        for entry in MODEL_CATALOG.values():
+            package = _package_module(entry)
+            package_root = SOURCE_ROOT.joinpath(*package.split("."))
+            for path in sorted(package_root.rglob("*.py")):
+                tree = ast.parse(path.read_text(), filename=str(path))
+                torch_aliases = {
+                    alias.asname or alias.name
+                    for node in tree.body
+                    if isinstance(node, ast.Import)
+                    for alias in node.names
+                    if alias.name == "torch"
+                }
+                direct_aliases = {
+                    alias.asname or alias.name
+                    for node in tree.body
+                    if isinstance(node, ast.ImportFrom) and node.module == "torch"
+                    for alias in node.names
+                    if alias.name in forbidden_calls
+                }
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    direct_call = (
+                        isinstance(node.func, ast.Name)
+                        and node.func.id in direct_aliases
+                    )
+                    qualified_call = (
+                        isinstance(node.func, ast.Attribute)
+                        and isinstance(node.func.value, ast.Name)
+                        and node.func.value.id in torch_aliases
+                        and node.func.attr in forbidden_calls
+                    )
+                    if direct_call or qualified_call:
+                        violations.append(
+                            f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}"
+                        )
+
+        self.assertEqual(
+            violations,
+            [],
+            "Compilation and process-wide Torch settings belong to the run/execution "
+            "boundary, not importable Model Packages.",
+        )
+
     def test_catalog_packages_have_no_construction_imports_outside_themselves(self):
         violations = []
         for entry in MODEL_CATALOG.values():

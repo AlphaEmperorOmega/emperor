@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from model_runtime.inspection.capture_limits import InspectionCapture
 from model_runtime.inspection.materialization import (
     materialize_configuration,
     materialize_inspection,
@@ -15,8 +16,15 @@ def inspect_model(
     from model_runtime.inspection.model_graph import inspect_model_graph
 
     materialized = materialize_inspection(package, request)
-    graph = inspect_model_graph(materialized.model)
-    return materialized.result(graph)
+    capture = InspectionCapture(request.capture_limits)
+    graph = inspect_model_graph(
+        materialized.model,
+        limits=request.capture_limits,
+        _capture=capture,
+    )
+    result = materialized.result(graph)
+    capture.ensure_total_output(result)
+    return result
 
 
 def validate_configuration(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 from emperor.layers import (
     ActivationOptions,
@@ -22,16 +22,35 @@ _WEIGHTED_RESIDUAL_CONFIGS = (
 
 
 class _SubmoduleStackDefaults(Protocol):
-    hidden_dim: int
-    num_layers: int
-    activation: ActivationOptions
-    layer_norm_position: LayerNormPositionOptions
-    residual_connection_option: type[ResidualConfig] | None
-    residual_model_flag: bool
-    dropout_probability: float
-    last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
-    bias_flag: bool
+    @property
+    def hidden_dim(self) -> int: ...
+
+    @property
+    def num_layers(self) -> int: ...
+
+    @property
+    def activation(self) -> ActivationOptions: ...
+
+    @property
+    def layer_norm_position(self) -> LayerNormPositionOptions: ...
+
+    @property
+    def residual_connection_option(self) -> type[ResidualConfig] | None: ...
+
+    @property
+    def residual_model_flag(self) -> bool: ...
+
+    @property
+    def dropout_probability(self) -> float: ...
+
+    @property
+    def last_layer_bias_option(self) -> LastLayerBiasOptions: ...
+
+    @property
+    def apply_output_pipeline_flag(self) -> bool: ...
+
+    @property
+    def bias_flag(self) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,14 +199,10 @@ def build_residual_config(
                 model_flag_field=model_flag_field,
             )
         return None
-    if not isinstance(residual_connection_option, type) or not issubclass(
-        residual_connection_option,
-        ResidualConfig,
-    ):
-        raise TypeError(
-            f"{selector_field} must be a ResidualConfig type or None; "
-            f"received {type(residual_connection_option).__name__}."
-        )
+    _validate_residual_selector(
+        cast(object, residual_connection_option),
+        selector_field=selector_field,
+    )
     if not residual_model_flag:
         return residual_connection_option()
     if not issubclass(residual_connection_option, _WEIGHTED_RESIDUAL_CONFIGS):
@@ -201,11 +216,24 @@ def build_residual_config(
             f"{model_flag_field}=True with {selector_field} requires resolved "
             "RESIDUAL_STACK options."
         )
-    return residual_connection_option(
+    weighted_residual_option = cast(
+        type[WeightedResidualConfig] | type[WeightedBlendResidualConfig],
+        residual_connection_option,
+    )
+    return weighted_residual_option(
         model_config=build_residual_stack_config(
             residual_stack_options,
         ),
     )
+
+
+def _validate_residual_selector(value: object, *, selector_field: str) -> None:
+    actual_type_name = type(value).__name__
+    if not isinstance(value, type) or not issubclass(value, ResidualConfig):
+        raise TypeError(
+            f"{selector_field} must be a ResidualConfig type or None; "
+            f"received {actual_type_name}."
+        )
 
 
 def _raise_incompatible_selector(

@@ -11,6 +11,7 @@ import models.parametric.parametric_matrix.dataset_options as dataset_options
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp")
 
+import pytest
 import torch
 
 from emperor.layers import (
@@ -46,7 +47,7 @@ from models.parametric.parametric_matrix.runtime_options import (
     ParametricStackOptions,
     RuntimeOptions,
 )
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomImageClassificationDataModule,
     tiny_cpu_trainer,
 )
@@ -385,6 +386,7 @@ class TestParametricMatrixModel(unittest.TestCase):
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
                 self.assertEqual(auxiliary_loss.shape, torch.Size([]))
 
+    @pytest.mark.training
     def test_all_presets_train_one_epoch(self):
         presets = model_package("parametric/parametric_matrix").presets
         dataset = dataset_options.DATASET_OPTIONS_BY_TASK[

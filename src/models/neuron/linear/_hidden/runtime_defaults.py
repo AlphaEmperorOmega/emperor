@@ -1,20 +1,49 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
-from enum import Enum
-from typing import Final, TypeVar
+from dataclasses import dataclass, replace
+from typing import Final, cast
 
-import models.neuron.linear.config as config
-from emperor.halting import HaltingHiddenStateModeOptions
-from emperor.layers import (
-    ActivationOptions,
-    LastLayerBiasOptions,
-    LayerGateOptions,
-    LayerNormPositionOptions,
-    ResidualConfig,
+from emperor.layers import LastLayerBiasOptions
+from models.neuron.linear._hidden._runtime_default_values import (
+    GateConditionValues,
+    HaltingMeasureValues,
+    HaltingValues,
+    MainStackValues,
+    MemoryMeasureValues,
+    MemoryValues,
+    OptionalStackInput,
+    OptionalStackMeasures,
+    RecurrenceValues,
+    RuntimeDimensionsValues,
+    RuntimeOverrideReader,
+    SubmoduleStackMeasureValues,
+    SubmoduleStackValues,
+    read_gate_activation,
+    read_gate_condition,
+    read_gate_stack_values,
+    read_halting_implementations,
+    read_halting_measures,
+    read_halting_stack_values,
+    read_halting_values,
+    read_main_stack_measures,
+    read_main_stack_values,
+    read_memory_measures,
+    read_memory_stack_values,
+    read_memory_values,
+    read_recurrence_values,
+    read_recurrent_gate_condition,
+    read_recurrent_gate_stack_values,
+    read_recurrent_halting_measures,
+    read_recurrent_halting_stack_values,
+    read_recurrent_max_steps,
+    read_residual_stack_measures,
+    read_residual_stack_values,
+    read_runtime_dimensions,
+    read_submodule_stack_measures,
+    read_submodule_stack_values,
+    runtime_override_reader,
 )
-from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.neuron.linear._hidden.runtime_options import (
     ControllerStackOptions,
     GateOptions,
@@ -25,261 +54,12 @@ from models.neuron.linear._hidden.runtime_options import (
     RuntimeOptions,
 )
 from models.neuron.linear._residual import (
+    ResidualStackOptions,
     ResidualStackSource,
     resolve_residual_stack_options,
 )
 
 _PACKAGE_NAME = "models.neuron.linear._hidden"
-_CONTROLLER_STACK_FIELDS = (
-    "independent_flag",
-    "hidden_dim",
-    "num_layers",
-    "last_layer_bias_option",
-    "apply_output_pipeline_flag",
-    "activation",
-    "layer_norm_position",
-    "residual_connection_option",
-    "residual_model_flag",
-    "dropout_probability",
-    "bias_flag",
-)
-_CONTROLLER_STACK_PREFIXES = (
-    "gate_stack",
-    "halting_stack",
-    "memory_stack",
-    "recurrent_gate_stack",
-    "recurrent_halting_stack",
-)
-
-_EnumT = TypeVar("_EnumT", bound=Enum)
-
-
-def _controller_stack_flat_defaults(prefix: str) -> dict[str, object]:
-    config_prefix = prefix.upper()
-    return {
-        f"{prefix}_{field}": getattr(config, f"{config_prefix}_{field.upper()}")
-        for field in _CONTROLLER_STACK_FIELDS
-    }
-
-
-def _flat_defaults() -> dict[str, object]:
-    defaults: dict[str, object] = {
-        "batch_size": config.BATCH_SIZE,
-        "learning_rate": config.LEARNING_RATE,
-        "input_dim": config.INPUT_DIM,
-        "hidden_dim": config.HIDDEN_DIM,
-        "output_dim": config.OUTPUT_DIM,
-        "stack_bias_flag": config.STACK_BIAS_FLAG,
-        "layer_norm_position": config.LAYER_NORM_POSITION,
-        "stack_num_layers": config.STACK_NUM_LAYERS,
-        "stack_activation": config.STACK_ACTIVATION,
-        "stack_residual_connection_option": (config.STACK_RESIDUAL_CONNECTION_OPTION),
-        "stack_residual_model_flag": config.STACK_RESIDUAL_MODEL_FLAG,
-        "stack_dropout_probability": config.STACK_DROPOUT_PROBABILITY,
-        "stack_last_layer_bias_option": config.STACK_LAST_LAYER_BIAS_OPTION,
-        "stack_apply_output_pipeline_flag": (config.STACK_APPLY_OUTPUT_PIPELINE_FLAG),
-        "submodule_stack_hidden_dim": config.SUBMODULE_STACK_HIDDEN_DIM,
-        "submodule_stack_num_layers": config.SUBMODULE_STACK_NUM_LAYERS,
-        "submodule_stack_last_layer_bias_option": (
-            config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        "submodule_stack_apply_output_pipeline_flag": (
-            config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        "submodule_stack_activation": config.SUBMODULE_STACK_ACTIVATION,
-        "submodule_stack_layer_norm_position": (
-            config.SUBMODULE_STACK_LAYER_NORM_POSITION
-        ),
-        "submodule_stack_residual_connection_option": (
-            config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        "submodule_stack_residual_model_flag": (
-            config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG
-        ),
-        "submodule_stack_dropout_probability": (
-            config.SUBMODULE_STACK_DROPOUT_PROBABILITY
-        ),
-        "submodule_stack_bias_flag": config.SUBMODULE_STACK_BIAS_FLAG,
-        "residual_stack_independent_flag": config.RESIDUAL_STACK_INDEPENDENT_FLAG,
-        "residual_stack_hidden_dim": config.RESIDUAL_STACK_HIDDEN_DIM,
-        "residual_stack_num_layers": config.RESIDUAL_STACK_NUM_LAYERS,
-        "residual_stack_activation": config.RESIDUAL_STACK_ACTIVATION,
-        "residual_stack_layer_norm_position": (
-            config.RESIDUAL_STACK_LAYER_NORM_POSITION
-        ),
-        "residual_stack_residual_connection_option": (
-            config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        "residual_stack_residual_model_flag": (
-            config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
-        ),
-        "residual_stack_dropout_probability": (
-            config.RESIDUAL_STACK_DROPOUT_PROBABILITY
-        ),
-        "residual_stack_last_layer_bias_option": (
-            config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        "residual_stack_apply_output_pipeline_flag": (
-            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        "residual_stack_bias_flag": config.RESIDUAL_STACK_BIAS_FLAG,
-        "stack_gate_flag": config.STACK_GATE_FLAG,
-        "gate_option": config.GATE_OPTION,
-        "gate_activation": config.GATE_ACTIVATION,
-        "stack_halting_flag": config.STACK_HALTING_FLAG,
-        "halting_threshold": config.HALTING_THRESHOLD,
-        "halting_dropout": config.HALTING_DROPOUT,
-        "halting_hidden_state_mode": config.HALTING_HIDDEN_STATE_MODE,
-        "memory_flag": config.MEMORY_FLAG,
-        "memory_option": config.MEMORY_OPTION,
-        "memory_position_option": config.MEMORY_POSITION_OPTION,
-        "memory_test_time_training_learning_rate": (
-            config.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
-        ),
-        "memory_test_time_training_num_inner_steps": (
-            config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
-        ),
-        "recurrent_flag": config.RECURRENT_FLAG,
-        "recurrent_max_steps": config.RECURRENT_MAX_STEPS,
-        "recurrent_initial_iterations": config.RECURRENT_INITIAL_ITERATIONS,
-        "recurrent_gradient_transition_count": config.RECURRENT_GRADIENT_TRANSITION_COUNT,
-        "recurrent_iteration_increment": config.RECURRENT_ITERATION_INCREMENT,
-        "recurrent_forward_calls_before_iteration_increment": (
-            config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
-        ),
-        "recurrent_layer_norm_position": config.RECURRENT_LAYER_NORM_POSITION,
-        "recurrent_stack_gate_flag": config.RECURRENT_STACK_GATE_FLAG,
-        "recurrent_gate_option": config.RECURRENT_GATE_OPTION,
-        "recurrent_gate_activation": config.RECURRENT_GATE_ACTIVATION,
-        "recurrent_stack_halting_flag": config.RECURRENT_STACK_HALTING_FLAG,
-        "recurrent_halting_threshold": config.RECURRENT_HALTING_THRESHOLD,
-        "recurrent_halting_dropout": config.RECURRENT_HALTING_DROPOUT,
-        "recurrent_halting_hidden_state_mode": (
-            config.RECURRENT_HALTING_HIDDEN_STATE_MODE
-        ),
-    }
-    for prefix in _CONTROLLER_STACK_PREFIXES:
-        defaults.update(_controller_stack_flat_defaults(prefix))
-    return defaults
-
-
-_DEFAULT_FLAT: Final = _flat_defaults()
-_ACCEPTED_KEYS: Final = frozenset(_DEFAULT_FLAT)
-
-
-def _canonical_flat_values(
-    overrides: Mapping[str, object] | None,
-) -> tuple[dict[str, object], dict[str, str]]:
-    values = dict(_DEFAULT_FLAT)
-    source_keys = {key: key for key in values}
-    if overrides is None:
-        return values, source_keys
-
-    unknown_keys = sorted(
-        (key for key in overrides if key not in _ACCEPTED_KEYS),
-        key=repr,
-    )
-    if unknown_keys:
-        accepted = ", ".join(sorted(_ACCEPTED_KEYS))
-        raise ValueError(
-            f"{_PACKAGE_NAME}: unknown runtime override {unknown_keys[0]!r}; "
-            f"accepted keys: {accepted}"
-        )
-
-    for key, value in overrides.items():
-        values[key] = value
-        source_keys[key] = key
-    return values, source_keys
-
-
-def _raise_type_error(key: str, value: object, expected: str) -> None:
-    raise TypeError(
-        f"{_PACKAGE_NAME}: {key!r} has type {type(value).__name__}; expected {expected}"
-    )
-
-
-def _bool(values: Mapping[str, object], sources: Mapping[str, str], key: str) -> bool:
-    value = values[key]
-    if type(value) is not bool:
-        _raise_type_error(sources[key], value, "bool")
-    return value
-
-
-def _int(values: Mapping[str, object], sources: Mapping[str, str], key: str) -> int:
-    value = values[key]
-    if type(value) is not int:
-        _raise_type_error(sources[key], value, "int")
-    return value
-
-
-def _optional_int(
-    values: Mapping[str, object], sources: Mapping[str, str], key: str
-) -> int | None:
-    value = values[key]
-    if value is None:
-        return None
-    return _int(values, sources, key)
-
-
-def _float(values: Mapping[str, object], sources: Mapping[str, str], key: str) -> float:
-    value = values[key]
-    if type(value) is not float:
-        _raise_type_error(sources[key], value, "float")
-    return value
-
-
-def _optional_float(
-    values: Mapping[str, object], sources: Mapping[str, str], key: str
-) -> float | None:
-    value = values[key]
-    if value is None:
-        return None
-    return _float(values, sources, key)
-
-
-def _enum(
-    values: Mapping[str, object],
-    sources: Mapping[str, str],
-    key: str,
-    expected_type: type[_EnumT],
-) -> _EnumT:
-    value = values[key]
-    if not isinstance(value, expected_type):
-        _raise_type_error(sources[key], value, expected_type.__name__)
-    return value
-
-
-def _optional_enum(
-    values: Mapping[str, object],
-    sources: Mapping[str, str],
-    key: str,
-    expected_type: type[_EnumT],
-) -> _EnumT | None:
-    value = values[key]
-    if value is None:
-        return None
-    return _enum(values, sources, key, expected_type)
-
-
-def _optional_residual_config_type(
-    values: Mapping[str, object],
-    sources: Mapping[str, str],
-    key: str,
-) -> type[ResidualConfig] | None:
-    value = values[key]
-    if value is None:
-        return None
-    if (
-        not isinstance(value, type)
-        or not issubclass(value, ResidualConfig)
-        or "_registry_owner" not in value.__dict__
-    ):
-        _raise_type_error(
-            sources[key],
-            value,
-            "concrete type[ResidualConfig]",
-        )
-    return value
 
 
 def _positive(key: str, value: int | float) -> None:
@@ -301,413 +81,350 @@ def _threshold(key: str, value: float) -> None:
         )
 
 
-def _main_stack(
-    values: Mapping[str, object], sources: Mapping[str, str]
-) -> MainStackOptions:
-    num_layers = _int(values, sources, "stack_num_layers")
-    dropout = _float(values, sources, "stack_dropout_probability")
-    _positive(sources["stack_num_layers"], num_layers)
-    _probability(sources["stack_dropout_probability"], dropout)
+def _runtime_dimensions(
+    reader: RuntimeOverrideReader,
+) -> RuntimeDimensionsValues:
+    dimensions = read_runtime_dimensions(reader)
+    for key, value in (
+        ("batch_size", dimensions.batch_size),
+        ("learning_rate", dimensions.learning_rate),
+        ("input_dim", dimensions.input_dim),
+        ("hidden_dim", dimensions.hidden_dim),
+        ("output_dim", dimensions.output_dim),
+    ):
+        _positive(key, value)
+    return dimensions
+
+
+def _main_stack(reader: RuntimeOverrideReader) -> MainStackOptions:
+    measures = read_main_stack_measures(reader)
+    _positive("stack_num_layers", measures.num_layers)
+    _probability("stack_dropout_probability", measures.dropout_probability)
+    values: MainStackValues = read_main_stack_values(reader, measures)
     return MainStackOptions(
-        bias_flag=_bool(values, sources, "stack_bias_flag"),
-        layer_norm_position=_enum(
-            values, sources, "layer_norm_position", LayerNormPositionOptions
-        ),
-        num_layers=num_layers,
-        activation=_enum(values, sources, "stack_activation", ActivationOptions),
-        residual_connection_option=_optional_residual_config_type(
-            values,
-            sources,
-            "stack_residual_connection_option",
-        ),
-        residual_model_flag=_bool(values, sources, "stack_residual_model_flag"),
-        dropout_probability=dropout,
-        last_layer_bias_option=_enum(
-            values,
-            sources,
-            "stack_last_layer_bias_option",
-            LastLayerBiasOptions,
-        ),
-        apply_output_pipeline_flag=_bool(
-            values, sources, "stack_apply_output_pipeline_flag"
-        ),
+        bias_flag=values.bias_flag,
+        layer_norm_position=values.layer_norm_position,
+        num_layers=values.num_layers,
+        activation=values.activation,
+        residual_connection_option=values.residual_connection_option,
+        residual_model_flag=values.residual_model_flag,
+        dropout_probability=values.dropout_probability,
+        last_layer_bias_option=values.last_layer_bias_option,
+        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
     )
 
 
-def _submodule_stack(
-    values: Mapping[str, object], sources: Mapping[str, str]
-) -> ControllerStackOptions:
-    hidden_dim = _int(values, sources, "submodule_stack_hidden_dim")
-    num_layers = _int(values, sources, "submodule_stack_num_layers")
-    dropout = _float(values, sources, "submodule_stack_dropout_probability")
-    _positive(sources["submodule_stack_hidden_dim"], hidden_dim)
-    _positive(sources["submodule_stack_num_layers"], num_layers)
-    _probability(sources["submodule_stack_dropout_probability"], dropout)
+def _submodule_stack(reader: RuntimeOverrideReader) -> ControllerStackOptions:
+    measures: SubmoduleStackMeasureValues = read_submodule_stack_measures(reader)
+    _positive("submodule_stack_hidden_dim", measures.hidden_dim)
+    _positive("submodule_stack_num_layers", measures.num_layers)
+    _probability(
+        "submodule_stack_dropout_probability",
+        measures.dropout_probability,
+    )
+    values: SubmoduleStackValues = read_submodule_stack_values(reader, measures)
     return ControllerStackOptions(
-        hidden_dim=hidden_dim,
-        num_layers=num_layers,
-        last_layer_bias_option=_enum(
-            values,
-            sources,
-            "submodule_stack_last_layer_bias_option",
-            LastLayerBiasOptions,
-        ),
-        apply_output_pipeline_flag=_bool(
-            values, sources, "submodule_stack_apply_output_pipeline_flag"
-        ),
-        activation=_enum(
-            values, sources, "submodule_stack_activation", ActivationOptions
-        ),
-        layer_norm_position=_enum(
-            values,
-            sources,
-            "submodule_stack_layer_norm_position",
-            LayerNormPositionOptions,
-        ),
-        residual_connection_option=_optional_residual_config_type(
-            values,
-            sources,
-            "submodule_stack_residual_connection_option",
-        ),
-        residual_model_flag=_bool(
-            values,
-            sources,
-            "submodule_stack_residual_model_flag",
-        ),
-        dropout_probability=dropout,
-        bias_flag=_bool(values, sources, "submodule_stack_bias_flag"),
+        hidden_dim=values.hidden_dim,
+        num_layers=values.num_layers,
+        last_layer_bias_option=values.last_layer_bias_option,
+        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        activation=values.activation,
+        layer_norm_position=values.layer_norm_position,
+        residual_connection_option=values.residual_connection_option,
+        residual_model_flag=values.residual_model_flag,
+        dropout_probability=values.dropout_probability,
+        bias_flag=values.bias_flag,
     )
+
+
+def _validate_optional_stack_measures(
+    stack: OptionalStackInput,
+) -> None:
+    fields = stack.fields
+    values = stack.values
+    if values.hidden_dim is not None:
+        _positive(fields.hidden_dim, values.hidden_dim)
+    if values.num_layers is not None:
+        _positive(fields.num_layers, values.num_layers)
+    if values.dropout_probability is not None:
+        _probability(fields.dropout_probability, values.dropout_probability)
 
 
 def _resolved_controller_stack(
-    values: Mapping[str, object],
-    sources: Mapping[str, str],
-    prefix: str,
+    stack: OptionalStackInput,
     defaults: ControllerStackOptions,
 ) -> ControllerStackOptions:
-    independent = _bool(values, sources, f"{prefix}_independent_flag")
-    hidden_dim = _optional_int(values, sources, f"{prefix}_hidden_dim")
-    num_layers = _optional_int(values, sources, f"{prefix}_num_layers")
-    last_layer_bias_option = _optional_enum(
-        values,
-        sources,
-        f"{prefix}_last_layer_bias_option",
-        LastLayerBiasOptions,
-    )
-    apply_output_pipeline_flag = values[f"{prefix}_apply_output_pipeline_flag"]
-    if apply_output_pipeline_flag is not None:
-        apply_output_pipeline_flag = _bool(
-            values, sources, f"{prefix}_apply_output_pipeline_flag"
-        )
-    activation = _optional_enum(
-        values, sources, f"{prefix}_activation", ActivationOptions
-    )
-    layer_norm_position = _optional_enum(
-        values,
-        sources,
-        f"{prefix}_layer_norm_position",
-        LayerNormPositionOptions,
-    )
-    residual_connection_option = _optional_residual_config_type(
-        values,
-        sources,
-        f"{prefix}_residual_connection_option",
-    )
-    residual_model_flag = _bool(values, sources, f"{prefix}_residual_model_flag")
-    dropout = _optional_float(values, sources, f"{prefix}_dropout_probability")
-    bias_flag = values[f"{prefix}_bias_flag"]
-    if bias_flag is not None:
-        bias_flag = _bool(values, sources, f"{prefix}_bias_flag")
-
-    if hidden_dim is not None:
-        _positive(sources[f"{prefix}_hidden_dim"], hidden_dim)
-    if num_layers is not None:
-        _positive(sources[f"{prefix}_num_layers"], num_layers)
-    if dropout is not None:
-        _probability(sources[f"{prefix}_dropout_probability"], dropout)
-    if not independent:
+    _validate_optional_stack_measures(stack)
+    values = stack.values
+    if not values.independent_flag:
         return defaults
     return ControllerStackOptions(
-        hidden_dim=defaults.hidden_dim if hidden_dim is None else hidden_dim,
-        num_layers=defaults.num_layers if num_layers is None else num_layers,
+        hidden_dim=(
+            defaults.hidden_dim if values.hidden_dim is None else values.hidden_dim
+        ),
+        num_layers=(
+            defaults.num_layers if values.num_layers is None else values.num_layers
+        ),
         last_layer_bias_option=(
             defaults.last_layer_bias_option
-            if last_layer_bias_option is None
-            else last_layer_bias_option
+            if values.last_layer_bias_option is None
+            else values.last_layer_bias_option
         ),
         apply_output_pipeline_flag=(
             defaults.apply_output_pipeline_flag
-            if apply_output_pipeline_flag is None
-            else apply_output_pipeline_flag
+            if values.apply_output_pipeline_flag is None
+            else values.apply_output_pipeline_flag
         ),
-        activation=defaults.activation if activation is None else activation,
+        activation=(
+            defaults.activation if values.activation is None else values.activation
+        ),
         layer_norm_position=(
             defaults.layer_norm_position
-            if layer_norm_position is None
-            else layer_norm_position
+            if values.layer_norm_position is None
+            else values.layer_norm_position
         ),
         residual_connection_option=(
             defaults.residual_connection_option
-            if residual_connection_option is None
-            else residual_connection_option
+            if values.residual_connection_option is None
+            else values.residual_connection_option
         ),
-        residual_model_flag=residual_model_flag,
+        residual_model_flag=values.residual_model_flag,
         dropout_probability=(
-            defaults.dropout_probability if dropout is None else dropout
+            defaults.dropout_probability
+            if values.dropout_probability is None
+            else values.dropout_probability
         ),
-        bias_flag=defaults.bias_flag if bias_flag is None else bias_flag,
+        bias_flag=(
+            defaults.bias_flag if values.bias_flag is None else values.bias_flag
+        ),
         residual_stack_options=defaults.residual_stack_options,
     )
 
 
-def _memory_implementation(
-    values: Mapping[str, object], sources: Mapping[str, str]
-) -> type[DynamicMemoryConfig]:
-    value = values["memory_option"]
-    if not isinstance(value, type) or not issubclass(value, DynamicMemoryConfig):
-        _raise_type_error(sources["memory_option"], value, "type[DynamicMemoryConfig]")
-    return value
-
-
-def runtime_from_flat(
-    overrides: Mapping[str, object] | None = None,
-) -> RuntimeOptions:
-    values, sources = _canonical_flat_values(overrides)
-
-    batch_size = _int(values, sources, "batch_size")
-    learning_rate = _float(values, sources, "learning_rate")
-    input_dim = _int(values, sources, "input_dim")
-    hidden_dim = _int(values, sources, "hidden_dim")
-    output_dim = _int(values, sources, "output_dim")
-    for key, value in (
-        ("batch_size", batch_size),
-        ("learning_rate", learning_rate),
-        ("input_dim", input_dim),
-        ("hidden_dim", hidden_dim),
-        ("output_dim", output_dim),
-    ):
-        _positive(sources[key], value)
-
-    main_stack = _main_stack(values, sources)
-    submodule_stack = _submodule_stack(values, sources)
-    residual_stack_hidden_dim = _optional_int(
-        values, sources, "residual_stack_hidden_dim"
-    )
-    residual_stack_num_layers = _optional_int(
-        values, sources, "residual_stack_num_layers"
-    )
-    residual_stack_dropout = _optional_float(
-        values, sources, "residual_stack_dropout_probability"
-    )
-    if residual_stack_hidden_dim is not None:
-        _positive(sources["residual_stack_hidden_dim"], residual_stack_hidden_dim)
-    if residual_stack_num_layers is not None:
-        _positive(sources["residual_stack_num_layers"], residual_stack_num_layers)
-    if residual_stack_dropout is not None:
+def _residual_stack(
+    reader: RuntimeOverrideReader,
+    submodule_stack: ControllerStackOptions,
+) -> ResidualStackOptions:
+    measures: OptionalStackMeasures = read_residual_stack_measures(reader)
+    if measures.hidden_dim is not None:
+        _positive("residual_stack_hidden_dim", measures.hidden_dim)
+    if measures.num_layers is not None:
+        _positive("residual_stack_num_layers", measures.num_layers)
+    if measures.dropout_probability is not None:
         _probability(
-            sources["residual_stack_dropout_probability"],
-            residual_stack_dropout,
+            "residual_stack_dropout_probability",
+            measures.dropout_probability,
         )
-    residual_stack_options = resolve_residual_stack_options(
+    stack = read_residual_stack_values(reader, measures)
+    values = stack.values
+    return resolve_residual_stack_options(
         ResidualStackSource(
-            independent_flag=_bool(values, sources, "residual_stack_independent_flag"),
-            hidden_dim=residual_stack_hidden_dim,
-            num_layers=residual_stack_num_layers,
-            activation=_optional_enum(
-                values, sources, "residual_stack_activation", ActivationOptions
-            ),
-            layer_norm_position=_optional_enum(
-                values,
-                sources,
-                "residual_stack_layer_norm_position",
-                LayerNormPositionOptions,
-            ),
-            residual_connection_option=_optional_residual_config_type(
-                values,
-                sources,
-                "residual_stack_residual_connection_option",
-            ),
-            residual_model_flag=_bool(
-                values, sources, "residual_stack_residual_model_flag"
-            ),
-            dropout_probability=residual_stack_dropout,
-            last_layer_bias_option=_optional_enum(
-                values,
-                sources,
-                "residual_stack_last_layer_bias_option",
-                LastLayerBiasOptions,
-            ),
-            apply_output_pipeline_flag=(
-                None
-                if values["residual_stack_apply_output_pipeline_flag"] is None
-                else _bool(
-                    values,
-                    sources,
-                    "residual_stack_apply_output_pipeline_flag",
-                )
-            ),
-            bias_flag=(
-                None
-                if values["residual_stack_bias_flag"] is None
-                else _bool(values, sources, "residual_stack_bias_flag")
-            ),
+            independent_flag=values.independent_flag,
+            hidden_dim=values.hidden_dim,
+            num_layers=values.num_layers,
+            activation=values.activation,
+            layer_norm_position=values.layer_norm_position,
+            residual_connection_option=values.residual_connection_option,
+            residual_model_flag=values.residual_model_flag,
+            dropout_probability=values.dropout_probability,
+            last_layer_bias_option=values.last_layer_bias_option,
+            apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+            bias_flag=values.bias_flag,
         ),
         submodule_stack,
     )
-    main_stack = replace(main_stack, residual_stack_options=residual_stack_options)
+
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeStacks:
+    main: MainStackOptions
+    submodule: ControllerStackOptions
+    residual: ResidualStackOptions
+    gate: ControllerStackOptions
+    halting: ControllerStackOptions
+    memory: ControllerStackOptions
+    recurrent_gate: ControllerStackOptions
+    recurrent_halting: ControllerStackOptions
+
+
+def _runtime_stacks(reader: RuntimeOverrideReader) -> _RuntimeStacks:
+    main_stack = _main_stack(reader)
+    submodule_stack = _submodule_stack(reader)
+    residual_stack = _residual_stack(reader, submodule_stack)
+    main_stack = replace(main_stack, residual_stack_options=residual_stack)
     submodule_stack = replace(
         submodule_stack,
-        residual_stack_options=residual_stack_options,
+        residual_stack_options=residual_stack,
     )
     gate_stack = _resolved_controller_stack(
-        values, sources, "gate_stack", submodule_stack
+        read_gate_stack_values(reader),
+        submodule_stack,
     )
     halting_stack = _resolved_controller_stack(
-        values,
-        sources,
-        "halting_stack",
+        read_halting_stack_values(reader),
         replace(
             submodule_stack,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
         ),
     )
     memory_stack = _resolved_controller_stack(
-        values, sources, "memory_stack", submodule_stack
+        read_memory_stack_values(reader),
+        submodule_stack,
     )
     recurrent_gate_stack = _resolved_controller_stack(
-        values, sources, "recurrent_gate_stack", gate_stack
+        read_recurrent_gate_stack_values(reader),
+        gate_stack,
     )
     recurrent_halting_stack = _resolved_controller_stack(
-        values, sources, "recurrent_halting_stack", halting_stack
+        read_recurrent_halting_stack_values(reader),
+        halting_stack,
+    )
+    return _RuntimeStacks(
+        main=main_stack,
+        submodule=submodule_stack,
+        residual=residual_stack,
+        gate=gate_stack,
+        halting=halting_stack,
+        memory=memory_stack,
+        recurrent_gate=recurrent_gate_stack,
+        recurrent_halting=recurrent_halting_stack,
     )
 
-    gate_enabled = _bool(values, sources, "stack_gate_flag")
-    gate_option = _optional_enum(values, sources, "gate_option", LayerGateOptions)
-    if gate_enabled and gate_option is None:
+
+def _gate_options(
+    reader: RuntimeOverrideReader,
+    stack: ControllerStackOptions,
+) -> GateOptions:
+    condition: GateConditionValues = read_gate_condition(reader)
+    if condition.enabled and condition.option is None:
         raise ValueError(
             f"{_PACKAGE_NAME}: 'gate_option' must be set when 'stack_gate_flag' is True"
         )
-    gate = GateOptions(
-        enabled=gate_enabled,
-        option=gate_option,
-        activation=_optional_enum(
-            values, sources, "gate_activation", ActivationOptions
-        ),
-        stack=gate_stack,
+    return GateOptions(
+        enabled=condition.enabled,
+        option=condition.option,
+        activation=read_gate_activation(reader),
+        stack=stack,
     )
 
-    halting_threshold = _float(values, sources, "halting_threshold")
-    halting_dropout = _float(values, sources, "halting_dropout")
-    _threshold(sources["halting_threshold"], halting_threshold)
-    _probability(sources["halting_dropout"], halting_dropout)
-    halting = HaltingOptions(
-        enabled=_bool(values, sources, "stack_halting_flag"),
-        threshold=halting_threshold,
-        dropout_probability=halting_dropout,
-        hidden_state_mode=_enum(
-            values,
-            sources,
-            "halting_hidden_state_mode",
-            HaltingHiddenStateModeOptions,
-        ),
-        stack=halting_stack,
+
+def _halting_options(
+    reader: RuntimeOverrideReader,
+    stack: ControllerStackOptions,
+) -> HaltingOptions:
+    measures: HaltingMeasureValues = read_halting_measures(reader)
+    _threshold("halting_threshold", measures.threshold)
+    _probability("halting_dropout", measures.dropout_probability)
+    values: HaltingValues = read_halting_values(reader)
+    return HaltingOptions(
+        enabled=values.enabled,
+        threshold=measures.threshold,
+        dropout_probability=measures.dropout_probability,
+        hidden_state_mode=values.hidden_state_mode,
+        stack=stack,
     )
 
-    memory_learning_rate = _optional_float(
-        values, sources, "memory_test_time_training_learning_rate"
-    )
-    memory_inner_steps = _optional_int(
-        values, sources, "memory_test_time_training_num_inner_steps"
-    )
-    if memory_learning_rate is not None:
+
+def _memory_options(
+    reader: RuntimeOverrideReader,
+    stack: ControllerStackOptions,
+) -> MemoryOptions:
+    measures: MemoryMeasureValues = read_memory_measures(reader)
+    if measures.learning_rate is not None:
         _positive(
-            sources["memory_test_time_training_learning_rate"],
-            memory_learning_rate,
+            "memory_test_time_training_learning_rate",
+            measures.learning_rate,
         )
-    if memory_inner_steps is not None:
+    if measures.num_inner_steps is not None:
         _positive(
-            sources["memory_test_time_training_num_inner_steps"],
-            memory_inner_steps,
+            "memory_test_time_training_num_inner_steps",
+            measures.num_inner_steps,
         )
-    memory = MemoryOptions(
-        enabled=_bool(values, sources, "memory_flag"),
-        implementation=_memory_implementation(values, sources),
-        position=_enum(
-            values, sources, "memory_position_option", MemoryPositionOptions
-        ),
-        test_time_training_learning_rate=memory_learning_rate,
-        test_time_training_num_inner_steps=memory_inner_steps,
-        stack=memory_stack,
+    values: MemoryValues = read_memory_values(reader)
+    return MemoryOptions(
+        enabled=values.enabled,
+        implementation=values.implementation,
+        position=values.position,
+        test_time_training_learning_rate=measures.learning_rate,
+        test_time_training_num_inner_steps=measures.num_inner_steps,
+        stack=stack,
     )
 
-    recurrent_max_steps = _int(values, sources, "recurrent_max_steps")
-    _positive(sources["recurrent_max_steps"], recurrent_max_steps)
-    recurrent_gate_enabled = _bool(values, sources, "recurrent_stack_gate_flag")
-    recurrent_gate_option = _optional_enum(
-        values, sources, "recurrent_gate_option", LayerGateOptions
-    )
-    if recurrent_gate_enabled and recurrent_gate_option is None:
+
+def _recurrence_options(
+    reader: RuntimeOverrideReader,
+    gate_stack: ControllerStackOptions,
+    halting_stack: ControllerStackOptions,
+) -> RecurrenceOptions:
+    max_steps = read_recurrent_max_steps(reader)
+    _positive("recurrent_max_steps", max_steps)
+    gate_condition = read_recurrent_gate_condition(reader)
+    if gate_condition.enabled and gate_condition.option is None:
         raise ValueError(
             f"{_PACKAGE_NAME}: 'recurrent_gate_option' must be set when "
             "'recurrent_stack_gate_flag' is True"
         )
-    recurrent_halting_threshold = _float(values, sources, "recurrent_halting_threshold")
-    recurrent_halting_dropout = _float(values, sources, "recurrent_halting_dropout")
-    _threshold(sources["recurrent_halting_threshold"], recurrent_halting_threshold)
-    _probability(sources["recurrent_halting_dropout"], recurrent_halting_dropout)
-    recurrence = RecurrenceOptions(
-        enabled=_bool(values, sources, "recurrent_flag"),
-        max_steps=recurrent_max_steps,
-        initial_iterations=_optional_int(
-            values, sources, "recurrent_initial_iterations"
+    halting_measures = read_recurrent_halting_measures(reader)
+    _threshold("recurrent_halting_threshold", halting_measures.threshold)
+    _probability(
+        "recurrent_halting_dropout",
+        halting_measures.dropout_probability,
+    )
+    values: RecurrenceValues = read_recurrence_values(reader)
+    return RecurrenceOptions(
+        enabled=values.enabled,
+        max_steps=max_steps,
+        initial_iterations=cast(int, values.initial_iterations),
+        gradient_transition_count=values.gradient_transition_count,
+        iteration_increment=values.iteration_increment,
+        forward_calls_before_iteration_increment=(
+            values.forward_calls_before_iteration_increment
         ),
-        gradient_transition_count=_optional_int(
-            values, sources, "recurrent_gradient_transition_count"
-        ),
-        iteration_increment=_int(values, sources, "recurrent_iteration_increment"),
-        forward_calls_before_iteration_increment=_int(
-            values,
-            sources,
-            "recurrent_forward_calls_before_iteration_increment",
-        ),
-        layer_norm_position=_enum(
-            values,
-            sources,
-            "recurrent_layer_norm_position",
-            LayerNormPositionOptions,
-        ),
+        layer_norm_position=values.layer_norm_position,
         gate=GateOptions(
-            enabled=recurrent_gate_enabled,
-            option=recurrent_gate_option,
-            activation=_optional_enum(
-                values, sources, "recurrent_gate_activation", ActivationOptions
-            ),
-            stack=recurrent_gate_stack,
+            enabled=gate_condition.enabled,
+            option=gate_condition.option,
+            activation=values.gate_activation,
+            stack=gate_stack,
         ),
         halting=HaltingOptions(
-            enabled=_bool(values, sources, "recurrent_stack_halting_flag"),
-            threshold=recurrent_halting_threshold,
-            dropout_probability=recurrent_halting_dropout,
-            hidden_state_mode=_enum(
-                values,
-                sources,
-                "recurrent_halting_hidden_state_mode",
-                HaltingHiddenStateModeOptions,
-            ),
-            stack=recurrent_halting_stack,
+            enabled=values.halting_enabled,
+            threshold=halting_measures.threshold,
+            dropout_probability=halting_measures.dropout_probability,
+            hidden_state_mode=values.halting_hidden_state_mode,
+            stack=halting_stack,
         ),
     )
+
+
+def runtime_from_flat(
+    overrides: Mapping[str, object] | None = None,
+) -> RuntimeOptions:
+    reader = runtime_override_reader(overrides)
+    dimensions = _runtime_dimensions(reader)
+    stacks = _runtime_stacks(reader)
+    gate = _gate_options(reader, stacks.gate)
+    halting = _halting_options(reader, stacks.halting)
+    memory = _memory_options(reader, stacks.memory)
+    recurrence = _recurrence_options(
+        reader,
+        stacks.recurrent_gate,
+        stacks.recurrent_halting,
+    )
+    implementations = read_halting_implementations(reader)
     return RuntimeOptions(
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        output_dim=output_dim,
-        stack=main_stack,
+        batch_size=dimensions.batch_size,
+        learning_rate=dimensions.learning_rate,
+        input_dim=dimensions.input_dim,
+        hidden_dim=dimensions.hidden_dim,
+        output_dim=dimensions.output_dim,
+        stack=stacks.main,
         gate=gate,
         halting=halting,
         memory=memory,
         recurrence=recurrence,
+        halting_option=implementations.main,
+        recurrent_halting_option=implementations.recurrent,
     )
 
 

@@ -111,6 +111,20 @@ class TestVitExpertLinearAdaptiveModel(unittest.TestCase):
             expert_layer_config.adaptive_augmentation_config.weight_config
         )
 
+    def test_enabled_adaptive_parameter_requires_an_option(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "weight_option must be set when weight_option_flag is True",
+        ):
+            self._config(
+                ExperimentPreset.BASELINE,
+                {
+                    **self._test_overrides(),
+                    "weight_option_flag": True,
+                    "weight_option": None,
+                },
+            )
+
     def test_ff_controls_apply_to_outer_slot_with_adaptive_experts_preserved(self):
         cfg = self._config(
             ExperimentPreset.LOW_RANK_EXPERT_WEIGHT,

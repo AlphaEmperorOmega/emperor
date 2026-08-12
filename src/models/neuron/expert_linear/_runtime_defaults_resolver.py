@@ -1,22 +1,13 @@
-# ruff: noqa: E501
+from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
-from typing import Any
+from typing import TypeVar, cast
 
 import models.neuron.expert_linear.config as config
-from emperor.halting import HaltingHiddenStateModeOptions
-from emperor.layers import (
-    ActivationOptions,
-    GateConfig,
-    LastLayerBiasOptions,
-    LayerGateOptions,
-    LayerNormPositionOptions,
-    ResidualConfig,
-)
-from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from models.neuron.expert_linear._hidden.runtime_defaults import runtime_from_flat
-from models.neuron.expert_linear._neuron_config_builder import (
-    NeuronConfigBuilder,
+from models.neuron.expert_linear._hidden.runtime_options import (
+    RuntimeOptions as HiddenRuntimeOptions,
 )
 from models.neuron.expert_linear.runtime_options import (
     ClusterRouteHaltingOptions,
@@ -26,234 +17,514 @@ from models.neuron.expert_linear.runtime_options import (
     NeuronTerminalSamplerOptions,
 )
 
+_CLUSTER_BEAM_WIDTH_DEFAULT = config.CLUSTER_BEAM_WIDTH
+_CLUSTER_ESCAPE_DRIVEN_GROWTH_FLAG_DEFAULT = config.CLUSTER_ESCAPE_DRIVEN_GROWTH_FLAG
+_CLUSTER_GROWTH_COOLDOWN_STEPS_DEFAULT = config.CLUSTER_GROWTH_COOLDOWN_STEPS
+_CLUSTER_GROWTH_THRESHOLD_DEFAULT = config.CLUSTER_GROWTH_THRESHOLD
+_CLUSTER_GROWTH_WARMUP_STEPS_DEFAULT = config.CLUSTER_GROWTH_WARMUP_STEPS
+_CLUSTER_HALTING_DROPOUT_DEFAULT = config.CLUSTER_HALTING_DROPOUT
+_CLUSTER_HALTING_FLAG_DEFAULT = config.CLUSTER_HALTING_FLAG
+_CLUSTER_HALTING_HIDDEN_STATE_MODE_DEFAULT = config.CLUSTER_HALTING_HIDDEN_STATE_MODE
+_CLUSTER_HALTING_OPTION_DEFAULT = config.CLUSTER_HALTING_OPTION
+_CLUSTER_HALTING_OUTPUT_DIM_DEFAULT = config.CLUSTER_HALTING_OUTPUT_DIM
+_CLUSTER_HALTING_STACK_ACTIVATION_DEFAULT = config.CLUSTER_HALTING_STACK_ACTIVATION
+_CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+)
+_CLUSTER_HALTING_STACK_BIAS_FLAG_DEFAULT = config.CLUSTER_HALTING_STACK_BIAS_FLAG
+_CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY
+)
+_CLUSTER_HALTING_STACK_HIDDEN_DIM_DEFAULT = config.CLUSTER_HALTING_STACK_HIDDEN_DIM
+_CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+)
+_CLUSTER_HALTING_STACK_LAYER_NORM_POSITION_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_LAYER_NORM_POSITION
+)
+_CLUSTER_HALTING_STACK_NUM_LAYERS_DEFAULT = config.CLUSTER_HALTING_STACK_NUM_LAYERS
+_CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+)
+_CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
+)
+_CLUSTER_HALTING_THRESHOLD_DEFAULT = config.CLUSTER_HALTING_THRESHOLD
+_CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS_DEFAULT = (
+    config.CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS
+)
+_CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS_DEFAULT = (
+    config.CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS
+)
+_CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS_DEFAULT = (
+    config.CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS
+)
+_CLUSTER_MAX_STEPS_DEFAULT = config.CLUSTER_MAX_STEPS
+_CLUSTER_MAX_TOTAL_GROWTHS_DEFAULT = config.CLUSTER_MAX_TOTAL_GROWTHS
+_CLUSTER_MITOSIS_INITIALIZATION_FLAG_DEFAULT = (
+    config.CLUSTER_MITOSIS_INITIALIZATION_FLAG
+)
+_CLUSTER_PRUNING_THRESHOLD_DEFAULT = config.CLUSTER_PRUNING_THRESHOLD
+_CLUSTER_TERMINAL_ROUTER_ACTIVATION_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_ACTIVATION
+_CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG
+)
+_CLUSTER_TERMINAL_ROUTER_BIAS_FLAG_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_BIAS_FLAG
+_CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY
+)
+_CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM
+_CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION
+)
+_CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION
+)
+_CLUSTER_TERMINAL_ROUTER_NUM_LAYERS_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_NUM_LAYERS
+_CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION
+)
+_CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG
+)
+_CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
+)
+_CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD
+)
+_CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT
+)
+_CLUSTER_TERMINAL_SAMPLER_NOISY_TOPK_FLAG_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_NOISY_TOPK_FLAG
+)
+_CLUSTER_TERMINAL_SAMPLER_NORMALIZE_PROBABILITIES_FLAG_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_NORMALIZE_PROBABILITIES_FLAG
+)
+_CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES
+)
+_CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT
+)
+_CLUSTER_TERMINAL_SAMPLER_THRESHOLD_DEFAULT = config.CLUSTER_TERMINAL_SAMPLER_THRESHOLD
+_CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT_DEFAULT = (
+    config.CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT
+)
+_CLUSTER_TERMINAL_TOP_K_DEFAULT = config.CLUSTER_TERMINAL_TOP_K
+_CLUSTER_TERMINAL_XY_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_XY_AXIS_RANGE
+_CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_OFFSET
+_CLUSTER_TERMINAL_Z_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_RANGE
+_CLUSTER_X_AXIS_TOTAL_NEURONS_DEFAULT = config.CLUSTER_X_AXIS_TOTAL_NEURONS
+_CLUSTER_Y_AXIS_TOTAL_NEURONS_DEFAULT = config.CLUSTER_Y_AXIS_TOTAL_NEURONS
+_CLUSTER_Z_AXIS_TOTAL_NEURONS_DEFAULT = config.CLUSTER_Z_AXIS_TOTAL_NEURONS
+_GATE_ACTIVATION_DEFAULT = config.GATE_ACTIVATION
+_GATE_OPTION_DEFAULT = config.GATE_OPTION
+_RECURRENT_GATE_ACTIVATION_DEFAULT = config.RECURRENT_GATE_ACTIVATION
+_RECURRENT_GATE_OPTION_DEFAULT = config.RECURRENT_GATE_OPTION
 
-class _NeuronExpertLinearRuntimeDefaultsResolver(NeuronConfigBuilder):
-    def __init__(
-        self,
-        cluster_x_axis_total_neurons: int = config.CLUSTER_X_AXIS_TOTAL_NEURONS,
-        cluster_y_axis_total_neurons: int = config.CLUSTER_Y_AXIS_TOTAL_NEURONS,
-        cluster_z_axis_total_neurons: int = config.CLUSTER_Z_AXIS_TOTAL_NEURONS,
-        cluster_initial_x_axis_total_neurons: int | None = (
-            config.CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS
-        ),
-        cluster_initial_y_axis_total_neurons: int | None = (
-            config.CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS
-        ),
-        cluster_initial_z_axis_total_neurons: int | None = (
-            config.CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS
-        ),
-        cluster_max_steps: int = config.CLUSTER_MAX_STEPS,
-        cluster_growth_threshold: int | None = config.CLUSTER_GROWTH_THRESHOLD,
-        cluster_terminal_xy_axis_range: TerminalRangeOptions = (
-            config.CLUSTER_TERMINAL_XY_AXIS_RANGE
-        ),
-        cluster_terminal_z_axis_range: TerminalRangeOptions = (
-            config.CLUSTER_TERMINAL_Z_AXIS_RANGE
-        ),
-        cluster_terminal_z_axis_offset: TerminalZAxisOffsetOptions = (
-            config.CLUSTER_TERMINAL_Z_AXIS_OFFSET
-        ),
-        cluster_terminal_top_k: int = config.CLUSTER_TERMINAL_TOP_K,
-        cluster_terminal_router_num_layers: int = (
-            config.CLUSTER_TERMINAL_ROUTER_NUM_LAYERS
-        ),
-        cluster_terminal_router_hidden_dim: int = (
-            config.CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM
-        ),
-        cluster_terminal_router_activation: ActivationOptions = (
-            config.CLUSTER_TERMINAL_ROUTER_ACTIVATION
-        ),
-        cluster_terminal_router_layer_norm_position: LayerNormPositionOptions = (
-            config.CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION
-        ),
-        cluster_terminal_router_residual_connection_option: type[ResidualConfig] = (
-            config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION
-        ),
-        cluster_terminal_router_residual_model_flag: bool = config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG,
-        cluster_terminal_router_dropout_probability: float = (
-            config.CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY
-        ),
-        cluster_terminal_router_last_layer_bias_option: LastLayerBiasOptions = (
-            config.CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION
-        ),
-        cluster_terminal_router_apply_output_pipeline_flag: bool = (
-            config.CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        cluster_terminal_router_bias_flag: bool = (
-            config.CLUSTER_TERMINAL_ROUTER_BIAS_FLAG
-        ),
-        cluster_terminal_sampler_threshold: float = (
-            config.CLUSTER_TERMINAL_SAMPLER_THRESHOLD
-        ),
-        cluster_terminal_sampler_filter_above_threshold: bool = (
-            config.CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD
-        ),
-        cluster_terminal_sampler_num_topk_samples: int = (
-            config.CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES
-        ),
-        cluster_terminal_sampler_normalize_probabilities_flag: bool = (
-            config.CLUSTER_TERMINAL_SAMPLER_NORMALIZE_PROBABILITIES_FLAG
-        ),
-        cluster_terminal_sampler_noisy_topk_flag: bool = (
-            config.CLUSTER_TERMINAL_SAMPLER_NOISY_TOPK_FLAG
-        ),
-        cluster_terminal_sampler_coefficient_of_variation_loss_weight: float = (
-            config.CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
-        ),
-        cluster_terminal_sampler_switch_loss_weight: float = (
-            config.CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT
-        ),
-        cluster_terminal_sampler_zero_centred_loss_weight: float = (
-            config.CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT
-        ),
-        cluster_terminal_sampler_mutual_information_loss_weight: float = (
-            config.CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT
-        ),
-        cluster_halting_flag: bool = config.CLUSTER_HALTING_FLAG,
-        cluster_halting_threshold: float = config.CLUSTER_HALTING_THRESHOLD,
-        cluster_halting_dropout: float = config.CLUSTER_HALTING_DROPOUT,
-        cluster_halting_hidden_state_mode: HaltingHiddenStateModeOptions = (
-            config.CLUSTER_HALTING_HIDDEN_STATE_MODE
-        ),
-        cluster_halting_stack_hidden_dim: int = (
-            config.CLUSTER_HALTING_STACK_HIDDEN_DIM
-        ),
-        cluster_halting_output_dim: int = config.CLUSTER_HALTING_OUTPUT_DIM,
-        cluster_halting_stack_layer_norm_position: LayerNormPositionOptions = (
-            config.CLUSTER_HALTING_STACK_LAYER_NORM_POSITION
-        ),
-        cluster_halting_stack_num_layers: int = (
-            config.CLUSTER_HALTING_STACK_NUM_LAYERS
-        ),
-        cluster_halting_stack_activation: ActivationOptions = (
-            config.CLUSTER_HALTING_STACK_ACTIVATION
-        ),
-        cluster_halting_stack_residual_connection_option: type[ResidualConfig] = (
-            config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
-        ),
-        cluster_halting_stack_residual_model_flag: bool = config.CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG,
-        cluster_halting_stack_dropout_probability: float = (
-            config.CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY
-        ),
-        cluster_halting_stack_last_layer_bias_option: LastLayerBiasOptions = (
-            config.CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION
-        ),
-        cluster_halting_stack_apply_output_pipeline_flag: bool = (
-            config.CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
-        ),
-        cluster_halting_stack_bias_flag: bool = (
-            config.CLUSTER_HALTING_STACK_BIAS_FLAG
-        ),
-        gate_option: LayerGateOptions | None = config.GATE_OPTION,
-        gate_activation: ActivationOptions | None = config.GATE_ACTIVATION,
-        recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION,
-        recurrent_gate_activation: ActivationOptions | None = (
-            config.RECURRENT_GATE_ACTIVATION
-        ),
-        shared_gate_config: GateConfig | None = None,
-        cluster_capacity_options: NeuronClusterCapacityOptions | None = None,
-        terminal_options: NeuronTerminalOptions | None = None,
-        terminal_router_options: NeuronSubmoduleStackOptions | None = None,
-        terminal_sampler_options: NeuronTerminalSamplerOptions | None = None,
-        cluster_halting_options: ClusterRouteHaltingOptions | None = None,
-        **hidden_options: Any,
-    ) -> None:
-        cluster_capacity_options = (
-            cluster_capacity_options
-            or NeuronClusterCapacityOptions(
-                x_axis_total_neurons=cluster_x_axis_total_neurons,
-                y_axis_total_neurons=cluster_y_axis_total_neurons,
-                z_axis_total_neurons=cluster_z_axis_total_neurons,
-                initial_x_axis_total_neurons=(cluster_initial_x_axis_total_neurons),
-                initial_y_axis_total_neurons=(cluster_initial_y_axis_total_neurons),
-                initial_z_axis_total_neurons=(cluster_initial_z_axis_total_neurons),
-                max_steps=cluster_max_steps,
-                growth_threshold=cluster_growth_threshold,
-            )
-        )
-        terminal_options = terminal_options or NeuronTerminalOptions(
-            xy_axis_range=cluster_terminal_xy_axis_range,
-            z_axis_range=cluster_terminal_z_axis_range,
-            z_axis_offset=cluster_terminal_z_axis_offset,
-            top_k=cluster_terminal_top_k,
-        )
-        terminal_router_options = (
-            terminal_router_options
-            or NeuronSubmoduleStackOptions(
-                hidden_dim=cluster_terminal_router_hidden_dim,
-                num_layers=cluster_terminal_router_num_layers,
-                last_layer_bias_option=(cluster_terminal_router_last_layer_bias_option),
-                apply_output_pipeline_flag=(
-                    cluster_terminal_router_apply_output_pipeline_flag
-                ),
-                activation=cluster_terminal_router_activation,
-                layer_norm_position=cluster_terminal_router_layer_norm_position,
-                residual_connection_option=(
-                    cluster_terminal_router_residual_connection_option
-                ),
-                residual_model_flag=cluster_terminal_router_residual_model_flag,
-                dropout_probability=cluster_terminal_router_dropout_probability,
-                bias_flag=cluster_terminal_router_bias_flag,
-            )
-        )
-        terminal_sampler_options = (
-            terminal_sampler_options
-            or NeuronTerminalSamplerOptions(
-                threshold=cluster_terminal_sampler_threshold,
-                filter_above_threshold=(
-                    cluster_terminal_sampler_filter_above_threshold
-                ),
-                num_topk_samples=cluster_terminal_sampler_num_topk_samples,
-                normalize_probabilities_flag=(
-                    cluster_terminal_sampler_normalize_probabilities_flag
-                ),
-                noisy_topk_flag=cluster_terminal_sampler_noisy_topk_flag,
-                coefficient_of_variation_loss_weight=(
-                    cluster_terminal_sampler_coefficient_of_variation_loss_weight
-                ),
-                switch_loss_weight=cluster_terminal_sampler_switch_loss_weight,
-                zero_centred_loss_weight=(
-                    cluster_terminal_sampler_zero_centred_loss_weight
-                ),
-                mutual_information_loss_weight=(
-                    cluster_terminal_sampler_mutual_information_loss_weight
-                ),
-            )
-        )
-        cluster_halting_options = cluster_halting_options or ClusterRouteHaltingOptions(
-            enabled=cluster_halting_flag,
-            threshold=cluster_halting_threshold,
-            dropout=cluster_halting_dropout,
-            hidden_state_mode=cluster_halting_hidden_state_mode,
-            stack_options=NeuronSubmoduleStackOptions(
-                hidden_dim=cluster_halting_stack_hidden_dim,
-                num_layers=cluster_halting_stack_num_layers,
-                last_layer_bias_option=(cluster_halting_stack_last_layer_bias_option),
-                apply_output_pipeline_flag=(
-                    cluster_halting_stack_apply_output_pipeline_flag
-                ),
-                activation=cluster_halting_stack_activation,
-                layer_norm_position=cluster_halting_stack_layer_norm_position,
-                residual_connection_option=(
-                    cluster_halting_stack_residual_connection_option
-                ),
-                residual_model_flag=cluster_halting_stack_residual_model_flag,
-                dropout_probability=cluster_halting_stack_dropout_probability,
-                bias_flag=cluster_halting_stack_bias_flag,
-            ),
-            output_dim=cluster_halting_output_dim,
-        )
-        hidden_flat_options = {
-            "gate_option": gate_option,
-            "gate_activation": gate_activation,
-            "recurrent_gate_option": recurrent_gate_option,
-            "recurrent_gate_activation": recurrent_gate_activation,
-            **hidden_options,
-        }
-        if shared_gate_config is not None:
-            hidden_flat_options["shared_gate_config"] = shared_gate_config
+_DefaultT = TypeVar("_DefaultT")
 
-        hidden_runtime = runtime_from_flat(hidden_flat_options, config)
+
+def _pop(
+    values: dict[str, object],
+    key: str,
+    default: _DefaultT,
+) -> _DefaultT:
+    return cast(_DefaultT, values.pop(key, default))
+
+
+def _cluster_capacity_options(
+    values: dict[str, object],
+) -> NeuronClusterCapacityOptions:
+    provided = cast(
+        NeuronClusterCapacityOptions | None,
+        values.pop("cluster_capacity_options", None),
+    )
+    x_axis_total_neurons = _pop(
+        values, "cluster_x_axis_total_neurons", _CLUSTER_X_AXIS_TOTAL_NEURONS_DEFAULT
+    )
+    y_axis_total_neurons = _pop(
+        values, "cluster_y_axis_total_neurons", _CLUSTER_Y_AXIS_TOTAL_NEURONS_DEFAULT
+    )
+    z_axis_total_neurons = _pop(
+        values, "cluster_z_axis_total_neurons", _CLUSTER_Z_AXIS_TOTAL_NEURONS_DEFAULT
+    )
+    initial_x_axis_total_neurons = _pop(
+        values,
+        "cluster_initial_x_axis_total_neurons",
+        _CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS_DEFAULT,
+    )
+    initial_y_axis_total_neurons = _pop(
+        values,
+        "cluster_initial_y_axis_total_neurons",
+        _CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS_DEFAULT,
+    )
+    initial_z_axis_total_neurons = _pop(
+        values,
+        "cluster_initial_z_axis_total_neurons",
+        _CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS_DEFAULT,
+    )
+    max_steps = _pop(values, "cluster_max_steps", _CLUSTER_MAX_STEPS_DEFAULT)
+    beam_width = _pop(values, "cluster_beam_width", _CLUSTER_BEAM_WIDTH_DEFAULT)
+    growth_threshold = _pop(
+        values, "cluster_growth_threshold", _CLUSTER_GROWTH_THRESHOLD_DEFAULT
+    )
+    growth_cooldown_steps = _pop(
+        values,
+        "cluster_growth_cooldown_steps",
+        _CLUSTER_GROWTH_COOLDOWN_STEPS_DEFAULT,
+    )
+    max_total_growths = _pop(
+        values, "cluster_max_total_growths", _CLUSTER_MAX_TOTAL_GROWTHS_DEFAULT
+    )
+    growth_warmup_steps = _pop(
+        values,
+        "cluster_growth_warmup_steps",
+        _CLUSTER_GROWTH_WARMUP_STEPS_DEFAULT,
+    )
+    pruning_threshold = _pop(
+        values, "cluster_pruning_threshold", _CLUSTER_PRUNING_THRESHOLD_DEFAULT
+    )
+    escape_driven_growth_flag = _pop(
+        values,
+        "cluster_escape_driven_growth_flag",
+        _CLUSTER_ESCAPE_DRIVEN_GROWTH_FLAG_DEFAULT,
+    )
+    mitosis_initialization_flag = _pop(
+        values,
+        "cluster_mitosis_initialization_flag",
+        _CLUSTER_MITOSIS_INITIALIZATION_FLAG_DEFAULT,
+    )
+    if provided:
+        return provided
+    return NeuronClusterCapacityOptions(
+        x_axis_total_neurons=x_axis_total_neurons,
+        y_axis_total_neurons=y_axis_total_neurons,
+        z_axis_total_neurons=z_axis_total_neurons,
+        initial_x_axis_total_neurons=initial_x_axis_total_neurons,
+        initial_y_axis_total_neurons=initial_y_axis_total_neurons,
+        initial_z_axis_total_neurons=initial_z_axis_total_neurons,
+        max_steps=max_steps,
+        beam_width=beam_width,
+        growth_threshold=growth_threshold,
+        growth_cooldown_steps=growth_cooldown_steps,
+        max_total_growths=max_total_growths,
+        growth_warmup_steps=growth_warmup_steps,
+        pruning_threshold=pruning_threshold,
+        escape_driven_growth_flag=escape_driven_growth_flag,
+        mitosis_initialization_flag=mitosis_initialization_flag,
+    )
+
+
+def _terminal_options(values: dict[str, object]) -> NeuronTerminalOptions:
+    provided = cast(
+        NeuronTerminalOptions | None,
+        values.pop("terminal_options", None),
+    )
+    xy_axis_range = _pop(
+        values,
+        "cluster_terminal_xy_axis_range",
+        _CLUSTER_TERMINAL_XY_AXIS_RANGE_DEFAULT,
+    )
+    z_axis_range = _pop(
+        values, "cluster_terminal_z_axis_range", _CLUSTER_TERMINAL_Z_AXIS_RANGE_DEFAULT
+    )
+    z_axis_offset = _pop(
+        values,
+        "cluster_terminal_z_axis_offset",
+        _CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT,
+    )
+    top_k = _pop(values, "cluster_terminal_top_k", _CLUSTER_TERMINAL_TOP_K_DEFAULT)
+    if provided:
+        return provided
+    return NeuronTerminalOptions(
+        xy_axis_range=xy_axis_range,
+        z_axis_range=z_axis_range,
+        z_axis_offset=z_axis_offset,
+        top_k=top_k,
+    )
+
+
+def _terminal_router_options(
+    values: dict[str, object],
+) -> NeuronSubmoduleStackOptions:
+    provided = cast(
+        NeuronSubmoduleStackOptions | None,
+        values.pop("terminal_router_options", None),
+    )
+    hidden_dim = _pop(
+        values,
+        "cluster_terminal_router_hidden_dim",
+        _CLUSTER_TERMINAL_ROUTER_HIDDEN_DIM_DEFAULT,
+    )
+    num_layers = _pop(
+        values,
+        "cluster_terminal_router_num_layers",
+        _CLUSTER_TERMINAL_ROUTER_NUM_LAYERS_DEFAULT,
+    )
+    last_layer_bias_option = _pop(
+        values,
+        "cluster_terminal_router_last_layer_bias_option",
+        _CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION_DEFAULT,
+    )
+    apply_output_pipeline_flag = _pop(
+        values,
+        "cluster_terminal_router_apply_output_pipeline_flag",
+        _CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT,
+    )
+    activation = _pop(
+        values,
+        "cluster_terminal_router_activation",
+        _CLUSTER_TERMINAL_ROUTER_ACTIVATION_DEFAULT,
+    )
+    layer_norm_position = _pop(
+        values,
+        "cluster_terminal_router_layer_norm_position",
+        _CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION_DEFAULT,
+    )
+    residual_connection_option = _pop(
+        values,
+        "cluster_terminal_router_residual_connection_option",
+        _CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION_DEFAULT,
+    )
+    residual_model_flag = _pop(
+        values,
+        "cluster_terminal_router_residual_model_flag",
+        _CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG_DEFAULT,
+    )
+    dropout_probability = _pop(
+        values,
+        "cluster_terminal_router_dropout_probability",
+        _CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY_DEFAULT,
+    )
+    bias_flag = _pop(
+        values,
+        "cluster_terminal_router_bias_flag",
+        _CLUSTER_TERMINAL_ROUTER_BIAS_FLAG_DEFAULT,
+    )
+    if provided:
+        return provided
+    return NeuronSubmoduleStackOptions(
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        last_layer_bias_option=last_layer_bias_option,
+        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        activation=activation,
+        layer_norm_position=layer_norm_position,
+        residual_connection_option=residual_connection_option,
+        residual_model_flag=residual_model_flag,
+        dropout_probability=dropout_probability,
+        bias_flag=bias_flag,
+    )
+
+
+def _terminal_sampler_options(
+    values: dict[str, object],
+) -> NeuronTerminalSamplerOptions:
+    provided = cast(
+        NeuronTerminalSamplerOptions | None,
+        values.pop("terminal_sampler_options", None),
+    )
+    threshold = _pop(
+        values,
+        "cluster_terminal_sampler_threshold",
+        _CLUSTER_TERMINAL_SAMPLER_THRESHOLD_DEFAULT,
+    )
+    filter_above_threshold = _pop(
+        values,
+        "cluster_terminal_sampler_filter_above_threshold",
+        _CLUSTER_TERMINAL_SAMPLER_FILTER_ABOVE_THRESHOLD_DEFAULT,
+    )
+    num_topk_samples = _pop(
+        values,
+        "cluster_terminal_sampler_num_topk_samples",
+        _CLUSTER_TERMINAL_SAMPLER_NUM_TOPK_SAMPLES_DEFAULT,
+    )
+    normalize_probabilities_flag = _pop(
+        values,
+        "cluster_terminal_sampler_normalize_probabilities_flag",
+        _CLUSTER_TERMINAL_SAMPLER_NORMALIZE_PROBABILITIES_FLAG_DEFAULT,
+    )
+    noisy_topk_flag = _pop(
+        values,
+        "cluster_terminal_sampler_noisy_topk_flag",
+        _CLUSTER_TERMINAL_SAMPLER_NOISY_TOPK_FLAG_DEFAULT,
+    )
+    coefficient_of_variation_loss_weight = _pop(
+        values,
+        "cluster_terminal_sampler_coefficient_of_variation_loss_weight",
+        _CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT_DEFAULT,
+    )
+    switch_loss_weight = _pop(
+        values,
+        "cluster_terminal_sampler_switch_loss_weight",
+        _CLUSTER_TERMINAL_SAMPLER_SWITCH_LOSS_WEIGHT_DEFAULT,
+    )
+    zero_centred_loss_weight = _pop(
+        values,
+        "cluster_terminal_sampler_zero_centred_loss_weight",
+        _CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT_DEFAULT,
+    )
+    mutual_information_loss_weight = _pop(
+        values,
+        "cluster_terminal_sampler_mutual_information_loss_weight",
+        _CLUSTER_TERMINAL_SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT_DEFAULT,
+    )
+    if provided:
+        return provided
+    return NeuronTerminalSamplerOptions(
+        threshold=threshold,
+        filter_above_threshold=filter_above_threshold,
+        num_topk_samples=num_topk_samples,
+        normalize_probabilities_flag=normalize_probabilities_flag,
+        noisy_topk_flag=noisy_topk_flag,
+        coefficient_of_variation_loss_weight=coefficient_of_variation_loss_weight,
+        switch_loss_weight=switch_loss_weight,
+        zero_centred_loss_weight=zero_centred_loss_weight,
+        mutual_information_loss_weight=mutual_information_loss_weight,
+    )
+
+
+def _cluster_halting_options(
+    values: dict[str, object],
+) -> ClusterRouteHaltingOptions:
+    provided = cast(
+        ClusterRouteHaltingOptions | None,
+        values.pop("cluster_halting_options", None),
+    )
+    enabled = _pop(values, "cluster_halting_flag", _CLUSTER_HALTING_FLAG_DEFAULT)
+    halting_option = _pop(
+        values, "cluster_halting_option", _CLUSTER_HALTING_OPTION_DEFAULT
+    )
+    threshold = _pop(
+        values, "cluster_halting_threshold", _CLUSTER_HALTING_THRESHOLD_DEFAULT
+    )
+    dropout = _pop(values, "cluster_halting_dropout", _CLUSTER_HALTING_DROPOUT_DEFAULT)
+    hidden_state_mode = _pop(
+        values,
+        "cluster_halting_hidden_state_mode",
+        _CLUSTER_HALTING_HIDDEN_STATE_MODE_DEFAULT,
+    )
+    output_dim = _pop(
+        values, "cluster_halting_output_dim", _CLUSTER_HALTING_OUTPUT_DIM_DEFAULT
+    )
+    hidden_dim = _pop(
+        values,
+        "cluster_halting_stack_hidden_dim",
+        _CLUSTER_HALTING_STACK_HIDDEN_DIM_DEFAULT,
+    )
+    num_layers = _pop(
+        values,
+        "cluster_halting_stack_num_layers",
+        _CLUSTER_HALTING_STACK_NUM_LAYERS_DEFAULT,
+    )
+    last_layer_bias_option = _pop(
+        values,
+        "cluster_halting_stack_last_layer_bias_option",
+        _CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION_DEFAULT,
+    )
+    apply_output_pipeline_flag = _pop(
+        values,
+        "cluster_halting_stack_apply_output_pipeline_flag",
+        _CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT,
+    )
+    activation = _pop(
+        values,
+        "cluster_halting_stack_activation",
+        _CLUSTER_HALTING_STACK_ACTIVATION_DEFAULT,
+    )
+    layer_norm_position = _pop(
+        values,
+        "cluster_halting_stack_layer_norm_position",
+        _CLUSTER_HALTING_STACK_LAYER_NORM_POSITION_DEFAULT,
+    )
+    residual_connection_option = _pop(
+        values,
+        "cluster_halting_stack_residual_connection_option",
+        _CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION_DEFAULT,
+    )
+    residual_model_flag = _pop(
+        values,
+        "cluster_halting_stack_residual_model_flag",
+        _CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG_DEFAULT,
+    )
+    dropout_probability = _pop(
+        values,
+        "cluster_halting_stack_dropout_probability",
+        _CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY_DEFAULT,
+    )
+    bias_flag = _pop(
+        values,
+        "cluster_halting_stack_bias_flag",
+        _CLUSTER_HALTING_STACK_BIAS_FLAG_DEFAULT,
+    )
+    if provided:
+        return provided
+    return ClusterRouteHaltingOptions(
+        enabled=enabled,
+        halting_option=halting_option,
+        threshold=threshold,
+        dropout=dropout,
+        hidden_state_mode=hidden_state_mode,
+        stack_options=NeuronSubmoduleStackOptions(
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            last_layer_bias_option=last_layer_bias_option,
+            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            activation=activation,
+            layer_norm_position=layer_norm_position,
+            residual_connection_option=residual_connection_option,
+            residual_model_flag=residual_model_flag,
+            dropout_probability=dropout_probability,
+            bias_flag=bias_flag,
+        ),
+        output_dim=output_dim,
+    )
+
+
+def _hidden_flat_options(values: dict[str, object]) -> dict[str, object]:
+    gate_option = _pop(values, "gate_option", _GATE_OPTION_DEFAULT)
+    gate_activation = _pop(values, "gate_activation", _GATE_ACTIVATION_DEFAULT)
+    recurrent_gate_option = _pop(
+        values, "recurrent_gate_option", _RECURRENT_GATE_OPTION_DEFAULT
+    )
+    recurrent_gate_activation = _pop(
+        values,
+        "recurrent_gate_activation",
+        _RECURRENT_GATE_ACTIVATION_DEFAULT,
+    )
+    shared_gate_config = values.pop("shared_gate_config", None)
+    hidden_options = {
+        "gate_option": gate_option,
+        "gate_activation": gate_activation,
+        "recurrent_gate_option": recurrent_gate_option,
+        "recurrent_gate_activation": recurrent_gate_activation,
+        **values,
+    }
+    if shared_gate_config is not None:
+        hidden_options["shared_gate_config"] = shared_gate_config
+    return hidden_options
+
+
+class _NeuronExpertLinearRuntimeDefaultsResolver:
+    hidden_runtime: HiddenRuntimeOptions
+    cluster_capacity_options: NeuronClusterCapacityOptions
+    terminal_options: NeuronTerminalOptions
+    terminal_router_options: NeuronSubmoduleStackOptions
+    terminal_sampler_options: NeuronTerminalSamplerOptions
+    cluster_halting_options: ClusterRouteHaltingOptions
+
+    def __init__(self, values: Mapping[str, object] | None = None) -> None:
+        flat_values = dict(values or {})
+        cluster_capacity_options = _cluster_capacity_options(flat_values)
+        terminal_options = _terminal_options(flat_values)
+        terminal_router_options = _terminal_router_options(flat_values)
+        terminal_sampler_options = _terminal_sampler_options(flat_values)
+        cluster_halting_options = _cluster_halting_options(flat_values)
+
+        hidden_runtime = runtime_from_flat(_hidden_flat_options(flat_values), config)
         residual_stack_options = hidden_runtime.stack_options.residual_stack_options
         terminal_router_options = replace(
             terminal_router_options,
@@ -267,11 +538,9 @@ class _NeuronExpertLinearRuntimeDefaultsResolver(NeuronConfigBuilder):
             ),
         )
 
-        super().__init__(
-            hidden_runtime=hidden_runtime,
-            cluster_capacity_options=cluster_capacity_options,
-            terminal_options=terminal_options,
-            terminal_router_options=terminal_router_options,
-            terminal_sampler_options=terminal_sampler_options,
-            cluster_halting_options=cluster_halting_options,
-        )
+        self.hidden_runtime = hidden_runtime
+        self.cluster_capacity_options = cluster_capacity_options
+        self.terminal_options = terminal_options
+        self.terminal_router_options = terminal_router_options
+        self.terminal_sampler_options = terminal_sampler_options
+        self.cluster_halting_options = cluster_halting_options

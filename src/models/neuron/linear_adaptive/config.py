@@ -9,9 +9,9 @@ from emperor.layers import (
 )
 
 # Trainer
-TRAINER_ACCELERATOR: str = "auto"
-TRAINER_DEVICES: str | int = "auto"
-TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_DEVICES: int = 1
+TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
 TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
 TRAINER_PRECISION: str = "32-true"
@@ -34,6 +34,7 @@ MONITOR_LOG_EVERY_N_STEPS: int = 100
 # Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
+SEED: int | None = None
 
 # Callback
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
@@ -102,12 +103,6 @@ INPUT_DIM: int = 28**2
 HIDDEN_DIM: int = 32
 OUTPUT_DIM: int = 10
 LEARNING_RATE: float = 1e-3
-
-# Trainer
-TRAINER_ACCELERATOR: str = "cpu"
-TRAINER_DEVICES: int = 1
-TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-
 
 #########################################################################
 # Layer Stack Options
@@ -488,7 +483,14 @@ CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS: int = 3
 CLUSTER_INITIAL_Y_AXIS_TOTAL_NEURONS: int = 3
 CLUSTER_INITIAL_Z_AXIS_TOTAL_NEURONS: int = 1
 CLUSTER_MAX_STEPS: int = 4
+CLUSTER_BEAM_WIDTH: int | None = None
 CLUSTER_GROWTH_THRESHOLD: int | None = 250
+CLUSTER_GROWTH_COOLDOWN_STEPS: int | None = None
+CLUSTER_MAX_TOTAL_GROWTHS: int | None = None
+CLUSTER_GROWTH_WARMUP_STEPS: int | None = None
+CLUSTER_PRUNING_THRESHOLD: int | None = None
+CLUSTER_ESCAPE_DRIVEN_GROWTH_FLAG: bool = False
+CLUSTER_MITOSIS_INITIALIZATION_FLAG: bool = False
 
 ## Cluster Terminal Options
 CLUSTER_TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE

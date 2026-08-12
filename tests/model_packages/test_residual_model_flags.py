@@ -113,20 +113,23 @@ def _modeled_residuals(configuration: object):
 class TestResidualModelFlagCatalogContract(unittest.TestCase):
     def test_every_package_exposes_the_exact_gate_parity_residual_stack(self) -> None:
         for package in discover_model_packages():
-            config = package.runtime_defaults
-            metadata = package.configuration_field_metadata()
+            runtime_defaults = package.runtime_defaults_spec
+            default_keys = tuple(
+                key for key, _value in runtime_defaults.default_items()
+            )
+            metadata = runtime_defaults.configuration_metadata
             schema_fields = {
                 field.key: field for field in configuration_schema(package).fields
             }
             residual_stack_keys = [
-                key for key in vars(config) if key.startswith("RESIDUAL_STACK_")
+                key for key in default_keys if key.startswith("RESIDUAL_STACK_")
             ]
             residual_stack_suffixes = [
                 key.removeprefix("RESIDUAL_STACK_") for key in residual_stack_keys
             ]
             gate_stack_suffixes = [
                 key.removeprefix("GATE_STACK_")
-                for key in vars(config)
+                for key in default_keys
                 if key.startswith("GATE_STACK_")
             ]
 
@@ -138,10 +141,18 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                 if gate_stack_suffixes:
                     self.assertListEqual(residual_stack_suffixes, gate_stack_suffixes)
                 self.assertFalse(
-                    any("RESIDUAL_MODEL_STACK" in key for key in vars(config))
+                    any("RESIDUAL_MODEL_STACK" in key for key in default_keys)
                 )
-                self.assertIs(config.RESIDUAL_STACK_INDEPENDENT_FLAG, False)
-                self.assertIs(config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG, False)
+                self.assertIs(
+                    runtime_defaults.current_value("RESIDUAL_STACK_INDEPENDENT_FLAG"),
+                    False,
+                )
+                self.assertIs(
+                    runtime_defaults.current_value(
+                        "RESIDUAL_STACK_RESIDUAL_MODEL_FLAG"
+                    ),
+                    False,
+                )
 
                 for key in residual_stack_keys:
                     self.assertEqual(
@@ -154,13 +165,16 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
         self,
     ) -> None:
         for package in discover_model_packages():
-            config = package.runtime_defaults
-            metadata = package.configuration_field_metadata()
+            runtime_defaults = package.runtime_defaults_spec
+            default_keys = tuple(
+                key for key, _value in runtime_defaults.default_items()
+            )
+            metadata = runtime_defaults.configuration_metadata
             schema_fields = {
                 field.key: field for field in configuration_schema(package).fields
             }
             selectors = sorted(
-                key for key in vars(config) if key.endswith(_SELECTOR_SUFFIX)
+                key for key in default_keys if key.endswith(_SELECTOR_SUFFIX)
             )
 
             self.assertTrue(selectors, package.catalog_key)
@@ -170,9 +184,18 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                     package=package.catalog_key,
                     selector=selector_key,
                 ):
-                    self.assertTrue(hasattr(config, model_flag_key), model_flag_key)
-                    self.assertIs(config.__annotations__.get(model_flag_key), bool)
-                    self.assertIs(getattr(config, model_flag_key), False)
+                    self.assertTrue(
+                        runtime_defaults.has_current_value(model_flag_key),
+                        model_flag_key,
+                    )
+                    self.assertIs(
+                        runtime_defaults.annotations.get(model_flag_key),
+                        bool,
+                    )
+                    self.assertIs(
+                        runtime_defaults.current_value(model_flag_key),
+                        False,
+                    )
                     self.assertEqual(
                         metadata[model_flag_key]["sectionPath"],
                         metadata[selector_key]["sectionPath"],
@@ -195,7 +218,9 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
         self,
     ) -> None:
         for package in discover_model_packages():
-            package_module = package.runtime_defaults.__package__
+            package_module = (
+                f"models.{package.identity.model_type}.{package.identity.model}"
+            )
             residuals = import_module(f"{package_module}._residual")
             build = residuals.build_residual_config
             residual_stack = residuals.ResidualStackOptions(
@@ -269,16 +294,18 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
 
     def test_every_flat_residual_model_flag_reaches_runtime_options(self) -> None:
         for package in discover_model_packages():
-            config = package.runtime_defaults
+            runtime_defaults = package.runtime_defaults_spec
             for model_flag_key in sorted(
-                key for key in vars(config) if key.endswith(_MODEL_FLAG_SUFFIX)
+                key
+                for key, _value in runtime_defaults.default_items()
+                if key.endswith(_MODEL_FLAG_SUFFIX)
             ):
                 overrides = {model_flag_key.lower(): True}
                 independent_key = (
                     f"{model_flag_key.removesuffix(_MODEL_FLAG_SUFFIX)}"
                     "_INDEPENDENT_FLAG"
                 )
-                if hasattr(config, independent_key):
+                if runtime_defaults.has_current_value(independent_key):
                     overrides[independent_key.lower()] = True
 
                 with self.subTest(
@@ -401,10 +428,12 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
 
     def test_every_package_builds_all_independent_residual_stack_options(self) -> None:
         for package in discover_model_packages():
-            config = package.runtime_defaults
+            runtime_defaults = package.runtime_defaults_spec
             selector_prefix = (
                 "STACK"
-                if hasattr(config, "STACK_RESIDUAL_CONNECTION_OPTION")
+                if runtime_defaults.has_current_value(
+                    "STACK_RESIDUAL_CONNECTION_OPTION"
+                )
                 else "ATTN_STACK"
             )
             configuration = package.build_configuration(

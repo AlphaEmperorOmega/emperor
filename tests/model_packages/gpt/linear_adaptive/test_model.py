@@ -1,9 +1,9 @@
 import importlib
 import inspect
 import unittest
-from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -18,10 +18,6 @@ from emperor.transformer import (
     TransformerDecoderLayerState,
 )
 from models.catalog import model_package
-from models.gpt.linear_adaptive import _config_defaults as config_defaults
-from models.gpt.linear_adaptive._builder_adapter import (
-    linear_adaptive_builder_kwargs_from_flat,
-)
 from models.gpt.linear_adaptive.config_builder import GptLinearAdaptiveConfigBuilder
 from models.gpt.linear_adaptive.experiment_config import ExperimentConfig
 from models.gpt.linear_adaptive.model import Model
@@ -31,7 +27,7 @@ from models.gpt.linear_adaptive.presets import (
     ExperimentPresets,
 )
 from models.gpt.linear_adaptive.runtime_options import RuntimeOptions
-from models.training_test_utils import (
+from tests.model_packages.training_test_utils import (
     RandomLanguageModelDataModule,
     tiny_cpu_trainer,
 )
@@ -313,52 +309,21 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
             "weight_option": config.LowRankDynamicWeightConfig,
             "stack_gate_flag": True,
         }
-        decoder_options = replace(
-            config_defaults.gpt_decoder_options(config),
-            hidden_dim=flat_options["hidden_dim"],
-            num_layers=flat_options["stack_num_layers"],
-            dropout_probability=flat_options["stack_dropout_probability"],
-        )
-        attention_options = replace(
-            config_defaults.gpt_attention_options(config),
-            num_heads=flat_options["attn_num_heads"],
-        )
-        recurrent_options = replace(
-            config_defaults.linears_recurrent_controller_options(
-                config,
-                recurrent_prefix="RECURRENT",
-                gate_stack_prefix="RECURRENT_GATE_STACK",
-                halting_stack_prefix="RECURRENT_HALTING_STACK",
-            ),
-            recurrent_max_steps=flat_options["recurrent_max_steps"],
-        )
-        layer_options = replace(
-            config_defaults.linears_layer_controller_options(
-                config,
-                gate_prefix="GATE",
-                gate_stack_prefix="GATE_STACK",
-                halting_prefix="HALTING",
-                halting_stack_prefix="HALTING_STACK",
-            ),
-            stack_gate_flag=True,
-        )
-        weight_options = replace(
-            config_defaults.hidden_adaptive_weight_options(config),
-            option_flag=True,
-            option=config.LowRankDynamicWeightConfig,
-        )
-        adapted = linear_adaptive_builder_kwargs_from_flat(flat_options, config)
-        self.assertEqual(adapted["decoder_options"], decoder_options)
-        self.assertEqual(adapted["attention_options"], attention_options)
-        self.assertEqual(adapted["layer_controller_options"], layer_options)
-        self.assertEqual(adapted["recurrent_controller_options"], recurrent_options)
-        self.assertEqual(adapted["hidden_adaptive_weight_options"], weight_options)
+        original = dict(flat_options)
+        package = model_package("gpt/linear_adaptive")
+        runtime = package.bind_runtime_defaults(flat_options)
+        configuration = GptLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
-        runtime = model_package("gpt/linear_adaptive").bind_runtime_defaults(
-            flat_options
+        self.assertEqual(flat_options, original)
+        self.assertEqual(
+            configuration,
+            package.build_configuration(config_overrides=flat_options),
         )
-        self.assertEqual(runtime, RuntimeOptions(adapted))
-        GptLinearAdaptiveConfigBuilder(runtime=runtime).build()
+        self.assertEqual(configuration.hidden_dim, flat_options["hidden_dim"])
+        decoder_config = configuration.experiment_config.decoder_config
+        decoder_stack = getattr(decoder_config, "block_config", decoder_config)
+        self.assertEqual(decoder_stack.num_layers, flat_options["stack_num_layers"])
+        self.assertIsNotNone(decoder_stack.layer_config.gate_config)
 
     def test_unknown_runtime_default_is_rejected_at_package_boundary(self):
         with self.assertRaisesRegex(ValueError, "unknown_option"):
@@ -538,6 +503,7 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
                 self.assertEqual(logits.shape[-1], dataset.num_classes)
                 self.assertEqual(tuple(auxiliary_loss.shape), ())
 
+    @pytest.mark.training
     def test_baseline_trains_one_tiny_epoch(self):
         cfg = self._preset_config(ExperimentPreset.BASELINE)
         tiny_cpu_trainer().fit(
@@ -594,47 +560,6 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
             "attn_num_heads": 4,
             "stack_dropout_probability": 0.0,
             "recurrent_max_steps": 2,
-        }
-
-    def _default_builder_kwargs(self) -> dict:
-        return {
-            "adaptive_generator_stack_options": (
-                config_defaults.adaptive_generator_stack_options(config)
-            ),
-            "feed_forward_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "FF_STACK",
-                    num_layers_key="FF_NUM_LAYERS",
-                    bias_key="FF_BIAS_FLAG",
-                )
-            ),
-            "feed_forward_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="FF_GATE",
-                    gate_stack_prefix="FF_GATE_STACK",
-                    halting_prefix="FF_HALTING",
-                    halting_stack_prefix="FF_HALTING_STACK",
-                )
-            ),
-            "attention_projection_stack_options": (
-                config_defaults.linears_submodule_stack_options(
-                    config,
-                    "ATTN_STACK",
-                    num_layers_key="ATTN_NUM_LAYERS",
-                    bias_key="ATTN_BIAS_FLAG",
-                )
-            ),
-            "attention_projection_layer_controller_options": (
-                config_defaults.linears_layer_controller_options(
-                    config,
-                    gate_prefix="ATTN_GATE",
-                    gate_stack_prefix="ATTN_GATE_STACK",
-                    halting_prefix="ATTN_HALTING",
-                    halting_stack_prefix="ATTN_HALTING_STACK",
-                )
-            ),
         }
 
     def _input_ids(self, cfg) -> torch.Tensor:

@@ -69,9 +69,9 @@ from emperor.memory import (
 )
 
 # Trainer
-TRAINER_ACCELERATOR: str = "auto"
-TRAINER_DEVICES: str | int = "auto"
-TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_DEVICES: int = 1
+TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
 TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
 TRAINER_PRECISION: str = "32-true"
@@ -95,6 +95,7 @@ MONITOR_LOG_EVERY_N_STEPS: int = 100
 # Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
+SEED: int | None = None
 
 # Callback
 CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
@@ -116,11 +117,6 @@ CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
 }
 SEQUENCE_LENGTH: int = 35
 
-# Trainer
-TRAINER_ACCELERATOR: str = "cpu"
-TRAINER_DEVICES: int = 1
-TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-
 #########################################################################
 # POSITIONAL EMBEDDING (added to token embeddings before the encoder)
 POSITIONAL_EMBEDDING_OPTION: type[AbsolutePositionalEmbeddingConfig] = (
@@ -140,7 +136,23 @@ CAUSAL_ATTENTION_MASK_FLAG: bool = False
 
 #########################################################################
 # EMBEDDING PIPELINE (applied to the summed token+positional+segment embedding)
+TOKEN_TYPE_VOCAB_SIZE: int = 2
+EMBEDDING_LAYER_NORM_FLAG: bool = True
 EMBEDDING_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
+
+#########################################################################
+# MASKED-LANGUAGE-MODELING HEAD
+MLM_ACTIVATION: ActivationOptions = ActivationOptions.GELU
+MLM_DENSE_BIAS_FLAG: bool = True
+MLM_LAYER_NORM_FLAG: bool = True
+MLM_DECODER_BIAS_FLAG: bool = True
+MLM_DECODER_WEIGHT_TYING_FLAG: bool = True
+
+#########################################################################
+# NEXT-SENTENCE-PREDICTION HEAD
+NSP_POOLER_ACTIVATION: ActivationOptions = ActivationOptions.TANH
+NSP_POOLER_BIAS_FLAG: bool = True
+NSP_HEAD_BIAS_FLAG: bool = True
 
 #########################################################################
 # Layer Stack Submodule Options

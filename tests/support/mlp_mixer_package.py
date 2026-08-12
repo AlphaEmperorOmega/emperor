@@ -7,6 +7,7 @@ import sys
 from importlib import import_module
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import Trainer
 from torch.utils.data import DataLoader, TensorDataset
@@ -546,9 +547,7 @@ class MlpMixerPackageContractMixin:
             router_stack_num_layers=3,
             router_stack_activation=ActivationOptions.TANH,
             router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            router_stack_residual_connection_option=(
-                AdditiveResidualConfig
-            ),
+            router_stack_residual_connection_option=(AdditiveResidualConfig),
             router_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             router_stack_apply_output_pipeline_flag=True,
             router_bias_flag=False,
@@ -783,6 +782,7 @@ class MlpMixerPackageContractMixin:
                     )
                 )
 
+    @pytest.mark.training
     def test_representative_presets_fit_with_the_cpu_trainer(self) -> None:
         package = self._package()
         for preset_name in self.FIT_PRESETS:

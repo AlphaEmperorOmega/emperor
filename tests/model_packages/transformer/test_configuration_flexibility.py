@@ -20,20 +20,7 @@ from emperor.experts import (
 )
 from emperor.layers import ActivationOptions
 from model_runtime.inspection import configuration_schema
-from model_runtime.packages.configuration import (
-    iter_supported_config_keys,
-    parse_config_value,
-)
 from models.catalog import model_package
-from models.transformer.expert_linear._building import (
-    build_experiment_config as build_expert_linear_experiment_config,
-)
-from models.transformer.expert_linear_adaptive._building import (
-    build_experiment_config as build_expert_linear_adaptive_experiment_config,
-)
-from models.transformer.linear_adaptive._building import (
-    build_experiment_config as build_linear_adaptive_experiment_config,
-)
 
 _TRANSFORMER_PACKAGES = (
     "transformer/linear",
@@ -43,26 +30,18 @@ _TRANSFORMER_PACKAGES = (
 )
 
 _EXPERT_TRANSFORMER_PACKAGES = (
-    (
-        "transformer/expert_linear",
-        build_expert_linear_experiment_config,
-    ),
-    (
-        "transformer/expert_linear_adaptive",
-        build_expert_linear_adaptive_experiment_config,
-    ),
+    "transformer/expert_linear",
+    "transformer/expert_linear_adaptive",
 )
 
 _ADAPTIVE_TRANSFORMER_PACKAGES = (
     (
         "transformer/linear_adaptive",
         "projection_adaptive_",
-        build_linear_adaptive_experiment_config,
     ),
     (
         "transformer/expert_linear_adaptive",
         "attention_projection_adaptive_",
-        build_expert_linear_adaptive_experiment_config,
     ),
 )
 
@@ -92,9 +71,11 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
         for package_key in _TRANSFORMER_PACKAGES:
             with self.subTest(package=package_key):
                 package = model_package(package_key)
+                self.assertIsNotNone(package)
+                assert package is not None
                 self.assertTrue(
                     expected_fields.issubset(
-                        iter_supported_config_keys(package.runtime_defaults)
+                        package.runtime_defaults_spec.supported_keys
                     )
                 )
                 self.assertTrue(
@@ -159,9 +140,12 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
             "expert_stack_activation": ActivationOptions.TANH,
         }
 
-        for package_key, build_experiment_config in _EXPERT_TRANSFORMER_PACKAGES:
+        for package_key in _EXPERT_TRANSFORMER_PACKAGES:
             with self.subTest(package=package_key):
-                runtime = model_package(package_key).bind_runtime_defaults(overrides)
+                package = model_package(package_key)
+                self.assertIsNotNone(package)
+                assert package is not None
+                runtime = package.bind_runtime_defaults(overrides)
                 self.assertEqual(
                     runtime.attention_expert_options.router_path_options.stack_options.hidden_dim,
                     19,
@@ -171,7 +155,9 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
                     17,
                 )
 
-                experiment = build_experiment_config(runtime)
+                experiment = package.build_configuration(
+                    config_overrides=overrides
+                ).experiment_config
                 encoder = getattr(
                     experiment.encoder_config,
                     "block_config",
@@ -228,7 +214,6 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
         for (
             package_key,
             prefix,
-            build_experiment_config,
         ) in _ADAPTIVE_TRANSFORMER_PACKAGES:
             overrides = {
                 **common,
@@ -266,6 +251,8 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
             }
             with self.subTest(package=package_key):
                 package = model_package(package_key)
+                self.assertIsNotNone(package)
+                assert package is not None
                 schema_keys = {
                     field.key for field in configuration_schema(package).fields
                 }
@@ -274,16 +261,14 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
                     schema_keys,
                 )
                 self.assertEqual(
-                    parse_config_value(
-                        package.runtime_defaults,
+                    package.runtime_defaults_spec.parse_value(
                         f"{prefix}weight_generator_stack_hidden_dim".upper(),
                         "31",
                     ),
                     31,
                 )
                 self.assertIs(
-                    parse_config_value(
-                        package.runtime_defaults,
+                    package.runtime_defaults_spec.parse_value(
                         f"{prefix}weight_generator_stack_independent_flag".upper(),
                         "true",
                     ),
@@ -299,7 +284,9 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
                     31,
                 )
 
-                experiment = build_experiment_config(runtime)
+                experiment = package.build_configuration(
+                    config_overrides=overrides
+                ).experiment_config
                 encoder = getattr(
                     experiment.encoder_config,
                     "block_config",
@@ -369,31 +356,33 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
                 self.assertEqual(augmentation.mask_config.mask_transition_width, 0.2)
 
     def test_expert_adaptive_router_and_nonexpert_kv_paths_stay_adaptive(self):
-        runtime = model_package(
-            "transformer/expert_linear_adaptive"
-        ).bind_runtime_defaults(
-            {
-                "batch_size": 2,
-                "vocab_size": 32,
-                "model_dim": 8,
-                "source_sequence_length": 4,
-                "target_sequence_length": 4,
-                "encoder_num_layers": 1,
-                "decoder_num_layers": 1,
-                "encoder_attn_num_heads": 2,
-                "encoder_ff_stack_hidden_dim": 8,
-                "decoder_ff_stack_hidden_dim": 8,
-                "dropout_probability": 0.0,
-                "expert_attention_use_kv_expert_models_flag": False,
-                "encoder_attn_adaptive_weight_option": (SingleModelDynamicWeightConfig),
-                "encoder_attn_adaptive_generator_stack_hidden_dim": 27,
-                "router_adaptive_weight_option": SingleModelDynamicWeightConfig,
-                "router_adaptive_group_count": 2,
-                "router_adaptive_generator_stack_hidden_dim": 33,
-            }
-        )
+        overrides = {
+            "batch_size": 2,
+            "vocab_size": 32,
+            "model_dim": 8,
+            "source_sequence_length": 4,
+            "target_sequence_length": 4,
+            "encoder_num_layers": 1,
+            "decoder_num_layers": 1,
+            "encoder_attn_num_heads": 2,
+            "encoder_ff_stack_hidden_dim": 8,
+            "decoder_ff_stack_hidden_dim": 8,
+            "dropout_probability": 0.0,
+            "expert_attention_use_kv_expert_models_flag": False,
+            "encoder_attn_adaptive_weight_option": (SingleModelDynamicWeightConfig),
+            "encoder_attn_adaptive_generator_stack_hidden_dim": 27,
+            "router_adaptive_weight_option": SingleModelDynamicWeightConfig,
+            "router_adaptive_group_count": 2,
+            "router_adaptive_generator_stack_hidden_dim": 33,
+        }
+        package = model_package("transformer/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        package.bind_runtime_defaults(overrides)
 
-        experiment = build_expert_linear_adaptive_experiment_config(runtime)
+        experiment = package.build_configuration(
+            config_overrides=overrides
+        ).experiment_config
         encoder = getattr(
             experiment.encoder_config,
             "block_config",

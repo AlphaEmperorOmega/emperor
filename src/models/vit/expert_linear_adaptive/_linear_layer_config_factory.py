@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Any
 
 import models.vit.expert_linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
@@ -20,7 +19,14 @@ from models.vit.expert_linear_adaptive._adaptive_hidden_model_config_factory imp
     HiddenModelConfigDependencies,
     HiddenModelConfigFactory,
 )
-from models.vit.expert_linear_adaptive.runtime_options import TransformerEncoderOptions
+from models.vit.expert_linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    HiddenAdaptiveBiasOptions,
+    HiddenAdaptiveDiagonalOptions,
+    HiddenAdaptiveMaskOptions,
+    HiddenAdaptiveWeightOptions,
+    TransformerEncoderOptions,
+)
 
 from ._residual import ResidualStackOptions, build_residual_config
 
@@ -33,26 +39,13 @@ class LinearLayerConfigDependencies:
 
 class LinearLayerConfigFactory:
     def __init__(self, dependencies: LinearLayerConfigDependencies) -> None:
-        self.encoder_options = self.__default_encoder_options(
-            dependencies.encoder_options
+        self.encoder_options = (
+            config_defaults.vit_encoder_options(config)
+            if dependencies.encoder_options is None
+            else dependencies.encoder_options
         )
         self.hidden_dim = self.encoder_options.hidden_dim
         self.adaptive_augmentation_config = dependencies.adaptive_augmentation_config
-
-    def __default_encoder_options(
-        self,
-        encoder_options: TransformerEncoderOptions | None,
-    ) -> TransformerEncoderOptions:
-        if encoder_options is not None:
-            return encoder_options
-        return TransformerEncoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-            causal_attention_mask_flag=False,
-        )
 
     def build_backend_linear_layer_config(
         self,
@@ -166,11 +159,11 @@ class LinearLayerConfigFactory:
 class AdaptiveAugmentationDependencies:
     hidden_dim: int
     output_dim: int
-    adaptive_generator_stack_options: Any
-    hidden_adaptive_weight_options: Any
-    hidden_adaptive_bias_options: Any
-    hidden_adaptive_diagonal_options: Any
-    hidden_adaptive_mask_options: Any
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
+    hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None
+    hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None
+    hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None
+    hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None
 
 
 class AdaptiveAugmentationConfigFactory:
@@ -178,76 +171,30 @@ class AdaptiveAugmentationConfigFactory:
         self.dependencies = dependencies
         config_module = config
         self.adaptive_generator_stack_options = (
-            self.__default_adaptive_generator_stack_options(
-                dependencies.adaptive_generator_stack_options,
-                config_module,
-            )
+            dependencies.adaptive_generator_stack_options
+            if dependencies.adaptive_generator_stack_options is not None
+            else config_defaults.adaptive_generator_stack_options(config_module)
         )
         self.hidden_adaptive_weight_options = (
-            self.__default_hidden_adaptive_weight_options(
-                dependencies.hidden_adaptive_weight_options,
-                config_module,
-            )
+            dependencies.hidden_adaptive_weight_options
+            if dependencies.hidden_adaptive_weight_options is not None
+            else config_defaults.hidden_adaptive_weight_options(config_module)
         )
-        self.hidden_adaptive_bias_options = self.__default_hidden_adaptive_bias_options(
-            dependencies.hidden_adaptive_bias_options,
-            config_module,
+        self.hidden_adaptive_bias_options = (
+            dependencies.hidden_adaptive_bias_options
+            if dependencies.hidden_adaptive_bias_options is not None
+            else config_defaults.hidden_adaptive_bias_options(config_module)
         )
         self.hidden_adaptive_diagonal_options = (
-            self.__default_hidden_adaptive_diagonal_options(
-                dependencies.hidden_adaptive_diagonal_options,
-                config_module,
-            )
+            dependencies.hidden_adaptive_diagonal_options
+            if dependencies.hidden_adaptive_diagonal_options is not None
+            else config_defaults.hidden_adaptive_diagonal_options(config_module)
         )
-        self.hidden_adaptive_mask_options = self.__default_hidden_adaptive_mask_options(
-            dependencies.hidden_adaptive_mask_options,
-            config_module,
+        self.hidden_adaptive_mask_options = (
+            dependencies.hidden_adaptive_mask_options
+            if dependencies.hidden_adaptive_mask_options is not None
+            else config_defaults.hidden_adaptive_mask_options(config_module)
         )
-
-    def __default_adaptive_generator_stack_options(
-        self,
-        adaptive_generator_stack_options: Any,
-        config_module: object,
-    ) -> Any:
-        if adaptive_generator_stack_options is not None:
-            return adaptive_generator_stack_options
-        return config_defaults.adaptive_generator_stack_options(config_module)
-
-    def __default_hidden_adaptive_weight_options(
-        self,
-        hidden_adaptive_weight_options: Any,
-        config_module: object,
-    ) -> Any:
-        if hidden_adaptive_weight_options is not None:
-            return hidden_adaptive_weight_options
-        return config_defaults.hidden_adaptive_weight_options(config_module)
-
-    def __default_hidden_adaptive_bias_options(
-        self,
-        hidden_adaptive_bias_options: Any,
-        config_module: object,
-    ) -> Any:
-        if hidden_adaptive_bias_options is not None:
-            return hidden_adaptive_bias_options
-        return config_defaults.hidden_adaptive_bias_options(config_module)
-
-    def __default_hidden_adaptive_diagonal_options(
-        self,
-        hidden_adaptive_diagonal_options: Any,
-        config_module: object,
-    ) -> Any:
-        if hidden_adaptive_diagonal_options is not None:
-            return hidden_adaptive_diagonal_options
-        return config_defaults.hidden_adaptive_diagonal_options(config_module)
-
-    def __default_hidden_adaptive_mask_options(
-        self,
-        hidden_adaptive_mask_options: Any,
-        config_module: object,
-    ) -> Any:
-        if hidden_adaptive_mask_options is not None:
-            return hidden_adaptive_mask_options
-        return config_defaults.hidden_adaptive_mask_options(config_module)
 
     def build_adaptive_augmentation_config(
         self,

@@ -83,18 +83,42 @@ class HiddenModelConfigFactory:
         output_dim = dependencies.output_dim
 
         self._hidden_dim = hidden_dim
-        self.stack_options = self.__default_stack_options(stack_options)
-        self.submodule_stack_options = self.__default_submodule_stack_options(
+        self.stack_options = (
+            stack_options
+            if stack_options is not None
+            else config_defaults.main_layer_stack_options(config)
+        )
+        self.submodule_stack_options = (
             submodule_stack_options
+            if submodule_stack_options is not None
+            else config_defaults.linears_submodule_stack_options(
+                config,
+                config_defaults.LinearRole.MAIN,
+            )
         )
-        self.layer_controller_options = self.__default_layer_controller_options(
+        self.layer_controller_options = (
             layer_controller_options
+            if layer_controller_options is not None
+            else config_defaults.linears_layer_controller_options(
+                config,
+                config_defaults.LinearRole.MAIN,
+            )
         )
-        self.dynamic_memory_options = self.__default_dynamic_memory_options(
+        self.dynamic_memory_options = (
             dynamic_memory_options
+            if dynamic_memory_options is not None
+            else config_defaults.linears_dynamic_memory_options(
+                config,
+                config_defaults.LinearRole.MAIN,
+            )
         )
-        self.recurrent_controller_options = self.__default_recurrent_controller_options(
+        self.recurrent_controller_options = (
             recurrent_controller_options
+            if recurrent_controller_options is not None
+            else config_defaults.linears_recurrent_controller_options(
+                config,
+                config_defaults.LinearRole.MAIN,
+            )
         )
         self.gate_config_factory = GateConfigFactory(
             layer_controller_options=self.layer_controller_options,
@@ -119,25 +143,29 @@ class HiddenModelConfigFactory:
             halting_config_factory=self.halting_config_factory,
         )
         self.hidden_adaptive_weight_options = (
-            self.__default_hidden_adaptive_weight_options(
-                hidden_adaptive_weight_options
-            )
+            hidden_adaptive_weight_options
+            if hidden_adaptive_weight_options is not None
+            else config_defaults.hidden_adaptive_weight_options(config)
         )
-        self.hidden_adaptive_bias_options = self.__default_hidden_adaptive_bias_options(
+        self.hidden_adaptive_bias_options = (
             hidden_adaptive_bias_options
+            if hidden_adaptive_bias_options is not None
+            else config_defaults.hidden_adaptive_bias_options(config)
         )
         self.hidden_adaptive_diagonal_options = (
-            self.__default_hidden_adaptive_diagonal_options(
-                hidden_adaptive_diagonal_options
-            )
+            hidden_adaptive_diagonal_options
+            if hidden_adaptive_diagonal_options is not None
+            else config_defaults.hidden_adaptive_diagonal_options(config)
         )
-        self.hidden_adaptive_mask_options = self.__default_hidden_adaptive_mask_options(
+        self.hidden_adaptive_mask_options = (
             hidden_adaptive_mask_options
+            if hidden_adaptive_mask_options is not None
+            else config_defaults.hidden_adaptive_mask_options(config)
         )
         self.adaptive_generator_stack_options = (
-            self.__default_adaptive_generator_stack_options(
-                adaptive_generator_stack_options
-            )
+            adaptive_generator_stack_options
+            if adaptive_generator_stack_options is not None
+            else config_defaults.adaptive_generator_stack_options(config)
         )
         self.adaptive_generator_stack_config_factory = (
             AdaptiveGeneratorStackConfigFactory(self.adaptive_generator_stack_options)
@@ -147,104 +175,6 @@ class HiddenModelConfigFactory:
     @property
     def hidden_dim(self) -> int:
         return self._hidden_dim
-
-    def __default_stack_options(
-        self,
-        stack_options: MainLayerStackOptions | None,
-    ) -> MainLayerStackOptions:
-        if stack_options is not None:
-            return stack_options
-        return config_defaults.main_layer_stack_options(config)
-
-    def __default_submodule_stack_options(
-        self,
-        submodule_stack_options: SubmoduleStackOptions | None,
-    ) -> SubmoduleStackOptions:
-        if submodule_stack_options is not None:
-            return submodule_stack_options
-        return config_defaults.linears_submodule_stack_options(
-            config,
-            "SUBMODULE_STACK",
-        )
-
-    def __default_layer_controller_options(
-        self,
-        layer_controller_options: LayerControllerOptions | None,
-    ) -> LayerControllerOptions:
-        if layer_controller_options is not None:
-            return layer_controller_options
-        return config_defaults.linears_layer_controller_options(
-            config,
-            gate_prefix="GATE",
-            gate_stack_prefix="GATE_STACK",
-            halting_prefix="HALTING",
-            halting_stack_prefix="HALTING_STACK",
-        )
-
-    def __default_dynamic_memory_options(
-        self,
-        dynamic_memory_options: DynamicMemoryOptions | None,
-    ) -> DynamicMemoryOptions:
-        if dynamic_memory_options is not None:
-            return dynamic_memory_options
-        return config_defaults.linears_dynamic_memory_options(
-            config,
-            memory_prefix="MEMORY",
-            memory_stack_prefix="MEMORY_STACK",
-        )
-
-    def __default_recurrent_controller_options(
-        self,
-        recurrent_controller_options: RecurrentControllerOptions | None,
-    ) -> RecurrentControllerOptions:
-        if recurrent_controller_options is not None:
-            return recurrent_controller_options
-        return config_defaults.linears_recurrent_controller_options(
-            config,
-            recurrent_prefix="RECURRENT",
-            gate_stack_prefix="RECURRENT_GATE_STACK",
-            halting_stack_prefix="RECURRENT_HALTING_STACK",
-        )
-
-    def __default_adaptive_generator_stack_options(
-        self,
-        adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None,
-    ) -> AdaptiveGeneratorStackOptions:
-        if adaptive_generator_stack_options is not None:
-            return adaptive_generator_stack_options
-        return config_defaults.adaptive_generator_stack_options(config)
-
-    def __default_hidden_adaptive_weight_options(
-        self,
-        hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None,
-    ) -> HiddenAdaptiveWeightOptions:
-        if hidden_adaptive_weight_options is not None:
-            return hidden_adaptive_weight_options
-        return config_defaults.hidden_adaptive_weight_options(config)
-
-    def __default_hidden_adaptive_bias_options(
-        self,
-        hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None,
-    ) -> HiddenAdaptiveBiasOptions:
-        if hidden_adaptive_bias_options is not None:
-            return hidden_adaptive_bias_options
-        return config_defaults.hidden_adaptive_bias_options(config)
-
-    def __default_hidden_adaptive_diagonal_options(
-        self,
-        hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None,
-    ) -> HiddenAdaptiveDiagonalOptions:
-        if hidden_adaptive_diagonal_options is not None:
-            return hidden_adaptive_diagonal_options
-        return config_defaults.hidden_adaptive_diagonal_options(config)
-
-    def __default_hidden_adaptive_mask_options(
-        self,
-        hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None,
-    ) -> HiddenAdaptiveMaskOptions:
-        if hidden_adaptive_mask_options is not None:
-            return hidden_adaptive_mask_options
-        return config_defaults.hidden_adaptive_mask_options(config)
 
     def build_hidden_model_config(self) -> LayerStackConfig | RecurrentLayerConfig:
         gate_config = self.gate_config_factory.build_gate_config()

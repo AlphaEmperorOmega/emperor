@@ -68,9 +68,9 @@ from emperor.memory import (
 # Package-local trainer defaults. Model packages intentionally do not import the
 # repository-level trainer configuration so they remain independently loadable.
 # Trainer
-TRAINER_ACCELERATOR: str = "auto"
-TRAINER_DEVICES: str | int = "auto"
-TRAINER_GRADIENT_CLIP_VAL: float = 0.0
+TRAINER_ACCELERATOR: str = "cpu"
+TRAINER_DEVICES: int = 1
+TRAINER_GRADIENT_CLIP_VAL: float = 1.0
 TRAINER_GRADIENT_CLIP_ALGORITHM: str = "norm"
 TRAINER_ACCUMULATE_GRAD_BATCHES: int = 1
 TRAINER_PRECISION: str = "32-true"
@@ -94,9 +94,10 @@ MONITOR_LOG_EVERY_N_STEPS: int = 100
 # Run
 DATA_NUM_WORKERS: int = 4
 RUN_TEST_AFTER_FIT: bool = True
+SEED: int | None = None
 
 # Callback
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 0
+CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
 CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 CALLBACK_EARLY_STOPPING_MIN_DELTA: float = 0.0
 CALLBACK_EARLY_STOPPING_STRICT: bool = True
@@ -107,15 +108,6 @@ CALLBACK_CHECKPOINT_FLAG: bool = False
 BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 30
-
-# Trainer
-TRAINER_ACCELERATOR: str = "cpu"
-TRAINER_DEVICES: int = 1
-TRAINER_GRADIENT_CLIP_VAL: float = 1.0
-CALLBACK_EARLY_STOPPING_PATIENCE: int = 10
-
-# Callback
-CALLBACK_EARLY_STOPPING_METRIC: str = "validation/accuracy"
 
 # Model
 INPUT_DIM: int = 28**2

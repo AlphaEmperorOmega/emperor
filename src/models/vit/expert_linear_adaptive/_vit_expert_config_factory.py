@@ -1,13 +1,12 @@
 from dataclasses import dataclass
-from typing import Any
 
 import torch
 
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
-from emperor.experts import MixtureOfExpertsModelConfig
-from emperor.layers import LastLayerBiasOptions
+from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
+from emperor.layers import LastLayerBiasOptions, LayerStackConfig, RecurrentLayerConfig
 from models.vit.expert_linear_adaptive._expert_control_config_factory import (
     ControlConfigDependencies as ExpertAdaptiveControlConfigDependencies,
 )
@@ -15,7 +14,19 @@ from models.vit.expert_linear_adaptive._expert_control_config_factory import (
     ControlConfigFactory as ExpertAdaptiveControlConfigFactory,
 )
 from models.vit.expert_linear_adaptive.runtime_options import (
+    AdaptiveGeneratorStackOptions,
+    ExpertsDynamicMemoryOptions,
+    ExpertsLayerControllerOptions,
+    ExpertsMixtureOptions,
+    ExpertsRecurrentControllerOptions,
+    ExpertsRouterOptions,
+    ExpertsSamplerOptions,
     ExpertsStackOptions,
+    ExpertsSubmoduleStackOptions,
+    HiddenAdaptiveBiasOptions,
+    HiddenAdaptiveDiagonalOptions,
+    HiddenAdaptiveMaskOptions,
+    HiddenAdaptiveWeightOptions,
     SubmoduleStackOptions,
     TransformerAttentionOptions,
     TransformerEncoderOptions,
@@ -29,35 +40,35 @@ class VitExpertConfigDependencies:
     encoder_options: TransformerEncoderOptions
     attention_options: TransformerAttentionOptions
     feed_forward_options: TransformerFeedForwardOptions
-    mixture_options: Any
-    expert_stack_options: Any
-    sampler_options: Any
-    router_options: Any
-    router_stack_options: Any
-    expert_layer_controller_options: Any
-    expert_dynamic_memory_options: Any
-    expert_recurrent_controller_options: Any
+    mixture_options: ExpertsMixtureOptions
+    expert_stack_options: ExpertsSubmoduleStackOptions
+    sampler_options: ExpertsSamplerOptions
+    router_options: ExpertsRouterOptions
+    router_stack_options: ExpertsSubmoduleStackOptions
+    expert_layer_controller_options: ExpertsLayerControllerOptions
+    expert_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    expert_recurrent_controller_options: ExpertsRecurrentControllerOptions
     expert_attention_use_kv_expert_models_flag: bool
 
 
 @dataclass(frozen=True)
 class VitExpertAdaptiveConfigDependencies(VitExpertConfigDependencies):
-    mixture_submodule_stack_options: Any
-    mixture_layer_controller_options: Any
-    mixture_dynamic_memory_options: Any
-    mixture_recurrent_controller_options: Any
-    router_layer_controller_options: Any
-    router_dynamic_memory_options: Any
-    router_recurrent_controller_options: Any
-    adaptive_generator_stack_options: Any
-    hidden_adaptive_weight_options: Any
-    hidden_adaptive_bias_options: Any
-    hidden_adaptive_diagonal_options: Any
-    hidden_adaptive_mask_options: Any
-    router_adaptive_weight_options: Any
-    router_adaptive_bias_options: Any
-    router_adaptive_diagonal_options: Any
-    router_adaptive_mask_options: Any
+    mixture_submodule_stack_options: ExpertsSubmoduleStackOptions
+    mixture_layer_controller_options: ExpertsLayerControllerOptions
+    mixture_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    mixture_recurrent_controller_options: ExpertsRecurrentControllerOptions
+    router_layer_controller_options: ExpertsLayerControllerOptions
+    router_dynamic_memory_options: ExpertsDynamicMemoryOptions
+    router_recurrent_controller_options: ExpertsRecurrentControllerOptions
+    adaptive_generator_stack_options: AdaptiveGeneratorStackOptions
+    hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions
+    hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions
+    hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions
+    hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions
+    router_adaptive_weight_options: HiddenAdaptiveWeightOptions
+    router_adaptive_bias_options: HiddenAdaptiveBiasOptions
+    router_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions
+    router_adaptive_mask_options: HiddenAdaptiveMaskOptions
 
 
 class _VitExpertConfigFactoryBase:
@@ -79,7 +90,7 @@ class _VitExpertConfigFactoryBase:
         batch_size: int,
         hidden_dim: int,
         sequence_length: int,
-        projection_model_config,
+        projection_model_config: LayerStackConfig | RecurrentLayerConfig,
     ) -> MixtureOfAttentionHeadsConfig:
         dependencies = self.dependencies
         encoder_options = dependencies.encoder_options
@@ -107,7 +118,7 @@ class _VitExpertConfigFactoryBase:
             ),
         )
 
-    def _build_attention_experts_config(self):
+    def _build_attention_experts_config(self) -> MixtureOfExpertsConfig:
         model_config = self._build_expert_model_config(
             None,
             use_feed_forward_stack_options=False,
@@ -173,7 +184,10 @@ class _VitExpertConfigFactoryBase:
             apply_output_pipeline_flag=True,
         )
 
-    def _build_control_config(self, stack_options: ExpertsStackOptions):
+    def _build_control_config(
+        self,
+        stack_options: ExpertsStackOptions,
+    ) -> ExpertAdaptiveControlConfigFactory:
         raise NotImplementedError
 
 

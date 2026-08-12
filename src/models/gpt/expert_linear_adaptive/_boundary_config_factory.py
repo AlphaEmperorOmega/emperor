@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-import models.gpt.expert_linear_adaptive.config as config
 from models.gpt.expert_linear_adaptive.runtime_options import (
     GptEmbeddingOptions,
     GptLmHeadOptions,
@@ -19,8 +18,8 @@ class BoundaryConfigDependencies:
     hidden_dim: int
     output_dim: int
     sequence_length: int
-    embedding_options: GptEmbeddingOptions | None
-    lm_head_options: GptLmHeadOptions | None
+    embedding_options: GptEmbeddingOptions
+    lm_head_options: GptLmHeadOptions
 
 
 class BoundaryConfigFactory:
@@ -29,14 +28,8 @@ class BoundaryConfigFactory:
         self.hidden_dim = dependencies.hidden_dim
         self.output_dim = dependencies.output_dim
         self.sequence_length = dependencies.sequence_length
-        self.embedding_options = dependencies.embedding_options or GptEmbeddingOptions(
-            layer_norm_flag=config.EMBEDDING_LAYER_NORM_FLAG,
-            dropout_probability=config.EMBEDDING_DROPOUT_PROBABILITY,
-        )
-        self.lm_head_options = dependencies.lm_head_options or GptLmHeadOptions(
-            weight_tying_flag=config.LM_HEAD_WEIGHT_TYING_FLAG,
-            bias_flag=config.LM_HEAD_BIAS_FLAG,
-        )
+        self.embedding_options = dependencies.embedding_options
+        self.lm_head_options = dependencies.lm_head_options
 
     def build_boundary_config(self) -> GptBoundaryConfig:
         self._validate()

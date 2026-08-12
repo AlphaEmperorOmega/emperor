@@ -1,5 +1,4 @@
 import models.linears.linear.config as config
-import models.linears.linear.dataset_options as dataset_options
 from emperor.config import BaseOptions
 from emperor.layers import (
     AdditiveResidualConfig,
@@ -14,12 +13,10 @@ from emperor.memory import (
 )
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
-    ExperimentPresetsBase,
     PresetDefinition,
 )
 from model_runtime.runs import ExperimentBase
 from models.linears.linear.config_builder import LinearConfigBuilder
-from models.linears.linear.model import Model
 from models.linears.linear.runtime_defaults import runtime_from_flat
 
 
@@ -368,17 +365,3 @@ class Experiment(ExperimentBase):
 
     def _num_epochs(self) -> int:
         return config.NUM_EPOCHS
-
-    def _dataset_options(self) -> list:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[
-            dataset_options.DEFAULT_EXPERIMENT_TASK
-        ]
-
-    def _model_type(self) -> type:
-        return Model
-
-    def _preset_generator_instance(self) -> ExperimentPresetsBase:
-        return ExperimentPresets()
-
-    def _experiment_preset_enum(self) -> type[BaseOptions]:
-        return ExperimentPreset

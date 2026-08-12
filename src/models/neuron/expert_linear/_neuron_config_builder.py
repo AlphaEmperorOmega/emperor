@@ -155,13 +155,11 @@ class NeuronConfigBuilder:
         runtime = self.hidden_runtime
         projection_factory = ProjectionConfigFactory(
             ProjectionConfigDependencies(
-                hidden_dim=runtime.hidden_dim,
                 stack_options=runtime.stack_options,
             )
         )
         hidden_factory = HiddenModelConfigFactory(
             HiddenModelConfigDependencies(
-                hidden_dim=runtime.hidden_dim,
                 stack_options=runtime.stack_options,
                 submodule_stack_options=runtime.submodule_stack_options,
                 mixture_options=runtime.mixture_options,

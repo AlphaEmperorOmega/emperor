@@ -1,0 +1,5 @@
+# Explicit Options
+SHARED = "explicit"
+EXPLICIT_ONLY = 1
+IMPORTED_COLLISION = "explicit"
+EXPLICIT_NOT_IMPORTED = 1

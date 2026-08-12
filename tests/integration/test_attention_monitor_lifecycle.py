@@ -6,6 +6,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.loggers import TensorBoardLogger
@@ -147,6 +148,7 @@ class _AttentionTrainingModule(LightningModule):
 
 
 class AttentionMonitorLifecycleTests(unittest.TestCase):
+    @pytest.mark.training
     def test_real_tensorboard_lifecycle_emits_visuals_at_exact_cadence(
         self,
     ) -> None:
@@ -236,6 +238,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
 
+    @pytest.mark.training
     def test_fully_masked_independent_lifecycle_is_finite_and_updates_parameters(
         self,
     ) -> None:
@@ -323,6 +326,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._entropy_history, {})
         self.assertEqual(monitor._max_probability_history, {})
 
+    @pytest.mark.training
     def test_real_mixture_lifecycle_preserves_one_head_statistics_and_dropout(
         self,
     ) -> None:
@@ -370,6 +374,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
                 msg=metric_name,
             )
 
+    @pytest.mark.training
     def test_real_trainer_logs_exact_attention_metrics_and_restores_methods(
         self,
     ) -> None:
@@ -505,6 +510,7 @@ class AttentionMonitorLifecycleTests(unittest.TestCase):
             vars(model.attention.processor),
         )
 
+    @pytest.mark.training
     def test_real_trainer_exception_restores_instrumented_attention_methods(
         self,
     ) -> None:

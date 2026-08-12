@@ -1,19 +1,14 @@
+from enum import Enum, auto
+from types import ModuleType
+
+from models.vit.expert_linear_adaptive import (
+    _adaptive_config_defaults as _adaptive_defaults,
+)
+from models.vit.expert_linear_adaptive import (
+    _expert_config_defaults as _expert_defaults,
+)
 from models.vit.expert_linear_adaptive.runtime_options import (
-    AdaptiveGeneratorStackOptions,
-    AdaptiveGeneratorStackSource,
     DynamicMemoryOptions,
-    ExpertsDynamicMemoryOptions,
-    ExpertsLayerControllerOptions,
-    ExpertsMixtureOptions,
-    ExpertsRecurrentControllerOptions,
-    ExpertsRouterOptions,
-    ExpertsSamplerOptions,
-    ExpertsSubmoduleStackOptions,
-    ExpertsSubmoduleStackSource,
-    HiddenAdaptiveBiasOptions,
-    HiddenAdaptiveDiagonalOptions,
-    HiddenAdaptiveMaskOptions,
-    HiddenAdaptiveWeightOptions,
     LayerControllerOptions,
     MainLayerStackOptions,
     RecurrentControllerOptions,
@@ -27,8 +22,38 @@ from models.vit.expert_linear_adaptive.runtime_options import (
     VitPatchOptions,
 )
 
+AdaptiveParameter = _adaptive_defaults.AdaptiveParameter
+AdaptiveRole = _adaptive_defaults.AdaptiveRole
+adaptive_generator_stack_options = _adaptive_defaults.adaptive_generator_stack_options
+adaptive_generator_stack_source = _adaptive_defaults.adaptive_generator_stack_source
+hidden_adaptive_bias_options = _adaptive_defaults.hidden_adaptive_bias_options
+hidden_adaptive_diagonal_options = _adaptive_defaults.hidden_adaptive_diagonal_options
+hidden_adaptive_mask_options = _adaptive_defaults.hidden_adaptive_mask_options
+hidden_adaptive_weight_options = _adaptive_defaults.hidden_adaptive_weight_options
 
-def vit_patch_options(config: object) -> VitPatchOptions:
+ExpertControlRole = _expert_defaults.ExpertControlRole
+ExpertStackRole = _expert_defaults.ExpertStackRole
+experts_dynamic_memory_options = _expert_defaults.experts_dynamic_memory_options
+experts_layer_controller_options = _expert_defaults.experts_layer_controller_options
+experts_mixture_options = _expert_defaults.experts_mixture_options
+experts_recurrent_controller_options = (
+    _expert_defaults.experts_recurrent_controller_options
+)
+experts_router_options = _expert_defaults.experts_router_options
+experts_sampler_options = _expert_defaults.experts_sampler_options
+experts_submodule_stack_options = _expert_defaults.experts_submodule_stack_options
+
+
+class LinearRole(Enum):
+    MAIN = auto()
+    ATTENTION = auto()
+    FEED_FORWARD = auto()
+
+
+_ControllerStackRole = _expert_defaults.ControllerStackRole
+
+
+def vit_patch_options(config: ModuleType) -> VitPatchOptions:
     return VitPatchOptions(
         patch_size=config.IMAGE_PATCH_SIZE,
         input_channels=config.INPUT_CHANNELS,
@@ -39,7 +64,7 @@ def vit_patch_options(config: object) -> VitPatchOptions:
 
 
 def vit_positional_embedding_options(
-    config: object,
+    config: ModuleType,
 ) -> TransformerPositionalEmbeddingOptions:
     return TransformerPositionalEmbeddingOptions(
         option=config.POSITIONAL_EMBEDDING_OPTION,
@@ -48,7 +73,7 @@ def vit_positional_embedding_options(
     )
 
 
-def vit_encoder_options(config: object) -> TransformerEncoderOptions:
+def vit_encoder_options(config: ModuleType) -> TransformerEncoderOptions:
     return TransformerEncoderOptions(
         hidden_dim=config.HIDDEN_DIM,
         num_layers=config.STACK_NUM_LAYERS,
@@ -59,7 +84,7 @@ def vit_encoder_options(config: object) -> TransformerEncoderOptions:
     )
 
 
-def vit_attention_options(config: object) -> TransformerAttentionOptions:
+def vit_attention_options(config: ModuleType) -> TransformerAttentionOptions:
     return TransformerAttentionOptions(
         num_heads=config.ATTN_NUM_HEADS,
         num_layers=config.ATTN_NUM_LAYERS,
@@ -68,17 +93,18 @@ def vit_attention_options(config: object) -> TransformerAttentionOptions:
     )
 
 
-def vit_feed_forward_options(config: object) -> TransformerFeedForwardOptions:
+def vit_feed_forward_options(config: ModuleType) -> TransformerFeedForwardOptions:
     return TransformerFeedForwardOptions(
-        num_layers=config.FF_NUM_LAYERS, bias_flag=config.FF_BIAS_FLAG
+        num_layers=config.FF_NUM_LAYERS,
+        bias_flag=config.FF_BIAS_FLAG,
     )
 
 
-def vit_output_options(config: object) -> VitOutputOptions:
+def vit_output_options(config: ModuleType) -> VitOutputOptions:
     return VitOutputOptions(bias_flag=config.OUTPUT_BIAS_FLAG)
 
 
-def main_layer_stack_options(config: object) -> MainLayerStackOptions:
+def main_layer_stack_options(config: ModuleType) -> MainLayerStackOptions:
     return MainLayerStackOptions(
         bias_flag=config.STACK_BIAS_FLAG,
         layer_norm_position=config.LAYER_NORM_POSITION,
@@ -93,434 +119,471 @@ def main_layer_stack_options(config: object) -> MainLayerStackOptions:
 
 
 def linears_submodule_stack_options(
-    config: object,
-    prefix: str,
-    *,
-    num_layers_key: str | None = None,
-    bias_key: str | None = None,
+    config: ModuleType,
+    role: LinearRole,
 ) -> SubmoduleStackOptions:
+    if role is LinearRole.MAIN:
+        return SubmoduleStackOptions(
+            hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
+            num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.SUBMODULE_STACK_ACTIVATION,
+            layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
+        )
+    if role is LinearRole.ATTENTION:
+        return SubmoduleStackOptions(
+            hidden_dim=config.ATTN_STACK_HIDDEN_DIM,
+            num_layers=config.ATTN_NUM_LAYERS,
+            last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            activation=config.ATTN_STACK_ACTIVATION,
+            layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
+            residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.ATTN_BIAS_FLAG,
+        )
     return SubmoduleStackOptions(
-        hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config, num_layers_key or f"{prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config, f"{prefix}_ACTIVATION"),
-        layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-        residual_connection_option=getattr(
-            config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-        bias_flag=getattr(config, bias_key or f"{prefix}_BIAS_FLAG"),
+        hidden_dim=config.FF_STACK_HIDDEN_DIM,
+        num_layers=config.FF_NUM_LAYERS,
+        last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        activation=config.FF_STACK_ACTIVATION,
+        layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config.FF_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config.FF_BIAS_FLAG,
     )
 
 
-def linears_controller_stack_source(
-    config: object, prefix: str
+def _controller_stack_source(
+    config: ModuleType,
+    role: LinearRole,
+    stack_role: _ControllerStackRole,
 ) -> SubmoduleStackSource:
+    if role is LinearRole.MAIN:
+        return _main_controller_stack_source(config, stack_role)
+    if role is LinearRole.ATTENTION:
+        return _attention_controller_stack_source(config, stack_role)
+    return _feed_forward_controller_stack_source(config, stack_role)
+
+
+def _main_controller_stack_source(
+    config: ModuleType,
+    stack_role: _ControllerStackRole,
+) -> SubmoduleStackSource:
+    defaults = _expert_defaults.main_controller_stack_defaults(config, stack_role)
     return SubmoduleStackSource(
-        independent_flag=getattr(config, f"{prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config, f"{prefix}_ACTIVATION"),
-        layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-        residual_connection_option=getattr(
-            config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-        bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
+        independent_flag=defaults.independent_flag,
+        hidden_dim=defaults.hidden_dim,
+        num_layers=defaults.num_layers,
+        last_layer_bias_option=defaults.last_layer_bias_option,
+        apply_output_pipeline_flag=defaults.apply_output_pipeline_flag,
+        activation=defaults.activation,
+        layer_norm_position=defaults.layer_norm_position,
+        residual_connection_option=defaults.residual_connection_option,
+        residual_model_flag=defaults.residual_model_flag,
+        dropout_probability=defaults.dropout_probability,
+        bias_flag=defaults.bias_flag,
     )
 
 
-def _stack_control_flag_name(prefix: str, control: str) -> str:
-    scope = "" if prefix == control else f"{prefix.removesuffix(f'_{control}')}_"
-    return f"{scope}STACK_{control}_FLAG"
+def _attention_controller_stack_source(
+    config: ModuleType,
+    stack_role: _ControllerStackRole,
+) -> SubmoduleStackSource:
+    if stack_role is _ControllerStackRole.GATE:
+        return SubmoduleStackSource(
+            independent_flag=config.ATTN_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.ATTN_GATE_STACK_HIDDEN_DIM,
+            num_layers=config.ATTN_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.ATTN_GATE_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.ATTN_GATE_STACK_ACTIVATION,
+            layer_norm_position=config.ATTN_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.ATTN_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.ATTN_GATE_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.ATTN_GATE_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.HALTING:
+        return SubmoduleStackSource(
+            independent_flag=config.ATTN_HALTING_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.ATTN_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config.ATTN_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.ATTN_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.ATTN_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.ATTN_HALTING_STACK_ACTIVATION,
+            layer_norm_position=config.ATTN_HALTING_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.ATTN_HALTING_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.ATTN_HALTING_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.ATTN_HALTING_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.MEMORY:
+        return SubmoduleStackSource(
+            independent_flag=config.ATTN_MEMORY_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.ATTN_MEMORY_STACK_HIDDEN_DIM,
+            num_layers=config.ATTN_MEMORY_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.ATTN_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.ATTN_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.ATTN_MEMORY_STACK_ACTIVATION,
+            layer_norm_position=config.ATTN_MEMORY_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.ATTN_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.ATTN_MEMORY_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.ATTN_MEMORY_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.RECURRENT_GATE:
+        return SubmoduleStackSource(
+            independent_flag=config.ATTN_RECURRENT_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.ATTN_RECURRENT_GATE_STACK_HIDDEN_DIM,
+            num_layers=config.ATTN_RECURRENT_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config.ATTN_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config.ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.ATTN_RECURRENT_GATE_STACK_ACTIVATION,
+            layer_norm_position=config.ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.ATTN_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=(config.ATTN_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY),
+            bias_flag=config.ATTN_RECURRENT_GATE_STACK_BIAS_FLAG,
+        )
+    return SubmoduleStackSource(
+        independent_flag=config.ATTN_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config.ATTN_RECURRENT_HALTING_STACK_HIDDEN_DIM,
+        num_layers=config.ATTN_RECURRENT_HALTING_STACK_NUM_LAYERS,
+        last_layer_bias_option=(
+            config.ATTN_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        apply_output_pipeline_flag=(
+            config.ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config.ATTN_RECURRENT_HALTING_STACK_ACTIVATION,
+        layer_norm_position=config.ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config.ATTN_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config.ATTN_RECURRENT_HALTING_STACK_BIAS_FLAG,
+    )
+
+
+def _feed_forward_controller_stack_source(
+    config: ModuleType,
+    stack_role: _ControllerStackRole,
+) -> SubmoduleStackSource:
+    if stack_role is _ControllerStackRole.GATE:
+        return SubmoduleStackSource(
+            independent_flag=config.FF_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.FF_GATE_STACK_HIDDEN_DIM,
+            num_layers=config.FF_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.FF_GATE_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.FF_GATE_STACK_ACTIVATION,
+            layer_norm_position=config.FF_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.FF_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.FF_GATE_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.FF_GATE_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.HALTING:
+        return SubmoduleStackSource(
+            independent_flag=config.FF_HALTING_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.FF_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config.FF_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.FF_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.FF_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.FF_HALTING_STACK_ACTIVATION,
+            layer_norm_position=config.FF_HALTING_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.FF_HALTING_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.FF_HALTING_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.FF_HALTING_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.MEMORY:
+        return SubmoduleStackSource(
+            independent_flag=config.FF_MEMORY_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.FF_MEMORY_STACK_HIDDEN_DIM,
+            num_layers=config.FF_MEMORY_STACK_NUM_LAYERS,
+            last_layer_bias_option=config.FF_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
+            apply_output_pipeline_flag=(
+                config.FF_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.FF_MEMORY_STACK_ACTIVATION,
+            layer_norm_position=config.FF_MEMORY_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.FF_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config.FF_MEMORY_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config.FF_MEMORY_STACK_BIAS_FLAG,
+        )
+    if stack_role is _ControllerStackRole.RECURRENT_GATE:
+        return SubmoduleStackSource(
+            independent_flag=config.FF_RECURRENT_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config.FF_RECURRENT_GATE_STACK_HIDDEN_DIM,
+            num_layers=config.FF_RECURRENT_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config.FF_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config.FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config.FF_RECURRENT_GATE_STACK_ACTIVATION,
+            layer_norm_position=config.FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config.FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config.FF_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=(config.FF_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY),
+            bias_flag=config.FF_RECURRENT_GATE_STACK_BIAS_FLAG,
+        )
+    return SubmoduleStackSource(
+        independent_flag=config.FF_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config.FF_RECURRENT_HALTING_STACK_HIDDEN_DIM,
+        num_layers=config.FF_RECURRENT_HALTING_STACK_NUM_LAYERS,
+        last_layer_bias_option=(
+            config.FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        apply_output_pipeline_flag=(
+            config.FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config.FF_RECURRENT_HALTING_STACK_ACTIVATION,
+        layer_norm_position=config.FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config.FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config.FF_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config.FF_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config.FF_RECURRENT_HALTING_STACK_BIAS_FLAG,
+    )
 
 
 def linears_layer_controller_options(
-    config: object,
-    *,
-    gate_prefix: str,
-    gate_stack_prefix: str,
-    halting_prefix: str,
-    halting_stack_prefix: str,
+    config: ModuleType,
+    role: LinearRole,
 ) -> LayerControllerOptions:
+    if role is LinearRole.MAIN:
+        return LayerControllerOptions(
+            stack_gate_flag=config.STACK_GATE_FLAG,
+            gate_option=config.GATE_OPTION,
+            gate_activation=config.GATE_ACTIVATION,
+            gate_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.GATE
+            ),
+            stack_halting_flag=config.STACK_HALTING_FLAG,
+            halting_option=config.HALTING_OPTION,
+            halting_threshold=config.HALTING_THRESHOLD,
+            halting_dropout=config.HALTING_DROPOUT,
+            halting_hidden_state_mode=config.HALTING_HIDDEN_STATE_MODE,
+            halting_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.HALTING
+            ),
+        )
+    if role is LinearRole.ATTENTION:
+        return LayerControllerOptions(
+            stack_gate_flag=config.ATTN_STACK_GATE_FLAG,
+            gate_option=config.ATTN_GATE_OPTION,
+            gate_activation=config.ATTN_GATE_ACTIVATION,
+            gate_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.GATE
+            ),
+            stack_halting_flag=config.ATTN_STACK_HALTING_FLAG,
+            halting_option=config.ATTN_HALTING_OPTION,
+            halting_threshold=config.ATTN_HALTING_THRESHOLD,
+            halting_dropout=config.ATTN_HALTING_DROPOUT,
+            halting_hidden_state_mode=config.ATTN_HALTING_HIDDEN_STATE_MODE,
+            halting_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.HALTING
+            ),
+        )
     return LayerControllerOptions(
-        stack_gate_flag=getattr(config, _stack_control_flag_name(gate_prefix, "GATE")),
-        gate_option=getattr(config, f"{gate_prefix}_OPTION"),
-        gate_activation=getattr(config, f"{gate_prefix}_ACTIVATION"),
-        gate_stack_source=linears_controller_stack_source(config, gate_stack_prefix),
-        stack_halting_flag=getattr(
-            config, _stack_control_flag_name(halting_prefix, "HALTING")
+        stack_gate_flag=config.FF_STACK_GATE_FLAG,
+        gate_option=config.FF_GATE_OPTION,
+        gate_activation=config.FF_GATE_ACTIVATION,
+        gate_stack_source=_controller_stack_source(
+            config, role, _ControllerStackRole.GATE
         ),
-        halting_option=getattr(
-            config,
-            f"{halting_prefix}_OPTION",
-            LayerControllerOptions.halting_option,
-        ),
-        halting_threshold=getattr(config, f"{halting_prefix}_THRESHOLD"),
-        halting_dropout=getattr(config, f"{halting_prefix}_DROPOUT"),
-        halting_hidden_state_mode=getattr(
-            config, f"{halting_prefix}_HIDDEN_STATE_MODE"
-        ),
-        halting_stack_source=linears_controller_stack_source(
-            config, halting_stack_prefix
+        stack_halting_flag=config.FF_STACK_HALTING_FLAG,
+        halting_option=config.FF_HALTING_OPTION,
+        halting_threshold=config.FF_HALTING_THRESHOLD,
+        halting_dropout=config.FF_HALTING_DROPOUT,
+        halting_hidden_state_mode=config.FF_HALTING_HIDDEN_STATE_MODE,
+        halting_stack_source=_controller_stack_source(
+            config, role, _ControllerStackRole.HALTING
         ),
     )
 
 
 def linears_dynamic_memory_options(
-    config: object, *, memory_prefix: str, memory_stack_prefix: str
+    config: ModuleType,
+    role: LinearRole,
 ) -> DynamicMemoryOptions:
+    if role is LinearRole.MAIN:
+        return DynamicMemoryOptions(
+            memory_flag=config.MEMORY_FLAG,
+            memory_option=config.MEMORY_OPTION,
+            memory_position_option=config.MEMORY_POSITION_OPTION,
+            memory_test_time_training_learning_rate=(
+                config.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
+            ),
+            memory_test_time_training_num_inner_steps=(
+                config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
+            ),
+            memory_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.MEMORY
+            ),
+        )
+    if role is LinearRole.ATTENTION:
+        return DynamicMemoryOptions(
+            memory_flag=config.ATTN_MEMORY_FLAG,
+            memory_option=config.ATTN_MEMORY_OPTION,
+            memory_position_option=config.ATTN_MEMORY_POSITION_OPTION,
+            memory_test_time_training_learning_rate=(
+                config.ATTN_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
+            ),
+            memory_test_time_training_num_inner_steps=(
+                config.ATTN_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
+            ),
+            memory_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.MEMORY
+            ),
+        )
     return DynamicMemoryOptions(
-        memory_flag=getattr(config, f"{memory_prefix}_FLAG"),
-        memory_option=getattr(config, f"{memory_prefix}_OPTION"),
-        memory_position_option=getattr(config, f"{memory_prefix}_POSITION_OPTION"),
-        memory_test_time_training_learning_rate=getattr(
-            config, f"{memory_prefix}_TEST_TIME_TRAINING_LEARNING_RATE"
+        memory_flag=config.FF_MEMORY_FLAG,
+        memory_option=config.FF_MEMORY_OPTION,
+        memory_position_option=config.FF_MEMORY_POSITION_OPTION,
+        memory_test_time_training_learning_rate=(
+            config.FF_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
         ),
-        memory_test_time_training_num_inner_steps=getattr(
-            config, f"{memory_prefix}_TEST_TIME_TRAINING_NUM_INNER_STEPS"
+        memory_test_time_training_num_inner_steps=(
+            config.FF_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
         ),
-        memory_stack_source=linears_controller_stack_source(
-            config, memory_stack_prefix
+        memory_stack_source=_controller_stack_source(
+            config, role, _ControllerStackRole.MEMORY
         ),
     )
 
 
 def linears_recurrent_controller_options(
-    config: object,
-    *,
-    recurrent_prefix: str,
-    gate_stack_prefix: str,
-    halting_stack_prefix: str,
+    config: ModuleType,
+    role: LinearRole,
 ) -> RecurrentControllerOptions:
+    if role is LinearRole.MAIN:
+        return RecurrentControllerOptions(
+            recurrent_flag=config.RECURRENT_FLAG,
+            recurrent_max_steps=config.RECURRENT_MAX_STEPS,
+            recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
+            recurrent_gradient_transition_count=(
+                config.RECURRENT_GRADIENT_TRANSITION_COUNT
+            ),
+            recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
+            recurrent_forward_calls_before_iteration_increment=(
+                config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+            ),
+            recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+            recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
+            recurrent_gate_option=config.RECURRENT_GATE_OPTION,
+            recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
+            recurrent_gate_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.RECURRENT_GATE
+            ),
+            recurrent_stack_halting_flag=config.RECURRENT_STACK_HALTING_FLAG,
+            recurrent_halting_option=config.RECURRENT_HALTING_OPTION,
+            recurrent_halting_threshold=config.RECURRENT_HALTING_THRESHOLD,
+            recurrent_halting_dropout=config.RECURRENT_HALTING_DROPOUT,
+            recurrent_halting_hidden_state_mode=(
+                config.RECURRENT_HALTING_HIDDEN_STATE_MODE
+            ),
+            recurrent_halting_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.RECURRENT_HALTING
+            ),
+        )
+    if role is LinearRole.ATTENTION:
+        return RecurrentControllerOptions(
+            recurrent_flag=config.ATTN_RECURRENT_FLAG,
+            recurrent_max_steps=config.ATTN_RECURRENT_MAX_STEPS,
+            recurrent_initial_iterations=2,
+            recurrent_gradient_transition_count=None,
+            recurrent_iteration_increment=1,
+            recurrent_forward_calls_before_iteration_increment=1,
+            recurrent_layer_norm_position=config.ATTN_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_stack_gate_flag=config.ATTN_RECURRENT_STACK_GATE_FLAG,
+            recurrent_gate_option=config.ATTN_RECURRENT_GATE_OPTION,
+            recurrent_gate_activation=config.ATTN_RECURRENT_GATE_ACTIVATION,
+            recurrent_gate_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.RECURRENT_GATE
+            ),
+            recurrent_stack_halting_flag=config.ATTN_RECURRENT_STACK_HALTING_FLAG,
+            recurrent_halting_option=config.ATTN_RECURRENT_HALTING_OPTION,
+            recurrent_halting_threshold=config.ATTN_RECURRENT_HALTING_THRESHOLD,
+            recurrent_halting_dropout=config.ATTN_RECURRENT_HALTING_DROPOUT,
+            recurrent_halting_hidden_state_mode=(
+                config.ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE
+            ),
+            recurrent_halting_stack_source=_controller_stack_source(
+                config, role, _ControllerStackRole.RECURRENT_HALTING
+            ),
+        )
     return RecurrentControllerOptions(
-        recurrent_flag=getattr(config, f"{recurrent_prefix}_FLAG"),
-        recurrent_max_steps=getattr(config, f"{recurrent_prefix}_MAX_STEPS"),
-        recurrent_initial_iterations=getattr(
-            config,
-            f"{recurrent_prefix}_INITIAL_ITERATIONS",
-            2,
+        recurrent_flag=config.FF_RECURRENT_FLAG,
+        recurrent_max_steps=config.FF_RECURRENT_MAX_STEPS,
+        recurrent_initial_iterations=2,
+        recurrent_gradient_transition_count=None,
+        recurrent_iteration_increment=1,
+        recurrent_forward_calls_before_iteration_increment=1,
+        recurrent_layer_norm_position=config.FF_RECURRENT_LAYER_NORM_POSITION,
+        recurrent_stack_gate_flag=config.FF_RECURRENT_STACK_GATE_FLAG,
+        recurrent_gate_option=config.FF_RECURRENT_GATE_OPTION,
+        recurrent_gate_activation=config.FF_RECURRENT_GATE_ACTIVATION,
+        recurrent_gate_stack_source=_controller_stack_source(
+            config, role, _ControllerStackRole.RECURRENT_GATE
         ),
-        recurrent_gradient_transition_count=getattr(
-            config,
-            f"{recurrent_prefix}_GRADIENT_TRANSITION_COUNT",
-            None,
+        recurrent_stack_halting_flag=config.FF_RECURRENT_STACK_HALTING_FLAG,
+        recurrent_halting_option=config.FF_RECURRENT_HALTING_OPTION,
+        recurrent_halting_threshold=config.FF_RECURRENT_HALTING_THRESHOLD,
+        recurrent_halting_dropout=config.FF_RECURRENT_HALTING_DROPOUT,
+        recurrent_halting_hidden_state_mode=(
+            config.FF_RECURRENT_HALTING_HIDDEN_STATE_MODE
         ),
-        recurrent_iteration_increment=getattr(
-            config,
-            f"{recurrent_prefix}_ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_forward_calls_before_iteration_increment=getattr(
-            config,
-            f"{recurrent_prefix}_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
-            1,
-        ),
-        recurrent_layer_norm_position=getattr(
-            config, f"{recurrent_prefix}_LAYER_NORM_POSITION"
-        ),
-        recurrent_stack_gate_flag=getattr(
-            config, f"{recurrent_prefix}_STACK_GATE_FLAG"
-        ),
-        recurrent_gate_option=getattr(config, f"{recurrent_prefix}_GATE_OPTION"),
-        recurrent_gate_activation=getattr(
-            config, f"{recurrent_prefix}_GATE_ACTIVATION"
-        ),
-        recurrent_gate_stack_source=linears_controller_stack_source(
-            config, gate_stack_prefix
-        ),
-        recurrent_stack_halting_flag=getattr(
-            config, f"{recurrent_prefix}_STACK_HALTING_FLAG"
-        ),
-        recurrent_halting_option=getattr(
-            config,
-            f"{recurrent_prefix}_HALTING_OPTION",
-            RecurrentControllerOptions.recurrent_halting_option,
-        ),
-        recurrent_halting_threshold=getattr(
-            config, f"{recurrent_prefix}_HALTING_THRESHOLD"
-        ),
-        recurrent_halting_dropout=getattr(
-            config, f"{recurrent_prefix}_HALTING_DROPOUT"
-        ),
-        recurrent_halting_hidden_state_mode=getattr(
-            config, f"{recurrent_prefix}_HALTING_HIDDEN_STATE_MODE"
-        ),
-        recurrent_halting_stack_source=linears_controller_stack_source(
-            config, halting_stack_prefix
+        recurrent_halting_stack_source=_controller_stack_source(
+            config, role, _ControllerStackRole.RECURRENT_HALTING
         ),
     )
-
-
-def adaptive_generator_stack_options(config: object) -> AdaptiveGeneratorStackOptions:
-    return AdaptiveGeneratorStackOptions(
-        hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
-        layer_norm_position=config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
-        num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
-        activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
-        residual_connection_option=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
-        residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
-        dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
-        last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
-        bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
-    )
-
-
-def adaptive_generator_stack_source(
-    config: object, prefix: str
-) -> AdaptiveGeneratorStackSource:
-    return AdaptiveGeneratorStackSource(
-        independent_flag=getattr(config, f"{prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-        layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-        num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-        activation=getattr(config, f"{prefix}_ACTIVATION"),
-        residual_connection_option=getattr(
-            config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-        last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
-    )
-
-
-def hidden_adaptive_weight_options(
-    config: object, *, prefix: str = "", stack_prefix: str = "WEIGHT_GENERATOR_STACK"
-) -> HiddenAdaptiveWeightOptions:
-    return HiddenAdaptiveWeightOptions(
-        generator_depth=getattr(config, f"{prefix}GENERATOR_DEPTH"),
-        option_flag=getattr(config, f"{prefix}WEIGHT_OPTION_FLAG"),
-        option=getattr(config, f"{prefix}WEIGHT_OPTION"),
-        normalization_option=getattr(config, f"{prefix}WEIGHT_NORMALIZATION_OPTION"),
-        normalization_position_option=getattr(
-            config, f"{prefix}WEIGHT_NORMALIZATION_POSITION_OPTION"
-        ),
-        decay_schedule=getattr(config, f"{prefix}WEIGHT_DECAY_SCHEDULE"),
-        decay_rate=getattr(config, f"{prefix}WEIGHT_DECAY_RATE"),
-        decay_warmup_batches=getattr(config, f"{prefix}WEIGHT_DECAY_WARMUP_BATCHES"),
-        bank_expansion_factor=getattr(config, f"{prefix}WEIGHT_BANK_EXPANSION_FACTOR"),
-        generator_stack_source=adaptive_generator_stack_source(config, stack_prefix),
-    )
-
-
-def hidden_adaptive_bias_options(
-    config: object, *, prefix: str = "", stack_prefix: str = "BIAS_GENERATOR_STACK"
-) -> HiddenAdaptiveBiasOptions:
-    return HiddenAdaptiveBiasOptions(
-        option_flag=getattr(config, f"{prefix}BIAS_OPTION_FLAG"),
-        option=getattr(config, f"{prefix}BIAS_OPTION"),
-        decay_schedule=getattr(config, f"{prefix}BIAS_DECAY_SCHEDULE"),
-        decay_rate=getattr(config, f"{prefix}BIAS_DECAY_RATE"),
-        decay_warmup_batches=getattr(config, f"{prefix}BIAS_DECAY_WARMUP_BATCHES"),
-        bank_expansion_factor=getattr(config, f"{prefix}BIAS_BANK_EXPANSION_FACTOR"),
-        generator_stack_source=adaptive_generator_stack_source(config, stack_prefix),
-    )
-
-
-def hidden_adaptive_diagonal_options(
-    config: object, *, prefix: str = "", stack_prefix: str = "DIAGONAL_GENERATOR_STACK"
-) -> HiddenAdaptiveDiagonalOptions:
-    return HiddenAdaptiveDiagonalOptions(
-        option_flag=getattr(config, f"{prefix}DIAGONAL_OPTION_FLAG"),
-        option=getattr(config, f"{prefix}DIAGONAL_OPTION"),
-        generator_stack_source=adaptive_generator_stack_source(config, stack_prefix),
-    )
-
-
-def hidden_adaptive_mask_options(
-    config: object, *, prefix: str = "", stack_prefix: str = "MASK_GENERATOR_STACK"
-) -> HiddenAdaptiveMaskOptions:
-    return HiddenAdaptiveMaskOptions(
-        option_flag=getattr(config, f"{prefix}MASK_OPTION_FLAG"),
-        row_mask_option=getattr(config, f"{prefix}ROW_MASK_OPTION"),
-        mask_dimension_option=getattr(config, f"{prefix}MASK_DIMENSION_OPTION"),
-        mask_threshold=getattr(config, f"{prefix}MASK_THRESHOLD"),
-        mask_surrogate_scale=getattr(config, f"{prefix}MASK_SURROGATE_SCALE"),
-        mask_floor=getattr(config, f"{prefix}MASK_FLOOR"),
-        mask_transition_width=getattr(config, f"{prefix}MASK_TRANSITION_WIDTH"),
-        generator_stack_source=adaptive_generator_stack_source(config, stack_prefix),
-    )
-
-
-def experts_submodule_stack_options(
-    config: object, prefix: str, *, bias_key: str | None = None
-) -> ExpertsSubmoduleStackOptions:
-    return ExpertsSubmoduleStackOptions(
-        hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config, f"{prefix}_ACTIVATION"),
-        layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-        residual_connection_option=getattr(
-            config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-        bias_flag=getattr(config, bias_key or f"{prefix}_BIAS_FLAG"),
-    )
-
-
-def experts_submodule_stack_source(
-    config: object, prefix: str
-) -> ExpertsSubmoduleStackSource:
-    return ExpertsSubmoduleStackSource(
-        independent_flag=getattr(config, f"{prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config, f"{prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config, f"{prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(config, f"{prefix}_LAST_LAYER_BIAS_OPTION"),
-        apply_output_pipeline_flag=getattr(
-            config, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config, f"{prefix}_ACTIVATION"),
-        layer_norm_position=getattr(config, f"{prefix}_LAYER_NORM_POSITION"),
-        residual_connection_option=getattr(
-            config, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(config, f"{prefix}_RESIDUAL_MODEL_FLAG"),
-        dropout_probability=getattr(config, f"{prefix}_DROPOUT_PROBABILITY"),
-        bias_flag=getattr(config, f"{prefix}_BIAS_FLAG"),
-    )
-
-
-def experts_layer_controller_options(
-    config: object,
-    *,
-    gate_prefix: str,
-    gate_stack_prefix: str,
-    halting_prefix: str,
-    halting_stack_prefix: str,
-) -> ExpertsLayerControllerOptions:
-    return ExpertsLayerControllerOptions(
-        stack_gate_flag=getattr(config, _stack_control_flag_name(gate_prefix, "GATE")),
-        gate_option=getattr(config, f"{gate_prefix}_OPTION"),
-        gate_activation=getattr(config, f"{gate_prefix}_ACTIVATION"),
-        gate_stack_source=experts_submodule_stack_source(config, gate_stack_prefix),
-        stack_halting_flag=getattr(
-            config, _stack_control_flag_name(halting_prefix, "HALTING")
-        ),
-        halting_option=getattr(
-            config,
-            f"{halting_prefix}_OPTION",
-            ExpertsLayerControllerOptions.halting_option,
-        ),
-        halting_threshold=getattr(config, f"{halting_prefix}_THRESHOLD"),
-        halting_dropout=getattr(config, f"{halting_prefix}_DROPOUT"),
-        halting_hidden_state_mode=getattr(
-            config, f"{halting_prefix}_HIDDEN_STATE_MODE"
-        ),
-        halting_stack_source=experts_submodule_stack_source(
-            config, halting_stack_prefix
-        ),
-        halting_output_dim=getattr(config, f"{halting_prefix}_OUTPUT_DIM"),
-    )
-
-
-def experts_dynamic_memory_options(
-    config: object, *, memory_prefix: str, memory_stack_prefix: str
-) -> ExpertsDynamicMemoryOptions:
-    return ExpertsDynamicMemoryOptions(
-        memory_flag=getattr(config, f"{memory_prefix}_FLAG"),
-        memory_option=getattr(config, f"{memory_prefix}_OPTION"),
-        memory_position_option=getattr(config, f"{memory_prefix}_POSITION_OPTION"),
-        memory_test_time_training_learning_rate=getattr(
-            config, f"{memory_prefix}_TEST_TIME_TRAINING_LEARNING_RATE"
-        ),
-        memory_test_time_training_num_inner_steps=getattr(
-            config, f"{memory_prefix}_TEST_TIME_TRAINING_NUM_INNER_STEPS"
-        ),
-        memory_stack_source=experts_submodule_stack_source(config, memory_stack_prefix),
-    )
-
-
-def experts_recurrent_controller_options(
-    config: object,
-    *,
-    recurrent_prefix: str,
-    gate_stack_prefix: str,
-    halting_stack_prefix: str,
-) -> ExpertsRecurrentControllerOptions:
-    return ExpertsRecurrentControllerOptions(
-        recurrent_flag=getattr(config, f"{recurrent_prefix}_FLAG"),
-        recurrent_max_steps=getattr(config, f"{recurrent_prefix}_MAX_STEPS"),
-        recurrent_layer_norm_position=getattr(
-            config, f"{recurrent_prefix}_LAYER_NORM_POSITION"
-        ),
-        recurrent_stack_gate_flag=getattr(
-            config, f"{recurrent_prefix}_STACK_GATE_FLAG"
-        ),
-        recurrent_gate_option=getattr(config, f"{recurrent_prefix}_GATE_OPTION"),
-        recurrent_gate_activation=getattr(
-            config, f"{recurrent_prefix}_GATE_ACTIVATION"
-        ),
-        recurrent_gate_stack_source=experts_submodule_stack_source(
-            config, gate_stack_prefix
-        ),
-        recurrent_stack_halting_flag=getattr(
-            config, f"{recurrent_prefix}_STACK_HALTING_FLAG"
-        ),
-        recurrent_halting_option=getattr(
-            config,
-            f"{recurrent_prefix}_HALTING_OPTION",
-            ExpertsRecurrentControllerOptions.recurrent_halting_option,
-        ),
-        recurrent_halting_threshold=getattr(
-            config, f"{recurrent_prefix}_HALTING_THRESHOLD"
-        ),
-        recurrent_halting_dropout=getattr(
-            config, f"{recurrent_prefix}_HALTING_DROPOUT"
-        ),
-        recurrent_halting_hidden_state_mode=getattr(
-            config, f"{recurrent_prefix}_HALTING_HIDDEN_STATE_MODE"
-        ),
-        recurrent_halting_stack_source=experts_submodule_stack_source(
-            config, halting_stack_prefix
-        ),
-    )
-
-
-def experts_mixture_options(config: object) -> ExpertsMixtureOptions:
-    return ExpertsMixtureOptions(
-        top_k=config.TOP_K,
-        num_experts=config.NUM_EXPERTS,
-        capacity_factor=config.CAPACITY_FACTOR,
-        dropped_token_behavior=config.DROPPED_TOKEN_BEHAVIOR,
-        compute_expert_mixture_flag=config.COMPUTE_EXPERT_MIXTURE_FLAG,
-        weighted_parameters_flag=config.WEIGHTED_PARAMETERS_FLAG,
-        weighting_position_option=config.WEIGHTING_POSITION_OPTION,
-        routing_initialization_mode=config.ROUTING_INITIALIZATION_MODE,
-    )
-
-
-def experts_sampler_options(config: object) -> ExpertsSamplerOptions:
-    return ExpertsSamplerOptions(
-        threshold=config.SAMPLER_THRESHOLD,
-        filter_above_threshold=config.SAMPLER_FILTER_ABOVE_THRESHOLD,
-        num_topk_samples=config.SAMPLER_NUM_TOPK_SAMPLES,
-        normalize_probabilities_flag=config.SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
-        noisy_topk_flag=config.SAMPLER_NOISY_TOPK_FLAG,
-        coefficient_of_variation_loss_weight=config.SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
-        switch_loss_weight=config.SAMPLER_SWITCH_LOSS_WEIGHT,
-        zero_centred_loss_weight=config.SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
-        mutual_information_loss_weight=config.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
-    )
-
-
-def experts_router_options(config: object) -> ExpertsRouterOptions:
-    return ExpertsRouterOptions(noisy_topk_flag=config.ROUTER_NOISY_TOPK_FLAG)

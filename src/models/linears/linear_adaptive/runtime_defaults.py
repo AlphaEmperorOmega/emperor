@@ -1,15 +1,48 @@
 from __future__ import annotations
 
-import types
 from collections.abc import Mapping
-from dataclasses import replace
-from typing import Final, Union, get_args, get_origin, get_type_hints
+from dataclasses import dataclass, replace
+from typing import Final
 
-from emperor.layers import GateConfig
-from models.linears.linear_adaptive import config
+from emperor.layers import LastLayerBiasOptions
 from models.linears.linear_adaptive._residual import (
+    ResidualStackOptions,
     ResidualStackSource,
     resolve_residual_stack_options,
+)
+from models.linears.linear_adaptive._runtime_default_values import (
+    _ADAPTIVE_GENERATOR_STACK_FIELDS,
+    _BIAS_FIELDS,
+    _BIAS_GENERATOR_STACK_FIELDS,
+    _CONTROL_FIELDS,
+    _DIAGONAL_FIELDS,
+    _DIAGONAL_GENERATOR_STACK_FIELDS,
+    _DIMENSION_FIELDS,
+    _GATE_STACK_FIELDS,
+    _HALTING_STACK_FIELDS,
+    _INPUT_PROJECTION_FIELDS,
+    _MAIN_STACK_FIELDS,
+    _MASK_FIELDS,
+    _MASK_GENERATOR_STACK_FIELDS,
+    _MEMORY_STACK_FIELDS,
+    _OUTPUT_PROJECTION_FIELDS,
+    _RECURRENT_GATE_STACK_FIELDS,
+    _RECURRENT_HALTING_STACK_FIELDS,
+    _RESIDUAL_STACK_FIELDS,
+    _SUBMODULE_STACK_FIELDS,
+    _WEIGHT_FIELDS,
+    _WEIGHT_GENERATOR_STACK_FIELDS,
+    BiasValues,
+    DiagonalValues,
+    MaskValues,
+    OptionalStackFields,
+    OptionalStackValues,
+    ProjectionValues,
+    RuntimeDefaultValues,
+    StackFields,
+    StackValues,
+    WeightValues,
+    runtime_default_values,
 )
 from models.linears.linear_adaptive.runtime_options import (
     AdaptiveBiasOptions,
@@ -27,494 +60,568 @@ from models.linears.linear_adaptive.runtime_options import (
 )
 
 _PACKAGE = "models.linears.linear_adaptive"
-_TOP_LEVEL_CONSTANTS = {
-    "BATCH_SIZE",
-    "LEARNING_RATE",
-    "INPUT_DIM",
-    "HIDDEN_DIM",
-    "OUTPUT_DIM",
-}
-_RUNTIME_PREFIXES = (
-    "STACK_",
-    "SUBMODULE_STACK_",
-    "RESIDUAL_STACK_",
-    "ADAPTIVE_GENERATOR_STACK_",
-    "GATE_",
-    "HALTING_",
-    "MEMORY_",
-    "RECURRENT_",
-    "WEIGHT_",
-    "BIAS_",
-    "DIAGONAL_",
-    "MASK_",
-    "INPUT_LAYER_",
-    "OUTPUT_LAYER_",
-)
-_EXTRA_RUNTIME_CONSTANTS = {
-    "GENERATOR_DEPTH",
-    "LAYER_NORM_POSITION",
-    "ROW_MASK_OPTION",
-}
 
 
-def _is_runtime_constant(name: str) -> bool:
-    return (
-        name in _TOP_LEVEL_CONSTANTS
-        or name in _EXTRA_RUNTIME_CONSTANTS
-        or any(name.startswith(prefix) for prefix in _RUNTIME_PREFIXES)
-    )
+def _positive(key: str, value: int | float) -> None:
+    if value <= 0:
+        raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be positive")
 
 
-def _flat_defaults() -> tuple[dict[str, object], dict[str, str]]:
-    values: dict[str, object] = {}
-    constants: dict[str, str] = {}
-    for name, value in vars(config).items():
-        if not name.isupper() or not _is_runtime_constant(name):
-            continue
-        key = name.lower()
-        values[key] = value
-        constants[key] = name
-    values["shared_gate_config"] = None
-    return values, constants
+def _nonnegative(key: str, value: int | float) -> None:
+    if value < 0:
+        raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be non-negative")
 
 
-_FLAT_DEFAULTS, _CONSTANT_BY_KEY = _flat_defaults()
-_CONFIG_TYPES = get_type_hints(config)
-_ACCEPTED_KEYS = frozenset(_FLAT_DEFAULTS)
+def _probability(key: str, value: int | float) -> None:
+    if not 0.0 <= value <= 1.0:
+        raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be between 0 and 1")
 
 
-def _expected_type(key: str):
-    if key == "shared_gate_config":
-        return GateConfig | None
-    return _CONFIG_TYPES[_CONSTANT_BY_KEY[key]]
-
-
-def _type_name(expected: object) -> str:
-    return str(expected).replace("<class '", "").replace("'>", "")
-
-
-def _matches_type(value: object, expected: object) -> bool:
-    origin = get_origin(expected)
-    if origin in (Union, types.UnionType):
-        return any(_matches_type(value, option) for option in get_args(expected))
-    if origin is type:
-        if not isinstance(value, type):
-            return False
-        expected_base = get_args(expected)[0]
-        return expected_base is object or issubclass(value, expected_base)
-    if expected is type(None):
-        return value is None
-    if expected is bool:
-        return type(value) is bool
-    if expected is int:
-        return type(value) is int
-    if expected is float:
-        return type(value) in (int, float)
-    try:
-        return isinstance(value, expected)
-    except TypeError:
-        return True
-
-
-def _normalize_overrides(overrides: Mapping[str, object]) -> dict[str, object]:
-    normalized: dict[str, object] = {}
-    for supplied_key, value in overrides.items():
-        if not isinstance(supplied_key, str):
-            raise TypeError(
-                f"{_PACKAGE}: runtime override keys must be str, got "
-                f"{type(supplied_key).__name__}"
-            )
-        raw_key = supplied_key
-        if raw_key not in _ACCEPTED_KEYS:
-            accepted = ", ".join(sorted(_ACCEPTED_KEYS))
-            raise ValueError(
-                f"{_PACKAGE}: unknown runtime key {supplied_key!r}; "
-                f"accepted keys: {accepted}"
-            )
-        key = raw_key
-        expected = _expected_type(key)
-        if not _matches_type(value, expected):
-            raise TypeError(
-                f"{_PACKAGE}: runtime key {supplied_key!r} has type "
-                f"{type(value).__name__}; expected {_type_name(expected)}"
-            )
-        normalized[key] = value
-    return normalized
-
-
-def _positive(values: Mapping[str, object], *keys: str) -> None:
-    for key in keys:
-        value = values[key]
-        if value <= 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be positive")
-
-
-def _probability(values: Mapping[str, object], *keys: str) -> None:
-    for key in keys:
-        value = values[key]
-        if not 0.0 <= value <= 1.0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be between 0 and 1")
-
-
-def _validate_values(values: Mapping[str, object]) -> None:
-    _positive(
-        values,
-        "batch_size",
-        "learning_rate",
-        "input_dim",
-        "hidden_dim",
-        "output_dim",
-        "stack_num_layers",
-        "submodule_stack_hidden_dim",
-        "submodule_stack_num_layers",
-        "adaptive_generator_stack_hidden_dim",
-        "adaptive_generator_stack_num_layers",
-        "recurrent_max_steps",
-    )
-    for key, value in values.items():
-        if value is None:
-            continue
-        if key.endswith("_num_layers") and value <= 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be positive")
-        if key.endswith("_hidden_dim") and value <= 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be positive")
-        if key.endswith("_dropout_probability"):
-            _probability(values, key)
-    _probability(
-        values,
-        "halting_dropout",
-        "halting_threshold",
-        "recurrent_halting_dropout",
-        "recurrent_halting_threshold",
-        "mask_threshold",
-        "mask_floor",
-        "input_layer_mask_threshold",
-        "input_layer_mask_floor",
-        "output_layer_mask_threshold",
-        "output_layer_mask_floor",
-    )
-    for key in (
-        "mask_surrogate_scale",
-        "mask_transition_width",
-        "input_layer_mask_surrogate_scale",
-        "input_layer_mask_transition_width",
-        "output_layer_mask_surrogate_scale",
-        "output_layer_mask_transition_width",
+def _validate_required_positive(values: RuntimeDefaultValues) -> None:
+    dimensions = values.dimensions
+    for field, value in (
+        (_DIMENSION_FIELDS.batch_size, dimensions.batch_size),
+        (_DIMENSION_FIELDS.learning_rate, dimensions.learning_rate),
+        (_DIMENSION_FIELDS.input_dim, dimensions.input_dim),
+        (_DIMENSION_FIELDS.hidden_dim, dimensions.hidden_dim),
+        (_DIMENSION_FIELDS.output_dim, dimensions.output_dim),
+        (_MAIN_STACK_FIELDS.num_layers, values.main_stack.num_layers),
+        (_SUBMODULE_STACK_FIELDS.hidden_dim, values.submodule_stack.hidden_dim),
+        (_SUBMODULE_STACK_FIELDS.num_layers, values.submodule_stack.num_layers),
+        (
+            _ADAPTIVE_GENERATOR_STACK_FIELDS.hidden_dim,
+            values.adaptive_generator_stack.hidden_dim,
+        ),
+        (
+            _ADAPTIVE_GENERATOR_STACK_FIELDS.num_layers,
+            values.adaptive_generator_stack.num_layers,
+        ),
+        (_CONTROL_FIELDS.recurrent_max_steps, values.control.recurrent_max_steps),
     ):
-        if values[key] <= 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be positive")
-    for key in (
-        "weight_decay_rate",
-        "bias_decay_rate",
-        "input_layer_weight_decay_rate",
-        "input_layer_bias_decay_rate",
-        "output_layer_weight_decay_rate",
-        "output_layer_bias_decay_rate",
+        _positive(field.key, value)
+
+
+def _validate_stack_probability(fields: StackFields, values: StackValues) -> None:
+    _probability(fields.dropout_probability.key, values.dropout_probability)
+
+
+def _validate_optional_stack_pattern(
+    fields: OptionalStackFields,
+    values: OptionalStackValues,
+) -> None:
+    if values.hidden_dim is not None:
+        _positive(fields.hidden_dim.key, values.hidden_dim)
+    if values.num_layers is not None:
+        _positive(fields.num_layers.key, values.num_layers)
+    if values.dropout_probability is not None:
+        _probability(fields.dropout_probability.key, values.dropout_probability)
+
+
+def _validate_stack_patterns(values: RuntimeDefaultValues) -> None:
+    for fields, stack_values in (
+        (_MAIN_STACK_FIELDS, values.main_stack),
+        (_SUBMODULE_STACK_FIELDS, values.submodule_stack),
+        (_ADAPTIVE_GENERATOR_STACK_FIELDS, values.adaptive_generator_stack),
     ):
-        if values[key] < 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be non-negative")
-    for key in (
-        "weight_decay_warmup_batches",
-        "bias_decay_warmup_batches",
-        "input_layer_weight_decay_warmup_batches",
-        "input_layer_bias_decay_warmup_batches",
-        "output_layer_weight_decay_warmup_batches",
-        "output_layer_bias_decay_warmup_batches",
+        _validate_stack_probability(fields, stack_values)
+    for fields, stack_values in (
+        (_RESIDUAL_STACK_FIELDS, values.residual_stack),
+        (_GATE_STACK_FIELDS, values.gate_stack),
+        (_HALTING_STACK_FIELDS, values.halting_stack),
+        (_MEMORY_STACK_FIELDS, values.memory_stack),
+        (_RECURRENT_GATE_STACK_FIELDS, values.recurrent_gate_stack),
+        (_RECURRENT_HALTING_STACK_FIELDS, values.recurrent_halting_stack),
+        (_WEIGHT_GENERATOR_STACK_FIELDS, values.weight_generator_stack),
+        (_BIAS_GENERATOR_STACK_FIELDS, values.bias_generator_stack),
+        (_DIAGONAL_GENERATOR_STACK_FIELDS, values.diagonal_generator_stack),
+        (_MASK_GENERATOR_STACK_FIELDS, values.mask_generator_stack),
     ):
-        if values[key] < 0:  # type: ignore[operator]
-            raise ValueError(f"{_PACKAGE}: runtime key {key!r} must be non-negative")
-    memory_learning_rate = values["memory_test_time_training_learning_rate"]
-    if memory_learning_rate is not None and memory_learning_rate <= 0:  # type: ignore[operator]
-        raise ValueError(
-            f"{_PACKAGE}: runtime key "
-            "'memory_test_time_training_learning_rate' must be positive"
+        _validate_optional_stack_pattern(fields, stack_values)
+
+
+def _validate_probabilities(values: RuntimeDefaultValues) -> None:
+    control = values.control
+    mask = values.mask
+    input_projection = values.input_projection
+    output_projection = values.output_projection
+    for field, value in (
+        (_CONTROL_FIELDS.halting_dropout, control.halting_dropout),
+        (_CONTROL_FIELDS.halting_threshold, control.halting_threshold),
+        (_CONTROL_FIELDS.recurrent_halting_dropout, control.recurrent_halting_dropout),
+        (
+            _CONTROL_FIELDS.recurrent_halting_threshold,
+            control.recurrent_halting_threshold,
+        ),
+        (_MASK_FIELDS.threshold, mask.threshold),
+        (_MASK_FIELDS.floor, mask.floor),
+        (_INPUT_PROJECTION_FIELDS.mask_threshold, input_projection.mask_threshold),
+        (_INPUT_PROJECTION_FIELDS.mask_floor, input_projection.mask_floor),
+        (
+            _OUTPUT_PROJECTION_FIELDS.mask_threshold,
+            output_projection.mask_threshold,
+        ),
+        (_OUTPUT_PROJECTION_FIELDS.mask_floor, output_projection.mask_floor),
+    ):
+        _probability(field.key, value)
+
+
+def _validate_positive_controls(values: RuntimeDefaultValues) -> None:
+    mask = values.mask
+    input_projection = values.input_projection
+    output_projection = values.output_projection
+    for field, value in (
+        (_MASK_FIELDS.surrogate_scale, mask.surrogate_scale),
+        (_MASK_FIELDS.transition_width, mask.transition_width),
+        (
+            _INPUT_PROJECTION_FIELDS.mask_surrogate_scale,
+            input_projection.mask_surrogate_scale,
+        ),
+        (
+            _INPUT_PROJECTION_FIELDS.mask_transition_width,
+            input_projection.mask_transition_width,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.mask_surrogate_scale,
+            output_projection.mask_surrogate_scale,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.mask_transition_width,
+            output_projection.mask_transition_width,
+        ),
+    ):
+        _positive(field.key, value)
+
+
+def _validate_decay_values(values: RuntimeDefaultValues) -> None:
+    input_projection = values.input_projection
+    output_projection = values.output_projection
+    for field, value in (
+        (_WEIGHT_FIELDS.decay_rate, values.weight.decay_rate),
+        (_BIAS_FIELDS.decay_rate, values.bias.decay_rate),
+        (
+            _INPUT_PROJECTION_FIELDS.weight_decay_rate,
+            input_projection.weight_decay_rate,
+        ),
+        (
+            _INPUT_PROJECTION_FIELDS.bias_decay_rate,
+            input_projection.bias_decay_rate,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.weight_decay_rate,
+            output_projection.weight_decay_rate,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.bias_decay_rate,
+            output_projection.bias_decay_rate,
+        ),
+    ):
+        _nonnegative(field.key, value)
+    for field, value in (
+        (_WEIGHT_FIELDS.decay_warmup_batches, values.weight.decay_warmup_batches),
+        (_BIAS_FIELDS.decay_warmup_batches, values.bias.decay_warmup_batches),
+        (
+            _INPUT_PROJECTION_FIELDS.weight_decay_warmup_batches,
+            input_projection.weight_decay_warmup_batches,
+        ),
+        (
+            _INPUT_PROJECTION_FIELDS.bias_decay_warmup_batches,
+            input_projection.bias_decay_warmup_batches,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.weight_decay_warmup_batches,
+            output_projection.weight_decay_warmup_batches,
+        ),
+        (
+            _OUTPUT_PROJECTION_FIELDS.bias_decay_warmup_batches,
+            output_projection.bias_decay_warmup_batches,
+        ),
+    ):
+        _nonnegative(field.key, value)
+
+
+def _validate_control_invariants(values: RuntimeDefaultValues) -> None:
+    control = values.control
+    if control.memory_learning_rate is not None:
+        _positive(
+            _CONTROL_FIELDS.memory_learning_rate.key, control.memory_learning_rate
         )
-    memory_steps = values["memory_test_time_training_num_inner_steps"]
-    if memory_steps is not None and memory_steps <= 0:  # type: ignore[operator]
-        raise ValueError(
-            f"{_PACKAGE}: runtime key "
-            "'memory_test_time_training_num_inner_steps' must be positive"
+    if control.memory_num_inner_steps is not None:
+        _positive(
+            _CONTROL_FIELDS.memory_num_inner_steps.key,
+            control.memory_num_inner_steps,
         )
-    for flag_key, option_key in (
-        ("weight_option_flag", "weight_option"),
-        ("bias_option_flag", "bias_option"),
-        ("diagonal_option_flag", "diagonal_option"),
-        ("mask_option_flag", "row_mask_option"),
+    for enabled, option, flag_field, option_field in (
+        (
+            values.weight.enabled,
+            values.weight.option,
+            _WEIGHT_FIELDS.enabled,
+            _WEIGHT_FIELDS.option,
+        ),
+        (
+            values.bias.enabled,
+            values.bias.option,
+            _BIAS_FIELDS.enabled,
+            _BIAS_FIELDS.option,
+        ),
+        (
+            values.diagonal.enabled,
+            values.diagonal.option,
+            _DIAGONAL_FIELDS.enabled,
+            _DIAGONAL_FIELDS.option,
+        ),
+        (
+            values.mask.enabled,
+            values.mask.row_mask_option,
+            _MASK_FIELDS.enabled,
+            _MASK_FIELDS.row_mask_option,
+        ),
     ):
-        if values[flag_key] and values[option_key] is None:
+        if enabled and option is None:
             raise ValueError(
-                f"{_PACKAGE}: runtime key {option_key!r} must be set when "
-                f"{flag_key!r} is True"
+                f"{_PACKAGE}: runtime key {option_field.key!r} must be set when "
+                f"{flag_field.key!r} is True"
             )
-    if values["stack_gate_flag"] and values["shared_gate_config"] is not None:
+    if control.stack_gate_flag and control.shared_gate_config is not None:
         raise ValueError(
             f"{_PACKAGE}: 'stack_gate_flag' and 'shared_gate_config' are "
             "mutually exclusive"
         )
 
 
-def _stack(values: Mapping[str, object], prefix: str) -> StackOptions:
+def _validate_values(values: RuntimeDefaultValues) -> None:
+    _validate_required_positive(values)
+    _validate_stack_patterns(values)
+    _validate_probabilities(values)
+    _validate_positive_controls(values)
+    _validate_decay_values(values)
+    _validate_control_invariants(values)
+
+
+def _stack(values: StackValues) -> StackOptions:
     return StackOptions(
-        hidden_dim=values[f"{prefix}_hidden_dim"],  # type: ignore[arg-type]
-        num_layers=values[f"{prefix}_num_layers"],  # type: ignore[arg-type]
-        last_layer_bias_option=values[f"{prefix}_last_layer_bias_option"],  # type: ignore[arg-type]
-        apply_output_pipeline_flag=values[f"{prefix}_apply_output_pipeline_flag"],  # type: ignore[arg-type]
-        activation=values[f"{prefix}_activation"],  # type: ignore[arg-type]
-        layer_norm_position=values[f"{prefix}_layer_norm_position"],  # type: ignore[arg-type]
-        residual_connection_option=values[f"{prefix}_residual_connection_option"],  # type: ignore[arg-type]
-        residual_model_flag=values[f"{prefix}_residual_model_flag"],  # type: ignore[arg-type]
-        dropout_probability=values[f"{prefix}_dropout_probability"],  # type: ignore[arg-type]
-        bias_flag=values[f"{prefix}_bias_flag"],  # type: ignore[arg-type]
+        hidden_dim=values.hidden_dim,
+        num_layers=values.num_layers,
+        last_layer_bias_option=values.last_layer_bias_option,
+        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        activation=values.activation,
+        layer_norm_position=values.layer_norm_position,
+        residual_connection_option=values.residual_connection_option,
+        residual_model_flag=values.residual_model_flag,
+        dropout_probability=values.dropout_probability,
+        bias_flag=values.bias_flag,
     )
 
 
 def _resolved_stack(
-    values: Mapping[str, object],
-    prefix: str,
+    values: OptionalStackValues,
     defaults: StackOptions,
 ) -> StackOptions:
-    if not values[f"{prefix}_independent_flag"]:
+    if not values.independent_flag:
         return defaults
-    updates = {
-        field: values[f"{prefix}_{field}"]
-        for field in (
-            "hidden_dim",
-            "num_layers",
-            "last_layer_bias_option",
-            "apply_output_pipeline_flag",
-            "activation",
-            "layer_norm_position",
-            "residual_connection_option",
-            "residual_model_flag",
-            "dropout_probability",
-            "bias_flag",
-        )
-        if values[f"{prefix}_{field}"] is not None
-    }
-    return replace(defaults, **updates)
+    return replace(
+        defaults,
+        hidden_dim=(
+            defaults.hidden_dim if values.hidden_dim is None else values.hidden_dim
+        ),
+        num_layers=(
+            defaults.num_layers if values.num_layers is None else values.num_layers
+        ),
+        last_layer_bias_option=(
+            defaults.last_layer_bias_option
+            if values.last_layer_bias_option is None
+            else values.last_layer_bias_option
+        ),
+        apply_output_pipeline_flag=(
+            defaults.apply_output_pipeline_flag
+            if values.apply_output_pipeline_flag is None
+            else values.apply_output_pipeline_flag
+        ),
+        activation=(
+            defaults.activation if values.activation is None else values.activation
+        ),
+        layer_norm_position=(
+            defaults.layer_norm_position
+            if values.layer_norm_position is None
+            else values.layer_norm_position
+        ),
+        residual_connection_option=(
+            defaults.residual_connection_option
+            if values.residual_connection_option is None
+            else values.residual_connection_option
+        ),
+        residual_model_flag=values.residual_model_flag,
+        dropout_probability=(
+            defaults.dropout_probability
+            if values.dropout_probability is None
+            else values.dropout_probability
+        ),
+        bias_flag=(
+            defaults.bias_flag if values.bias_flag is None else values.bias_flag
+        ),
+    )
 
 
 def _generator_stack(
-    values: Mapping[str, object],
-    prefix: str,
+    values: OptionalStackValues,
     defaults: StackOptions,
 ) -> GeneratorStackOptions:
-    independent = values[f"{prefix}_independent_flag"]
     return GeneratorStackOptions(
-        independent=independent,  # type: ignore[arg-type]
-        stack=_resolved_stack(values, prefix, defaults),
+        independent=values.independent_flag,
+        stack=_resolved_stack(values, defaults),
     )
 
 
-def _projection(
-    values: Mapping[str, object],
-    prefix: str,
-) -> AdaptiveProjectionOptions:
-    def value(name: str) -> object:
-        return values[f"{prefix}_{name}"]
-
-    return AdaptiveProjectionOptions(
-        weight_option=value("weight_option"),  # type: ignore[arg-type]
-        generator_depth=value("generator_depth"),  # type: ignore[arg-type]
-        weight_decay_schedule=value("weight_decay_schedule"),  # type: ignore[arg-type]
-        weight_decay_rate=value("weight_decay_rate"),  # type: ignore[arg-type]
-        weight_decay_warmup_batches=value("weight_decay_warmup_batches"),  # type: ignore[arg-type]
-        weight_normalization_option=value("weight_normalization_option"),  # type: ignore[arg-type]
-        weight_normalization_position_option=value(
-            "weight_normalization_position_option"
-        ),  # type: ignore[arg-type]
-        weight_bank_expansion_factor=value("weight_bank_expansion_factor"),  # type: ignore[arg-type]
-        bias_option=value("bias_option"),  # type: ignore[arg-type]
-        bias_decay_schedule=value("bias_decay_schedule"),  # type: ignore[arg-type]
-        bias_decay_rate=value("bias_decay_rate"),  # type: ignore[arg-type]
-        bias_decay_warmup_batches=value("bias_decay_warmup_batches"),  # type: ignore[arg-type]
-        bias_bank_expansion_factor=value("bias_bank_expansion_factor"),  # type: ignore[arg-type]
-        diagonal_option=value("diagonal_option"),  # type: ignore[arg-type]
-        row_mask_option=value("row_mask_option"),  # type: ignore[arg-type]
-        mask_dimension_option=value("mask_dimension_option"),  # type: ignore[arg-type]
-        mask_threshold=value("mask_threshold"),  # type: ignore[arg-type]
-        mask_surrogate_scale=value("mask_surrogate_scale"),  # type: ignore[arg-type]
-        mask_floor=value("mask_floor"),  # type: ignore[arg-type]
-        mask_transition_width=value("mask_transition_width"),  # type: ignore[arg-type]
-    )
+@dataclass(frozen=True, slots=True)
+class _ResolvedStacks:
+    main: StackOptions
+    submodule: StackOptions
+    residual: ResidualStackOptions
+    gate: StackOptions
+    halting: StackOptions
+    memory: StackOptions
+    recurrent_gate: StackOptions
+    recurrent_halting: StackOptions
+    adaptive_generator: StackOptions
 
 
-def _runtime(values: Mapping[str, object]) -> RuntimeOptions:
-    stack = StackOptions(
-        hidden_dim=values["hidden_dim"],  # type: ignore[arg-type]
-        num_layers=values["stack_num_layers"],  # type: ignore[arg-type]
-        last_layer_bias_option=values["stack_last_layer_bias_option"],  # type: ignore[arg-type]
-        apply_output_pipeline_flag=values["stack_apply_output_pipeline_flag"],  # type: ignore[arg-type]
-        activation=values["stack_activation"],  # type: ignore[arg-type]
-        layer_norm_position=values["layer_norm_position"],  # type: ignore[arg-type]
-        residual_connection_option=values["stack_residual_connection_option"],  # type: ignore[arg-type]
-        residual_model_flag=values["stack_residual_model_flag"],  # type: ignore[arg-type]
-        dropout_probability=values["stack_dropout_probability"],  # type: ignore[arg-type]
-        bias_flag=values["stack_bias_flag"],  # type: ignore[arg-type]
-    )
-    submodule_stack = _stack(values, "submodule_stack")
-    residual_stack = resolve_residual_stack_options(
+def _resolve_stacks(values: RuntimeDefaultValues) -> _ResolvedStacks:
+    main = _stack(values.main_stack)
+    submodule = _stack(values.submodule_stack)
+    residual_values = values.residual_stack
+    residual = resolve_residual_stack_options(
         ResidualStackSource(
-            independent_flag=values["residual_stack_independent_flag"],  # type: ignore[arg-type]
-            hidden_dim=values["residual_stack_hidden_dim"],  # type: ignore[arg-type]
-            num_layers=values["residual_stack_num_layers"],  # type: ignore[arg-type]
-            activation=values["residual_stack_activation"],  # type: ignore[arg-type]
-            layer_norm_position=values["residual_stack_layer_norm_position"],  # type: ignore[arg-type]
-            residual_connection_option=values[
-                "residual_stack_residual_connection_option"
-            ],  # type: ignore[arg-type]
-            residual_model_flag=values["residual_stack_residual_model_flag"],  # type: ignore[arg-type]
-            dropout_probability=values["residual_stack_dropout_probability"],  # type: ignore[arg-type]
-            last_layer_bias_option=values["residual_stack_last_layer_bias_option"],  # type: ignore[arg-type]
-            apply_output_pipeline_flag=values[
-                "residual_stack_apply_output_pipeline_flag"
-            ],  # type: ignore[arg-type]
-            bias_flag=values["residual_stack_bias_flag"],  # type: ignore[arg-type]
+            independent_flag=residual_values.independent_flag,
+            hidden_dim=residual_values.hidden_dim,
+            num_layers=residual_values.num_layers,
+            activation=residual_values.activation,
+            layer_norm_position=residual_values.layer_norm_position,
+            residual_connection_option=residual_values.residual_connection_option,
+            residual_model_flag=residual_values.residual_model_flag,
+            dropout_probability=residual_values.dropout_probability,
+            last_layer_bias_option=residual_values.last_layer_bias_option,
+            apply_output_pipeline_flag=(residual_values.apply_output_pipeline_flag),
+            bias_flag=residual_values.bias_flag,
         ),
-        submodule_stack,
+        submodule,
     )
-    gate_stack = _resolved_stack(values, "gate_stack", submodule_stack)
-    halting_defaults = replace(
-        submodule_stack,
-        last_layer_bias_option=config.LastLayerBiasOptions.DISABLED,
+    gate = _resolved_stack(values.gate_stack, submodule)
+    halting = _resolved_stack(
+        values.halting_stack,
+        replace(
+            submodule,
+            last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+        ),
     )
-    halting_stack = _resolved_stack(values, "halting_stack", halting_defaults)
-    memory_stack = _resolved_stack(values, "memory_stack", submodule_stack)
-    recurrent_gate_stack = _resolved_stack(
-        values,
-        "recurrent_gate_stack",
-        gate_stack,
+    memory = _resolved_stack(values.memory_stack, submodule)
+    return _ResolvedStacks(
+        main=main,
+        submodule=submodule,
+        residual=residual,
+        gate=gate,
+        halting=halting,
+        memory=memory,
+        recurrent_gate=_resolved_stack(values.recurrent_gate_stack, gate),
+        recurrent_halting=_resolved_stack(values.recurrent_halting_stack, halting),
+        adaptive_generator=_stack(values.adaptive_generator_stack),
     )
-    recurrent_halting_stack = _resolved_stack(
-        values,
-        "recurrent_halting_stack",
-        halting_stack,
-    )
-    adaptive_generator_stack = _stack(values, "adaptive_generator_stack")
-    return RuntimeOptions(
-        batch_size=values["batch_size"],  # type: ignore[arg-type]
-        learning_rate=values["learning_rate"],  # type: ignore[arg-type]
-        input_dim=values["input_dim"],  # type: ignore[arg-type]
-        hidden_dim=values["hidden_dim"],  # type: ignore[arg-type]
-        output_dim=values["output_dim"],  # type: ignore[arg-type]
-        stack=stack,
-        submodule_stack=submodule_stack,
-        residual_stack=residual_stack,
+
+
+@dataclass(frozen=True, slots=True)
+class _ControlDefaults:
+    gate: GateOptions
+    halting: HaltingOptions
+    memory: MemoryOptions
+    recurrence: RecurrenceOptions
+
+
+def _resolve_control_defaults(
+    values: RuntimeDefaultValues,
+    stacks: _ResolvedStacks,
+) -> _ControlDefaults:
+    control = values.control
+    return _ControlDefaults(
         gate=GateOptions(
-            enabled=values["stack_gate_flag"],  # type: ignore[arg-type]
-            option=values["gate_option"],  # type: ignore[arg-type]
-            activation=values["gate_activation"],  # type: ignore[arg-type]
-            stack=gate_stack,
-            shared_config=values["shared_gate_config"],  # type: ignore[arg-type]
+            enabled=control.stack_gate_flag,
+            option=control.gate_option,
+            activation=control.gate_activation,
+            stack=stacks.gate,
+            shared_config=control.shared_gate_config,
         ),
         halting=HaltingOptions(
-            enabled=values["stack_halting_flag"],  # type: ignore[arg-type]
-            threshold=values["halting_threshold"],  # type: ignore[arg-type]
-            dropout_probability=values["halting_dropout"],  # type: ignore[arg-type]
-            hidden_state_mode=values["halting_hidden_state_mode"],  # type: ignore[arg-type]
-            stack=halting_stack,
+            enabled=control.stack_halting_flag,
+            threshold=control.halting_threshold,
+            dropout_probability=control.halting_dropout,
+            hidden_state_mode=control.halting_hidden_state_mode,
+            stack=stacks.halting,
         ),
         memory=MemoryOptions(
-            enabled=values["memory_flag"],  # type: ignore[arg-type]
-            option=values["memory_option"],  # type: ignore[arg-type]
-            position=values["memory_position_option"],  # type: ignore[arg-type]
-            test_time_training_learning_rate=values[
-                "memory_test_time_training_learning_rate"
-            ],  # type: ignore[arg-type]
-            test_time_training_num_inner_steps=values[
-                "memory_test_time_training_num_inner_steps"
-            ],  # type: ignore[arg-type]
-            stack=memory_stack,
+            enabled=control.memory_flag,
+            option=control.memory_option,
+            position=control.memory_position_option,
+            test_time_training_learning_rate=control.memory_learning_rate,
+            test_time_training_num_inner_steps=control.memory_num_inner_steps,
+            stack=stacks.memory,
         ),
         recurrence=RecurrenceOptions(
-            enabled=values["recurrent_flag"],  # type: ignore[arg-type]
-            max_steps=values["recurrent_max_steps"],  # type: ignore[arg-type]
-            initial_iterations=values["recurrent_initial_iterations"],  # type: ignore[arg-type]
-            gradient_transition_count=values["recurrent_gradient_transition_count"],  # type: ignore[arg-type]
-            iteration_increment=values["recurrent_iteration_increment"],  # type: ignore[arg-type]
-            forward_calls_before_iteration_increment=values[
-                "recurrent_forward_calls_before_iteration_increment"
-            ],  # type: ignore[arg-type]
-            layer_norm_position=values["recurrent_layer_norm_position"],  # type: ignore[arg-type]
+            enabled=control.recurrent_flag,
+            max_steps=control.recurrent_max_steps,
+            initial_iterations=control.recurrent_initial_iterations,
+            gradient_transition_count=control.recurrent_gradient_transition_count,
+            iteration_increment=control.recurrent_iteration_increment,
+            forward_calls_before_iteration_increment=(
+                control.recurrent_forward_calls_before_iteration_increment
+            ),
+            layer_norm_position=control.recurrent_layer_norm_position,
             gate=GateOptions(
-                enabled=values["recurrent_stack_gate_flag"],  # type: ignore[arg-type]
-                option=values["recurrent_gate_option"],  # type: ignore[arg-type]
-                activation=values["recurrent_gate_activation"],  # type: ignore[arg-type]
-                stack=recurrent_gate_stack,
+                enabled=control.recurrent_stack_gate_flag,
+                option=control.recurrent_gate_option,
+                activation=control.recurrent_gate_activation,
+                stack=stacks.recurrent_gate,
             ),
             halting=HaltingOptions(
-                enabled=values["recurrent_stack_halting_flag"],  # type: ignore[arg-type]
-                threshold=values["recurrent_halting_threshold"],  # type: ignore[arg-type]
-                dropout_probability=values["recurrent_halting_dropout"],  # type: ignore[arg-type]
-                hidden_state_mode=values["recurrent_halting_hidden_state_mode"],  # type: ignore[arg-type]
-                stack=recurrent_halting_stack,
+                enabled=control.recurrent_stack_halting_flag,
+                threshold=control.recurrent_halting_threshold,
+                dropout_probability=control.recurrent_halting_dropout,
+                hidden_state_mode=control.recurrent_halting_hidden_state_mode,
+                stack=stacks.recurrent_halting,
             ),
         ),
-        adaptive_generator_stack=adaptive_generator_stack,
+    )
+
+
+def _projection(values: ProjectionValues) -> AdaptiveProjectionOptions:
+    return AdaptiveProjectionOptions(
+        weight_option=values.weight_option,
+        generator_depth=values.generator_depth,
+        weight_decay_schedule=values.weight_decay_schedule,
+        weight_decay_rate=values.weight_decay_rate,
+        weight_decay_warmup_batches=values.weight_decay_warmup_batches,
+        weight_normalization_option=values.weight_normalization_option,
+        weight_normalization_position_option=(
+            values.weight_normalization_position_option
+        ),
+        weight_bank_expansion_factor=values.weight_bank_expansion_factor,
+        bias_option=values.bias_option,
+        bias_decay_schedule=values.bias_decay_schedule,
+        bias_decay_rate=values.bias_decay_rate,
+        bias_decay_warmup_batches=values.bias_decay_warmup_batches,
+        bias_bank_expansion_factor=values.bias_bank_expansion_factor,
+        diagonal_option=values.diagonal_option,
+        row_mask_option=values.row_mask_option,
+        mask_dimension_option=values.mask_dimension_option,
+        mask_threshold=values.mask_threshold,
+        mask_surrogate_scale=values.mask_surrogate_scale,
+        mask_floor=values.mask_floor,
+        mask_transition_width=values.mask_transition_width,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _AdaptiveDefaults:
+    weight: AdaptiveWeightOptions
+    bias: AdaptiveBiasOptions
+    diagonal: AdaptiveDiagonalOptions
+    mask: AdaptiveMaskOptions
+    input_projection: AdaptiveProjectionOptions
+    output_projection: AdaptiveProjectionOptions
+
+
+def _resolve_adaptive_defaults(
+    values: RuntimeDefaultValues,
+    adaptive_generator_stack: StackOptions,
+) -> _AdaptiveDefaults:
+    weight: WeightValues = values.weight
+    bias: BiasValues = values.bias
+    diagonal: DiagonalValues = values.diagonal
+    mask: MaskValues = values.mask
+    return _AdaptiveDefaults(
         weight=AdaptiveWeightOptions(
-            enabled=values["weight_option_flag"],  # type: ignore[arg-type]
-            option=values["weight_option"],  # type: ignore[arg-type]
-            generator_depth=values["generator_depth"],  # type: ignore[arg-type]
-            normalization_option=values["weight_normalization_option"],  # type: ignore[arg-type]
-            normalization_position_option=values[
-                "weight_normalization_position_option"
-            ],  # type: ignore[arg-type]
-            decay_schedule=values["weight_decay_schedule"],  # type: ignore[arg-type]
-            decay_rate=values["weight_decay_rate"],  # type: ignore[arg-type]
-            decay_warmup_batches=values["weight_decay_warmup_batches"],  # type: ignore[arg-type]
-            bank_expansion_factor=values["weight_bank_expansion_factor"],  # type: ignore[arg-type]
+            enabled=weight.enabled,
+            option=weight.option,
+            generator_depth=weight.generator_depth,
+            normalization_option=weight.normalization_option,
+            normalization_position_option=weight.normalization_position_option,
+            decay_schedule=weight.decay_schedule,
+            decay_rate=weight.decay_rate,
+            decay_warmup_batches=weight.decay_warmup_batches,
+            bank_expansion_factor=weight.bank_expansion_factor,
             generator_stack=_generator_stack(
-                values,
-                "weight_generator_stack",
+                values.weight_generator_stack,
                 adaptive_generator_stack,
             ),
         ),
         bias=AdaptiveBiasOptions(
-            enabled=values["bias_option_flag"],  # type: ignore[arg-type]
-            option=values["bias_option"],  # type: ignore[arg-type]
-            decay_schedule=values["bias_decay_schedule"],  # type: ignore[arg-type]
-            decay_rate=values["bias_decay_rate"],  # type: ignore[arg-type]
-            decay_warmup_batches=values["bias_decay_warmup_batches"],  # type: ignore[arg-type]
-            bank_expansion_factor=values["bias_bank_expansion_factor"],  # type: ignore[arg-type]
+            enabled=bias.enabled,
+            option=bias.option,
+            decay_schedule=bias.decay_schedule,
+            decay_rate=bias.decay_rate,
+            decay_warmup_batches=bias.decay_warmup_batches,
+            bank_expansion_factor=bias.bank_expansion_factor,
             generator_stack=_generator_stack(
-                values,
-                "bias_generator_stack",
+                values.bias_generator_stack,
                 adaptive_generator_stack,
             ),
         ),
         diagonal=AdaptiveDiagonalOptions(
-            enabled=values["diagonal_option_flag"],  # type: ignore[arg-type]
-            option=values["diagonal_option"],  # type: ignore[arg-type]
+            enabled=diagonal.enabled,
+            option=diagonal.option,
             generator_stack=_generator_stack(
-                values,
-                "diagonal_generator_stack",
+                values.diagonal_generator_stack,
                 adaptive_generator_stack,
             ),
         ),
         mask=AdaptiveMaskOptions(
-            enabled=values["mask_option_flag"],  # type: ignore[arg-type]
-            row_mask_option=values["row_mask_option"],  # type: ignore[arg-type]
-            dimension_option=values["mask_dimension_option"],  # type: ignore[arg-type]
-            threshold=values["mask_threshold"],  # type: ignore[arg-type]
-            surrogate_scale=values["mask_surrogate_scale"],  # type: ignore[arg-type]
-            floor=values["mask_floor"],  # type: ignore[arg-type]
-            transition_width=values["mask_transition_width"],  # type: ignore[arg-type]
+            enabled=mask.enabled,
+            row_mask_option=mask.row_mask_option,
+            dimension_option=mask.dimension_option,
+            threshold=mask.threshold,
+            surrogate_scale=mask.surrogate_scale,
+            floor=mask.floor,
+            transition_width=mask.transition_width,
             generator_stack=_generator_stack(
-                values,
-                "mask_generator_stack",
+                values.mask_generator_stack,
                 adaptive_generator_stack,
             ),
         ),
-        input_projection=_projection(values, "input_layer"),
-        output_projection=_projection(values, "output_layer"),
+        input_projection=_projection(values.input_projection),
+        output_projection=_projection(values.output_projection),
+    )
+
+
+def _runtime(values: RuntimeDefaultValues) -> RuntimeOptions:
+    stacks = _resolve_stacks(values)
+    control = _resolve_control_defaults(values, stacks)
+    adaptive = _resolve_adaptive_defaults(values, stacks.adaptive_generator)
+    dimensions = values.dimensions
+    return RuntimeOptions(
+        batch_size=dimensions.batch_size,
+        learning_rate=dimensions.learning_rate,
+        input_dim=dimensions.input_dim,
+        hidden_dim=dimensions.hidden_dim,
+        output_dim=dimensions.output_dim,
+        stack=stacks.main,
+        submodule_stack=stacks.submodule,
+        residual_stack=stacks.residual,
+        gate=control.gate,
+        halting=control.halting,
+        memory=control.memory,
+        recurrence=control.recurrence,
+        adaptive_generator_stack=stacks.adaptive_generator,
+        weight=adaptive.weight,
+        bias=adaptive.bias,
+        diagonal=adaptive.diagonal,
+        mask=adaptive.mask,
+        input_projection=adaptive.input_projection,
+        output_projection=adaptive.output_projection,
+        halting_option=values.control.halting_option,
+        recurrent_halting_option=values.control.recurrent_halting_option,
     )
 
 
 def runtime_from_flat(
     overrides: Mapping[str, object] | None = None,
 ) -> RuntimeOptions:
-    normalized = _normalize_overrides(overrides or {})
-    values = {**_FLAT_DEFAULTS, **normalized}
+    values = runtime_default_values(overrides)
     _validate_values(values)
     return _runtime(values)
 

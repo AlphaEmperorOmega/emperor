@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal
 
 import models.gpt.expert_linear.runtime_options as expert_options
+from models.gpt.expert_linear import _config_defaults as config_defaults
 
 _SUBMODULE_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
@@ -51,16 +52,7 @@ def _mixture_options_from_kwargs(
     *,
     provided: expert_options.ExpertsMixtureOptions | None,
 ) -> expert_options.ExpertsMixtureOptions:
-    options = provided or expert_options.ExpertsMixtureOptions(
-        top_k=config_module.TOP_K,
-        num_experts=config_module.NUM_EXPERTS,
-        capacity_factor=config_module.CAPACITY_FACTOR,
-        dropped_token_behavior=config_module.DROPPED_TOKEN_BEHAVIOR,
-        compute_expert_mixture_flag=config_module.COMPUTE_EXPERT_MIXTURE_FLAG,
-        weighted_parameters_flag=config_module.WEIGHTED_PARAMETERS_FLAG,
-        weighting_position_option=config_module.WEIGHTING_POSITION_OPTION,
-        routing_initialization_mode=config_module.ROUTING_INITIALIZATION_MODE,
-    )
+    options = provided or config_defaults.experts_mixture_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -83,17 +75,7 @@ def _sampler_options_from_kwargs(
     *,
     provided: expert_options.ExpertsSamplerOptions | None,
 ) -> expert_options.ExpertsSamplerOptions:
-    options = provided or expert_options.ExpertsSamplerOptions(
-        threshold=config_module.SAMPLER_THRESHOLD,
-        filter_above_threshold=config_module.SAMPLER_FILTER_ABOVE_THRESHOLD,
-        num_topk_samples=config_module.SAMPLER_NUM_TOPK_SAMPLES,
-        normalize_probabilities_flag=config_module.SAMPLER_NORMALIZE_PROBABILITIES_FLAG,
-        noisy_topk_flag=config_module.SAMPLER_NOISY_TOPK_FLAG,
-        coefficient_of_variation_loss_weight=config_module.SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT,
-        switch_loss_weight=config_module.SAMPLER_SWITCH_LOSS_WEIGHT,
-        zero_centred_loss_weight=config_module.SAMPLER_ZERO_CENTRED_LOSS_WEIGHT,
-        mutual_information_loss_weight=config_module.SAMPLER_MUTUAL_INFORMATION_LOSS_WEIGHT,
-    )
+    options = provided or config_defaults.experts_sampler_options(config_module)
     updates = _pop_updates(
         kwargs,
         {
@@ -119,9 +101,7 @@ def _router_options_from_kwargs(
     *,
     provided: expert_options.ExpertsRouterOptions | None,
 ) -> expert_options.ExpertsRouterOptions:
-    options = provided or expert_options.ExpertsRouterOptions(
-        noisy_topk_flag=config_module.ROUTER_NOISY_TOPK_FLAG
-    )
+    options = provided or config_defaults.experts_router_options(config_module)
     updates = _pop_updates(kwargs, {"router_noisy_topk_flag": "noisy_topk_flag"})
     return replace(options, **updates) if updates else options
 
@@ -131,9 +111,13 @@ def _controller_stack_source_from_kwargs(
     config_module: ModuleType,
     prefix: str,
     *,
+    role: Literal["expert", "router"],
+    stack: Literal["gate", "halting", "memory", "recurrent_gate", "recurrent_halting"],
     provided: expert_options.ExpertsSubmoduleStackSource | None = None,
 ) -> expert_options.ExpertsSubmoduleStackSource:
-    source = provided or _default_controller_stack_source(config_module, prefix)
+    source = provided or config_defaults.experts_controller_stack_source(
+        config_module, role, stack
+    )
     updates = _pop_updates(
         kwargs,
         {
@@ -150,22 +134,9 @@ def _expert_layer_controller_options_from_kwargs(
     *,
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
-    options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.EXPERT_STACK_GATE_FLAG,
-        gate_option=config_module.EXPERT_GATE_OPTION,
-        gate_activation=config_module.EXPERT_GATE_ACTIVATION,
-        gate_stack_source=_default_controller_stack_source(
-            config_module, "expert_gate_stack"
-        ),
-        stack_halting_flag=config_module.EXPERT_STACK_HALTING_FLAG,
-        halting_option=config_module.EXPERT_HALTING_OPTION,
-        halting_threshold=config_module.EXPERT_HALTING_THRESHOLD,
-        halting_dropout=config_module.EXPERT_HALTING_DROPOUT,
-        halting_hidden_state_mode=config_module.EXPERT_HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=_default_controller_stack_source(
-            config_module, "expert_halting_stack"
-        ),
-        halting_output_dim=config_module.EXPERT_HALTING_OUTPUT_DIM,
+    options = provided or config_defaults.experts_layer_controller_options(
+        config_module,
+        "expert",
     )
     updates = _pop_updates(
         kwargs,
@@ -182,12 +153,19 @@ def _expert_layer_controller_options_from_kwargs(
         },
     )
     updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "expert_gate_stack", provided=options.gate_stack_source
+        kwargs,
+        config_module,
+        "expert_gate_stack",
+        role="expert",
+        stack="gate",
+        provided=options.gate_stack_source,
     )
     updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
         config_module,
         "expert_halting_stack",
+        role="expert",
+        stack="halting",
         provided=options.halting_stack_source,
     )
     return replace(options, **updates)
@@ -199,15 +177,9 @@ def _expert_dynamic_memory_options_from_kwargs(
     *,
     provided: expert_options.ExpertsDynamicMemoryOptions | None,
 ) -> expert_options.ExpertsDynamicMemoryOptions:
-    options = provided or expert_options.ExpertsDynamicMemoryOptions(
-        memory_flag=config_module.EXPERT_MEMORY_FLAG,
-        memory_option=config_module.EXPERT_MEMORY_OPTION,
-        memory_position_option=config_module.EXPERT_MEMORY_POSITION_OPTION,
-        memory_test_time_training_learning_rate=config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-        memory_test_time_training_num_inner_steps=config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-        memory_stack_source=_default_controller_stack_source(
-            config_module, "expert_memory_stack"
-        ),
+    options = provided or config_defaults.experts_dynamic_memory_options(
+        config_module,
+        "expert",
     )
     updates = _pop_updates(
         kwargs,
@@ -227,6 +199,8 @@ def _expert_dynamic_memory_options_from_kwargs(
         kwargs,
         config_module,
         "expert_memory_stack",
+        role="expert",
+        stack="memory",
         provided=options.memory_stack_source,
     )
     return replace(options, **updates)
@@ -238,24 +212,9 @@ def _expert_recurrent_controller_options_from_kwargs(
     *,
     provided: expert_options.ExpertsRecurrentControllerOptions | None,
 ) -> expert_options.ExpertsRecurrentControllerOptions:
-    options = provided or expert_options.ExpertsRecurrentControllerOptions(
-        recurrent_flag=config_module.EXPERT_RECURRENT_FLAG,
-        recurrent_max_steps=config_module.EXPERT_RECURRENT_MAX_STEPS,
-        recurrent_layer_norm_position=config_module.EXPERT_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_stack_gate_flag=config_module.EXPERT_RECURRENT_STACK_GATE_FLAG,
-        recurrent_gate_option=config_module.EXPERT_RECURRENT_GATE_OPTION,
-        recurrent_gate_activation=config_module.EXPERT_RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=_default_controller_stack_source(
-            config_module, "expert_recurrent_gate_stack"
-        ),
-        recurrent_stack_halting_flag=config_module.EXPERT_RECURRENT_STACK_HALTING_FLAG,
-        recurrent_halting_option=config_module.EXPERT_RECURRENT_HALTING_OPTION,
-        recurrent_halting_threshold=config_module.EXPERT_RECURRENT_HALTING_THRESHOLD,
-        recurrent_halting_dropout=config_module.EXPERT_RECURRENT_HALTING_DROPOUT,
-        recurrent_halting_hidden_state_mode=config_module.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE,
-        recurrent_halting_stack_source=_default_controller_stack_source(
-            config_module, "expert_recurrent_halting_stack"
-        ),
+    options = provided or config_defaults.experts_recurrent_controller_options(
+        config_module,
+        "expert",
     )
     updates = _pop_updates(
         kwargs,
@@ -279,12 +238,16 @@ def _expert_recurrent_controller_options_from_kwargs(
         kwargs,
         config_module,
         "expert_recurrent_gate_stack",
+        role="expert",
+        stack="recurrent_gate",
         provided=options.recurrent_gate_stack_source,
     )
     updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
         config_module,
         "expert_recurrent_halting_stack",
+        role="expert",
+        stack="recurrent_halting",
         provided=options.recurrent_halting_stack_source,
     )
     return replace(options, **updates)
@@ -296,21 +259,9 @@ def _router_layer_controller_options_from_kwargs(
     *,
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
-    options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.ROUTER_STACK_GATE_FLAG,
-        gate_option=config_module.ROUTER_GATE_OPTION,
-        gate_activation=config_module.ROUTER_GATE_ACTIVATION,
-        gate_stack_source=_default_controller_stack_source(
-            config_module, "router_gate_stack"
-        ),
-        stack_halting_flag=config_module.ROUTER_STACK_HALTING_FLAG,
-        halting_threshold=config_module.ROUTER_HALTING_THRESHOLD,
-        halting_dropout=config_module.ROUTER_HALTING_DROPOUT,
-        halting_hidden_state_mode=config_module.ROUTER_HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=_default_controller_stack_source(
-            config_module, "router_halting_stack"
-        ),
-        halting_output_dim=config_module.ROUTER_HALTING_OUTPUT_DIM,
+    options = provided or config_defaults.experts_layer_controller_options(
+        config_module,
+        "router",
     )
     updates = _pop_updates(
         kwargs,
@@ -326,12 +277,19 @@ def _router_layer_controller_options_from_kwargs(
         },
     )
     updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "router_gate_stack", provided=options.gate_stack_source
+        kwargs,
+        config_module,
+        "router_gate_stack",
+        role="router",
+        stack="gate",
+        provided=options.gate_stack_source,
     )
     updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
         config_module,
         "router_halting_stack",
+        role="router",
+        stack="halting",
         provided=options.halting_stack_source,
     )
     return replace(options, **updates)
@@ -343,15 +301,9 @@ def _router_dynamic_memory_options_from_kwargs(
     *,
     provided: expert_options.ExpertsDynamicMemoryOptions | None,
 ) -> expert_options.ExpertsDynamicMemoryOptions:
-    options = provided or expert_options.ExpertsDynamicMemoryOptions(
-        memory_flag=config_module.ROUTER_MEMORY_FLAG,
-        memory_option=config_module.ROUTER_MEMORY_OPTION,
-        memory_position_option=config_module.ROUTER_MEMORY_POSITION_OPTION,
-        memory_test_time_training_learning_rate=config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-        memory_test_time_training_num_inner_steps=config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-        memory_stack_source=_default_controller_stack_source(
-            config_module, "router_memory_stack"
-        ),
+    options = provided or config_defaults.experts_dynamic_memory_options(
+        config_module,
+        "router",
     )
     updates = _pop_updates(
         kwargs,
@@ -371,6 +323,8 @@ def _router_dynamic_memory_options_from_kwargs(
         kwargs,
         config_module,
         "router_memory_stack",
+        role="router",
+        stack="memory",
         provided=options.memory_stack_source,
     )
     return replace(options, **updates)
@@ -382,23 +336,9 @@ def _router_recurrent_controller_options_from_kwargs(
     *,
     provided: expert_options.ExpertsRecurrentControllerOptions | None,
 ) -> expert_options.ExpertsRecurrentControllerOptions:
-    options = provided or expert_options.ExpertsRecurrentControllerOptions(
-        recurrent_flag=config_module.ROUTER_RECURRENT_FLAG,
-        recurrent_max_steps=config_module.ROUTER_RECURRENT_MAX_STEPS,
-        recurrent_layer_norm_position=config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_stack_gate_flag=config_module.ROUTER_RECURRENT_STACK_GATE_FLAG,
-        recurrent_gate_option=config_module.ROUTER_RECURRENT_GATE_OPTION,
-        recurrent_gate_activation=config_module.ROUTER_RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=_default_controller_stack_source(
-            config_module, "router_recurrent_gate_stack"
-        ),
-        recurrent_stack_halting_flag=config_module.ROUTER_RECURRENT_STACK_HALTING_FLAG,
-        recurrent_halting_threshold=config_module.ROUTER_RECURRENT_HALTING_THRESHOLD,
-        recurrent_halting_dropout=config_module.ROUTER_RECURRENT_HALTING_DROPOUT,
-        recurrent_halting_hidden_state_mode=config_module.ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE,
-        recurrent_halting_stack_source=_default_controller_stack_source(
-            config_module, "router_recurrent_halting_stack"
-        ),
+    options = provided or config_defaults.experts_recurrent_controller_options(
+        config_module,
+        "router",
     )
     updates = _pop_updates(
         kwargs,
@@ -421,46 +361,19 @@ def _router_recurrent_controller_options_from_kwargs(
         kwargs,
         config_module,
         "router_recurrent_gate_stack",
+        role="router",
+        stack="recurrent_gate",
         provided=options.recurrent_gate_stack_source,
     )
     updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
         config_module,
         "router_recurrent_halting_stack",
+        role="router",
+        stack="recurrent_halting",
         provided=options.recurrent_halting_stack_source,
     )
     return replace(options, **updates)
-
-
-def _default_controller_stack_source(
-    config_module: ModuleType, prefix: str
-) -> expert_options.ExpertsSubmoduleStackSource:
-    config_prefix = prefix.upper()
-    return expert_options.ExpertsSubmoduleStackSource(
-        independent_flag=getattr(config_module, f"{config_prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config_module, f"{config_prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config_module, f"{config_prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(
-            config_module, f"{config_prefix}_LAST_LAYER_BIAS_OPTION"
-        ),
-        apply_output_pipeline_flag=getattr(
-            config_module, f"{config_prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config_module, f"{config_prefix}_ACTIVATION"),
-        layer_norm_position=getattr(
-            config_module, f"{config_prefix}_LAYER_NORM_POSITION"
-        ),
-        residual_connection_option=getattr(
-            config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(
-            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
-        ),
-        dropout_probability=getattr(
-            config_module, f"{config_prefix}_DROPOUT_PROBABILITY"
-        ),
-        bias_flag=getattr(config_module, f"{config_prefix}_BIAS_FLAG"),
-    )
 
 
 def _pop_updates(kwargs: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:

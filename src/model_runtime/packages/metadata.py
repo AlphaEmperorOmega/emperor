@@ -3,17 +3,29 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from emperor.experiments import (
     ExperimentTask,
     experiment_task_name,
     resolve_experiment_task,
 )
+from model_runtime.packages.configuration import (
+    config_key_to_model_param,
+    iter_supported_config_keys,
+    normalize_key,
+)
+from model_runtime.packages.configuration_metadata import configuration_field_metadata
 from model_runtime.packages.identity import ModelIdentity
+from model_runtime.packages.runtime_defaults import (
+    RuntimeDefaultsError,
+    RuntimeDefaultsSpec,
+)
 
 if TYPE_CHECKING:
     from emperor.monitoring import MonitorOption
+    from model_runtime.packages.definition import ModelPackage
+    from model_runtime.packages.inspection_limits import InspectionConstructionLimits
 
 
 def _coerce_dataset_options_by_task(
@@ -28,8 +40,9 @@ def _coerce_dataset_options_by_task(
         )
 
     options_by_task: dict[ExperimentTask, tuple[type, ...]] = {}
-    for raw_task, raw_datasets in raw_options.items():
-        task = resolve_experiment_task(raw_task)
+    raw_options_mapping = cast(dict[object, object], raw_options)
+    for raw_task, raw_datasets in raw_options_mapping.items():
+        task = resolve_experiment_task(cast(str | ExperimentTask | None, raw_task))
         if task is None:
             raise ValueError(
                 f"Model Package '{identity.catalog_key}' has invalid Experiment "
@@ -40,7 +53,8 @@ def _coerce_dataset_options_by_task(
                 f"Model Package '{identity.catalog_key}' must define a non-empty "
                 f"dataset list for {experiment_task_name(task)}."
             )
-        if any(not isinstance(dataset, type) for dataset in raw_datasets):
+        raw_dataset_list = cast(list[object], raw_datasets)
+        if any(not isinstance(dataset, type) for dataset in raw_dataset_list):
             raise ValueError(
                 f"Model Package '{identity.catalog_key}' dataset options for "
                 f"{experiment_task_name(task)} must contain dataset types."
@@ -50,7 +64,7 @@ def _coerce_dataset_options_by_task(
                 f"Model Package '{identity.catalog_key}' defines duplicate "
                 f"Experiment Task {experiment_task_name(task)!r}."
             )
-        options_by_task[task] = tuple(raw_datasets)
+        options_by_task[task] = tuple(cast(list[type[Any]], raw_dataset_list))
     return options_by_task
 
 
@@ -76,15 +90,74 @@ def _coerce_default_experiment_task(
     return default_task
 
 
-@dataclass(frozen=True)
+def _keys_by_alias(supported_keys: tuple[str, ...]) -> dict[str, str]:
+    keys_by_alias: dict[str, str] = {}
+    for config_key in supported_keys:
+        keys_by_alias[normalize_key(config_key)] = config_key
+        keys_by_alias[normalize_key(config_key_to_model_param(config_key))] = config_key
+    return keys_by_alias
+
+
+def _nested_metadata(
+    metadata: Mapping[str, Mapping[str, Any]],
+) -> Mapping[str, Mapping[str, Any]]:
+    return MappingProxyType(
+        {key: MappingProxyType(dict(value)) for key, value in metadata.items()}
+    )
+
+
+def _coerce_monitor_options(
+    identity: ModelIdentity,
+    source: ModuleType,
+) -> tuple[MonitorOption, ...]:
+    from emperor.monitoring import MonitorOption
+
+    raw_monitors = getattr(source, "MONITOR_OPTIONS", []) or []
+    if not isinstance(raw_monitors, list):
+        raise ValueError(
+            f"Model Package '{identity.catalog_key}' MONITOR_OPTIONS must be a list."
+        )
+    raw_monitor_list = cast(list[object], raw_monitors)
+    invalid_monitors = [
+        type(option).__name__
+        for option in raw_monitor_list
+        if not isinstance(option, MonitorOption)
+    ]
+    if invalid_monitors:
+        raise ValueError(
+            f"Model package '{identity.catalog_key}' has invalid MONITOR_OPTIONS "
+            f"entries: {', '.join(invalid_monitors)}."
+        )
+    monitor_options = cast(list[MonitorOption], raw_monitor_list)
+    monitor_names = [option.name for option in monitor_options]
+    duplicate_monitors = sorted(
+        name for name in set(monitor_names) if monitor_names.count(name) > 1
+    )
+    if duplicate_monitors:
+        raise ValueError(
+            f"Model package '{identity.catalog_key}' has duplicate monitor options: "
+            f"{', '.join(duplicate_monitors)}."
+        )
+    return tuple(monitor_options)
+
+
+def _coerce_search_space_items(source: ModuleType) -> dict[str, tuple[Any, ...]]:
+    search_items: dict[str, tuple[Any, ...]] = {}
+    for key, value in cast(dict[str, object], vars(source)).items():
+        if key.startswith("SEARCH_SPACE_") and isinstance(value, list):
+            search_items[key] = tuple(cast(list[Any], value))
+    return search_items
+
+
+@dataclass(frozen=True, init=False)
 class ModelMetadata:
     """Descriptive metadata supplied by one package-local adapter."""
 
     identity: ModelIdentity
-    runtime_defaults: ModuleType
-    dataset_options: ModuleType
-    monitor_options_source: ModuleType
-    search_space: ModuleType
+    _runtime_defaults_source: ModuleType = field(repr=False)
+    _dataset_options_source: ModuleType = field(repr=False)
+    _monitor_options_source: ModuleType = field(repr=False)
+    _search_space_source: ModuleType = field(repr=False)
     _dataset_options_by_task: Mapping[ExperimentTask, tuple[type, ...]] = field(
         init=False,
         repr=False,
@@ -102,59 +175,96 @@ class ModelMetadata:
         compare=False,
     )
 
-    def __post_init__(self) -> None:
-        from emperor.monitoring import MonitorOption
+    def __init__(
+        self,
+        identity: ModelIdentity,
+        runtime_defaults: ModuleType,
+        dataset_options: ModuleType,
+        monitor_options_source: ModuleType,
+        search_space: ModuleType,
+    ) -> None:
+        object.__setattr__(self, "identity", identity)
+        object.__setattr__(self, "_runtime_defaults_source", runtime_defaults)
+        object.__setattr__(self, "_dataset_options_source", dataset_options)
+        object.__setattr__(self, "_monitor_options_source", monitor_options_source)
+        object.__setattr__(self, "_search_space_source", search_space)
+        self.__post_init__()
 
+    def __post_init__(self) -> None:
         options_by_task = _coerce_dataset_options_by_task(
             self.identity,
-            self.dataset_options,
+            self._dataset_options_source,
         )
         default_task = _coerce_default_experiment_task(
             self.identity,
-            self.dataset_options,
+            self._dataset_options_source,
             options_by_task,
         )
-        raw_monitors = getattr(self.monitor_options_source, "MONITOR_OPTIONS", []) or []
-        if not isinstance(raw_monitors, list):
-            raise ValueError(
-                f"Model Package '{self.identity.catalog_key}' MONITOR_OPTIONS "
-                "must be a list."
-            )
-        invalid_monitors = [
-            type(option).__name__
-            for option in raw_monitors
-            if not isinstance(option, MonitorOption)
-        ]
-        if invalid_monitors:
-            raise ValueError(
-                f"Model package '{self.identity.catalog_key}' has invalid "
-                f"MONITOR_OPTIONS entries: {', '.join(invalid_monitors)}."
-            )
-        monitor_names = [option.name for option in raw_monitors]
-        duplicate_monitors = sorted(
-            name for name in set(monitor_names) if monitor_names.count(name) > 1
+        monitor_options = _coerce_monitor_options(
+            self.identity,
+            self._monitor_options_source,
         )
-        if duplicate_monitors:
-            raise ValueError(
-                f"Model package '{self.identity.catalog_key}' has duplicate "
-                f"monitor options: {', '.join(duplicate_monitors)}."
-            )
-        search_items = {
-            key: tuple(value)
-            for key, value in vars(self.search_space).items()
-            if key.startswith("SEARCH_SPACE_") and isinstance(value, list)
-        }
+        search_items = _coerce_search_space_items(self._search_space_source)
         object.__setattr__(
             self,
             "_dataset_options_by_task",
             MappingProxyType(options_by_task),
         )
         object.__setattr__(self, "_default_task", default_task)
-        object.__setattr__(self, "_monitor_options", tuple(raw_monitors))
+        object.__setattr__(self, "_monitor_options", monitor_options)
         object.__setattr__(
             self,
             "_search_space_items",
             MappingProxyType(search_items),
+        )
+
+    def compile_runtime_defaults_spec(
+        self,
+        package: ModelPackage,
+        inspection_limits: InspectionConstructionLimits,
+    ) -> RuntimeDefaultsSpec:
+        try:
+            config_module = self._runtime_defaults_source
+            search_space_module = self._search_space_source
+            supported_keys = tuple(iter_supported_config_keys(config_module))
+            keys_by_alias = _keys_by_alias(supported_keys)
+            config_metadata = configuration_field_metadata(config_module)
+            search_metadata = configuration_field_metadata(
+                search_space_module,
+                include_search_space=True,
+            )
+            search_values = {
+                key: tuple(values) for key, values in self.search_space_items.items()
+            }
+            skipped_schema_keys = frozenset(
+                key
+                for key in getattr(config_module, "CONFIG_SCHEMA_SKIP_KEYS", ())
+                if isinstance(key, str) and key in supported_keys
+            )
+        except ValueError as exc:
+            raise RuntimeDefaultsError(str(exc)) from exc
+        except Exception as exc:
+            raise RuntimeDefaultsError(
+                f"Failed to import model package '{package.catalog_key}': {exc}"
+            ) from exc
+
+        return RuntimeDefaultsSpec(
+            package=package,
+            _config_module=config_module,
+            _search_space_module=search_space_module,
+            supported_keys=supported_keys,
+            keys_by_alias=MappingProxyType(keys_by_alias),
+            annotations=MappingProxyType(
+                dict(getattr(config_module, "__annotations__", {}))
+            ),
+            search_annotations=MappingProxyType(
+                dict(getattr(search_space_module, "__annotations__", {}))
+            ),
+            configuration_metadata=_nested_metadata(config_metadata),
+            search_metadata=_nested_metadata(search_metadata),
+            search_values=MappingProxyType(search_values),
+            skipped_schema_keys=skipped_schema_keys,
+            inspection_limits=inspection_limits,
         )
 
     @property

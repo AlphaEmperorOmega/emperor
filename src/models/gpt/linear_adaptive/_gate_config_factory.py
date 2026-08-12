@@ -1,5 +1,4 @@
-from emperor.layers import GateConfig, LayerConfig, LayerStackConfig
-from emperor.linears import LinearLayerConfig
+from emperor.layers import GateConfig, LayerStackConfig
 from models.gpt.linear_adaptive.runtime_options import (
     LayerControllerOptions,
     RecurrentControllerOptions,
@@ -7,7 +6,7 @@ from models.gpt.linear_adaptive.runtime_options import (
     resolve_controller_stack_options,
 )
 
-from ._residual import build_residual_config
+from ._controller_stack_config import build_controller_stack_config
 
 
 class GateConfigFactory:
@@ -41,7 +40,7 @@ class GateConfigFactory:
             self.__recurrent_gate_stack_defaults(),
         )
         return GateConfig(
-            model_config=self.__build_controller_stack(options),
+            model_config=build_controller_stack_config(options),
             option=self.recurrent_controller_options.recurrent_gate_option,
             activation=self.recurrent_controller_options.recurrent_gate_activation,
         )
@@ -51,7 +50,7 @@ class GateConfigFactory:
             self.layer_controller_options.gate_stack_source,
             self.submodule_stack_options,
         )
-        return self.__build_controller_stack(options)
+        return build_controller_stack_config(options)
 
     def __recurrent_gate_stack_defaults(self) -> SubmoduleStackOptions:
         if not self.recurrent_stack_inherits_gate_stack:
@@ -59,33 +58,4 @@ class GateConfigFactory:
         return resolve_controller_stack_options(
             self.layer_controller_options.gate_stack_source,
             self.submodule_stack_options,
-        )
-
-    def __build_controller_stack(
-        self,
-        options: SubmoduleStackOptions,
-        *,
-        hidden_dim: int | None = None,
-        output_dim: int | None = None,
-    ) -> LayerStackConfig:
-        return LayerStackConfig(
-            hidden_dim=options.hidden_dim if hidden_dim is None else hidden_dim,
-            output_dim=output_dim,
-            num_layers=options.num_layers,
-            last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
-            layer_config=LayerConfig(
-                activation=options.activation,
-                layer_norm_position=options.layer_norm_position,
-                residual_config=build_residual_config(
-                    options.residual_connection_option,
-                    options.residual_model_flag,
-                    options.residual_stack_options,
-                ),
-                dropout_probability=options.dropout_probability,
-                halting_config=None,
-                gate_config=None,
-                memory_config=None,
-                layer_model_config=LinearLayerConfig(bias_flag=options.bias_flag),
-            ),
         )

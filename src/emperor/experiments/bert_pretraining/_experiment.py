@@ -15,6 +15,12 @@ if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
 
+_INTEGER_DTYPES = {
+    torch.int32,
+    torch.int64,
+}
+
+
 class BertPretrainingExperiment(LightningModule):
     VALIDATOR = _ExperimentConfigValidator
 
@@ -104,8 +110,7 @@ class BertPretrainingExperiment(LightningModule):
         )
         token_tensors = (input_ids, mlm_labels, attention_mask, token_type_ids)
         if any(
-            not isinstance(value, Tensor) or value.ndim != 2
-            for value in token_tensors
+            not isinstance(value, Tensor) or value.ndim != 2 for value in token_tensors
         ):
             raise ValueError(
                 "BERT-pretraining input IDs, MLM labels, attention mask, and "
@@ -128,6 +133,73 @@ class BertPretrainingExperiment(LightningModule):
                 "dimension."
             )
         return batch
+
+    def _prepare_model_inputs(
+        self,
+        input_ids: Tensor,
+        attention_mask: Tensor | None,
+        token_type_ids: Tensor | None,
+        *,
+        token_type_vocab_size: int,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Validate BERT model inputs before any stochastic model operation."""
+
+        if not isinstance(input_ids, Tensor) or input_ids.ndim != 2:
+            raise ValueError("input_ids must be a rank-2 tensor.")
+        expected_shape = tuple(input_ids.shape)
+        if any(dimension < 1 for dimension in expected_shape):
+            raise ValueError("input_ids must have non-empty batch and sequence axes.")
+        if input_ids.dtype not in _INTEGER_DTYPES:
+            raise ValueError("input_ids must use torch.int32 or torch.int64.")
+        if torch.any(input_ids < 0) or torch.any(input_ids >= self.cfg.input_dim):
+            raise ValueError(
+                "input_ids values must be in [0, config.input_dim), received "
+                f"config.input_dim={self.cfg.input_dim}."
+            )
+
+        if attention_mask is not None:
+            if not isinstance(attention_mask, Tensor):
+                raise ValueError("attention_mask must be a tensor when provided.")
+            if tuple(attention_mask.shape) != expected_shape:
+                raise ValueError(
+                    f"attention_mask must have shape {expected_shape}, received "
+                    f"{tuple(attention_mask.shape)}."
+                )
+            if attention_mask.is_complex():
+                raise ValueError("attention_mask must contain boolean or 0/1 values.")
+            if not torch.all((attention_mask == 0) | (attention_mask == 1)):
+                raise ValueError("attention_mask must contain only 0/1 values.")
+
+        if token_type_ids is not None:
+            if not isinstance(token_type_ids, Tensor):
+                raise ValueError("token_type_ids must be a tensor when provided.")
+            if tuple(token_type_ids.shape) != expected_shape:
+                raise ValueError(
+                    f"token_type_ids must have shape {expected_shape}, received "
+                    f"{tuple(token_type_ids.shape)}."
+                )
+            if token_type_ids.dtype not in _INTEGER_DTYPES:
+                raise ValueError("token_type_ids must use torch.int32 or torch.int64.")
+            if torch.any(token_type_ids < 0) or torch.any(
+                token_type_ids >= token_type_vocab_size
+            ):
+                raise ValueError(
+                    "token_type_ids values must be in [0, token_type_vocab_size), "
+                    f"received token_type_vocab_size={token_type_vocab_size}."
+                )
+
+        input_ids = input_ids.to(self.device)
+        attention_mask = (
+            torch.ones_like(input_ids)
+            if attention_mask is None
+            else attention_mask.to(self.device)
+        )
+        token_type_ids = (
+            torch.zeros_like(input_ids)
+            if token_type_ids is None
+            else token_type_ids.to(self.device)
+        )
+        return input_ids, attention_mask, token_type_ids
 
     def _validate_model_output(
         self,
@@ -164,8 +236,7 @@ class BertPretrainingExperiment(LightningModule):
             )
         if nsp_logits.size(0) != next_sentence_labels.size(0):
             raise ValueError(
-                "BERT-pretraining NSP logits and labels must share the batch "
-                "dimension."
+                "BERT-pretraining NSP logits and labels must share the batch dimension."
             )
         if nsp_logits.size(1) != 2:
             raise ValueError(

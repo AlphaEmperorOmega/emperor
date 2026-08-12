@@ -1,12 +1,24 @@
-# ruff: noqa: E501
-
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from types import ModuleType
-from typing import Any
 
+from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
+from emperor.layers import (
+    ActivationOptions,
+    LastLayerBiasOptions,
+    LayerGateOptions,
+    LayerNormPositionOptions,
+    ResidualConfig,
+)
+from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.gpt.expert_linear_adaptive import runtime_options as expert_options
+from models.gpt.expert_linear_adaptive._flat_updates import (
+    pop_updates as _pop_updates,
+)
+from models.gpt.expert_linear_adaptive._flat_updates import (
+    replace_prefixed_fields as _replace_prefixed_fields,
+)
 
 _SUBMODULE_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
@@ -27,14 +39,13 @@ _CONTROLLER_STACK_FIELD_MAP = {
 
 
 def _role_stack_options_from_kwargs(
-    kwargs: dict[str, Any],
-    config_module: ModuleType,
+    kwargs: dict[str, object],
     prefix: str,
     *,
     defaults: expert_options.ExpertsSubmoduleStackOptions,
     provided: expert_options.ExpertsSubmoduleStackOptions | None,
     extra_mapping: dict[str, str] | None = None,
-    default_overrides: dict[str, Any] | None = None,
+    default_overrides: dict[str, object] | None = None,
 ) -> expert_options.ExpertsSubmoduleStackOptions:
     options = provided or replace(defaults, **default_overrides or {})
     mapping = {
@@ -65,7 +76,7 @@ def _router_stack_options_from_config(
 
 
 def _mixture_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsMixtureOptions | None,
@@ -97,7 +108,7 @@ def _mixture_options_from_kwargs(
 
 
 def _sampler_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsSamplerOptions | None,
@@ -131,7 +142,7 @@ def _sampler_options_from_kwargs(
 
 
 def _router_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsRouterOptions | None,
@@ -143,26 +154,161 @@ def _router_options_from_kwargs(
     return replace(options, **updates) if updates else options
 
 
-def _controller_stack_source_from_kwargs(
-    kwargs: dict[str, Any],
+def _controller_stack_source(
+    *,
+    independent_flag: bool,
+    hidden_dim: int | None,
+    num_layers: int | None,
+    last_layer_bias_option: LastLayerBiasOptions | None,
+    apply_output_pipeline_flag: bool | None,
+    activation: ActivationOptions | None,
+    layer_norm_position: LayerNormPositionOptions | None,
+    residual_connection_option: type[ResidualConfig] | None,
+    residual_model_flag: bool,
+    dropout_probability: float | None,
+    bias_flag: bool | None,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return expert_options.ExpertsSubmoduleStackSource(
+        independent_flag=independent_flag,
+        hidden_dim=hidden_dim,
+        num_layers=num_layers,
+        last_layer_bias_option=last_layer_bias_option,
+        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        activation=activation,
+        layer_norm_position=layer_norm_position,
+        residual_connection_option=residual_connection_option,
+        residual_model_flag=residual_model_flag,
+        dropout_probability=dropout_probability,
+        bias_flag=bias_flag,
+    )
+
+
+def _gate_stack_source(
     config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.GATE_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.GATE_STACK_HIDDEN_DIM,
+        num_layers=config_module.GATE_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.GATE_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=config_module.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        activation=config_module.GATE_STACK_ACTIVATION,
+        layer_norm_position=config_module.GATE_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=config_module.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_model_flag=config_module.GATE_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.GATE_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.GATE_STACK_BIAS_FLAG,
+    )
+
+
+def _halting_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.HALTING_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.HALTING_STACK_HIDDEN_DIM,
+        num_layers=config_module.HALTING_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=(
+            config_module.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.HALTING_STACK_ACTIVATION,
+        layer_norm_position=config_module.HALTING_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.HALTING_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.HALTING_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.HALTING_STACK_BIAS_FLAG,
+    )
+
+
+def _memory_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.MEMORY_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.MEMORY_STACK_HIDDEN_DIM,
+        num_layers=config_module.MEMORY_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=(
+            config_module.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.MEMORY_STACK_ACTIVATION,
+        layer_norm_position=config_module.MEMORY_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.MEMORY_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.MEMORY_STACK_BIAS_FLAG,
+    )
+
+
+def _recurrent_gate_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.RECURRENT_GATE_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.RECURRENT_GATE_STACK_HIDDEN_DIM,
+        num_layers=config_module.RECURRENT_GATE_STACK_NUM_LAYERS,
+        last_layer_bias_option=(
+            config_module.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        apply_output_pipeline_flag=(
+            config_module.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.RECURRENT_GATE_STACK_ACTIVATION,
+        layer_norm_position=config_module.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.RECURRENT_GATE_STACK_BIAS_FLAG,
+    )
+
+
+def _recurrent_halting_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.RECURRENT_HALTING_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.RECURRENT_HALTING_STACK_HIDDEN_DIM,
+        num_layers=config_module.RECURRENT_HALTING_STACK_NUM_LAYERS,
+        last_layer_bias_option=(
+            config_module.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+        ),
+        apply_output_pipeline_flag=(
+            config_module.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.RECURRENT_HALTING_STACK_ACTIVATION,
+        layer_norm_position=config_module.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=(config_module.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY),
+        bias_flag=config_module.RECURRENT_HALTING_STACK_BIAS_FLAG,
+    )
+
+
+def _controller_stack_source_from_kwargs(
+    kwargs: dict[str, object],
     prefix: str,
     *,
-    provided: expert_options.ExpertsSubmoduleStackSource | None = None,
+    provided: expert_options.ExpertsSubmoduleStackSource,
 ) -> expert_options.ExpertsSubmoduleStackSource:
-    source = provided or _default_controller_stack_source(config_module, prefix)
-    updates = _pop_updates(
+    return _replace_prefixed_fields(
         kwargs,
-        {
-            f"{prefix}_{flat_field}": dataclass_field
-            for flat_field, dataclass_field in _CONTROLLER_STACK_FIELD_MAP.items()
-        },
+        provided,
+        prefix,
+        _CONTROLLER_STACK_FIELD_MAP,
     )
-    return replace(source, **updates) if updates else source
 
 
 def _layer_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsLayerControllerOptions | None,
@@ -171,15 +317,13 @@ def _layer_controller_options_from_kwargs(
         stack_gate_flag=config_module.STACK_GATE_FLAG,
         gate_option=config_module.GATE_OPTION,
         gate_activation=config_module.GATE_ACTIVATION,
-        gate_stack_source=_default_controller_stack_source(config_module, "gate_stack"),
+        gate_stack_source=_gate_stack_source(config_module),
         stack_halting_flag=config_module.STACK_HALTING_FLAG,
         halting_option=config_module.HALTING_OPTION,
         halting_threshold=config_module.HALTING_THRESHOLD,
         halting_dropout=config_module.HALTING_DROPOUT,
         halting_hidden_state_mode=config_module.HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=_default_controller_stack_source(
-            config_module, "halting_stack"
-        ),
+        halting_stack_source=_halting_stack_source(config_module),
         halting_output_dim=config_module.HALTING_OUTPUT_DIM,
     )
     updates = _pop_updates(
@@ -198,16 +342,16 @@ def _layer_controller_options_from_kwargs(
         },
     )
     updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "gate_stack", provided=options.gate_stack_source
+        kwargs, "gate_stack", provided=options.gate_stack_source
     )
     updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "halting_stack", provided=options.halting_stack_source
+        kwargs, "halting_stack", provided=options.halting_stack_source
     )
     return replace(options, **updates)
 
 
 def _dynamic_memory_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsDynamicMemoryOptions | None,
@@ -218,9 +362,7 @@ def _dynamic_memory_options_from_kwargs(
         memory_position_option=config_module.MEMORY_POSITION_OPTION,
         memory_test_time_training_learning_rate=config_module.MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
         memory_test_time_training_num_inner_steps=config_module.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-        memory_stack_source=_default_controller_stack_source(
-            config_module, "memory_stack"
-        ),
+        memory_stack_source=_memory_stack_source(config_module),
     )
     updates = _pop_updates(
         kwargs,
@@ -233,13 +375,13 @@ def _dynamic_memory_options_from_kwargs(
         },
     )
     updates["memory_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "memory_stack", provided=options.memory_stack_source
+        kwargs, "memory_stack", provided=options.memory_stack_source
     )
     return replace(options, **updates)
 
 
 def _recurrent_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsRecurrentControllerOptions | None,
@@ -258,18 +400,14 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=_default_controller_stack_source(
-            config_module, "recurrent_gate_stack"
-        ),
+        recurrent_gate_stack_source=_recurrent_gate_stack_source(config_module),
         recurrent_stack_halting_flag=config_module.RECURRENT_STACK_HALTING_FLAG,
         recurrent_halting_option=config_module.RECURRENT_HALTING_OPTION,
         recurrent_halting_threshold=config_module.RECURRENT_HALTING_THRESHOLD,
         recurrent_ponder_cost_weight=config_module.RECURRENT_PONDER_COST_WEIGHT,
         recurrent_halting_dropout=config_module.RECURRENT_HALTING_DROPOUT,
         recurrent_halting_hidden_state_mode=config_module.RECURRENT_HALTING_HIDDEN_STATE_MODE,
-        recurrent_halting_stack_source=_default_controller_stack_source(
-            config_module, "recurrent_halting_stack"
-        ),
+        recurrent_halting_stack_source=_recurrent_halting_stack_source(config_module),
     )
     updates = _pop_updates(
         kwargs,
@@ -297,333 +435,708 @@ def _recurrent_controller_options_from_kwargs(
     )
     updates["recurrent_gate_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
-        config_module,
         "recurrent_gate_stack",
         provided=options.recurrent_gate_stack_source,
     )
     updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
         kwargs,
-        config_module,
         "recurrent_halting_stack",
         provided=options.recurrent_halting_stack_source,
     )
     return replace(options, **updates)
 
 
+@dataclass(frozen=True, slots=True)
+class _LayerStackSources:
+    gate: expert_options.ExpertsSubmoduleStackSource
+    halting: expert_options.ExpertsSubmoduleStackSource
+
+
+@dataclass(frozen=True, slots=True)
+class _RecurrentStackSources:
+    gate: expert_options.ExpertsSubmoduleStackSource
+    halting: expert_options.ExpertsSubmoduleStackSource
+
+
+@dataclass(frozen=True, slots=True)
+class _LayerControllerDefaults:
+    stack_gate_flag: bool
+    gate_option: LayerGateOptions | None
+    gate_activation: ActivationOptions | None
+    stack_sources: _LayerStackSources
+    stack_halting_flag: bool
+    halting_option: type[HaltingConfig]
+    halting_threshold: float
+    halting_dropout: float
+    halting_hidden_state_mode: HaltingHiddenStateModeOptions
+    halting_output_dim: int
+
+
+@dataclass(frozen=True, slots=True)
+class _DynamicMemoryDefaults:
+    memory_flag: bool
+    memory_option: type[DynamicMemoryConfig]
+    memory_position_option: MemoryPositionOptions
+    learning_rate: float | None
+    num_inner_steps: int | None
+    stack_source: expert_options.ExpertsSubmoduleStackSource
+
+
+@dataclass(frozen=True, slots=True)
+class _RecurrentControllerDefaults:
+    recurrent_flag: bool
+    recurrent_max_steps: int
+    recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_stack_gate_flag: bool
+    recurrent_gate_option: LayerGateOptions | None
+    recurrent_gate_activation: ActivationOptions | None
+    stack_sources: _RecurrentStackSources
+    recurrent_stack_halting_flag: bool
+    recurrent_halting_option: type[HaltingConfig]
+    recurrent_halting_threshold: float
+    recurrent_halting_dropout: float
+    recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions
+
+
+def _layer_controller_options(
+    defaults: _LayerControllerDefaults,
+) -> expert_options.ExpertsLayerControllerOptions:
+    return expert_options.ExpertsLayerControllerOptions(
+        stack_gate_flag=defaults.stack_gate_flag,
+        gate_option=defaults.gate_option,
+        gate_activation=defaults.gate_activation,
+        gate_stack_source=defaults.stack_sources.gate,
+        stack_halting_flag=defaults.stack_halting_flag,
+        halting_option=defaults.halting_option,
+        halting_threshold=defaults.halting_threshold,
+        halting_dropout=defaults.halting_dropout,
+        halting_hidden_state_mode=defaults.halting_hidden_state_mode,
+        halting_stack_source=defaults.stack_sources.halting,
+        halting_output_dim=defaults.halting_output_dim,
+    )
+
+
+def _dynamic_memory_options(
+    defaults: _DynamicMemoryDefaults,
+) -> expert_options.ExpertsDynamicMemoryOptions:
+    return expert_options.ExpertsDynamicMemoryOptions(
+        memory_flag=defaults.memory_flag,
+        memory_option=defaults.memory_option,
+        memory_position_option=defaults.memory_position_option,
+        memory_test_time_training_learning_rate=defaults.learning_rate,
+        memory_test_time_training_num_inner_steps=defaults.num_inner_steps,
+        memory_stack_source=defaults.stack_source,
+    )
+
+
+def _recurrent_controller_options(
+    defaults: _RecurrentControllerDefaults,
+) -> expert_options.ExpertsRecurrentControllerOptions:
+    return expert_options.ExpertsRecurrentControllerOptions(
+        recurrent_flag=defaults.recurrent_flag,
+        recurrent_max_steps=defaults.recurrent_max_steps,
+        recurrent_layer_norm_position=defaults.recurrent_layer_norm_position,
+        recurrent_stack_gate_flag=defaults.recurrent_stack_gate_flag,
+        recurrent_gate_option=defaults.recurrent_gate_option,
+        recurrent_gate_activation=defaults.recurrent_gate_activation,
+        recurrent_gate_stack_source=defaults.stack_sources.gate,
+        recurrent_stack_halting_flag=defaults.recurrent_stack_halting_flag,
+        recurrent_halting_option=defaults.recurrent_halting_option,
+        recurrent_halting_threshold=defaults.recurrent_halting_threshold,
+        recurrent_halting_dropout=defaults.recurrent_halting_dropout,
+        recurrent_halting_hidden_state_mode=(
+            defaults.recurrent_halting_hidden_state_mode
+        ),
+        recurrent_halting_stack_source=defaults.stack_sources.halting,
+    )
+
+
+def _role_layer_controller_options_from_kwargs(
+    kwargs: dict[str, object],
+    *,
+    role_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
+    options: expert_options.ExpertsLayerControllerOptions,
+) -> expert_options.ExpertsLayerControllerOptions:
+    updates = _pop_updates(
+        kwargs,
+        {
+            f"{role_prefix}_stack_gate_flag": "stack_gate_flag",
+            f"{role_prefix}_gate_option": "gate_option",
+            f"{role_prefix}_gate_activation": "gate_activation",
+            f"{role_prefix}_stack_halting_flag": "stack_halting_flag",
+            f"{role_prefix}_halting_option": "halting_option",
+            f"{role_prefix}_halting_threshold": "halting_threshold",
+            f"{role_prefix}_halting_dropout": "halting_dropout",
+            f"{role_prefix}_halting_hidden_state_mode": "halting_hidden_state_mode",
+            f"{role_prefix}_halting_output_dim": "halting_output_dim",
+        },
+    )
+    updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        gate_stack_prefix,
+        provided=options.gate_stack_source,
+    )
+    updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        halting_stack_prefix,
+        provided=options.halting_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _role_dynamic_memory_options_from_kwargs(
+    kwargs: dict[str, object],
+    *,
+    role_prefix: str,
+    memory_stack_prefix: str,
+    options: expert_options.ExpertsDynamicMemoryOptions,
+) -> expert_options.ExpertsDynamicMemoryOptions:
+    updates = _pop_updates(
+        kwargs,
+        {
+            f"{role_prefix}_memory_flag": "memory_flag",
+            f"{role_prefix}_memory_option": "memory_option",
+            f"{role_prefix}_memory_position_option": "memory_position_option",
+            f"{role_prefix}_memory_test_time_training_learning_rate": (
+                "memory_test_time_training_learning_rate"
+            ),
+            f"{role_prefix}_memory_test_time_training_num_inner_steps": (
+                "memory_test_time_training_num_inner_steps"
+            ),
+        },
+    )
+    updates["memory_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        memory_stack_prefix,
+        provided=options.memory_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _role_recurrent_controller_options_from_kwargs(
+    kwargs: dict[str, object],
+    *,
+    role_prefix: str,
+    gate_stack_prefix: str,
+    halting_stack_prefix: str,
+    options: expert_options.ExpertsRecurrentControllerOptions,
+) -> expert_options.ExpertsRecurrentControllerOptions:
+    updates = _pop_updates(
+        kwargs,
+        {
+            f"{role_prefix}_recurrent_flag": "recurrent_flag",
+            f"{role_prefix}_recurrent_max_steps": "recurrent_max_steps",
+            f"{role_prefix}_recurrent_layer_norm_position": (
+                "recurrent_layer_norm_position"
+            ),
+            f"{role_prefix}_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
+            f"{role_prefix}_recurrent_gate_option": "recurrent_gate_option",
+            f"{role_prefix}_recurrent_gate_activation": "recurrent_gate_activation",
+            f"{role_prefix}_recurrent_stack_halting_flag": (
+                "recurrent_stack_halting_flag"
+            ),
+            f"{role_prefix}_recurrent_halting_option": "recurrent_halting_option",
+            f"{role_prefix}_recurrent_halting_threshold": (
+                "recurrent_halting_threshold"
+            ),
+            f"{role_prefix}_recurrent_halting_dropout": "recurrent_halting_dropout",
+            f"{role_prefix}_recurrent_halting_hidden_state_mode": (
+                "recurrent_halting_hidden_state_mode"
+            ),
+        },
+    )
+    updates["recurrent_gate_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        gate_stack_prefix,
+        provided=options.recurrent_gate_stack_source,
+    )
+    updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
+        kwargs,
+        halting_stack_prefix,
+        provided=options.recurrent_halting_stack_source,
+    )
+    return replace(options, **updates)
+
+
+def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources:
+    return _LayerStackSources(
+        gate=_controller_stack_source(
+            independent_flag=config_module.EXPERT_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config_module.EXPERT_GATE_STACK_HIDDEN_DIM,
+            num_layers=config_module.EXPERT_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.EXPERT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.EXPERT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.EXPERT_GATE_STACK_ACTIVATION,
+            layer_norm_position=config_module.EXPERT_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config_module.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config_module.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config_module.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config_module.EXPERT_GATE_STACK_BIAS_FLAG,
+        ),
+        halting=_controller_stack_source(
+            independent_flag=config_module.EXPERT_HALTING_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config_module.EXPERT_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config_module.EXPERT_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.EXPERT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.EXPERT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.EXPERT_HALTING_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.EXPERT_HALTING_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.EXPERT_HALTING_STACK_BIAS_FLAG,
+        ),
+    )
+
+
+def _expert_memory_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.EXPERT_MEMORY_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.EXPERT_MEMORY_STACK_HIDDEN_DIM,
+        num_layers=config_module.EXPERT_MEMORY_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.EXPERT_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=(
+            config_module.EXPERT_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.EXPERT_MEMORY_STACK_ACTIVATION,
+        layer_norm_position=config_module.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.EXPERT_MEMORY_STACK_BIAS_FLAG,
+    )
+
+
+def _expert_recurrent_stack_sources(
+    config_module: ModuleType,
+) -> _RecurrentStackSources:
+    return _RecurrentStackSources(
+        gate=_controller_stack_source(
+            independent_flag=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_INDEPENDENT_FLAG
+            ),
+            hidden_dim=config_module.EXPERT_RECURRENT_GATE_STACK_HIDDEN_DIM,
+            num_layers=config_module.EXPERT_RECURRENT_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG,
+        ),
+        halting=_controller_stack_source(
+            independent_flag=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG
+            ),
+            hidden_dim=config_module.EXPERT_RECURRENT_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config_module.EXPERT_RECURRENT_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.EXPERT_RECURRENT_HALTING_STACK_BIAS_FLAG,
+        ),
+    )
+
+
+def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources:
+    return _LayerStackSources(
+        gate=_controller_stack_source(
+            independent_flag=config_module.ROUTER_GATE_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config_module.ROUTER_GATE_STACK_HIDDEN_DIM,
+            num_layers=config_module.ROUTER_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.ROUTER_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.ROUTER_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.ROUTER_GATE_STACK_ACTIVATION,
+            layer_norm_position=config_module.ROUTER_GATE_STACK_LAYER_NORM_POSITION,
+            residual_connection_option=(
+                config_module.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=config_module.ROUTER_GATE_STACK_RESIDUAL_MODEL_FLAG,
+            dropout_probability=config_module.ROUTER_GATE_STACK_DROPOUT_PROBABILITY,
+            bias_flag=config_module.ROUTER_GATE_STACK_BIAS_FLAG,
+        ),
+        halting=_controller_stack_source(
+            independent_flag=config_module.ROUTER_HALTING_STACK_INDEPENDENT_FLAG,
+            hidden_dim=config_module.ROUTER_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config_module.ROUTER_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.ROUTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.ROUTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.ROUTER_HALTING_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.ROUTER_HALTING_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.ROUTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.ROUTER_HALTING_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.ROUTER_HALTING_STACK_BIAS_FLAG,
+        ),
+    )
+
+
+def _router_memory_stack_source(
+    config_module: ModuleType,
+) -> expert_options.ExpertsSubmoduleStackSource:
+    return _controller_stack_source(
+        independent_flag=config_module.ROUTER_MEMORY_STACK_INDEPENDENT_FLAG,
+        hidden_dim=config_module.ROUTER_MEMORY_STACK_HIDDEN_DIM,
+        num_layers=config_module.ROUTER_MEMORY_STACK_NUM_LAYERS,
+        last_layer_bias_option=config_module.ROUTER_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
+        apply_output_pipeline_flag=(
+            config_module.ROUTER_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        ),
+        activation=config_module.ROUTER_MEMORY_STACK_ACTIVATION,
+        layer_norm_position=config_module.ROUTER_MEMORY_STACK_LAYER_NORM_POSITION,
+        residual_connection_option=(
+            config_module.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
+        ),
+        residual_model_flag=config_module.ROUTER_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
+        dropout_probability=config_module.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY,
+        bias_flag=config_module.ROUTER_MEMORY_STACK_BIAS_FLAG,
+    )
+
+
+def _router_recurrent_stack_sources(
+    config_module: ModuleType,
+) -> _RecurrentStackSources:
+    return _RecurrentStackSources(
+        gate=_controller_stack_source(
+            independent_flag=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_INDEPENDENT_FLAG
+            ),
+            hidden_dim=config_module.ROUTER_RECURRENT_GATE_STACK_HIDDEN_DIM,
+            num_layers=config_module.ROUTER_RECURRENT_GATE_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.ROUTER_RECURRENT_GATE_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.ROUTER_RECURRENT_GATE_STACK_BIAS_FLAG,
+        ),
+        halting=_controller_stack_source(
+            independent_flag=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG
+            ),
+            hidden_dim=config_module.ROUTER_RECURRENT_HALTING_STACK_HIDDEN_DIM,
+            num_layers=config_module.ROUTER_RECURRENT_HALTING_STACK_NUM_LAYERS,
+            last_layer_bias_option=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
+            ),
+            apply_output_pipeline_flag=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            ),
+            activation=config_module.ROUTER_RECURRENT_HALTING_STACK_ACTIVATION,
+            layer_norm_position=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
+            ),
+            residual_connection_option=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
+            ),
+            residual_model_flag=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
+            ),
+            dropout_probability=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
+            ),
+            bias_flag=config_module.ROUTER_RECURRENT_HALTING_STACK_BIAS_FLAG,
+        ),
+    )
+
+
 def _expert_layer_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
-    options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.EXPERT_STACK_GATE_FLAG,
-        gate_option=config_module.EXPERT_GATE_OPTION,
-        gate_activation=config_module.EXPERT_GATE_ACTIVATION,
-        gate_stack_source=_default_controller_stack_source(
-            config_module, "expert_gate_stack"
-        ),
-        stack_halting_flag=config_module.EXPERT_STACK_HALTING_FLAG,
-        halting_option=config_module.EXPERT_HALTING_OPTION,
-        halting_threshold=config_module.EXPERT_HALTING_THRESHOLD,
-        halting_dropout=config_module.EXPERT_HALTING_DROPOUT,
-        halting_hidden_state_mode=config_module.EXPERT_HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=_default_controller_stack_source(
-            config_module, "expert_halting_stack"
-        ),
-        halting_output_dim=config_module.EXPERT_HALTING_OUTPUT_DIM,
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _layer_controller_options(
+            _LayerControllerDefaults(
+                stack_gate_flag=config_module.EXPERT_STACK_GATE_FLAG,
+                gate_option=config_module.EXPERT_GATE_OPTION,
+                gate_activation=config_module.EXPERT_GATE_ACTIVATION,
+                stack_sources=_expert_layer_stack_sources(config_module),
+                stack_halting_flag=config_module.EXPERT_STACK_HALTING_FLAG,
+                halting_option=config_module.EXPERT_HALTING_OPTION,
+                halting_threshold=config_module.EXPERT_HALTING_THRESHOLD,
+                halting_dropout=config_module.EXPERT_HALTING_DROPOUT,
+                halting_hidden_state_mode=(
+                    config_module.EXPERT_HALTING_HIDDEN_STATE_MODE
+                ),
+                halting_output_dim=config_module.EXPERT_HALTING_OUTPUT_DIM,
+            )
+        )
+    return _role_layer_controller_options_from_kwargs(
         kwargs,
-        {
-            "expert_stack_gate_flag": "stack_gate_flag",
-            "expert_gate_option": "gate_option",
-            "expert_gate_activation": "gate_activation",
-            "expert_stack_halting_flag": "stack_halting_flag",
-            "expert_halting_option": "halting_option",
-            "expert_halting_threshold": "halting_threshold",
-            "expert_halting_dropout": "halting_dropout",
-            "expert_halting_hidden_state_mode": "halting_hidden_state_mode",
-            "expert_halting_output_dim": "halting_output_dim",
-        },
+        role_prefix="expert",
+        gate_stack_prefix="expert_gate_stack",
+        halting_stack_prefix="expert_halting_stack",
+        options=provided,
     )
-    updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "expert_gate_stack", provided=options.gate_stack_source
-    )
-    updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "expert_halting_stack",
-        provided=options.halting_stack_source,
-    )
-    return replace(options, **updates)
 
 
 def _expert_dynamic_memory_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsDynamicMemoryOptions | None,
 ) -> expert_options.ExpertsDynamicMemoryOptions:
-    options = provided or expert_options.ExpertsDynamicMemoryOptions(
-        memory_flag=config_module.EXPERT_MEMORY_FLAG,
-        memory_option=config_module.EXPERT_MEMORY_OPTION,
-        memory_position_option=config_module.EXPERT_MEMORY_POSITION_OPTION,
-        memory_test_time_training_learning_rate=config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-        memory_test_time_training_num_inner_steps=config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-        memory_stack_source=_default_controller_stack_source(
-            config_module, "expert_memory_stack"
-        ),
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _dynamic_memory_options(
+            _DynamicMemoryDefaults(
+                memory_flag=config_module.EXPERT_MEMORY_FLAG,
+                memory_option=config_module.EXPERT_MEMORY_OPTION,
+                memory_position_option=config_module.EXPERT_MEMORY_POSITION_OPTION,
+                learning_rate=(
+                    config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
+                ),
+                num_inner_steps=(
+                    config_module.EXPERT_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
+                ),
+                stack_source=_expert_memory_stack_source(config_module),
+            )
+        )
+    return _role_dynamic_memory_options_from_kwargs(
         kwargs,
-        {
-            "expert_memory_flag": "memory_flag",
-            "expert_memory_option": "memory_option",
-            "expert_memory_position_option": "memory_position_option",
-            "expert_memory_test_time_training_learning_rate": "memory_test_time_training_learning_rate",
-            "expert_memory_test_time_training_num_inner_steps": "memory_test_time_training_num_inner_steps",
-        },
+        role_prefix="expert",
+        memory_stack_prefix="expert_memory_stack",
+        options=provided,
     )
-    updates["memory_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "expert_memory_stack",
-        provided=options.memory_stack_source,
-    )
-    return replace(options, **updates)
 
 
 def _expert_recurrent_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsRecurrentControllerOptions | None,
 ) -> expert_options.ExpertsRecurrentControllerOptions:
-    options = provided or expert_options.ExpertsRecurrentControllerOptions(
-        recurrent_flag=config_module.EXPERT_RECURRENT_FLAG,
-        recurrent_max_steps=config_module.EXPERT_RECURRENT_MAX_STEPS,
-        recurrent_layer_norm_position=config_module.EXPERT_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_stack_gate_flag=config_module.EXPERT_RECURRENT_STACK_GATE_FLAG,
-        recurrent_gate_option=config_module.EXPERT_RECURRENT_GATE_OPTION,
-        recurrent_gate_activation=config_module.EXPERT_RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=_default_controller_stack_source(
-            config_module, "expert_recurrent_gate_stack"
-        ),
-        recurrent_stack_halting_flag=config_module.EXPERT_RECURRENT_STACK_HALTING_FLAG,
-        recurrent_halting_option=config_module.EXPERT_RECURRENT_HALTING_OPTION,
-        recurrent_halting_threshold=config_module.EXPERT_RECURRENT_HALTING_THRESHOLD,
-        recurrent_halting_dropout=config_module.EXPERT_RECURRENT_HALTING_DROPOUT,
-        recurrent_halting_hidden_state_mode=config_module.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE,
-        recurrent_halting_stack_source=_default_controller_stack_source(
-            config_module, "expert_recurrent_halting_stack"
-        ),
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _recurrent_controller_options(
+            _RecurrentControllerDefaults(
+                recurrent_flag=config_module.EXPERT_RECURRENT_FLAG,
+                recurrent_max_steps=config_module.EXPERT_RECURRENT_MAX_STEPS,
+                recurrent_layer_norm_position=(
+                    config_module.EXPERT_RECURRENT_LAYER_NORM_POSITION
+                ),
+                recurrent_stack_gate_flag=(
+                    config_module.EXPERT_RECURRENT_STACK_GATE_FLAG
+                ),
+                recurrent_gate_option=config_module.EXPERT_RECURRENT_GATE_OPTION,
+                recurrent_gate_activation=(
+                    config_module.EXPERT_RECURRENT_GATE_ACTIVATION
+                ),
+                stack_sources=_expert_recurrent_stack_sources(config_module),
+                recurrent_stack_halting_flag=(
+                    config_module.EXPERT_RECURRENT_STACK_HALTING_FLAG
+                ),
+                recurrent_halting_option=(
+                    config_module.EXPERT_RECURRENT_HALTING_OPTION
+                ),
+                recurrent_halting_threshold=(
+                    config_module.EXPERT_RECURRENT_HALTING_THRESHOLD
+                ),
+                recurrent_halting_dropout=(
+                    config_module.EXPERT_RECURRENT_HALTING_DROPOUT
+                ),
+                recurrent_halting_hidden_state_mode=(
+                    config_module.EXPERT_RECURRENT_HALTING_HIDDEN_STATE_MODE
+                ),
+            )
+        )
+    return _role_recurrent_controller_options_from_kwargs(
         kwargs,
-        {
-            "expert_recurrent_flag": "recurrent_flag",
-            "expert_recurrent_max_steps": "recurrent_max_steps",
-            "expert_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "expert_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
-            "expert_recurrent_gate_option": "recurrent_gate_option",
-            "expert_recurrent_gate_activation": "recurrent_gate_activation",
-            "expert_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
-            "expert_recurrent_halting_option": "recurrent_halting_option",
-            "expert_recurrent_halting_threshold": "recurrent_halting_threshold",
-            "expert_recurrent_halting_dropout": "recurrent_halting_dropout",
-            "expert_recurrent_halting_hidden_state_mode": "recurrent_halting_hidden_state_mode",
-        },
+        role_prefix="expert",
+        gate_stack_prefix="expert_recurrent_gate_stack",
+        halting_stack_prefix="expert_recurrent_halting_stack",
+        options=provided,
     )
-    updates["recurrent_gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "expert_recurrent_gate_stack",
-        provided=options.recurrent_gate_stack_source,
-    )
-    updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "expert_recurrent_halting_stack",
-        provided=options.recurrent_halting_stack_source,
-    )
-    return replace(options, **updates)
 
 
 def _router_layer_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsLayerControllerOptions | None,
 ) -> expert_options.ExpertsLayerControllerOptions:
-    options = provided or expert_options.ExpertsLayerControllerOptions(
-        stack_gate_flag=config_module.ROUTER_STACK_GATE_FLAG,
-        gate_option=config_module.ROUTER_GATE_OPTION,
-        gate_activation=config_module.ROUTER_GATE_ACTIVATION,
-        gate_stack_source=_default_controller_stack_source(
-            config_module, "router_gate_stack"
-        ),
-        stack_halting_flag=config_module.ROUTER_STACK_HALTING_FLAG,
-        halting_option=config_module.ROUTER_HALTING_OPTION,
-        halting_threshold=config_module.ROUTER_HALTING_THRESHOLD,
-        halting_dropout=config_module.ROUTER_HALTING_DROPOUT,
-        halting_hidden_state_mode=config_module.ROUTER_HALTING_HIDDEN_STATE_MODE,
-        halting_stack_source=_default_controller_stack_source(
-            config_module, "router_halting_stack"
-        ),
-        halting_output_dim=config_module.ROUTER_HALTING_OUTPUT_DIM,
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _layer_controller_options(
+            _LayerControllerDefaults(
+                stack_gate_flag=config_module.ROUTER_STACK_GATE_FLAG,
+                gate_option=config_module.ROUTER_GATE_OPTION,
+                gate_activation=config_module.ROUTER_GATE_ACTIVATION,
+                stack_sources=_router_layer_stack_sources(config_module),
+                stack_halting_flag=config_module.ROUTER_STACK_HALTING_FLAG,
+                halting_option=config_module.ROUTER_HALTING_OPTION,
+                halting_threshold=config_module.ROUTER_HALTING_THRESHOLD,
+                halting_dropout=config_module.ROUTER_HALTING_DROPOUT,
+                halting_hidden_state_mode=(
+                    config_module.ROUTER_HALTING_HIDDEN_STATE_MODE
+                ),
+                halting_output_dim=config_module.ROUTER_HALTING_OUTPUT_DIM,
+            )
+        )
+    return _role_layer_controller_options_from_kwargs(
         kwargs,
-        {
-            "router_stack_gate_flag": "stack_gate_flag",
-            "router_gate_option": "gate_option",
-            "router_gate_activation": "gate_activation",
-            "router_stack_halting_flag": "stack_halting_flag",
-            "router_halting_option": "halting_option",
-            "router_halting_threshold": "halting_threshold",
-            "router_halting_dropout": "halting_dropout",
-            "router_halting_hidden_state_mode": "halting_hidden_state_mode",
-            "router_halting_output_dim": "halting_output_dim",
-        },
+        role_prefix="router",
+        gate_stack_prefix="router_gate_stack",
+        halting_stack_prefix="router_halting_stack",
+        options=provided,
     )
-    updates["gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs, config_module, "router_gate_stack", provided=options.gate_stack_source
-    )
-    updates["halting_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "router_halting_stack",
-        provided=options.halting_stack_source,
-    )
-    return replace(options, **updates)
 
 
 def _router_dynamic_memory_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsDynamicMemoryOptions | None,
 ) -> expert_options.ExpertsDynamicMemoryOptions:
-    options = provided or expert_options.ExpertsDynamicMemoryOptions(
-        memory_flag=config_module.ROUTER_MEMORY_FLAG,
-        memory_option=config_module.ROUTER_MEMORY_OPTION,
-        memory_position_option=config_module.ROUTER_MEMORY_POSITION_OPTION,
-        memory_test_time_training_learning_rate=config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE,
-        memory_test_time_training_num_inner_steps=config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS,
-        memory_stack_source=_default_controller_stack_source(
-            config_module, "router_memory_stack"
-        ),
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _dynamic_memory_options(
+            _DynamicMemoryDefaults(
+                memory_flag=config_module.ROUTER_MEMORY_FLAG,
+                memory_option=config_module.ROUTER_MEMORY_OPTION,
+                memory_position_option=config_module.ROUTER_MEMORY_POSITION_OPTION,
+                learning_rate=(
+                    config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_LEARNING_RATE
+                ),
+                num_inner_steps=(
+                    config_module.ROUTER_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
+                ),
+                stack_source=_router_memory_stack_source(config_module),
+            )
+        )
+    return _role_dynamic_memory_options_from_kwargs(
         kwargs,
-        {
-            "router_memory_flag": "memory_flag",
-            "router_memory_option": "memory_option",
-            "router_memory_position_option": "memory_position_option",
-            "router_memory_test_time_training_learning_rate": "memory_test_time_training_learning_rate",
-            "router_memory_test_time_training_num_inner_steps": "memory_test_time_training_num_inner_steps",
-        },
+        role_prefix="router",
+        memory_stack_prefix="router_memory_stack",
+        options=provided,
     )
-    updates["memory_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "router_memory_stack",
-        provided=options.memory_stack_source,
-    )
-    return replace(options, **updates)
 
 
 def _router_recurrent_controller_options_from_kwargs(
-    kwargs: dict[str, Any],
+    kwargs: dict[str, object],
     config_module: ModuleType,
     *,
     provided: expert_options.ExpertsRecurrentControllerOptions | None,
 ) -> expert_options.ExpertsRecurrentControllerOptions:
-    options = provided or expert_options.ExpertsRecurrentControllerOptions(
-        recurrent_flag=config_module.ROUTER_RECURRENT_FLAG,
-        recurrent_max_steps=config_module.ROUTER_RECURRENT_MAX_STEPS,
-        recurrent_layer_norm_position=config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION,
-        recurrent_stack_gate_flag=config_module.ROUTER_RECURRENT_STACK_GATE_FLAG,
-        recurrent_gate_option=config_module.ROUTER_RECURRENT_GATE_OPTION,
-        recurrent_gate_activation=config_module.ROUTER_RECURRENT_GATE_ACTIVATION,
-        recurrent_gate_stack_source=_default_controller_stack_source(
-            config_module, "router_recurrent_gate_stack"
-        ),
-        recurrent_stack_halting_flag=config_module.ROUTER_RECURRENT_STACK_HALTING_FLAG,
-        recurrent_halting_option=config_module.ROUTER_RECURRENT_HALTING_OPTION,
-        recurrent_halting_threshold=config_module.ROUTER_RECURRENT_HALTING_THRESHOLD,
-        recurrent_halting_dropout=config_module.ROUTER_RECURRENT_HALTING_DROPOUT,
-        recurrent_halting_hidden_state_mode=config_module.ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE,
-        recurrent_halting_stack_source=_default_controller_stack_source(
-            config_module, "router_recurrent_halting_stack"
-        ),
-    )
-    updates = _pop_updates(
+    if provided is None:
+        provided = _recurrent_controller_options(
+            _RecurrentControllerDefaults(
+                recurrent_flag=config_module.ROUTER_RECURRENT_FLAG,
+                recurrent_max_steps=config_module.ROUTER_RECURRENT_MAX_STEPS,
+                recurrent_layer_norm_position=(
+                    config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION
+                ),
+                recurrent_stack_gate_flag=(
+                    config_module.ROUTER_RECURRENT_STACK_GATE_FLAG
+                ),
+                recurrent_gate_option=config_module.ROUTER_RECURRENT_GATE_OPTION,
+                recurrent_gate_activation=(
+                    config_module.ROUTER_RECURRENT_GATE_ACTIVATION
+                ),
+                stack_sources=_router_recurrent_stack_sources(config_module),
+                recurrent_stack_halting_flag=(
+                    config_module.ROUTER_RECURRENT_STACK_HALTING_FLAG
+                ),
+                recurrent_halting_option=(
+                    config_module.ROUTER_RECURRENT_HALTING_OPTION
+                ),
+                recurrent_halting_threshold=(
+                    config_module.ROUTER_RECURRENT_HALTING_THRESHOLD
+                ),
+                recurrent_halting_dropout=(
+                    config_module.ROUTER_RECURRENT_HALTING_DROPOUT
+                ),
+                recurrent_halting_hidden_state_mode=(
+                    config_module.ROUTER_RECURRENT_HALTING_HIDDEN_STATE_MODE
+                ),
+            )
+        )
+    return _role_recurrent_controller_options_from_kwargs(
         kwargs,
-        {
-            "router_recurrent_flag": "recurrent_flag",
-            "router_recurrent_max_steps": "recurrent_max_steps",
-            "router_recurrent_layer_norm_position": "recurrent_layer_norm_position",
-            "router_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
-            "router_recurrent_gate_option": "recurrent_gate_option",
-            "router_recurrent_gate_activation": "recurrent_gate_activation",
-            "router_recurrent_stack_halting_flag": "recurrent_stack_halting_flag",
-            "router_recurrent_halting_option": "recurrent_halting_option",
-            "router_recurrent_halting_threshold": "recurrent_halting_threshold",
-            "router_recurrent_halting_dropout": "recurrent_halting_dropout",
-            "router_recurrent_halting_hidden_state_mode": "recurrent_halting_hidden_state_mode",
-        },
+        role_prefix="router",
+        gate_stack_prefix="router_recurrent_gate_stack",
+        halting_stack_prefix="router_recurrent_halting_stack",
+        options=provided,
     )
-    updates["recurrent_gate_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "router_recurrent_gate_stack",
-        provided=options.recurrent_gate_stack_source,
-    )
-    updates["recurrent_halting_stack_source"] = _controller_stack_source_from_kwargs(
-        kwargs,
-        config_module,
-        "router_recurrent_halting_stack",
-        provided=options.recurrent_halting_stack_source,
-    )
-    return replace(options, **updates)
-
-
-def _default_controller_stack_source(
-    config_module: ModuleType, prefix: str
-) -> expert_options.ExpertsSubmoduleStackSource:
-    config_prefix = prefix.upper()
-    return expert_options.ExpertsSubmoduleStackSource(
-        independent_flag=getattr(config_module, f"{config_prefix}_INDEPENDENT_FLAG"),
-        hidden_dim=getattr(config_module, f"{config_prefix}_HIDDEN_DIM"),
-        num_layers=getattr(config_module, f"{config_prefix}_NUM_LAYERS"),
-        last_layer_bias_option=getattr(
-            config_module, f"{config_prefix}_LAST_LAYER_BIAS_OPTION"
-        ),
-        apply_output_pipeline_flag=getattr(
-            config_module, f"{config_prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
-        ),
-        activation=getattr(config_module, f"{config_prefix}_ACTIVATION"),
-        layer_norm_position=getattr(
-            config_module, f"{config_prefix}_LAYER_NORM_POSITION"
-        ),
-        residual_connection_option=getattr(
-            config_module, f"{config_prefix}_RESIDUAL_CONNECTION_OPTION"
-        ),
-        residual_model_flag=getattr(
-            config_module, f"{config_prefix}_RESIDUAL_MODEL_FLAG"
-        ),
-        dropout_probability=getattr(
-            config_module, f"{config_prefix}_DROPOUT_PROBABILITY"
-        ),
-        bias_flag=getattr(config_module, f"{config_prefix}_BIAS_FLAG"),
-    )
-
-
-def _pop_updates(kwargs: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
-    updates: dict[str, Any] = {}
-    for flat_key, option_field in mapping.items():
-        if flat_key in kwargs:
-            updates[option_field] = kwargs.pop(flat_key)
-    return updates

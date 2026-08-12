@@ -10,6 +10,7 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
+from models.gpt.expert_linear._config_defaults import gpt_decoder_options
 from models.gpt.expert_linear.runtime_options import TransformerDecoderOptions
 
 from ._residual import ResidualStackOptions, build_residual_config
@@ -22,24 +23,12 @@ class LinearLayerConfigDependencies:
 
 class LinearLayerConfigFactory:
     def __init__(self, dependencies: LinearLayerConfigDependencies) -> None:
-        self.decoder_options = self.__default_decoder_options(
-            dependencies.decoder_options
+        self.decoder_options = (
+            gpt_decoder_options(config)
+            if dependencies.decoder_options is None
+            else dependencies.decoder_options
         )
         self.hidden_dim = self.decoder_options.hidden_dim
-
-    def __default_decoder_options(
-        self,
-        decoder_options: TransformerDecoderOptions | None,
-    ) -> TransformerDecoderOptions:
-        if decoder_options is not None:
-            return decoder_options
-        return TransformerDecoderOptions(
-            hidden_dim=config.HIDDEN_DIM,
-            num_layers=config.STACK_NUM_LAYERS,
-            activation=config.STACK_ACTIVATION,
-            dropout_probability=config.STACK_DROPOUT_PROBABILITY,
-            layer_norm_position=config.LAYER_NORM_POSITION,
-        )
 
     def build_backend_linear_layer_config(
         self,

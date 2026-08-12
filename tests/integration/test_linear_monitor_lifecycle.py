@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import unittest
 
+import pytest
 import torch
 from lightning import LightningModule, Trainer
 from torch.nn import functional as F
@@ -341,6 +342,7 @@ class _TrainAndValidationActivationExperiment(_CapturingLogExperiment):
 
 
 class LinearMonitorLifecycleTests(unittest.TestCase):
+    @pytest.mark.training
     def test_real_trainer_logs_exact_forward_parameter_gradient_and_health_metrics(
         self,
     ) -> None:
@@ -414,6 +416,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
                 msg=metric_name,
             )
 
+    @pytest.mark.training
     def test_real_optimizer_steps_produce_exact_parameter_delta_metrics(self) -> None:
         model = _DeltaDiagnosticsExperiment()
         monitor = LinearMonitorCallback(log_every_n_steps=1)
@@ -468,6 +471,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
                 msg=metric_name,
             )
 
+    @pytest.mark.training
     def test_dead_feature_metrics_include_norms_exactly_at_relative_threshold(
         self,
     ) -> None:
@@ -511,6 +515,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
             0.5,
         )
 
+    @pytest.mark.training
     def test_replacing_a_bias_does_not_compare_it_with_the_removed_parameter(
         self,
     ) -> None:
@@ -558,6 +563,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
             torch.tensor([0.75]),
         )
 
+    @pytest.mark.training
     def test_real_trainer_tracks_every_linear_under_its_module_namespace(
         self,
     ) -> None:
@@ -601,6 +607,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(len(model.encoder._forward_hooks), 0)
         self.assertEqual(len(model.head._forward_hooks), 0)
 
+    @pytest.mark.training
     def test_real_trainer_cadence_uses_global_step_for_each_metric_family(
         self,
     ) -> None:
@@ -645,6 +652,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(input_mean_steps, [2])
         self.assertEqual(weight_mean_steps, [2])
 
+    @pytest.mark.training
     def test_gradient_accumulation_emits_one_exact_sample_per_optimizer_step(
         self,
     ) -> None:
@@ -701,6 +709,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
                     self.assertAlmostEqual(actual_value, expected_value, places=5)
         self.assertAlmostEqual(model.linear.weight_params.item(), 0.2, places=5)
 
+    @pytest.mark.training
     def test_manual_optimizers_emit_each_linear_update_without_overwriting(
         self,
     ) -> None:
@@ -750,6 +759,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertAlmostEqual(model.first.weight_params.item(), 0.8, places=6)
         self.assertAlmostEqual(model.second.weight_params.item(), 0.8, places=6)
 
+    @pytest.mark.training
     def test_real_trainer_tracks_keyword_input_activations(self) -> None:
         model = _KeywordInputExperiment()
         monitor = LinearMonitorCallback(log_every_n_steps=1)
@@ -783,6 +793,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
             places=6,
         )
 
+    @pytest.mark.training
     def test_real_trainer_refreshes_a_replaced_linear_between_batches(self) -> None:
         model = _ReplacingLinearExperiment()
         monitor = LinearMonitorCallback(log_every_n_steps=1)
@@ -832,6 +843,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._capture._hooks, {})
         self.assertEqual(monitor._capture._linear_modules, {})
 
+    @pytest.mark.training
     def test_real_trainer_logs_activation_metrics_only_for_training_batches(
         self,
     ) -> None:
@@ -885,6 +897,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
             1.0,
         )
 
+    @pytest.mark.training
     def test_real_trainer_fit_logs_diagnostics_updates_parameters_and_cleans_up(
         self,
     ) -> None:
@@ -952,6 +965,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(monitor._capture._activation_moments, {})
         self.assertIsNone(monitor._capture._pending_step)
 
+    @pytest.mark.training
     def test_real_trainer_logs_input_metrics_for_non_tensor_hook_output(
         self,
     ) -> None:
@@ -988,6 +1002,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertIn("linear/weights/l2_norm", trainer.logged_metrics)
         self.assertEqual(monitor._capture._hooks, {})
 
+    @pytest.mark.training
     def test_real_trainer_logs_output_metrics_without_tensor_hook_input(
         self,
     ) -> None:
@@ -1024,6 +1039,7 @@ class LinearMonitorLifecycleTests(unittest.TestCase):
         self.assertIn("linear/weights/l2_norm", trainer.logged_metrics)
         self.assertEqual(monitor._capture._hooks, {})
 
+    @pytest.mark.training
     def test_real_trainer_exception_cleans_up_and_callback_can_be_reused(self) -> None:
         model = _FailingLinearExperiment()
         dataloader = DataLoader(

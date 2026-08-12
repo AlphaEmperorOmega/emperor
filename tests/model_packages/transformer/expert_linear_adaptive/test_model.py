@@ -4,6 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from emperor.attention import MixtureOfAttentionHeadsConfig
@@ -21,10 +22,6 @@ from emperor.transformer import (
 )
 from model_runtime.packages import PresetLock
 from models.catalog import model_package
-from models.training_test_utils import (
-    RandomTranslationDataModule,
-    tiny_cpu_trainer,
-)
 from models.transformer.expert_linear_adaptive import dataset_options
 from models.transformer.expert_linear_adaptive.config_builder import (
     TransformerExpertLinearAdaptiveConfigBuilder,
@@ -33,6 +30,10 @@ from models.transformer.expert_linear_adaptive.model import Model
 from models.transformer.expert_linear_adaptive.presets import (
     Experiment,
     ExperimentPreset,
+)
+from tests.model_packages.training_test_utils import (
+    RandomTranslationDataModule,
+    tiny_cpu_trainer,
 )
 
 _MIXTURE_ATTENTION_TYPE = MixtureOfAttentionHeadsConfig().registry_owner()
@@ -335,6 +336,7 @@ class TestTransformerExpertLinearAdaptiveModel(unittest.TestCase):
             any(isinstance(module, LinearLayer) for module in controlled.modules())
         )
 
+    @pytest.mark.training
     def test_baseline_lifecycle_and_low_rank_expert_signature_train(self):
         baseline_cfg = self._config()
         baseline = Model(baseline_cfg)

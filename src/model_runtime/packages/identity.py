@@ -28,7 +28,7 @@ class ModelIdentity:
 
 
 def is_safe_model_segment(value: object) -> bool:
-    if not isinstance(value, str):
+    if type(value) is not str:
         return False
     if not value or value.strip() != value:
         return False
