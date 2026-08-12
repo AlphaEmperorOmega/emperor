@@ -105,6 +105,7 @@ def _validate_search_payload(
     payload: object,
     *,
     path: str,
+    allow_empty: bool = False,
 ) -> Mapping[str, Any]:
     if not isinstance(payload, Mapping):
         raise ValueError(f"{path} must be an object.")
@@ -112,7 +113,7 @@ def _validate_search_payload(
     if mode not in {"grid", "random"}:
         raise ValueError(f"{path}.mode must be 'grid' or 'random'.")
     values = payload.get("values")
-    if not isinstance(values, Mapping) or not values:
+    if not isinstance(values, Mapping) or (not values and not allow_empty):
         raise ValueError(f"{path}.values must be a non-empty object.")
     if len(values) > MAX_TRAINING_SEARCH_AXES:
         raise ValueError(
@@ -138,6 +139,19 @@ def _validate_search_payload(
                 option,
                 path=f"{path}.values.{key}[{index}]",
             )
+    custom_value_axes = _validate_string_list(
+        payload.get("customValueAxes", []),
+        path=f"{path}.customValueAxes",
+        nonempty_items=True,
+    )
+    normalized_custom_axes: set[str] = set()
+    for key in custom_value_axes:
+        normalized_key = normalize_key(key)
+        if normalized_key in normalized_custom_axes:
+            raise ValueError(f"{path}.customValueAxes contains duplicate axis '{key}'.")
+        if normalized_key not in normalized_axes:
+            raise ValueError(f"{path}.customValueAxes contains unknown axis '{key}'.")
+        normalized_custom_axes.add(normalized_key)
     random_samples = payload.get("randomSamples")
     if mode == "random":
         _validate_integer(random_samples, path=f"{path}.randomSamples")
@@ -149,6 +163,27 @@ def _validate_search_payload(
             )
     elif random_samples is not None:
         raise ValueError(f"{path}.randomSamples is only valid for random search.")
+    return payload
+
+
+def _validate_preset_searches_payload(
+    payload: object,
+    *,
+    presets: list[str],
+    path: str,
+) -> Mapping[str, Any]:
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"{path} must be an object.")
+    if set(payload) != set(presets):
+        raise ValueError(f"{path} must exactly match the Run Plan presets.")
+    for preset in presets:
+        search = payload[preset]
+        if search is not None:
+            _validate_search_payload(
+                search,
+                path=f"{path}.{preset}",
+                allow_empty=True,
+            )
     return payload
 
 
@@ -244,7 +279,7 @@ def _validate_plan_payload(payload: Mapping[str, Any]) -> None:
     preset = payload.get("preset")
     if not isinstance(preset, str) or not preset:
         raise ValueError("Persisted Run Plan preset must be a non-empty string.")
-    _validate_string_list(
+    presets = _validate_string_list(
         payload.get("presets"),
         path="runPlan.presets",
         allow_empty=False,
@@ -263,6 +298,12 @@ def _validate_plan_payload(payload: Mapping[str, Any]) -> None:
     _validate_config_mapping(payload.get("overrides"), path="runPlan.overrides")
     if payload.get("search") is not None:
         _validate_search_payload(payload["search"], path="runPlan.search")
+    if "presetSearches" in payload:
+        _validate_preset_searches_payload(
+            payload["presetSearches"],
+            presets=presets,
+            path="runPlan.presetSearches",
+        )
     if not isinstance(payload.get("logFolder"), str):
         raise ValueError("runPlan.logFolder must be a string.")
     if "isRandomSearch" in payload and not isinstance(payload["isRandomSearch"], bool):
@@ -322,6 +363,7 @@ def _search_from_payload(
         random_samples=(
             int(raw_random_samples) if raw_random_samples is not None else None
         ),
+        custom_value_axes=tuple(cast(list[str], payload.get("customValueAxes", []))),
     )
 
 
@@ -329,6 +371,36 @@ def _search_to_payload(search: TrainingSearch) -> dict[str, Any]:
     payload: dict[str, Any] = {"mode": search.mode, "values": search.values}
     if search.random_samples is not None:
         payload["randomSamples"] = search.random_samples
+    if search.custom_value_axes:
+        payload["customValueAxes"] = list(search.custom_value_axes)
+    return payload
+
+
+def _preset_searches_from_payload(
+    payload: Mapping[str, Any],
+    *,
+    presets: list[str],
+    summary: TrainingSearch | None,
+) -> dict[str, TrainingSearch | None]:
+    raw_preset_searches = payload.get("presetSearches")
+    if raw_preset_searches is None:
+        return {preset: summary for preset in presets}
+    assert isinstance(raw_preset_searches, Mapping)
+    return {
+        preset: _search_from_payload(
+            cast(Mapping[str, Any] | None, raw_preset_searches[preset])
+        )
+        for preset in presets
+    }
+
+
+def _preset_searches_to_payload(
+    plan: TrainingRunPlanView,
+) -> dict[str, dict[str, Any] | None]:
+    payload: dict[str, dict[str, Any] | None] = {}
+    for preset in plan.presets:
+        search = plan.preset_searches.get(preset, plan.search)
+        payload[preset] = _search_to_payload(search) if search is not None else None
     return payload
 
 
@@ -506,16 +578,16 @@ def _snapshot_revisions_to_payload(
 
 
 def _plan_from_payload(payload: Mapping[str, Any]) -> TrainingRunPlanView:
+    presets = [str(item) for item in payload.get("presets") or []]
+    search = _search_from_payload(cast(Mapping[str, Any] | None, payload.get("search")))
     return TrainingRunPlanView(
         model=_payload_model_id(payload),
         preset=str(payload.get("preset") or ""),
-        presets=[str(item) for item in payload.get("presets") or []],
+        presets=presets,
         experiment_task=str(payload.get("experimentTask") or ""),
         datasets=[str(item) for item in payload.get("datasets") or []],
         overrides=dict(payload.get("overrides") or {}),
-        search=_search_from_payload(
-            cast(Mapping[str, Any] | None, payload.get("search"))
-        ),
+        search=search,
         log_folder=str(payload.get("logFolder") or ""),
         is_random_search=bool(payload.get("isRandomSearch")),
         runs=[_run_from_payload(item) for item in _mapping_items(payload.get("runs"))],
@@ -524,6 +596,11 @@ def _plan_from_payload(payload: Mapping[str, Any]) -> TrainingRunPlanView:
         ),
         snapshot_revisions=_snapshot_revisions_from_payload(
             payload.get("snapshotRevisions")
+        ),
+        preset_searches=_preset_searches_from_payload(
+            payload,
+            presets=presets,
+            summary=search,
         ),
     )
 
@@ -537,6 +614,7 @@ def _plan_to_payload(plan: TrainingRunPlanView) -> dict[str, Any]:
         "datasets": plan.datasets,
         "overrides": plan.overrides,
         "search": _search_to_payload(plan.search) if plan.search else None,
+        "presetSearches": _preset_searches_to_payload(plan),
         "logFolder": plan.log_folder,
         "isRandomSearch": plan.is_random_search,
         "runs": [_run_to_payload(run) for run in plan.runs],

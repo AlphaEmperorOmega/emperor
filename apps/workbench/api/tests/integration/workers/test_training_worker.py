@@ -50,6 +50,26 @@ def read_jsonl(path: Path) -> list[dict[str, object]]:
 
 
 class TrainingWorkerPlanAcceptanceTests(unittest.TestCase):
+    def test_worker_preserves_persisted_custom_value_authorization(self) -> None:
+        payload = worker_payload(
+            search={
+                "mode": "grid",
+                "values": {"hidden_dim": [64]},
+            }
+        )
+        run_plan = payload["runPlan"]
+        search = run_plan["search"]
+        axis_key = next(iter(search["values"]))
+        search["customValueAxes"] = [axis_key]
+        run_plan["presetSearches"]["baseline"]["customValueAxes"] = [axis_key]
+
+        package = project_adapter_client().package("linears/linear")
+        accepted = RunPlanWorkerAcceptance.accept(package, payload)
+        effective_search = accepted.search_for_preset("baseline")
+        self.assertIsNotNone(effective_search)
+        assert effective_search is not None
+        self.assertTrue(effective_search.axes[0].allow_custom_values)
+
     def test_worker_accepts_exact_materialized_rows_without_sampling(self) -> None:
         payload = worker_payload(
             search={

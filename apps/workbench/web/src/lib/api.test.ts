@@ -976,6 +976,24 @@ describe("successful API fixtures", () => {
     ).toThrow();
   });
 
+  it("preserves per-preset search provenance in training run plans", () => {
+    const result = trainingRunPlanSchema.parse({
+      ...successfulTrainingRunPlanFixture,
+      presetSearches: {
+        baseline: successfulTrainingRunPlanFixture.search,
+        wide: {
+          mode: "grid",
+          values: {
+            hidden_dim: [128],
+          },
+        },
+      },
+    });
+
+    expect(Object.keys(result.presetSearches)).toEqual(["baseline", "wide"]);
+    expect(result.presetSearches.wide?.values).toEqual({ hidden_dim: [128] });
+  });
+
   it("accepts a training job fetch response fixture", async () => {
     const result = await validateSuccessfulFixture(successfulTrainingJobFixture, () =>
       fetchTrainingJob("job-123"),

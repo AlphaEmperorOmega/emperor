@@ -1,6 +1,6 @@
 {
   "canonicalization": "UTF-8 JSON; object keys sorted; compact separators; array order preserved",
-  "documentSha256": "51e0603551f00c2b594d33e13352bc465f9371cc5fcf2b51e2ee87e8d12b65f1",
+  "documentSha256": "c3b4ba1b514c0f03549eeab56b305e2b17ec9e0982530d2b6d4e40e495161559",
   "info": {
     "title": "Emperor Model Workbench API",
     "version": "1.0.0"
@@ -530,11 +530,11 @@
     },
     {
       "name": "TrainingDatasetCompletedProgressEventResponse",
-      "sha256": "d392a66f953f6a955c3a8f8149787d9c05978ee74b51d217fcca569f175ff0af"
+      "sha256": "1caa956ff50a682985a5ef3247471b44851279e256a0118647c8cfd5dc8bb2a1"
     },
     {
       "name": "TrainingDatasetStartedProgressEventResponse",
-      "sha256": "0e560839a4a27a7ec541e3ba00f8d6dbef8c3dbfb2124fc4ab9f445dc0a4f43a"
+      "sha256": "ee859317242b35f73c03236ddd26ea0b2d8cfcc89422cb6fb6782e79608cf495"
     },
     {
       "name": "TrainingErrorProgressEventResponse",
@@ -582,7 +582,7 @@
     },
     {
       "name": "TrainingRunPlanResponse",
-      "sha256": "79f825de6b05de7cc5a19ab9263c2aa8089646bcbc0b0a9c25130f97f078f8d8"
+      "sha256": "d84122c9a13d5ffb6b0fe6473de4c4a3a9d2a8f8fb922291e883010b08d38607"
     },
     {
       "name": "TrainingRunPlanSummaryResponse",

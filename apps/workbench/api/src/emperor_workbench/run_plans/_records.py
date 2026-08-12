@@ -26,6 +26,7 @@ class TrainingSearch:
     mode: Literal["grid", "random"]
     values: dict[str, list[ConfigValue]] = field(default_factory=dict)
     random_samples: int | None = None
+    custom_value_axes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,7 @@ class TrainingRunPlanView:
     runs: list[TrainingRunView]
     summary: TrainingRunPlanSummaryView
     snapshot_revisions: tuple[ConfigSnapshotRevision, ...] = ()
+    preset_searches: dict[str, TrainingSearch | None] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

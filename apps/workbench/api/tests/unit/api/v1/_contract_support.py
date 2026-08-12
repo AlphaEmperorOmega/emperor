@@ -523,6 +523,7 @@ TRAINING_RUN_PLAN_FIELDS = (
     "datasets",
     "overrides",
     "search",
+    "presetSearches",
     "logFolder",
     "isRandomSearch",
     "runs",
