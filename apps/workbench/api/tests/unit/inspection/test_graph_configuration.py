@@ -263,6 +263,9 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             input_dim=4,
             output_dim=4,
             max_steps=2,
+            initial_iterations=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=LayerNormPositionOptions.AFTER,
             block_config=block_config,
             gate_config=GateConfig(

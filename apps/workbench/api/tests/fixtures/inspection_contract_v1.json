@@ -36,8 +36,8 @@
       "edgeCount": 253
     },
     "bert-task": {
-      "sha256": "110b5ceffaf962fb16027ca544de8039b1c42c44c020866299d8b6ac56f7c5dc",
-      "bytes": 272422,
+      "sha256": "e695b2538766e00a5f6c01ba518bb6f1baaa1d25f5e0adcfa61f0ea8c33e8854",
+      "bytes": 272918,
       "model": "bert/linear",
       "preset": "baseline",
       "dataset": "PennTreebankBertPretraining",
@@ -46,8 +46,8 @@
       "edgeCount": 173
     },
     "gpt-task": {
-      "sha256": "50ae23b954f9d28dcffd7b1f85d0706a07adafe7fc99044433bc7822f920058f",
-      "bytes": 270418,
+      "sha256": "3aae57f8e6cb1e26b6227af899fae0bf2ba9a39d84c670f487375b76cd65c5e6",
+      "bytes": 270914,
       "model": "gpt/linear",
       "preset": "baseline",
       "dataset": "WikiText2",
@@ -56,8 +56,8 @@
       "edgeCount": 165
     },
     "translation-task": {
-      "sha256": "630ac4ac759feb72c4dd391dfc0df2a5dcddc3d09ac31119ba18090735590d81",
-      "bytes": 443598,
+      "sha256": "4a1f6d4ea478460113cf6110bcae267c2d0ab53b0fd0ffd2c94a2d66a3bcbd13",
+      "bytes": 444712,
       "model": "transformer/linear",
       "preset": "baseline",
       "dataset": "Multi30kDeEn",
@@ -71,9 +71,9 @@
       "model": "linears/linear",
       "preset": "baseline",
       "presets": null,
-      "configSha256": "78bba85c273472be076851adf056f1e3a9ba35cd1d5dbb22dafb713f0cebb2ad",
-      "configBytes": 71901,
-      "fieldCount": 126,
+      "configSha256": "f20a7bfd12b2350f6a2a9419a85305b352bd37f5f376b5064c877bb915831f5a",
+      "configBytes": 86728,
+      "fieldCount": 149,
       "searchSha256": "6bd6aebeda5fdb2addd4024bb85682ec874428f44f2297e7baddebc8043dcebf",
       "searchBytes": 1864,
       "axisCount": 6
@@ -82,9 +82,9 @@
       "model": "linears/linear",
       "preset": "gating",
       "presets": null,
-      "configSha256": "11669082b9fcd8643b27acb197d3098090b95e6b04ad2f9ce7b1041682b2df54",
-      "configBytes": 71972,
-      "fieldCount": 126,
+      "configSha256": "681a7157076beb6c107a0c7e2de54e49819153c28262c3efe0e178e61c940531",
+      "configBytes": 86799,
+      "fieldCount": 149,
       "searchSha256": "0da0dd9f8b6836a242bb2ccfc62c0131800e04d534886373dbeb5d979eb812f3",
       "searchBytes": 1862,
       "axisCount": 6
@@ -93,9 +93,9 @@
       "model": "linears/linear_adaptive",
       "preset": "full-stack",
       "presets": null,
-      "configSha256": "0380cbba5a2628e540da508b5c2d3c8be39d75c7f48d8182ba19b929b2b77fef",
-      "configBytes": 142741,
-      "fieldCount": 239,
+      "configSha256": "2f0638417061e671f8d49ee2725c3c9794a5d00456c5303412183aad50b1c708",
+      "configBytes": 161443,
+      "fieldCount": 267,
       "searchSha256": "13d65d1ca3044646e0c78c93e2cb9c3057522eaccc3fd6c3c499f5f86bb068de",
       "searchBytes": 11732,
       "axisCount": 31
@@ -104,9 +104,9 @@
       "model": "linears/linear_adaptive",
       "preset": "baseline",
       "presets": ["full-stack", "dual-weight-gating"],
-      "configSha256": "c3873e4c624a59d39acd546dc67bbe0c95703de47b80317319def5fb501c7390",
-      "configBytes": 142030,
-      "fieldCount": 239,
+      "configSha256": "1a13c6ffb52f49cf228bfb1bc072f77ace30cce304972a289cd2a6245e7c2c4f",
+      "configBytes": 160732,
+      "fieldCount": 267,
       "searchSha256": "0c202f161aee4d1d9f0c5c0867c1535c6c60239c2b26eaac07a2e85d1f30a17d",
       "searchBytes": 11919,
       "axisCount": 31
@@ -116,7 +116,7 @@
     "linears/linear": ["cfe122a94b689b08965adebb83122f1ae6948531cba9d7fe3d94e3a03bfe1a98", 7497, 35, 1, 5],
     "linears/linear_adaptive": ["3f1854e66057b64b91d76f0f7bfb916fd596a85dde69e7b521cda95cdb380eef", 14345, 70, 1, 7],
     "bert/linear": ["999ebdf0014f4f2902c8d5c2770ca69ad08bb1bffb8afb5845a911a1b13c3aa4", 5378, 28, 1, 4],
-    "gpt/linear": ["ecf4a4fdc30723bac70745ce15cacfb8c71182e1cce9b4565b8cd56155edd40b", 5210, 27, 1, 4],
+    "gpt/linear": ["2c1eff64d162840c5e0181492b3ac7fd35ed382567064e336ce1ec51d8a7f833", 5375, 27, 1, 4],
     "transformer/linear": ["ea42fa102fc245bd6b7a77c9d65073128eb125c79175835c479b57f5e5aca389", 4181, 27, 1, 4]
   },
   "catalog": ["e29a170d3b663c97390f5fb93e0ff0ceba38b7a39f726eb4547dea66cd2baeeb", 759, 31],
