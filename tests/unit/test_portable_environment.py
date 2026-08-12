@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import tempfile
 import tomllib
@@ -86,6 +87,28 @@ class PortableEnvironmentProfileTests(unittest.TestCase):
         )
         self.assertNotIn("{{", config_text)
         self.assertNotIn("{%", config_text)
+
+    def test_setup_owns_locked_root_development_tools(self) -> None:
+        package_path = PROJECT_ROOT / "package.json"
+        lock_path = PROJECT_ROOT / "package-lock.json"
+        package = json.loads(package_path.read_text(encoding="utf-8"))
+        package_lock = json.loads(lock_path.read_text(encoding="utf-8"))
+
+        self.assertIn(package_path, emperor_dev.SETUP_INPUTS)
+        self.assertIn(lock_path, emperor_dev.SETUP_INPUTS)
+        self.assertIn(
+            (
+                PROJECT_ROOT,
+                PROJECT_ROOT / "node_modules/pyright/package.json",
+                "development-tool",
+            ),
+            emperor_dev.NODE_PROJECTS,
+        )
+        self.assertEqual(package["devDependencies"], {"pyright": "1.1.411"})
+        self.assertEqual(
+            package_lock["packages"]["node_modules/pyright"]["version"],
+            "1.1.411",
+        )
 
     def test_cuda_legacy_uses_exact_cu126_wheel_command(self) -> None:
         python = Path("/verified/venv/bin/python")

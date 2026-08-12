@@ -65,6 +65,31 @@ description = "Run mutation testing for one Emperor family"
 raw = true
 run = "python tools/emperor_test_family.py mutation"
 
+[tasks."test:model-runtime"]
+description = "Run focused Model Runtime tests"
+raw = true
+run = "python tools/emperor_dev.py python -- tools/model_runtime_quality.py tests"
+
+[tasks."test:model-runtime-coverage"]
+description = "Enforce Model Runtime statement and branch coverage floors"
+raw = true
+run = "python tools/emperor_dev.py python -- tools/model_runtime_quality.py coverage"
+
+[tasks."test:model-runtime-structure"]
+description = "Enforce Model Runtime structural thresholds and reviewed ceilings"
+raw = true
+run = "python tools/emperor_dev.py python -- tools/model_runtime_quality.py structure"
+
+[tasks."test:model-runtime-mutation"]
+description = "Run critical Model Runtime mutation testing"
+raw = true
+run = "python tools/emperor_dev.py python -- tools/model_runtime_quality.py mutation"
+
+[tasks."test:model-runtime-types"]
+description = "Run pinned strict type checking for Model Runtime"
+raw = true
+run = "npm run typecheck:model-runtime"
+
 [tasks."test:attention"]
 description = "Run the attention unittest suite"
 run = "python tools/emperor_test_family.py tests attention"

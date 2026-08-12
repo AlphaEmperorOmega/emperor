@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any
+from typing import Any, cast
 
 from emperor.experiments import ExperimentTask
 
@@ -54,12 +54,13 @@ class ExperimentTaskBehavior:
         metrics = result.get("metrics", {})
         if not isinstance(metrics, Mapping):
             metrics = {}
+        typed_metrics = cast(Mapping[str, Any], metrics)
         for preference in self.ranking_metrics:
             value = next(
                 (
-                    metrics[key]
+                    typed_metrics[key]
                     for key in preference.keys
-                    if metrics.get(key) is not None
+                    if typed_metrics.get(key) is not None
                 ),
                 None,
             )
@@ -252,11 +253,13 @@ _DECLARED_BEHAVIORS = (
 
 
 def _compile_registry() -> Mapping[ExperimentTask, ExperimentTaskBehavior]:
-    task_counts = Counter(behavior.task for behavior in _DECLARED_BEHAVIORS)
+    task_counts: Counter[ExperimentTask] = Counter(
+        behavior.task for behavior in _DECLARED_BEHAVIORS
+    )
     duplicates = sorted(task.name for task, count in task_counts.items() if count > 1)
     missing = sorted(task.name for task in ExperimentTask if task not in task_counts)
     if duplicates or missing:
-        details = []
+        details: list[str] = []
         if duplicates:
             details.append(f"duplicates: {', '.join(duplicates)}")
         if missing:

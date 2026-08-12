@@ -1,0 +1,108 @@
+schema_version = 1
+
+[structure]
+source_root = "src/model_runtime"
+ruff_rules = ["C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+maximum_complexity = 10
+maximum_branches = 12
+maximum_returns = 6
+maximum_statements = 50
+maximum_arguments = 5
+maximum_function_lines = 60
+module_review_threshold = 600
+allowed_findings = [
+  { path = "src/model_runtime/runs/execution.py", code = "PLR0913", function = "execute_runs", rationale = "The public keyword-compatible Run execution interface has eight established arguments." },
+  { path = "src/model_runtime/runs/experiment.py", code = "PLR0913", function = "ExperimentBase.execute_training_run", rationale = "The public keyword-compatible training interface has seven established arguments." },
+]
+reviewed_modules = [
+  { path = "src/model_runtime/inspection/shape_trace.py", maximum_lines = 717, rationale = "Cohesive shape-trace adapter; generic tensor walking and runtime lifecycle already live in separate modules." },
+  { path = "src/model_runtime/runs/experiment.py", maximum_lines = 602, rationale = "Cohesive training adapter spanning materialization, runtime configuration, progress, Trainer execution, and artifacts; extracting only its tightly coupled phases would create a shallow back-reference seam." },
+]
+
+[coverage]
+source = "model_runtime"
+minimum_statement_percent = 88.0
+minimum_branch_percent = 75.0
+tests = [
+  "tests.architecture.test_quality_configuration",
+  "tests.contract.test_model_package_inspection_capabilities",
+  "tests.contract.test_model_package_interface",
+  "tests.integration.test_checkpoint_continuation",
+  "tests.unit.test_cli_wire",
+  "tests.unit.test_experiment_config_overrides",
+  "tests.unit.test_inspection_graph_interface",
+  "tests.unit.test_inspection_schema_interface",
+  "tests.unit.test_inspection_shape_trace",
+  "tests.unit.test_inspection_shape_trace_core",
+  "tests.unit.test_model_catalog_cli",
+  "tests.unit.test_model_runtime_quality_runner",
+  "tests.unit.test_override_key_resolution",
+  "tests.unit.test_package_cli_runs",
+  "tests.unit.test_runs_acceptance",
+  "tests.unit.test_runs_artifacts",
+  "tests.unit.test_runs_checkpoint_validation",
+  "tests.unit.test_runs_execution",
+  "tests.unit.test_runs_parameter_preservation",
+  "tests.unit.test_runs_planning",
+  "tests.unit.test_runs_progress",
+  "tests.unit.test_runs_search",
+]
+
+[mutation]
+source_root = "src/model_runtime/"
+critical_sources = [
+  "src/model_runtime/runs/planning.py",
+  "src/model_runtime/runs/_search_parsing.py",
+  "src/model_runtime/inspection/preflight.py",
+  "src/model_runtime/runs/execution.py",
+  "src/model_runtime/runs/experiment.py",
+  "src/model_runtime/cli/_wire_shared.py",
+  "src/model_runtime/inspection/_graph_accounting.py",
+  "src/model_runtime/inspection/model_graph.py",
+  "src/model_runtime/inspection/_shape_runtime.py",
+  "src/model_runtime/inspection/_tensor_walk.py",
+  "src/model_runtime/inspection/shape_trace.py",
+  "src/model_runtime/inspection/capture_limits.py",
+  "src/model_runtime/packages/inspection_limits.py",
+  "src/model_runtime/runs/artifacts.py",
+]
+selectors = [
+  "*planning.x_plan_runs__mutmut_4",
+  "*planning.x_accept_run_plan__mutmut_19",
+  "*_search_parsing.x__requires_custom_value_authorization__mutmut_7",
+  "*preflight.xǁ_InspectionPreflightǁ_parameter_estimate__mutmut_70",
+  "*preflight.xǁ_InspectionPreflightǁ_maximum_parameter_estimate__mutmut_6",
+  "*execution.x__monitor_callbacks__mutmut_1",
+  "*execution.xǁ_RunExecutorǁ_callback_groups__mutmut_13",
+  "*execution.x__validate_training_run_handoff__mutmut_16",
+  "*experiment.xǁExperimentBaseǁ_emit_training_error_preserving_primary__mutmut_5",
+  "*_wire_shared.x__require_json_container_depth__mutmut_1",
+  "*_graph_accounting.xǁ_ParameterAccumulatorǁ_reserve_memberships__mutmut_4",
+  "*_graph_accounting.xǁ_ParameterAccumulatorǁ_reserve_registration__mutmut_4",
+  "*model_graph.x_inspect_model_graph__mutmut_1",
+  "*_tensor_walk.xǁ_TensorWalkerǁ_reserve_visit__mutmut_1",
+  "*shape_trace.xǁ_ModuleCallRecorderǁinstall__mutmut_1",
+  "*shape_trace.x__variable_tracer__mutmut_1",
+  "*_shape_runtime.xǁShapeTraceRuntimeǁrestore__mutmut_1",
+  "*_shape_runtime.xǁShapeTraceRuntimeǁrestore__mutmut_2",
+  "*capture_limits.x__scalar_output_bytes__mutmut_17",
+  "*inspection_limits.x__validate_positive_integer_limits__mutmut_1",
+  "*inspection_limits.x__frozen_limits__mutmut_31",
+  "*artifacts.x__validate_path_segment__mutmut_1",
+  "*artifacts.x__model_id__mutmut_6",
+  "*artifacts.x__resolved_contained_path__mutmut_3",
+  "*artifacts.x__best_results_path__mutmut_6",
+  "*artifacts.x__result_path__mutmut_12",
+  "*artifacts.x__best_results_lock_path__mutmut_7",
+]
+tests = [
+  "tests/architecture/test_quality_configuration.py",
+  "tests/unit/test_cli_wire.py",
+  "tests/unit/test_inspection_graph_interface.py",
+  "tests/unit/test_inspection_shape_trace_core.py",
+  "tests/unit/test_package_cli_runs.py",
+  "tests/unit/test_runs_acceptance.py",
+  "tests/unit/test_runs_artifacts.py",
+  "tests/unit/test_runs_execution.py",
+  "tests/unit/test_runs_planning.py",
+]

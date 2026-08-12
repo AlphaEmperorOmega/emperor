@@ -39,9 +39,23 @@ PYTORCH_CUDA_130_INDEX = "https://download.pytorch.org/whl/cu130"
 PYTORCH_CUDA_126_INDEX = "https://download.pytorch.org/whl/cu126"
 SETUP_INPUTS = (
     REPOSITORY_ROOT / "pyproject.toml",
+    REPOSITORY_ROOT / "package.json",
+    REPOSITORY_ROOT / "package-lock.json",
     API_ROOT / "pyproject.toml",
     FRONTEND_ROOT / "package.json",
     FRONTEND_ROOT / "package-lock.json",
+)
+NODE_PROJECTS = (
+    (
+        REPOSITORY_ROOT,
+        REPOSITORY_ROOT / "node_modules" / "pyright" / "package.json",
+        "development-tool",
+    ),
+    (
+        FRONTEND_ROOT,
+        FRONTEND_ROOT / "node_modules",
+        "Workbench frontend",
+    ),
 )
 
 
@@ -694,15 +708,19 @@ def setup(profile: str = "cpu") -> int:
             ]
         )
 
-    frontend_current = (
-        marker is not None
-        and marker.get("signature") == signature
-        and (FRONTEND_ROOT / "node_modules").is_dir()
-    )
-    if not frontend_current:
-        npm = resolve_executable("npm", windows_name="npm.cmd")
-        print("Installing locked Workbench frontend dependencies...")
-        _run_checked([npm, "ci"], cwd=FRONTEND_ROOT)
+    npm: str | None = None
+    for project_root, installation_proof, label in NODE_PROJECTS:
+        dependencies_current = (
+            marker is not None
+            and marker.get("signature") == signature
+            and installation_proof.exists()
+        )
+        if dependencies_current:
+            continue
+        if npm is None:
+            npm = resolve_executable("npm", windows_name="npm.cmd")
+        print(f"Installing locked {label} dependencies...")
+        _run_checked([npm, "ci"], cwd=project_root)
     _run_checked([str(python), "-m", "pip", "check"])
     if not _torch_install_matches_profile(python, profile, spec, lock):
         build = _installed_torch_build(python)
