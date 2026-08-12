@@ -17,6 +17,7 @@ from emperor.layers import LayerControllerMonitorCallback
 from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
+    PlanningBudget,
     RunRequest,
     plan_runs,
 )
@@ -43,6 +44,33 @@ def _linears_linear_adaptive():
 
 
 class PackageCliRunsTests(unittest.TestCase):
+    def test_package_cli_supplies_a_finite_planning_budget(self) -> None:
+        args = SimpleNamespace(datasets=["mnist"], logdir=None)
+        mode = SimpleNamespace(
+            experiment_task=_linears_linear().default_experiment_task,
+            preset=_linears_linear().default_preset,
+            selected_presets=None,
+            search_mode=None,
+            search_keys=None,
+            config_overrides={},
+            search_overrides={},
+            monitor_names=[],
+        )
+        parser = SimpleNamespace(parse_args=lambda _argv=None: args)
+        semantic_plan = object()
+        with (
+            patch("models.package_cli.get_experiment_parser", return_value=parser),
+            patch("models.package_cli.resolve_cli_selection", return_value=mode),
+            patch(
+                "models.package_cli.plan_runs",
+                return_value=semantic_plan,
+            ) as planner,
+            patch("models.package_cli.execute_runs", return_value=()),
+        ):
+            run_model_package_cli("linears/linear")
+
+        self.assertEqual(planner.call_args.kwargs["budget"], PlanningBudget())
+
     def test_explicit_monitor_cadence_survives_run_materialization(self) -> None:
         for requested_cadence in (37, 100):
             with self.subTest(requested_cadence=requested_cadence):
@@ -53,7 +81,7 @@ class PackageCliRunsTests(unittest.TestCase):
                     ) as bind_runtime,
                     patch.object(
                         ExperimentBase,
-                        "execute_training_run",
+                        "execute_training",
                         autospec=True,
                         return_value=({}, "logs/dry-run"),
                     ) as execute_training,
@@ -79,17 +107,23 @@ class PackageCliRunsTests(unittest.TestCase):
                         ],
                     )
 
-                materialized_runs = [
+                execution_requests = [
                     call.args[1] for call in execute_training.call_args_list
                 ]
+                materialized_runs = [
+                    request.training_run for request in execution_requests
+                ]
                 callback_groups = [
-                    tuple(call.kwargs["callbacks"])
-                    for call in execute_training.call_args_list
+                    tuple(request.callbacks) for request in execution_requests
                 ]
                 self.assertEqual(status, 0)
                 self.assertEqual(len(materialized_runs), 8)
                 self.assertEqual({run.run_total for run in materialized_runs}, {8})
                 self.assertEqual(bind_runtime.call_count, 8)
+                self.assertEqual(
+                    len({id(callbacks[0]) for callbacks in callback_groups}),
+                    8,
+                )
                 for call in bind_runtime.call_args_list:
                     self.assertNotIn("monitor_log_every_n_steps", call.args[0])
                 for training_run, callbacks in zip(
@@ -334,6 +368,10 @@ class PackageCliRunsTests(unittest.TestCase):
             random_source=random.Random(7),
         )
 
+        accepted_search = plan.search_for_preset("baseline")
+        self.assertIsNotNone(accepted_search)
+        assert accepted_search is not None
+        self.assertFalse(accepted_search.axes[0].allow_custom_values)
         self.assertIsNotNone(plan.search)
         assert plan.search is not None
         self.assertFalse(plan.search.axes[0].allow_custom_values)

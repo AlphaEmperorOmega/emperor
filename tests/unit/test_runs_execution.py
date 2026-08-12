@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from datetime import datetime
+from inspect import Parameter, signature
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,18 +14,24 @@ import torch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 
+from emperor.monitoring import MonitorOption
 from model_runtime.packages import ModelIdentity, ModelPackage
 from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
     InvalidRunPlan,
+    PlanningBudget,
+    RunParameter,
     RunRequest,
+    SubmittedRun,
+    accept_run_plan,
     execute_runs,
     plan_runs,
 )
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
+from model_runtime.runs.experiment import ExperimentBase
 from models.catalog import model_package
 
 
@@ -91,6 +98,24 @@ def _linears_linear():
 
 
 class RunsExecutionTests(unittest.TestCase):
+    def test_secondary_progress_failure_is_attached_to_primary_error(self) -> None:
+        experiment = object.__new__(ExperimentBase)
+        primary = RuntimeError("primary training failure")
+        with patch.object(
+            ExperimentBase,
+            "_emit_training_error",
+            side_effect=OSError("progress sink failure"),
+        ):
+            experiment._emit_training_error_preserving_primary(primary, None)
+
+        self.assertEqual(
+            primary.__notes__,
+            [
+                "Failed to persist the training error progress event: "
+                "OSError: progress sink failure"
+            ],
+        )
+
     def setUp(self) -> None:
         _Trainer.instances.clear()
         _Logger.instances.clear()
@@ -163,6 +188,676 @@ class RunsExecutionTests(unittest.TestCase):
                     for callback in _Trainer.instances[0].callbacks
                 )
             )
+
+    def test_explicit_run_seed_seeds_lightning_and_the_dataset(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={"SEED": 17, "RUN_TEST_AFTER_FIT": False},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch(
+                    "model_runtime.runs.experiment.seed_everything"
+                ) as seed_everything_mock,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        seed_everything_mock.assert_called_once_with(17, workers=True)
+        self.assertEqual(_Trainer.instances[0].fit_datamodule.seed, 17)
+
+    def test_unset_run_seed_does_not_seed_lightning(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={"RUN_TEST_AFTER_FIT": False},
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch(
+                    "model_runtime.runs.experiment.seed_everything"
+                ) as seed_everything_mock,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        seed_everything_mock.assert_not_called()
+
+    def test_direct_execution_rejects_oversized_plan_before_package_side_effects(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        oversized_plan = replace(
+            plan,
+            runs=tuple(
+                replace(plan.runs[0], id=f"run-{index:04d}")
+                for index in range(1, 2_002)
+            ),
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(ModelPackage, "build_experiment") as build_experiment,
+            self.assertRaisesRegex(
+                InvalidRunPlan,
+                "2001 Runs.*maximum of 2000",
+            ),
+        ):
+            execute_runs(
+                package,
+                oversized_plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        build_experiment.assert_not_called()
+
+    def test_execution_budget_can_be_tightened_explicitly(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST"),
+            ),
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(ModelPackage, "build_experiment") as build_experiment,
+            self.assertRaisesRegex(InvalidRunPlan, "maximum of 1"),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                budget=PlanningBudget(max_materialized_runs=1),
+            )
+
+        build_experiment.assert_not_called()
+
+    def test_public_execution_signatures_remain_keyword_compatible(self) -> None:
+        execute_parameters = signature(execute_runs).parameters
+        self.assertEqual(
+            list(execute_parameters),
+            [
+                "package",
+                "plan",
+                "artifacts",
+                "progress",
+                "progress_step_interval",
+                "monitors",
+                "continuation",
+                "budget",
+            ],
+        )
+        self.assertEqual(
+            [parameter.kind for parameter in execute_parameters.values()],
+            [
+                Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+            ],
+        )
+        self.assertIs(execute_parameters["artifacts"].default, Parameter.empty)
+        self.assertEqual(
+            [
+                execute_parameters[name].default
+                for name in (
+                    "progress",
+                    "progress_step_interval",
+                    "monitors",
+                    "continuation",
+                    "budget",
+                )
+            ],
+            [None, 1, (), None, None],
+        )
+
+        training_parameters = signature(ExperimentBase.execute_training_run).parameters
+        self.assertEqual(
+            list(training_parameters),
+            [
+                "self",
+                "training_run",
+                "callbacks",
+                "progress",
+                "progress_step_interval",
+                "ckpt_path",
+                "model_validator",
+                "resumed_from",
+            ],
+        )
+        self.assertEqual(
+            [parameter.kind for parameter in training_parameters.values()],
+            [
+                Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+                Parameter.KEYWORD_ONLY,
+            ],
+        )
+        self.assertIs(training_parameters["callbacks"].default, Parameter.empty)
+        self.assertEqual(
+            [
+                training_parameters[name].default
+                for name in (
+                    "progress",
+                    "progress_step_interval",
+                    "ckpt_path",
+                    "model_validator",
+                    "resumed_from",
+                )
+            ],
+            [None, 1, None, None, None],
+        )
+
+    def test_execution_plan_validation_precedence_is_stable(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        run = plan.runs[0]
+        duplicate_parameters = (
+            RunParameter("HIDDEN_DIM", 64, "override"),
+            RunParameter("HIDDEN_DIM", 128, "override"),
+        )
+        cases = (
+            (
+                replace(
+                    plan,
+                    identity=ModelIdentity("gpt", "linear"),
+                    presets=(),
+                    datasets=(),
+                    runs=(),
+                    preset_searches=(),
+                ),
+                "Run plan model 'gpt/linear' does not match selected model "
+                "'linears/linear'.",
+            ),
+            (
+                replace(
+                    plan,
+                    presets=(),
+                    datasets=(),
+                    runs=(),
+                    preset_searches=(),
+                ),
+                "Run plan requires at least one selected preset.",
+            ),
+            (
+                replace(plan, datasets=(), runs=()),
+                "Run plan requires at least one selected dataset.",
+            ),
+            (
+                replace(plan, runs=()),
+                "Run plan requires at least one training run.",
+            ),
+            (
+                replace(
+                    plan,
+                    experiment_task="missing-task",
+                    presets=("missing-preset",),
+                    datasets=("missing-dataset",),
+                    preset_searches=(
+                        replace(
+                            plan.preset_searches[0],
+                            preset="missing-preset",
+                        ),
+                    ),
+                ),
+                "Unknown experiment task 'missing-task' for model "
+                "'linears/linear'. Valid tasks: image-classification.",
+            ),
+            (
+                replace(
+                    plan,
+                    presets=("missing-preset",),
+                    datasets=("missing-dataset",),
+                    preset_searches=(
+                        replace(
+                            plan.preset_searches[0],
+                            preset="missing-preset",
+                        ),
+                    ),
+                ),
+                "Unknown preset 'missing-preset' for model 'linears/linear'.",
+            ),
+            (
+                replace(plan, datasets=("missing-dataset",)),
+                "Unknown dataset 'missing-dataset' for model 'linears/linear'. "
+                "Valid datasets: Mnist, FashionMNIST, Cifar10, Cifar100.",
+            ),
+            (
+                replace(
+                    plan,
+                    runs=(
+                        replace(
+                            run,
+                            id="",
+                            experiment_task="foreign",
+                            preset="missing",
+                            dataset="missing",
+                            parameters=duplicate_parameters,
+                        ),
+                    ),
+                ),
+                "Run plan contains empty run id.",
+            ),
+            (
+                replace(
+                    plan,
+                    runs=(
+                        replace(
+                            run,
+                            id="bad",
+                            experiment_task="foreign",
+                            preset="missing",
+                            dataset="missing",
+                            parameters=duplicate_parameters,
+                        ),
+                    ),
+                ),
+                "Run 'bad' experiment task 'foreign' does not match plan task "
+                "'image-classification'.",
+            ),
+            (
+                replace(
+                    plan,
+                    runs=(
+                        replace(
+                            run,
+                            id="bad",
+                            preset="missing",
+                            dataset="missing",
+                            parameters=duplicate_parameters,
+                        ),
+                    ),
+                ),
+                "Run plan contains unknown preset 'missing'.",
+            ),
+            (
+                replace(
+                    plan,
+                    runs=(
+                        replace(
+                            run,
+                            id="bad",
+                            dataset="missing",
+                            parameters=duplicate_parameters,
+                        ),
+                    ),
+                ),
+                "Run plan contains unknown dataset 'missing'.",
+            ),
+            (
+                replace(
+                    plan,
+                    runs=(replace(run, id="bad", parameters=duplicate_parameters),),
+                ),
+                "Run 'bad' contains duplicate Runtime Defaults assignments.",
+            ),
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(ModelPackage, "build_experiment") as build_experiment,
+        ):
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            for invalid_plan, message in cases:
+                with self.subTest(message=message):
+                    with self.assertRaises(InvalidRunPlan) as raised:
+                        execute_runs(
+                            package,
+                            invalid_plan,
+                            artifacts=artifacts,
+                        )
+                    self.assertEqual(str(raised.exception), message)
+
+        build_experiment.assert_not_called()
+
+    def test_accepted_runs_build_fresh_monitors_from_exact_run_overrides(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = accept_run_plan(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+            (
+                SubmittedRun(
+                    "cadence-37",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 37},
+                ),
+                SubmittedRun(
+                    "cadence-73",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 73},
+                ),
+            ),
+        )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ExperimentBase,
+                "execute_training",
+                autospec=True,
+                side_effect=[({}, "logs/cadence-37"), ({}, "logs/cadence-73")],
+            ) as execute_training,
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                monitors=("layer-controller",),
+            )
+
+        first_callbacks = execute_training.call_args_list[0].args[1].callbacks
+        second_callbacks = execute_training.call_args_list[1].args[1].callbacks
+        self.assertEqual(first_callbacks[0].log_every_n_steps, 37)
+        self.assertEqual(second_callbacks[0].log_every_n_steps, 73)
+        self.assertIsNot(first_callbacks[0], second_callbacks[0])
+
+    def test_all_exact_run_monitors_build_before_any_run_executes(self) -> None:
+        package = _linears_linear()
+        plan = accept_run_plan(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+            (
+                SubmittedRun(
+                    "cadence-37",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 37},
+                ),
+                SubmittedRun(
+                    "cadence-73",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 73},
+                ),
+            ),
+        )
+
+        def callback_factory(settings):
+            if settings.log_every_n_steps == 73:
+                raise ValueError("unsupported exact Run cadence")
+            return Callback()
+
+        option = MonitorOption(
+            name="fixture-monitor",
+            label="Fixture monitor",
+            description="Exercises pre-execution callback construction.",
+            kinds=("scalar",),
+            callback_factory=callback_factory,
+        )
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "resolve_monitors",
+                return_value=[option],
+            ),
+            patch.object(
+                ExperimentBase,
+                "execute_training",
+                autospec=True,
+            ) as execute_training,
+            self.assertRaisesRegex(
+                InvalidRunPlan,
+                "unsupported exact Run cadence",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                monitors=("fixture-monitor",),
+            )
+
+        execute_training.assert_not_called()
+
+    def test_invalid_run_experiment_port_fails_before_materialization(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                return_value=object(),
+            ),
+            patch.object(
+                ExperimentBase,
+                "materialize_training_runs",
+                autospec=True,
+            ) as materialize,
+            self.assertRaisesRegex(
+                TypeError,
+                "Model Package 'linears/linear' returned an invalid Run Experiment",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        materialize.assert_not_called()
+
+    def test_reordered_training_runs_fail_before_checkpoint_binding_or_training(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST"),
+            ),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        def materialize_in_reverse(experiment, requests):
+            return list(reversed(original_materialize(experiment, requests)))
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ExperimentBase,
+                "materialize_training_runs",
+                autospec=True,
+                side_effect=materialize_in_reverse,
+            ),
+            patch(
+                "model_runtime.runs.execution."
+                "CheckpointContinuationLifecycle.bind_training_runs",
+                autospec=True,
+            ) as bind_checkpoint,
+            patch.object(
+                ExperimentBase,
+                "execute_training",
+                autospec=True,
+                return_value=({}, "logs/unused"),
+            ) as execute_training,
+            self.assertRaisesRegex(
+                InvalidRunPlan,
+                "position 1.*expected run id 'run-0001'.*got 'run-0002'",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        bind_checkpoint.assert_not_called()
+        execute_training.assert_not_called()
+
+    def test_training_run_handoff_rejects_missing_duplicate_and_mismatched_ids(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST"),
+            ),
+        )
+        cases = (
+            ((None, "run-0002"), "expected run id 'run-0001', got None"),
+            (
+                ("run-0001", "run-0001"),
+                "expected run id 'run-0002', got 'run-0001'",
+            ),
+            (
+                ("external-run", "run-0002"),
+                "expected run id 'run-0001', got 'external-run'",
+            ),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        for run_ids, message in cases:
+            with self.subTest(run_ids=run_ids):
+
+                def materialize_with_run_ids(
+                    experiment,
+                    requests,
+                    selected_run_ids=run_ids,
+                ):
+                    training_runs = original_materialize(experiment, requests)
+                    for training_run, run_id in zip(
+                        training_runs,
+                        selected_run_ids,
+                        strict=True,
+                    ):
+                        training_run.run_id = run_id
+                    return training_runs
+
+                with (
+                    tempfile.TemporaryDirectory() as tmp,
+                    patch.object(
+                        ExperimentBase,
+                        "materialize_training_runs",
+                        autospec=True,
+                        side_effect=materialize_with_run_ids,
+                    ),
+                    self.assertRaisesRegex(InvalidRunPlan, message),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    )
+
+    def test_training_run_handoff_rejects_identity_corruption(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        experiment_task = package.resolve_experiment_task(plan.experiment_task)
+        cases = (
+            ("run_index", 2, "expected run index 1, got 2"),
+            ("run_total", 2, "expected run total 1, got 2"),
+            (
+                "preset",
+                package.resolve_preset("gating"),
+                "expected preset 'baseline', got 'gating'",
+            ),
+            (
+                "dataset_type",
+                package.resolve_dataset("FashionMNIST", experiment_task),
+                "expected Dataset 'Mnist', got 'FashionMNIST'",
+            ),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        for field_name, replacement, message in cases:
+            with self.subTest(field=field_name):
+
+                def materialize_with_corruption(
+                    experiment,
+                    requests,
+                    selected_field=field_name,
+                    selected_replacement=replacement,
+                ):
+                    training_runs = original_materialize(experiment, requests)
+                    setattr(
+                        training_runs[0],
+                        selected_field,
+                        selected_replacement,
+                    )
+                    return training_runs
+
+                with (
+                    tempfile.TemporaryDirectory() as tmp,
+                    patch.object(
+                        ExperimentBase,
+                        "materialize_training_runs",
+                        autospec=True,
+                        side_effect=materialize_with_corruption,
+                    ),
+                    patch(
+                        "model_runtime.runs.execution."
+                        "CheckpointContinuationLifecycle.bind_training_runs",
+                        autospec=True,
+                    ) as bind_checkpoint,
+                    patch.object(
+                        ExperimentBase,
+                        "execute_training",
+                        autospec=True,
+                        return_value=({}, "logs/unused"),
+                    ) as execute_training,
+                    self.assertRaisesRegex(InvalidRunPlan, message),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    )
+
+                bind_checkpoint.assert_not_called()
+                execute_training.assert_not_called()
 
     def test_requested_checkpointing_keeps_best_and_last_checkpoints(self) -> None:
         package = _linears_linear()
@@ -700,6 +1395,10 @@ class RunsExecutionTests(unittest.TestCase):
         self.assertEqual(progress.events[-1]["runId"], "run-0001")
         self.assertEqual(progress.events[-1]["dataset"], "Mnist")
         self.assertEqual(progress.events[-1]["error"], "training exploded")
+        self.assertEqual(
+            progress.events[-1]["logDir"],
+            progress.events[0]["logDir"],
+        )
 
     def test_invalid_monitor_rejects_before_package_config_materialization(
         self,

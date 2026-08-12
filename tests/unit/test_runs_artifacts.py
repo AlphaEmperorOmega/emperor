@@ -23,6 +23,133 @@ from model_runtime.task_behavior import (
 
 
 class RunsArtifactsTests(unittest.TestCase):
+    def test_artifact_paths_require_typed_model_identity(self) -> None:
+        artifacts = FilesystemRunArtifacts(root=Path("/safe/root"))
+
+        for raw_identity in (
+            "linears/linear",
+            "/tmp/escape",
+            "../../escape",
+            "linears\\linear",
+            " linears/linear ",
+        ):
+            with (
+                self.subTest(identity=raw_identity),
+                self.assertRaisesRegex(
+                    TypeError,
+                    "ModelIdentity",
+                ),
+            ):
+                artifacts.best_results_path(raw_identity)
+
+    def test_artifact_identity_ignores_overridden_catalog_key(self) -> None:
+        class HostileIdentity(ModelIdentity):
+            @property
+            def catalog_key(self) -> str:
+                return "../../escape"
+
+        artifacts = FilesystemRunArtifacts()
+        identity = HostileIdentity("linears", "linear")
+
+        self.assertTrue(
+            artifacts.run_name(identity, "baseline", "Mnist", {}).startswith(
+                "linears/linear/baseline/Mnist/"
+            )
+        )
+
+    def test_run_name_rejects_path_like_preset_and_dataset_segments(self) -> None:
+        artifacts = FilesystemRunArtifacts()
+        identity = ModelIdentity("linears", "linear")
+
+        for field_name, preset, dataset in (
+            ("preset_key", "../escape", "Mnist"),
+            ("preset_key", "/tmp", "Mnist"),
+            ("preset_key", "nested/folder", "Mnist"),
+            ("preset_key", "nested\\folder", "Mnist"),
+            ("dataset", "baseline", "../escape"),
+            ("dataset", "baseline", "/tmp"),
+            ("dataset", "baseline", "nested/folder"),
+            ("dataset", "baseline", " nested "),
+        ):
+            with self.subTest(field=field_name, value=(preset, dataset)):
+                with self.assertRaisesRegex(ValueError, field_name):
+                    artifacts.run_name(identity, preset, dataset, {})
+
+    def test_result_write_rejects_log_directory_outside_artifact_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            outside = Path(tmp) / "outside"
+            artifacts = FilesystemRunArtifacts(root=root)
+
+            with self.assertRaisesRegex(ValueError, "outside artifact root"):
+                artifacts.write_result(outside, {"status": "escaped"})
+
+            self.assertFalse(outside.exists())
+
+    def test_model_root_rejects_existing_symlink_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            outside = Path(tmp) / "outside"
+            root.mkdir()
+            outside.mkdir()
+            (root / "linears").symlink_to(outside, target_is_directory=True)
+            artifacts = FilesystemRunArtifacts(root=root)
+
+            with self.assertRaisesRegex(ValueError, "outside artifact root"):
+                artifacts.best_results_path(ModelIdentity("linears", "linear"))
+
+            self.assertEqual(list(outside.iterdir()), [])
+
+    def test_final_artifact_file_symlinks_cannot_escape_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            model_root = root / "linears" / "linear"
+            log_dir = root / "run" / "version_0"
+            model_root.mkdir(parents=True)
+            log_dir.mkdir(parents=True)
+            outside_summary = Path(tmp) / "outside-summary.json"
+            outside_result = Path(tmp) / "outside-result.json"
+            outside_summary.write_text('{"secret": true}', encoding="utf-8")
+            outside_result.write_text('{"status": "unchanged"}', encoding="utf-8")
+            (model_root / "best_results.json").symlink_to(outside_summary)
+            (log_dir / "result.json").symlink_to(outside_result)
+            artifacts = FilesystemRunArtifacts(root=root)
+            identity = ModelIdentity("linears", "linear")
+
+            with self.assertRaisesRegex(ValueError, "outside artifact root"):
+                artifacts.read_best_results(identity)
+            with self.assertRaisesRegex(ValueError, "outside artifact root"):
+                artifacts.write_result(log_dir, {"status": "escaped"})
+
+            self.assertEqual(
+                json.loads(outside_summary.read_text(encoding="utf-8")),
+                {"secret": True},
+            )
+            self.assertEqual(
+                json.loads(outside_result.read_text(encoding="utf-8")),
+                {"status": "unchanged"},
+            )
+
+    def test_final_lock_file_symlink_cannot_escape_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "logs"
+            model_root = root / "linears" / "linear"
+            model_root.mkdir(parents=True)
+            outside_lock = Path(tmp) / "outside.lock"
+            outside_lock.write_text("unchanged", encoding="utf-8")
+            (model_root / "best_results.json.lock").symlink_to(outside_lock)
+            artifacts = FilesystemRunArtifacts(root=root)
+
+            with self.assertRaisesRegex(ValueError, "outside artifact root"):
+                artifacts.update_best_results(
+                    ModelIdentity("linears", "linear"),
+                    None,
+                    {"dataset": "Mnist", "metrics": {}},
+                )
+
+            self.assertEqual(outside_lock.read_text(encoding="utf-8"), "unchanged")
+            self.assertFalse((model_root / "best_results.json").exists())
+
     def test_relative_run_name_and_result_name_are_stable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             artifacts = FilesystemRunArtifacts(

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import pytest
 import torch
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, TensorDataset
@@ -70,6 +71,7 @@ def _linears_linear():
 
 
 class CheckpointContinuationIntegrationTests(unittest.TestCase):
+    @pytest.mark.training
     def test_real_lightning_continues_complete_state_into_new_run_artifact(
         self,
     ) -> None:

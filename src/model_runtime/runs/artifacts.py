@@ -3,18 +3,19 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from filelock import FileLock
 
 from emperor.experiments import ExperimentTask
-from model_runtime.packages.identity import ModelIdentity
+from model_runtime.packages.identity import ModelIdentity, model_key
 from model_runtime.runs._metrics import sanitize_metric_payload
 from model_runtime.runs.json_values import require_finite_json
 from model_runtime.task_behavior import (
@@ -24,6 +25,69 @@ from model_runtime.task_behavior import (
 
 DEFAULT_RESULT_METRIC_KEY_LIMIT = 512
 DEFAULT_RESULT_STRING_VALUE_LIMIT = 20_000
+_RUN_ARTIFACT_SEGMENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+
+
+def _validate_namespace(namespace: str | None) -> str | None:
+    if namespace is None:
+        return None
+    if type(namespace) is not str:
+        raise TypeError("log_folder must be a string or None")
+    path = Path(namespace)
+    if (
+        not namespace
+        or namespace in {".", ".."}
+        or "\\" in namespace
+        or path.is_absolute()
+        or len(path.parts) != 1
+    ):
+        raise ValueError(
+            "log_folder must be a single relative folder name without path separators"
+        )
+    return namespace
+
+
+def _validate_path_segment(value: object, field_name: str) -> str:
+    if (
+        type(value) is not str
+        or value in {"", ".", ".."}
+        or value.strip() != value
+        or _RUN_ARTIFACT_SEGMENT_RE.fullmatch(value) is None
+    ):
+        raise ValueError(f"{field_name} must be one safe relative path segment.")
+    return value
+
+
+def _model_id(identity: object) -> str:
+    if not isinstance(identity, ModelIdentity):
+        raise TypeError("Run Artifact paths require a ModelIdentity.")
+    return model_key(identity.model_type, identity.model)
+
+
+def _resolved_contained_path(root: Path, path: Path) -> Path:
+    resolved_root = root.resolve()
+    resolved_path = path.resolve()
+    if not resolved_path.is_relative_to(resolved_root):
+        raise ValueError(
+            f"Run Artifact path '{path}' is outside artifact root '{root}'."
+        )
+    return resolved_path
+
+
+def _best_results_path(root: Path, model_root: Path) -> Path:
+    return _resolved_contained_path(root, model_root / "best_results.json")
+
+
+def _result_path(root: Path, log_dir: str | Path) -> Path:
+    contained_log_dir = _resolved_contained_path(root, Path(log_dir))
+    return _resolved_contained_path(root, contained_log_dir / "result.json")
+
+
+def _best_results_lock_path(root: Path, summary_path: Path) -> Path:
+    return _resolved_contained_path(
+        root,
+        summary_path.with_suffix(summary_path.suffix + ".lock"),
+    )
 
 
 @runtime_checkable
@@ -35,7 +99,7 @@ class RunArtifacts(Protocol):
 
     def run_name(
         self,
-        identity: ModelIdentity | str,
+        identity: ModelIdentity,
         preset_key: str,
         dataset: str,
         parameters: Mapping[str, Any],
@@ -54,12 +118,12 @@ class RunArtifacts(Protocol):
 
     def read_best_results(
         self,
-        identity: ModelIdentity | str,
+        identity: ModelIdentity,
     ) -> dict[str, Any]: ...
 
     def update_best_results(
         self,
-        identity: ModelIdentity | str,
+        identity: ModelIdentity,
         experiment_task: ExperimentTask | None,
         result: Mapping[str, Any],
     ) -> dict[str, Any]: ...
@@ -67,7 +131,11 @@ class RunArtifacts(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class FilesystemRunArtifacts:
-    """Atomic filesystem Implementation of the Run Artifact Interface."""
+    """Atomic filesystem Implementation of the Run Artifact Interface.
+
+    Resolved-path checks contain existing symlinks. They assume an actor cannot
+    concurrently replace checked path components between validation and I/O.
+    """
 
     root: Path = Path("logs")
     namespace: str | None = None
@@ -75,47 +143,26 @@ class FilesystemRunArtifacts:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root))
-        object.__setattr__(self, "namespace", self._validate_namespace(self.namespace))
+        object.__setattr__(self, "namespace", _validate_namespace(self.namespace))
 
-    @staticmethod
-    def _validate_namespace(namespace: str | None) -> str | None:
-        if namespace is None:
-            return None
-        folder = str(namespace)
-        path = Path(folder)
-        if (
-            not folder
-            or folder in {".", ".."}
-            or "\\" in folder
-            or path.is_absolute()
-            or len(path.parts) != 1
-        ):
-            raise ValueError(
-                "log_folder must be a single relative folder name without path "
-                "separators"
-            )
-        return folder
-
-    @staticmethod
-    def _model_id(identity: ModelIdentity | str) -> str:
-        return identity.catalog_key if isinstance(identity, ModelIdentity) else identity
-
-    def model_root(self, identity: ModelIdentity | str) -> Path:
+    def model_root(self, identity: ModelIdentity) -> Path:
         root = self.root
         if self.namespace is not None:
             root = root / self.namespace
-        return root / self._model_id(identity)
+        return _resolved_contained_path(self.root, root / _model_id(identity))
 
-    def best_results_path(self, identity: ModelIdentity | str) -> Path:
-        return self.model_root(identity) / "best_results.json"
+    def best_results_path(self, identity: ModelIdentity) -> Path:
+        return _best_results_path(self.root, self.model_root(identity))
 
     def run_name(
         self,
-        identity: ModelIdentity | str,
+        identity: ModelIdentity,
         preset_key: str,
         dataset: str,
         parameters: Mapping[str, Any],
     ) -> str:
+        preset_key = _validate_path_segment(preset_key, "preset_key")
+        dataset = _validate_path_segment(dataset, "dataset")
         param_string = "_".join(f"{key}={value}" for key, value in parameters.items())
         parameter_id = (
             hashlib.md5(
@@ -126,7 +173,7 @@ class FilesystemRunArtifacts:
             else "default"
         )
         timestamp = self.clock().strftime("%Y%m%d_%H%M%S")
-        model_id = self._model_id(identity)
+        model_id = _model_id(identity)
         prefix = (
             f"{self.namespace}/{model_id}" if self.namespace is not None else model_id
         )
@@ -154,16 +201,16 @@ class FilesystemRunArtifacts:
         log_dir: str | Path,
         result: Mapping[str, Any],
     ) -> Path:
-        result_path = Path(log_dir) / "result.json"
+        result_path = _result_path(self.root, log_dir)
         self._write_json_atomic(result_path, result, trailing_newline=False)
         return result_path
 
-    def read_best_results(self, identity: ModelIdentity | str) -> dict[str, Any]:
+    def read_best_results(self, identity: ModelIdentity) -> dict[str, Any]:
         return self._read_json_object(self.best_results_path(identity))
 
     def update_best_results(
         self,
-        identity: ModelIdentity | str,
+        identity: ModelIdentity,
         experiment_task: ExperimentTask | None,
         result: Mapping[str, Any],
     ) -> dict[str, Any]:
@@ -208,8 +255,8 @@ class FilesystemRunArtifacts:
     def _read_json_object(path: Path) -> dict[str, Any]:
         if not path.exists():
             return {}
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else {}
+        payload: object = json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
 
     @staticmethod
     def _write_json_atomic(
@@ -240,8 +287,8 @@ class FilesystemRunArtifacts:
                 temp_path.unlink()
 
     @contextmanager
-    def _best_results_lock(self, summary_path: Path) -> Iterator[None]:
-        lock_path = summary_path.with_suffix(summary_path.suffix + ".lock")
+    def _best_results_lock(self, summary_path: Path) -> Generator[None]:
+        lock_path = _best_results_lock_path(self.root, summary_path)
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         with FileLock(str(lock_path)):
             yield
