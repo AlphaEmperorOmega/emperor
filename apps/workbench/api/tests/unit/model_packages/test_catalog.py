@@ -121,7 +121,7 @@ class InspectorDiscoveryTests(unittest.TestCase):
         self.assertEqual(group["experimentTask"], "causal-language-modeling")
         self.assertEqual(
             [dataset["name"] for dataset in group["datasets"]],
-            ["WikiText2", "PennTreebank"],
+            ["WikiText2", "PennTreebank", "WikiText103", "OpenWebText"],
         )
 
     def test_transformer_discovery_exposes_translation_directions_and_dims(
