@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, cast
 
 from emperor.config import ModelConfig
@@ -20,6 +21,19 @@ class PresetLock:
 class PresetDefinition:
     preset_values: Mapping[str, object]
     description: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PresetDefinitionSnapshot:
+    preset_values: tuple[tuple[str, object], ...]
+    description: str
+
+    @classmethod
+    def capture(cls, definition: PresetDefinition) -> _PresetDefinitionSnapshot:
+        return cls(tuple(definition.preset_values.items()), definition.description)
+
+    def project(self) -> PresetDefinition:
+        return PresetDefinition(dict(self.preset_values), self.description)
 
 
 @dataclass(frozen=True)
@@ -60,7 +74,12 @@ class ExperimentPresetsBase:
         self,
         preset_definitions: Mapping[object, PresetDefinition],
     ) -> None:
-        self._preset_definitions = dict(preset_definitions)
+        self._preset_definition_snapshots = MappingProxyType(
+            {
+                preset: _PresetDefinitionSnapshot.capture(definition)
+                for preset, definition in preset_definitions.items()
+            }
+        )
 
     @property
     def default_preset(self) -> object:
@@ -88,8 +107,14 @@ class ExperimentPresetsBase:
         self,
         model_config_preset: object,
     ) -> PresetDefinition:
+        return self._definition_snapshot_for_preset(model_config_preset).project()
+
+    def _definition_snapshot_for_preset(
+        self,
+        model_config_preset: object,
+    ) -> _PresetDefinitionSnapshot:
         try:
-            return self._preset_definitions[model_config_preset]
+            return self._preset_definition_snapshots[model_config_preset]
         except KeyError as exc:
             raise ValueError(
                 "The specified preset is not supported. Please choose a valid "
