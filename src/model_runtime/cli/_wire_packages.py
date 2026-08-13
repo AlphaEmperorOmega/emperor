@@ -27,7 +27,7 @@ from model_runtime.packages import (
 _EXPERIMENT_TASK_NAMES = {experiment_task_name(task) for task in ExperimentTask}
 
 
-def _experiment_task(value: object, path: str) -> str:
+def experiment_task_from_wire(value: object, path: str) -> str:
     selected = wire_string(value, path)
     if selected not in _EXPERIMENT_TASK_NAMES:
         raise WireCodecError(f"{path} is not a supported Experiment Task.")
@@ -143,7 +143,7 @@ class _PackageMetadataDecoder:
             "identity": identity_to_wire(identity),
             "catalog_key": catalog_key,
             "presets": presets,
-            "default_experiment_task": _experiment_task(
+            "default_experiment_task": experiment_task_from_wire(
                 self._raw["default_experiment_task"],
                 "$.default_experiment_task",
             ),
@@ -186,7 +186,7 @@ class _PackageMetadataDecoder:
             datasets = self._datasets(group, path)
             dataset_groups.append(
                 {
-                    "experiment_task": _experiment_task(
+                    "experiment_task": experiment_task_from_wire(
                         group["experiment_task"],
                         f"{path}.experiment_task",
                     ),

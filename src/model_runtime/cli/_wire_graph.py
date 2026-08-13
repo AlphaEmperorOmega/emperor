@@ -10,6 +10,7 @@ from model_runtime.cli._wire_shared import (
     json_mapping_from_wire,
     json_value_from_wire,
     json_value_to_wire,
+    require_sequence_limit,
     wire_fields,
     wire_int,
     wire_list,
@@ -57,15 +58,6 @@ class InspectionWireLimits:
     maximum_output_bytes: int = 16 * 1024**2
 
 
-def _require_sequence_limit(
-    values: tuple[Any, ...] | list[Any],
-    path: str,
-    maximum_items: int,
-) -> None:
-    if len(values) > maximum_items:
-        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
-
-
 def _require_output_budget(
     value: object,
     limits: InspectionWireLimits,
@@ -81,7 +73,7 @@ def _graph_configuration_to_wire(
 ) -> dict[str, Any] | None:
     if configuration is None:
         return None
-    _require_sequence_limit(
+    require_sequence_limit(
         configuration.fields,
         "$.nodes[].configuration.fields",
         limits.maximum_configuration_fields,
@@ -137,12 +129,12 @@ def encode_inspection_result(
     *,
     limits: InspectionWireLimits,
 ) -> dict[str, Any]:
-    _require_sequence_limit(
+    require_sequence_limit(
         result.nodes,
         "$.nodes",
         limits.maximum_graph_nodes,
     )
-    _require_sequence_limit(
+    require_sequence_limit(
         result.edges,
         "$.edges",
         limits.maximum_graph_edges,

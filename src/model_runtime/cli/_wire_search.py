@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import Any, cast
 
 from model_runtime.cli._wire_shared import (
-    WireCodecError,
     json_value_from_wire,
     json_value_to_wire,
+    require_sequence_limit,
     wire_bool,
     wire_fields,
     wire_list,
@@ -23,15 +22,6 @@ _MAX_WIRE_SEARCH_AXES = _DEFAULT_BUDGET.max_axes or 16
 _MAX_WIRE_SEARCH_VALUES = _DEFAULT_BUDGET.max_values_per_axis or 50
 
 
-def _require_sequence_limit(
-    values: Sequence[Any],
-    path: str,
-    maximum_items: int,
-) -> None:
-    if len(values) > maximum_items:
-        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
-
-
 def search_spec_to_wire_at(
     search: SearchSpec | None,
     path: str,
@@ -39,14 +29,14 @@ def search_spec_to_wire_at(
     if search is None:
         return None
     if search.axes is not None:
-        _require_sequence_limit(
+        require_sequence_limit(
             search.axes,
             f"{path}.axes",
             _MAX_WIRE_SEARCH_AXES,
         )
         for index, axis in enumerate(search.axes):
             if axis.values is not None:
-                _require_sequence_limit(
+                require_sequence_limit(
                     axis.values,
                     f"{path}.axes[{index}].values",
                     _MAX_WIRE_SEARCH_VALUES,
