@@ -5,6 +5,7 @@ import pickle
 import unittest
 from copy import copy, deepcopy
 from dataclasses import asdict, astuple, fields, replace
+from enum import Enum
 from inspect import signature
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -49,6 +50,7 @@ from model_runtime.packages import (
     RuntimeDefaultsError,
     configuration_field_metadata,
 )
+from models.bert.linear import config as bert_linear_config
 from models.catalog import model_package
 from models.transformer.linear import config as transformer_linear_config
 from support.metadata_fixture import config as metadata_fixture_config
@@ -507,6 +509,54 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 "WeightedResidualConfig",
             ),
         )
+
+    def test_schema_hides_input_only_enum_and_class_aliases(self) -> None:
+        class _RenamedActivation(Enum):
+            CURRENT = "current"
+            HISTORICAL = "current"
+            ALTERNATIVE = "alternative"
+
+        with (
+            patch.object(
+                bert_linear_config,
+                "STACK_ACTIVATION",
+                _RenamedActivation.CURRENT,
+            ),
+            patch.object(
+                bert_linear_config,
+                "HistoricalResidualConfig",
+                WeightedResidualConfig,
+                create=True,
+            ),
+        ):
+            package = _fresh_package("bert/linear")
+            fields = {
+                field.key: field for field in configuration_schema(package).fields
+            }
+            activation = fields["STACK_ACTIVATION"]
+            residual = fields["STACK_RESIDUAL_CONNECTION_OPTION"]
+
+            self.assertEqual(activation.default, "CURRENT")
+            self.assertTupleEqual(
+                activation.choices,
+                ("CURRENT", "ALTERNATIVE"),
+            )
+            self.assertNotIn("HISTORICAL", activation.choices)
+            self.assertEqual(
+                residual.choices.count("WeightedResidualConfig"),
+                1,
+            )
+            self.assertNotIn("HistoricalResidualConfig", residual.choices)
+
+            parsed = package.runtime_defaults_spec.parse_value(
+                "STACK_RESIDUAL_CONNECTION_OPTION",
+                "HistoricalResidualConfig",
+            )
+            self.assertIs(parsed, WeightedResidualConfig)
+            self.assertEqual(
+                package.runtime_defaults_spec.serialize_value(parsed),
+                "WeightedResidualConfig",
+            )
 
     def test_configuration_metadata_import_and_alias_precedence_is_stable(
         self,
