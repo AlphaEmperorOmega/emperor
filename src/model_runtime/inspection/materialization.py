@@ -81,6 +81,13 @@ def materialize_configuration(
             dataset,
             config_overrides=dict(parsed_overrides.values),
         )
+        preflight_inspection_configuration(
+            package,
+            parsed_overrides.values,
+            preset,
+            memory_limit_bytes=request.memory_limit_bytes,
+            effective_configuration=configuration,
+        )
     except InspectionError:
         raise
     except (ImportError, ModuleNotFoundError) as exc:
