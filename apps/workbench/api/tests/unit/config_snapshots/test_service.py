@@ -8,6 +8,7 @@ from dataclasses import FrozenInstanceError
 from pathlib import Path
 from threading import Barrier
 from typing import Any
+from unittest.mock import patch
 
 from emperor_workbench.config_snapshots import (
     ConfigSnapshotFailure,
@@ -221,6 +222,35 @@ class ConfigSnapshotServiceAdaptiveValidationTests(unittest.TestCase):
                 "RESIDUAL_STACK_NUM_LAYERS": "3",
                 "STACK_RESIDUAL_CONNECTION_OPTION": "WeightedResidualConfig",
                 "STACK_RESIDUAL_MODEL_FLAG": "true",
+            },
+        )
+
+    def test_snapshot_persists_canonical_adapter_serialization(self) -> None:
+        with patch(
+            "emperor_workbench.model_packages.SelectedModelPackage."
+            "serialize_overrides",
+            return_value={
+                "STACK_RESIDUAL_CONNECTION_OPTION": "WeightedResidualConfig"
+            },
+        ) as serialize_overrides:
+            snapshot = self.service.create_snapshot(
+                model="linears/linear",
+                preset="baseline",
+                name="canonical residual spelling",
+                overrides={
+                    "stack_residual_connection_option": (
+                        "AdditiveResidualConfig"
+                    ),
+                },
+            )
+
+        serialize_overrides.assert_called_once_with(
+            {"STACK_RESIDUAL_CONNECTION_OPTION": "AdditiveResidualConfig"}
+        )
+        self.assertEqual(
+            dict(snapshot.overrides),
+            {
+                "STACK_RESIDUAL_CONNECTION_OPTION": "WeightedResidualConfig",
             },
         )
 
