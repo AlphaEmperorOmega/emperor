@@ -330,6 +330,59 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn('run["dataset_type"]', experiment_source)
         self.assertIn(") -> RunExperiment:", package_source)
 
+    def test_inspection_snapshots_normalize_every_collection_owner(self) -> None:
+        records_path = INSPECTION_ROOT / "records.py"
+        records_source = records_path.read_text(encoding="utf-8")
+        records_tree = ast.parse(records_source, records_path.as_posix())
+        classes = {
+            node.name: node
+            for node in records_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        collection_owners = (
+            "InspectionRequest",
+            "ParsedOverrides",
+            "ConfigurationFieldCondition",
+            "ConfigurationField",
+            "ConfigurationSchema",
+            "SearchAxis",
+            "SearchSpace",
+            "GraphConfigurationField",
+            "GraphConfiguration",
+            "GraphNode",
+            "ModelGraph",
+            "InspectionResult",
+        )
+        for class_name in collection_owners:
+            with self.subTest(class_name=class_name):
+                self.assertIn(
+                    "__post_init__",
+                    {
+                        node.name
+                        for node in classes[class_name].body
+                        if isinstance(node, ast.FunctionDef)
+                    },
+                )
+
+        freeze_owners: list[str] = []
+        for source_path in sorted(INSPECTION_ROOT.glob("*.py")):
+            tree = ast.parse(
+                source_path.read_text(encoding="utf-8"),
+                source_path.as_posix(),
+            )
+            if any(
+                isinstance(node, ast.FunctionDef) and node.name == "freeze_value"
+                for node in tree.body
+            ):
+                freeze_owners.append(source_path.name)
+        self.assertEqual(freeze_owners, ["records.py"])
+        self.assertIn("(set, frozenset)", records_source)
+
+        inspection_facade = (INSPECTION_ROOT / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('"freeze_value"', inspection_facade)
+
     def test_runs_own_one_checkpoint_continuation_lifecycle(self) -> None:
         checkpoint_path = RUNS_ROOT / "checkpoints.py"
         checkpoint_tree = ast.parse(
