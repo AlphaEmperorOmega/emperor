@@ -174,21 +174,32 @@ def print_preset_options(catalog_key: str) -> None:
         print(f"  {package.preset_name(preset)}{suffix}")
 
 
-def print_dataset_options(catalog_key: str) -> None:
+def dataset_option_names(catalog_key: str) -> list[str]:
     package = _selected_package(catalog_key)
     seen: set[str] = set()
+    names: list[str] = []
     for datasets in package.dataset_metadata.values():
         for dataset in datasets:
             name = _dataset_cli_name(dataset)
             if name not in seen:
                 seen.add(name)
-                print(name)
+                names.append(name)
+    return names
+
+
+def monitor_option_names(catalog_key: str) -> list[str]:
+    package = _selected_package(catalog_key)
+    return [option.name for option in package.monitor_options()]
+
+
+def print_dataset_options(catalog_key: str) -> None:
+    for name in dataset_option_names(catalog_key):
+        print(name)
 
 
 def print_monitor_options(catalog_key: str) -> None:
-    package = _selected_package(catalog_key)
-    for option in package.monitor_options():
-        print(option.name)
+    for name in monitor_option_names(catalog_key):
+        print(name)
 
 
 def main() -> None:
@@ -217,7 +228,9 @@ if __name__ == "__main__":
 
 __all__ = [
     "add_config_override_arguments",
+    "dataset_option_names",
     "extract_config_overrides",
+    "monitor_option_names",
     "parse_search_set",
     "print_config_options",
     "print_dataset_options",

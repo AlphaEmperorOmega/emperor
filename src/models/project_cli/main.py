@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from models.catalog import (
@@ -12,9 +12,9 @@ from models.catalog import (
     model_type_exists,
 )
 from models.config_overrides import (
+    dataset_option_names,
+    monitor_option_names,
     print_config_options,
-    print_dataset_options,
-    print_monitor_options,
     print_preset_options,
 )
 
@@ -29,18 +29,6 @@ INSPECTION_FLAGS = {
     "--print-model-shapes": "outputs",
     "--print-model-tensor-shapes": "variables",
 }
-
-
-def _captured_lines(action: Callable[[], None]) -> list[str]:
-    """Capture a catalog printer while preserving its exact line-oriented output."""
-
-    import contextlib
-    import io
-
-    output = io.StringIO()
-    with contextlib.redirect_stdout(output):
-        action()
-    return output.getvalue().splitlines()
 
 
 def list_model_types() -> None:
@@ -64,17 +52,15 @@ def list_models(model_type: str = "") -> None:
 def list_datasets(model_type: str, model: str) -> None:
     model_id = f"{model_type}/{model}"
     print(f"Available datasets for --model-type {model_type} --model {model}:")
-    for dataset in _captured_lines(lambda: print_dataset_options(model_id)):
-        if dataset:
-            print(f"  --datasets {dataset}")
+    for dataset in dataset_option_names(model_id):
+        print(f"  --datasets {dataset}")
 
 
 def list_monitors(model_type: str, model: str) -> None:
     model_id = f"{model_type}/{model}"
     print(f"Available monitors for --model-type {model_type} --model {model}:")
-    for monitor in _captured_lines(lambda: print_monitor_options(model_id)):
-        if monitor:
-            print(f"  --monitors {monitor}")
+    for monitor in monitor_option_names(model_id):
+        print(f"  --monitors {monitor}")
 
 
 def list_flags() -> None:
