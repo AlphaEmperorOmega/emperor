@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import gc
 import json
 import math
 import tempfile
 import unittest
+import weakref
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -47,6 +49,190 @@ def _context() -> RunProgressContext:
 
 
 class RunsProgressTests(unittest.TestCase):
+    def test_growth_callback_releases_cluster_state_on_exception(self) -> None:
+        events: list[dict[str, object]] = []
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster = {"neuron_1_1_1": object()}
+                self.x_axis_total_neurons = 1
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        cluster = Cluster()
+        cluster_reference = weakref.ref(cluster)
+        modules: list[tuple[str, object]] = [("cluster", cluster)]
+        model = SimpleNamespace(named_modules=lambda: iter(modules))
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(SimpleNamespace(), model)
+        event_count = len(events)
+        modules.clear()
+        del cluster
+
+        callback.on_exception(
+            SimpleNamespace(),
+            model,
+            RuntimeError("fit failed"),
+        )
+        gc.collect()
+
+        self.assertIsNone(cluster_reference())
+        self.assertEqual(len(events), event_count)
+
+    def test_growth_callback_releases_state_when_fit_completion_fails(self) -> None:
+        failure = RuntimeError("completion projection failed")
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster = {"neuron_1_1_1": object()}
+                self.x_axis_total_neurons = 1
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        def write_event(event: object) -> None:
+            if dict(event)["type"] == "fit_completed":
+                raise failure
+
+        cluster = Cluster()
+        cluster_reference = weakref.ref(cluster)
+        modules: list[tuple[str, object]] = [("cluster", cluster)]
+        model = SimpleNamespace(named_modules=lambda: iter(modules))
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: write_event(event)},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+        trainer = SimpleNamespace(
+            current_epoch=1,
+            global_step=2,
+            callback_metrics={},
+        )
+
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(trainer, model)
+        modules.clear()
+        del cluster
+
+        with self.assertRaises(RuntimeError) as raised:
+            callback.on_fit_end(trainer, model)
+        gc.collect()
+
+        self.assertIs(raised.exception, failure)
+        self.assertIsNone(cluster_reference())
+
+    def test_growth_callback_cleans_partial_startup_after_base_exception(
+        self,
+    ) -> None:
+        cancellation = KeyboardInterrupt("startup cancelled")
+        writes = 0
+
+        class Cluster:
+            def __init__(self, coordinate: int) -> None:
+                self.cluster = {f"neuron_{coordinate}_1_1": object()}
+                self.x_axis_total_neurons = 2
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        def write_event(_event: object) -> None:
+            nonlocal writes
+            writes += 1
+            if writes == 2:
+                raise cancellation
+
+        first_cluster = Cluster(1)
+        second_cluster = Cluster(2)
+        references = (weakref.ref(first_cluster), weakref.ref(second_cluster))
+        modules: list[tuple[str, object]] = [
+            ("first", first_cluster),
+            ("second", second_cluster),
+        ]
+        model = SimpleNamespace(named_modules=lambda: iter(modules))
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: write_event(event)},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+
+        with (
+            patch("emperor.neuron.NeuronCluster", Cluster),
+            self.assertRaises(KeyboardInterrupt) as raised,
+        ):
+            callback.on_fit_start(SimpleNamespace(), model)
+        modules.clear()
+        del first_cluster
+        del second_cluster
+        gc.collect()
+
+        self.assertIs(raised.exception, cancellation)
+        self.assertTrue(all(reference() is None for reference in references))
+
+    def test_growth_projection_failure_keeps_state_advanced_until_cleanup(
+        self,
+    ) -> None:
+        events: list[dict[str, object]] = []
+        failure = RuntimeError("growth projection failed")
+        reject_growth = False
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster: dict[str, object] = {}
+                self.x_axis_total_neurons = 2
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        def write_event(event: object) -> None:
+            payload = dict(event)
+            if reject_growth and payload["type"] == "neuron_added":
+                raise failure
+            events.append(payload)
+
+        cluster = Cluster()
+        model = SimpleNamespace(
+            named_modules=lambda: iter((("cluster", cluster),)),
+        )
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: write_event(event)},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+        trainer = SimpleNamespace(current_epoch=0, global_step=1)
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(trainer, model)
+        events.clear()
+        cluster.cluster["neuron_2_1_1"] = object()
+        reject_growth = True
+
+        with self.assertRaises(RuntimeError) as raised:
+            callback.on_train_batch_end(trainer, model, None, None, 0)
+        reject_growth = False
+        callback.on_train_batch_end(trainer, model, None, None, 1)
+        callback.on_exception(trainer, model, failure)
+
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(events, [])
+
     def test_non_scalar_tensor_metric_is_omitted_before_host_transfer(self) -> None:
         metric = torch.ones(4, device="meta")
 
