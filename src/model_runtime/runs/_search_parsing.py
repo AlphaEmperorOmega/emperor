@@ -90,8 +90,10 @@ def _validate_search_spec(spec: SearchSpec, budget: PlanningBudget) -> None:
         and budget.max_axes is not None
         and len(spec.axes) > budget.max_axes
     ):
+        requested = len(spec.axes)
         raise PlanTooLarge(
-            f"Training search accepts at most {budget.max_axes} selected axes."
+            f"Training search requested {requested} axes; limit {budget.max_axes}. "
+            "Select fewer axes with --search-keys."
         )
 
 
@@ -137,8 +139,10 @@ def _selected_axes(
             for selection in selections
         }
         if len(semantic_axes) > limit:
+            requested = len(semantic_axes)
             raise PlanTooLarge(
-                f"Training search accepts at most {limit} selected axes."
+                f"Training search requested {requested} axes; limit {limit}. "
+                "Select fewer axes with --search-keys."
             )
     return selections
 
@@ -151,7 +155,8 @@ def _reject_selected_value_budget(
     limit = budget.max_values_per_axis
     if values is not None and limit is not None and len(values) > limit:
         raise PlanTooLarge(
-            f"Search axis '{selection.key}' accepts at most {limit} selected values."
+            f"Search axis '{selection.key}' requested {len(values)} values; "
+            f"limit {limit}. Select fewer values with --search-set."
         )
 
 
@@ -256,7 +261,8 @@ def _raw_axis_values(
     limit = context.budget.max_values_per_axis
     if limit is not None and len(values) > limit:
         raise PlanTooLarge(
-            f"Search axis '{definition.key}' accepts at most {limit} selected values."
+            f"Search axis '{definition.key}' requested {len(values)} values; "
+            f"limit {limit}. Select fewer values with --search-set."
         )
     return values
 
