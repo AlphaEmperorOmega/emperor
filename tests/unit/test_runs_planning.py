@@ -311,7 +311,10 @@ class RunsPlanningTests(unittest.TestCase):
             search=SearchSpec(mode="grid"),
         )
 
-        with self.assertRaisesRegex(PlanTooLarge, "at most 1 selected axes"):
+        with self.assertRaisesRegex(
+            PlanTooLarge,
+            "requested 6 axes; limit 1.*--search-keys",
+        ):
             plan_runs(
                 _linears_linear(),
                 request,
@@ -319,7 +322,7 @@ class RunsPlanningTests(unittest.TestCase):
             )
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "LEARNING_RATE.*at most 2 selected values",
+            "LEARNING_RATE.*requested 3 values; limit 2.*--search-set",
         ):
             plan_runs(
                 _linears_linear(),
@@ -354,7 +357,10 @@ class RunsPlanningTests(unittest.TestCase):
                 budget=PlanningBudget(max_axes=1),
             )
 
-        with self.assertRaisesRegex(PlanTooLarge, "at most 1 selected axes"):
+        with self.assertRaisesRegex(
+            PlanTooLarge,
+            "requested 2 axes; limit 1.*--search-keys",
+        ):
             plan_runs(
                 package,
                 RunRequest(
@@ -370,7 +376,10 @@ class RunsPlanningTests(unittest.TestCase):
                 budget=PlanningBudget(max_axes=1),
             )
 
-        with self.assertRaisesRegex(PlanTooLarge, "at most 1 selected values"):
+        with self.assertRaisesRegex(
+            PlanTooLarge,
+            "requested 2 values; limit 1.*--search-set",
+        ):
             plan_runs(
                 package,
                 RunRequest(
@@ -420,7 +429,7 @@ class RunsPlanningTests(unittest.TestCase):
     ) -> None:
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "at most 16 selected axes",
+            "requested 111 axes; limit 16.*--search-keys",
         ):
             plan_runs(
                 _gpt_linear_adaptive(),
@@ -457,7 +466,8 @@ class RunsPlanningTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "2025 planned runs exceeds 2000",
+            "2025 planned runs exceeds limit 2000.*2 axes.*45.*45"
+            ".*--search-keys.*--search-set",
         ):
             plan_runs(_linears_linear(), request)
 
@@ -903,7 +913,8 @@ class RunsPlanningTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "2500 planned runs exceeds 2000",
+            "2500 planned runs exceeds limit 2000.*2 axes.*50, 50"
+            ".*--search-keys.*--search-set",
         ):
             plan_runs(
                 _linears_linear(),
@@ -926,7 +937,8 @@ class RunsPlanningTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "4000 planned runs exceeds 2000",
+            "4000 planned runs exceeds limit 2000.*2 axes.*50, 50"
+            ".*--search-keys.*--search-set",
         ):
             plan_runs(
                 _linears_linear(),

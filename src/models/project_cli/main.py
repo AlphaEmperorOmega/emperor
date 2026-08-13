@@ -4,6 +4,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from model_runtime.runs import InvalidRunRequest
 from models.catalog import (
     discover_model_identities,
     discover_model_identities_for_type,
@@ -465,7 +466,11 @@ def run_experiment(argv: Sequence[str] | None = None) -> int:
     listing_result = _dispatch_listing(invocation)
     if listing_result is not None:
         return listing_result
-    return _dispatch_selected_model(invocation)
+    try:
+        return _dispatch_selected_model(invocation)
+    except InvalidRunRequest as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
 
 def main(argv: Sequence[str] | None = None) -> int:

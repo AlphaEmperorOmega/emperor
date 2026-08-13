@@ -5,6 +5,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
+from model_runtime.runs import PlanTooLarge
 from models.project_cli.main import run_experiment
 
 
@@ -83,6 +84,27 @@ class ProjectCliDispatchContracts(unittest.TestCase):
             "Error: --model-type requires a value.\n"
             "\n"
             "Run 'mise run experiment --' to see available flags.\n",
+        )
+
+    def test_expected_planning_failures_are_rendered_without_a_traceback(self) -> None:
+        stderr = StringIO()
+        with (
+            patch(
+                "models.project_cli.main.run_model_command",
+                side_effect=PlanTooLarge(
+                    "Training search requested 20 axes; limit 16. "
+                    "Select fewer axes with --search-keys."
+                ),
+            ),
+            redirect_stderr(stderr),
+        ):
+            result = run_experiment(["--model-type", "bert", "--model", "linear"])
+
+        self.assertEqual(result, 2)
+        self.assertEqual(
+            stderr.getvalue(),
+            "Error: Training search requested 20 axes; limit 16. "
+            "Select fewer axes with --search-keys.\n",
         )
 
 
