@@ -349,6 +349,7 @@ class FakePackageAdapter:
         identity = ModelIdentity("test", "fake")
         runtime_defaults = ModuleType("tests.fake_runtime_defaults")
         runtime_defaults.DATA_NUM_WORKERS = 4
+        runtime_defaults.NUM_EPOCHS = 1
         runtime_defaults.RUN_TEST_AFTER_FIT = True
         runtime_defaults.SEED = None
         dataset_metadata = ModuleType("tests.fake_dataset_metadata")
@@ -398,9 +399,6 @@ def fake_model_package() -> ModelPackage:
 
 
 class FakeExperiment(ExperimentBase):
-    def _num_epochs(self):
-        return 1
-
     def _load_trainer_config(self, config_overrides=None):
         return {"trainer_args": {}, "callbacks": []}
 
@@ -455,6 +453,23 @@ class TestExperimentTraining(unittest.TestCase):
             callbacks=callbacks or [],
             progress=progress,
         )
+
+    def test_constructor_preserves_preset_keyword_and_rejects_ambiguous_alias(self):
+        experiment = ExperimentBase(
+            preset=FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+
+        self.assertIs(experiment.preset, FakeOption.BASELINE)
+        with self.assertRaisesRegex(
+            TypeError,
+            "Pass only 'preset' or 'experiment_preset'",
+        ):
+            ExperimentBase(
+                FakeOption.BASELINE,
+                experiment_preset=FakeOption.GATING,
+                model_package=self.model_package,
+            )
 
     def test_data_num_workers_override_updates_datamodule(self):
         experiment = FakeExperiment(
