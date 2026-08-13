@@ -259,12 +259,24 @@ def _planned_run_count(resolved: _ResolvedRequest) -> int:
 def _reject_plan_budget(
     planned_run_count: int,
     budget: PlanningBudget,
+    resolved: _ResolvedRequest,
 ) -> None:
     limit = budget.max_materialized_runs
     if limit is not None and planned_run_count > limit:
+        searches = tuple(search for search in resolved.searches if search is not None)
+        axis_value_counts = tuple(
+            len(axis.values) for search in searches for axis in search.axes
+        )
+        details = (
+            f" across {len(axis_value_counts)} axes with value counts "
+            f"{', '.join(str(count) for count in axis_value_counts)}"
+            if axis_value_counts
+            else ""
+        )
         raise PlanTooLarge(
             "Training run plan is too large: "
-            f"{planned_run_count} planned runs exceeds {limit}."
+            f"{planned_run_count} planned runs exceeds limit {limit}{details}. "
+            "Narrow the sweep with --search-keys or --search-set."
         )
 
 
@@ -320,7 +332,7 @@ def plan_runs(
     package = _require_model_package(package)
     planning_budget = _selected_planning_budget(budget)
     resolved = _resolve_request(package, request, planning_budget)
-    _reject_plan_budget(_planned_run_count(resolved), planning_budget)
+    _reject_plan_budget(_planned_run_count(resolved), planning_budget, resolved)
     if random_source is None and any(
         search is not None and search.spec.mode == "random"
         for search in resolved.searches
