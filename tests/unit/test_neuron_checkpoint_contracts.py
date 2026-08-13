@@ -81,14 +81,14 @@ def _validate_checkpoint_model(
             },
             checkpoint,
         )
-        lifecycle = CheckpointContinuationLifecycle.admit(
+        with CheckpointContinuationLifecycle.admit(
             CheckpointContinuation(checkpoint),
             _SingleRunPlan(),
-        )
-        execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
-        model_validator = execution_options.model_validator
-        assert model_validator is not None
-        model_validator(model)
+        ) as lifecycle:
+            execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
+            model_validator = execution_options.strict_model_preloader
+            assert model_validator is not None
+            model_validator(model)
 
 
 class TestNeuronCheckpointTopology(NeuronTestCase):

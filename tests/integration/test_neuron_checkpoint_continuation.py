@@ -184,32 +184,35 @@ class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
             )
 
             resumed_model = _GrowingNeuronModule(config)
-            lifecycle = CheckpointContinuationLifecycle.admit(
+            with CheckpointContinuationLifecycle.admit(
                 CheckpointContinuation(checkpoint),
                 _SingleRunPlan(),
-            )
-            execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
-            model_validator = execution_options.model_validator
-            assert model_validator is not None
-            model_validator(resumed_model)
-            probe = _GrownParameterContinuationProbe()
-            resumed_trainer = Trainer(
-                accelerator="cpu",
-                default_root_dir=directory,
-                max_epochs=3,
-                limit_train_batches=3,
-                limit_val_batches=0,
-                logger=False,
-                enable_model_summary=False,
-                enable_checkpointing=False,
-                num_sanity_val_steps=0,
-                callbacks=[probe],
-            )
-            resumed_trainer.fit(
-                resumed_model,
-                train_dataloaders=loader,
-                ckpt_path=checkpoint,
-            )
+            ) as lifecycle:
+                execution_options = lifecycle.bind_training_runs(
+                    [_TargetTrainingRun()]
+                )
+                model_validator = execution_options.strict_model_preloader
+                assert model_validator is not None
+                model_validator(resumed_model)
+                probe = _GrownParameterContinuationProbe()
+                resumed_trainer = Trainer(
+                    accelerator="cpu",
+                    default_root_dir=directory,
+                    max_epochs=3,
+                    limit_train_batches=3,
+                    limit_val_batches=0,
+                    logger=False,
+                    enable_model_summary=False,
+                    enable_checkpointing=False,
+                    num_sanity_val_steps=0,
+                    callbacks=[probe],
+                )
+                resumed_trainer.fit(
+                    resumed_model,
+                    train_dataloaders=loader,
+                    ckpt_path=execution_options.checkpoint_path,
+                    weights_only=True,
+                )
 
         self.assertIn("neuron_2_1_1", resumed_model.cluster.cluster)
         torch.testing.assert_close(probe.restored_parameter, source_value)
