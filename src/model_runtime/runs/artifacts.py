@@ -130,8 +130,21 @@ class RunArtifacts(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RunArtifactReservation:
+    """One exclusively claimed filesystem Run Artifact directory."""
+
+    name: str
+    version: int
+    log_dir: Path
+
+
+@dataclass(frozen=True, slots=True)
 class FilesystemRunArtifacts:
     """Atomic filesystem Implementation of the Run Artifact Interface.
+
+    Final ``version_N`` directory allocation is exclusive across processes.
+    Other Run Artifact Adapters retain responsibility for their own namespace
+    allocation policy.
 
     Resolved-path checks contain existing symlinks. They assume an actor cannot
     concurrently replace checked path components between validation and I/O.
@@ -178,6 +191,39 @@ class FilesystemRunArtifacts:
             f"{self.namespace}/{model_id}" if self.namespace is not None else model_id
         )
         return f"{prefix}/{preset_key}/{dataset}/{parameter_id}_{timestamp}"
+
+    def reserve_run(
+        self,
+        identity: ModelIdentity,
+        preset_key: str,
+        dataset: str,
+        parameters: Mapping[str, Any],
+    ) -> RunArtifactReservation:
+        """Atomically claim a final ``version_N`` directory for one Run.
+
+        Creating the directory is the reservation. A process failure may leave
+        an empty failed-attempt directory, which is intentionally never reused.
+        """
+
+        name = self.run_name(identity, preset_key, dataset, parameters)
+        root = self.root
+        run_dir = _resolved_contained_path(root, root / name)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = _resolved_contained_path(root, run_dir)
+
+        version = 0
+        while True:
+            log_dir = _resolved_contained_path(root, run_dir / f"version_{version}")
+            try:
+                log_dir.mkdir()
+            except FileExistsError:
+                version += 1
+                continue
+            return RunArtifactReservation(
+                name=name,
+                version=version,
+                log_dir=_resolved_contained_path(root, log_dir),
+            )
 
     def result_metrics_payload(
         self,
@@ -294,4 +340,8 @@ class FilesystemRunArtifacts:
             yield
 
 
-__all__ = ["FilesystemRunArtifacts", "RunArtifacts"]
+__all__ = [
+    "FilesystemRunArtifacts",
+    "RunArtifactReservation",
+    "RunArtifacts",
+]
