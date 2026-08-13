@@ -280,6 +280,30 @@ class RunsPlanningTests(unittest.TestCase):
                 ),
             )
 
+    def test_implicit_search_preserves_present_legacy_none_lock(self) -> None:
+        package = _linears_linear()
+        with patch.object(
+            ModelPackage,
+            "preset_locks",
+            return_value={"HIDDEN_DIM": None},
+        ):
+            plan = plan_runs(
+                package,
+                RunRequest(
+                    presets=("baseline",),
+                    datasets=("Mnist",),
+                    search=SearchSpec(mode="random", random_samples=1),
+                ),
+                random_source=random.Random(7),
+                budget=PlanningBudget.unlimited(),
+            )
+
+        assert plan.search is not None
+        self.assertNotIn(
+            "HIDDEN_DIM",
+            {axis.key for axis in plan.search.axes or ()},
+        )
+
     def test_implicit_search_honors_axis_and_value_budgets(self) -> None:
         request = RunRequest(
             presets=("baseline",),

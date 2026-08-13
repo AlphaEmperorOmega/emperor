@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from model_runtime.packages import (
     ModelPackage,
@@ -14,6 +14,9 @@ from model_runtime.packages import (
 from model_runtime.runs.errors import InvalidRunRequest, PlanTooLarge
 from model_runtime.runs.records import PlanningBudget, SearchAxisSelection, SearchSpec
 from model_runtime.runs.search import PreparedSearch
+
+if TYPE_CHECKING:
+    from model_runtime.packages.presets import PresetLock
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +50,7 @@ class _SearchContext:
     runtime_defaults: RuntimeDefaultsSpec
     search_axes: tuple[_AxisDefinition, ...]
     axes_by_key: Mapping[str, _AxisDefinition]
-    locks: Mapping[str, Any]
+    locks: Mapping[str, PresetLock]
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,13 +157,14 @@ def _reject_selected_value_budget(
 
 def _search_axis_definition(
     runtime_defaults: RuntimeDefaultsSpec,
-    locks: Mapping[str, Any],
+    locks: Mapping[str, PresetLock],
     search_key: str,
     values: tuple[Any, ...],
 ) -> _AxisDefinition:
     config_key = search_key.removeprefix("SEARCH_SPACE_")
     model_param = runtime_defaults.model_parameter(config_key)
-    lock = locks.get(model_param)
+    locked = model_param in locks
+    lock = locks[model_param] if locked else None
     serialized_values = tuple(
         runtime_defaults.serialize_value(value) for value in values
     )
@@ -171,9 +175,9 @@ def _search_axis_definition(
         search_key=search_key,
         default_values=serialized_values,
         allowed_values=serialized_values,
-        locked=lock is not None,
+        locked=locked,
         locked_value=runtime_defaults.serialize_value(
-            getattr(lock, "value", None)
+            lock.value if lock is not None else None
         ),
     )
 
@@ -183,7 +187,8 @@ def _custom_axis_definition(
     config_key: str,
 ) -> _AxisDefinition:
     model_param = context.runtime_defaults.model_parameter(config_key)
-    lock = context.locks.get(model_param)
+    locked = model_param in context.locks
+    lock = context.locks[model_param] if locked else None
     return _AxisDefinition(
         key=config_key,
         config_key=config_key,
@@ -191,9 +196,9 @@ def _custom_axis_definition(
         search_key=None,
         default_values=(),
         allowed_values=None,
-        locked=lock is not None,
+        locked=locked,
         locked_value=context.runtime_defaults.serialize_value(
-            getattr(lock, "value", None)
+            lock.value if lock is not None else None
         ),
     )
 

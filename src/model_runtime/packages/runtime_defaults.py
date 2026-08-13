@@ -17,6 +17,7 @@ from model_runtime.packages.configuration import (
 if TYPE_CHECKING:
     from model_runtime.packages.definition import ModelPackage
     from model_runtime.packages.inspection_limits import InspectionConstructionLimits
+    from model_runtime.packages.presets import PresetLock
 
 
 class RuntimeDefaultsError(Exception):
@@ -39,6 +40,14 @@ def _annotation_accepts_none(annotation: Any) -> bool:
     if NoneType in get_args(annotation):
         return True
     return any(_annotation_accepts_none(arg) for arg in get_args(annotation))
+
+
+def _snapshot_preset_lock(lock: object) -> PresetLock:
+    from model_runtime.packages.presets import PresetLock
+
+    value = getattr(lock, "value", None)
+    reason = cast(str, getattr(lock, "reason", ""))
+    return PresetLock(value=value, reason=reason)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +185,7 @@ class RuntimeDefaultsSpec:
     def resolve_preset_locks(
         self,
         preset_name: str | None,
-    ) -> tuple[Any | None, dict[str, Any]]:
+    ) -> tuple[Any | None, dict[str, PresetLock]]:
         if preset_name is None:
             return None, {}
         try:
@@ -192,21 +201,21 @@ class RuntimeDefaultsSpec:
         preset: Any,
         *,
         label: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, PresetLock]:
         preset_label = label or getattr(preset, "name", str(preset))
         try:
             locks = self.package.preset_locks(preset)
         except Exception as exc:
             raise _package_error(self.package, exc) from exc
 
-        canonical: dict[str, Any] = {}
+        canonical: dict[str, PresetLock] = {}
         source_fields: dict[str, str] = {}
-        for field, lock in locks.items():
+        for field, raw_lock in locks.items():
             model_param = self.model_parameter(field)
-            previous = canonical.get(model_param)
-            if previous is not None:
-                previous_value = self.serialize_value(getattr(previous, "value", None))
-                value = self.serialize_value(getattr(lock, "value", None))
+            lock = _snapshot_preset_lock(raw_lock)
+            if model_param in canonical:
+                previous_value = self.serialize_value(canonical[model_param].value)
+                value = self.serialize_value(lock.value)
                 if previous_value != value:
                     raise RuntimeDefaultsError(
                         f"Preset '{preset_label}' for model "
@@ -219,7 +228,7 @@ class RuntimeDefaultsSpec:
             source_fields[model_param] = field
         return canonical
 
-    def preset_locks(self, preset_name: str | None) -> dict[str, Any]:
+    def preset_locks(self, preset_name: str | None) -> dict[str, PresetLock]:
         return self.resolve_preset_locks(preset_name)[1]
 
     def canonicalize_overrides(
@@ -304,9 +313,7 @@ class RuntimeDefaultsSpec:
         locked_keys = sorted(set(parsed_overrides or {}) & set(locks))
         if not locked_keys:
             return
-        details = ", ".join(
-            f"{key} ({getattr(locks[key], 'reason', '')})" for key in locked_keys
-        )
+        details = ", ".join(f"{key} ({locks[key].reason})" for key in locked_keys)
         raise RuntimeDefaultsError(
             f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
         )
@@ -320,13 +327,11 @@ class RuntimeDefaultsSpec:
         conflicts = sorted(
             key
             for key, value in parsed_overrides.items()
-            if key in locks and value != getattr(locks[key], "value", None)
+            if key in locks and value != locks[key].value
         )
         if not conflicts:
             return
-        details = ", ".join(
-            f"{key} ({getattr(locks[key], 'reason', '')})" for key in conflicts
-        )
+        details = ", ".join(f"{key} ({locks[key].reason})" for key in conflicts)
         raise RuntimeDefaultsError(
             f"Preset '{preset_name}' does not allow overriding locked fields: {details}"
         )

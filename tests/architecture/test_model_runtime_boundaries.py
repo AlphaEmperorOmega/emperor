@@ -727,6 +727,34 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
 
         self.assertEqual(exposed, {})
 
+    def test_runtime_defaults_owns_typed_preset_lock_normalization(self) -> None:
+        runtime_defaults_path = MODEL_RUNTIME_ROOT / "packages" / "runtime_defaults.py"
+        runtime_defaults_source = runtime_defaults_path.read_text(encoding="utf-8")
+        self.assertIn("def _snapshot_preset_lock(", runtime_defaults_source)
+        self.assertIn("dict[str, PresetLock]", runtime_defaults_source)
+
+        reflected_value_owners: set[str] = set()
+        reflected_reason_owners: set[str] = set()
+        for source_path in MODEL_RUNTIME_ROOT.rglob("*.py"):
+            source = source_path.read_text(encoding="utf-8")
+            relative_path = source_path.relative_to(MODEL_RUNTIME_ROOT).as_posix()
+            if 'getattr(lock, "value"' in source:
+                reflected_value_owners.add(relative_path)
+            if 'getattr(lock, "reason"' in source:
+                reflected_reason_owners.add(relative_path)
+
+        expected_structural_owners = {
+            "cli/_wire_inspection.py",
+            "packages/runtime_defaults.py",
+        }
+        self.assertEqual(reflected_value_owners, expected_structural_owners)
+        self.assertEqual(reflected_reason_owners, expected_structural_owners)
+
+        packages_facade = (MODEL_RUNTIME_ROOT / "packages" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("_snapshot_preset_lock", packages_facade)
+
     def test_emperor_has_no_outward_project_imports(self) -> None:
         forbidden = [
             (path, module)
