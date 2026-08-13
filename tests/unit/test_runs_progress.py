@@ -184,6 +184,187 @@ class RunsProgressTests(unittest.TestCase):
         self.assertIs(raised.exception, cancellation)
         self.assertTrue(all(reference() is None for reference in references))
 
+    def test_growth_callback_streams_a_bounded_lexical_burst_sample(self) -> None:
+        events: list[dict[str, object]] = []
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster: dict[str, object] = {}
+                self.x_axis_total_neurons = 200
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        cluster = Cluster()
+        model = SimpleNamespace(
+            named_modules=lambda: iter((("cluster", cluster),)),
+        )
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+        trainer = SimpleNamespace(current_epoch=3, global_step=1)
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(trainer, model)
+        events.clear()
+
+        added_names = [f"neuron_{index}_1_1" for index in range(1, 102)]
+        expected_names = sorted(added_names)[:100]
+        cluster.cluster.update({name: object() for name in added_names})
+        cluster.cluster["not_a_coordinate"] = object()
+
+        with patch(
+            "builtins.sorted",
+            side_effect=AssertionError("growth sampling must not fully sort"),
+        ):
+            callback.on_train_batch_end(trainer, model, None, None, 0)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["type"], "neurons_added")
+        self.assertEqual(
+            events[0]["coordinates"],
+            [[int(name.split("_")[1]), 1, 1] for name in expected_names],
+        )
+        self.assertEqual(events[0]["coordinateCount"], 101)
+        self.assertIs(events[0]["coordinatesTruncated"], True)
+        self.assertEqual(events[0]["count"], 102)
+
+    def test_growth_callback_streams_initial_numeric_coordinate_sample(self) -> None:
+        events: list[dict[str, object]] = []
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster = {
+                    **{f"neuron_{index}_1_1": object() for index in range(1, 102)},
+                    "not_a_coordinate": object(),
+                }
+                self.x_axis_total_neurons = 200
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        cluster = Cluster()
+        model = SimpleNamespace(
+            named_modules=lambda: iter((("cluster", cluster),)),
+        )
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+
+        with (
+            patch("emperor.neuron.NeuronCluster", Cluster),
+            patch(
+                "builtins.sorted",
+                side_effect=AssertionError("initial sampling must not fully sort"),
+            ),
+        ):
+            callback.on_fit_start(SimpleNamespace(), model)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["type"], "cluster_initialized")
+        self.assertEqual(
+            events[0]["coordinates"],
+            [[index, 1, 1] for index in range(1, 101)],
+        )
+        self.assertEqual(events[0]["coordinateCount"], 101)
+        self.assertIs(events[0]["coordinatesTruncated"], True)
+        self.assertEqual(events[0]["count"], 102)
+
+    def test_growth_callback_keeps_individual_events_at_burst_limit(self) -> None:
+        events: list[dict[str, object]] = []
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster: dict[str, object] = {}
+                self.x_axis_total_neurons = 100
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        cluster = Cluster()
+        model = SimpleNamespace(
+            named_modules=lambda: iter((("cluster", cluster),)),
+        )
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+        trainer = SimpleNamespace(current_epoch=3, global_step=1)
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(trainer, model)
+        events.clear()
+
+        added_names = [f"neuron_{index}_1_1" for index in range(1, 101)]
+        cluster.cluster.update({name: object() for name in added_names})
+        callback.on_train_batch_end(trainer, model, None, None, 0)
+
+        self.assertEqual(len(events), 100)
+        self.assertTrue(all(event["type"] == "neuron_added" for event in events))
+        self.assertEqual(
+            [event["coord"] for event in events],
+            [[int(name.split("_")[1]), 1, 1] for name in sorted(added_names)],
+        )
+
+    def test_growth_callback_detects_net_zero_change_and_later_regrowth(self) -> None:
+        events: list[dict[str, object]] = []
+
+        class Cluster:
+            def __init__(self) -> None:
+                self.cluster = {
+                    "neuron_1_1_1": object(),
+                    "neuron_2_1_1": object(),
+                }
+                self.x_axis_total_neurons = 10
+                self.y_axis_total_neurons = 1
+                self.z_axis_total_neurons = 1
+
+        cluster = Cluster()
+        model = SimpleNamespace(
+            named_modules=lambda: iter((("cluster", cluster),)),
+        )
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),
+            step_interval=10,
+        )
+        trainer = SimpleNamespace(current_epoch=0, global_step=1)
+        with patch("emperor.neuron.NeuronCluster", Cluster):
+            callback.on_fit_start(trainer, model)
+        events.clear()
+
+        del cluster.cluster["neuron_2_1_1"]
+        cluster.cluster["neuron_10_1_1"] = object()
+        callback.on_train_batch_end(trainer, model, None, None, 0)
+        del cluster.cluster["neuron_10_1_1"]
+        callback.on_train_batch_end(trainer, model, None, None, 1)
+        cluster.cluster["neuron_10_1_1"] = object()
+        callback.on_train_batch_end(trainer, model, None, None, 2)
+
+        self.assertEqual(
+            [(event["type"], event["coord"]) for event in events],
+            [
+                ("neuron_added", [10, 1, 1]),
+                ("neuron_added", [10, 1, 1]),
+            ],
+        )
+
     def test_growth_projection_failure_keeps_state_advanced_until_cleanup(
         self,
     ) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from heapq import nsmallest
 from typing import Any, cast
 
 from lightning.pytorch.callbacks import Callback
@@ -63,19 +64,41 @@ class _LightningRunProgressAdapter(Callback):
         ]
 
     @staticmethod
-    def _coordinates(names: set[str]) -> list[list[int]]:
-        coordinates = (_coordinate_from_neuron_name(name) for name in names)
-        return sorted(
-            coordinate for coordinate in coordinates if coordinate is not None
+    def _coordinate_sample(
+        names: Iterable[str],
+        *,
+        maximum: int,
+        order_by_name: bool,
+    ) -> tuple[list[list[int]], int]:
+        coordinate_count = 0
+
+        def coordinate_entries() -> Iterator[tuple[str, list[int]]]:
+            nonlocal coordinate_count
+            for name in names:
+                coordinate = _coordinate_from_neuron_name(name)
+                if coordinate is None:
+                    continue
+                coordinate_count += 1
+                yield name, coordinate
+
+        entries = coordinate_entries()
+        sampled_entries = (
+            nsmallest(maximum, entries, key=lambda entry: entry[0])
+            if order_by_name
+            else nsmallest(maximum, entries, key=lambda entry: tuple(entry[1]))
         )
+        return [coordinate for _name, coordinate in sampled_entries], coordinate_count
 
     def _coordinate_sample_payload(self, names: set[str]) -> dict[str, Any]:
-        coordinates = self._coordinates(names)
-        sampled = coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT]
+        sampled, coordinate_count = self._coordinate_sample(
+            names,
+            maximum=CLUSTER_COORDINATE_SAMPLE_LIMIT,
+            order_by_name=False,
+        )
         return {
             "coordinates": sampled,
-            "coordinateCount": len(coordinates),
-            "coordinatesTruncated": len(coordinates) > len(sampled),
+            "coordinateCount": coordinate_count,
+            "coordinatesTruncated": coordinate_count > len(sampled),
         }
 
     def _cluster_initialized_event(
@@ -147,29 +170,34 @@ class _LightningRunProgressAdapter(Callback):
     def _emit_neuron_growth(self, trainer: Any) -> None:
         for name, cluster in self._clusters:
             current = set(cluster.cluster.keys())
-            new_names = current - self._known_names.get(name, set())
+            previous = self._known_names.get(name)
             self._known_names[name] = current
-            coordinates = [
-                coordinate
-                for coordinate in (
-                    _coordinate_from_neuron_name(new_name)
-                    for new_name in sorted(new_names)
-                )
-                if coordinate is not None
-            ]
-            if not coordinates:
+            coordinates, coordinate_count = self._coordinate_sample(
+                (
+                    current_name
+                    for current_name in current
+                    if previous is None or current_name not in previous
+                ),
+                maximum=max(
+                    CLUSTER_COORDINATE_SAMPLE_LIMIT,
+                    NEURON_ADDED_BURST_LIMIT,
+                ),
+                order_by_name=True,
+            )
+            if coordinate_count == 0:
                 continue
             count = len(current)
             capacity = self._capacity(cluster)
             epoch = int(getattr(trainer, "current_epoch", 0))
             step = int(getattr(trainer, "global_step", 0))
-            if len(coordinates) > NEURON_ADDED_BURST_LIMIT:
+            if coordinate_count > NEURON_ADDED_BURST_LIMIT:
+                sampled_coordinates = coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT]
                 self._progress.write_event(
                     NeuronsAddedEvent(
-                        coordinates=coordinates[:CLUSTER_COORDINATE_SAMPLE_LIMIT],
-                        coordinate_count=len(coordinates),
+                        coordinates=sampled_coordinates,
+                        coordinate_count=coordinate_count,
                         coordinates_truncated=(
-                            len(coordinates) > CLUSTER_COORDINATE_SAMPLE_LIMIT
+                            coordinate_count > len(sampled_coordinates)
                         ),
                         node=name,
                         count=count,
