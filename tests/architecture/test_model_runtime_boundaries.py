@@ -291,6 +291,54 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_checkpoint_reconstruction_is_an_explicit_optional_package_capability(
+        self,
+    ) -> None:
+        definition_path = MODEL_RUNTIME_ROOT / "packages" / "definition.py"
+        definition_source = definition_path.read_text(encoding="utf-8")
+        tree = ast.parse(definition_source, definition_path.as_posix())
+        classes = {
+            node.name: node for node in tree.body if isinstance(node, ast.ClassDef)
+        }
+        core_adapter = classes["_PackageAdapter"]
+        core_operations = {
+            node.name for node in core_adapter.body if isinstance(node, ast.FunctionDef)
+        }
+        self.assertEqual(
+            core_operations,
+            {
+                "bind_runtime_defaults",
+                "build_configuration",
+                "build_experiment",
+                "build_model",
+                "load_metadata",
+                "load_preset_type",
+                "load_presets",
+                "load_runtime_options_type",
+            },
+        )
+        package_class = classes["ModelPackage"]
+        package_operations = {
+            node.name
+            for node in package_class.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertIn("checkpoint_config_overrides", package_operations)
+        self.assertNotIn(
+            'getattr(self._adapter, "checkpoint_config_overrides"',
+            definition_source,
+        )
+        self.assertIn("kw_only=True", definition_source)
+
+        suppliers: list[str] = []
+        for package_init in sorted(
+            (PROJECT_ROOT / "src" / "models").glob("*/*/__init__.py")
+        ):
+            source = package_init.read_text(encoding="utf-8")
+            if "_checkpoint_config_interpreter=" in source:
+                suppliers.append(package_init.relative_to(PROJECT_ROOT).as_posix())
+        self.assertEqual(suppliers, ["src/models/linears/linear/__init__.py"])
+
     def test_runs_own_a_typed_run_to_experiment_handoff(self) -> None:
         handoff_path = RUNS_ROOT / "_handoff.py"
         self.assertTrue(handoff_path.is_file())
