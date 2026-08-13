@@ -105,28 +105,24 @@ _PLANNING_EXPORTS = {"accept_run_plan", "plan_runs"}
 _EXECUTION_EXPORTS = {"execute_runs"}
 _EXPERIMENT_EXPORTS = {"ExperimentBase"}
 
+_EXPORT_MODULES = {
+    **dict.fromkeys(_CHECKPOINT_EXPORTS, "model_runtime.runs.checkpoints"),
+    **dict.fromkeys(_ERROR_EXPORTS, "model_runtime.runs.errors"),
+    **dict.fromkeys(_ARTIFACT_EXPORTS, "model_runtime.runs.artifacts"),
+    **dict.fromkeys(_PROGRESS_EXPORTS, "model_runtime.runs.progress"),
+    **dict.fromkeys(_JSON_VALUE_EXPORTS, "model_runtime.runs.json_values"),
+    **dict.fromkeys(_RECORD_EXPORTS, "model_runtime.runs.records"),
+    **dict.fromkeys(_PLANNING_EXPORTS, "model_runtime.runs.planning"),
+    **dict.fromkeys(_EXECUTION_EXPORTS, "model_runtime.runs.execution"),
+    **dict.fromkeys(_EXPERIMENT_EXPORTS, "model_runtime.runs.experiment"),
+}
+
 
 def __getattr__(name: str) -> Any:
-    if name in _CHECKPOINT_EXPORTS:
-        module_name = "model_runtime.runs.checkpoints"
-    elif name in _ERROR_EXPORTS:
-        module_name = "model_runtime.runs.errors"
-    elif name in _ARTIFACT_EXPORTS:
-        module_name = "model_runtime.runs.artifacts"
-    elif name in _PROGRESS_EXPORTS:
-        module_name = "model_runtime.runs.progress"
-    elif name in _JSON_VALUE_EXPORTS:
-        module_name = "model_runtime.runs.json_values"
-    elif name in _RECORD_EXPORTS:
-        module_name = "model_runtime.runs.records"
-    elif name in _PLANNING_EXPORTS:
-        module_name = "model_runtime.runs.planning"
-    elif name in _EXECUTION_EXPORTS:
-        module_name = "model_runtime.runs.execution"
-    elif name in _EXPERIMENT_EXPORTS:
-        module_name = "model_runtime.runs.experiment"
-    else:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        module_name = _EXPORT_MODULES[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
     value = getattr(import_module(module_name), name)
     globals()[name] = value
     return value
