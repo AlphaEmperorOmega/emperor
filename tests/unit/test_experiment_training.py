@@ -5,6 +5,7 @@ import unittest
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 from unittest.mock import patch
 
 from lightning.pytorch.callbacks import Callback
@@ -13,6 +14,7 @@ import model_runtime.runs.experiment as experiments_base
 from emperor.experiments import ExperimentTask
 from emperor.monitoring import MonitorOption
 from model_runtime.packages import (
+    BuilderBackedExperimentPresetsBase,
     ExperimentPresetsBase,
     ModelIdentity,
     ModelMetadata,
@@ -81,6 +83,148 @@ class FakeDatasetB:
     def __init__(self, batch_size):
         self.batch_size = batch_size
         self.num_workers = 4
+
+
+class _SnapshotPreset(Enum):
+    BASELINE = "baseline"
+    UNKNOWN = "unknown"
+
+
+class _SnapshotConfigBuilder:
+    def __init__(self, **values: object) -> None:
+        self.values = values
+
+    def build(self) -> dict[str, object]:
+        return dict(self.values)
+
+
+class _DefinitionOverridingPresets(BuilderBackedExperimentPresetsBase):
+    def __init__(self, projected_value: object) -> None:
+        super().__init__(
+            {
+                _SnapshotPreset.BASELINE: PresetDefinition(
+                    preset_values={"enabled": True},
+                    description="Stored description.",
+                )
+            },
+            builder_type=_SnapshotConfigBuilder,
+            default_preset=_SnapshotPreset.BASELINE,
+            default_dataset=FakeDatasetA,
+        )
+        self.projected_value = projected_value
+
+    def definition_for_preset(
+        self,
+        model_config_preset: object,
+    ) -> PresetDefinition:
+        definition = super().definition_for_preset(model_config_preset)
+        return PresetDefinition(
+            preset_values={
+                **definition.preset_values,
+                "projected_value": self.projected_value,
+            },
+            description="Projected description.",
+        )
+
+
+class PresetDefinitionSnapshotTests(unittest.TestCase):
+    def test_provider_owns_definitions_and_returns_fresh_public_maps(self) -> None:
+        opaque_value = object()
+        source_values: dict[str, object] = {
+            "enabled": True,
+            "opaque_value": opaque_value,
+        }
+        source_definition = PresetDefinition(
+            preset_values=source_values,
+            description="Snapshot baseline.",
+        )
+        source_definitions = {_SnapshotPreset.BASELINE: source_definition}
+        presets = BuilderBackedExperimentPresetsBase(
+            source_definitions,
+            builder_type=_SnapshotConfigBuilder,
+            default_preset=_SnapshotPreset.BASELINE,
+            default_dataset=FakeDatasetA,
+        )
+
+        first_definition = presets.definition_for_preset(_SnapshotPreset.BASELINE)
+        first_overrides = presets.overrides_for_preset(_SnapshotPreset.BASELINE)
+        first_locks = presets.locks_for_preset(_SnapshotPreset.BASELINE)
+        first_configuration = cast(
+            dict[str, object],
+            presets.get_config(_SnapshotPreset.BASELINE)[0],
+        )
+        expected_definition = PresetDefinition(
+            preset_values={"enabled": True, "opaque_value": opaque_value},
+            description="Snapshot baseline.",
+        )
+
+        self.assertEqual(first_definition, expected_definition)
+        self.assertEqual(repr(first_definition), repr(expected_definition))
+        self.assertIsInstance(first_definition.preset_values, dict)
+        self.assertIs(first_definition.preset_values["opaque_value"], opaque_value)
+        self.assertIs(first_overrides["opaque_value"], opaque_value)
+        self.assertIs(first_locks["opaque_value"].value, opaque_value)
+        self.assertIs(first_configuration["opaque_value"], opaque_value)
+
+        source_definitions[_SnapshotPreset.BASELINE] = PresetDefinition(
+            preset_values={"enabled": False},
+            description="Replacement.",
+        )
+        source_values["enabled"] = False
+        source_values["added"] = "source mutation"
+        cast(dict[str, object], first_definition.preset_values)["enabled"] = False
+        first_overrides["enabled"] = False
+
+        second_definition = presets.definition_for_preset(_SnapshotPreset.BASELINE)
+        second_overrides = presets.overrides_for_preset(_SnapshotPreset.BASELINE)
+        second_locks = presets.locks_for_preset(_SnapshotPreset.BASELINE)
+        second_configuration = cast(
+            dict[str, object],
+            presets.get_config(_SnapshotPreset.BASELINE)[0],
+        )
+        self.assertEqual(second_definition, expected_definition)
+        self.assertEqual(second_overrides, expected_definition.preset_values)
+        self.assertTupleEqual(tuple(second_locks), ("enabled", "opaque_value"))
+        self.assertEqual(
+            second_locks["enabled"].reason,
+            "Locked by the BASELINE preset because this preset locks `enabled`.",
+        )
+        self.assertIsNot(first_definition, second_definition)
+        self.assertIsNot(
+            first_definition.preset_values, second_definition.preset_values
+        )
+        self.assertIsNot(first_overrides, second_overrides)
+        self.assertIs(second_definition.preset_values["opaque_value"], opaque_value)
+        self.assertIs(second_overrides["opaque_value"], opaque_value)
+        self.assertIs(second_locks["opaque_value"].value, opaque_value)
+        self.assertIs(second_configuration["opaque_value"], opaque_value)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "The specified preset is not supported. Please choose a valid "
+            "`ExperimentPreset`.",
+        ) as raised:
+            presets.definition_for_preset(_SnapshotPreset.UNKNOWN)
+        self.assertIsInstance(raised.exception.__cause__, KeyError)
+
+    def test_definition_override_propagates_through_every_consumer(self) -> None:
+        projected_value = object()
+        presets = _DefinitionOverridingPresets(projected_value)
+
+        overrides = presets.overrides_for_preset(_SnapshotPreset.BASELINE)
+        locks = presets.locks_for_preset(_SnapshotPreset.BASELINE)
+        configuration = cast(
+            dict[str, object],
+            presets.get_config(_SnapshotPreset.BASELINE)[0],
+        )
+
+        self.assertIs(overrides["projected_value"], projected_value)
+        self.assertEqual(
+            presets.description_for_preset(_SnapshotPreset.BASELINE),
+            "Projected description.",
+        )
+        self.assertIs(locks["projected_value"].value, projected_value)
+        self.assertIs(configuration["projected_value"], projected_value)
 
 
 class FakeOption(Enum):
