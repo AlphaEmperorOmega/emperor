@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar, cast
 
 from model_runtime.packages.identity import ModelIdentity
 from model_runtime.runs._value_policy import deep_freeze
@@ -187,6 +187,34 @@ class RunResult:
         object.__setattr__(self, "payload", deep_freeze(self.payload))
 
 
+@dataclass(frozen=True, slots=True)
+class RunPlanRetry:
+    """Explicit retry of one exact filesystem receipt prefix.
+
+    Best-summary projection is replayed idempotently. Completion progress is
+    not replayed because its destination has no acknowledgement Interface.
+    """
+
+    execution_id: str
+    completed_results: Sequence[RunResult]
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.execution_id) is not str
+            or not self.execution_id
+            or self.execution_id.strip() != self.execution_id
+            or len(self.execution_id) > 128
+        ):
+            raise ValueError("execution_id must be a non-empty bounded string.")
+        untrusted_results = tuple(cast(Sequence[object], self.completed_results))
+        completed = cast(tuple[RunResult, ...], untrusted_results)
+        if not completed:
+            raise ValueError("completed_results must contain at least one RunResult.")
+        if any(not isinstance(result, RunResult) for result in untrusted_results):
+            raise TypeError("completed_results must contain only RunResult values.")
+        object.__setattr__(self, "completed_results", completed)
+
+
 __all__ = [
     "PlanningBudget",
     "PresetSearch",
@@ -194,6 +222,7 @@ __all__ = [
     "RunParameter",
     "RunParameterSource",
     "RunPlan",
+    "RunPlanRetry",
     "RunRequest",
     "RunResult",
     "RunSpec",

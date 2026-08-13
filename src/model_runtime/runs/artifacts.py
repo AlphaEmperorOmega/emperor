@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, cast, runtime_checkable
 
 from filelock import FileLock
+from filelock import Timeout as FileLockTimeout
 
 from emperor.experiments import ExperimentTask
 from model_runtime.packages.identity import ModelIdentity, model_key
@@ -114,7 +116,9 @@ class RunArtifacts(Protocol):
         self,
         log_dir: str | Path,
         result: Mapping[str, Any],
-    ) -> Path: ...
+    ) -> Path:
+        """Commit the terminal receipt for one completed artifact attempt."""
+        ...
 
     def read_best_results(
         self,
@@ -153,10 +157,21 @@ class FilesystemRunArtifacts:
     root: Path = Path("logs")
     namespace: str | None = None
     clock: Callable[[], datetime] = datetime.now
+    best_results_lock_timeout_seconds: float = field(default=30.0, kw_only=True)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "root", Path(self.root))
         object.__setattr__(self, "namespace", _validate_namespace(self.namespace))
+        timeout = self.best_results_lock_timeout_seconds
+        if (
+            type(timeout) not in (int, float)
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ValueError(
+                "best_results_lock_timeout_seconds must be a finite positive number."
+            )
+        object.__setattr__(self, "best_results_lock_timeout_seconds", float(timeout))
 
     def model_root(self, identity: ModelIdentity) -> Path:
         root = self.root
@@ -247,9 +262,29 @@ class FilesystemRunArtifacts:
         log_dir: str | Path,
         result: Mapping[str, Any],
     ) -> Path:
+        """Atomically commit the authoritative completed-Run receipt."""
+
         result_path = _result_path(self.root, log_dir)
         self._write_json_atomic(result_path, result, trailing_newline=False)
         return result_path
+
+    def read_result(self, log_dir: str | Path) -> dict[str, Any]:
+        """Read one contained terminal receipt for explicit retry admission."""
+
+        result_path = _result_path(self.root, log_dir)
+        if not result_path.is_file():
+            raise ValueError(f"Run Artifact '{result_path}' has no result receipt.")
+        try:
+            payload: object = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, RecursionError, ValueError) as exc:
+            raise ValueError(
+                f"Run Artifact '{result_path}' has an invalid result receipt."
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"Run Artifact '{result_path}' has an invalid result receipt."
+            )
+        return cast(dict[str, Any], payload)
 
     def read_best_results(self, identity: ModelIdentity) -> dict[str, Any]:
         return self._read_json_object(self.best_results_path(identity))
@@ -265,6 +300,21 @@ class FilesystemRunArtifacts:
             merged = self._read_json_object(summary_path)
             dataset = str(result["dataset"])
             runs = list(merged.get(dataset, []))
+            artifact_id = self._artifact_id(result)
+            if artifact_id is not None:
+                matching = self._artifact_matches(merged, artifact_id)
+                if matching:
+                    normalized = self._normalized_result(result)
+                    if any(
+                        candidate_dataset != dataset
+                        or self._normalized_result(candidate) != normalized
+                        for candidate_dataset, candidate in matching
+                    ):
+                        raise ValueError(
+                            "Best-results artifactId "
+                            f"'{artifact_id}' already has different content."
+                        )
+                    return merged
             new_score = self._ranking_score(experiment_task, result)
             worst_score = min(
                 (self._ranking_score(experiment_task, candidate) for candidate in runs),
@@ -288,6 +338,38 @@ class FilesystemRunArtifacts:
                 ]
                 self._write_json_atomic(summary_path, merged, trailing_newline=True)
         return merged
+
+    @staticmethod
+    def _artifact_id(result: Mapping[str, Any]) -> str | None:
+        if "artifactId" not in result:
+            return None
+        artifact_id = result["artifactId"]
+        if type(artifact_id) is not str or not artifact_id:
+            raise ValueError("Best-results artifactId must be a non-empty string.")
+        return artifact_id
+
+    @staticmethod
+    def _artifact_matches(
+        summary: Mapping[str, Any],
+        artifact_id: str,
+    ) -> tuple[tuple[str, Mapping[str, Any]], ...]:
+        matches: list[tuple[str, Mapping[str, Any]]] = []
+        for dataset, candidates in summary.items():
+            if not isinstance(candidates, list):
+                continue
+            for value in cast(Sequence[object], candidates):
+                if not isinstance(value, dict):
+                    continue
+                candidate = cast(dict[str, Any], value)
+                if candidate.get("artifactId") == artifact_id:
+                    matches.append((dataset, candidate))
+        return tuple(matches)
+
+    @staticmethod
+    def _normalized_result(result: Mapping[str, Any]) -> object:
+        payload = {key: value for key, value in result.items() if key != "rank"}
+        require_finite_json(payload)
+        return json.loads(json.dumps(payload, default=str, sort_keys=True))
 
     @staticmethod
     def _ranking_score(
@@ -336,8 +418,14 @@ class FilesystemRunArtifacts:
     def _best_results_lock(self, summary_path: Path) -> Generator[None]:
         lock_path = _best_results_lock_path(self.root, summary_path)
         lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with FileLock(str(lock_path)):
-            yield
+        try:
+            with FileLock(
+                str(lock_path),
+                timeout=self.best_results_lock_timeout_seconds,
+            ):
+                yield
+        except FileLockTimeout as exc:
+            raise TimeoutError("Timed out acquiring the best-results lock.") from exc
 
 
 __all__ = [

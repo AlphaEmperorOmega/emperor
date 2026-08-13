@@ -566,6 +566,24 @@ class TestExperimentTraining(unittest.TestCase):
             result,
         )
 
+    def test_result_json_is_the_completed_artifact_attempt_receipt(self):
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+
+        result, log_dir = self._execute_run(experiment, run_id="receipt-run")
+
+        persisted = json.loads(Path(log_dir, "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(persisted, result)
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["runId"], "receipt-run")
+        self.assertIsInstance(result["artifactId"], str)
+        self.assertTrue(result["artifactId"])
+        self.assertNotIn("executionId", result)
+        self.assertNotIn("runIndex", result)
+        self.assertNotIn("runTotal", result)
+
     def test_materialized_run_sets_progress_context_and_events(self):
         experiment = FakeExperiment(model_package=self.model_package)
         progress = CaptureRunProgress()
@@ -978,7 +996,7 @@ class TestExperimentTraining(unittest.TestCase):
             error_event["traceback"],
         )
 
-    def test_dataset_completed_sink_failure_is_the_primary_completion_failure(self):
+    def test_dataset_completed_sink_failure_does_not_reclassify_training(self):
         class FailingCompletedProgress:
             def __init__(self):
                 self.events = []
@@ -1004,12 +1022,84 @@ class TestExperimentTraining(unittest.TestCase):
         self.assertEqual(len(FakeTrainer.instances), 1)
         self.assertEqual(
             [event["type"] for event in progress.events],
-            ["dataset_started", "error"],
+            ["dataset_started"],
+        )
+        log_dir = Path(progress.events[0]["logDir"])
+        receipt = json.loads(
+            log_dir.joinpath("result.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(receipt["status"], "completed")
+        self.assertEqual(receipt["runId"], "run-0001")
+
+    def test_best_result_failure_still_attempts_completion_after_commit(self):
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        progress = CaptureRunProgress()
+        failure = OSError("best-results projection failed")
+
+        with (
+            patch.object(
+                FilesystemRunArtifacts,
+                "update_best_results",
+                side_effect=failure,
+            ),
+            self.assertRaises(OSError) as raised,
+        ):
+            self._execute_run(experiment, progress=progress)
+
+        self.assertIs(raised.exception, failure)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed"],
+        )
+        receipt_path = Path(progress.events[0]["logDir"], "result.json")
+        self.assertEqual(
+            json.loads(receipt_path.read_text(encoding="utf-8"))["status"],
+            "completed",
+        )
+
+    def test_dual_projection_failure_preserves_first_and_notes_second(self):
+        class FailingCompletedProgress:
+            def __init__(self):
+                self.events = []
+
+            def write_event(self, event):
+                payload = dict(event)
+                if payload["type"] == "dataset_completed":
+                    raise OSError("completion projection failed")
+                self.events.append(payload)
+
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+        progress = FailingCompletedProgress()
+        primary = OSError("best-results projection failed")
+
+        with (
+            patch.object(
+                FilesystemRunArtifacts,
+                "update_best_results",
+                side_effect=primary,
+            ),
+            self.assertRaises(OSError) as raised,
+        ):
+            self._execute_run(experiment, progress=progress)
+
+        self.assertIs(raised.exception, primary)
+        self.assertTrue(
+            any(
+                "completion projection failed" in note
+                for note in raised.exception.__notes__
+            )
         )
         self.assertEqual(
-            progress.events[-1]["error"],
-            "dataset-completed sink failure",
+            [event["type"] for event in progress.events],
+            ["dataset_started"],
         )
+        self.assertTrue(Path(progress.events[0]["logDir"], "result.json").is_file())
 
     def test_run_execution_rejects_path_like_log_folder(self):
         with self.assertRaises(ValueError):

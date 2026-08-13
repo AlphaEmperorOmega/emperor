@@ -15,6 +15,7 @@ if TYPE_CHECKING:
         InvalidRunPlan,
         InvalidRunRequest,
         PlanTooLarge,
+        RunPlanExecutionError,
         RunsError,
     )
     from model_runtime.runs.execution import execute_runs
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
         RandomSource,
         RunParameter,
         RunPlan,
+        RunPlanRetry,
         RunRequest,
         RunResult,
         RunSpec,
@@ -59,6 +61,8 @@ __all__ = [
     "RandomSource",
     "RunParameter",
     "RunPlan",
+    "RunPlanExecutionError",
+    "RunPlanRetry",
     "RunArtifacts",
     "RunProgress",
     "RunRequest",
@@ -82,6 +86,7 @@ _ERROR_EXPORTS = {
     "InvalidRunPlan",
     "InvalidRunRequest",
     "PlanTooLarge",
+    "RunPlanExecutionError",
     "RunsError",
 }
 _CHECKPOINT_EXPORTS = {"CheckpointContinuation"}
@@ -104,6 +109,7 @@ _RECORD_EXPORTS = {
     "RandomSource",
     "RunParameter",
     "RunPlan",
+    "RunPlanRetry",
     "RunRequest",
     "RunResult",
     "RunSpec",

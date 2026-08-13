@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from emperor.config import BaseOptions, ModelConfig
     from emperor.experiments import ExperimentTask
+    from model_runtime.runs._outcomes import TrainingOutcomeObserver
     from model_runtime.runs.progress import RunProgress
 
 
@@ -67,6 +68,7 @@ class TrainingExecutionRequest:
     ckpt_path: Path | None
     model_validator: Callable[[object], None] | None
     resumed_from: Mapping[str, object] | None
+    outcome_observer: TrainingOutcomeObserver | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "callbacks", tuple(self.callbacks))

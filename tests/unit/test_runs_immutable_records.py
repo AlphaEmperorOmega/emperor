@@ -9,6 +9,8 @@ from lightning.pytorch.callbacks import Callback
 
 from model_runtime.runs import (
     RunParameter,
+    RunPlanExecutionError,
+    RunPlanRetry,
     RunRequest,
     RunResult,
 )
@@ -25,9 +27,11 @@ from model_runtime.runs._progress_events import (
     NeuronAddedEvent,
     NeuronsAddedEvent,
     StepEvent,
-    TestCompletedEvent,
     ValidationEvent,
     project_run_progress_event,
+)
+from model_runtime.runs._progress_events import (
+    TestCompletedEvent as CompletedTestEvent,
 )
 
 
@@ -132,7 +136,7 @@ class RunsImmutableRecordTests(unittest.TestCase):
             ),
             (
                 "test_completed",
-                lambda values: TestCompletedEvent(
+                lambda values: CompletedTestEvent(
                     epoch=1,
                     step=2,
                     metrics=values["metrics"],
@@ -322,6 +326,101 @@ class RunsImmutableRecordTests(unittest.TestCase):
 
         self.assertEqual(request.overrides["nested"]["values"], (4,))
         self.assertEqual(result.payload["nested"]["values"], (5,))
+
+    def test_run_plan_retry_snapshots_one_nonempty_completed_prefix(self) -> None:
+        result = RunResult(
+            run_id="run-1",
+            experiment_task="image-classification",
+            preset="baseline",
+            dataset="Mnist",
+            log_dir="logs/run-1",
+            payload={"status": "completed"},
+        )
+        source = [result]
+        retry = RunPlanRetry("execution-a", source)
+        source.clear()
+
+        self.assertEqual(retry.execution_id, "execution-a")
+        self.assertEqual(retry.completed_results, (result,))
+        for execution_id in ("", " execution-a", "x" * 129):
+            with self.subTest(execution_id=execution_id), self.assertRaises(ValueError):
+                RunPlanRetry(execution_id, (result,))
+        with self.assertRaises(ValueError):
+            RunPlanRetry("execution-a", ())
+        with self.assertRaises(TypeError):
+            RunPlanRetry("execution-a", (cast(Any, object()),))
+
+    def test_partial_plan_error_enforces_phase_membership_invariant(self) -> None:
+        result = RunResult(
+            run_id="run-1",
+            experiment_task="image-classification",
+            preset="baseline",
+            dataset="Mnist",
+            log_dir="logs/run-1",
+            payload={"status": "completed"},
+        )
+
+        training = RunPlanExecutionError(
+            completed_results=(result,),
+            affected_run_id="run-2",
+            phase="training",
+            execution_id="execution-a",
+        )
+        projection = RunPlanExecutionError(
+            completed_results=[result],
+            affected_run_id="run-1",
+            phase="progress_projection",
+            execution_id="execution-a",
+        )
+
+        self.assertEqual(training.completed_results, (result,))
+        self.assertEqual(projection.completed_results, (result,))
+        for phase, affected_run_id in (
+            ("training", "run-1"),
+            ("result_commit", "run-1"),
+            ("best_results_projection", "run-2"),
+            ("progress_projection", "run-2"),
+        ):
+            with (
+                self.subTest(phase=phase),
+                self.assertRaisesRegex(ValueError, "do not match"),
+            ):
+                RunPlanExecutionError(
+                    completed_results=(result,),
+                    affected_run_id=affected_run_id,
+                    phase=cast(Any, phase),
+                    execution_id="execution-a",
+                )
+        for field, value in (
+            ("affected_run_id", ""),
+            ("execution_id", ""),
+            ("execution_id", "x" * 129),
+            ("phase", "unknown"),
+        ):
+            arguments: dict[str, Any] = {
+                "completed_results": (result,),
+                "affected_run_id": "run-2",
+                "phase": "training",
+                "execution_id": "execution-a",
+                field: value,
+            }
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                RunPlanExecutionError(**arguments)
+        with self.assertRaises(ValueError):
+            RunPlanExecutionError(
+                completed_results=(),
+                affected_run_id="run-1",
+                phase="training",
+                execution_id="execution-a",
+            )
+        with self.assertRaises(TypeError):
+            RunPlanExecutionError(
+                completed_results=(cast(Any, object()),),
+                affected_run_id="run-1",
+                phase="training",
+                execution_id="execution-a",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

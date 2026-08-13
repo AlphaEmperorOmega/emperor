@@ -19,6 +19,7 @@ from model_runtime.runs._handoff import (
     TrainingRunRequest,
 )
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
+from model_runtime.runs._outcomes import TrainingOutcomeObserver
 from model_runtime.runs._progress_events import (
     DatasetCompletedEvent,
     DatasetStartedEvent,
@@ -58,6 +59,7 @@ class _TrainingExecutionState:
     training_run: TrainingRun
     options: TrainingExecutionRequest
     run_progress: ContextualRunProgress | None
+    outcome: TrainingOutcomeObserver
 
 
 class ExperimentBase:
@@ -358,6 +360,7 @@ class ExperimentBase:
             request.training_run,
             request,
             run_progress,
+            request.outcome_observer or TrainingOutcomeObserver(),
         )
         try:
             runtime = self._prepare_training_runtime(state)
@@ -366,7 +369,8 @@ class ExperimentBase:
             self._fit_and_test_training(state, trainer, runtime)
             return self._complete_training_execution(state, trainer, started)
         except Exception as exc:
-            self._emit_training_error_preserving_primary(exc, state.run_progress)
+            if not state.outcome.is_committed:
+                self._emit_training_error_preserving_primary(exc, state.run_progress)
             raise
 
     def _prepare_training_runtime(
@@ -479,23 +483,30 @@ class ExperimentBase:
         trainer: Trainer,
         started: _StartedTrainingRun,
     ) -> tuple[dict[str, Any], str]:
+        state.outcome.begin_result_commit()
         result = self._training_result(
             state.training_run,
             trainer,
             resumed_from=state.options.resumed_from,
         )
-        self.run_artifacts.write_result(started.logger.log_dir, result)
-        self.run_artifacts.update_best_results(
-            self.model_package.identity,
-            self.experiment_task,
-            result,
+        result.update(state.outcome.receipt_fields(state.training_run.run_id))
+        log_dir = started.logger.log_dir
+        committed_result = state.outcome.prepare_commit(result)
+        self.run_artifacts.write_result(log_dir, result)
+        state.outcome.commit(committed_result, log_dir)
+        state.outcome.project(
+            lambda: self.run_artifacts.update_best_results(
+                self.model_package.identity,
+                self.experiment_task,
+                result,
+            ),
+            lambda: self._emit_dataset_completed(
+                result,
+                state.run_progress,
+                resumed_from=state.options.resumed_from,
+            ),
         )
-        self._emit_dataset_completed(
-            result,
-            state.run_progress,
-            resumed_from=state.options.resumed_from,
-        )
-        return result, started.logger.log_dir
+        return result, log_dir
 
     def _run_progress_context(
         self,
