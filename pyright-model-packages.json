@@ -1,0 +1,14 @@
+{
+  "include": [
+    "src/models/catalog.py",
+    "src/models/**/runtime_options.py"
+  ],
+  "pythonPlatform": "Linux",
+  "pythonVersion": "3.13",
+  "extraPaths": [
+    "src"
+  ],
+  "venvPath": ".",
+  "venv": "torchenv",
+  "typeCheckingMode": "strict"
+}

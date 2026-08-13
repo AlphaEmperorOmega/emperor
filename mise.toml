@@ -90,6 +90,11 @@ description = "Run pinned strict type checking for Model Runtime"
 raw = true
 run = "npm run typecheck:model-runtime"
 
+[tasks."test:model-packages-types"]
+description = "Run pinned strict type checking for Model Packages"
+raw = true
+run = "npm run typecheck:model-packages"
+
 [tasks."test:attention"]
 description = "Run the attention unittest suite"
 run = "python tools/emperor_test_family.py tests attention"
