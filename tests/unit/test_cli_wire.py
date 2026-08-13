@@ -6,6 +6,7 @@ import math
 import random
 import unittest
 from contextlib import redirect_stderr
+from dataclasses import replace
 from io import StringIO
 from unittest.mock import patch
 
@@ -623,6 +624,12 @@ class CliWireRoundTripTests(unittest.TestCase):
         payload = run_plan_to_wire(_run_plan())
         with self.assertRaisesRegex(
             WireCodecError,
+            r"\$\.runs must be a list",
+        ):
+            run_plan_from_wire({**payload, "runs": (None,) * 2_001})
+
+        with self.assertRaisesRegex(
+            WireCodecError,
             r"\$\.runs must contain at most 2000 items",
         ):
             run_plan_from_wire({**payload, "runs": [None] * 2_001})
@@ -634,6 +641,65 @@ class CliWireRoundTripTests(unittest.TestCase):
             r"\$\.runs\[0\]\.parameters must contain at most 1024 items",
         ):
             run_plan_from_wire(oversized_parameters)
+
+    def test_encode_sequence_limits_preserve_exact_paths(self) -> None:
+        request = replace(_run_request(), presets=("baseline",) * 2_001)
+        search = SearchSpec(
+            mode="grid",
+            axes=(SearchAxisSelection("HIDDEN_DIM", (64,)),) * 17,
+        )
+        inspection = _inspection_result()
+        oversized_graph = replace(
+            inspection,
+            nodes=(inspection.nodes[0],) * 8_193,
+        )
+        cases = (
+            (
+                run_request_to_wire,
+                request,
+                r"\$\.presets must contain at most 2000 items",
+            ),
+            (
+                search_spec_to_wire,
+                search,
+                r"\$\.search\.axes must contain at most 16 items",
+            ),
+            (
+                inspection_result_to_wire,
+                oversized_graph,
+                r"\$\.nodes must contain at most 8192 items",
+            ),
+        )
+
+        for encoder, value, message in cases:
+            with (
+                self.subTest(encoder=encoder.__name__),
+                self.assertRaisesRegex(WireCodecError, message),
+            ):
+                encoder(value)
+
+    def test_experiment_task_wire_errors_preserve_consumer_paths(self) -> None:
+        request_payload = run_request_to_wire(_run_request())
+        package_payload = package_metadata_to_wire(model_package("linears/linear"))
+        cases = (
+            (
+                run_request_from_wire,
+                {**request_payload, "experiment_task": "unsupported"},
+                r"\$\.experiment_task is not a supported Experiment Task",
+            ),
+            (
+                package_metadata_from_wire,
+                {**package_payload, "default_experiment_task": "unsupported"},
+                r"\$\.default_experiment_task is not a supported Experiment Task",
+            ),
+        )
+
+        for decoder, payload, message in cases:
+            with (
+                self.subTest(decoder=decoder.__name__),
+                self.assertRaisesRegex(WireCodecError, message),
+            ):
+                decoder(payload)
 
     def test_package_metadata_decoder_validation_precedence_is_stable(
         self,

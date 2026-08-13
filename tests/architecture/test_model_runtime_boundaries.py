@@ -106,6 +106,94 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("require_transportable_run_budget", public_source)
         self.assertNotIn("require_transportable_run_budget", adapter_source)
 
+    def test_cli_wire_policies_have_one_private_owner(self) -> None:
+        module_names = (
+            "_wire_graph.py",
+            "_wire_packages.py",
+            "_wire_runs.py",
+            "_wire_search.py",
+            "_wire_shared.py",
+        )
+        trees = {
+            name: ast.parse(
+                (CLI_ROOT / name).read_text(encoding="utf-8"),
+                (CLI_ROOT / name).as_posix(),
+            )
+            for name in module_names
+        }
+
+        def function_owners(function_name: str) -> list[str]:
+            return [
+                name
+                for name, tree in trees.items()
+                if any(
+                    isinstance(node, ast.FunctionDef) and node.name == function_name
+                    for node in tree.body
+                )
+            ]
+
+        self.assertEqual(
+            function_owners("require_sequence_limit"),
+            ["_wire_shared.py"],
+        )
+        self.assertEqual(
+            function_owners("experiment_task_from_wire"),
+            ["_wire_packages.py"],
+        )
+
+        for consumer in ("_wire_graph.py", "_wire_runs.py", "_wire_search.py"):
+            with self.subTest(sequence_limit_consumer=consumer):
+                self.assertTrue(
+                    any(
+                        isinstance(node, ast.ImportFrom)
+                        and node.module == "model_runtime.cli._wire_shared"
+                        and any(
+                            alias.name == "require_sequence_limit"
+                            for alias in node.names
+                        )
+                        for node in trees[consumer].body
+                    )
+                )
+
+        shared_wire_list = next(
+            node
+            for node in trees["_wire_shared.py"].body
+            if isinstance(node, ast.FunctionDef) and node.name == "wire_list"
+        )
+        self.assertTrue(
+            any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "require_sequence_limit"
+                for node in ast.walk(shared_wire_list)
+            )
+        )
+
+        runs_tree = trees["_wire_runs.py"]
+        self.assertTrue(
+            any(
+                isinstance(node, ast.ImportFrom)
+                and node.module == "model_runtime.cli._wire_packages"
+                and any(
+                    alias.name == "experiment_task_from_wire" for alias in node.names
+                )
+                for node in runs_tree.body
+            )
+        )
+        self.assertFalse(
+            any(
+                isinstance(node, ast.ImportFrom)
+                and node.module == "emperor.experiments"
+                for node in runs_tree.body
+            )
+        )
+
+        for public_module in ("wire.py", "__init__.py"):
+            source = (CLI_ROOT / public_module).read_text(encoding="utf-8")
+            with self.subTest(public_module=public_module):
+                self.assertNotIn("require_sequence_limit", source)
+                self.assertNotIn("experiment_task_from_wire", source)
+
     def test_run_artifacts_own_lifecycle_without_experiment_forwarders(self) -> None:
         self.assertFalse((RUNS_ROOT / "locking.py").exists())
         experiment_path = RUNS_ROOT / "experiment.py"
