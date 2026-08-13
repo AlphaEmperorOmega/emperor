@@ -4,10 +4,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from model_runtime.inspection import (
-    InspectionError,
-    configuration_schema,
-)
 from model_runtime.packages import ModelPackage, RuntimeDefaultsError, dataset_name
 from model_runtime.runs._search_parsing import ParsedSearch, SearchValue, parse_search
 from model_runtime.runs.errors import InvalidRunPlan, InvalidRunRequest, PlanTooLarge
@@ -217,8 +213,7 @@ def _ordered_parameters(
     try:
         runtime_defaults = package.runtime_defaults_spec
         canonical = runtime_defaults.canonicalize_overrides(overrides)
-        schema = configuration_schema(package)
-    except (InspectionError, RuntimeDefaultsError) as exc:
+    except RuntimeDefaultsError as exc:
         raise _request_error(exc) from exc
     supported_keys = runtime_defaults.supported_keys
     missing_keys = sorted(set(canonical) - set(supported_keys))
@@ -227,11 +222,7 @@ def _ordered_parameters(
             "Canonical Run overrides are not supported Runtime Defaults: "
             f"{', '.join(missing_keys)}."
         )
-    schema_keys = [field.key for field in schema.fields]
-    visible_keys = set(schema_keys)
-    ordered_keys = schema_keys + [
-        key for key in supported_keys if key not in visible_keys
-    ]
+    ordered_keys = runtime_defaults.ordered_configuration_keys()
     return tuple(
         RunParameter(
             key=key,

@@ -4,8 +4,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from model_runtime.inspection import InspectionError, search_space_schema
-from model_runtime.inspection.records import SearchAxis
 from model_runtime.packages import (
     ModelPackage,
     RuntimeDefaultsError,
@@ -47,8 +45,8 @@ class _SearchContext:
     preset_name: str
     budget: PlanningBudget
     runtime_defaults: RuntimeDefaultsSpec
-    search_axes: tuple[SearchAxis, ...]
-    axes_by_key: Mapping[str, SearchAxis]
+    search_axes: tuple[_AxisDefinition, ...]
+    axes_by_key: Mapping[str, _AxisDefinition]
     locks: Mapping[str, Any]
 
 
@@ -101,16 +99,19 @@ def _search_context(
 ) -> _SearchContext:
     try:
         runtime_defaults = package.runtime_defaults_spec
-        search_space = search_space_schema(package, preset_name)
         locks = runtime_defaults.preset_locks(preset_name)
-    except (InspectionError, RuntimeDefaultsError) as exc:
+    except RuntimeDefaultsError as exc:
         raise _request_error(exc) from exc
+    search_axes = tuple(
+        _search_axis_definition(runtime_defaults, locks, search_key, values)
+        for search_key, values in runtime_defaults.ordered_search_items()
+    )
     return _SearchContext(
         preset_name=preset_name,
         budget=budget,
         runtime_defaults=runtime_defaults,
-        search_axes=search_space.axes,
-        axes_by_key={normalize_key(axis.key): axis for axis in search_space.axes},
+        search_axes=search_axes,
+        axes_by_key={normalize_key(axis.key): axis for axis in search_axes},
         locks=locks,
     )
 
@@ -151,19 +152,29 @@ def _reject_selected_value_budget(
         )
 
 
-def _schema_axis_definition(
+def _search_axis_definition(
     runtime_defaults: RuntimeDefaultsSpec,
-    axis: SearchAxis,
+    locks: Mapping[str, Any],
+    search_key: str,
+    values: tuple[Any, ...],
 ) -> _AxisDefinition:
+    config_key = search_key.removeprefix("SEARCH_SPACE_")
+    model_param = runtime_defaults.model_parameter(config_key)
+    lock = locks.get(model_param)
+    serialized_values = tuple(
+        runtime_defaults.serialize_value(value) for value in values
+    )
     return _AxisDefinition(
-        key=axis.key,
-        config_key=axis.key,
-        model_param=runtime_defaults.model_parameter(axis.key),
-        search_key=axis.search_key,
-        default_values=axis.values,
-        allowed_values=axis.values,
-        locked=axis.locked,
-        locked_value=axis.locked_value,
+        key=config_key,
+        config_key=config_key,
+        model_param=model_param,
+        search_key=search_key,
+        default_values=serialized_values,
+        allowed_values=serialized_values,
+        locked=lock is not None,
+        locked_value=runtime_defaults.serialize_value(
+            getattr(lock, "value", None)
+        ),
     )
 
 
@@ -194,7 +205,7 @@ def _axis_definition(
     normalized_key = normalize_key(selection.key)
     axis = context.axes_by_key.get(normalized_key)
     if axis is not None:
-        return _schema_axis_definition(context.runtime_defaults, axis)
+        return axis
     if selection.allow_custom_values:
         config_key = context.runtime_defaults.keys_by_alias.get(normalized_key)
         if config_key is not None:

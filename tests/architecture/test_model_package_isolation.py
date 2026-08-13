@@ -335,6 +335,36 @@ if loaded:
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_importing_run_planning_keeps_preset_and_training_stacks_unloaded(self):
+        script = """
+import sys
+import model_runtime.runs.planning
+
+forbidden = (
+    'model_runtime.packages.presets',
+    'torch',
+    'torchvision',
+    'lightning',
+    'pytorch_lightning',
+)
+loaded = sorted(
+    name for name in sys.modules
+    if any(name == root or name.startswith(root + '.') for root in forbidden)
+)
+if loaded:
+    raise SystemExit(f'Run planning imported heavy modules: {loaded}')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_obsolete_model_modules_are_removed(self):
         remaining = []
         for module in _REMOVED_MODEL_MODULES:
