@@ -97,19 +97,24 @@ class _LightningRunProgressAdapter(Callback):
         )
 
     def on_fit_start(self, trainer: Any, pl_module: Any) -> None:
+        self._clear_growth_state()
         from emperor.neuron import NeuronCluster
 
-        self._clusters = [
-            (name, module)
-            for name, module in pl_module.named_modules()
-            if isinstance(module, NeuronCluster)
-        ]
-        for name, cluster in self._clusters:
-            names = set(cluster.cluster.keys())
-            self._known_names[name] = names
-            self._progress.write_event(
-                self._cluster_initialized_event(name, cluster, names)
+        try:
+            self._clusters.extend(
+                (name, module)
+                for name, module in pl_module.named_modules()
+                if isinstance(module, NeuronCluster)
             )
+            for name, cluster in self._clusters:
+                names = set(cluster.cluster.keys())
+                self._known_names[name] = names
+                self._progress.write_event(
+                    self._cluster_initialized_event(name, cluster, names)
+                )
+        except BaseException:
+            self._clear_growth_state()
+            raise
 
     def on_train_epoch_start(self, trainer: Any, pl_module: Any) -> None:
         self._progress.write_event(
@@ -196,14 +201,27 @@ class _LightningRunProgressAdapter(Callback):
         )
 
     def on_fit_end(self, trainer: Any, pl_module: Any) -> None:
-        self._progress.write_event(
-            FitCompletedEvent(
-                epoch=int(trainer.current_epoch),
-                step=int(trainer.global_step),
-                metrics=self._metrics(trainer),
+        try:
+            self._progress.write_event(
+                FitCompletedEvent(
+                    epoch=int(trainer.current_epoch),
+                    step=int(trainer.global_step),
+                    metrics=self._metrics(trainer),
+                )
             )
-        )
-        self._clusters = []
+        finally:
+            self._clear_growth_state()
+
+    def on_exception(
+        self,
+        trainer: Any,
+        pl_module: Any,
+        exception: BaseException,
+    ) -> None:
+        self._clear_growth_state()
+
+    def _clear_growth_state(self) -> None:
+        self._clusters.clear()
         self._known_names.clear()
 
     def on_test_end(self, trainer: Any, pl_module: Any) -> None:
