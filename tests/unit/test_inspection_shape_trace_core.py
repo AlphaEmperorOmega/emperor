@@ -137,6 +137,19 @@ class SharedModel(nn.Module):
 
 
 class InspectionShapeTraceCoreTests(unittest.TestCase):
+    def test_unknown_detail_precedes_package_validation(self) -> None:
+        with self.assertRaises(ValueError) as raised:
+            shape_trace.inspect_model_shapes(
+                object(),  # type: ignore[arg-type]
+                InspectionRequest(preset="baseline"),
+                detail="unknown",  # type: ignore[arg-type]
+            )
+
+        self.assertEqual(
+            str(raised.exception),
+            "Unknown shape-trace detail: 'unknown'",
+        )
+
     def test_tensor_shapes_are_materialized_before_later_capture_failure(
         self,
     ) -> None:
