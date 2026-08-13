@@ -74,21 +74,32 @@ class _PackageAdapter(Protocol):
 _INITIALIZATION_MISSING = object()
 _MODEL_PACKAGE_INITIALIZATION_LOCK = RLock()
 _InitializationValue = TypeVar("_InitializationValue")
+_CheckpointConfigInterpreter = Callable[
+    [Mapping[str, tuple[int, ...]]],
+    Mapping[str, Any],
+]
 
 
 @dataclass(frozen=True)
 class ModelPackage:
     """Canonical Interface for one isolated Model Package.
 
-    Identity is data, while every implementation operation belongs to the
-    selected package's lightweight adapter. Importing the catalog therefore
-    never imports a concrete model, Runtime Defaults module, or training stack.
+    Identity is data, while core operations and optional package-local
+    capabilities belong to explicit lightweight adapters. Importing the catalog
+    therefore never imports a concrete model, Runtime Defaults module, or
+    training stack.
     """
 
     identity: ModelIdentity
     _adapter: _PackageAdapter = field(repr=False, compare=False)
     inspection_construction_limits: InspectionConstructionLimits = (
         DEFAULT_INSPECTION_CONSTRUCTION_LIMITS
+    )
+    _checkpoint_config_interpreter: _CheckpointConfigInterpreter | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+        kw_only=True,
     )
 
     def __post_init__(self) -> None:
@@ -201,7 +212,7 @@ class ModelPackage:
     ) -> dict[str, Any]:
         """Interpret package-owned checkpoint shapes when supported."""
 
-        interpreter = getattr(self._adapter, "checkpoint_config_overrides", None)
+        interpreter = self._checkpoint_config_interpreter
         if interpreter is None:
             return {}
         if not callable(interpreter):
@@ -209,13 +220,13 @@ class ModelPackage:
                 f"Model package '{self.catalog_key}' has an invalid checkpoint "
                 "interpreter."
             )
-        overrides = interpreter(tensor_shapes)
-        if not isinstance(overrides, Mapping):
+        untrusted_overrides = cast(object, interpreter(tensor_shapes))
+        if not isinstance(untrusted_overrides, Mapping):
             raise ValueError(
                 f"Model package '{self.catalog_key}' returned invalid checkpoint "
                 "configuration overrides."
             )
-        overrides_mapping = cast(Mapping[object, Any], overrides)
+        overrides_mapping = cast(Mapping[object, Any], untrusted_overrides)
         if any(not isinstance(key, str) for key in overrides_mapping):
             raise ValueError(
                 f"Model package '{self.catalog_key}' returned invalid checkpoint "

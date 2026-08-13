@@ -384,6 +384,27 @@ class TestModelPackageInterface(unittest.TestCase):
                 model = package.build_model(configuration)
                 self.assertIsInstance(model, Module)
 
+    def test_checkpoint_reconstruction_is_an_explicit_optional_capability(self):
+        tensor_shapes = {
+            "input_model.model.weight_params": (784, 12),
+            "main_model.layers.0.model.weight_params": (12, 12),
+            "output_model.model.weight_params": (12, 10),
+        }
+        expected = {
+            "input_dim": 784,
+            "output_dim": 10,
+            "hidden_dim": 12,
+            "stack_num_layers": 1,
+        }
+
+        for package in discover_model_packages():
+            with self.subTest(model_package=package.catalog_key):
+                overrides = package.checkpoint_config_overrides(tensor_shapes)
+                if package.catalog_key == "linears/linear":
+                    self.assertEqual(overrides, expected)
+                else:
+                    self.assertEqual(overrides, {})
+
 
 if __name__ == "__main__":
     unittest.main()
