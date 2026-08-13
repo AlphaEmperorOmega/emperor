@@ -72,7 +72,37 @@ def validated_overrides(
             "Change at least one non-default field before adding a snapshot."
         )
     validate_config_snapshot(model_packages, model, preset, entries)
-    return {entry["key"]: entry["value"] for entry in entries}
+    return _serialized_override_values(model_packages, model, fields, entries)
+
+
+def _serialized_override_values(
+    model_packages: ModelPackageCatalog,
+    model: str,
+    fields: tuple[ConfigurationField, ...],
+    entries: list[dict[str, str]],
+) -> dict[str, str]:
+    overrides = {entry["key"]: entry["value"] for entry in entries}
+    try:
+        serialized = model_packages.select(model).serialize_overrides(overrides)
+    except ModelPackageFailure as exc:
+        raise ConfigSnapshotFailure(
+            "Invalid config snapshot overrides: "
+            f"{_snapshot_config_error_detail(exc)}"
+        ) from exc
+
+    fields_by_key = {field.key: field for field in fields}
+    canonical: dict[str, str] = {}
+    for entry in entries:
+        key = entry["key"]
+        if key not in serialized:
+            raise ConfigSnapshotFailure(
+                "Invalid config snapshot overrides: the project Adapter omitted "
+                f"the validated field {key!r}."
+            )
+        field = fields_by_key[key]
+        normalized = _normalize_value_for_field(field, serialized[key])
+        canonical[key] = "" if field.nullable and normalized == "null" else normalized
+    return canonical
 
 
 def canonical_overrides(
