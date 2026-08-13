@@ -250,20 +250,43 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_inspection_runtime_defaults_translation_has_one_owner(self) -> None:
+        runtime_defaults_source = (INSPECTION_ROOT / "runtime_defaults.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("def apply_runtime_defaults(", runtime_defaults_source)
+        self.assertIn(
+            "def raise_runtime_defaults_inspection_error(",
+            runtime_defaults_source,
+        )
+
+        duplicated_translation = (
+            "raise InspectionError(str(exc)) from (exc.__cause__ or exc)"
+        )
+        for source_path in sorted(INSPECTION_ROOT.glob("*.py")):
+            if source_path.name == "runtime_defaults.py":
+                continue
+            with self.subTest(module=source_path.name):
+                self.assertNotIn(
+                    duplicated_translation,
+                    source_path.read_text(encoding="utf-8"),
+                )
+
+        facade_source = (INSPECTION_ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("apply_runtime_defaults", facade_source)
+        self.assertNotIn("raise_runtime_defaults_inspection_error", facade_source)
+
     def test_runs_consume_runtime_defaults_through_model_package_interface(
         self,
     ) -> None:
-        forbidden_modules = {
-            "model_runtime.inspection.overrides",
-            "model_runtime.inspection.runtime_defaults",
-        }
         violations = [
             (
                 source_path.relative_to(PROJECT_ROOT).as_posix(),
                 imported_module,
             )
             for source_path, imported_module in _imports_under(RUNS_ROOT)
-            if imported_module in forbidden_modules
+            if imported_module == "model_runtime.inspection"
+            or imported_module.startswith("model_runtime.inspection.")
         ]
 
         self.assertEqual(violations, [])
