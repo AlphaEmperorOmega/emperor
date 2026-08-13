@@ -131,7 +131,7 @@ def _enum_choices(value: Any, annotation: Any) -> list[str]:
             if issubclass(cls, Enum):
                 enum_type = cls
                 break
-    return list(enum_type.__members__) if enum_type is not None else []
+    return [member.name for member in enum_type] if enum_type is not None else []
 
 
 def _class_choice_name(value: Any) -> str | None:
