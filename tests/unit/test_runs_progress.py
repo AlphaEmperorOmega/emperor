@@ -6,11 +6,14 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import patch
+
+import torch
 
 from model_runtime.runs import JsonlRunProgress
 from model_runtime.runs._lightning_progress import lightning_progress_adapter
-from model_runtime.runs._metrics import sanitize_metric_payload
+from model_runtime.runs._metrics import portable_metric_values, sanitize_metric_payload
 from model_runtime.runs._progress_events import (
     ClusterInitializedEvent,
     DatasetCompletedEvent,
@@ -25,6 +28,7 @@ from model_runtime.runs._progress_events import (
     ValidationEvent,
     project_run_progress_event,
 )
+from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
 
 
@@ -43,6 +47,147 @@ def _context() -> RunProgressContext:
 
 
 class RunsProgressTests(unittest.TestCase):
+    def test_non_scalar_tensor_metric_is_omitted_before_host_transfer(self) -> None:
+        metric = torch.ones(4, device="meta")
+
+        payload = FilesystemRunArtifacts().result_metrics_payload(
+            {"validation/accuracy": metric}
+        )
+
+        self.assertEqual(
+            payload,
+            {"metrics": {"validation/accuracy": "<non-scalar metric omitted>"}},
+        )
+
+    def test_lightning_progress_omits_non_scalar_tensor_before_host_transfer(
+        self,
+    ) -> None:
+        events: list[dict[str, object]] = []
+        progress = type(
+            "Progress",
+            (),
+            {"write_event": lambda _self, event: events.append(dict(event))},
+        )()
+        callback = lightning_progress_adapter(
+            ContextualRunProgress(progress, _context()),  # type: ignore[arg-type]
+            step_interval=1,
+        )
+        trainer = SimpleNamespace(
+            current_epoch=0,
+            global_step=1,
+            callback_metrics={"vector": torch.ones(4, device="meta")},
+        )
+
+        callback.on_train_batch_end(trainer, None, None, None, 0)
+
+        self.assertEqual(
+            events[0]["metrics"],
+            {"vector": "<non-scalar metric omitted>"},
+        )
+
+    def test_tensor_like_metric_admits_scalar_before_transfer(self) -> None:
+        calls: list[str] = []
+
+        class MetricProbe:
+            def __init__(self, count: Any) -> None:
+                self._count = count
+
+            def numel(self) -> Any:
+                calls.append("numel")
+                if isinstance(self._count, BaseException):
+                    raise self._count
+                return self._count
+
+            def detach(self) -> MetricProbe:
+                calls.append("detach")
+                return self
+
+            def cpu(self) -> MetricProbe:
+                calls.append("cpu")
+                return self
+
+            def item(self) -> float:
+                calls.append("item")
+                return 0.75
+
+            def __str__(self) -> str:
+                calls.append("str")
+                return "probe"
+
+        self.assertEqual(
+            portable_metric_values({"metric": MetricProbe(1)}),
+            {"metric": 0.75},
+        )
+        self.assertEqual(calls, ["numel", "detach", "cpu", "item"])
+
+        for count in (4, True, 1.0, RuntimeError("numel failure")):
+            with self.subTest(count=count):
+                calls.clear()
+                self.assertEqual(
+                    portable_metric_values({"metric": MetricProbe(count)}),
+                    {"metric": "<non-scalar metric omitted>"},
+                )
+                self.assertEqual(calls, ["numel"])
+
+        cancellation = KeyboardInterrupt("metric cancellation")
+        calls.clear()
+        with self.assertRaises(KeyboardInterrupt) as raised:
+            portable_metric_values({"metric": MetricProbe(cancellation)})
+        self.assertIs(raised.exception, cancellation)
+        self.assertEqual(calls, ["numel"])
+
+    def test_item_only_metric_wrapper_keeps_legacy_conversion(self) -> None:
+        calls: list[str] = []
+
+        class ItemOnlyMetric:
+            @staticmethod
+            def item() -> float:
+                calls.append("item")
+                return 0.625
+
+        self.assertEqual(
+            portable_metric_values({"metric": ItemOnlyMetric()}),
+            {"metric": 0.625},
+        )
+        self.assertEqual(calls, ["item"])
+
+    def test_metric_selection_precedes_scalar_admission(self) -> None:
+        class NumelTrap:
+            @staticmethod
+            def numel() -> int:
+                raise AssertionError("filtered metric must not be inspected")
+
+        sanitized, original_count, dropped_count = sanitize_metric_payload(
+            {
+                "validation/confusion_matrix": NumelTrap(),
+                "retained": 0.5,
+                "truncated": NumelTrap(),
+            },
+            metric_key_limit=1,
+            string_value_limit=100,
+        )
+
+        self.assertEqual(sanitized, {"retained": 0.5})
+        self.assertEqual(original_count, 3)
+        self.assertEqual(dropped_count, 2)
+
+    def test_scalar_tensor_metrics_keep_values_and_finite_validation(self) -> None:
+        self.assertEqual(
+            portable_metric_values(
+                {
+                    "zero_dimensional": torch.tensor(0.25),
+                    "one_element": torch.tensor([0.75]),
+                }
+            ),
+            {"zero_dimensional": 0.25, "one_element": 0.75},
+        )
+        with self.assertRaises(ValueError):
+            sanitize_metric_payload(
+                {"loss": torch.tensor(float("inf"))},
+                metric_key_limit=1,
+                string_value_limit=100,
+            )
+
     def test_typed_progress_events_have_one_exact_wire_projection(self) -> None:
         cases = (
             (
