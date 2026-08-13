@@ -26,6 +26,7 @@ from model_runtime.runs._progress_events import (
     RunProgressEvent,
     TrainingErrorEvent,
 )
+from model_runtime.runs._terminal_checkpoint import save_terminal_last_checkpoint
 from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
 from model_runtime.runs.progress import (
     ContextualRunProgress,
@@ -46,6 +47,7 @@ class _TrainingRuntime:
     runtime_config: dict[str, Any]
     dataset: Any
     model: Any
+    terminal_checkpoint_callback: ModelCheckpoint | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,15 +101,22 @@ class ExperimentBase:
     ) -> dict[str, Any]:
         runtime_defaults = self.model_package.runtime_defaults_spec
         config_overrides = config_overrides or {}
+        checkpoint = self._checkpoint_callback(runtime_defaults, config_overrides)
         return {
             "trainer_args": self._trainer_args(runtime_defaults, config_overrides),
-            "callbacks": self._trainer_callbacks(runtime_defaults, config_overrides),
+            "callbacks": self._trainer_callbacks(
+                runtime_defaults,
+                config_overrides,
+                checkpoint,
+            ),
+            "terminal_checkpoint_callback": checkpoint,
         }
 
     def _trainer_callbacks(
         self,
         runtime_defaults: RuntimeDefaultsSpec,
         config_overrides: dict[str, Any],
+        checkpoint: ModelCheckpoint | None,
     ) -> list[Callback]:
         callbacks: list[Callback] = []
         early_stopping = self._early_stopping_callback(
@@ -116,7 +125,6 @@ class ExperimentBase:
         )
         if early_stopping is not None:
             callbacks.append(early_stopping)
-        checkpoint = self._checkpoint_callback(runtime_defaults, config_overrides)
         if checkpoint is not None:
             callbacks.append(checkpoint)
 
@@ -324,7 +332,7 @@ class ExperimentBase:
         self,
         training_run: TrainingRun,
         *,
-        callbacks: list[Callback],
+        callbacks: Sequence[Callback],
         progress: RunProgress | None = None,
         progress_step_interval: int = 1,
         ckpt_path: Path | None = None,
@@ -391,6 +399,9 @@ class ExperimentBase:
             runtime_config=runtime_config,
             dataset=dataset,
             model=model,
+            terminal_checkpoint_callback=trainer_config.get(
+                "terminal_checkpoint_callback"
+            ),
         )
 
     def _start_training_execution(
@@ -474,6 +485,8 @@ class ExperimentBase:
                 ckpt_path=state.options.ckpt_path,
                 weights_only=True,
             )
+        if runtime.terminal_checkpoint_callback is not None:
+            save_terminal_last_checkpoint(trainer, runtime.terminal_checkpoint_callback)
         if runtime.runtime_config["run_test_after_fit"]:
             trainer.test(runtime.model, datamodule=runtime.dataset)
 
