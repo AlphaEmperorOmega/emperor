@@ -379,7 +379,9 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef)
             and node.name == "materialize_training_runs"
         )
-        materialize_contract = ast.get_docstring(materialize_operation) or ""
+        materialize_contract = " ".join(
+            (ast.get_docstring(materialize_operation) or "").split()
+        )
         self.assertIn("same order", materialize_contract)
         for identity_field in (
             "run id",
@@ -387,6 +389,10 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             "run total",
             "preset identity",
             "Dataset identity",
+            "Experiment Task identity",
+            "requested parameters",
+            "Runtime Defaults overrides",
+            "epoch count",
         ):
             with self.subTest(identity_field=identity_field):
                 self.assertIn(identity_field, materialize_contract)
