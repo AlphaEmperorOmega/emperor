@@ -35,10 +35,82 @@ class _SemanticDetailContext:
     limits: InspectionCaptureLimits
     details: dict[str, Any] = field(default_factory=dict[str, Any])
     cluster_present: bool = False
+    halting_model_present: bool = False
+    halting_model: Any | None = None
 
 
 class _SemanticDetailsAdapter(Protocol):
     def apply(self, context: _SemanticDetailContext) -> None: ...
+
+
+class _MissingAttribute:
+    __slots__ = ()
+
+
+_MISSING_ATTRIBUTE = _MissingAttribute()
+
+
+class _NeuronClusterRemainder(Protocol):
+    y_axis_total_neurons: Any
+    z_axis_total_neurons: Any
+
+
+@dataclass(frozen=True, slots=True)
+class _NeuronClusterObservation:
+    owner: _NeuronClusterRemainder
+    x_axis_total_neurons: Any
+    cluster: Any
+
+
+class _TerminalReachRemainder(Protocol):
+    y_axis_position: Any
+    z_axis_position: Any
+
+
+@dataclass(frozen=True, slots=True)
+class _TerminalReachObservation:
+    owner: _TerminalReachRemainder
+    neuron_connections: Any
+    x_axis_position: Any
+
+
+class _RecurrentIterationSchedule(Protocol):
+    def snapshot(self) -> object: ...
+
+
+class _RecurrentScheduleSnapshot(Protocol):
+    maximum_transition_count: Any
+    active_transition_count: Any
+    gradient_transition_count: Any
+    iteration_unit: Any
+    initial_iterations: Any
+    maximum_iterations: Any
+    active_iterations: Any
+    iteration_increment: Any
+    forward_calls_before_iteration_increment: Any
+    forward_call_progress: Any
+    complete: Any
+    no_gradient_transition_count: Any
+
+
+def _neuron_cluster_capability(
+    module: GraphModule,
+) -> _NeuronClusterObservation | None:
+    x_axis_total_neurons = getattr(
+        module,
+        "x_axis_total_neurons",
+        _MISSING_ATTRIBUTE,
+    )
+    if x_axis_total_neurons is _MISSING_ATTRIBUTE:
+        return None
+    cluster = getattr(module, "cluster", _MISSING_ATTRIBUTE)
+    if cluster is _MISSING_ATTRIBUTE:
+        return None
+    return _NeuronClusterObservation(
+        owner=cast(_NeuronClusterRemainder, module),
+        x_axis_total_neurons=x_axis_total_neurons,
+        cluster=cluster,
+    )
 
 
 def _shape_value(value: Any) -> str | None:
@@ -109,10 +181,11 @@ def _first_detail_value(module: GraphModule, attr_paths: tuple[str, ...]) -> Any
     for attr_path in attr_paths:
         value: Any = module
         for attr_name in attr_path.split("."):
-            if not hasattr(value, attr_name):
+            observed = getattr(value, attr_name, _MISSING_ATTRIBUTE)
+            if observed is _MISSING_ATTRIBUTE:
                 value = None
                 break
-            value = getattr(value, attr_name)
+            value = observed
         if value is not None:
             return value
     return None
@@ -137,10 +210,14 @@ class _ExpertDetailsAdapter:
                 context.details[detail_key] = display_graph_value(value)
 
 
-def _bool_from_optional_model(module: GraphModule, attr_name: str) -> bool | None:
-    if not hasattr(module, attr_name):
-        return None
-    return getattr(module, attr_name) is not None
+def _optional_model(
+    module: GraphModule,
+    attr_name: str,
+) -> tuple[bool, Any | None]:
+    model = getattr(module, attr_name, _MISSING_ATTRIBUTE)
+    if model is _MISSING_ATTRIBUTE:
+        return False, None
+    return True, model
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +228,7 @@ class _LayerBehaviorDetailsAdapter:
         if dropout is not None:
             context.details["dropout"] = dropout
 
-        gate = getattr(module, "gate_model", None)
+        gate_present, gate = _optional_model(module, "gate_model")
         gate_option = getattr(gate, "option", None)
         if gate_option is None:
             gate_config = getattr(module, "gate_config", None)
@@ -162,13 +239,14 @@ class _LayerBehaviorDetailsAdapter:
         if gate_option_name is not None:
             context.details["gateOption"] = gate_option_name
 
-        gate_model = _bool_from_optional_model(module, "gate_model")
-        if gate_model is not None:
-            context.details["gate"] = gate_model and gate is not None
+        if gate_present:
+            context.details["gate"] = gate is not None
 
-        halting = _bool_from_optional_model(module, "halting_model")
-        if halting is not None:
-            context.details["halting"] = halting
+        halting_present, halting = _optional_model(module, "halting_model")
+        context.halting_model_present = halting_present
+        context.halting_model = halting
+        if context.halting_model_present:
+            context.details["halting"] = context.halting_model is not None
 
         activation = getattr(module, "activation_function", None)
         if activation is not None:
@@ -196,12 +274,10 @@ class _NeuronDetailsAdapter:
         module: GraphModule,
         limits: InspectionCaptureLimits,
     ) -> dict[str, Any] | None:
-        if not hasattr(module, "x_axis_total_neurons") or not hasattr(
-            module, "cluster"
-        ):
+        cluster_observation = _neuron_cluster_capability(module)
+        if cluster_observation is None:
             return None
-        dynamic_module = cast(Any, module)
-        cluster: Any = dynamic_module.cluster
+        cluster = cluster_observation.cluster
         total_coordinates = len(cluster)
         cluster_names = tuple(
             islice(
@@ -219,9 +295,9 @@ class _NeuronDetailsAdapter:
         coordinates_truncated = total_coordinates > len(cluster_names)
         return {
             "capacity": [
-                dynamic_module.x_axis_total_neurons,
-                dynamic_module.y_axis_total_neurons,
-                dynamic_module.z_axis_total_neurons,
+                cluster_observation.x_axis_total_neurons,
+                cluster_observation.owner.y_axis_total_neurons,
+                cluster_observation.owner.z_axis_total_neurons,
             ],
             "initial": [
                 getattr(module, "initial_x_axis_total_neurons", None),
@@ -250,20 +326,35 @@ class _NeuronDetailsAdapter:
         module: GraphModule,
         limits: InspectionCaptureLimits,
     ) -> dict[str, Any] | None:
-        source: Any = module
-        if not hasattr(source, "neuron_connections") and hasattr(module, "terminal"):
-            source = cast(Any, module).terminal
-        connections = getattr(source, "neuron_connections", None)
-        if connections is None or not hasattr(source, "x_axis_position"):
+        source: object = module
+        connections = getattr(module, "neuron_connections", _MISSING_ATTRIBUTE)
+        if connections is _MISSING_ATTRIBUTE:
+            source = getattr(module, "terminal", module)
+            connections = (
+                None
+                if source is module
+                else getattr(source, "neuron_connections", None)
+            )
+        if connections is None:
             return None
-        total = int(connections.shape[0])
-        selected_connections = connections[: limits.maximum_terminal_connections]
-        truncated = total > limits.maximum_terminal_connections
+        x_axis_position = getattr(source, "x_axis_position", _MISSING_ATTRIBUTE)
+        if x_axis_position is _MISSING_ATTRIBUTE:
+            return None
+        terminal = _TerminalReachObservation(
+            owner=cast(_TerminalReachRemainder, source),
+            neuron_connections=connections,
+            x_axis_position=x_axis_position,
+        )
+        observed_connections = terminal.neuron_connections
+        total = int(observed_connections.shape[0])
+        maximum = limits.maximum_terminal_connections
+        selected_connections = observed_connections[:maximum]
+        truncated = total > maximum
         return {
             "position": [
-                source.x_axis_position,
-                source.y_axis_position,
-                source.z_axis_position,
+                terminal.x_axis_position,
+                terminal.owner.y_axis_position,
+                terminal.owner.z_axis_position,
             ],
             "connections": selected_connections.detach().cpu().tolist(),
             "total": total,
@@ -288,11 +379,14 @@ class _NeuronDetailsAdapter:
 @dataclass(frozen=True, slots=True)
 class _RecurrentDetailsAdapter:
     @staticmethod
-    def _schedule(module: GraphModule) -> tuple[Any | None, Any | None]:
+    def _schedule(
+        module: GraphModule,
+    ) -> tuple[_RecurrentScheduleSnapshot | None, Any | None]:
         iteration_schedule = getattr(module, "recurrent_iteration_schedule", None)
-        schedule_snapshot = (
-            iteration_schedule.snapshot() if iteration_schedule is not None else None
-        )
+        schedule_snapshot: _RecurrentScheduleSnapshot | None = None
+        if iteration_schedule is not None:
+            schedule = cast(_RecurrentIterationSchedule, iteration_schedule)
+            schedule_snapshot = cast(_RecurrentScheduleSnapshot, schedule.snapshot())
         max_steps = (
             schedule_snapshot.maximum_transition_count
             if schedule_snapshot is not None
@@ -318,7 +412,12 @@ class _RecurrentDetailsAdapter:
         )
         return gate, gate_option_name
 
-    def _base_details(self, module: GraphModule, max_steps: Any) -> dict[str, Any]:
+    def _base_details(
+        self,
+        module: GraphModule,
+        max_steps: Any,
+        halting_model: Any | None,
+    ) -> dict[str, Any]:
         gate, gate_option_name = self._gate_details(module)
         return {
             "maxSteps": max_steps,
@@ -327,13 +426,13 @@ class _RecurrentDetailsAdapter:
             ),
             "gate": gate,
             "gateOption": gate_option_name,
-            "halting": bool(getattr(module, "halting_model", None) is not None),
+            "halting": halting_model is not None,
         }
 
     @staticmethod
     def _append_schedule_details(
         recurrent: dict[str, Any],
-        schedule_snapshot: Any | None,
+        schedule_snapshot: _RecurrentScheduleSnapshot | None,
     ) -> None:
         if schedule_snapshot is None:
             return
@@ -359,9 +458,9 @@ class _RecurrentDetailsAdapter:
     def _append_optional_details(
         module: GraphModule,
         recurrent: dict[str, Any],
-        schedule_snapshot: Any | None,
+        schedule_snapshot: _RecurrentScheduleSnapshot | None,
+        halting_model: Any | None,
     ) -> None:
-        halting_model = getattr(module, "halting_model", None)
         min_steps = getattr(halting_model, "min_steps", None)
         if min_steps is not None:
             recurrent["minSteps"] = min_steps
@@ -397,12 +496,17 @@ class _RecurrentDetailsAdapter:
         schedule_snapshot, max_steps = self._schedule(context.module)
         if max_steps is None or context.cluster_present:
             return
-        recurrent = self._base_details(context.module, max_steps)
+        recurrent = self._base_details(
+            context.module,
+            max_steps,
+            context.halting_model,
+        )
         self._append_schedule_details(recurrent, schedule_snapshot)
         self._append_optional_details(
             context.module,
             recurrent,
             schedule_snapshot,
+            context.halting_model,
         )
         context.details["recurrent"] = recurrent
 

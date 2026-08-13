@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from inspect import cleandoc
-from operator import attrgetter
 from typing import Any, cast
 
 from emperor.config import ConfigBase
@@ -28,16 +26,11 @@ INTERNAL_ROLE: GraphRole = "internal"
 RUNTIME_ROLE: GraphRole = "runtime"
 
 
-def _registered_type_id(class_type: type[object]) -> str | None:
-    module = sys.modules.get(class_type.__module__)
-    registered: object = module
-    for name in class_type.__qualname__.split("."):
-        if registered is None or name == "<locals>":
-            return None
-        registered = getattr(registered, name, None)
-    if registered is not class_type:
-        return None
-    return f"{class_type.__module__}.{class_type.__qualname__}"
+class _MissingAttribute:
+    __slots__ = ()
+
+
+_MISSING_ATTRIBUTE = _MissingAttribute()
 
 
 def display_graph_value(value: Any) -> Any:
@@ -76,7 +69,12 @@ def _module_config_instance(module: GraphModule) -> Any | None:
 
 
 def _metadata_help(metadata: Any) -> str | None:
-    help_text = metadata.get("help") if hasattr(metadata, "get") else None
+    metadata_get = getattr(metadata, "get", _MISSING_ATTRIBUTE)
+    help_text = (
+        cast(Any, metadata_get)("help")
+        if metadata_get is not _MISSING_ATTRIBUTE
+        else None
+    )
     if not isinstance(help_text, str):
         return None
     help_text = help_text.strip()
@@ -98,12 +96,12 @@ def _flattened_residual_configuration_fields(
         DEFAULT_RESIDUAL_OPTION_DESCRIPTION,
         DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
     )
-    has_residual_model_config = hasattr(residual_config, "model_config")
-    residual_model_config = (
-        attrgetter("model_config")(residual_config)
-        if has_residual_model_config
-        else None
+    residual_model_config = getattr(
+        residual_config,
+        "model_config",
+        _MISSING_ATTRIBUTE,
     )
+    has_residual_model_config = residual_model_config is not _MISSING_ATTRIBUTE
     return (
         GraphConfigurationField(
             key="residual_connection_option",
