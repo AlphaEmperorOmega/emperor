@@ -339,12 +339,9 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         super().__init__(
             _PRESET_DEFINITIONS,
             builder_type=LinearConfigBuilder,
+            runtime_factory=runtime_from_flat,
             default_preset=ExperimentPreset.BASELINE,
         )
-
-    def _preset(self, **kwargs):
-        runtime = runtime_from_flat(kwargs)
-        return self._builder_type(runtime=runtime).build()
 
 
 class Experiment(ExperimentBase):

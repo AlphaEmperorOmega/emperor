@@ -316,6 +316,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=TransformerExpertLinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
+            runtime_factory=runtime_from_flat,
             default_dataset=Multi30kDeEn,
         )
 
@@ -325,9 +326,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             "source_sequence_length": dataset.source_sequence_length,
             "target_sequence_length": dataset.target_sequence_length,
         }
-
-    def _preset(self, **kwargs):
-        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
