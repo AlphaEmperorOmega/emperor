@@ -15,6 +15,14 @@ from model_runtime.runs._handoff import (
     TrainingRunRequest,
     require_run_experiment,
 )
+from model_runtime.runs._outcomes import (
+    RunRetryContext,
+    TrainingOutcomeObserver,
+    admit_run_plan_retry,
+    new_execution_id,
+    run_result,
+    selected_retry,
+)
 from model_runtime.runs.artifacts import RunArtifacts
 from model_runtime.runs.checkpoint_admission import (
     DEFAULT_CHECKPOINT_ADMISSION_POLICY,
@@ -25,9 +33,19 @@ from model_runtime.runs.checkpoints import (
     CheckpointContinuationLifecycle,
     CheckpointExecution,
 )
-from model_runtime.runs.errors import InvalidRunPlan, InvalidRunRequest
+from model_runtime.runs.errors import (
+    InvalidRunPlan,
+    InvalidRunRequest,
+    RunPlanExecutionError,
+)
 from model_runtime.runs.progress import RunProgress, require_run_progress
-from model_runtime.runs.records import PlanningBudget, RunPlan, RunResult, RunSpec
+from model_runtime.runs.records import (
+    PlanningBudget,
+    RunPlan,
+    RunPlanRetry,
+    RunResult,
+    RunSpec,
+)
 
 
 def _invalid_plan(message: str) -> InvalidRunPlan:
@@ -253,6 +271,7 @@ class _RunExecutionOptions:
     continuation: CheckpointContinuation | None
     budget: PlanningBudget | None
     checkpoint_admission: CheckpointAdmissionPolicy
+    retry: RunPlanRetry | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,6 +280,9 @@ class _PreparedRunExecution:
     callback_groups: tuple[list[Callback], ...]
     progress: RunProgress | None
     continuation: CheckpointExecution
+    execution_id: str
+    semantic_runs: Sequence[RunSpec]
+    completed_results: Sequence[RunResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -423,9 +445,26 @@ class _RunExecutor:
             _validated_materialized_runs(package, self.plan, selected_budget)
         )
         monitor_options = _resolve_monitor_options(package, self.options.monitors)
+        retry = self.options.retry
+        if retry is not None and self.options.continuation is not None:
+            raise InvalidRunRequest(
+                "Run Plan retry cannot be combined with checkpoint continuation."
+            )
+        retry_context = RunRetryContext(
+            package,
+            self.plan,
+            materialized_runs,
+            experiment_task,
+            self.options.artifacts,
+        )
+        completed_results = admit_run_plan_retry(retry_context, retry)
+        pending_offset = len(completed_results)
+        if pending_offset == len(materialized_runs):
+            return completed_results
+        pending_requests = materialized_runs[pending_offset:]
         callback_groups = self._callback_groups(
             package,
-            materialized_runs,
+            pending_requests,
             monitor_options,
         )
         with CheckpointContinuationLifecycle.admit(
@@ -436,7 +475,7 @@ class _RunExecutor:
             scoped_runs = self._materialize_training_runs(
                 package,
                 experiment_task,
-                materialized_runs,
+                pending_requests,
             )
             training_runs = [run.training_run for run in scoped_runs]
             continuation = continuation_lifecycle.bind_training_runs(training_runs)
@@ -445,6 +484,11 @@ class _RunExecutor:
                 callback_groups=callback_groups,
                 progress=selected_progress,
                 continuation=continuation,
+                execution_id=(
+                    retry.execution_id if retry is not None else new_execution_id()
+                ),
+                semantic_runs=self.plan.runs[pending_offset:],
+                completed_results=completed_results,
             )
             return self._execute_training_runs(prepared)
 
@@ -528,35 +572,47 @@ class _RunExecutor:
         self,
         prepared: _PreparedRunExecution,
     ) -> tuple[RunResult, ...]:
-        results: list[RunResult] = []
+        results = list(prepared.completed_results)
         for semantic_run, materialized_run, callbacks in zip(
-            self.plan.runs,
+            prepared.semantic_runs,
             prepared.materialized_runs,
             prepared.callback_groups,
             strict=True,
         ):
             training_run = materialized_run.training_run
-            payload, log_dir = materialized_run.experiment.execute_training(
-                TrainingExecutionRequest(
-                    training_run=training_run,
-                    callbacks=callbacks,
-                    progress=prepared.progress,
-                    progress_step_interval=self.options.progress_step_interval,
-                    ckpt_path=prepared.continuation.checkpoint_path,
-                    model_validator=prepared.continuation.strict_model_preloader,
-                    resumed_from=prepared.continuation.provenance,
+            outcome = TrainingOutcomeObserver(prepared.execution_id)
+            try:
+                payload, log_dir = materialized_run.experiment.execute_training(
+                    TrainingExecutionRequest(
+                        training_run=training_run,
+                        callbacks=callbacks,
+                        progress=prepared.progress,
+                        progress_step_interval=self.options.progress_step_interval,
+                        ckpt_path=prepared.continuation.checkpoint_path,
+                        model_validator=prepared.continuation.strict_model_preloader,
+                        resumed_from=prepared.continuation.provenance,
+                        outcome_observer=outcome,
+                    )
                 )
-            )
-            results.append(
-                RunResult(
-                    run_id=semantic_run.id,
-                    experiment_task=semantic_run.experiment_task,
-                    preset=semantic_run.preset,
-                    dataset=semantic_run.dataset,
-                    log_dir=log_dir,
-                    payload=payload,
-                )
-            )
+            except Exception as exc:
+                if outcome.committed_payload is not None:
+                    assert outcome.committed_log_dir is not None
+                    results.append(
+                        run_result(
+                            semantic_run,
+                            outcome.committed_payload,
+                            outcome.committed_log_dir,
+                        )
+                    )
+                if results:
+                    raise RunPlanExecutionError(
+                        completed_results=results,
+                        affected_run_id=semantic_run.id,
+                        phase=outcome.phase,
+                        execution_id=prepared.execution_id,
+                    ) from exc
+                raise
+            results.append(run_result(semantic_run, payload, log_dir))
         return tuple(results)
 
 
@@ -573,6 +629,7 @@ def execute_runs(
     checkpoint_admission: CheckpointAdmissionPolicy = (
         DEFAULT_CHECKPOINT_ADMISSION_POLICY
     ),
+    retry: RunPlanRetry | None = None,
 ) -> tuple[RunResult, ...]:
     options = _RunExecutionOptions(
         artifacts=artifacts,
@@ -582,6 +639,7 @@ def execute_runs(
         continuation=continuation,
         budget=budget,
         checkpoint_admission=_selected_checkpoint_admission(checkpoint_admission),
+        retry=selected_retry(retry),
     )
     return _RunExecutor(package, plan, options).execute()
 

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 import weakref
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -251,7 +252,7 @@ class RunsCheckpointValidationTests(unittest.TestCase):
                 },
             )
 
-    def test_execution_cleans_snapshot_after_training_failure(
+    def test_execution_cleans_snapshot_after_training_or_projection_failure(
         self,
     ) -> None:
         package = model_package("linears/linear")
@@ -276,45 +277,57 @@ class RunsCheckpointValidationTests(unittest.TestCase):
                 },
                 source,
             )
-            observed_paths: list[Path] = []
-            experiment_type = _failing_experiment("training", observed_paths)
+            for stage in ("training", "projection"):
+                observed_paths: list[Path] = []
+                experiment_type = _failing_experiment(stage, observed_paths)
 
-            with (
-                patch.object(
-                    execution,
-                    "_validated_materialized_runs",
-                    return_value=(
-                        ExperimentTask.IMAGE_CLASSIFICATION,
-                        ["baseline"],
-                        [
-                            TrainingRunRequest(
-                                run_id="run-0001",
-                                run_index=1,
-                                run_total=1,
-                                preset="baseline",
-                                dataset_type=object,
-                                parameters={},
-                                config_overrides={"num_epochs": 3},
-                            )
-                        ],
-                    ),
-                ),
-                patch.object(
-                    ModelPackage,
-                    "build_experiment",
-                    return_value=experiment_type(),
-                ),
-                self.assertRaisesRegex(RuntimeError, "training failed"),
-            ):
-                execution.execute_runs(
-                    package,
-                    plan,
-                    artifacts=SimpleNamespace(namespace="runs"),
-                    continuation=CheckpointContinuation(source),
+                projection_failure = (
+                    patch.object(
+                        execution,
+                        "run_result",
+                        side_effect=RuntimeError("projection failed"),
+                    )
+                    if stage == "projection"
+                    else nullcontext()
                 )
+                with (
+                    self.subTest(stage=stage),
+                    patch.object(
+                        execution,
+                        "_validated_materialized_runs",
+                        return_value=(
+                            ExperimentTask.IMAGE_CLASSIFICATION,
+                            ["baseline"],
+                            [
+                                TrainingRunRequest(
+                                    run_id="run-0001",
+                                    run_index=1,
+                                    run_total=1,
+                                    preset="baseline",
+                                    dataset_type=object,
+                                    parameters={},
+                                    config_overrides={"num_epochs": 3},
+                                )
+                            ],
+                        ),
+                    ),
+                    patch.object(
+                        ModelPackage,
+                        "build_experiment",
+                        return_value=experiment_type(),
+                    ),
+                    projection_failure,
+                    self.assertRaisesRegex(RuntimeError, f"{stage} failed"),
+                ):
+                    execution.execute_runs(
+                        package,
+                        plan,
+                        artifacts=SimpleNamespace(namespace="runs"),
+                        continuation=CheckpointContinuation(source),
+                    )
 
-            self.assertEqual(len(observed_paths), 1)
-            self.assertFalse(observed_paths[0].exists())
+                self.assertEqual(len(observed_paths), 1)
+                self.assertFalse(observed_paths[0].exists())
 
     def test_tensor_count_limit_includes_nested_optimizer_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
