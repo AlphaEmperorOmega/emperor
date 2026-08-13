@@ -829,7 +829,10 @@ class TestExperimentTraining(unittest.TestCase):
             [configured_callback, explicit_callback, progress_callback],
         )
         self.assertEqual(trainer.kwargs, {"fixture_option": "kept"})
-        self.assertEqual(trainer.fit_kwargs, {"ckpt_path": Path("resume.ckpt")})
+        self.assertEqual(
+            trainer.fit_kwargs,
+            {"ckpt_path": Path("resume.ckpt"), "weights_only": True},
+        )
         self.assertEqual(log_dir, "logs/trace/model/BASELINE/FakeDatasetA/run")
         self.assertEqual(result["resumedFrom"], resumed_from)
         self.assertEqual(

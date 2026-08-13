@@ -177,6 +177,7 @@ class PackageCliRunsTests(unittest.TestCase):
             execute.call_args.kwargs["continuation"],
             CheckpointContinuation(checkpoint),
         )
+        self.assertNotIn("checkpoint_admission", execute.call_args.kwargs)
 
     def test_checkpoint_continuation_requires_explicit_dataset(self) -> None:
         args = SimpleNamespace(

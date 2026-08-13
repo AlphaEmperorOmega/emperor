@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import gc
+import hashlib
+import sys
 import tempfile
 import unittest
+import weakref
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 
+from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelPackage
-from model_runtime.runs import execution
+from model_runtime.runs import CheckpointAdmissionPolicy, execution
 from model_runtime.runs._handoff import TrainingRun, TrainingRunRequest
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
@@ -22,7 +27,7 @@ from models.catalog import model_package
 
 class _TopologyAwareModel:
     def __init__(self) -> None:
-        self.loaded_state: dict[str, torch.Tensor] = {}
+        self.loaded_state: dict[str, torch.Tensor] = {"dynamic.weight": torch.zeros(2)}
         self.strict: bool | None = None
 
     def load_state_dict(
@@ -48,7 +53,7 @@ class _Experiment:
     def materialize_training_runs(runs) -> list[TrainingRun]:
         return [
             TrainingRun(
-                experiment_task=None,
+                experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
                 preset=run.preset,
                 dataset_type=run.dataset_type,
                 config=SimpleNamespace(),  # type: ignore[arg-type]
@@ -70,13 +75,31 @@ class _Experiment:
         return {}, "logs/run"
 
 
+def _failing_experiment(
+    failure_stage: str,
+    observed_paths: list[Path],
+) -> type[_Experiment]:
+    class FailingExperiment(_Experiment):
+        @classmethod
+        def execute_training(cls, request):
+            assert request.ckpt_path is not None
+            observed_paths.append(request.ckpt_path)
+            assert request.model_validator is not None
+            request.model_validator(_TopologyAwareModel())
+            if failure_stage == "training":
+                raise RuntimeError("training failed")
+            return {}, "logs/run"
+
+    return FailingExperiment
+
+
 def _checkpoint_execution(
     directory: str,
     *,
     state_dict: dict[str, torch.Tensor] | None = None,
     epoch: int = 0,
     target_epochs: int = 3,
-) -> CheckpointExecution:
+) -> tuple[CheckpointContinuationLifecycle, CheckpointExecution]:
     checkpoint_path = Path(directory) / "dynamic.ckpt"
     torch.save(
         {
@@ -92,10 +115,268 @@ def _checkpoint_execution(
         CheckpointContinuation(checkpoint_path),
         SimpleNamespace(runs=(object(),)),
     )
-    return lifecycle.bind_training_runs([SimpleNamespace(num_epochs=target_epochs)])
+    return lifecycle, lifecycle.bind_training_runs(
+        [SimpleNamespace(num_epochs=target_epochs)]
+    )
 
 
 class RunsCheckpointValidationTests(unittest.TestCase):
+    def test_checkpoint_file_limit_rejects_before_deserialization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "oversized.ckpt"
+            checkpoint.write_bytes(b"x" * 17)
+            with (
+                patch("model_runtime.runs.checkpoints.torch.load") as torch_load,
+                self.assertRaisesRegex(
+                    InvalidCheckpointContinuation,
+                    "17 bytes.*limit of 16 bytes",
+                ),
+            ):
+                CheckpointContinuationLifecycle.admit(
+                    CheckpointContinuation(checkpoint),
+                    SimpleNamespace(runs=(object(),)),
+                    admission_policy=CheckpointAdmissionPolicy(max_file_bytes=16),
+                )
+
+            torch_load.assert_not_called()
+
+    def test_execution_uses_and_cleans_an_immutable_admitted_snapshot(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        semantic_run = SimpleNamespace(
+            id="run-0001",
+            experiment_task="image-classification",
+            preset="baseline",
+            dataset="SyntheticDataset",
+        )
+        plan = SimpleNamespace(runs=(semantic_run,))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.ckpt"
+            replacement = root / "replacement.ckpt"
+            original_state = torch.ones(2)
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.5.0",
+                    "state_dict": {"dynamic.weight": original_state},
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [{}],
+                },
+                source,
+            )
+            original_bytes = source.read_bytes()
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.5.0",
+                    "state_dict": {"dynamic.weight": torch.full((2,), 9.0)},
+                    "epoch": 1,
+                    "global_step": 9,
+                    "optimizer_states": [{}],
+                },
+                replacement,
+            )
+            replacement_bytes = replacement.read_bytes()
+
+            class ReplacingModel(_TopologyAwareModel):
+                def load_state_dict(self, state_dict, *, strict):
+                    replacement.replace(source)
+                    super().load_state_dict(state_dict, strict=strict)
+
+            class SnapshotObservingExperiment(_Experiment):
+                observed_path: Path | None = None
+                observed_bytes: bytes | None = None
+                observed_provenance: dict[str, object] | None = None
+
+                @classmethod
+                def execute_training(cls, request):
+                    assert request.model_validator is not None
+                    request.model_validator(ReplacingModel())
+                    cls.observed_path = request.ckpt_path
+                    assert cls.observed_path is not None
+                    cls.observed_bytes = cls.observed_path.read_bytes()
+                    cls.observed_provenance = dict(request.resumed_from)
+                    return {}, "logs/run"
+
+            with (
+                patch.object(
+                    execution,
+                    "_validated_materialized_runs",
+                    return_value=(
+                        ExperimentTask.IMAGE_CLASSIFICATION,
+                        ["baseline"],
+                        [
+                            TrainingRunRequest(
+                                run_id="run-0001",
+                                run_index=1,
+                                run_total=1,
+                                preset="baseline",
+                                dataset_type=object,
+                                parameters={},
+                                config_overrides={"num_epochs": 3},
+                            )
+                        ],
+                    ),
+                ),
+                patch.object(
+                    ModelPackage,
+                    "build_experiment",
+                    return_value=SnapshotObservingExperiment(),
+                ),
+            ):
+                execution.execute_runs(
+                    package,
+                    plan,
+                    artifacts=SimpleNamespace(namespace="runs"),
+                    continuation=CheckpointContinuation(source),
+                )
+
+            observed_path = SnapshotObservingExperiment.observed_path
+            assert observed_path is not None
+            self.assertNotEqual(observed_path, source)
+            self.assertEqual(
+                SnapshotObservingExperiment.observed_bytes,
+                original_bytes,
+            )
+            self.assertEqual(source.read_bytes(), replacement_bytes)
+            self.assertFalse(observed_path.exists())
+            self.assertEqual(
+                SnapshotObservingExperiment.observed_provenance,
+                {
+                    "checkpoint": "source.ckpt",
+                    "epoch": 0,
+                    "globalStep": 1,
+                    "sha256": hashlib.sha256(original_bytes).hexdigest(),
+                },
+            )
+
+    def test_execution_cleans_snapshot_after_training_failure(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        semantic_run = SimpleNamespace(
+            id="run-0001",
+            experiment_task="image-classification",
+            preset="baseline",
+            dataset="SyntheticDataset",
+        )
+        plan = SimpleNamespace(runs=(semantic_run,))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.5.0",
+                    "state_dict": {"dynamic.weight": torch.ones(2)},
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [{}],
+                },
+                source,
+            )
+            observed_paths: list[Path] = []
+            experiment_type = _failing_experiment("training", observed_paths)
+
+            with (
+                patch.object(
+                    execution,
+                    "_validated_materialized_runs",
+                    return_value=(
+                        ExperimentTask.IMAGE_CLASSIFICATION,
+                        ["baseline"],
+                        [
+                            TrainingRunRequest(
+                                run_id="run-0001",
+                                run_index=1,
+                                run_total=1,
+                                preset="baseline",
+                                dataset_type=object,
+                                parameters={},
+                                config_overrides={"num_epochs": 3},
+                            )
+                        ],
+                    ),
+                ),
+                patch.object(
+                    ModelPackage,
+                    "build_experiment",
+                    return_value=experiment_type(),
+                ),
+                self.assertRaisesRegex(RuntimeError, "training failed"),
+            ):
+                execution.execute_runs(
+                    package,
+                    plan,
+                    artifacts=SimpleNamespace(namespace="runs"),
+                    continuation=CheckpointContinuation(source),
+                )
+
+            self.assertEqual(len(observed_paths), 1)
+            self.assertFalse(observed_paths[0].exists())
+
+    def test_tensor_count_limit_includes_nested_optimizer_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "optimizer-tensors.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.5.0",
+                    "state_dict": {"weight": torch.ones(1)},
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [
+                        {
+                            "state": {
+                                0: {
+                                    "momentum": torch.ones(1),
+                                    "variance": torch.ones(1),
+                                }
+                            }
+                        }
+                    ],
+                },
+                checkpoint,
+            )
+
+            with self.assertRaisesRegex(
+                InvalidCheckpointContinuation,
+                "3 tensors.*limit of 2",
+            ):
+                CheckpointContinuationLifecycle.admit(
+                    CheckpointContinuation(checkpoint),
+                    SimpleNamespace(runs=(object(),)),
+                    admission_policy=CheckpointAdmissionPolicy(max_tensor_count=2),
+                )
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux containment")
+    def test_required_isolated_decode_enforces_worker_wall_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "timeout.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.5.0",
+                    "state_dict": {"weight": torch.ones(1)},
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [{}],
+                },
+                checkpoint,
+            )
+
+            with self.assertRaisesRegex(
+                InvalidCheckpointContinuation,
+                "isolated decoder timed out",
+            ):
+                CheckpointContinuationLifecycle.admit(
+                    CheckpointContinuation(checkpoint),
+                    SimpleNamespace(runs=(object(),)),
+                    admission_policy=CheckpointAdmissionPolicy(
+                        require_isolated_decode=True,
+                        worker_wall_timeout_seconds=0.001,
+                    ),
+                )
+
     def test_checkpoint_payload_validation_precedence_is_stable(self) -> None:
         valid = {
             "pytorch-lightning_version": "2.5.0",
@@ -137,17 +418,13 @@ class RunsCheckpointValidationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             checkpoint = Path(tmp) / "precedence.ckpt"
-            checkpoint.write_bytes(b"checkpoint")
             plan = SimpleNamespace(runs=(object(),))
             for payload, message in cases:
                 with (
                     self.subTest(message=message),
-                    patch(
-                        "model_runtime.runs.checkpoints.torch.load",
-                        return_value=payload,
-                    ),
                     self.assertRaisesRegex(InvalidCheckpointContinuation, message),
                 ):
+                    torch.save(payload, checkpoint)
                     CheckpointContinuationLifecycle.admit(
                         CheckpointContinuation(checkpoint),
                         plan,
@@ -169,7 +446,7 @@ class RunsCheckpointValidationTests(unittest.TestCase):
 
         self.assertIsNone(execution_options.checkpoint_path)
         self.assertIsNone(execution_options.provenance)
-        self.assertIsNone(execution_options.model_validator)
+        self.assertIsNone(execution_options.strict_model_preloader)
 
     def test_lifecycle_rejects_run_cardinality_before_checkpoint_file(self) -> None:
         with self.assertRaisesRegex(
@@ -184,15 +461,16 @@ class RunsCheckpointValidationTests(unittest.TestCase):
     def test_validation_loads_checkpoint_state_strictly_into_the_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             expected = torch.ones(2)
-            execution_options = _checkpoint_execution(
+            lifecycle, execution_options = _checkpoint_execution(
                 tmp,
                 state_dict={"dynamic.weight": expected},
             )
-            model = _TopologyAwareModel()
+            with lifecycle:
+                model = _TopologyAwareModel()
 
-            model_validator = execution_options.model_validator
-            self.assertIsNotNone(model_validator)
-            model_validator(model)
+                model_validator = execution_options.strict_model_preloader
+                self.assertIsNotNone(model_validator)
+                model_validator(model)
 
         self.assertIs(model.strict, True)
         self.assertEqual(tuple(model.loaded_state), ("dynamic.weight",))
@@ -200,6 +478,86 @@ class RunsCheckpointValidationTests(unittest.TestCase):
             model.loaded_state["dynamic.weight"],
             expected,
         )
+
+    def test_strict_preload_is_one_shot_and_releases_parent_payload(self) -> None:
+        class NonRetainingModel:
+            admitted_tensor: weakref.ReferenceType[torch.Tensor] | None = None
+
+            @staticmethod
+            def state_dict() -> dict[str, torch.Tensor]:
+                return {"weight": torch.zeros(1)}
+
+            def load_state_dict(self, state_dict, *, strict):
+                self.asserted_strict = strict
+                self.admitted_tensor = weakref.ref(state_dict["weight"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "release.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.6.5",
+                    "state_dict": {"weight": torch.ones(1)},
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [{}],
+                },
+                checkpoint,
+            )
+            with CheckpointContinuationLifecycle.admit(
+                CheckpointContinuation(checkpoint),
+                SimpleNamespace(runs=(object(),)),
+            ) as lifecycle:
+                execution_options = lifecycle.bind_training_runs(
+                    [SimpleNamespace(num_epochs=2)]
+                )
+                preloader = execution_options.strict_model_preloader
+                assert preloader is not None
+                model = NonRetainingModel()
+                preloader(model)
+                gc.collect()
+
+                self.assertIs(model.asserted_strict, True)
+                assert model.admitted_tensor is not None
+                self.assertIsNone(model.admitted_tensor())
+                with self.assertRaisesRegex(RuntimeError, "already consumed"):
+                    preloader(model)
+
+    def test_model_preload_diagnostics_are_bounded_and_snapshot_is_cleaned(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "mismatch.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.6.5",
+                    "state_dict": {
+                        f"checkpoint-{index}": torch.ones(1) for index in range(100)
+                    },
+                    "epoch": 0,
+                    "global_step": 1,
+                    "optimizer_states": [{}],
+                },
+                checkpoint,
+            )
+            snapshot_path: Path | None = None
+            with self.assertRaises(InvalidCheckpointContinuation) as raised:
+                with CheckpointContinuationLifecycle.admit(
+                    CheckpointContinuation(checkpoint),
+                    SimpleNamespace(runs=(object(),)),
+                ) as lifecycle:
+                    execution_options = lifecycle.bind_training_runs(
+                        [SimpleNamespace(num_epochs=2)]
+                    )
+                    snapshot_path = execution_options.checkpoint_path
+                    preloader = execution_options.strict_model_preloader
+                    assert preloader is not None
+                    preloader({f"model-{index}": torch.ones(1) for index in range(100)})
+
+            self.assertLess(len(str(raised.exception)), 1024)
+            self.assertIn("missing_count=100", str(raised.exception))
+            self.assertIn("unexpected_count=100", str(raised.exception))
+            assert snapshot_path is not None
+            self.assertFalse(snapshot_path.exists())
 
     def test_target_epoch_validation_occurs_when_training_runs_are_bound(
         self,
@@ -221,11 +579,43 @@ class RunsCheckpointValidationTests(unittest.TestCase):
                 SimpleNamespace(runs=(object(),)),
             )
 
-            with self.assertRaisesRegex(
-                InvalidCheckpointContinuation,
-                "Target NUM_EPOCHS.*completed epochs",
-            ):
-                lifecycle.bind_training_runs([SimpleNamespace(num_epochs=2)])
+            with lifecycle:
+                with self.assertRaisesRegex(
+                    InvalidCheckpointContinuation,
+                    "Target NUM_EPOCHS.*completed epochs",
+                ):
+                    lifecycle.bind_training_runs([SimpleNamespace(num_epochs=2)])
+
+    def test_lightning_loop_progress_controls_terminal_epoch_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "terminal.ckpt"
+            torch.save(
+                {
+                    "pytorch-lightning_version": "2.6.5",
+                    "state_dict": {"weight": torch.ones(1)},
+                    "epoch": 1,
+                    "global_step": 2,
+                    "optimizer_states": [{}],
+                    "loops": {
+                        "fit_loop": {
+                            "epoch_progress": {
+                                "current": {"completed": 1},
+                            }
+                        }
+                    },
+                },
+                checkpoint,
+            )
+
+            with CheckpointContinuationLifecycle.admit(
+                CheckpointContinuation(checkpoint),
+                SimpleNamespace(runs=(object(),)),
+            ) as lifecycle:
+                execution_options = lifecycle.bind_training_runs(
+                    [SimpleNamespace(num_epochs=2)]
+                )
+
+            self.assertEqual(execution_options.provenance["epoch"], 1)
 
     def test_execution_passes_the_model_to_checkpoint_validation(self) -> None:
         semantic_run = SimpleNamespace(
@@ -258,7 +648,7 @@ class RunsCheckpointValidationTests(unittest.TestCase):
                     execution,
                     "_validated_materialized_runs",
                     return_value=(
-                        "image-classification",
+                        ExperimentTask.IMAGE_CLASSIFICATION,
                         ["baseline"],
                         [
                             TrainingRunRequest(
@@ -268,7 +658,7 @@ class RunsCheckpointValidationTests(unittest.TestCase):
                                 preset="baseline",
                                 dataset_type=object,
                                 parameters={},
-                                config_overrides={},
+                                config_overrides={"num_epochs": 3},
                             )
                         ],
                     ),

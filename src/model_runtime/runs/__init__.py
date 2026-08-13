@@ -5,6 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
+    from model_runtime.runs.checkpoint_admission import (
+        DEFAULT_CHECKPOINT_ADMISSION_POLICY,
+        CheckpointAdmissionPolicy,
+    )
     from model_runtime.runs.checkpoints import CheckpointContinuation
     from model_runtime.runs.errors import (
         InvalidCheckpointContinuation,
@@ -40,6 +44,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CheckpointContinuation",
+    "CheckpointAdmissionPolicy",
+    "DEFAULT_CHECKPOINT_ADMISSION_POLICY",
     "InvalidCheckpointContinuation",
     "InvalidRunPlan",
     "InvalidRunRequest",
@@ -79,6 +85,10 @@ _ERROR_EXPORTS = {
     "RunsError",
 }
 _CHECKPOINT_EXPORTS = {"CheckpointContinuation"}
+_CHECKPOINT_ADMISSION_EXPORTS = {
+    "CheckpointAdmissionPolicy",
+    "DEFAULT_CHECKPOINT_ADMISSION_POLICY",
+}
 _ARTIFACT_EXPORTS = {"FilesystemRunArtifacts", "RunArtifacts"}
 _PROGRESS_EXPORTS = {"JsonlRunProgress", "RunProgress"}
 _JSON_VALUE_EXPORTS = {
@@ -107,6 +117,10 @@ _EXPERIMENT_EXPORTS = {"ExperimentBase"}
 
 _EXPORT_MODULES = {
     **dict.fromkeys(_CHECKPOINT_EXPORTS, "model_runtime.runs.checkpoints"),
+    **dict.fromkeys(
+        _CHECKPOINT_ADMISSION_EXPORTS,
+        "model_runtime.runs.checkpoint_admission",
+    ),
     **dict.fromkeys(_ERROR_EXPORTS, "model_runtime.runs.errors"),
     **dict.fromkeys(_ARTIFACT_EXPORTS, "model_runtime.runs.artifacts"),
     **dict.fromkeys(_PROGRESS_EXPORTS, "model_runtime.runs.progress"),

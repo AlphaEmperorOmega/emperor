@@ -451,6 +451,7 @@ class ExperimentBase:
                 runtime.model,
                 datamodule=runtime.dataset,
                 ckpt_path=state.options.ckpt_path,
+                weights_only=True,
             )
         if runtime.runtime_config["run_test_after_fit"]:
             trainer.test(runtime.model, datamodule=runtime.dataset)
