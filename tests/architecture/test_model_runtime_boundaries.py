@@ -531,40 +531,62 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn("search=semantic_plan.search,", service_source)
         self.assertNotIn("search=semantic_plan.search,", worker_source)
 
-    def test_package_experiments_do_not_repeat_obsolete_construction_hooks(
+    def test_package_experiments_are_local_adapters_over_runtime_implementation(
         self,
     ) -> None:
-        obsolete_hooks = {
-            "_dataset_options",
-            "_experiment_preset_enum",
-            "_model_type",
-            "_preset_generator_instance",
-        }
         violations: list[tuple[str, str]] = []
         for source_path in sorted((SOURCE_ROOT / "models").glob("*/*/presets.py")):
             tree = ast.parse(
                 source_path.read_text(encoding="utf-8"),
                 source_path.as_posix(),
             )
-            experiment = next(
-                (
-                    node
-                    for node in tree.body
-                    if isinstance(node, ast.ClassDef) and node.name == "Experiment"
-                ),
-                None,
-            )
-            if experiment is None:
-                continue
-            violations.extend(
-                (
-                    source_path.relative_to(PROJECT_ROOT).as_posix(),
-                    node.name,
+            relative_path = source_path.relative_to(PROJECT_ROOT).as_posix()
+            aliases_runtime_implementation = any(
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(target, ast.Name) and target.id == "Experiment"
+                    for target in node.targets
                 )
-                for node in experiment.body
-                if isinstance(node, ast.FunctionDef) and node.name in obsolete_hooks
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "ExperimentBase"
+                for node in tree.body
+            )
+            if aliases_runtime_implementation:
+                violations.append((relative_path, "shared ExperimentBase alias"))
+            experiment_classes = [
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.name == "Experiment"
+            ]
+            if len(experiment_classes) != 1:
+                violations.append((relative_path, "missing local Experiment Adapter"))
+            else:
+                experiment_class = experiment_classes[0]
+                if not any(
+                    isinstance(base, ast.Name) and base.id == "ExperimentBase"
+                    for base in experiment_class.bases
+                ):
+                    violations.append((relative_path, "wrong Experiment base"))
+                methods = {
+                    node.name
+                    for node in experiment_class.body
+                    if isinstance(node, ast.FunctionDef)
+                }
+                if methods != {"__init__"}:
+                    violations.append(
+                        (relative_path, "non-adapter Experiment behavior")
+                    )
+            violations.extend(
+                (relative_path, "_num_epochs hook")
+                for node in ast.walk(tree)
+                if isinstance(node, ast.FunctionDef) and node.name == "_num_epochs"
             )
 
+        runtime_source = (RUNS_ROOT / "experiment.py").read_text(encoding="utf-8")
+        if "def _num_epochs" in runtime_source:
+            violations.append(
+                ("src/model_runtime/runs/experiment.py", "_num_epochs hook")
+            )
         self.assertEqual(violations, [])
 
     def test_run_progress_producers_use_the_typed_event_vocabulary(self) -> None:

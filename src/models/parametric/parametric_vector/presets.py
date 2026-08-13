@@ -1,4 +1,3 @@
-import models.parametric.parametric_vector.config as config
 from emperor.config import BaseOptions
 from model_runtime.packages import (
     BuilderBackedExperimentPresetsBase,
@@ -35,12 +34,14 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
         super().__init__(
             _PRESET_DEFINITIONS,
             builder_type=ParametricVectorConfigBuilder,
-            runtime_factory=runtime_from_flat,
             default_preset=ExperimentPreset.PRESET,
+            runtime_factory=runtime_from_flat,
         )
 
 
 class Experiment(ExperimentBase):
+    """Package-local Run Experiment Adapter."""
+
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
@@ -50,11 +51,8 @@ class Experiment(ExperimentBase):
         run_artifacts=None,
     ) -> None:
         super().__init__(
-            experiment_preset,
+            experiment_preset=experiment_preset,
             experiment_task=experiment_task,
             model_package=model_package,
             run_artifacts=run_artifacts,
         )
-
-    def _num_epochs(self) -> int:
-        return config.NUM_EPOCHS
