@@ -15,6 +15,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 import torch
 from torch import nn
 
+from emperor.config import ModelConfig
 from emperor.halting import HaltingHiddenStateModeOptions, SoftHaltingConfig
 from emperor.layers import (
     ActivationOptions,
@@ -1713,6 +1714,122 @@ assert semantic_module not in sys.modules
                         },
                     ),
                 )
+
+    def test_dataset_dimensions_are_preflighted_before_model_construction(
+        self,
+    ) -> None:
+        cases = (
+            ("linears/linear", "Cifar100", 1_120_000, 144_512),
+            ("gpt/linear", "WikiText103", 160_000_000, 69_429_376),
+        )
+        for package_key, dataset, memory_limit, expected_estimate in cases:
+            with self.subTest(package=package_key, dataset=dataset):
+                package = model_package(package_key)
+                assert package is not None
+                with patch.object(
+                    ModelPackage,
+                    "build_model",
+                    side_effect=AssertionError("model constructor was observed"),
+                ) as build_model:
+                    with self.assertRaisesRegex(
+                        InspectionError,
+                        rf"estimated parameter count {expected_estimate} exceeds "
+                        r"the memory-derived maximum",
+                    ):
+                        inspect_model(
+                            package,
+                            InspectionRequest(
+                                preset="baseline",
+                                dataset=dataset,
+                                memory_limit_bytes=memory_limit,
+                            ),
+                        )
+
+                build_model.assert_not_called()
+
+    def test_effective_preflight_cannot_lower_the_existing_estimate(self) -> None:
+        for package_key in (
+            "vit/expert_linear",
+            "vit/expert_linear_adaptive",
+        ):
+            with self.subTest(package=package_key):
+                package = model_package(package_key)
+                assert package is not None
+                raw_estimate = preflight_inspection_configuration(
+                    package,
+                    {},
+                    package.default_preset,
+                )
+                configuration = package.build_configuration(package.default_preset)
+
+                self.assertEqual(
+                    preflight_inspection_configuration(
+                        package,
+                        {},
+                        package.default_preset,
+                        effective_configuration=configuration,
+                    ),
+                    raw_estimate,
+                )
+
+    def test_effective_preflight_rejects_a_non_model_configuration(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+
+        with self.assertRaisesRegex(TypeError, "must be a ModelConfig"):
+            preflight_inspection_configuration(
+                package,
+                {},
+                package.default_preset,
+                effective_configuration=object(),  # type: ignore[arg-type]
+            )
+
+    def test_effective_root_fields_are_independent_of_runtime_default_names(
+        self,
+    ) -> None:
+        package = model_package("transformer/linear")
+        assert package is not None
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            "field 'INPUT_DIM' value 2000000 exceeds",
+        ):
+            preflight_inspection_configuration(
+                package,
+                {},
+                package.default_preset,
+                effective_configuration=ModelConfig(
+                    input_dim=2_000_000,
+                    hidden_dim=20_000,
+                    output_dim=2_000_000,
+                    sequence_length=64,
+                ),
+            )
+
+    def test_raw_preflight_still_precedes_dataset_resolution(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        maximum = package.inspection_construction_limits.maximum_hidden_dimension
+
+        with patch.object(
+            ModelPackage,
+            "resolve_dataset",
+            side_effect=AssertionError("dataset resolution was observed"),
+        ) as resolve_dataset:
+            with self.assertRaisesRegex(
+                InspectionError,
+                "HIDDEN_DIM.*exceeds.*maximum",
+            ):
+                inspect_model(
+                    package,
+                    InspectionRequest(
+                        preset="baseline",
+                        dataset="missing-dataset",
+                        overrides={"hidden_dim": maximum + 1},
+                    ),
+                )
+
+        resolve_dataset.assert_not_called()
 
     def test_obvious_parameter_growth_is_rejected_before_construction(self) -> None:
         package = model_package("linears/linear")

@@ -592,6 +592,66 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn('"validate_typed_overrides"', inspection_facade)
         self.assertNotIn('"validated_overrides_for_materialization"', inspection_facade)
 
+    def test_inspection_preflights_raw_then_effective_configuration(self) -> None:
+        materialization_path = INSPECTION_ROOT / "materialization.py"
+        materialization_tree = ast.parse(
+            materialization_path.read_text(encoding="utf-8"),
+            materialization_path.as_posix(),
+        )
+        materialize_configuration = next(
+            node
+            for node in materialization_tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "materialize_configuration"
+        )
+        calls = [
+            node
+            for node in ast.walk(materialize_configuration)
+            if isinstance(node, ast.Call)
+        ]
+        preflight_calls = sorted(
+            (
+                call
+                for call in calls
+                if isinstance(call.func, ast.Name)
+                and call.func.id == "preflight_inspection_configuration"
+            ),
+            key=lambda call: call.lineno,
+        )
+        build_configuration = next(
+            call
+            for call in calls
+            if isinstance(call.func, ast.Attribute)
+            and call.func.attr == "build_configuration"
+        )
+
+        self.assertEqual(len(preflight_calls), 2)
+        self.assertLess(preflight_calls[0].lineno, build_configuration.lineno)
+        self.assertLess(build_configuration.lineno, preflight_calls[1].lineno)
+        self.assertNotIn(
+            "effective_configuration",
+            {keyword.arg for keyword in preflight_calls[0].keywords},
+        )
+        self.assertIn(
+            "effective_configuration",
+            {keyword.arg for keyword in preflight_calls[1].keywords},
+        )
+
+        preflight_source = (INSPECTION_ROOT / "preflight.py").read_text(
+            encoding="utf-8"
+        )
+        package_definition = (
+            MODEL_RUNTIME_ROOT / "packages" / "definition.py"
+        ).read_text(encoding="utf-8")
+        inspection_facade = (INSPECTION_ROOT / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("_EFFECTIVE_CONFIGURATION_FIELDS", preflight_source)
+        self.assertIn('("input_dim", "INPUT_DIM")', preflight_source)
+        self.assertNotIn("spec.resolve_key(field_name)", preflight_source)
+        self.assertNotIn("effective_configuration", package_definition)
+        self.assertNotIn('"preflight_inspection_configuration"', inspection_facade)
+
     def test_runs_own_one_checkpoint_continuation_lifecycle(self) -> None:
         checkpoint_path = RUNS_ROOT / "checkpoints.py"
         checkpoint_tree = ast.parse(
