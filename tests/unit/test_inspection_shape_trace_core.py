@@ -24,6 +24,7 @@ from model_runtime.inspection.materialization import (
 )
 from model_runtime.inspection.records import ParsedOverrides
 from model_runtime.packages import ModelIdentity, ModelPackage
+from model_runtime.task_behavior import SyntheticInputError
 
 
 class _ImageDataset:
@@ -385,6 +386,8 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
             self.assertEqual(module._forward_hooks, {})
 
     def test_model_failure_is_wrapped_after_all_runtime_state_is_restored(self) -> None:
+        model_failure = RuntimeError("fixture forward failure")
+
         class FailingModel(nn.Module):
             def __init__(self) -> None:
                 super().__init__()
@@ -392,7 +395,7 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
 
             def forward(self, value: torch.Tensor) -> torch.Tensor:
                 self.block(value)
-                raise RuntimeError("fixture forward failure")
+                raise model_failure
 
         package = _FixturePackage(
             ModelIdentity("fixtures", "shape_trace"),
@@ -432,13 +435,15 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
                     (torch.zeros((1, 4)),),
                 ),
             ),
-            self.assertRaisesRegex(
-                InspectionError,
-                "Failed to execute shape trace.*fixture forward failure",
-            ),
+            self.assertRaises(InspectionError) as raised,
         ):
             shape_trace.inspect_model_shapes(package, request, detail="outputs")
 
+        self.assertRegex(
+            str(raised.exception),
+            "Failed to execute shape trace.*fixture forward failure",
+        )
+        self.assertIs(raised.exception.__cause__, model_failure)
         self.assertIs(sys.gettrace(), previous_trace)
         self.assertEqual(
             {id(module): module.training for module in model.modules()},
@@ -837,6 +842,36 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
                     tuple(tuple(tensor.shape) for tensor in inputs),
                     expected_shapes,
                 )
+
+    def test_synthetic_input_failure_keeps_the_domain_cause(self) -> None:
+        synthetic_failure = SyntheticInputError("fixture input failure")
+
+        def fail_synthetic_inputs(_dataset: type, _configuration: object) -> None:
+            raise synthetic_failure
+
+        materialized = SimpleNamespace(
+            package=_SamplePackage(
+                ExperimentTask.IMAGE_CLASSIFICATION,
+                _ImageDataset,
+            ),
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            configuration=SimpleNamespace(),
+        )
+        behavior = SimpleNamespace(synthetic_inputs=fail_synthetic_inputs)
+
+        with (
+            patch.object(
+                shape_trace,
+                "experiment_task_behavior",
+                return_value=behavior,
+            ),
+            self.assertRaises(InspectionError) as raised,
+        ):
+            shape_trace._sample_inputs(materialized)  # type: ignore[arg-type]
+
+        self.assertEqual(str(raised.exception), "fixture input failure")
+        self.assertIs(raised.exception.__cause__, synthetic_failure)
 
     def test_shape_trace_records_repeated_calls_and_same_shape_variables(self) -> None:
         package = _FixturePackage(
