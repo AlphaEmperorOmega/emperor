@@ -257,11 +257,30 @@ class _RunExecutionOptions:
 
 @dataclass(frozen=True, slots=True)
 class _PreparedRunExecution:
-    experiment: RunExperiment
-    training_runs: list[TrainingRun]
+    materialized_runs: tuple[_MaterializedTrainingRun, ...]
     callback_groups: tuple[list[Callback], ...]
     progress: RunProgress | None
     continuation: CheckpointExecution
+
+
+@dataclass(frozen=True, slots=True)
+class _MaterializedTrainingRun:
+    experiment: RunExperiment
+    training_run: TrainingRun
+
+
+def _pending_preset_groups(
+    requests: Sequence[TrainingRunRequest],
+) -> list[tuple[Any, list[tuple[int, TrainingRunRequest]]]]:
+    groups: list[tuple[Any, list[tuple[int, TrainingRunRequest]]]] = []
+    for position, request in enumerate(requests):
+        for preset, entries in groups:
+            if request.preset is preset:
+                entries.append((position, request))
+                break
+        else:
+            groups.append((request.preset, [(position, request)]))
+    return groups
 
 
 def _handoff_preset_name(package: ModelPackage, preset: object) -> str:
@@ -400,25 +419,29 @@ class _RunExecutor:
             if self.options.progress is not None
             else None
         )
-        experiment_task, selected_presets, materialized_runs = (
+        experiment_task, _selected_presets, materialized_runs = (
             _validated_materialized_runs(package, self.plan, selected_budget)
         )
-        callback_groups = self._callback_groups(package, materialized_runs)
+        monitor_options = _resolve_monitor_options(package, self.options.monitors)
+        callback_groups = self._callback_groups(
+            package,
+            materialized_runs,
+            monitor_options,
+        )
         with CheckpointContinuationLifecycle.admit(
             self.options.continuation,
             self.plan,
             admission_policy=self.options.checkpoint_admission,
         ) as continuation_lifecycle:
-            experiment, training_runs = self._materialize_training_runs(
+            scoped_runs = self._materialize_training_runs(
                 package,
                 experiment_task,
-                selected_presets,
                 materialized_runs,
             )
+            training_runs = [run.training_run for run in scoped_runs]
             continuation = continuation_lifecycle.bind_training_runs(training_runs)
             prepared = _PreparedRunExecution(
-                experiment=experiment,
-                training_runs=training_runs,
+                materialized_runs=scoped_runs,
                 callback_groups=callback_groups,
                 progress=selected_progress,
                 continuation=continuation,
@@ -429,8 +452,8 @@ class _RunExecutor:
         self,
         package: ModelPackage,
         materialized_runs: list[TrainingRunRequest],
+        monitor_options: Sequence[MonitorOption],
     ) -> tuple[list[Callback], ...]:
-        monitor_options = _resolve_monitor_options(package, self.options.monitors)
         if monitor_options:
             return tuple(
                 _monitor_callbacks(
@@ -446,43 +469,74 @@ class _RunExecutor:
         self,
         package: ModelPackage,
         experiment_task: Any,
-        selected_presets: list[Any],
         materialized_runs: list[TrainingRunRequest],
-    ) -> tuple[RunExperiment, list[TrainingRun]]:
-        experiment = require_run_experiment(
-            package.build_experiment(
-                selected_presets[0],
-                experiment_task=experiment_task,
-                run_artifacts=self.options.artifacts,
-            ),
-            package.catalog_key,
-        )
-        training_runs = experiment.materialize_training_runs(materialized_runs)
-        if len(training_runs) != len(self.plan.runs):
-            raise _invalid_plan(
-                "Run plan materialization produced a different number of Runs: "
-                f"expected {len(self.plan.runs)}, got {len(training_runs)}."
+    ) -> tuple[_MaterializedTrainingRun, ...]:
+        scoped_runs: list[tuple[int, _MaterializedTrainingRun]] = []
+        for preset, entries in _pending_preset_groups(materialized_runs):
+            scoped_runs.extend(
+                self._materialize_preset_group(
+                    package,
+                    experiment_task,
+                    preset,
+                    entries,
+                )
             )
+        scoped_runs.sort(key=lambda item: item[0])
+        ordered = tuple(run for _position, run in scoped_runs)
+        training_runs = [run.training_run for run in ordered]
         _validate_training_run_handoff(
             package,
             experiment_task,
             materialized_runs,
             training_runs,
         )
-        return experiment, training_runs
+        return ordered
+
+    def _materialize_preset_group(
+        self,
+        package: ModelPackage,
+        experiment_task: Any,
+        preset: Any,
+        entries: Sequence[tuple[int, TrainingRunRequest]],
+    ) -> list[tuple[int, _MaterializedTrainingRun]]:
+        experiment = require_run_experiment(
+            package.build_experiment(
+                preset,
+                experiment_task=experiment_task,
+                run_artifacts=self.options.artifacts,
+            ),
+            package.catalog_key,
+        )
+        requests = [request for _position, request in entries]
+        training_runs = experiment.materialize_training_runs(requests)
+        expected_count = len(requests)
+        if len(training_runs) != expected_count:
+            raise _invalid_plan(
+                "Run plan materialization produced a different number of Runs: "
+                f"expected {expected_count}, got {len(training_runs)}."
+            )
+        return [
+            (position, _MaterializedTrainingRun(experiment, training_run))
+            for (position, _request), training_run in zip(
+                entries,
+                training_runs,
+                strict=True,
+            )
+        ]
 
     def _execute_training_runs(
         self,
         prepared: _PreparedRunExecution,
     ) -> tuple[RunResult, ...]:
         results: list[RunResult] = []
-        for semantic_run, training_run, callbacks in zip(
+        for semantic_run, materialized_run, callbacks in zip(
             self.plan.runs,
-            prepared.training_runs,
+            prepared.materialized_runs,
             prepared.callback_groups,
             strict=True,
         ):
-            payload, log_dir = prepared.experiment.execute_training(
+            training_run = materialized_run.training_run
+            payload, log_dir = materialized_run.experiment.execute_training(
                 TrainingExecutionRequest(
                     training_run=training_run,
                     callbacks=callbacks,
