@@ -20,6 +20,7 @@ from models.catalog import (
     model_package,
     model_type_exists,
 )
+from models.config_overrides import dataset_option_names, monitor_option_names
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -307,6 +308,22 @@ class TestConfigOverrideCli(unittest.TestCase):
         self.assertEqual(completed.stderr, "")
         self.assertEqual(
             completed.stdout.splitlines(),
+            [
+                "linear",
+                "recurrent-layer",
+                "layer-controller",
+                "halting",
+                "memory",
+            ],
+        )
+
+    def test_dataset_and_monitor_queries_return_ordered_data(self):
+        self.assertEqual(
+            dataset_option_names("linears/linear"),
+            ["mnist", "fashion-mnist", "cifar10", "cifar100"],
+        )
+        self.assertEqual(
+            monitor_option_names("linears/linear"),
             [
                 "linear",
                 "recurrent-layer",
