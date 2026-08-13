@@ -177,6 +177,11 @@ class QualityConfigurationTests(unittest.TestCase):
             },
             {
                 (
+                    "src/model_runtime/packages/metadata.py",
+                    "PLR0913",
+                    "ModelMetadata.__init__",
+                ),
+                (
                     "src/model_runtime/runs/execution.py",
                     "PLR0913",
                     "execute_runs",
@@ -189,8 +194,10 @@ class QualityConfigurationTests(unittest.TestCase):
             },
         )
         expected_reviewed_modules = {
-            "src/model_runtime/inspection/shape_trace.py": 717,
-            "src/model_runtime/runs/experiment.py": 602,
+            "src/model_runtime/runs/execution.py": 650,
+            "src/model_runtime/inspection/shape_trace.py": 730,
+            "src/model_runtime/packages/runtime_values.py": 710,
+            "src/model_runtime/runs/experiment.py": 640,
         }
         self.assertEqual(
             {

@@ -11,12 +11,15 @@ maximum_arguments = 5
 maximum_function_lines = 60
 module_review_threshold = 600
 allowed_findings = [
-  { path = "src/model_runtime/runs/execution.py", code = "PLR0913", function = "execute_runs", rationale = "The public keyword-compatible Run execution interface has eight established arguments." },
+  { path = "src/model_runtime/packages/metadata.py", code = "PLR0913", function = "ModelMetadata.__init__", rationale = "The established five package-source inputs remain positional while configuration and search declarations form one explicit keyword-only all-or-none pair; hiding them in a shallow aggregate would weaken the construction contract." },
+  { path = "src/model_runtime/runs/execution.py", code = "PLR0913", function = "execute_runs", rationale = "The public Run execution Interface has eight established inputs plus one explicit deployment-owned checkpoint-admission policy." },
   { path = "src/model_runtime/runs/experiment.py", code = "PLR0913", function = "ExperimentBase.execute_training_run", rationale = "The public keyword-compatible training interface has seven established arguments." },
 ]
 reviewed_modules = [
-  { path = "src/model_runtime/inspection/shape_trace.py", maximum_lines = 717, rationale = "Cohesive shape-trace adapter; generic tensor walking and runtime lifecycle already live in separate modules." },
-  { path = "src/model_runtime/runs/experiment.py", maximum_lines = 602, rationale = "Cohesive training adapter spanning materialization, runtime configuration, progress, Trainer execution, and artifacts; extracting only its tightly coupled phases would create a shallow back-reference seam." },
+  { path = "src/model_runtime/runs/execution.py", maximum_lines = 650, rationale = "Cohesive Run execution coordinator: plan admission, pending preset-scoped Experiment grouping, immutable handoff association, continuation binding, and ordered execution form one lifecycle; extracting the grouping would create a one-caller policy Module and split eager validation ordering." },
+  { path = "src/model_runtime/inspection/shape_trace.py", maximum_lines = 730, rationale = "Re-reviewed cohesive shape-trace adapter: public trusted/sequential execution policy, trace orchestration, and immutable projection remain one boundary; generic tensor walking and runtime lifecycle already live in separate modules." },
+  { path = "src/model_runtime/packages/runtime_values.py", maximum_lines = 710, rationale = "Re-reviewed cohesive Runtime Defaults admission owner: alias precedence, finite annotation-shape admission (including class-shaped typing rejection and transparent Annotated normalization), recursive value matching, exactly-once abstract configuration checks across overlapping union arms, and semantic constraints form one boundary; extracting any stage would create a one-caller policy Module and split exact error ordering." },
+  { path = "src/model_runtime/runs/experiment.py", maximum_lines = 640, rationale = "Re-reviewed cohesive Lightning Integration Module spanning materialization, execution lifecycle, overridable progress/result hooks, and exact Run Artifact logger allocation; shared cross-Run outcome/retry state remains in the private outcome owner, while extracting these one-caller hooks would create shallow Modules." },
 ]
 
 [coverage]
@@ -25,16 +28,22 @@ minimum_statement_percent = 88.0
 minimum_branch_percent = 75.0
 tests = [
   "tests.architecture.test_quality_configuration",
+  "tests.contract.test_model_package_config_declarations",
   "tests.contract.test_model_package_inspection_capabilities",
   "tests.contract.test_model_package_interface",
+  "tests.contract.test_runtime_default_value_validation",
   "tests.integration.test_checkpoint_continuation",
+  "tests.integration.test_terminal_checkpoint",
   "tests.unit.test_cli_wire",
+  "tests.unit.test_checkpoint_admission_security",
   "tests.unit.test_experiment_config_overrides",
   "tests.unit.test_inspection_graph_interface",
+  "tests.unit.test_inspection_immutable_records",
   "tests.unit.test_inspection_schema_interface",
   "tests.unit.test_inspection_shape_trace",
   "tests.unit.test_inspection_shape_trace_core",
   "tests.unit.test_model_catalog_cli",
+  "tests.unit.test_model_package_checkpoint_capability",
   "tests.unit.test_model_runtime_quality_runner",
   "tests.unit.test_override_key_resolution",
   "tests.unit.test_package_cli_runs",
@@ -42,10 +51,14 @@ tests = [
   "tests.unit.test_runs_artifacts",
   "tests.unit.test_runs_checkpoint_validation",
   "tests.unit.test_runs_execution",
+  "tests.unit.test_runs_immutable_records",
   "tests.unit.test_runs_parameter_preservation",
   "tests.unit.test_runs_planning",
   "tests.unit.test_runs_progress",
   "tests.unit.test_runs_search",
+  "tests.unit.test_runtime_defaults_preset_locks",
+  "tests.unit.test_runtime_defaults_explicit_metadata",
+  "tests.unit.test_terminal_checkpoint",
 ]
 
 [mutation]
