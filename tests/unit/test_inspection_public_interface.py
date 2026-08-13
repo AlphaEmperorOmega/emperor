@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import subprocess
 import sys
 import unittest
@@ -46,6 +47,38 @@ PUBLIC_EXPORTS = (
 
 
 class InspectionPublicInterfaceTests(unittest.TestCase):
+    def test_shape_trace_documents_its_trusted_sequential_execution_contract(
+        self,
+    ) -> None:
+        shape_trace = importlib.import_module("model_runtime.inspection.shape_trace")
+        operation = shape_trace.inspect_model_shapes
+
+        self.assertEqual(
+            str(inspect.signature(operation)),
+            "(package: 'ModelPackage', request: 'InspectionRequest', *, "
+            "detail: 'ShapeTraceDetail' = 'outputs') -> "
+            "'tuple[InspectionResult, ModelShapeTrace]'",
+        )
+        documentation = inspect.getdoc(operation)
+        self.assertIsNotNone(documentation)
+        assert documentation is not None
+        normalized_documentation = " ".join(documentation.split())
+        self.assertIn("trusted local Model Packages", normalized_documentation)
+        self.assertIn("synchronously in the caller process", normalized_documentation)
+        self.assertIn(
+            "does not enforce a deadline or memory limit",
+            normalized_documentation,
+        )
+        self.assertIn("must not overlap", normalized_documentation)
+        self.assertIn("CUDA RNG state", normalized_documentation)
+        self.assertIn("are not isolated", normalized_documentation)
+        self.assertIn("Python/NumPy state", normalized_documentation)
+        self.assertIn(
+            "Capture limits bound collected data, not execution resources",
+            normalized_documentation,
+        )
+        self.assertIn("caller-owned process containment", normalized_documentation)
+
     def test_lazy_public_exports_have_exact_order_ownership_and_identity(self) -> None:
         inspection = importlib.import_module("model_runtime.inspection")
 

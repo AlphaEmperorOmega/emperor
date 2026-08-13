@@ -691,6 +691,16 @@ def inspect_model_shapes(
     *,
     detail: ShapeTraceDetail = "outputs",
 ) -> tuple[InspectionResult, ModelShapeTrace]:
+    """Execute a shape trace for trusted local Model Packages.
+
+    Execution runs synchronously in the caller process and does not enforce a
+    deadline or memory limit. It temporarily changes and restores the
+    process-global CPU RNG and the caller thread's Python trace; CUDA RNG state,
+    Python/NumPy state, and arbitrary package side effects are not isolated.
+    Calls must not overlap another shape trace or other global Torch RNG work.
+    Capture limits bound collected data, not execution resources. Use
+    caller-owned process containment when stronger isolation is required.
+    """
     if detail not in {"outputs", "variables"}:
         raise ValueError(f"Unknown shape-trace detail: {detail!r}")
     package = _require_model_package(package)

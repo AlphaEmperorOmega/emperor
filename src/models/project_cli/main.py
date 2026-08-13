@@ -132,13 +132,13 @@ def list_flags() -> None:
         ),
         (
             "--print-model-shapes",
-            "Print the model tree with executed module input/output shapes",
+            "Trusted local execution: print module input/output shapes",
             f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} "
             "--print-model-shapes",
         ),
         (
             "--print-model-tensor-shapes",
-            "Also print every executed Python tensor variable and method output",
+            "Trusted local execution: also print Python tensor variables",
             f"{COMMAND} {MODEL_SELECTOR_ARG} --preset {PRESET_ARG} "
             "--print-model-tensor-shapes",
         ),

@@ -8,10 +8,30 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from model_runtime.inspection import InspectionCaptureLimits, InspectionRequest
-from models.inspection_cli import _render_json_inspection, run_inspection
+from models.inspection_cli import _parse_args, _render_json_inspection, run_inspection
 
 
 class InspectionCliRenderingContracts(unittest.TestCase):
+    def test_shape_trace_help_identifies_trusted_local_execution(self) -> None:
+        stdout = StringIO()
+
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            _parse_args(
+                [
+                    "--model-type",
+                    "linears",
+                    "--model",
+                    "linear",
+                    "--help",
+                ]
+            )
+
+        self.assertEqual(raised.exception.code, 0)
+        help_text = stdout.getvalue().lower()
+        self.assertIn("trusted local model", help_text)
+        self.assertIn("caller process", help_text)
+        self.assertIn("no deadline or memory isolation", help_text)
+
     def test_json_output_is_compact_and_keeps_payload_order(self) -> None:
         stdout = StringIO()
 
