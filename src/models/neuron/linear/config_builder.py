@@ -11,7 +11,7 @@ class NeuronLinearConfigBuilder(NeuronConfigBuilder):
                 "RuntimeOptions"
             )
         self.runtime = runtime
-        super().__init__(**runtime._as_construction_kwargs())
+        super().__init__(runtime=runtime)
 
 
 __all__ = ["NeuronLinearConfigBuilder"]
