@@ -118,8 +118,14 @@ class _Metric:
 
 
 class _Logger:
-    def __init__(self, save_dir: str, name: str) -> None:
-        self.log_dir = str(Path(save_dir) / name)
+    def __init__(
+        self,
+        save_dir: str,
+        name: str,
+        version: int | None = None,
+    ) -> None:
+        selected_version = 0 if version is None else version
+        self.log_dir = str(Path(save_dir) / name / f"version_{selected_version}")
 
 
 class _Trainer:
