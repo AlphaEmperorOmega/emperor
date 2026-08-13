@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Protocol, TypeAlias
+
+from model_runtime.runs._value_policy import deep_freeze, deep_thaw
 
 
 class RunProgressEventType(StrEnum):
@@ -27,8 +29,13 @@ class DatasetStartedEvent:
     resumed_from: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "params", deep_freeze(self.params))
         if self.resumed_from is not None:
-            object.__setattr__(self, "resumed_from", dict(self.resumed_from))
+            object.__setattr__(
+                self,
+                "resumed_from",
+                deep_freeze(self.resumed_from),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,8 +44,13 @@ class DatasetCompletedEvent:
     resumed_from: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", deep_freeze(self.metrics))
         if self.resumed_from is not None:
-            object.__setattr__(self, "resumed_from", dict(self.resumed_from))
+            object.__setattr__(
+                self,
+                "resumed_from",
+                deep_freeze(self.resumed_from),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,12 +72,18 @@ class StepEvent:
     batch: int
     metrics: Mapping[str, Any]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", deep_freeze(self.metrics))
+
 
 @dataclass(frozen=True, slots=True)
 class ValidationEvent:
     epoch: int
     step: int
     metrics: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", deep_freeze(self.metrics))
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +92,9 @@ class FitCompletedEvent:
     step: int
     metrics: Mapping[str, Any]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", deep_freeze(self.metrics))
+
 
 @dataclass(frozen=True, slots=True)
 class TestCompletedEvent:
@@ -81,37 +102,60 @@ class TestCompletedEvent:
     step: int
     metrics: Mapping[str, Any]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", deep_freeze(self.metrics))
+
 
 @dataclass(frozen=True, slots=True)
 class ClusterInitializedEvent:
     node: str
     count: int
-    capacity: list[int]
-    coordinates: list[list[int]]
+    capacity: Sequence[int]
+    coordinates: Sequence[Sequence[int]]
     coordinate_count: int
     coordinates_truncated: bool
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "capacity", tuple(self.capacity))
+        object.__setattr__(
+            self,
+            "coordinates",
+            tuple(tuple(coordinate) for coordinate in self.coordinates),
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class NeuronAddedEvent:
-    coord: list[int]
+    coord: Sequence[int]
     node: str
     count: int
-    capacity: list[int]
+    capacity: Sequence[int]
     epoch: int
     step: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "coord", tuple(self.coord))
+        object.__setattr__(self, "capacity", tuple(self.capacity))
 
 
 @dataclass(frozen=True, slots=True)
 class NeuronsAddedEvent:
-    coordinates: list[list[int]]
+    coordinates: Sequence[Sequence[int]]
     coordinate_count: int
     coordinates_truncated: bool
     node: str
     count: int
-    capacity: list[int]
+    capacity: Sequence[int]
     epoch: int
     step: int
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "coordinates",
+            tuple(tuple(coordinate) for coordinate in self.coordinates),
+        )
+        object.__setattr__(self, "capacity", tuple(self.capacity))
 
 
 RunProgressEvent: TypeAlias = (
@@ -317,7 +361,7 @@ def _typed_event_payload(event: RunProgressEvent) -> dict[str, Any]:
     for field in projection.fields:
         value = getattr(event, field.attribute)
         if value is not None or not field.omit_none:
-            payload[field.wire_name] = value
+            payload[field.wire_name] = deep_thaw(value)
     return payload
 
 
