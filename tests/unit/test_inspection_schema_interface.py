@@ -764,7 +764,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             parse_overrides(package, {"hidden-dim": "64"})
 
         self.assertIs(first, second)
-        self.assertEqual(metadata.call_count, 2)
+        metadata.assert_not_called()
 
     def test_runtime_defaults_metadata_is_a_defensive_cached_snapshot(self) -> None:
         catalog_package = model_package("linears/linear")

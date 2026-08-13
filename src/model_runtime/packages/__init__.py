@@ -18,6 +18,7 @@ if TYPE_CHECKING:
         serialize_config_value,
     )
     from model_runtime.packages.configuration_metadata import (
+        RuntimeDefaultsSection,
         configuration_field_metadata,
     )
     from model_runtime.packages.datasets import (
@@ -67,6 +68,7 @@ __all__ = [
     "PresetDefinition",
     "PresetLock",
     "RuntimeDefaultsError",
+    "RuntimeDefaultsSection",
     "RuntimeDefaultsSpec",
     "abstract_config_class_error",
     "canonical_config_key",
@@ -103,7 +105,10 @@ _CONFIGURATION_EXPORTS = {
     "search_key_to_config_key",
     "serialize_config_value",
 }
-_CONFIGURATION_METADATA_EXPORTS = {"configuration_field_metadata"}
+_CONFIGURATION_METADATA_EXPORTS = {
+    "RuntimeDefaultsSection",
+    "configuration_field_metadata",
+}
 _DATASET_EXPORTS = {
     "dataset_class_name_to_cli_name",
     "dataset_cli_name",
