@@ -13,6 +13,7 @@ from model_runtime.runs import (
     RunParameter,
     RunPlan,
     RunRequest,
+    RunResult,
     RunSpec,
 )
 
@@ -177,6 +178,7 @@ class ProjectAdapterWireTests(unittest.TestCase):
                     ).call("example")
 
     def test_remote_failure_preserves_failure_semantics(self) -> None:
+        long_run_id = "run-" + "x" * 1_024
         process = _FakeOneShotProcess(
             json.dumps(
                 {
@@ -187,6 +189,22 @@ class ProjectAdapterWireTests(unittest.TestCase):
                         "kind": FailureKind.CONFLICT.value,
                         "type": "RemoteConflict",
                         "cause": {"message": "remote cause"},
+                        "phase": "best_results_projection",
+                        "affected_run_id": long_run_id,
+                        "execution_id": "execution-a",
+                        "completed_results": [
+                            {
+                                "run_id": long_run_id,
+                                "experiment_task": "image-classification",
+                                "preset": "baseline",
+                                "dataset": "Mnist",
+                                "log_dir": "logs/run/version_0",
+                                "payload": {
+                                    "status": "completed",
+                                    "artifactId": "attempt-a",
+                                },
+                            }
+                        ],
                     },
                 }
             ).encode()
@@ -206,6 +224,70 @@ class ProjectAdapterWireTests(unittest.TestCase):
         self.assertEqual(raised.exception.kind, FailureKind.CONFLICT)
         self.assertEqual(raised.exception.remote_type, "RemoteConflict")
         self.assertEqual(raised.exception.remote_cause_detail, "remote cause")
+        self.assertEqual(raised.exception.phase, "best_results_projection")
+        self.assertEqual(raised.exception.affected_run_id, long_run_id)
+        self.assertEqual(raised.exception.execution_id, "execution-a")
+        self.assertEqual(
+            raised.exception.completed_results,
+            (
+                RunResult(
+                    run_id=long_run_id,
+                    experiment_task="image-classification",
+                    preset="baseline",
+                    dataset="Mnist",
+                    log_dir="logs/run/version_0",
+                    payload={"status": "completed", "artifactId": "attempt-a"},
+                ),
+            ),
+        )
+
+    def test_partial_run_failure_requires_bounded_consistent_fields(self) -> None:
+        completed = {
+            "run_id": "run-0001",
+            "experiment_task": "image-classification",
+            "preset": "baseline",
+            "dataset": "Mnist",
+            "log_dir": "logs/run/version_0",
+            "payload": {"status": "completed", "artifactId": "attempt-a"},
+        }
+        valid = {
+            "message": "remote failure",
+            "kind": FailureKind.UNAVAILABLE.value,
+            "type": "RunPlanExecutionError",
+            "phase": "best_results_projection",
+            "affected_run_id": "run-0001",
+            "execution_id": "execution-a",
+            "completed_results": [completed],
+        }
+        cases = (
+            {**valid, "phase": "unknown"},
+            {key: value for key, value in valid.items() if key != "execution_id"},
+            {**valid, "completed_results": []},
+            {**valid, "phase": "training"},
+            {**valid, "affected_run_id": "run-0002"},
+            {**valid, "completed_results": [{}]},
+            {**valid, "completed_results": [completed] * 2_001},
+        )
+        for error in cases:
+            response = json.dumps(
+                {
+                    "version": PROTOCOL_VERSION,
+                    "ok": False,
+                    "error": error,
+                }
+            ).encode()
+            with (
+                self.subTest(error=error.get("phase")),
+                patch(
+                    "emperor_workbench.project_adapter._client.subprocess.Popen",
+                    return_value=_FakeOneShotProcess(response),
+                ),
+                self.assertRaisesRegex(
+                    ProjectAdapterFailure,
+                    "invalid partial Run failure",
+                ),
+            ):
+                ProjectAdapterClient(("adapter",), persistent=False).call("example")
 
     def test_malformed_operation_results_are_unavailable_protocol_failures(
         self,

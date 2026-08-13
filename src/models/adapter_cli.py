@@ -46,6 +46,7 @@ from model_runtime.packages import (
 from model_runtime.runs import (
     FilesystemRunArtifacts,
     JsonlRunProgress,
+    RunPlanExecutionError,
     RunsError,
     accept_run_plan,
     execute_runs,
@@ -476,15 +477,29 @@ def _response(raw_request: bytes) -> dict[str, Any]:
         return process_request(_object(request, "request"))
     except Exception as exc:  # The process boundary always returns one envelope.
         failure_kind = (
-            "invalid"
-            if isinstance(
-                exc,
-                (AdapterProtocolError, InspectionError, RunsError, ValueError),
+            "unavailable"
+            if isinstance(exc, RunPlanExecutionError)
+            else (
+                "invalid"
+                if isinstance(
+                    exc,
+                    (AdapterProtocolError, InspectionError, RunsError, ValueError),
+                )
+                else "unavailable"
             )
-            else "unavailable"
         )
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         cause = exc.__cause__
+        structured = (
+            {
+                "phase": exc.phase,
+                "affected_run_id": exc.affected_run_id,
+                "execution_id": exc.execution_id,
+                "completed_results": run_results_to_wire(exc.completed_results),
+            }
+            if isinstance(exc, RunPlanExecutionError)
+            else {}
+        )
         return {
             "version": PROTOCOL_VERSION,
             "ok": False,
@@ -500,6 +515,7 @@ def _response(raw_request: bytes) -> dict[str, Any]:
                     if cause is not None
                     else None
                 ),
+                **structured,
             },
         }
 

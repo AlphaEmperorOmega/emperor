@@ -61,6 +61,7 @@ from model_runtime.runs import (
     PresetSearch,
     RunParameter,
     RunPlan,
+    RunPlanExecutionError,
     RunRequest,
     RunResult,
     RunSpec,
@@ -251,6 +252,45 @@ class CliWireRoundTripTests(unittest.TestCase):
             }
         )
         self.assertEqual(parsed["result"], 64)
+
+    def test_adapter_error_preserves_structured_partial_plan_outcome(self) -> None:
+        completed = RunResult(
+            run_id="run-0001",
+            experiment_task="image-classification",
+            preset="baseline",
+            dataset="Mnist",
+            log_dir="logs/run/version_0",
+            payload={"status": "completed", "artifactId": "attempt-a"},
+        )
+        error = RunPlanExecutionError(
+            completed_results=(completed,),
+            affected_run_id="run-" + "x" * 1_024,
+            phase="training",
+            execution_id="execution-a",
+        )
+        error.__cause__ = RuntimeError("fit failed")
+        request = json.dumps(
+            {"version": PROTOCOL_VERSION, "operation": "catalog", "payload": {}}
+        ).encode()
+
+        with (
+            patch("models.adapter_cli._handle", side_effect=error),
+            redirect_stderr(StringIO()),
+        ):
+            response = _response(request)
+
+        self.assertIs(response["ok"], False)
+        self.assertEqual(response["error"]["kind"], "unavailable")
+        self.assertEqual(response["error"]["phase"], "training")
+        self.assertEqual(
+            response["error"]["affected_run_id"],
+            "run-" + "x" * 1_024,
+        )
+        self.assertEqual(response["error"]["execution_id"], "execution-a")
+        self.assertEqual(
+            response["error"]["completed_results"],
+            [run_result_to_wire(completed)],
+        )
 
     def test_run_plan_wire_preserves_per_preset_search_provenance(self) -> None:
         baseline_search = SearchSpec(
