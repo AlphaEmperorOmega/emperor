@@ -427,8 +427,12 @@ def _supported_configuration_keys(
             f"Config fields for model {spec.package.catalog_key!r} are missing "
             f"source heading metadata: {', '.join(missing)}"
         )
-    supported_keys.sort(key=lambda key: tuple(metadata[key].get("sortKey", [10**9])))
-    return supported_keys, applicability
+    ordered_keys = [
+        key
+        for key in spec.ordered_configuration_keys()
+        if key not in spec.skipped_schema_keys
+    ]
+    return ordered_keys, applicability
 
 
 def _configuration_schema(
@@ -517,15 +521,9 @@ def search_space_schema(
     except RuntimeDefaultsError as exc:
         raise InspectionError(str(exc)) from (exc.__cause__ or exc)
     metadata = spec.search_metadata
-    search_keys = sorted(
-        spec.search_values,
-        key=lambda key: int(metadata.get(key, {}).get("line", 10**9)),
-    )
-
     axes: list[SearchAxis] = []
-    for search_key in search_keys:
+    for search_key, values in spec.ordered_search_items():
         config_key = search_key.removeprefix("SEARCH_SPACE_")
-        values = spec.search_values[search_key]
         field = config_fields.get(config_key)
         lock_details = lock_details_by_param.get(
             spec.model_parameter(config_key),

@@ -97,6 +97,31 @@ class RuntimeDefaultsSpec:
     def configuration_applicability(self) -> object:
         return getattr(self._config_module, "CONFIG_FIELD_APPLICABILITY", {})
 
+    def ordered_configuration_keys(self) -> tuple[str, ...]:
+        """Return planning keys in stable source order, then schema-hidden keys."""
+
+        visible_keys = [
+            key for key in self.supported_keys if key not in self.skipped_schema_keys
+        ]
+        visible_keys.sort(
+            key=lambda key: tuple(
+                self.configuration_metadata.get(key, {}).get("sortKey", [10**9])
+            )
+        )
+        return (
+            *visible_keys,
+            *(key for key in self.supported_keys if key in self.skipped_schema_keys),
+        )
+
+    def ordered_search_items(self) -> tuple[tuple[str, tuple[Any, ...]], ...]:
+        """Return declared search axes in stable source order."""
+
+        ordered_keys = sorted(
+            self.search_values,
+            key=lambda key: int(self.search_metadata.get(key, {}).get("line", 10**9)),
+        )
+        return tuple((key, self.search_values[key]) for key in ordered_keys)
+
     def accepts_none(self, config_key: str) -> bool:
         current_value = self.current_value(config_key)
         if current_value is None:

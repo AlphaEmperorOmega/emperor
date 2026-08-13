@@ -7,9 +7,11 @@ from collections.abc import Mapping
 from dataclasses import FrozenInstanceError
 from types import ModuleType
 from typing import Any
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+from model_runtime.inspection import InspectionError, configuration_schema
 from model_runtime.packages import (
     ModelMetadata,
     ModelPackage,
@@ -141,6 +143,43 @@ class _ForbiddenRandom:
 
 
 class RunsPlanningTests(unittest.TestCase):
+    def test_runs_planning_does_not_require_inspection_presentation_metadata(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        catalog_metadata = package._adapter.load_metadata()
+        legacy_metadata = ModelMetadata(
+            package.identity,
+            catalog_metadata._runtime_defaults_source,
+            catalog_metadata._dataset_options_source,
+            catalog_metadata._monitor_options_source,
+            catalog_metadata._search_space_source,
+        )
+        package_without_headings = ModelPackage(
+            package.identity,
+            _SearchMetadataAdapter(package, legacy_metadata),
+            package.inspection_construction_limits,
+        )
+        with patch(
+            "model_runtime.packages.metadata.configuration_field_metadata",
+            return_value={},
+        ):
+            plan = plan_runs(
+                package_without_headings,
+                RunRequest(
+                    presets=("baseline",),
+                    datasets=("Mnist",),
+                    overrides={"hidden_dim": 64},
+                ),
+            )
+
+        self.assertEqual(dict(plan.runs[0].overrides), {"HIDDEN_DIM": 64})
+        with self.assertRaisesRegex(
+            InspectionError,
+            "missing source heading metadata",
+        ):
+            configuration_schema(package_without_headings)
+
     def test_planning_budget_requires_positive_plain_integers_or_none(self) -> None:
         for field_name in (
             "max_axes",
