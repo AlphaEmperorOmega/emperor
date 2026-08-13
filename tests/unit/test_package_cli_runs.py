@@ -75,8 +75,9 @@ class PackageCliRunsTests(unittest.TestCase):
         for requested_cadence in (37, 100):
             with self.subTest(requested_cadence=requested_cadence):
                 with (
-                    patch(
-                        "models.linears.linear.presets.runtime_from_flat",
+                    patch.object(
+                        _linears_linear().presets,
+                        "_runtime_factory",
                         wraps=runtime_from_flat,
                     ) as bind_runtime,
                     patch.object(

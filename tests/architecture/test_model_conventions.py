@@ -356,6 +356,27 @@ class TestModelConventions(unittest.TestCase):
                         isinstance(node, ast.ClassDef)
                         and node.name == "ExperimentPresets"
                     ):
+                        method_names = {
+                            item.name
+                            for item in node.body
+                            if isinstance(item, ast.FunctionDef)
+                        }
+                        self.assertNotIn("_preset", method_names)
+                        initializer = next(
+                            item
+                            for item in node.body
+                            if isinstance(item, ast.FunctionDef)
+                            and item.name == "__init__"
+                        )
+                        runtime_factories = [
+                            keyword.value
+                            for call in ast.walk(initializer)
+                            if isinstance(call, ast.Call)
+                            for keyword in call.keywords
+                            if keyword.arg == "runtime_factory"
+                        ]
+                        self.assertEqual(len(runtime_factories), 1)
+                        self.assertIsInstance(runtime_factories[0], ast.Name)
                         for item in node.body:
                             if isinstance(item, (ast.Assign, ast.AnnAssign)):
                                 targets = (

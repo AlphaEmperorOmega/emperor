@@ -128,6 +128,49 @@ class _DefinitionOverridingPresets(BuilderBackedExperimentPresetsBase):
 
 
 class PresetDefinitionSnapshotTests(unittest.TestCase):
+    def test_builder_backed_provider_projects_values_through_runtime_factory(
+        self,
+    ) -> None:
+        runtime = object()
+        received_values: list[dict[str, object]] = []
+
+        def runtime_factory(values: dict[str, object]) -> object:
+            received_values.append(dict(values))
+            return runtime
+
+        presets = BuilderBackedExperimentPresetsBase(
+            {
+                _SnapshotPreset.BASELINE: PresetDefinition(
+                    preset_values={"enabled": True},
+                    description="Runtime-backed baseline.",
+                )
+            },
+            builder_type=_SnapshotConfigBuilder,
+            default_preset=_SnapshotPreset.BASELINE,
+            default_dataset=FakeDatasetA,
+            runtime_factory=runtime_factory,
+        )
+
+        configuration = cast(
+            dict[str, object],
+            presets.get_config(
+                config_overrides={"batch_size": 4, "trainer_devices": 2}
+            )[0],
+        )
+
+        self.assertEqual(
+            received_values,
+            [
+                {
+                    "input_dim": 4,
+                    "output_dim": 2,
+                    "batch_size": 4,
+                    "enabled": True,
+                }
+            ],
+        )
+        self.assertEqual(configuration, {"runtime": runtime})
+
     def test_provider_owns_definitions_and_returns_fresh_public_maps(self) -> None:
         opaque_value = object()
         source_values: dict[str, object] = {

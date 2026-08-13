@@ -274,11 +274,13 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
         builder_type: type[Any],
         default_preset: object,
         default_dataset: type[Any] = Mnist,
+        runtime_factory: Callable[[dict[str, Any]], object] | None = None,
     ) -> None:
         super().__init__(preset_definitions)
         self._builder_type = builder_type
         self._default_preset = default_preset
         self._default_dataset = default_dataset
+        self._runtime_factory = runtime_factory
 
     @property
     def default_preset(self) -> object:
@@ -334,6 +336,9 @@ class BuilderBackedExperimentPresetsBase(ExperimentPresetsBase):
         return self._preset(**{**kwargs, **self.overrides_for_preset(preset)})
 
     def _preset(self, **kwargs: Any) -> ModelConfig:
+        if self._runtime_factory is not None:
+            runtime = self._runtime_factory(kwargs)
+            return self._builder_type(runtime=runtime).build()
         return self._builder_type(**kwargs).build()
 
 

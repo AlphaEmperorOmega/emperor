@@ -787,6 +787,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=BertLinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
+            runtime_factory=runtime_from_flat,
             default_dataset=PennTreebankBertPretraining,
         )
 
@@ -795,9 +796,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             **super()._dataset_config(dataset),
             "sequence_length": dataset.sequence_length,
         }
-
-    def _preset(self, **kwargs):
-        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):

@@ -295,6 +295,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             builder_type=GptExpertLinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
             default_dataset=WikiText2,
+            runtime_factory=runtime_from_flat,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -302,9 +303,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             **super()._dataset_config(dataset),
             "sequence_length": dataset.sequence_length,
         }
-
-    def _preset(self, **kwargs):
-        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
