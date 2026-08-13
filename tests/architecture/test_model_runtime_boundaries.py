@@ -415,6 +415,24 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         }
         self.assertGreaterEqual(len(adapter_classes), 2)
 
+        catalog_source = (INSPECTION_ROOT / "_graph_semantic_catalog.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("class SemanticTypePolicy", catalog_source)
+        self.assertIn("class SemanticTypeCatalog", catalog_source)
+        component_semantics_source = (
+            INSPECTION_ROOT / "_graph_component_semantics.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("SEMANTIC_TYPE_CATALOG", component_semantics_source)
+        self.assertNotIn("def _registered_type_id", component_semantics_source)
+        for parallel_type_id_policy in (
+            "DESCRIPTION_BY_TYPE_ID",
+            "INTERNAL_ROLE_TYPE_IDS",
+            "RUNTIME_ROLE_TYPE_IDS",
+            "RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_TYPE_ID",
+        ):
+            self.assertNotIn(parallel_type_id_policy, catalog_source)
+
         model_graph_source = (INSPECTION_ROOT / "model_graph.py").read_text(
             encoding="utf-8"
         )

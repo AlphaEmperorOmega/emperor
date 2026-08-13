@@ -12,11 +12,8 @@ from model_runtime.inspection._graph_accounting import GraphModule
 from model_runtime.inspection._graph_semantic_catalog import (
     DEFAULT_RESIDUAL_MODEL_DESCRIPTION,
     DEFAULT_RESIDUAL_OPTION_DESCRIPTION,
-    DESCRIPTION_BY_TYPE_ID,
-    INTERNAL_ROLE_TYPE_IDS,
     PROJECT_MODEL_DESCRIPTION,
-    RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_TYPE_ID,
-    RUNTIME_ROLE_TYPE_IDS,
+    SEMANTIC_TYPE_CATALOG,
 )
 from model_runtime.inspection.capture_limits import InspectionCaptureLimits
 from model_runtime.inspection.errors import InspectionError
@@ -93,11 +90,9 @@ def _flattened_residual_configuration_fields(
     residual_config_type: type[object] | None = (
         None if residual_config is None else type(cast(object, residual_config))
     )
-    config_type_id = _registered_type_id(type(cast(object, config)))
+    config_policy = SEMANTIC_TYPE_CATALOG.policy_for(type(cast(object, config)))
     descriptions = (
-        RESIDUAL_FIELD_DESCRIPTIONS_BY_CONFIG_TYPE_ID.get(config_type_id)
-        if config_type_id is not None
-        else None
+        config_policy.residual_field_descriptions if config_policy is not None else None
     )
     option_description, model_description = descriptions or (
         DEFAULT_RESIDUAL_OPTION_DESCRIPTION,
@@ -190,8 +185,9 @@ def _explicit_docstring_description(class_type: type[Any]) -> str | None:
 def _project_model_description(module_type: type[Any]) -> str | None:
     module_name = module_type.__module__
     if (
-        _registered_type_id(module_type) == f"{module_name}.Model"
+        SEMANTIC_TYPE_CATALOG.is_registered_type(module_type)
         and module_type.__name__ == "Model"
+        and module_type.__qualname__ == "Model"
         and module_name.startswith("models.")
         and module_name.endswith(".model")
     ):
@@ -199,14 +195,14 @@ def _project_model_description(module_type: type[Any]) -> str | None:
     return None
 
 
-def _registered_description(class_type: type[object]) -> str | None:
-    type_id = _registered_type_id(class_type)
-    return DESCRIPTION_BY_TYPE_ID.get(type_id) if type_id is not None else None
+def _catalog_description(class_type: type[object]) -> str | None:
+    policy = SEMANTIC_TYPE_CATALOG.policy_for(class_type)
+    return policy.description if policy is not None else None
 
 
 def component_description(module: GraphModule) -> str | None:
     module_type: type[object] = type(module)
-    description = _registered_description(module_type)
+    description = _catalog_description(module_type)
     if description is None:
         description = _project_model_description(module_type)
     if description is not None:
@@ -215,7 +211,7 @@ def component_description(module: GraphModule) -> str | None:
     config = _module_config_instance(module)
     if config is not None:
         config_type = type(cast(object, config))
-        description = _registered_description(config_type)
+        description = _catalog_description(config_type)
         if description is not None:
             return description
 
@@ -230,11 +226,9 @@ def component_description(module: GraphModule) -> str | None:
 
 def component_graph_role(module: GraphModule) -> GraphRole:
     module_type = type(module)
-    type_id = _registered_type_id(module_type)
-    if type_id in INTERNAL_ROLE_TYPE_IDS:
-        return INTERNAL_ROLE
-    if type_id in RUNTIME_ROLE_TYPE_IDS:
-        return RUNTIME_ROLE
+    policy = SEMANTIC_TYPE_CATALOG.policy_for(module_type)
+    if policy is not None:
+        return policy.graph_role
     if module_type.__module__.startswith("torchmetrics."):
         return RUNTIME_ROLE
     return ARCHITECTURE_ROLE

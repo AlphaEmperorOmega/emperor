@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import unittest
 from collections.abc import Mapping, Sequence
 from dataclasses import FrozenInstanceError, dataclass, field, replace
@@ -76,6 +78,27 @@ def _broken_package() -> ModelPackage:
 
 
 class InspectionGraphInterfaceTests(unittest.TestCase):
+    def test_semantic_catalog_does_not_import_unselected_registered_types(self) -> None:
+        script = """
+import sys
+from torch import nn
+from model_runtime.inspection.model_graph import graph_role
+
+semantic_module = "emperor.neuron._cluster.model"
+assert semantic_module not in sys.modules
+assert graph_role(nn.Identity()) == "architecture"
+assert semantic_module not in sys.modules
+"""
+
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_same_named_user_types_do_not_inherit_emperor_graph_semantics(
         self,
     ) -> None:
@@ -146,6 +169,36 @@ class InspectionGraphInterfaceTests(unittest.TestCase):
         spoofed = inspect_model_graph(SpoofedDropout()).nodes[0]
         self.assertEqual(spoofed.graph_role, "architecture")
         self.assertIsNone(spoofed.description)
+
+        class DropoutSubclass(nn.Dropout):
+            pass
+
+        subclass = inspect_model_graph(DropoutSubclass()).nodes[0]
+        self.assertEqual(subclass.graph_role, "architecture")
+        self.assertIsNone(subclass.description)
+
+        from models.linears.linear.model import Model as RegisteredProjectModel
+
+        class SpoofedProjectModel(nn.Module):
+            pass
+
+        SpoofedProjectModel.__name__ = "Model"
+        SpoofedProjectModel.__qualname__ = "Model"
+        SpoofedProjectModel.__module__ = RegisteredProjectModel.__module__
+        spoofed_project_model = inspect_model_graph(SpoofedProjectModel()).nodes[0]
+        self.assertIsNone(spoofed_project_model.description)
+
+        import models.linears.linear.model as project_model_module
+
+        class Outer:
+            class Model(nn.Module):
+                pass
+
+        Outer.Model.__module__ = project_model_module.__name__
+        Outer.Model.__qualname__ = "Outer.Model"
+        with patch.object(project_model_module, "Outer", Outer, create=True):
+            nested_project_model = inspect_model_graph(Outer.Model()).nodes[0]
+        self.assertIsNone(nested_project_model.description)
 
     def test_exact_known_types_keep_their_graph_semantics(self) -> None:
         dropout = inspect_model_graph(nn.Dropout()).nodes[0]
