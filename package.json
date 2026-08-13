@@ -5,6 +5,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
+    "typecheck:model-packages": "pyright --project pyright-model-packages.json",
     "typecheck:model-runtime": "pyright --project pyrightconfig.json src/model_runtime"
   },
   "devDependencies": {

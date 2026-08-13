@@ -326,6 +326,88 @@ class QualityConfigurationTests(unittest.TestCase):
             "1.1.411",
         )
 
+    def test_model_package_strict_type_scope_cannot_silently_shrink(self) -> None:
+        config = json.loads(
+            (PROJECT_ROOT / "pyright-model-packages.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            set(config),
+            {
+                "include",
+                "pythonPlatform",
+                "pythonVersion",
+                "extraPaths",
+                "venvPath",
+                "venv",
+                "typeCheckingMode",
+            },
+        )
+        self.assertEqual(
+            config["include"],
+            [
+                "src/models/catalog.py",
+                "src/models/**/runtime_options.py",
+            ],
+        )
+        self.assertEqual(config["typeCheckingMode"], "strict")
+        self.assertEqual(config["pythonPlatform"], "Linux")
+        self.assertEqual(config["pythonVersion"], "3.13")
+        self.assertEqual(config["extraPaths"], ["src"])
+        self.assertEqual(config["venvPath"], ".")
+        self.assertEqual(config["venv"], "torchenv")
+
+        runtime_option_modules = {
+            path.resolve()
+            for path in (PROJECT_ROOT / "src/models").glob("**/runtime_options.py")
+        }
+        certified_sources = {
+            (PROJECT_ROOT / "src/models/catalog.py").resolve(),
+            *runtime_option_modules,
+        }
+        self.assertGreaterEqual(len(certified_sources), 36)
+        self.assertEqual(
+            runtime_option_modules,
+            {
+                path.resolve()
+                for path in (PROJECT_ROOT / "src/models").rglob("runtime_options.py")
+            },
+        )
+        for path in sorted(certified_sources):
+            with self.subTest(path=path.relative_to(PROJECT_ROOT)):
+                self.assertTrue(path.is_file())
+                self.assertFalse(path.is_symlink())
+                self.assertTrue(path.is_relative_to(PROJECT_ROOT))
+                source = path.read_text(encoding="utf-8")
+                self.assertNotIn("type: ignore", source)
+                self.assertNotIn("pyright: ignore", source)
+                self.assertNotIn("# pyright:", source)
+
+    def test_model_packages_use_locked_canonical_type_checker(self) -> None:
+        package = json.loads(
+            (PROJECT_ROOT / "package.json").read_text(encoding="utf-8")
+        )
+        package_lock = json.loads(
+            (PROJECT_ROOT / "package-lock.json").read_text(encoding="utf-8")
+        )
+        with (PROJECT_ROOT / "mise.toml").open("rb") as mise_file:
+            mise = tomllib.load(mise_file)
+
+        command = package["scripts"]["typecheck:model-packages"]
+        self.assertEqual(
+            command,
+            "pyright --project pyright-model-packages.json",
+        )
+        self.assertNotIn(" src/", command)
+        task = mise["tasks"]["test:model-packages-types"]
+        self.assertTrue(task["raw"])
+        self.assertEqual(task["run"], "npm run typecheck:model-packages")
+        self.assertEqual(package["devDependencies"]["pyright"], "1.1.411")
+        self.assertEqual(
+            package_lock["packages"]["node_modules/pyright"]["version"],
+            "1.1.411",
+        )
+
     def test_repository_versions_match_contracts(self) -> None:
         with (PROJECT_ROOT / "mise.toml").open("rb") as mise_file:
             mise = tomllib.load(mise_file)
