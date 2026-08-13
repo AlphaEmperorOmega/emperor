@@ -442,13 +442,6 @@ def _render_json_inspection(
     print(encoded)
 
 
-def _preset_description(package: ModelPackage, preset: Any) -> str:
-    description_for_preset = getattr(package.presets, "description_for_preset", None)
-    if callable(description_for_preset):
-        return description_for_preset(preset)
-    return preset.value if isinstance(preset.value, str) else ""
-
-
 def _render_text_inspection(
     resolved: _ResolvedInspection,
     execution: _InspectionExecution,
@@ -456,7 +449,7 @@ def _render_text_inspection(
 ) -> None:
     print("=" * 100)
     print(resolved.preset.name)
-    description = _preset_description(resolved.package, resolved.preset)
+    description = resolved.package.preset_description(resolved.preset)
     if description:
         print(f"description: {description}")
     trace = execution.trace
