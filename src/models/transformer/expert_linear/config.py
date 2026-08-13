@@ -1,4 +1,5 @@
 from emperor.embedding.absolute import (
+    AbsolutePositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
 )
 from emperor.experts import (
@@ -30,17 +31,21 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Global
 BATCH_SIZE = 64
 LEARNING_RATE = 1.0
 VOCAB_SIZE = 8192
 MODEL_DIM = 128
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("MODEL_DIM")
 SOURCE_SEQUENCE_LENGTH = 64
 TARGET_SEQUENCE_LENGTH = 64
 SEQUENCE_LENGTH = 64
 DROPOUT_PROBABILITY = 0.1
-POSITIONAL_EMBEDDING_OPTION = TextSinusoidalPositionalEmbeddingConfig
+POSITIONAL_EMBEDDING_OPTION: type[AbsolutePositionalEmbeddingConfig] = (
+    TextSinusoidalPositionalEmbeddingConfig
+)
 
 # Attention Options
 ATTN_NUM_HEADS: int = 4
@@ -352,13 +357,13 @@ RECURRENT_INITIAL_ITERATIONS: int = 2
 RECURRENT_GRADIENT_TRANSITION_COUNT: int | None = None
 RECURRENT_ITERATION_INCREMENT: int = 1
 RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT: int = 1
-RECURRENT_RESIDUAL_CONNECTION_OPTION = None
+RECURRENT_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RECURRENT_RESIDUAL_MODEL_FLAG: bool = False
 
 ## Residual Options
 # - False uses the residual variant's learned coefficient parameters.
 # - True uses the residual stack for data-dependent coefficients.
-STACK_RESIDUAL_CONNECTION_OPTION = None
+STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_RESIDUAL_MODEL_FLAG: bool = False
 ### Residual Stack Options
 # - If False, residual stack options inherit layer stack submodule options.

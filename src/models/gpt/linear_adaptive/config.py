@@ -59,6 +59,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Global
 INPUT_DIM: int = 28782
@@ -971,6 +972,8 @@ _PUBLIC_CONFIG_KEYS = {
     "LM_HEAD_BIAS_FLAG",
     "LM_HEAD_WEIGHT_TYING_FLAG",
 }
+
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 _PUBLIC_CONFIG_PREFIXES = (
     "TRAINER_",
     "CALLBACK_",

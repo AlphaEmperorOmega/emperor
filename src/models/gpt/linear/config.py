@@ -26,6 +26,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Global
 INPUT_DIM: int = 28782
@@ -521,3 +522,5 @@ FF_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG: bool | None = None
 FF_RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
+
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")

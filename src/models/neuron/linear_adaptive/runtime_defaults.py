@@ -3,6 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Final
 
+from model_runtime.packages.runtime_values import validate_runtime_default_value_types
+
+from . import config
 from ._runtime_defaults_resolver import _NeuronLinearAdaptiveRuntimeDefaultsResolver
 from .runtime_options import RuntimeOptions
 
@@ -35,6 +38,11 @@ def _raise_outer_unknown_key(
 
 def runtime_from_flat(values: Mapping[str, object] | None = None) -> RuntimeOptions:
     flat_values = _keyword_values(**dict(values or {}))
+    validate_runtime_default_value_types(
+        flat_values,
+        package="models.neuron.linear_adaptive",
+        config_module=config,
+    )
     try:
         resolver = _NeuronLinearAdaptiveRuntimeDefaultsResolver(flat_values)
     except (TypeError, ValueError) as error:

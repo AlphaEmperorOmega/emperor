@@ -14,11 +14,11 @@ from model_runtime.inspection import (
     InspectionResult,
     MethodShapeTrace,
     ModelShapeTrace,
-    ParsedOverrides,
     TensorShape,
     inspect_model,
     inspect_model_shapes,
 )
+from model_runtime.inspection.overrides import validate_typed_overrides
 from model_runtime.packages import ModelPackage
 from models.catalog import model_id_from_parts, model_package
 from models.cli_selection import resolve_cli_selection
@@ -390,7 +390,11 @@ def _resolve_inspection_request(argv: Sequence[str]) -> _ResolvedInspection:
         preset=package.preset_name(preset),
         dataset=datasets[0].__name__,
         experiment_task=package.task_name(selection.experiment_task),
-        overrides=ParsedOverrides(selection.config_overrides),
+        overrides=validate_typed_overrides(
+            package,
+            selection.config_overrides,
+            preset=package.preset_name(preset),
+        ),
     )
     return _ResolvedInspection(
         package=package,

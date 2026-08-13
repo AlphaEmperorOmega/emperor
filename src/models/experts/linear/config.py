@@ -27,6 +27,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Package-local trainer defaults. Model packages intentionally do not import the
 # repository-level trainer configuration so they remain independently loadable.
@@ -70,6 +71,7 @@ CALLBACK_CHECKPOINT_FLAG: bool = False
 # Global
 INPUT_DIM: int = 28**2
 HIDDEN_DIM: int = 32
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 OUTPUT_DIM: int = 10
 BATCH_SIZE: int = 128
 LEARNING_RATE: float = 1e-3
@@ -266,7 +268,7 @@ ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = RoutingInitializationMo
 EXPERT_STACK_HIDDEN_DIM: int = SUBMODULE_STACK_HIDDEN_DIM
 EXPERT_STACK_NUM_LAYERS: int = SUBMODULE_STACK_NUM_LAYERS
 EXPERT_STACK_ACTIVATION: ActivationOptions = SUBMODULE_STACK_ACTIVATION
-EXPERT_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] = (
+EXPERT_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
     SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
 )
 EXPERT_STACK_RESIDUAL_MODEL_FLAG: bool = False
