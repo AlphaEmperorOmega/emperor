@@ -453,6 +453,73 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
             self.assertEqual(module._forward_pre_hooks, {})
             self.assertEqual(module._forward_hooks, {})
 
+    def test_keyboard_interrupt_restores_runtime_and_cpu_rng_state(self) -> None:
+        interruption = KeyboardInterrupt("fixture cancellation")
+
+        class InterruptingModel(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.block = nn.Identity()
+
+            def forward(self, value: torch.Tensor) -> torch.Tensor:
+                self.block(value)
+                torch.rand(1)
+                raise interruption
+
+        package = _FixturePackage(
+            ModelIdentity("fixtures", "shape_trace"),
+            _UnusedPackageAdapter(),  # type: ignore[arg-type]
+        )
+        model = InterruptingModel()
+        model.train()
+        model.block.eval()
+        training_flags = {id(module): module.training for module in model.modules()}
+        previous_trace = sys.gettrace()
+        random_state = torch.random.get_rng_state().clone()
+        request = InspectionRequest(preset="baseline")
+        prepared = MaterializedConfiguration(
+            package=package,
+            request=request,
+            preset="baseline",
+            experiment_task=ExperimentTask.IMAGE_CLASSIFICATION,
+            dataset=_ImageDataset,
+            overrides=ParsedOverrides(),
+            configuration=SimpleNamespace(),
+        )
+
+        with (
+            patch.object(
+                shape_trace,
+                "materialize_inspection",
+                return_value=MaterializedInspection(
+                    prepared=prepared,
+                    model=model,
+                ),
+            ),
+            patch.object(
+                shape_trace,
+                "_sample_inputs",
+                return_value=(
+                    "SyntheticDataset",
+                    "image-classification",
+                    (torch.zeros((1, 4)),),
+                ),
+            ),
+            self.assertRaises(KeyboardInterrupt) as raised,
+        ):
+            shape_trace.inspect_model_shapes(package, request, detail="variables")
+
+        self.assertIs(raised.exception, interruption)
+        self.assertIs(sys.gettrace(), previous_trace)
+        self.assertTrue(torch.equal(torch.random.get_rng_state(), random_state))
+        self.assertEqual(
+            {id(module): module.training for module in model.modules()},
+            training_flags,
+        )
+        for module in model.modules():
+            self.assertEqual(module._forward_pre_hooks, {})
+            self.assertEqual(module._forward_hooks, {})
+
     def test_runtime_restoration_failure_is_not_translated(self) -> None:
         package = _FixturePackage(
             ModelIdentity("fixtures", "shape_trace"),
@@ -514,6 +581,7 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
         model.train()
         model.block.eval()
         training_flags = {id(module): module.training for module in model.modules()}
+        random_state = torch.random.get_rng_state().clone()
         sample_input = torch.zeros((1, 4))
         request = InspectionRequest(preset="baseline")
         prepared = MaterializedConfiguration(
@@ -555,6 +623,7 @@ class InspectionShapeTraceCoreTests(unittest.TestCase):
             {id(module): module.training for module in model.modules()},
             training_flags,
         )
+        self.assertTrue(torch.equal(torch.random.get_rng_state(), random_state))
 
     def test_successful_trace_restores_preexisting_python_trace(self) -> None:
         package = _FixturePackage(
