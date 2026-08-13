@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
 from typing import TYPE_CHECKING, Any, cast
@@ -98,12 +98,82 @@ def _keys_by_alias(supported_keys: tuple[str, ...]) -> dict[str, str]:
     return keys_by_alias
 
 
+@dataclass(frozen=True, slots=True)
+class _MetadataListSnapshot:
+    values: tuple[Any, ...]
+
+
+def _snapshot_metadata_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        nested_mapping = cast(Mapping[object, Any], value)
+        return MappingProxyType(
+            {
+                key: _snapshot_metadata_value(nested_value)
+                for key, nested_value in nested_mapping.items()
+            }
+        )
+    if isinstance(value, list):
+        nested_list = cast(list[Any], value)
+        return _MetadataListSnapshot(
+            tuple(_snapshot_metadata_value(item) for item in nested_list)
+        )
+    return value
+
+
+def _project_metadata_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        nested_mapping = cast(Mapping[object, Any], value)
+        return MappingProxyType(
+            {
+                key: _project_metadata_value(nested_value)
+                for key, nested_value in nested_mapping.items()
+            }
+        )
+    if isinstance(value, _MetadataListSnapshot):
+        return [_project_metadata_value(item) for item in value.values]
+    return value
+
+
+class _MetadataSnapshot(Mapping[str, Mapping[str, Any]]):
+    """Own immutable metadata while projecting fresh read-only entries."""
+
+    __slots__ = ("_entries",)
+
+    def __init__(self, metadata: Mapping[str, Mapping[str, Any]]) -> None:
+        self._entries = MappingProxyType(
+            {
+                key: MappingProxyType(
+                    {
+                        field: _snapshot_metadata_value(value)
+                        for field, value in entry.items()
+                    }
+                )
+                for key, entry in metadata.items()
+            }
+        )
+
+    def __getitem__(self, key: str) -> Mapping[str, Any]:
+        return MappingProxyType(
+            {
+                field: _project_metadata_value(value)
+                for field, value in self._entries[key].items()
+            }
+        )
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __repr__(self) -> str:
+        return repr(MappingProxyType({key: self[key] for key in self}))
+
+
 def _nested_metadata(
     metadata: Mapping[str, Mapping[str, Any]],
 ) -> Mapping[str, Mapping[str, Any]]:
-    return MappingProxyType(
-        {key: MappingProxyType(dict(value)) for key, value in metadata.items()}
-    )
+    return _MetadataSnapshot(metadata)
 
 
 def _coerce_monitor_options(
