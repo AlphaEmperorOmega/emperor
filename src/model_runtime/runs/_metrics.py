@@ -7,6 +7,7 @@ from typing import Any
 from model_runtime.runs.json_values import require_finite_json
 
 _DROPPED_METRIC_TOKENS = ("confusion_matrix", "per_class")
+_NON_SCALAR_METRIC = "<non-scalar metric omitted>"
 
 
 def truncate_string(value: str, limit: int) -> str:
@@ -15,7 +16,20 @@ def truncate_string(value: str, limit: int) -> str:
     return f"{value[:limit]}...[truncated {len(value) - limit} chars]"
 
 
+def _admits_scalar_transfer(value: Any) -> bool | None:
+    numel = getattr(value, "numel", None)
+    if not callable(numel):
+        return None
+    try:
+        count = numel()
+    except Exception:
+        return False
+    return type(count) is int and count == 1
+
+
 def _json_value(value: Any, *, string_value_limit: int | None = None) -> Any:
+    if _admits_scalar_transfer(value) is False:
+        return _NON_SCALAR_METRIC
     if hasattr(value, "detach"):
         value = value.detach()
     if hasattr(value, "cpu"):
