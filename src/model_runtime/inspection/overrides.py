@@ -1,26 +1,24 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Never
+from typing import Any
 
-from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.records import ParsedOverrides
-from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
+from model_runtime.inspection.runtime_defaults import apply_runtime_defaults
 from model_runtime.packages import (
     ModelPackage,
-    RuntimeDefaultsError,
     config_key_to_model_param,
     normalize_key,
 )
 
 
-def _raise_inspection_error(exc: RuntimeDefaultsError) -> Never:
-    raise InspectionError(str(exc)) from (exc.__cause__ or exc)
-
-
 def supported_config_keys(package: ModelPackage) -> dict[str, str]:
-    spec = runtime_defaults_spec(package)
-    return {normalize_key(config_key): config_key for config_key in spec.supported_keys}
+    return apply_runtime_defaults(
+        package,
+        lambda spec: {
+            normalize_key(config_key): config_key for config_key in spec.supported_keys
+        },
+    )
 
 
 def resolve_override_key(
@@ -41,13 +39,13 @@ def reject_locked_overrides(
     preset_name: str,
     parsed_overrides: Mapping[str, Any] | None,
 ) -> None:
-    try:
-        runtime_defaults_spec(package).reject_locked_overrides(
+    apply_runtime_defaults(
+        package,
+        lambda spec: spec.reject_locked_overrides(
             preset_name,
             parsed_overrides,
-        )
-    except RuntimeDefaultsError as exc:
-        _raise_inspection_error(exc)
+        ),
+    )
 
 
 def reject_conflicting_locked_overrides(
@@ -55,13 +53,13 @@ def reject_conflicting_locked_overrides(
     preset_name: str,
     parsed_overrides: Mapping[str, Any],
 ) -> None:
-    try:
-        runtime_defaults_spec(package).reject_conflicting_locked_overrides(
+    apply_runtime_defaults(
+        package,
+        lambda spec: spec.reject_conflicting_locked_overrides(
             preset_name,
             parsed_overrides,
-        )
-    except RuntimeDefaultsError as exc:
-        _raise_inspection_error(exc)
+        ),
+    )
 
 
 def parse_overrides(
@@ -71,14 +69,14 @@ def parse_overrides(
     preset: str | None = None,
     ignore_unknown: bool = False,
 ) -> ParsedOverrides:
-    try:
-        parsed = runtime_defaults_spec(package).parse_overrides(
+    parsed = apply_runtime_defaults(
+        package,
+        lambda spec: spec.parse_overrides(
             overrides,
             preset=preset,
             ignore_unknown=ignore_unknown,
-        )
-    except RuntimeDefaultsError as exc:
-        _raise_inspection_error(exc)
+        ),
+    )
     return ParsedOverrides(parsed)
 
 
@@ -90,14 +88,13 @@ def canonicalize_overrides(
 ) -> dict[str, Any]:
     if not overrides:
         return {}
-    try:
-        return runtime_defaults_spec(package).canonicalize_overrides(
+    return apply_runtime_defaults(
+        package,
+        lambda spec: spec.canonicalize_overrides(
             overrides,
             ignore_unknown=ignore_unknown,
-        )
-    except RuntimeDefaultsError as exc:
-        _raise_inspection_error(exc)
-    raise AssertionError("unreachable")
+        ),
+    )
 
 
 def serialize_overrides(
@@ -106,14 +103,13 @@ def serialize_overrides(
     *,
     ignore_unknown: bool = False,
 ) -> dict[str, Any]:
-    try:
-        return runtime_defaults_spec(package).serialize_overrides(
+    return apply_runtime_defaults(
+        package,
+        lambda spec: spec.serialize_overrides(
             overrides,
             ignore_unknown=ignore_unknown,
-        )
-    except RuntimeDefaultsError as exc:
-        _raise_inspection_error(exc)
-    raise AssertionError("unreachable")
+        ),
+    )
 
 
 __all__ = [
