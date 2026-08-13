@@ -17,6 +17,8 @@ from model_runtime.inspection.records import (
 )
 from model_runtime.inspection.runtime_defaults import (
     RuntimeDefaultsSpec,
+    apply_runtime_defaults,
+    raise_runtime_defaults_inspection_error,
     runtime_defaults_spec,
 )
 from model_runtime.packages import (
@@ -213,10 +215,10 @@ def preset_locks(
     package: ModelPackage,
     preset_name: str | None,
 ) -> dict[str, Any]:
-    try:
-        return runtime_defaults_spec(package).preset_locks(preset_name)
-    except RuntimeDefaultsError as exc:
-        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
+    return apply_runtime_defaults(
+        package,
+        lambda spec: spec.preset_locks(preset_name),
+    )
 
 
 def _unique_presets(
@@ -407,7 +409,7 @@ def configuration_schema(
     try:
         return _configuration_schema(spec, preset)
     except RuntimeDefaultsError as exc:
-        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
+        raise_runtime_defaults_inspection_error(exc)
 
 
 def _supported_configuration_keys(
@@ -519,7 +521,7 @@ def search_space_schema(
             field.key: field for field in _configuration_schema(spec, preset).fields
         }
     except RuntimeDefaultsError as exc:
-        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
+        raise_runtime_defaults_inspection_error(exc)
     metadata = spec.search_metadata
     axes: list[SearchAxis] = []
     for search_key, values in spec.ordered_search_items():

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
+import model_runtime.inspection.overrides as override_module
 from emperor.layers import (
     AdditiveResidualConfig,
     HierarchicalReasoningModelRecurrentConfig,
@@ -34,6 +35,7 @@ from model_runtime.inspection.schema import _configuration_field_applicability
 from model_runtime.packages import (
     ModelIdentity,
     ModelPackage,
+    RuntimeDefaultsError,
     configuration_field_metadata,
 )
 from models.catalog import model_package
@@ -384,12 +386,18 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
     def test_broken_package_override_failures_are_transport_neutral(self) -> None:
         package = _broken_package()
         self.assertEqual(canonicalize_overrides(package, {}), {})
+        self.assertEqual(canonicalize_overrides(package, None), {})
         calls = (
             lambda: supported_config_keys(package),
             lambda: parse_overrides(package, {"HIDDEN_DIM": "1"}),
             lambda: canonicalize_overrides(package, {"HIDDEN_DIM": "1"}),
             lambda: serialize_overrides(package, {"HIDDEN_DIM": "1"}),
             lambda: reject_locked_overrides(package, "baseline", {}),
+            lambda: override_module.reject_conflicting_locked_overrides(
+                package,
+                "baseline",
+                {},
+            ),
         )
 
         for call in calls:
@@ -397,8 +405,40 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 with self.assertRaisesRegex(
                     InspectionError,
                     "Failed to import model package 'broken/missing'",
-                ):
+                ) as raised:
                     call()
+                self.assertIsInstance(raised.exception.__cause__, ModuleNotFoundError)
+
+    def test_override_module_preserves_all_function_owners_and_exports(self) -> None:
+        expected_exports = [
+            "canonicalize_overrides",
+            "parse_overrides",
+            "reject_conflicting_locked_overrides",
+            "reject_locked_overrides",
+            "resolve_override_key",
+            "serialize_overrides",
+            "supported_config_keys",
+        ]
+
+        self.assertEqual(override_module.__all__, expected_exports)
+        for name in expected_exports:
+            with self.subTest(name=name):
+                operation = getattr(override_module, name)
+                self.assertEqual(operation.__module__, override_module.__name__)
+
+    def test_semantic_override_failure_keeps_runtime_defaults_error_as_cause(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+
+        with self.assertRaises(InspectionError) as raised:
+            parse_overrides(package, {"NO_SUCH_FIELD": "1"})
+
+        self.assertIsInstance(
+            raised.exception.__cause__,
+            RuntimeDefaultsError,
+        )
 
     def test_broken_package_schema_failures_are_transport_neutral(self) -> None:
         package = _broken_package()

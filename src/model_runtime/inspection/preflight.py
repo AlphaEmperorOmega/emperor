@@ -7,6 +7,7 @@ from typing import Any
 from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.runtime_defaults import (
     RuntimeDefaultsSpec,
+    raise_runtime_defaults_inspection_error,
     runtime_defaults_spec,
 )
 from model_runtime.packages import ModelPackage, RuntimeDefaultsError
@@ -233,7 +234,7 @@ def preflight_inspection_configuration(
             memory_limit_bytes,
         ).validate()
     except RuntimeDefaultsError as exc:
-        raise InspectionError(str(exc)) from (exc.__cause__ or exc)
+        raise_runtime_defaults_inspection_error(exc)
 
 
 __all__ = ["preflight_inspection_configuration"]
