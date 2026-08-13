@@ -393,15 +393,32 @@ class ExperimentBase:
         self,
         state: _TrainingExecutionState,
     ) -> _StartedTrainingRun:
-        logger = TensorBoardLogger(
-            save_dir=str(self.run_artifacts.root),
-            name=self.run_artifacts.run_name(
+        if isinstance(self.run_artifacts, FilesystemRunArtifacts):
+            reservation = self.run_artifacts.reserve_run(
                 self.model_package.identity,
                 state.training_run.preset.name,
                 state.training_run.dataset_type.__name__,
                 state.training_run.parameters,
-            ),
-        )
+            )
+            logger = TensorBoardLogger(
+                save_dir=str(self.run_artifacts.root),
+                name=reservation.name,
+                version=reservation.version,
+            )
+            if Path(logger.log_dir).resolve() != reservation.log_dir:
+                raise RuntimeError(
+                    "Logger did not consume its reserved Run Artifact directory."
+                )
+        else:
+            logger = TensorBoardLogger(
+                save_dir=str(self.run_artifacts.root),
+                name=self.run_artifacts.run_name(
+                    self.model_package.identity,
+                    state.training_run.preset.name,
+                    state.training_run.dataset_type.__name__,
+                    state.training_run.parameters,
+                ),
+            )
         if state.run_progress is not None:
             state.run_progress = state.run_progress.with_log_dir(logger.log_dir)
         self._emit_dataset_started(
