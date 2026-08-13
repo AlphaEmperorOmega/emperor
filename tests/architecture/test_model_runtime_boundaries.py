@@ -431,6 +431,49 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         )
         self.assertNotIn('"freeze_value"', inspection_facade)
 
+    def test_parsed_override_admission_has_one_non_facade_owner(self) -> None:
+        records_source = (INSPECTION_ROOT / "records.py").read_text(encoding="utf-8")
+        overrides_source = (INSPECTION_ROOT / "overrides.py").read_text(
+            encoding="utf-8"
+        )
+        materialization_source = (INSPECTION_ROOT / "materialization.py").read_text(
+            encoding="utf-8"
+        )
+        inspection_facade = (INSPECTION_ROOT / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        local_cli_source = (SOURCE_ROOT / "models" / "inspection_cli.py").read_text(
+            encoding="utf-8"
+        )
+
+        for helper in (
+            "parsed_overrides_for_identity",
+            "parsed_overrides_identity",
+        ):
+            with self.subTest(helper=helper):
+                self.assertIn(f"def {helper}(", records_source)
+                self.assertNotIn(f'"{helper}"', inspection_facade)
+        self.assertIn("def validate_typed_overrides(", overrides_source)
+        self.assertIn("def validated_overrides_for_materialization(", overrides_source)
+        self.assertIn(
+            "return validate_typed_overrides(package, overrides.values, preset=preset)",
+            overrides_source,
+        )
+        self.assertIn(
+            "validated_overrides_for_materialization(",
+            materialization_source,
+        )
+        self.assertNotIn(
+            "if isinstance(request.overrides, ParsedOverrides):",
+            materialization_source,
+        )
+        self.assertIn("validate_typed_overrides(", local_cli_source)
+        self.assertNotIn(
+            "ParsedOverrides(selection.config_overrides)", local_cli_source
+        )
+        self.assertNotIn('"validate_typed_overrides"', inspection_facade)
+        self.assertNotIn('"validated_overrides_for_materialization"', inspection_facade)
+
     def test_runs_own_one_checkpoint_continuation_lifecycle(self) -> None:
         checkpoint_path = RUNS_ROOT / "checkpoints.py"
         checkpoint_tree = ast.parse(

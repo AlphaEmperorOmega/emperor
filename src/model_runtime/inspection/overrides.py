@@ -3,7 +3,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from model_runtime.inspection.records import ParsedOverrides
+from model_runtime.inspection.errors import InspectionError
+from model_runtime.inspection.records import (
+    ParsedOverrides,
+    parsed_overrides_for_identity,
+    parsed_overrides_identity,
+)
 from model_runtime.inspection.runtime_defaults import apply_runtime_defaults
 from model_runtime.packages import (
     ModelPackage,
@@ -77,7 +82,7 @@ def parse_overrides(
             ignore_unknown=ignore_unknown,
         ),
     )
-    return ParsedOverrides(parsed)
+    return parsed_overrides_for_identity(parsed, package.identity)
 
 
 def validate_typed_overrides(
@@ -90,7 +95,7 @@ def validate_typed_overrides(
         package,
         lambda spec: spec.validate_typed_overrides(overrides, preset=preset),
     )
-    return ParsedOverrides(validated)
+    return parsed_overrides_for_identity(validated, package.identity)
 
 
 def validated_overrides_for_materialization(
@@ -100,6 +105,13 @@ def validated_overrides_for_materialization(
 ) -> ParsedOverrides:
     if not isinstance(overrides, ParsedOverrides):
         return parse_overrides(package, overrides, preset=preset)
+    validated_identity = parsed_overrides_identity(overrides)
+    if validated_identity is not None and validated_identity != package.identity:
+        raise InspectionError(
+            f"Parsed overrides were validated for model "
+            f"'{validated_identity.catalog_key}', not selected model "
+            f"'{package.catalog_key}'."
+        )
     return validate_typed_overrides(package, overrides.values, preset=preset)
 
 
