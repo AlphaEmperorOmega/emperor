@@ -95,6 +95,12 @@ class _Trainer:
         self.callback_metrics = {"validation_accuracy": _Metric(0.75)}
         self.current_epoch = 1
         self.global_step = 2
+        self.is_global_zero = False
+        self.loggers: tuple[object, ...] = ()
+        self.save_checkpoint_calls: list[tuple[str, bool]] = []
+        for callback in callbacks:
+            if isinstance(callback, ModelCheckpoint) and callback.dirpath is None:
+                callback.dirpath = str(Path(logger.log_dir) / "checkpoints")
         type(self).instances.append(self)
 
     def fit(self, model, datamodule, **kwargs) -> None:
@@ -104,6 +110,9 @@ class _Trainer:
 
     def test(self, model, datamodule) -> None:
         self.test_datamodule = datamodule
+
+    def save_checkpoint(self, path: str, weights_only: bool) -> None:
+        self.save_checkpoint_calls.append((path, weights_only))
 
 
 class _FailingTrainer(_Trainer):
@@ -1658,8 +1667,217 @@ class RunsExecutionTests(unittest.TestCase):
         self.assertEqual(len(checkpoints), 1)
         self.assertEqual(checkpoints[0].save_top_k, 1)
         self.assertIs(checkpoints[0].save_last, True)
+        self.assertFalse(checkpoints[0].save_weights_only)
+        self.assertEqual(
+            _Trainer.instances[0].save_checkpoint_calls,
+            [(checkpoints[0].last_model_path, False)],
+        )
+        self.assertTrue(checkpoints[0].last_model_path.endswith("/last.ckpt"))
 
-    def test_valid_continuation_passes_exact_checkpoint_path_to_lightning(
+    def test_terminal_save_uses_only_the_runtime_owned_checkpoint_callback(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={
+                    "CALLBACK_CHECKPOINT_FLAG": True,
+                    "RUN_TEST_AFTER_FIT": False,
+                },
+            ),
+        )
+        caller_checkpoint = ModelCheckpoint(save_last=True)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch.object(
+                    execution._RunExecutor,
+                    "_callback_groups",
+                    return_value=([caller_checkpoint],),
+                ),
+                patch(
+                    "model_runtime.runs.experiment.save_terminal_last_checkpoint"
+                ) as terminal_save,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        trainer, runtime_checkpoint = terminal_save.call_args.args
+        self.assertIs(trainer, _Trainer.instances[0])
+        self.assertIsNot(runtime_checkpoint, caller_checkpoint)
+        self.assertIn(runtime_checkpoint, trainer.callbacks)
+        self.assertIn(caller_checkpoint, trainer.callbacks)
+
+    def test_fit_terminal_save_test_and_completion_are_strictly_ordered(
+        self,
+    ) -> None:
+        events: list[str] = []
+
+        class TracingTrainer(_Trainer):
+            def fit(self, model, datamodule, **kwargs) -> None:
+                events.append("fit")
+                super().fit(model, datamodule, **kwargs)
+
+            def test(self, model, datamodule) -> None:
+                events.append("test")
+                super().test(model, datamodule)
+
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={"CALLBACK_CHECKPOINT_FLAG": True},
+            ),
+        )
+        complete_training = ExperimentBase._complete_training_execution
+
+        def complete(experiment, state, trainer, started):
+            events.append("complete")
+            return complete_training(experiment, state, trainer, started)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", TracingTrainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch(
+                    "model_runtime.runs.experiment.save_terminal_last_checkpoint",
+                    side_effect=lambda *_args: events.append("terminal_save"),
+                ),
+                patch.object(
+                    ExperimentBase,
+                    "_complete_training_execution",
+                    autospec=True,
+                    side_effect=complete,
+                ),
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        self.assertEqual(events, ["fit", "terminal_save", "test", "complete"])
+
+    def test_checkpoint_disabled_run_never_invokes_terminal_adapter(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={"RUN_TEST_AFTER_FIT": False},
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch(
+                    "model_runtime.runs.experiment.save_terminal_last_checkpoint"
+                ) as terminal_save,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        terminal_save.assert_not_called()
+
+    def test_terminal_save_failure_uses_run_error_path_and_prevents_completion(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={
+                    "CALLBACK_CHECKPOINT_FLAG": True,
+                    "RUN_TEST_AFTER_FIT": False,
+                },
+            ),
+        )
+        progress = _Progress()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch(
+                    "model_runtime.runs.experiment.save_terminal_last_checkpoint",
+                    side_effect=OSError("terminal disk full"),
+                ),
+                patch.object(
+                    FilesystemRunArtifacts,
+                    "write_result",
+                    autospec=True,
+                ) as write_result,
+                self.assertRaisesRegex(OSError, "terminal disk full"),
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=artifacts,
+                    progress=progress,
+                )
+
+        write_result.assert_not_called()
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "error"],
+        )
+
+    def test_training_failure_does_not_invoke_terminal_adapter(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist",),
+                overrides={
+                    "CALLBACK_CHECKPOINT_FLAG": True,
+                    "RUN_TEST_AFTER_FIT": False,
+                },
+            ),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _FailingTrainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch(
+                    "model_runtime.runs.experiment.save_terminal_last_checkpoint"
+                ) as terminal_save,
+                self.assertRaisesRegex(RuntimeError, "training exploded"),
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                )
+
+        terminal_save.assert_not_called()
+
+    def test_valid_continuation_passes_admitted_snapshot_to_lightning_safely(
         self,
     ) -> None:
         package = _linears_linear()
