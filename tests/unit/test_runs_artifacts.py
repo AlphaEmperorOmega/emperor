@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import math
+import multiprocessing
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from emperor.experiments import ExperimentTask
@@ -21,8 +23,106 @@ from model_runtime.task_behavior import (
     EXPERIMENT_TASK_BEHAVIORS,
 )
 
+if TYPE_CHECKING:
+    from multiprocessing.queues import Queue
+    from multiprocessing.synchronize import Barrier
+
+
+def _reserve_run_artifacts_in_process(
+    artifact_root: str,
+    start: Barrier,
+    results: Queue[tuple[str, int, str]],
+) -> None:
+    artifacts = FilesystemRunArtifacts(
+        root=Path(artifact_root),
+        namespace="runs_fixture",
+        clock=lambda: datetime(2026, 6, 1, 1, 2, 3),
+    )
+    start.wait()
+    allocation = artifacts.reserve_run(
+        ModelIdentity("linears", "linear"),
+        "BASELINE",
+        "Mnist",
+        {"batch_size": 128},
+    )
+    results.put((allocation.name, allocation.version, str(allocation.log_dir)))
+
 
 class RunsArtifactsTests(unittest.TestCase):
+    def test_filesystem_allocations_are_atomic_across_spawned_processes(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            context = multiprocessing.get_context("spawn")
+            process_count = 4
+            start = context.Barrier(process_count)
+            results = context.Queue()
+            processes = [
+                context.Process(
+                    target=_reserve_run_artifacts_in_process,
+                    args=(tmp, start, results),
+                )
+                for _ in range(process_count)
+            ]
+
+            try:
+                for process in processes:
+                    process.start()
+                for process in processes:
+                    process.join(timeout=20)
+                for process in processes:
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(timeout=5)
+
+                self.assertEqual(
+                    [process.exitcode for process in processes],
+                    [0] * process_count,
+                )
+                allocations = [results.get(timeout=5) for _ in processes]
+            finally:
+                results.close()
+                results.join_thread()
+
+            names = {name for name, _, _ in allocations}
+            versions = {version for _, version, _ in allocations}
+            log_dirs = {Path(log_dir) for _, _, log_dir in allocations}
+            self.assertEqual(
+                names,
+                {"runs_fixture/linears/linear/BASELINE/Mnist/e10f8fea_20260601_010203"},
+            )
+            self.assertEqual(versions, {0, 1, 2, 3})
+            self.assertEqual(len(log_dirs), process_count)
+            for log_dir in log_dirs:
+                self.assertTrue(log_dir.is_dir())
+                self.assertTrue(log_dir.resolve().is_relative_to(Path(tmp).resolve()))
+
+    def test_filesystem_reservation_never_reuses_an_existing_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(
+                root=Path(tmp),
+                clock=lambda: datetime(2026, 6, 1, 1, 2, 3),
+            )
+            identity = ModelIdentity("linears", "linear")
+            run_name = artifacts.run_name(identity, "BASELINE", "Mnist", {})
+            abandoned_attempt = artifacts.root / run_name / "version_0"
+            abandoned_attempt.mkdir(parents=True)
+
+            reservation = artifacts.reserve_run(
+                identity,
+                "BASELINE",
+                "Mnist",
+                {},
+            )
+
+            self.assertEqual(reservation.name, run_name)
+            self.assertEqual(reservation.version, 1)
+            self.assertEqual(
+                reservation.log_dir, (abandoned_attempt.parent / "version_1").resolve()
+            )
+            self.assertTrue(abandoned_attempt.is_dir())
+            self.assertTrue(reservation.log_dir.is_dir())
+
     def test_artifact_paths_require_typed_model_identity(self) -> None:
         artifacts = FilesystemRunArtifacts(root=Path("/safe/root"))
 
