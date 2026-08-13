@@ -335,6 +335,88 @@ if loaded:
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_catalog_metadata_declarations_are_package_local_and_lazy(self):
+        for entry in MODEL_CATALOG.values():
+            package = _package_module(entry)
+            package_root = SOURCE_ROOT.joinpath(*package.split("."))
+            declaration_path = package_root / "_inspection_metadata.py"
+            init_path = package_root / "__init__.py"
+            tree = ast.parse(
+                init_path.read_text(encoding="utf-8"), init_path.as_posix()
+            )
+            adapter = next(
+                node
+                for node in tree.body
+                if isinstance(node, ast.ClassDef)
+                and node.name == "_ModelPackageAdapter"
+            )
+            load_metadata = next(
+                node
+                for node in adapter.body
+                if isinstance(node, ast.FunctionDef) and node.name == "load_metadata"
+            )
+            local_declaration_imports = [
+                node
+                for node in ast.walk(load_metadata)
+                if isinstance(node, ast.ImportFrom)
+                and node.level == 1
+                and node.module == "_inspection_metadata"
+            ]
+            top_level_declaration_imports = [
+                node
+                for node in tree.body
+                if isinstance(node, ast.ImportFrom)
+                and node.module == "_inspection_metadata"
+            ]
+            with self.subTest(package=package):
+                self.assertTrue(declaration_path.is_file())
+                self.assertEqual(len(local_declaration_imports), 1)
+                self.assertEqual(top_level_declaration_imports, [])
+
+        script = """
+import sys
+import models.catalog
+
+loaded = sorted(
+    name for name in sys.modules if name.endswith('._inspection_metadata')
+)
+if loaded:
+    raise SystemExit(f'catalog eagerly imported metadata declarations: {loaded}')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_runtime_defaults_section_facade_is_lightweight(self):
+        script = """
+import sys
+from model_runtime.packages import RuntimeDefaultsSection
+
+assert RuntimeDefaultsSection.__name__ == 'RuntimeDefaultsSection'
+forbidden = ('torch', 'lightning', 'pytorch_lightning', 'models')
+loaded = sorted(
+    name for name in sys.modules
+    if any(name == root or name.startswith(root + '.') for root in forbidden)
+)
+if loaded:
+    raise SystemExit(f'metadata declaration facade imported heavy modules: {loaded}')
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=PROJECT_ROOT,
+            env={**os.environ, "PYTHONPATH": str(SOURCE_ROOT)},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_importing_run_planning_keeps_preset_and_training_stacks_unloaded(self):
         script = """
 import sys

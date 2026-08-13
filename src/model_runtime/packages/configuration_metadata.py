@@ -3,9 +3,87 @@ from __future__ import annotations
 import ast
 import importlib.util
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
+
+_RuntimeDefaultsField = tuple[str, int, tuple[int, ...]]
+_RuntimeDefaultsFieldInput = tuple[str, int, Sequence[int]]
+
+
+def _snapshot_section_path(path: object) -> tuple[str, ...]:
+    if isinstance(path, (str, bytes)) or not isinstance(path, Sequence):
+        raise ValueError("Runtime Defaults metadata section path must be a sequence.")
+    snapshot = tuple(cast(Sequence[object], path))
+    if any(
+        not isinstance(item, str) or not item or item != item.strip()
+        for item in snapshot
+    ):
+        raise ValueError(
+            "Runtime Defaults metadata section path items must be non-empty "
+            "trimmed strings."
+        )
+    return cast(tuple[str, ...], snapshot)
+
+
+def _snapshot_metadata_field(field: object) -> _RuntimeDefaultsField:
+    if isinstance(field, (str, bytes)) or not isinstance(field, Sequence):
+        raise ValueError(
+            "Runtime Defaults metadata fields require key, line, and sort key."
+        )
+    values = tuple(cast(Sequence[object], field))
+    if len(values) != 3:
+        raise ValueError(
+            "Runtime Defaults metadata fields require key, line, and sort key."
+        )
+    key, line, raw_sort_key = values
+    if not isinstance(key, str) or not key or key != key.strip():
+        raise ValueError(
+            "Runtime Defaults metadata field keys must be non-empty trimmed strings."
+        )
+    if type(line) is not int or line < 1:
+        raise ValueError(
+            "Runtime Defaults metadata field lines must be positive integers."
+        )
+    if isinstance(raw_sort_key, (str, bytes)) or not isinstance(raw_sort_key, Sequence):
+        raise ValueError(
+            "Runtime Defaults metadata sort keys must be integer sequences."
+        )
+    sort_key = tuple(cast(Sequence[object], raw_sort_key))
+    if not sort_key or any(type(item) is not int or item < 0 for item in sort_key):
+        raise ValueError(
+            "Runtime Defaults metadata sort keys must contain non-negative integers."
+        )
+    return key, line, cast(tuple[int, ...], sort_key)
+
+
+def _snapshot_metadata_fields(fields: object) -> tuple[_RuntimeDefaultsField, ...]:
+    if isinstance(fields, (str, bytes)) or not isinstance(fields, Sequence):
+        raise ValueError("Runtime Defaults metadata fields must be a sequence.")
+    return tuple(
+        _snapshot_metadata_field(field) for field in cast(Sequence[object], fields)
+    )
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class RuntimeDefaultsSection:
+    """Immutable package-owned declaration of ordered Inspection metadata."""
+
+    path: tuple[str, ...]
+    fields: tuple[_RuntimeDefaultsField, ...]
+
+    def __init__(
+        self,
+        path: Sequence[str],
+        fields: Sequence[_RuntimeDefaultsFieldInput],
+    ) -> None:
+        snapshot = _snapshot_metadata_fields(fields)
+        if not snapshot:
+            raise ValueError("Runtime Defaults metadata sections require fields.")
+        object.__setattr__(self, "path", _snapshot_section_path(path))
+        object.__setattr__(self, "fields", snapshot)
 
 
 def _assignment_key(node: ast.AST) -> str | None:
@@ -332,4 +410,4 @@ def _configuration_field_metadata_for_module(
     ).parse()
 
 
-__all__ = ["configuration_field_metadata"]
+__all__ = ["RuntimeDefaultsSection", "configuration_field_metadata"]

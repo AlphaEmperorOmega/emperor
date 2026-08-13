@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType, ModuleType
 from typing import TYPE_CHECKING, Any, cast
@@ -15,7 +15,10 @@ from model_runtime.packages.configuration import (
     iter_supported_config_keys,
     normalize_key,
 )
-from model_runtime.packages.configuration_metadata import configuration_field_metadata
+from model_runtime.packages.configuration_metadata import (
+    RuntimeDefaultsSection,
+    configuration_field_metadata,
+)
 from model_runtime.packages.identity import ModelIdentity
 from model_runtime.packages.runtime_defaults import (
     RuntimeDefaultsError,
@@ -176,6 +179,81 @@ def _nested_metadata(
     return _MetadataSnapshot(metadata)
 
 
+def _declared_metadata_entry(
+    path: tuple[str, ...],
+    line: int,
+    sort_key: tuple[int, ...],
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {"line": line, "sortKey": list(sort_key)}
+    if path:
+        entry["section"] = path[-1]
+        entry["sectionPath"] = list(path)
+    return entry
+
+
+def _declared_metadata_keys(
+    source: ModuleType,
+    sections: Sequence[object],
+    *,
+    require_section_path: bool,
+) -> dict[str, dict[str, Any]]:
+    metadata: dict[str, dict[str, Any]] = {}
+    source_keys = vars(source)
+    for value in sections:
+        if not isinstance(value, RuntimeDefaultsSection):
+            raise ValueError(
+                "Runtime Defaults metadata declarations must contain "
+                "RuntimeDefaultsSection values."
+            )
+        if require_section_path and not value.path:
+            raise ValueError(
+                "Configuration metadata sections require a non-empty path."
+            )
+        for key, line, sort_key in value.fields:
+            if key in metadata:
+                raise ValueError(
+                    f"Runtime Defaults metadata declares duplicate field {key!r}."
+                )
+            if key not in source_keys:
+                raise ValueError(
+                    f"Runtime Defaults metadata declares unknown field {key!r}."
+                )
+            metadata[key] = _declared_metadata_entry(value.path, line, sort_key)
+    return metadata
+
+
+def _compile_declared_metadata(
+    source: ModuleType,
+    sections: Sequence[object],
+    required_keys: Sequence[str],
+    *,
+    require_section_path: bool,
+    exact_keys: bool,
+) -> dict[str, dict[str, Any]]:
+    metadata = _declared_metadata_keys(
+        source,
+        sections,
+        require_section_path=require_section_path,
+    )
+    declared = set(metadata)
+    required = set(required_keys)
+    missing = sorted(required - declared)
+    if missing:
+        raise ValueError(
+            "Runtime Defaults metadata is missing required fields: "
+            + ", ".join(missing)
+            + "."
+        )
+    extras = sorted(declared - required) if exact_keys else []
+    if extras:
+        raise ValueError(
+            "Runtime Defaults search metadata declares fields without values: "
+            + ", ".join(extras)
+            + "."
+        )
+    return metadata
+
+
 def _coerce_monitor_options(
     identity: ModelIdentity,
     source: ModuleType,
@@ -228,6 +306,12 @@ class ModelMetadata:
     _dataset_options_source: ModuleType = field(repr=False)
     _monitor_options_source: ModuleType = field(repr=False)
     _search_space_source: ModuleType = field(repr=False)
+    _configuration_metadata_sections: tuple[RuntimeDefaultsSection, ...] | None = field(
+        repr=False
+    )
+    _search_metadata_sections: tuple[RuntimeDefaultsSection, ...] | None = field(
+        repr=False
+    )
     _dataset_options_by_task: Mapping[ExperimentTask, tuple[type, ...]] = field(
         init=False,
         repr=False,
@@ -252,12 +336,40 @@ class ModelMetadata:
         dataset_options: ModuleType,
         monitor_options_source: ModuleType,
         search_space: ModuleType,
+        *,
+        configuration_metadata_sections: Sequence[RuntimeDefaultsSection] | None = None,
+        search_metadata_sections: Sequence[RuntimeDefaultsSection] | None = None,
     ) -> None:
+        if (configuration_metadata_sections is None) != (
+            search_metadata_sections is None
+        ):
+            raise ValueError(
+                "ModelMetadata requires configuration and search metadata "
+                "declarations together."
+            )
         object.__setattr__(self, "identity", identity)
         object.__setattr__(self, "_runtime_defaults_source", runtime_defaults)
         object.__setattr__(self, "_dataset_options_source", dataset_options)
         object.__setattr__(self, "_monitor_options_source", monitor_options_source)
         object.__setattr__(self, "_search_space_source", search_space)
+        object.__setattr__(
+            self,
+            "_configuration_metadata_sections",
+            (
+                None
+                if configuration_metadata_sections is None
+                else tuple(configuration_metadata_sections)
+            ),
+        )
+        object.__setattr__(
+            self,
+            "_search_metadata_sections",
+            (
+                None
+                if search_metadata_sections is None
+                else tuple(search_metadata_sections)
+            ),
+        )
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -298,11 +410,6 @@ class ModelMetadata:
             search_space_module = self._search_space_source
             supported_keys = tuple(iter_supported_config_keys(config_module))
             keys_by_alias = _keys_by_alias(supported_keys)
-            config_metadata = configuration_field_metadata(config_module)
-            search_metadata = configuration_field_metadata(
-                search_space_module,
-                include_search_space=True,
-            )
             search_values = {
                 key: tuple(values) for key, values in self.search_space_items.items()
             }
@@ -311,6 +418,11 @@ class ModelMetadata:
                 for key in getattr(config_module, "CONFIG_SCHEMA_SKIP_KEYS", ())
                 if isinstance(key, str) and key in supported_keys
             )
+            config_metadata = self._configuration_metadata(
+                supported_keys,
+                skipped_schema_keys,
+            )
+            search_metadata = self._search_metadata(tuple(search_values))
         except ValueError as exc:
             raise RuntimeDefaultsError(str(exc)) from exc
         except Exception as exc:
@@ -335,6 +447,43 @@ class ModelMetadata:
             search_values=MappingProxyType(search_values),
             skipped_schema_keys=skipped_schema_keys,
             inspection_limits=inspection_limits,
+        )
+
+    def _configuration_metadata(
+        self,
+        supported_keys: tuple[str, ...],
+        skipped_schema_keys: frozenset[str],
+    ) -> dict[str, dict[str, Any]]:
+        sections = self._configuration_metadata_sections
+        if sections is None:
+            return configuration_field_metadata(self._runtime_defaults_source)
+        required_keys = tuple(
+            key for key in supported_keys if key not in skipped_schema_keys
+        )
+        return _compile_declared_metadata(
+            self._runtime_defaults_source,
+            sections,
+            required_keys,
+            require_section_path=True,
+            exact_keys=False,
+        )
+
+    def _search_metadata(
+        self,
+        search_keys: tuple[str, ...],
+    ) -> dict[str, dict[str, Any]]:
+        sections = self._search_metadata_sections
+        if sections is None:
+            return configuration_field_metadata(
+                self._search_space_source,
+                include_search_space=True,
+            )
+        return _compile_declared_metadata(
+            self._search_space_source,
+            sections,
+            search_keys,
+            require_section_path=False,
+            exact_keys=True,
         )
 
     @property
