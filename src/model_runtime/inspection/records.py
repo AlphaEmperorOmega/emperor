@@ -3,12 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, cast
+from typing import Any, Literal, TypeVar, cast
 
 from model_runtime.inspection.capture_limits import InspectionCaptureLimits
 from model_runtime.packages.identity import ModelIdentity
 
 GraphRole = Literal["architecture", "internal", "runtime"]
+_SnapshotValue = TypeVar("_SnapshotValue")
 
 
 def freeze_value(value: Any) -> Any:
@@ -20,7 +21,16 @@ def freeze_value(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         sequence = cast(list[Any] | tuple[Any, ...], value)
         return tuple(freeze_value(item) for item in sequence)
+    if isinstance(value, (set, frozenset)):
+        values = cast(set[Any] | frozenset[Any], value)
+        return frozenset(freeze_value(item) for item in values)
     return value
+
+
+def _frozen_tuple(
+    values: tuple[_SnapshotValue, ...],
+) -> tuple[_SnapshotValue, ...]:
+    return tuple(cast(_SnapshotValue, freeze_value(item)) for item in values)
 
 
 def _validated_memory_limit(value: object | None) -> int | None:
@@ -76,6 +86,9 @@ class ConfigurationFieldCondition:
     key: str
     values: tuple[SerializedConfigValue, ...]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", _frozen_tuple(self.values))
+
 
 @dataclass(frozen=True)
 class ConfigurationField:
@@ -93,11 +106,27 @@ class ConfigurationField:
     locked_value: SerializedConfigValue = None
     locked_reason: str = ""
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "section_path",
+            _frozen_tuple(self.section_path),
+        )
+        object.__setattr__(self, "choices", _frozen_tuple(self.choices))
+        object.__setattr__(
+            self,
+            "applicable_when",
+            _frozen_tuple(self.applicable_when),
+        )
+
 
 @dataclass(frozen=True)
 class ConfigurationSchema:
     identity: ModelIdentity
     fields: tuple[ConfigurationField, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fields", _frozen_tuple(self.fields))
 
 
 @dataclass(frozen=True)
@@ -113,12 +142,28 @@ class SearchAxis:
     locked_by_presets: tuple[str, ...] = ()
     lock_reasons: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", _frozen_tuple(self.values))
+        object.__setattr__(
+            self,
+            "locked_by_presets",
+            _frozen_tuple(self.locked_by_presets),
+        )
+        object.__setattr__(
+            self,
+            "lock_reasons",
+            _frozen_tuple(self.lock_reasons),
+        )
+
 
 @dataclass(frozen=True)
 class SearchSpace:
     identity: ModelIdentity
     preset: str | None
     axes: tuple[SearchAxis, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "axes", _frozen_tuple(self.axes))
 
 
 @dataclass(frozen=True)
@@ -127,11 +172,17 @@ class GraphConfigurationField:
     value: Any
     description: str | None = None
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "value", freeze_value(self.value))
+
 
 @dataclass(frozen=True)
 class GraphConfiguration:
     type_name: str
     fields: tuple[GraphConfigurationField, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "fields", _frozen_tuple(self.fields))
 
 
 @dataclass(frozen=True)
@@ -162,6 +213,10 @@ class ModelGraph:
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "nodes", _frozen_tuple(self.nodes))
+        object.__setattr__(self, "edges", _frozen_tuple(self.edges))
+
 
 @dataclass(frozen=True)
 class InspectionResult:
@@ -171,6 +226,10 @@ class InspectionResult:
     parameter_size_bytes: int
     nodes: tuple[GraphNode, ...]
     edges: tuple[GraphEdge, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "nodes", _frozen_tuple(self.nodes))
+        object.__setattr__(self, "edges", _frozen_tuple(self.edges))
 
 
 __all__ = [
