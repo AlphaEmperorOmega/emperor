@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from itertools import islice
 from typing import Any, Protocol, cast
 
+from torch import Tensor
 from torch.nn.parameter import is_lazy
 
 from model_runtime.inspection._graph_accounting import GraphModule
@@ -16,6 +17,7 @@ from model_runtime.inspection._graph_component_semantics import (
     module_configuration,
 )
 from model_runtime.inspection.capture_limits import InspectionCaptureLimits
+from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.records import GraphConfiguration, GraphRole
 
 
@@ -340,6 +342,11 @@ class _NeuronDetailsAdapter:
         x_axis_position = getattr(source, "x_axis_position", _MISSING_ATTRIBUTE)
         if x_axis_position is _MISSING_ATTRIBUTE:
             return None
+        valid_shape = isinstance(connections, Tensor) and connections.shape[1:] == (3,)
+        if not valid_shape:
+            raise InspectionError(
+                "Terminal neuron_connections must be a Tensor shaped [connections, 3]."
+            )
         terminal = _TerminalReachObservation(
             owner=cast(_TerminalReachRemainder, source),
             neuron_connections=connections,
