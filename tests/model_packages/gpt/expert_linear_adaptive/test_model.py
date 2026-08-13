@@ -180,27 +180,31 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         ):
             GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
-    def test_recurrent_minimum_rejects_invalid_values_when_recurrence_is_disabled(
-        self,
-    ):
+    def test_recurrent_minimum_rejects_wrong_types_during_runtime_binding(self):
         package = model_package("gpt/expert_linear_adaptive")
         self.assertIsNotNone(package)
         assert package is not None
-        invalid_cases = (
-            (True, TypeError),
-            (1.5, TypeError),
-            ("1", TypeError),
-            (0, ValueError),
-            (-1, ValueError),
-        )
+        invalid_values = (True, 1.5, "1")
 
-        for invalid_value, expected_error in invalid_cases:
+        for invalid_value in invalid_values:
+            with self.subTest(invalid_value=invalid_value):
+                with self.assertRaisesRegex(TypeError, "recurrent_min_steps"):
+                    package.bind_runtime_defaults(
+                        {"recurrent_min_steps": invalid_value}
+                    )
+
+    def test_recurrent_minimum_rejects_nonpositive_values_in_builder(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+
+        for invalid_value in (0, -1):
             with self.subTest(invalid_value=invalid_value):
                 runtime = package.bind_runtime_defaults(
                     {"recurrent_min_steps": invalid_value}
                 )
 
-                with self.assertRaisesRegex(expected_error, "recurrent_min_steps"):
+                with self.assertRaisesRegex(ValueError, "recurrent_min_steps"):
                     GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
     def test_recurrent_minimum_cannot_exceed_recurrent_maximum(self):
@@ -222,29 +226,43 @@ class TestGptExpertLinearAdaptiveModel(unittest.TestCase):
         ):
             GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()
 
-    def test_recurrent_ponder_weight_rejects_invalid_values_when_halting_is_disabled(
+    def test_recurrent_ponder_weight_rejects_wrong_types_during_runtime_binding(
         self,
     ):
         package = model_package("gpt/expert_linear_adaptive")
         self.assertIsNotNone(package)
         assert package is not None
-        invalid_cases = (
-            (True, TypeError),
-            ("1.0", TypeError),
-            (float("nan"), ValueError),
-            (float("inf"), ValueError),
-            (float("-inf"), ValueError),
-            (-0.1, ValueError),
+        invalid_values = (True, "1.0")
+
+        for invalid_value in invalid_values:
+            with self.subTest(invalid_value=invalid_value):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "recurrent_ponder_cost_weight",
+                ):
+                    package.bind_runtime_defaults(
+                        {"recurrent_ponder_cost_weight": invalid_value}
+                    )
+
+    def test_recurrent_ponder_weight_rejects_invalid_values_in_builder(self):
+        package = model_package("gpt/expert_linear_adaptive")
+        self.assertIsNotNone(package)
+        assert package is not None
+        invalid_values = (
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+            -0.1,
         )
 
-        for invalid_value, expected_error in invalid_cases:
+        for invalid_value in invalid_values:
             with self.subTest(invalid_value=invalid_value):
                 runtime = package.bind_runtime_defaults(
                     {"recurrent_ponder_cost_weight": invalid_value}
                 )
 
                 with self.assertRaisesRegex(
-                    expected_error,
+                    ValueError,
                     "recurrent_ponder_cost_weight",
                 ):
                     GptExpertLinearAdaptiveConfigBuilder(runtime=runtime).build()

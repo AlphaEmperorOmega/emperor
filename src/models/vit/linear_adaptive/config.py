@@ -59,6 +59,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -99,6 +100,7 @@ CALLBACK_CHECKPOINT_FLAG: bool = False
 # Global
 INPUT_DIM: int = 224 * 224 * 3
 HIDDEN_DIM: int = 32
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 OUTPUT_DIM: int = 10
 BATCH_SIZE: int = 64
 LEARNING_RATE: float = 1e-3

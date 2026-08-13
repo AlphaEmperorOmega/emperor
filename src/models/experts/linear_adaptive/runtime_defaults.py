@@ -3,6 +3,7 @@ from types import ModuleType
 from typing import Final
 
 import models.experts.linear_adaptive.config as config
+from model_runtime.packages.runtime_values import validate_runtime_default_value_types
 from models.experts.linear_adaptive._config_implementation import (
     _RuntimeDefaultsResolver,
     _RuntimeDefaultValues,
@@ -69,6 +70,11 @@ def runtime_from_flat(
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
     flat_values = builder_kwargs_from_flat(flat_kwargs or {}, config_module)
+    validate_runtime_default_value_types(
+        flat_values,
+        package="models.experts.linear_adaptive",
+        config_module=config_module,
+    )
     try:
         values = _RuntimeDefaultValues(**flat_values)
     except TypeError as error:

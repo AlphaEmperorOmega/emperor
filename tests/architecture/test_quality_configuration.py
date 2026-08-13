@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import configparser
 import json
 import os
@@ -70,6 +71,23 @@ REQUIRED_RUNTIME_MUTATION_SELECTORS = {
 
 
 class QualityConfigurationTests(unittest.TestCase):
+    def test_runtime_value_validation_uses_python_311_typing_surface(self) -> None:
+        for relative_path in (
+            "src/model_runtime/packages/runtime_values.py",
+            "tests/contract/test_runtime_default_value_validation.py",
+        ):
+            tree = ast.parse((PROJECT_ROOT / relative_path).read_text(encoding="utf-8"))
+            typing_imports = {
+                alias.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.module == "typing"
+                for alias in node.names
+            }
+            with self.subTest(path=relative_path):
+                self.assertTrue(
+                    typing_imports.isdisjoint({"TypeAliasType", "is_protocol"})
+                )
+
     def test_strict_type_baseline_cannot_silently_shrink(self) -> None:
         config = json.loads(
             (PROJECT_ROOT / "pyrightconfig.json").read_text(encoding="utf-8")
