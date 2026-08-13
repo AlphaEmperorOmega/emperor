@@ -45,6 +45,7 @@ class _ParameterPackageAdapter:
         identity = ModelIdentity("fixtures", "parameters")
         runtime_defaults = ModuleType("tests.parameter_runtime_defaults")
         runtime_defaults.DATA_NUM_WORKERS = None
+        runtime_defaults.NUM_EPOCHS = 1
         runtime_defaults.RUN_TEST_AFTER_FIT = False
         runtime_defaults.SEED = None
         dataset_options = ModuleType("tests.parameter_dataset_options")
@@ -140,9 +141,6 @@ class _Progress:
 
 
 class _ParameterExperiment(ExperimentBase):
-    def _num_epochs(self) -> int:
-        return 1
-
     def _load_trainer_config(self, config_overrides=None) -> dict:
         return {"trainer_args": {}, "callbacks": []}
 

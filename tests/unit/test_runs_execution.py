@@ -9,7 +9,8 @@ from dataclasses import replace
 from datetime import datetime
 from inspect import Parameter, signature
 from pathlib import Path
-from unittest.mock import patch
+from types import ModuleType
+from unittest.mock import PropertyMock, patch
 
 import torch
 
@@ -17,6 +18,7 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 
+from emperor.experiments import ExperimentTask
 from emperor.monitoring import MonitorOption
 from model_runtime.packages import ModelIdentity, ModelPackage
 from model_runtime.runs import (
@@ -30,6 +32,7 @@ from model_runtime.runs import (
     SubmittedRun,
     accept_run_plan,
     execute_runs,
+    execution,
     plan_runs,
 )
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
@@ -814,6 +817,12 @@ class RunsExecutionTests(unittest.TestCase):
                 package.resolve_dataset("FashionMNIST", experiment_task),
                 "expected Dataset 'Mnist', got 'FashionMNIST'",
             ),
+            (
+                "experiment_task",
+                ExperimentTask.TEXT_TRANSLATION,
+                "expected Experiment Task 'image-classification', got "
+                "'text-translation'",
+            ),
         )
         original_materialize = ExperimentBase.materialize_training_runs
 
@@ -863,6 +872,220 @@ class RunsExecutionTests(unittest.TestCase):
 
                 bind_checkpoint.assert_not_called()
                 execute_training.assert_not_called()
+
+    def test_training_run_handoff_rejects_nested_semantic_corruption(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        experiment_task, selected_presets, requests = (
+            execution._validated_materialized_runs(package, plan)
+        )
+        nested = {"nested": {"values": [1, 2]}}
+        nested_request = replace(
+            requests[0],
+            parameters=nested,
+            config_overrides=nested,
+        )
+        cases = (
+            ("parameters", "did not preserve requested parameters"),
+            (
+                "config_overrides",
+                "did not preserve Runtime Defaults overrides",
+            ),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        for field_name, message in cases:
+            with self.subTest(field=field_name):
+
+                def materialize_with_nested_corruption(
+                    experiment,
+                    materialized_requests,
+                    selected_field=field_name,
+                ):
+                    sanitized_request = replace(
+                        materialized_requests[0],
+                        parameters={},
+                        config_overrides={},
+                    )
+                    training_run = original_materialize(
+                        experiment,
+                        [sanitized_request],
+                    )[0]
+                    training_run.parameters = dict(nested_request.parameters)
+                    training_run.config_overrides = dict(
+                        nested_request.config_overrides
+                    )
+                    setattr(
+                        training_run,
+                        selected_field,
+                        {"nested": {"values": (1, 3)}},
+                    )
+                    return [training_run]
+
+                with (
+                    tempfile.TemporaryDirectory() as tmp,
+                    patch.object(
+                        execution,
+                        "_validated_materialized_runs",
+                        return_value=(
+                            experiment_task,
+                            selected_presets,
+                            [nested_request],
+                        ),
+                    ),
+                    patch.object(
+                        ExperimentBase,
+                        "materialize_training_runs",
+                        autospec=True,
+                        side_effect=materialize_with_nested_corruption,
+                    ),
+                    patch(
+                        "model_runtime.runs.execution."
+                        "CheckpointContinuationLifecycle.bind_training_runs",
+                        autospec=True,
+                    ) as bind_checkpoint,
+                    patch.object(
+                        ExperimentBase,
+                        "execute_training",
+                        autospec=True,
+                        return_value=({}, "logs/unused"),
+                    ) as execute_training,
+                    self.assertRaisesRegex(InvalidRunPlan, message),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    )
+
+                bind_checkpoint.assert_not_called()
+                execute_training.assert_not_called()
+
+    def test_training_run_handoff_rejects_corrupted_epoch_count(self) -> None:
+        package = _linears_linear()
+        default_epochs = package.runtime_defaults_spec.current_value_or(
+            "NUM_EPOCHS",
+            10,
+        )
+        cases = (
+            ({}, default_epochs, default_epochs + 1),
+            ({"NUM_EPOCHS": 2}, 2, 3),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        for overrides, expected_epochs, corrupted_epochs in cases:
+            with self.subTest(overrides=overrides):
+                plan = plan_runs(
+                    package,
+                    RunRequest(
+                        presets=("baseline",),
+                        datasets=("Mnist",),
+                        overrides=overrides,
+                    ),
+                )
+
+                def materialize_with_epoch_corruption(
+                    experiment,
+                    requests,
+                    selected_epochs=corrupted_epochs,
+                ):
+                    training_runs = original_materialize(experiment, requests)
+                    training_runs[0].num_epochs = selected_epochs
+                    return training_runs
+
+                with (
+                    tempfile.TemporaryDirectory() as tmp,
+                    patch.object(
+                        ExperimentBase,
+                        "materialize_training_runs",
+                        autospec=True,
+                        side_effect=materialize_with_epoch_corruption,
+                    ),
+                    patch(
+                        "model_runtime.runs.execution."
+                        "CheckpointContinuationLifecycle.bind_training_runs",
+                        autospec=True,
+                    ) as bind_checkpoint,
+                    patch.object(
+                        ExperimentBase,
+                        "execute_training",
+                        autospec=True,
+                        return_value=({}, "logs/unused"),
+                    ) as execute_training,
+                    self.assertRaisesRegex(
+                        InvalidRunPlan,
+                        f"expected epoch count {expected_epochs}, got "
+                        f"{corrupted_epochs}",
+                    ),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    )
+
+                bind_checkpoint.assert_not_called()
+                execute_training.assert_not_called()
+
+    def test_training_run_handoff_preserves_historical_epoch_fallback(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        runtime_defaults_without_epochs = replace(
+            package.runtime_defaults_spec,
+            _config_module=ModuleType("runtime_defaults_without_epochs"),
+        )
+        original_materialize = ExperimentBase.materialize_training_runs
+
+        def materialize_with_epoch_corruption(experiment, requests):
+            training_runs = original_materialize(experiment, requests)
+            self.assertEqual(training_runs[0].num_epochs, 10)
+            training_runs[0].num_epochs = 11
+            return training_runs
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "runtime_defaults_spec",
+                new_callable=PropertyMock,
+                return_value=runtime_defaults_without_epochs,
+            ),
+            patch.object(
+                ExperimentBase,
+                "materialize_training_runs",
+                autospec=True,
+                side_effect=materialize_with_epoch_corruption,
+            ),
+            patch(
+                "model_runtime.runs.execution."
+                "CheckpointContinuationLifecycle.bind_training_runs",
+                autospec=True,
+            ) as bind_checkpoint,
+            patch.object(
+                ExperimentBase,
+                "execute_training",
+                autospec=True,
+                return_value=({}, "logs/unused"),
+            ) as execute_training,
+            self.assertRaisesRegex(
+                InvalidRunPlan,
+                "expected epoch count 10, got 11",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        bind_checkpoint.assert_not_called()
+        execute_training.assert_not_called()
 
     def test_requested_checkpointing_keeps_best_and_last_checkpoints(self) -> None:
         package = _linears_linear()

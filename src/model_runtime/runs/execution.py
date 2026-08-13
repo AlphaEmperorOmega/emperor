@@ -276,8 +276,87 @@ def _handoff_dataset_name(dataset_type: object) -> str:
     return name if isinstance(name, str) else type(dataset_type).__name__
 
 
+def _handoff_task_name(package: ModelPackage, experiment_task: object) -> str:
+    try:
+        return package.task_name(cast(Any, experiment_task))
+    except (AttributeError, TypeError, ValueError):
+        return type(experiment_task).__name__
+
+
+def _validate_training_run_identity(
+    package: ModelPackage,
+    experiment_task: Any,
+    position: int,
+    request: TrainingRunRequest,
+    training_run: TrainingRun,
+) -> None:
+    if training_run.run_id != request.run_id:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected run id "
+            f"{request.run_id!r}, got {training_run.run_id!r}."
+        )
+    if training_run.run_index != request.run_index:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected run index "
+            f"{request.run_index}, got {training_run.run_index}."
+        )
+    if training_run.run_total != request.run_total:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected run total "
+            f"{request.run_total}, got {training_run.run_total}."
+        )
+    expected_preset_name = _handoff_preset_name(package, request.preset)
+    actual_preset_name = _handoff_preset_name(package, training_run.preset)
+    if (
+        training_run.preset is not request.preset
+        or actual_preset_name != expected_preset_name
+    ):
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected preset "
+            f"'{expected_preset_name}', got '{actual_preset_name}'."
+        )
+    if training_run.dataset_type is not request.dataset_type:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected Dataset "
+            f"'{_handoff_dataset_name(request.dataset_type)}', got "
+            f"'{_handoff_dataset_name(training_run.dataset_type)}'."
+        )
+    if training_run.experiment_task is not experiment_task:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected Experiment "
+            f"Task '{_handoff_task_name(package, experiment_task)}', got "
+            f"'{_handoff_task_name(package, training_run.experiment_task)}'."
+        )
+
+
+def _validate_training_run_semantics(
+    package: ModelPackage,
+    position: int,
+    request: TrainingRunRequest,
+    training_run: TrainingRun,
+) -> None:
+    if training_run.parameters != request.parameters:
+        raise _invalid_plan(
+            f"Run materialization at position {position} did not preserve "
+            "requested parameters."
+        )
+    if training_run.config_overrides != request.config_overrides:
+        raise _invalid_plan(
+            f"Run materialization at position {position} did not preserve "
+            "Runtime Defaults overrides."
+        )
+    default_epochs = package.runtime_defaults_spec.current_value_or("NUM_EPOCHS", 10)
+    expected_epochs = request.config_overrides.get("num_epochs", default_epochs)
+    if training_run.num_epochs != expected_epochs:
+        raise _invalid_plan(
+            f"Run materialization at position {position} expected epoch count "
+            f"{expected_epochs}, got {training_run.num_epochs}."
+        )
+
+
 def _validate_training_run_handoff(
     package: ModelPackage,
+    experiment_task: Any,
     requests: Sequence[TrainingRunRequest],
     training_runs: Sequence[TrainingRun],
 ) -> None:
@@ -290,37 +369,14 @@ def _validate_training_run_handoff(
                 f"Run materialization at position {position} expected a "
                 f"TrainingRun, got {type(training_run).__name__}."
             )
-        if training_run.run_id != request.run_id:
-            raise _invalid_plan(
-                f"Run materialization at position {position} expected run id "
-                f"{request.run_id!r}, got {training_run.run_id!r}."
-            )
-        if training_run.run_index != request.run_index:
-            raise _invalid_plan(
-                f"Run materialization at position {position} expected run index "
-                f"{request.run_index}, got {training_run.run_index}."
-            )
-        if training_run.run_total != request.run_total:
-            raise _invalid_plan(
-                f"Run materialization at position {position} expected run total "
-                f"{request.run_total}, got {training_run.run_total}."
-            )
-        expected_preset_name = _handoff_preset_name(package, request.preset)
-        actual_preset_name = _handoff_preset_name(package, training_run.preset)
-        if (
-            training_run.preset is not request.preset
-            or actual_preset_name != expected_preset_name
-        ):
-            raise _invalid_plan(
-                f"Run materialization at position {position} expected preset "
-                f"'{expected_preset_name}', got '{actual_preset_name}'."
-            )
-        if training_run.dataset_type is not request.dataset_type:
-            raise _invalid_plan(
-                f"Run materialization at position {position} expected Dataset "
-                f"'{_handoff_dataset_name(request.dataset_type)}', got "
-                f"'{_handoff_dataset_name(training_run.dataset_type)}'."
-            )
+        _validate_training_run_identity(
+            package,
+            experiment_task,
+            position,
+            request,
+            training_run,
+        )
+        _validate_training_run_semantics(package, position, request, training_run)
 
 
 class _RunExecutor:
@@ -407,7 +463,12 @@ class _RunExecutor:
                 "Run plan materialization produced a different number of Runs: "
                 f"expected {len(self.plan.runs)}, got {len(training_runs)}."
             )
-        _validate_training_run_handoff(package, materialized_runs, training_runs)
+        _validate_training_run_handoff(
+            package,
+            experiment_task,
+            materialized_runs,
+            training_runs,
+        )
         return experiment, training_runs
 
     def _execute_training_runs(
