@@ -4,8 +4,11 @@ import random
 from collections.abc import Sequence
 from typing import Any, cast
 
-from emperor.experiments import ExperimentTask, experiment_task_name
-from model_runtime.cli._wire_packages import identity_from_wire, identity_to_wire
+from model_runtime.cli._wire_packages import (
+    experiment_task_from_wire,
+    identity_from_wire,
+    identity_to_wire,
+)
 from model_runtime.cli._wire_search import (
     search_spec_from_wire,
     search_spec_from_wire_at,
@@ -17,6 +20,7 @@ from model_runtime.cli._wire_shared import (
     json_mapping_from_wire,
     json_value_from_wire,
     json_value_to_wire,
+    require_sequence_limit,
     wire_fields,
     wire_list,
     wire_literal,
@@ -37,28 +41,11 @@ from model_runtime.runs import (
 )
 from model_runtime.runs.records import RunParameterSource
 
-_EXPERIMENT_TASK_NAMES = {experiment_task_name(task) for task in ExperimentTask}
 _RUN_PARAMETER_SOURCES = {"override", "search"}
 _DEFAULT_BUDGET = PlanningBudget()
 _MAX_WIRE_RUNS = _DEFAULT_BUDGET.max_materialized_runs or 2_000
 _MAX_WIRE_SELECTIONS = _MAX_WIRE_RUNS
 _MAX_WIRE_PARAMETERS_PER_RUN = 1_024
-
-
-def _require_sequence_limit(
-    values: Sequence[Any],
-    path: str,
-    maximum_items: int,
-) -> None:
-    if len(values) > maximum_items:
-        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
-
-
-def _experiment_task(value: object, path: str) -> str:
-    selected = wire_string(value, path)
-    if selected not in _EXPERIMENT_TASK_NAMES:
-        raise WireCodecError(f"{path} is not a supported Experiment Task.")
-    return selected
 
 
 def _mapping_to_wire(value: object, path: str) -> dict[str, Any]:
@@ -69,12 +56,12 @@ def _mapping_to_wire(value: object, path: str) -> dict[str, Any]:
 
 
 def run_request_to_wire(request: RunRequest) -> dict[str, Any]:
-    _require_sequence_limit(
+    require_sequence_limit(
         request.presets,
         "$.presets",
         _MAX_WIRE_SELECTIONS,
     )
-    _require_sequence_limit(
+    require_sequence_limit(
         request.datasets,
         "$.datasets",
         _MAX_WIRE_SELECTIONS,
@@ -83,7 +70,7 @@ def run_request_to_wire(request: RunRequest) -> dict[str, Any]:
         "presets": list(request.presets),
         "datasets": list(request.datasets),
         "experiment_task": (
-            _experiment_task(request.experiment_task, "$.experiment_task")
+            experiment_task_from_wire(request.experiment_task, "$.experiment_task")
             if request.experiment_task is not None
             else None
         ),
@@ -122,7 +109,7 @@ def run_request_from_wire(payload: object) -> RunRequest:
         experiment_task=(
             None
             if experiment_task is None
-            else _experiment_task(experiment_task, "$.experiment_task")
+            else experiment_task_from_wire(experiment_task, "$.experiment_task")
         ),
         overrides=json_mapping_from_wire(
             raw.get("overrides", {}),
@@ -214,7 +201,7 @@ def submitted_run_from_wire(payload: object) -> SubmittedRun:
 
 
 def submitted_runs_to_wire(runs: Sequence[SubmittedRun]) -> list[dict[str, Any]]:
-    _require_sequence_limit(runs, "$.runs", _MAX_WIRE_RUNS)
+    require_sequence_limit(runs, "$.runs", _MAX_WIRE_RUNS)
     return [submitted_run_to_wire(run) for run in runs]
 
 
@@ -242,14 +229,14 @@ def _run_parameter_to_wire(parameter: RunParameter) -> dict[str, Any]:
 
 
 def _run_spec_to_wire(run: RunSpec) -> dict[str, Any]:
-    _require_sequence_limit(
+    require_sequence_limit(
         run.parameters,
         "$.runs[].parameters",
         _MAX_WIRE_PARAMETERS_PER_RUN,
     )
     return {
         "id": run.id,
-        "experiment_task": _experiment_task(
+        "experiment_task": experiment_task_from_wire(
             run.experiment_task,
             "$.runs[].experiment_task",
         ),
@@ -273,18 +260,18 @@ def _preset_search_to_wire(
 
 
 def run_plan_to_wire(plan: RunPlan) -> dict[str, Any]:
-    _require_sequence_limit(plan.runs, "$.runs", _MAX_WIRE_RUNS)
-    _require_sequence_limit(
+    require_sequence_limit(plan.runs, "$.runs", _MAX_WIRE_RUNS)
+    require_sequence_limit(
         plan.presets,
         "$.presets",
         _MAX_WIRE_SELECTIONS,
     )
-    _require_sequence_limit(
+    require_sequence_limit(
         plan.datasets,
         "$.datasets",
         _MAX_WIRE_SELECTIONS,
     )
-    _require_sequence_limit(
+    require_sequence_limit(
         plan.preset_searches,
         "$.preset_searches",
         _MAX_WIRE_SELECTIONS,
@@ -292,7 +279,7 @@ def run_plan_to_wire(plan: RunPlan) -> dict[str, Any]:
     payload = {
         "identity": identity_to_wire(plan.identity),
         "presets": list(plan.presets),
-        "experiment_task": _experiment_task(
+        "experiment_task": experiment_task_from_wire(
             plan.experiment_task,
             "$.experiment_task",
         ),
@@ -352,7 +339,7 @@ def _run_spec_from_wire(item: object, index: int) -> RunSpec:
     parameters = _run_parameters_from_wire(run["parameters"], f"{path}.parameters")
     return RunSpec(
         id=wire_string(run["id"], f"{path}.id"),
-        experiment_task=_experiment_task(
+        experiment_task=experiment_task_from_wire(
             run["experiment_task"],
             f"{path}.experiment_task",
         ),
@@ -423,7 +410,7 @@ def run_plan_from_wire(payload: object) -> RunPlan:
         ),
         "$.presets",
     )
-    experiment_task = _experiment_task(
+    experiment_task = experiment_task_from_wire(
         raw["experiment_task"],
         "$.experiment_task",
     )
@@ -457,7 +444,7 @@ def run_plan_from_wire(payload: object) -> RunPlan:
 def run_result_to_wire(result: RunResult) -> dict[str, Any]:
     payload = {
         "run_id": result.run_id,
-        "experiment_task": _experiment_task(
+        "experiment_task": experiment_task_from_wire(
             result.experiment_task,
             "$.experiment_task",
         ),
@@ -485,7 +472,7 @@ def run_result_from_wire(payload: object) -> RunResult:
     )
     return RunResult(
         run_id=wire_string(raw["run_id"], "$.run_id"),
-        experiment_task=_experiment_task(
+        experiment_task=experiment_task_from_wire(
             raw["experiment_task"],
             "$.experiment_task",
         ),
@@ -497,7 +484,7 @@ def run_result_from_wire(payload: object) -> RunResult:
 
 
 def run_results_to_wire(results: Sequence[RunResult]) -> list[dict[str, Any]]:
-    _require_sequence_limit(results, "$.results", _MAX_WIRE_RUNS)
+    require_sequence_limit(results, "$.results", _MAX_WIRE_RUNS)
     return [run_result_to_wire(result) for result in results]
 
 

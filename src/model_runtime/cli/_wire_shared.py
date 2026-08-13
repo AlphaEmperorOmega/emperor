@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Sized
 from typing import Any, cast
 
 PROTOCOL_VERSION = 1
@@ -10,6 +10,15 @@ _MAX_JSON_NESTING_DEPTH = 64
 
 class WireCodecError(ValueError):
     """A value does not conform to the version 1 CLI wire protocol."""
+
+
+def require_sequence_limit(
+    values: Sized,
+    path: str,
+    maximum_items: int,
+) -> None:
+    if len(values) > maximum_items:
+        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
 
 
 def wire_mapping(value: object, path: str) -> Mapping[str, Any]:
@@ -31,8 +40,8 @@ def wire_list(
     if not isinstance(value, list):
         raise WireCodecError(f"{path} must be a list.")
     items = cast(list[Any], value)
-    if maximum_items is not None and len(items) > maximum_items:
-        raise WireCodecError(f"{path} must contain at most {maximum_items} items.")
+    if maximum_items is not None:
+        require_sequence_limit(items, path, maximum_items)
     return items
 
 
