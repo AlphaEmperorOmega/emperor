@@ -77,6 +77,20 @@ def _broken_package() -> ModelPackage:
     )
 
 
+class _ReadOnceDescriptor:
+    def __init__(self, value: object) -> None:
+        self.value = value
+        self.read_count = 0
+
+    def __get__(self, instance: object, owner: type[object]) -> object:
+        if instance is None:
+            return self
+        self.read_count += 1
+        if self.read_count > 1:
+            raise AssertionError("structural capability was observed twice")
+        return self.value
+
+
 class InspectionGraphInterfaceTests(unittest.TestCase):
     def test_semantic_catalog_does_not_import_unselected_registered_types(self) -> None:
         script = """
@@ -1062,6 +1076,196 @@ assert semantic_module not in sys.modules
 
         self.assertIn("cluster", details)
         self.assertNotIn("recurrent", details)
+
+    def test_partial_neuron_cluster_capability_keeps_explicit_failure(self) -> None:
+        for missing_attribute in (
+            "y_axis_total_neurons",
+            "z_axis_total_neurons",
+        ):
+            with self.subTest(missing_attribute=missing_attribute):
+                cluster = nn.Module()
+                cluster.x_axis_total_neurons = 1
+                cluster.cluster = nn.ModuleDict()
+                if missing_attribute == "z_axis_total_neurons":
+                    cluster.y_axis_total_neurons = 1
+
+                with self.assertRaisesRegex(AttributeError, missing_attribute):
+                    module_details(cluster)
+
+    def test_partial_terminal_capability_keeps_explicit_failure(self) -> None:
+        for missing_attribute in ("y_axis_position", "z_axis_position"):
+            with self.subTest(missing_attribute=missing_attribute):
+                terminal = nn.Module()
+                terminal.neuron_connections = torch.tensor([[1, 2, 3]])
+                terminal.x_axis_position = 4
+                if missing_attribute == "z_axis_position":
+                    terminal.y_axis_position = 5
+
+                with self.assertRaisesRegex(AttributeError, missing_attribute):
+                    module_details(terminal)
+
+    def test_partial_recurrent_schedule_capability_keeps_explicit_failure(self) -> None:
+        recurrent = nn.Module()
+        recurrent.recurrent_iteration_schedule = object()
+
+        with self.assertRaisesRegex(AttributeError, "snapshot"):
+            module_details(recurrent)
+
+    def test_direct_terminal_reach_does_not_read_irrelevant_terminal(self) -> None:
+        class DirectTerminalReach(nn.Module):
+            @property
+            def terminal(self) -> object:
+                raise AssertionError("direct reach must not inspect terminal")
+
+        reach = DirectTerminalReach()
+        reach.neuron_connections = torch.tensor([[1, 2, 3]])
+        reach.x_axis_position = 4
+        reach.y_axis_position = 5
+        reach.z_axis_position = 6
+
+        self.assertEqual(
+            module_details(reach)["terminalReach"]["position"],
+            [4, 5, 6],
+        )
+
+    def test_recurrent_schedule_descriptor_is_read_once(self) -> None:
+        @dataclass
+        class ScheduleSnapshot:
+            maximum_transition_count: int = 1
+            active_transition_count: int = 1
+            gradient_transition_count: int | None = None
+            iteration_unit: str = "transition"
+            initial_iterations: int = 1
+            maximum_iterations: int = 1
+            active_iterations: int = 1
+            iteration_increment: int = 1
+            forward_calls_before_iteration_increment: int = 1
+            forward_call_progress: int = 0
+            complete: bool = False
+            no_gradient_transition_count: int = 0
+
+        class Schedule:
+            @staticmethod
+            def snapshot() -> ScheduleSnapshot:
+                return ScheduleSnapshot()
+
+        class Recurrent(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.schedule_reads = 0
+
+            @property
+            def recurrent_iteration_schedule(self) -> Schedule:
+                self.schedule_reads += 1
+                return Schedule()
+
+        recurrent = Recurrent()
+
+        module_details(recurrent)
+
+        self.assertEqual(recurrent.schedule_reads, 1)
+
+    def test_expert_capability_descriptor_is_read_once(self) -> None:
+        top_k = _ReadOnceDescriptor(2)
+
+        class Expert(nn.Module):
+            pass
+
+        Expert.top_k = top_k  # type: ignore[attr-defined]
+        details = module_details(Expert())
+
+        self.assertEqual(details["topK"], 2)
+        self.assertEqual(top_k.read_count, 1)
+
+    def test_optional_model_descriptors_are_read_once(self) -> None:
+        gate_model = _ReadOnceDescriptor(SimpleNamespace(option=ActivationOptions.GELU))
+        halting_model = _ReadOnceDescriptor(SimpleNamespace(min_steps=2))
+
+        class Layer(nn.Module):
+            pass
+
+        Layer.gate_model = gate_model  # type: ignore[attr-defined]
+        Layer.halting_model = halting_model  # type: ignore[attr-defined]
+        details = module_details(Layer())
+
+        self.assertEqual(details["gateOption"], "GELU")
+        self.assertIs(details["gate"], True)
+        self.assertIs(details["halting"], True)
+        self.assertEqual(gate_model.read_count, 1)
+        self.assertEqual(halting_model.read_count, 1)
+
+    def test_recurrent_halting_descriptor_is_shared_across_detail_adapters(
+        self,
+    ) -> None:
+        halting_model = _ReadOnceDescriptor(SimpleNamespace(min_steps=2))
+
+        class Recurrent(nn.Module):
+            max_steps = 3
+
+        Recurrent.halting_model = halting_model  # type: ignore[attr-defined]
+
+        details = module_details(Recurrent())
+
+        self.assertIs(details["halting"], True)
+        self.assertIs(details["recurrent"]["halting"], True)
+        self.assertEqual(details["recurrent"]["minSteps"], 2)
+        self.assertEqual(halting_model.read_count, 1)
+
+    def test_cluster_capability_descriptors_are_read_once(self) -> None:
+        x_axis_total_neurons = _ReadOnceDescriptor(2)
+        cluster_members = _ReadOnceDescriptor(
+            nn.ModuleDict({"neuron_1_1_1": nn.Identity()})
+        )
+
+        class Cluster(nn.Module):
+            y_axis_total_neurons = 1
+            z_axis_total_neurons = 1
+
+        Cluster.x_axis_total_neurons = x_axis_total_neurons  # type: ignore[attr-defined]
+        Cluster.cluster = cluster_members  # type: ignore[attr-defined]
+        details = module_details(Cluster())
+
+        self.assertEqual(details["cluster"]["capacity"], [2, 1, 1])
+        self.assertEqual(x_axis_total_neurons.read_count, 1)
+        self.assertEqual(cluster_members.read_count, 1)
+
+    def test_terminal_capability_descriptors_are_read_once(self) -> None:
+        connections = _ReadOnceDescriptor(torch.tensor([[1, 2, 3]]))
+        x_axis_position = _ReadOnceDescriptor(4)
+
+        class Terminal(nn.Module):
+            y_axis_position = 5
+            z_axis_position = 6
+
+        Terminal.neuron_connections = connections  # type: ignore[attr-defined]
+        Terminal.x_axis_position = x_axis_position  # type: ignore[attr-defined]
+        details = module_details(Terminal())
+
+        self.assertEqual(details["terminalReach"]["position"], [4, 5, 6])
+        self.assertEqual(connections.read_count, 1)
+        self.assertEqual(x_axis_position.read_count, 1)
+
+    def test_residual_capability_descriptor_is_read_once(self) -> None:
+        model_config = _ReadOnceDescriptor(LinearLayerConfig)
+
+        class Residual:
+            pass
+
+        Residual.model_config = model_config  # type: ignore[attr-defined]
+
+        @dataclass
+        class Config:
+            residual_config: object = field(default_factory=Residual)
+
+        configured = nn.Module()
+        configured.cfg = Config()
+
+        configuration = inspect_model_graph(configured).nodes[0].configuration
+
+        assert configuration is not None
+        fields_by_key = {item.key: item.value for item in configuration.fields}
+        self.assertEqual(fields_by_key["residual_model_config"], "LinearLayerConfig")
+        self.assertEqual(model_config.read_count, 1)
 
     def test_recurrent_detail_order_and_fallback_are_stable(self) -> None:
         @dataclass
