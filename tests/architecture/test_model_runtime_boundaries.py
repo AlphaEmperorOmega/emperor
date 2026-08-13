@@ -398,11 +398,37 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
                 self.assertIn(identity_field, materialize_contract)
 
         execution_source = (RUNS_ROOT / "execution.py").read_text(encoding="utf-8")
+        execution_tree = ast.parse(execution_source, "execution.py")
+        execution_classes = {
+            node.name: node
+            for node in execution_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        scoped_run = execution_classes["_MaterializedTrainingRun"]
+        self.assertIn(
+            "dataclass(frozen=True, slots=True)",
+            {ast.unparse(decorator) for decorator in scoped_run.decorator_list},
+        )
+        self.assertEqual(
+            [
+                target.id
+                for node in scoped_run.body
+                if isinstance(node, ast.AnnAssign)
+                and isinstance((target := node.target), ast.Name)
+            ],
+            ["experiment", "training_run"],
+        )
         experiment_source = (RUNS_ROOT / "experiment.py").read_text(encoding="utf-8")
         package_source = (MODEL_RUNTIME_ROOT / "packages" / "definition.py").read_text(
             encoding="utf-8"
         )
         self.assertNotIn('run["config_overrides"]', execution_source)
+        self.assertNotIn("selected_presets[0]", execution_source)
+        self.assertIn("request.preset is preset", execution_source)
+        self.assertIn(
+            "materialized_run.experiment.execute_training",
+            execution_source,
+        )
         self.assertNotIn('run["preset"]', experiment_source)
         self.assertNotIn('run["dataset_type"]', experiment_source)
         self.assertIn(") -> RunExperiment:", package_source)

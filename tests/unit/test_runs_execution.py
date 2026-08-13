@@ -95,6 +95,47 @@ class _Progress:
         self.events.append(dict(event))
 
 
+class _PresetBoundRunExperiment:
+    def __init__(
+        self,
+        package,
+        preset,
+        experiment_task,
+        artifacts,
+    ) -> None:
+        self.package = package
+        self.preset = preset
+        self.delegate = ExperimentBase(
+            preset,
+            experiment_task,
+            model_package=package,
+            run_artifacts=artifacts,
+        )
+        self.materialized_run_ids: list[str] = []
+        self.executed_run_ids: list[str] = []
+        self.executed_callback_intervals: list[list[int]] = []
+
+    def materialize_training_runs(self, requests):
+        self.materialized_run_ids = [request.run_id for request in requests]
+        if any(request.preset is not self.preset for request in requests):
+            raise AssertionError("received a request for another preset")
+        return self.delegate.materialize_training_runs(requests)
+
+    def execute_training(self, request):
+        training_run = request.training_run
+        if training_run.preset is not self.preset:
+            raise AssertionError("executed a Run through another preset")
+        assert training_run.run_id is not None
+        self.executed_run_ids.append(training_run.run_id)
+        self.executed_callback_intervals.append(
+            [callback.log_every_n_steps for callback in request.callbacks]
+        )
+        return (
+            {"boundPreset": self.package.preset_name(self.preset)},
+            f"logs/{training_run.run_id}",
+        )
+
+
 def _linears_linear():
     package = model_package("linears/linear")
     if package is None:
@@ -690,6 +731,402 @@ class RunsExecutionTests(unittest.TestCase):
             )
 
         materialize.assert_not_called()
+
+    def test_interleaved_presets_use_one_scoped_experiment_per_preset(self) -> None:
+        package = _linears_linear()
+        plan = accept_run_plan(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+            (
+                SubmittedRun(
+                    "baseline-1",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 11},
+                ),
+                SubmittedRun(
+                    "gating-1",
+                    "gating",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 22},
+                ),
+                SubmittedRun(
+                    "baseline-2",
+                    "baseline",
+                    "Mnist",
+                    {"MONITOR_LOG_EVERY_N_STEPS": 33},
+                ),
+            ),
+        )
+        experiments: list[_PresetBoundRunExperiment] = []
+        monitor = MonitorOption(
+            name="fixture-monitor",
+            label="Fixture monitor",
+            description="Pins Run-to-Experiment callback association.",
+            kinds=("scalar",),
+            callback_factory=lambda settings: type(
+                "FixtureCallback",
+                (Callback,),
+                {"log_every_n_steps": settings.log_every_n_steps},
+            )(),
+        )
+
+        def build_experiment(
+            selected_package,
+            preset,
+            *,
+            experiment_task,
+            run_artifacts,
+        ):
+            scoped = _PresetBoundRunExperiment(
+                selected_package,
+                preset,
+                experiment_task,
+                run_artifacts,
+            )
+            experiments.append(scoped)
+            return scoped
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                autospec=True,
+                side_effect=build_experiment,
+            ),
+            patch.object(ModelPackage, "resolve_monitors", return_value=[monitor]),
+        ):
+            results = execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                monitors=("fixture-monitor",),
+            )
+
+        self.assertEqual(
+            [package.preset_name(experiment.preset) for experiment in experiments],
+            ["baseline", "gating"],
+        )
+        self.assertEqual(
+            [experiment.materialized_run_ids for experiment in experiments],
+            [["baseline-1", "baseline-2"], ["gating-1"]],
+        )
+        self.assertEqual(
+            [experiment.executed_callback_intervals for experiment in experiments],
+            [[[11], [33]], [[22]]],
+        )
+        self.assertEqual(
+            [experiment.executed_run_ids for experiment in experiments],
+            [["baseline-1", "baseline-2"], ["gating-1"]],
+        )
+        self.assertEqual(
+            [result.run_id for result in results],
+            ["baseline-1", "gating-1", "baseline-2"],
+        )
+
+    def test_execution_does_not_build_an_unused_selected_preset(self) -> None:
+        package = _linears_linear()
+        plan = accept_run_plan(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+            (SubmittedRun("gating-only", "gating", "Mnist", {}),),
+        )
+        built_presets: list[str] = []
+
+        def build_experiment(
+            selected_package,
+            preset,
+            *,
+            experiment_task,
+            run_artifacts,
+        ):
+            built_presets.append(selected_package.preset_name(preset))
+            return _PresetBoundRunExperiment(
+                selected_package,
+                preset,
+                experiment_task,
+                run_artifacts,
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                autospec=True,
+                side_effect=build_experiment,
+            ),
+        ):
+            results = execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        self.assertEqual(built_presets, ["gating"])
+        self.assertEqual([result.run_id for result in results], ["gating-only"])
+
+    def test_single_preset_runs_still_share_one_materialization_batch(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST"),
+            ),
+        )
+        experiments: list[_PresetBoundRunExperiment] = []
+
+        def build_experiment(
+            selected_package,
+            preset,
+            *,
+            experiment_task,
+            run_artifacts,
+        ):
+            scoped = _PresetBoundRunExperiment(
+                selected_package,
+                preset,
+                experiment_task,
+                run_artifacts,
+            )
+            experiments.append(scoped)
+            return scoped
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                autospec=True,
+                side_effect=build_experiment,
+            ),
+        ):
+            results = execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        self.assertEqual(len(experiments), 1)
+        self.assertEqual(
+            experiments[0].materialized_run_ids,
+            [run.id for run in plan.runs],
+        )
+        self.assertEqual(
+            experiments[0].executed_run_ids,
+            [run.id for run in plan.runs],
+        )
+        self.assertEqual(
+            [result.run_id for result in results], [run.id for run in plan.runs]
+        )
+
+    def test_invalid_later_preset_experiment_fails_before_bind_or_training(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+        )
+        baseline = package.resolve_preset("baseline")
+
+        def build_experiment(
+            selected_package,
+            preset,
+            *,
+            experiment_task,
+            run_artifacts,
+        ):
+            if preset is not baseline:
+                return object()
+            return ExperimentBase(
+                preset,
+                experiment_task,
+                model_package=selected_package,
+                run_artifacts=run_artifacts,
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                autospec=True,
+                side_effect=build_experiment,
+            ),
+            patch(
+                "model_runtime.runs.execution."
+                "CheckpointContinuationLifecycle.bind_training_runs",
+                autospec=True,
+            ) as bind_checkpoint,
+            patch.object(
+                ExperimentBase,
+                "execute_training",
+                autospec=True,
+                return_value=({}, "logs/unused"),
+            ) as execute_training,
+            self.assertRaisesRegex(
+                TypeError,
+                "Model Package 'linears/linear' returned an invalid Run Experiment",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        bind_checkpoint.assert_not_called()
+        execute_training.assert_not_called()
+
+    def test_later_preset_handoff_uses_original_pending_position(self) -> None:
+        package = _linears_linear()
+        plan = accept_run_plan(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+            (
+                SubmittedRun("baseline-1", "baseline", "Mnist", {}),
+                SubmittedRun("gating-1", "gating", "Mnist", {}),
+                SubmittedRun("baseline-2", "baseline", "Mnist", {}),
+            ),
+        )
+        gating = package.resolve_preset("gating")
+
+        class CorruptingExperiment(_PresetBoundRunExperiment):
+            def materialize_training_runs(self, requests):
+                training_runs = super().materialize_training_runs(requests)
+                training_runs[0].run_id = "corrupted"
+                return training_runs
+
+        def build_experiment(
+            selected_package,
+            preset,
+            *,
+            experiment_task,
+            run_artifacts,
+        ):
+            experiment_type = (
+                CorruptingExperiment if preset is gating else _PresetBoundRunExperiment
+            )
+            return experiment_type(
+                selected_package,
+                preset,
+                experiment_task,
+                run_artifacts,
+            )
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                ModelPackage,
+                "build_experiment",
+                autospec=True,
+                side_effect=build_experiment,
+            ),
+            patch(
+                "model_runtime.runs.execution."
+                "CheckpointContinuationLifecycle.bind_training_runs",
+                autospec=True,
+            ) as bind_checkpoint,
+            self.assertRaisesRegex(
+                InvalidRunPlan,
+                "position 2.*expected run id 'gating-1'.*got 'corrupted'",
+            ),
+        ):
+            execute_runs(
+                package,
+                plan,
+                artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+            )
+
+        bind_checkpoint.assert_not_called()
+
+    def test_later_preset_construction_failures_preserve_exception_identity(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+        )
+        baseline = package.resolve_preset("baseline")
+
+        for failure_phase in ("build", "materialize"):
+            with self.subTest(failure_phase=failure_phase):
+                failure = RuntimeError(f"{failure_phase} failed")
+
+                class FailingMaterialization:
+                    @staticmethod
+                    def materialize_training_runs(
+                        _requests,
+                        _failure=failure,
+                    ):
+                        raise _failure
+
+                    @staticmethod
+                    def execute_training(_request):
+                        raise AssertionError("training must not begin")
+
+                def build_experiment(
+                    selected_package,
+                    preset,
+                    *,
+                    experiment_task,
+                    run_artifacts,
+                    selected_failure_phase=failure_phase,
+                    selected_failure=failure,
+                ):
+                    if preset is not baseline:
+                        if selected_failure_phase == "build":
+                            raise selected_failure
+                        return FailingMaterialization()
+                    return ExperimentBase(
+                        preset,
+                        experiment_task,
+                        model_package=selected_package,
+                        run_artifacts=run_artifacts,
+                    )
+
+                with (
+                    tempfile.TemporaryDirectory() as tmp,
+                    patch.object(
+                        ModelPackage,
+                        "build_experiment",
+                        autospec=True,
+                        side_effect=build_experiment,
+                    ),
+                    patch(
+                        "model_runtime.runs.execution."
+                        "CheckpointContinuationLifecycle.bind_training_runs",
+                        autospec=True,
+                    ) as bind_checkpoint,
+                    self.assertRaises(RuntimeError) as raised,
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    )
+
+                self.assertIs(raised.exception, failure)
+                bind_checkpoint.assert_not_called()
 
     def test_reordered_training_runs_fail_before_checkpoint_binding_or_training(
         self,
