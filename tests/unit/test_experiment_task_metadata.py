@@ -24,6 +24,16 @@ class _MetadataValidationFailureAdapter:
 
 
 class TestExperimentTaskMetadata(unittest.TestCase):
+    def test_catalog_experiment_preserves_experiment_preset_keyword(self):
+        package = model_package("linears/linear")
+
+        experiment = LinearExperiment(
+            experiment_preset=package.default_preset,
+            model_package=package,
+        )
+
+        self.assertIs(experiment.preset, package.default_preset)
+
     def test_catalog_experiment_rejects_unsupported_task(self):
         with self.assertRaises(ValueError) as context:
             LinearExperiment(

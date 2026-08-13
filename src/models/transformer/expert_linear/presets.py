@@ -11,7 +11,6 @@ from model_runtime.packages import (
 )
 from model_runtime.runs import ExperimentBase
 
-from . import config
 from .config_builder import TransformerExpertLinearConfigBuilder
 from .runtime_defaults import runtime_from_flat
 
@@ -175,8 +174,8 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=TransformerExpertLinearConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
-            runtime_factory=runtime_from_flat,
             default_dataset=Multi30kDeEn,
+            runtime_factory=runtime_from_flat,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -188,6 +187,8 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
 
 
 class Experiment(ExperimentBase):
+    """Package-local Run Experiment Adapter."""
+
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
@@ -197,11 +198,8 @@ class Experiment(ExperimentBase):
         run_artifacts=None,
     ) -> None:
         super().__init__(
-            experiment_preset,
+            experiment_preset=experiment_preset,
             experiment_task=experiment_task,
             model_package=model_package,
             run_artifacts=run_artifacts,
         )
-
-    def _num_epochs(self) -> int:
-        return config.NUM_EPOCHS

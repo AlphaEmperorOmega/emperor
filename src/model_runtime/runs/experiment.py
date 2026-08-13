@@ -4,17 +4,14 @@ import traceback
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NewType, cast
 
 from lightning import Trainer, seed_everything
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 from emperor.config import BaseOptions
-from emperor.experiments import (
-    ExperimentTask,
-    experiment_task_name,
-)
+from emperor.experiments import ExperimentTask, experiment_task_name
 from model_runtime.packages import ModelPackage, RuntimeDefaultsSpec
 from model_runtime.runs._handoff import (
     TrainingExecutionRequest,
@@ -36,6 +33,10 @@ from model_runtime.runs.progress import (
     contextual_run_progress,
 )
 from model_runtime.task_behavior import experiment_task_behavior
+
+_ExperimentPresetUnset = NewType("_ExperimentPresetUnset", object)
+_EXPERIMENT_PRESET_UNSET = _ExperimentPresetUnset(object())
+_ExperimentPresetInput = BaseOptions | None | _ExperimentPresetUnset
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,34 +68,28 @@ class ExperimentBase:
         *,
         model_package: ModelPackage,
         run_artifacts: RunArtifacts | None = None,
+        experiment_preset: _ExperimentPresetInput = _EXPERIMENT_PRESET_UNSET,
     ) -> None:
         if not isinstance(cast(object, model_package), ModelPackage):
             raise TypeError("Runs require an explicit ModelPackage.")
+        if experiment_preset is not _EXPERIMENT_PRESET_UNSET:
+            if preset is not None:
+                raise TypeError("Pass only 'preset' or 'experiment_preset'.")
+            preset = cast(BaseOptions | None, experiment_preset)
         self.model_package = model_package
         self.run_artifacts = (
             run_artifacts if run_artifacts is not None else FilesystemRunArtifacts()
         )
         self.preset = preset
-        self.num_epochs = self._num_epochs()
-        self.experiment_task = self._resolve_experiment_task(experiment_task)
-        self.dataset_options = self._dataset_options_for_task(self.experiment_task)
+        self.experiment_task = model_package.resolve_experiment_task(experiment_task)
+        self.dataset_options = model_package.dataset_options_for_task(
+            self.experiment_task
+        )
+        runtime_defaults = model_package.runtime_defaults_spec
+        default_epochs = runtime_defaults.current_value_or("NUM_EPOCHS", 10)
+        self.num_epochs = cast(int, default_epochs)
         self.preset_generator = model_package.presets
         self.preset_enum = model_package.preset_type
-
-    def _num_epochs(self) -> int:
-        return 10
-
-    def _resolve_experiment_task(
-        self,
-        experiment_task: ExperimentTask | str | None,
-    ) -> ExperimentTask:
-        return self.model_package.resolve_experiment_task(experiment_task)
-
-    def _dataset_options_for_task(
-        self,
-        experiment_task: ExperimentTask,
-    ) -> list[type[Any]]:
-        return self.model_package.dataset_options_for_task(experiment_task)
 
     def _load_trainer_config(
         self,
@@ -496,7 +491,7 @@ class ExperimentBase:
         return RunProgressContext(
             experiment_task=experiment_task,
             dataset=training_run.dataset_type.__name__,
-            preset=self._preset_cli_name(training_run.preset),
+            preset=self.model_package.preset_name(training_run.preset),
             preset_key=training_run.preset.name,
             log_dir=None,
             run_id=training_run.run_id,
@@ -585,18 +580,12 @@ class ExperimentBase:
             **self.model_package.identity.to_payload(),
             "experimentTask": experiment_task,
             "dataset": training_run.dataset_type.__name__,
-            "preset": self._preset_cli_name(training_run.preset),
+            "preset": self.model_package.preset_name(training_run.preset),
             "presetKey": training_run.preset.name,
             "params": training_run.parameters,
             **self.run_artifacts.result_metrics_payload(trainer.callback_metrics),
             **({"resumedFrom": dict(resumed_from)} if resumed_from is not None else {}),
         }
-
-    def _preset_cli_name(self, preset: BaseOptions) -> str:
-        cli_name = getattr(type(preset), "cli_name", None)
-        if callable(cli_name):
-            return cast(str, cli_name(preset.name))
-        return preset.name.lower().replace("_", "-")
 
 
 __all__ = ["ExperimentBase"]

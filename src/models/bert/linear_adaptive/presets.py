@@ -1,4 +1,3 @@
-import models.bert.linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
@@ -787,8 +786,8 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=BertLinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
-            runtime_factory=runtime_from_flat,
             default_dataset=PennTreebankBertPretraining,
+            runtime_factory=runtime_from_flat,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -799,6 +798,8 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
 
 
 class Experiment(ExperimentBase):
+    """Package-local Run Experiment Adapter."""
+
     def __init__(
         self,
         experiment_preset: ExperimentPreset | None = None,
@@ -808,11 +809,8 @@ class Experiment(ExperimentBase):
         run_artifacts=None,
     ) -> None:
         super().__init__(
-            experiment_preset,
+            experiment_preset=experiment_preset,
             experiment_task=experiment_task,
             model_package=model_package,
             run_artifacts=run_artifacts,
         )
-
-    def _num_epochs(self) -> int:
-        return config.NUM_EPOCHS

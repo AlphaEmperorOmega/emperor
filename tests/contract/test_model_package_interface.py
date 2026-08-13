@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+import pickle
 import random
 import unittest
 from pathlib import Path
@@ -12,6 +14,7 @@ from torch.nn import Module
 from emperor.config import ModelConfig
 from model_runtime.packages import ModelPackage
 from model_runtime.runs import (
+    ExperimentBase,
     PlanningBudget,
     RunRequest,
     SearchSpec,
@@ -281,6 +284,51 @@ class TestModelPackageInterface(unittest.TestCase):
                         require_run_experiment(experiment, package.catalog_key),
                         experiment,
                     )
+                    self.assertEqual(
+                        experiment.num_epochs,
+                        package.runtime_defaults_spec.current_value_or(
+                            "NUM_EPOCHS",
+                            10,
+                        ),
+                    )
+
+    def test_every_catalog_package_preserves_its_public_experiment_identity(self):
+        experiment_types: set[type[ExperimentBase]] = set()
+        with TemporaryDirectory() as temporary_directory:
+            artifacts = FilesystemRunArtifacts(root=Path(temporary_directory))
+            for package in discover_model_packages():
+                with self.subTest(model_package=package.catalog_key):
+                    experiment = package.build_experiment(
+                        package.default_preset,
+                        experiment_task=package.default_experiment_task,
+                        run_artifacts=artifacts,
+                    )
+                    experiment_type = type(experiment)
+                    expected_module = (
+                        f"models.{package.identity.model_type}."
+                        f"{package.identity.model}.presets"
+                    )
+
+                    self.assertIsNot(experiment_type, ExperimentBase)
+                    self.assertTrue(issubclass(experiment_type, ExperimentBase))
+                    self.assertEqual(experiment_type.__name__, "Experiment")
+                    self.assertEqual(experiment_type.__module__, expected_module)
+                    self.assertEqual(
+                        tuple(inspect.signature(experiment_type).parameters),
+                        (
+                            "experiment_preset",
+                            "experiment_task",
+                            "model_package",
+                            "run_artifacts",
+                        ),
+                    )
+                    self.assertIs(
+                        pickle.loads(pickle.dumps(experiment_type)),
+                        experiment_type,
+                    )
+                    experiment_types.add(experiment_type)
+
+        self.assertEqual(len(experiment_types), len(MODEL_CATALOG))
 
     def test_every_catalog_entry_uses_the_same_model_package_interface(self):
         packages = discover_model_packages()
