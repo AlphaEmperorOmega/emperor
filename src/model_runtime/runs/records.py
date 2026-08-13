@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, Protocol, TypeVar, cast
+from typing import Any, Literal, Protocol, TypeVar
 
 from model_runtime.packages.identity import ModelIdentity
+from model_runtime.runs._value_policy import deep_freeze
 
 SearchMode = Literal["grid", "random"]
 RunParameterSource = Literal["override", "search"]
@@ -22,18 +23,6 @@ class RandomSource(Protocol):
     def randrange(self, stop: int) -> int: ...
 
 
-def _freeze_value(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        mapping = cast(Mapping[object, Any], value)
-        return MappingProxyType(
-            {str(key): _freeze_value(item) for key, item in mapping.items()}
-        )
-    if isinstance(value, (list, tuple)):
-        sequence = cast(list[Any] | tuple[Any, ...], value)
-        return tuple(_freeze_value(item) for item in sequence)
-    return value
-
-
 @dataclass(frozen=True, slots=True)
 class SearchAxisSelection:
     key: str
@@ -45,7 +34,7 @@ class SearchAxisSelection:
             object.__setattr__(
                 self,
                 "values",
-                tuple(_freeze_value(value) for value in self.values),
+                tuple(deep_freeze(value) for value in self.values),
             )
 
 
@@ -77,7 +66,7 @@ class RunRequest:
     def __post_init__(self) -> None:
         object.__setattr__(self, "presets", tuple(self.presets))
         object.__setattr__(self, "datasets", tuple(self.datasets))
-        object.__setattr__(self, "overrides", _freeze_value(self.overrides))
+        object.__setattr__(self, "overrides", deep_freeze(self.overrides))
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +102,7 @@ class RunParameter:
     source: RunParameterSource
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "value", _freeze_value(self.value))
+        object.__setattr__(self, "value", deep_freeze(self.value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +151,7 @@ class RunPlan:
         )
         object.__setattr__(self, "presets", presets)
         object.__setattr__(self, "datasets", tuple(self.datasets))
-        object.__setattr__(self, "overrides", _freeze_value(self.overrides))
+        object.__setattr__(self, "overrides", deep_freeze(self.overrides))
         object.__setattr__(self, "search", summary)
         object.__setattr__(self, "runs", tuple(self.runs))
         object.__setattr__(self, "preset_searches", preset_searches)
@@ -182,7 +171,7 @@ class SubmittedRun:
     overrides: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "overrides", _freeze_value(self.overrides))
+        object.__setattr__(self, "overrides", deep_freeze(self.overrides))
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +184,7 @@ class RunResult:
     payload: Mapping[str, Any]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "payload", _freeze_value(self.payload))
+        object.__setattr__(self, "payload", deep_freeze(self.payload))
 
 
 __all__ = [

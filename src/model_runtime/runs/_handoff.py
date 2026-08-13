@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, cast
+
+from model_runtime.runs._value_policy import deep_freeze
 
 if TYPE_CHECKING:
     from lightning.pytorch.callbacks import Callback
@@ -30,12 +31,12 @@ class TrainingRunRequest:
         object.__setattr__(
             self,
             "parameters",
-            MappingProxyType(dict(self.parameters)),
+            deep_freeze(self.parameters),
         )
         object.__setattr__(
             self,
             "config_overrides",
-            MappingProxyType(dict(self.config_overrides)),
+            deep_freeze(self.config_overrides),
         )
 
 
@@ -60,12 +61,21 @@ class TrainingExecutionRequest:
     """Complete typed request for one Experiment training lifecycle."""
 
     training_run: TrainingRun
-    callbacks: list[Callback]
+    callbacks: Sequence[Callback]
     progress: RunProgress | None
     progress_step_interval: int
     ckpt_path: Path | None
     model_validator: Callable[[object], None] | None
     resumed_from: Mapping[str, object] | None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "callbacks", tuple(self.callbacks))
+        if self.resumed_from is not None:
+            object.__setattr__(
+                self,
+                "resumed_from",
+                deep_freeze(self.resumed_from),
+            )
 
 
 class RunExperiment(Protocol):

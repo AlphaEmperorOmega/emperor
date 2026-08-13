@@ -330,6 +330,31 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
         self.assertNotIn('run["dataset_type"]', experiment_source)
         self.assertIn(") -> RunExperiment:", package_source)
 
+    def test_runs_immutable_values_have_one_private_policy_owner(self) -> None:
+        value_policy_path = RUNS_ROOT / "_value_policy.py"
+        self.assertTrue(value_policy_path.is_file())
+
+        consumers = {
+            name: (RUNS_ROOT / name).read_text(encoding="utf-8")
+            for name in ("records.py", "_handoff.py", "_progress_events.py")
+        }
+        for name, source in consumers.items():
+            with self.subTest(consumer=name):
+                self.assertIn(
+                    "from model_runtime.runs._value_policy import",
+                    source,
+                )
+
+        self.assertNotIn("def _freeze_value", consumers["records.py"])
+        self.assertNotIn(
+            "MappingProxyType(dict(",
+            consumers["_handoff.py"],
+        )
+        runs_facade = (RUNS_ROOT / "__init__.py").read_text(encoding="utf-8")
+        self.assertNotIn("_value_policy", runs_facade)
+        self.assertNotIn("deep_freeze", runs_facade)
+        self.assertNotIn("deep_thaw", runs_facade)
+
     def test_inspection_snapshots_normalize_every_collection_owner(self) -> None:
         records_path = INSPECTION_ROOT / "records.py"
         records_source = records_path.read_text(encoding="utf-8")
