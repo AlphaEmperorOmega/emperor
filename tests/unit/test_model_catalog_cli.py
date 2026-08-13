@@ -357,6 +357,7 @@ class TestProjectCatalogCli(unittest.TestCase):
         self.assertIn("--datasets mnist --resume-checkpoint", completed.stdout)
         self.assertIn("--print-model-shapes", completed.stdout)
         self.assertIn("--print-model-tensor-shapes", completed.stdout)
+        self.assertIn("Trusted local execution", completed.stdout)
 
     def test_list_model_types_prints_copyable_model_type_flags(self):
         completed = self.run_experiment("--list-model-types")

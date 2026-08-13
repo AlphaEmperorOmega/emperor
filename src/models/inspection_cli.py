@@ -345,8 +345,9 @@ def _parse_args(
         choices=["outputs", "variables"],
         default=None,
         help=(
-            "Execute one synthetic batch and print module output shapes, or all "
-            "executed Python tensor variables."
+            "Trusted local model. Runs in the caller process with no deadline "
+            "or memory isolation. Execute one synthetic batch and print module "
+            "output shapes, or all executed Python tensor variables."
         ),
     )
     args = parser.parse_args(list(argv))

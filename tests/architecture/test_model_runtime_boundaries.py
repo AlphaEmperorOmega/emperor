@@ -35,6 +35,39 @@ def _imports_under(root: Path) -> list[tuple[Path, str]]:
 
 
 class ModelRuntimeBoundaryTests(unittest.TestCase):
+    def test_workbench_does_not_claim_to_expose_contained_shape_tracing(self) -> None:
+        worker_source = (
+            WORKBENCH_SOURCE_ROOT / "emperor_workbench" / "inspection" / "worker.py"
+        ).read_text(encoding="utf-8")
+        subprocess_source = (
+            WORKBENCH_SOURCE_ROOT
+            / "emperor_workbench"
+            / "inspection"
+            / "_subprocess.py"
+        ).read_text(encoding="utf-8")
+        adapter_source = (SOURCE_ROOT / "models" / "adapter_cli.py").read_text(
+            encoding="utf-8"
+        )
+        bootstrap_source = (
+            WORKBENCH_SOURCE_ROOT / "emperor_workbench" / "api" / "_bootstrap.py"
+        ).read_text(encoding="utf-8")
+        workbench_shape_trace_owners = [
+            source_path.relative_to(PROJECT_ROOT).as_posix()
+            for source_path in sorted(WORKBENCH_SOURCE_ROOT.rglob("*.py"))
+            if "inspect_model_shapes" in source_path.read_text(encoding="utf-8")
+        ]
+
+        self.assertIn("selected_model_package.inspect(", worker_source)
+        self.assertIn("inspect_model(", adapter_source)
+        self.assertEqual(workbench_shape_trace_owners, [])
+        self.assertIn(
+            "InspectionService(\n                SubprocessInspectionExecutor(",
+            bootstrap_source,
+        )
+        self.assertIn("SubprocessInspectionExecutor", subprocess_source)
+        self.assertIn("timeout_seconds", subprocess_source)
+        self.assertIn("memory_bytes", subprocess_source)
+
     def test_wire_facade_exposes_only_record_specific_codecs(self) -> None:
         for module_name in (
             "_wire_inspection.py",
