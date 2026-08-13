@@ -308,8 +308,9 @@ class FakeModel:
 
 
 class FakeLogger:
-    def __init__(self, save_dir, name):
-        self.log_dir = str(Path(save_dir) / name)
+    def __init__(self, save_dir, name, version=None):
+        selected_version = 0 if version is None else version
+        self.log_dir = str(Path(save_dir) / name / f"version_{selected_version}")
 
 
 class FakeTrainer:
@@ -516,6 +517,27 @@ class TestExperimentTraining(unittest.TestCase):
 
         self.assertIsInstance(FakeTrainer.instances[0].model.config, FakeConfig)
 
+    def test_real_lightning_logger_consumes_the_reserved_directory(self):
+        experiment = FakeExperiment(
+            FakeOption.BASELINE,
+            model_package=self.model_package,
+        )
+
+        with patch.object(
+            experiments_base,
+            "TensorBoardLogger",
+            self.original_logger,
+        ):
+            result, log_dir = self._execute_run(experiment)
+
+        resolved_log_dir = Path(log_dir).resolve()
+        self.assertEqual(resolved_log_dir.name, "version_0")
+        self.assertTrue(resolved_log_dir.is_dir())
+        self.assertEqual(
+            json.loads((resolved_log_dir / "result.json").read_text(encoding="utf-8")),
+            result,
+        )
+
     def test_run_result_keeps_core_metrics_after_monitor_metric_pressure(self):
         class MonitorHeavyTrainer(FakeTrainer):
             def __init__(self, *args, **kwargs):
@@ -709,8 +731,9 @@ class TestExperimentTraining(unittest.TestCase):
                 )
 
         class TracingLogger:
-            def __init__(self, save_dir, name):
+            def __init__(self, save_dir, name, version=None):
                 events.append("logger")
+                self.version = version
                 self.log_dir = str(Path(save_dir) / name)
 
         class TracingTrainer:
@@ -834,6 +857,7 @@ class TestExperimentTraining(unittest.TestCase):
             {"ckpt_path": Path("resume.ckpt"), "weights_only": True},
         )
         self.assertEqual(log_dir, "logs/trace/model/BASELINE/FakeDatasetA/run")
+        self.assertIsNone(trainer.logger.version)
         self.assertEqual(result["resumedFrom"], resumed_from)
         self.assertEqual(
             [event["type"] for event in progress.events],

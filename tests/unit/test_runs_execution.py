@@ -17,6 +17,7 @@ import torch
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 from lightning.pytorch.callbacks import Callback, ModelCheckpoint
+from lightning.pytorch.loggers import TensorBoardLogger
 
 from emperor.experiments import ExperimentTask
 from emperor.monitoring import MonitorOption
@@ -51,8 +52,32 @@ class _Metric:
 class _Logger:
     instances: list[_Logger] = []
 
-    def __init__(self, save_dir: str, name: str) -> None:
-        self.log_dir = str(Path(save_dir) / name / "version_0")
+    def __init__(
+        self,
+        save_dir: str,
+        name: str,
+        version: int | None = None,
+    ) -> None:
+        selected_version = 0 if version is None else version
+        self.log_dir = str(Path(save_dir) / name / f"version_{selected_version}")
+        type(self).instances.append(self)
+
+
+class _ReservationConsumingLogger(TensorBoardLogger):
+    instances: list[_ReservationConsumingLogger] = []
+
+    def __init__(
+        self,
+        save_dir: str,
+        name: str,
+        version: int | None = None,
+    ) -> None:
+        self.requested_version = version
+        self.reservation_existed = (
+            version is not None
+            and (Path(save_dir) / name / f"version_{version}").is_dir()
+        )
+        super().__init__(save_dir=save_dir, name=name, version=version)
         type(self).instances.append(self)
 
 
@@ -165,6 +190,50 @@ class RunsExecutionTests(unittest.TestCase):
     def setUp(self) -> None:
         _Trainer.instances.clear()
         _Logger.instances.clear()
+        _ReservationConsumingLogger.instances.clear()
+
+    def test_filesystem_execution_consumes_exact_reserved_logger_versions(
+        self,
+    ) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(
+                root=Path(tmp) / "logs",
+                namespace="runs_fixture",
+                clock=lambda: datetime(2026, 6, 1, 1, 2, 3),
+            )
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch(
+                    "model_runtime.runs.experiment.TensorBoardLogger",
+                    _ReservationConsumingLogger,
+                ),
+                patch("model_runtime.runs.experiment.seed_everything"),
+            ):
+                first_result = execute_runs(package, plan, artifacts=artifacts)[0]
+                second_result = execute_runs(package, plan, artifacts=artifacts)[0]
+
+            self.assertEqual(
+                [
+                    logger.requested_version
+                    for logger in _ReservationConsumingLogger.instances
+                ],
+                [0, 1],
+            )
+            self.assertTrue(
+                all(
+                    logger.reservation_existed
+                    for logger in _ReservationConsumingLogger.instances
+                )
+            )
+            self.assertEqual(
+                [Path(first_result.log_dir).name, Path(second_result.log_dir).name],
+                ["version_0", "version_1"],
+            )
 
     def test_no_search_plan_executes_exact_run_and_writes_portable_artifacts(
         self,
