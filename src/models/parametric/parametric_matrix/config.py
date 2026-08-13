@@ -9,6 +9,7 @@ from emperor.layers import (
     WeightedResidualConfig,  # noqa: F401
 )
 from emperor.parametric import ClipParameterOptions, MatrixBiasMixtureConfig
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Trainer
 TRAINER_ACCELERATOR: str = "auto"
@@ -54,6 +55,7 @@ NUM_EPOCHS: int = 2
 # Model
 INPUT_DIM: int = 28**2
 HIDDEN_DIM: int = 32
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 OUTPUT_DIM: int = 10
 
 # Layer Stack Options

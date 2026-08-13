@@ -156,6 +156,8 @@ class ModelPackage:
         values: Mapping[str, object] | None = None,
     ) -> Any:
         runtime_values = _runtime_default_values(values)
+        if runtime_values:
+            self.runtime_defaults_spec.validate_typed_values(runtime_values)
         runtime = self._adapter.bind_runtime_defaults(runtime_values)
         if type(runtime) is not self.runtime_options_type:
             raise TypeError(

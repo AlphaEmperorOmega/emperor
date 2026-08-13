@@ -13,6 +13,9 @@ from model_runtime.packages.configuration import (
     parse_config_value,
     serialize_config_value,
 )
+from model_runtime.packages.runtime_values import (
+    validate_runtime_default_value_types,
+)
 
 if TYPE_CHECKING:
     from model_runtime.packages.definition import ModelPackage
@@ -141,6 +144,15 @@ class RuntimeDefaultsSpec:
             return True
         return _annotation_accepts_none(self.annotations.get(config_key))
 
+    def validate_typed_values(self, values: Mapping[str, object]) -> None:
+        """Enforce declared package types before construction is dispatched."""
+
+        validate_runtime_default_value_types(
+            values,
+            package="models." + self.package.catalog_key.replace("/", "."),
+            config_module=self._config_module,
+        )
+
     def parse_value(self, config_key: str, raw_value: Any) -> Any:
         if raw_value is None:
             value = "None" if self.accepts_none(config_key) else ""
@@ -264,22 +276,61 @@ class RuntimeDefaultsSpec:
                     if ignore_unknown:
                         continue
                     raise RuntimeDefaultsError(f"Unknown override '{raw_key}'.")
-                try:
-                    parsed_value = self.parse_value(config_key, raw_value)
-                    if isinstance(parsed_value, type):
-                        abstract_error = abstract_config_class_error(parsed_value)
-                        if abstract_error is not None:
-                            raise ValueError(abstract_error)
-                    parsed[self.model_parameter(config_key)] = parsed_value
-                except RuntimeDefaultsError:
-                    raise
-                except Exception as exc:
-                    raise RuntimeDefaultsError(
-                        f"Invalid value for override '{raw_key}': {raw_value!r}. {exc}"
-                    ) from exc
+                parsed[self.model_parameter(config_key)] = self._parse_override_value(
+                    config_key,
+                    raw_key,
+                    raw_value,
+                )
+        self._ensure_typed_override_values(parsed)
         if preset is not None:
             self.reject_locked_overrides(preset, parsed)
         return parsed
+
+    def _parse_override_value(
+        self,
+        config_key: str,
+        raw_key: str,
+        raw_value: Any,
+    ) -> Any:
+        try:
+            parsed_value = self.parse_value(config_key, raw_value)
+            if isinstance(parsed_value, type):
+                abstract_error = abstract_config_class_error(parsed_value)
+                if abstract_error is not None:
+                    raise ValueError(abstract_error)
+            return parsed_value
+        except RuntimeDefaultsError:
+            raise
+        except Exception as exc:
+            raise RuntimeDefaultsError(
+                f"Invalid value for override '{raw_key}': {raw_value!r}. {exc}"
+            ) from exc
+
+    def _ensure_typed_override_values(
+        self,
+        overrides: Mapping[str, object],
+    ) -> None:
+        try:
+            self.validate_typed_values(overrides)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeDefaultsError(str(exc)) from exc
+
+    def validate_typed_overrides(
+        self,
+        overrides: Mapping[str, Any] | None,
+        *,
+        preset: str | None = None,
+    ) -> dict[str, Any]:
+        canonical: dict[str, Any] = {}
+        for raw_key, value in (overrides or {}).items():
+            config_key = self.resolve_key(raw_key)
+            if config_key is None:
+                raise RuntimeDefaultsError(f"Unknown override '{raw_key}'.")
+            canonical[self.model_parameter(config_key)] = value
+        self._ensure_typed_override_values(canonical)
+        if preset is not None:
+            self.reject_locked_overrides(preset, canonical)
+        return canonical
 
     def serialize_overrides(
         self,

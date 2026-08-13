@@ -11,7 +11,9 @@ import model_runtime.inspection.overrides as override_module
 from emperor.layers import (
     AdditiveResidualConfig,
     HierarchicalReasoningModelRecurrentConfig,
+    LayerNormPositionOptions,
     RecurrentLayerConfig,
+    ResidualConfig,
     TinyRecursiveModelRecurrentConfig,
     WeightedResidualConfig,
 )
@@ -19,6 +21,7 @@ from model_runtime.inspection import (
     ConfigurationSchema,
     InspectionError,
     InspectionRequest,
+    ParsedOverrides,
     SearchSpace,
     canonicalize_overrides,
     config_field_description,
@@ -29,6 +32,9 @@ from model_runtime.inspection import (
     serialize_overrides,
     supported_config_keys,
     validate_configuration,
+)
+from model_runtime.inspection.materialization import (
+    materialize_configuration,
 )
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.inspection.schema import _configuration_field_applicability
@@ -76,6 +82,142 @@ def _fresh_package(catalog_key: str) -> ModelPackage:
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):
+    def test_typed_override_admission_preserves_alias_and_value_semantics(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        parsed = override_module.validate_typed_overrides(
+            package,
+            {
+                "HIDDEN_DIM": 16,
+                "hidden-dim": 32,
+                "hidden_dim": 64,
+                "LAYER_NORM_POSITION": LayerNormPositionOptions.BEFORE,
+                "stack-residual-connection-option": AdditiveResidualConfig,
+            },
+        )
+
+        self.assertEqual(
+            tuple(parsed.values.items()),
+            (
+                ("hidden_dim", 64),
+                ("layer_norm_position", LayerNormPositionOptions.BEFORE),
+                ("stack_residual_connection_option", AdditiveResidualConfig),
+            ),
+        )
+        self.assertIs(
+            parsed.values["layer_norm_position"],
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertIs(
+            parsed.values["stack_residual_connection_option"],
+            AdditiveResidualConfig,
+        )
+
+        prepared = materialize_configuration(
+            package,
+            InspectionRequest(preset="baseline", overrides=parsed),
+        )
+        self.assertIs(
+            prepared.overrides.values["layer_norm_position"],
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertIs(
+            prepared.overrides.values["stack_residual_connection_option"],
+            AdditiveResidualConfig,
+        )
+
+    def test_unprovenanced_typed_overrides_are_admitted_without_losing_identity(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        supplied = ParsedOverrides(
+            {
+                "layer_norm_position": LayerNormPositionOptions.BEFORE,
+                "stack_residual_connection_option": AdditiveResidualConfig,
+            }
+        )
+
+        prepared = materialize_configuration(
+            package,
+            InspectionRequest(preset="baseline", overrides=supplied),
+        )
+
+        self.assertIs(
+            prepared.overrides.values["layer_norm_position"],
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertIs(
+            prepared.overrides.values["stack_residual_connection_option"],
+            AdditiveResidualConfig,
+        )
+
+    def test_typed_override_admission_rejects_unknowns_types_and_abstracts(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+
+        with self.assertRaisesRegex(
+            InspectionError, "Unknown override 'unknown'"
+        ) as unknown:
+            override_module.validate_typed_overrides(
+                package,
+                {"hidden_dim": "wrong type", "unknown": 1},
+            )
+        self.assertIsInstance(unknown.exception.__cause__, RuntimeDefaultsError)
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            "runtime key 'hidden_dim' has type str; expected int",
+        ) as wrong_type:
+            materialize_configuration(
+                package,
+                InspectionRequest(
+                    preset="baseline",
+                    overrides=ParsedOverrides({"hidden_dim": "wrong type"}),
+                ),
+            )
+        self.assertIsInstance(wrong_type.exception.__cause__, TypeError)
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            "ResidualConfig is abstract",
+        ) as abstract:
+            override_module.validate_typed_overrides(
+                package,
+                {"stack_residual_connection_option": ResidualConfig},
+            )
+        self.assertIsInstance(abstract.exception.__cause__, ValueError)
+
+    def test_local_inspection_cli_admits_typed_values_without_reparsing(self) -> None:
+        from models.inspection_cli import _resolve_inspection_request
+
+        resolved = _resolve_inspection_request(
+            [
+                "--model-type",
+                "linears",
+                "--model",
+                "linear",
+                "--preset",
+                "baseline",
+                "--layer-norm-position",
+                "BEFORE",
+                "--stack-residual-connection-option",
+                "AdditiveResidualConfig",
+            ]
+        )
+        prepared = materialize_configuration(resolved.package, resolved.request)
+
+        self.assertIs(
+            prepared.overrides.values["layer_norm_position"],
+            LayerNormPositionOptions.BEFORE,
+        )
+        self.assertIs(
+            prepared.overrides.values["stack_residual_connection_option"],
+            AdditiveResidualConfig,
+        )
+
     def test_public_schema_value_kinds_and_choices_are_stable(self) -> None:
         package = model_package("bert/linear")
         assert package is not None
@@ -149,11 +291,19 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         ambiguous_fields = {
             field.key: field for field in configuration_schema(ambiguous_package).fields
         }
-        ambiguous = ambiguous_fields["STACK_RESIDUAL_CONNECTION_OPTION"]
-        self.assertEqual(ambiguous.value_type, "unknown")
-        self.assertIsNone(ambiguous.default)
-        self.assertTrue(ambiguous.nullable)
-        self.assertTupleEqual(ambiguous.choices, ())
+        residual_selector = ambiguous_fields["STACK_RESIDUAL_CONNECTION_OPTION"]
+        self.assertEqual(residual_selector.value_type, "class")
+        self.assertIsNone(residual_selector.default)
+        self.assertTrue(residual_selector.nullable)
+        self.assertTupleEqual(
+            residual_selector.choices,
+            (
+                "AdditiveResidualConfig",
+                "AttentionResidualConfig",
+                "WeightedBlendResidualConfig",
+                "WeightedResidualConfig",
+            ),
+        )
 
     def test_configuration_metadata_import_and_alias_precedence_is_stable(
         self,

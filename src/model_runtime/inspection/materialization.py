@@ -5,7 +5,7 @@ from typing import Any
 
 from emperor.experiments import ExperimentTask
 from model_runtime.inspection.errors import InspectionError, model_package_failure
-from model_runtime.inspection.overrides import parse_overrides, reject_locked_overrides
+from model_runtime.inspection.overrides import validated_overrides_for_materialization
 from model_runtime.inspection.preflight import preflight_inspection_configuration
 from model_runtime.inspection.records import (
     InspectionRequest,
@@ -63,19 +63,11 @@ def materialize_configuration(
         raise model_package_failure(package.catalog_key, exc) from exc
 
     try:
-        if isinstance(request.overrides, ParsedOverrides):
-            parsed_overrides = request.overrides
-            reject_locked_overrides(
-                package,
-                request.preset,
-                parsed_overrides.values,
-            )
-        else:
-            parsed_overrides = parse_overrides(
-                package,
-                request.overrides,
-                preset=request.preset,
-            )
+        parsed_overrides = validated_overrides_for_materialization(
+            package,
+            request.overrides,
+            request.preset,
+        )
         preflight_inspection_configuration(
             package,
             parsed_overrides.values,

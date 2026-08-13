@@ -62,6 +62,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Global
 INPUT_DIM: int = BERT_PRETRAINING_TARGET_VOCAB_SIZE
@@ -75,6 +76,8 @@ CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
     "HALTING_OUTPUT_DIM",
     "NSP_OUTPUT_DIM",
 }
+
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 SEQUENCE_LENGTH: int = 35
 
 # Trainer

@@ -4,6 +4,7 @@ from types import ModuleType
 from typing import Any, Final
 
 import models.experts.linear.config as config
+from model_runtime.packages.runtime_values import validate_runtime_default_value_types
 from models.experts.linear import runtime_options as options
 from models.experts.linear._control_defaults import (
     expert_control_defaults,
@@ -522,6 +523,11 @@ def runtime_from_flat(
     config_module: ModuleType = config,
 ) -> options.RuntimeOptions:
     flat = dict(flat_kwargs or {})
+    validate_runtime_default_value_types(
+        flat,
+        package="models.experts.linear",
+        config_module=config_module,
+    )
     hidden_dim = flat.get("hidden_dim", config_module.HIDDEN_DIM)
     translated = builder_kwargs_from_flat(flat, config_module)
     values = {

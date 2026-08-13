@@ -5,6 +5,7 @@ from types import ModuleType
 from typing import Any, Final
 
 import models.bert.linear.config as config
+from model_runtime.packages.runtime_values import validate_runtime_default_value_types
 from models.bert.linear._builder_adapter import linear_builder_kwargs_from_flat
 from models.bert.linear.runtime_options import RuntimeOptions
 
@@ -59,9 +60,15 @@ def runtime_from_flat(
     flat_kwargs: dict[str, Any] | None = None,
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
+    values = flat_kwargs or {}
+    validate_runtime_default_value_types(
+        values,
+        package="models.bert.linear",
+        config_module=config_module,
+    )
     return _runtime_with_fields(
         runtime_from_config(config_module),
-        linear_builder_kwargs_from_flat(flat_kwargs or {}, config_module),
+        linear_builder_kwargs_from_flat(values, config_module),
     )
 
 

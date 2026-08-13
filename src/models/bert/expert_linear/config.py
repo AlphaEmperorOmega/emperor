@@ -34,6 +34,7 @@ from emperor.memory import (
     MemoryPositionOptions,
     WeightedDynamicMemoryConfig,  # noqa: F401
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Trainer
 TRAINER_ACCELERATOR: str = "cpu"
@@ -84,6 +85,8 @@ CONFIG_OVERRIDE_SKIP_KEYS: set[str] = {
     "HALTING_OUTPUT_DIM",
     "NSP_OUTPUT_DIM",
 }
+
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 SEQUENCE_LENGTH: int = 35
 
 #########################################################################
@@ -570,7 +573,7 @@ ROUTING_INITIALIZATION_MODE: RoutingInitializationMode = RoutingInitializationMo
 EXPERT_STACK_HIDDEN_DIM: int = SUBMODULE_STACK_HIDDEN_DIM
 EXPERT_STACK_NUM_LAYERS: int = SUBMODULE_STACK_NUM_LAYERS
 EXPERT_STACK_ACTIVATION: ActivationOptions = SUBMODULE_STACK_ACTIVATION
-EXPERT_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] = (
+EXPERT_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
     SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
 )
 EXPERT_STACK_RESIDUAL_MODEL_FLAG: bool = False

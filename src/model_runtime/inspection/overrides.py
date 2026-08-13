@@ -80,6 +80,29 @@ def parse_overrides(
     return ParsedOverrides(parsed)
 
 
+def validate_typed_overrides(
+    package: ModelPackage,
+    overrides: Mapping[str, Any] | None,
+    *,
+    preset: str | None = None,
+) -> ParsedOverrides:
+    validated = apply_runtime_defaults(
+        package,
+        lambda spec: spec.validate_typed_overrides(overrides, preset=preset),
+    )
+    return ParsedOverrides(validated)
+
+
+def validated_overrides_for_materialization(
+    package: ModelPackage,
+    overrides: Mapping[str, Any] | ParsedOverrides,
+    preset: str,
+) -> ParsedOverrides:
+    if not isinstance(overrides, ParsedOverrides):
+        return parse_overrides(package, overrides, preset=preset)
+    return validate_typed_overrides(package, overrides.values, preset=preset)
+
+
 def canonicalize_overrides(
     package: ModelPackage,
     overrides: Mapping[str, Any] | None,

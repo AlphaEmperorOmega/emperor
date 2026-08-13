@@ -52,12 +52,14 @@ from emperor.memory import (
     GatedResidualDynamicMemoryConfig,
     MemoryPositionOptions,
 )
+from model_runtime.packages.runtime_values import positive_runtime_fields
 
 #########################################################################
 # Global
 BATCH_SIZE: int = 64
 INPUT_DIM: int = 224 * 224 * 3
 HIDDEN_DIM: int = 32
+RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 OUTPUT_DIM: int = 10
 LEARNING_RATE: float = 1e-3
 NUM_EPOCHS: int = 10
