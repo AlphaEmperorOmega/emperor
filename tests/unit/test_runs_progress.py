@@ -25,10 +25,12 @@ from model_runtime.runs._progress_events import (
     NeuronAddedEvent,
     NeuronsAddedEvent,
     StepEvent,
-    TestCompletedEvent,
     TrainingErrorEvent,
     ValidationEvent,
     project_run_progress_event,
+)
+from model_runtime.runs._progress_events import (
+    TestCompletedEvent as CompletedTestEvent,
 )
 from model_runtime.runs.artifacts import FilesystemRunArtifacts
 from model_runtime.runs.progress import ContextualRunProgress, RunProgressContext
@@ -635,7 +637,7 @@ class RunsProgressTests(unittest.TestCase):
                 ],
             ),
             (
-                TestCompletedEvent(epoch=1, step=2, metrics={"loss": 0.2}),
+                CompletedTestEvent(epoch=1, step=2, metrics={"loss": 0.2}),
                 [
                     ("type", "test_completed"),
                     ("status", "running"),
