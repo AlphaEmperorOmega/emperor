@@ -88,7 +88,8 @@ class RunExperiment(Protocol):
         """Return one Training Run per request in the same order.
 
         Every result preserves its request's run id, run index, run total,
-        preset identity, and Dataset identity.
+        preset identity, Dataset identity, Experiment Task identity, requested
+        parameters, Runtime Defaults overrides, and epoch count.
         """
         ...
 
