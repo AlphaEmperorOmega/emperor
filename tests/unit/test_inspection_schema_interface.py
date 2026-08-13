@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import os
+import pickle
 import unittest
-from types import SimpleNamespace
+from copy import copy, deepcopy
+from dataclasses import asdict, astuple, fields, replace
+from inspect import signature
+from types import ModuleType, SimpleNamespace
+from typing import Any
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -64,6 +69,38 @@ class _BrokenPackageAdapter:
     build_experiment = _missing
 
 
+class _SchemaReplacingMetadata:
+    def __init__(self, source_spec: Any, config_module: ModuleType) -> None:
+        self._source_spec = source_spec
+        self._config_module = config_module
+
+    def compile_runtime_defaults_spec(
+        self,
+        package: ModelPackage,
+        _inspection_limits: object,
+    ) -> Any:
+        return replace(
+            self._source_spec,
+            package=package,
+            _config_module=self._config_module,
+        )
+
+
+class _SchemaReplacingAdapter:
+    def __init__(self, delegate: Any, metadata: _SchemaReplacingMetadata) -> None:
+        self._delegate = delegate
+        self._metadata = metadata
+
+    def load_metadata(self) -> Any:
+        return self._metadata
+
+    def build_configuration(self, *_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("construction must not run before typed admission")
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._delegate, name)
+
+
 def _broken_package() -> ModelPackage:
     return ModelPackage(
         ModelIdentity("broken", "missing"),
@@ -82,6 +119,98 @@ def _fresh_package(catalog_key: str) -> ModelPackage:
 
 
 class InspectionSchemaInterfaceTests(unittest.TestCase):
+    def test_parsed_overrides_documents_transient_non_authoritative_provenance(
+        self,
+    ) -> None:
+        documentation = ParsedOverrides.__doc__ or ""
+
+        for phrase in (
+            "process-local diagnostic",
+            "reconstruction",
+            "wire",
+            "never skips",
+            "selected Model Package",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, documentation)
+
+    def test_parsed_overrides_provenance_preserves_public_dataclass_shape(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        plain = ParsedOverrides({"hidden_dim": 16})
+        parsed = parse_overrides(package, {"hidden_dim": "16"})
+
+        self.assertEqual(tuple(field.name for field in fields(plain)), ("values",))
+        self.assertEqual(
+            str(signature(ParsedOverrides)),
+            "(values: 'Mapping[str, Any]' = <factory>) -> None",
+        )
+        self.assertTupleEqual(ParsedOverrides.__match_args__, ("values",))
+        self.assertEqual(parsed, plain)
+        self.assertEqual(repr(parsed), repr(plain))
+        match parsed:
+            case ParsedOverrides(values):
+                self.assertEqual(dict(values), {"hidden_dim": 16})
+            case _:
+                self.fail("ParsedOverrides must retain one positional value pattern.")
+        for operation in (asdict, astuple, deepcopy, pickle.dumps):
+            with self.subTest(operation=operation.__name__):
+                with self.assertRaisesRegex(TypeError, "mappingproxy"):
+                    operation(parsed)
+
+    def test_parsed_override_transforms_preserve_only_their_stated_diagnostic(
+        self,
+    ) -> None:
+        source = model_package("linears/linear")
+        selected = model_package("bert/linear")
+        assert source is not None
+        assert selected is not None
+        parsed = parse_overrides(source, {"hidden_dim": "16"})
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            "validated for model 'linears/linear'.*selected model 'bert/linear'",
+        ):
+            materialize_configuration(
+                selected,
+                InspectionRequest(preset="baseline", overrides=copy(parsed)),
+            )
+
+        reconstructed = replace(parsed)
+        prepared = materialize_configuration(
+            selected,
+            InspectionRequest(preset="baseline", overrides=reconstructed),
+        )
+
+        self.assertEqual(dict(prepared.overrides.values), {"hidden_dim": 16})
+
+        invalid_reconstruction = replace(
+            parsed,
+            values={"hidden_dim": "still untyped"},
+        )
+        with self.assertRaisesRegex(
+            InspectionError,
+            "runtime key 'hidden_dim' has type str; expected int",
+        ) as invalid:
+            materialize_configuration(
+                selected,
+                InspectionRequest(
+                    preset="baseline",
+                    overrides=invalid_reconstruction,
+                ),
+            )
+        self.assertIsInstance(invalid.exception.__cause__, TypeError)
+
+        wire_reconstruction = ParsedOverrides(dict(parsed.values))
+        wire_prepared = materialize_configuration(
+            selected,
+            InspectionRequest(preset="baseline", overrides=wire_reconstruction),
+        )
+        self.assertEqual(
+            dict(wire_prepared.overrides.values),
+            {"hidden_dim": 16},
+        )
+
     def test_typed_override_admission_preserves_alias_and_value_semantics(self) -> None:
         package = model_package("linears/linear")
         assert package is not None
@@ -189,6 +318,80 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 {"stack_residual_connection_option": ResidualConfig},
             )
         self.assertIsInstance(abstract.exception.__cause__, ValueError)
+
+    def test_parsed_override_provenance_rejects_different_model_identity(self) -> None:
+        source = model_package("linears/linear")
+        selected = model_package("bert/linear")
+        assert source is not None
+        assert selected is not None
+        parsed = parse_overrides(source, {"hidden_dim": "16"})
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            "validated for model 'linears/linear'.*selected model 'bert/linear'",
+        ):
+            override_module.validated_overrides_for_materialization(
+                selected,
+                parsed,
+                "baseline",
+            )
+
+    def test_same_identity_provenance_is_revalidated_against_selected_schema(
+        self,
+    ) -> None:
+        source = _fresh_package("linears/linear")
+        parsed = parse_overrides(source, {"hidden_dim": "16"})
+        incompatible_config = ModuleType("tests.incompatible_runtime_defaults")
+        incompatible_config.HIDDEN_DIM = "wide"
+        incompatible_config.__annotations__ = {"HIDDEN_DIM": str}
+        selected = ModelPackage(
+            source.identity,
+            _SchemaReplacingAdapter(
+                source._adapter,
+                _SchemaReplacingMetadata(
+                    source.runtime_defaults_spec,
+                    incompatible_config,
+                ),
+            ),
+            source.inspection_construction_limits,
+        )
+
+        with patch(
+            "model_runtime.inspection.materialization."
+            "preflight_inspection_configuration",
+            autospec=True,
+        ) as preflight:
+            with self.assertRaisesRegex(
+                InspectionError,
+                "runtime key 'hidden_dim' has type int; expected str",
+            ):
+                materialize_configuration(
+                    selected,
+                    InspectionRequest(preset="baseline", overrides=parsed),
+                )
+        preflight.assert_not_called()
+
+        compatible = override_module.validated_overrides_for_materialization(
+            _fresh_package("linears/linear"),
+            parsed,
+            "baseline",
+        )
+        self.assertEqual(dict(compatible.values), {"hidden_dim": 16})
+
+    def test_same_package_provenance_rechecks_selected_preset_locks(self) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        parsed_without_preset = parse_overrides(
+            package,
+            {"stack_gate_flag": "true"},
+        )
+
+        with self.assertRaisesRegex(InspectionError, "locked fields: stack_gate_flag"):
+            override_module.validated_overrides_for_materialization(
+                package,
+                parsed_without_preset,
+                "gating",
+            )
 
     def test_local_inspection_cli_admits_typed_values_without_reparsing(self) -> None:
         from models.inspection_cli import _resolve_inspection_request
