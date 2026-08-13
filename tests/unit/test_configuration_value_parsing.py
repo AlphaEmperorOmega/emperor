@@ -4,12 +4,22 @@ import unittest
 from enum import Enum
 from types import ModuleType
 
-from model_runtime.packages import ConfigValueError, parse_config_value
+from model_runtime.packages import (
+    ConfigValueError,
+    parse_config_value,
+    serialize_config_value,
+)
 
 
 class _Color(Enum):
     RED = "red"
     BLUE = "blue"
+
+
+class _RenamedOption(Enum):
+    CURRENT = "current"
+    HISTORICAL = "current"
+    ALTERNATIVE = "alternative"
 
 
 class _FirstChoice:
@@ -24,12 +34,16 @@ def _configuration_module() -> ModuleType:
     module = ModuleType("configuration_value_fixture")
     module._FirstChoice = _FirstChoice
     module._SecondChoice = _SecondChoice
+    module.CurrentChoice = _FirstChoice
+    module.HistoricalChoice = _FirstChoice
     module.CURRENT_BOOL = True
     module.CURRENT_INT = 1
     module.CURRENT_FLOAT = 1.0
     module.CURRENT_STRING = "old"
     module.CURRENT_ENUM = _Color.RED
+    module.RENAMED_ENUM = _RenamedOption.CURRENT
     module.CURRENT_CLASS = _FirstChoice
+    module.RENAMED_CLASS = _FirstChoice
     module.CURRENT_LIST = [None, 1, 2]
     module.CURRENT_ENUM_LIST = [None, _Color.RED]
     module.EMPTY_LIST = []
@@ -43,6 +57,7 @@ def _configuration_module() -> ModuleType:
         "CURRENT_STRING": int,
         "CURRENT_ENUM": str,
         "CURRENT_CLASS": str,
+        "RENAMED_CLASS": type[_FirstChoice],
         "CURRENT_LIST": str,
         "CURRENT_ENUM_LIST": str,
         "EMPTY_LIST": int,
@@ -137,6 +152,34 @@ class ConfigurationValueParsingTests(unittest.TestCase):
             parse_config_value(module, "CURRENT_CLASS", "package.MissingChoice")
         with self.assertRaisesRegex(ValueError, "invalid literal for int"):
             parse_config_value(module, "CURRENT_INT", "not-an-integer")
+
+    def test_package_local_symbol_aliases_parse_but_serialize_canonically(self) -> None:
+        module = _configuration_module()
+
+        parsed_enum = parse_config_value(
+            module,
+            "RENAMED_ENUM",
+            "legacy.HISTORICAL",
+        )
+        parsed_class = parse_config_value(
+            module,
+            "RENAMED_CLASS",
+            "legacy.HistoricalChoice",
+        )
+
+        self.assertIs(parsed_enum, _RenamedOption.CURRENT)
+        self.assertIs(parsed_class, _FirstChoice)
+        self.assertEqual(serialize_config_value(parsed_enum), "CURRENT")
+        self.assertEqual(serialize_config_value(parsed_class), "_FirstChoice")
+
+    def test_class_lookup_never_imports_a_supplied_module_path(self) -> None:
+        module = _configuration_module()
+
+        with self.assertRaisesRegex(
+            ConfigValueError,
+            r"^unknown config class 'pathlib\.Path'$",
+        ):
+            parse_config_value(module, "RENAMED_CLASS", "pathlib.Path")
 
 
 if __name__ == "__main__":
