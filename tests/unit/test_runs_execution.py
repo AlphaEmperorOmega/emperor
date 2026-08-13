@@ -13,6 +13,7 @@ from types import ModuleType
 from unittest.mock import PropertyMock, patch
 
 import torch
+from filelock import FileLock
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -27,8 +28,11 @@ from model_runtime.runs import (
     CheckpointContinuation,
     InvalidCheckpointContinuation,
     InvalidRunPlan,
+    InvalidRunRequest,
     PlanningBudget,
     RunParameter,
+    RunPlanExecutionError,
+    RunPlanRetry,
     RunRequest,
     SubmittedRun,
     accept_run_plan,
@@ -36,7 +40,7 @@ from model_runtime.runs import (
     execution,
     plan_runs,
 )
-from model_runtime.runs.artifacts import FilesystemRunArtifacts
+from model_runtime.runs.artifacts import FilesystemRunArtifacts, RunArtifacts
 from model_runtime.runs.experiment import ExperimentBase
 from models.catalog import model_package
 
@@ -234,6 +238,14 @@ class RunsExecutionTests(unittest.TestCase):
                 [Path(first_result.log_dir).name, Path(second_result.log_dir).name],
                 ["version_0", "version_1"],
             )
+            self.assertNotEqual(
+                first_result.payload["executionId"],
+                second_result.payload["executionId"],
+            )
+            self.assertNotEqual(
+                first_result.payload["artifactId"],
+                second_result.payload["artifactId"],
+            )
 
     def test_no_search_plan_executes_exact_run_and_writes_portable_artifacts(
         self,
@@ -427,6 +439,7 @@ class RunsExecutionTests(unittest.TestCase):
                 "continuation",
                 "budget",
                 "checkpoint_admission",
+                "retry",
             ],
         )
         self.assertEqual(
@@ -434,6 +447,7 @@ class RunsExecutionTests(unittest.TestCase):
             [
                 Parameter.POSITIONAL_OR_KEYWORD,
                 Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
@@ -454,9 +468,18 @@ class RunsExecutionTests(unittest.TestCase):
                     "continuation",
                     "budget",
                     "checkpoint_admission",
+                    "retry",
                 )
             ],
-            [None, 1, (), None, None, DEFAULT_CHECKPOINT_ADMISSION_POLICY],
+            [
+                None,
+                1,
+                (),
+                None,
+                None,
+                DEFAULT_CHECKPOINT_ADMISSION_POLICY,
+                None,
+            ],
         )
 
         training_parameters = signature(ExperimentBase.execute_training_run).parameters
@@ -2140,6 +2163,591 @@ class RunsExecutionTests(unittest.TestCase):
             progress.events[-1]["logDir"],
             progress.events[0]["logDir"],
         )
+
+    def test_later_training_failure_exposes_earlier_committed_results(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST", "Cifar10"),
+            ),
+        )
+        long_run_id = "run-" + "x" * 1_024
+        plan = replace(
+            plan,
+            runs=(plan.runs[0], replace(plan.runs[1], id=long_run_id), plan.runs[2]),
+        )
+        failure = RuntimeError("second Run training failed")
+
+        class FailsSecondTrainer(_Trainer):
+            fit_count = 0
+
+            def fit(self, model, datamodule, **kwargs) -> None:
+                type(self).fit_count += 1
+                if type(self).fit_count == 2:
+                    raise failure
+                super().fit(model, datamodule, **kwargs)
+
+        progress = _Progress()
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", FailsSecondTrainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    progress=progress,
+                )
+
+        error = raised.exception
+        self.assertIs(error.__cause__, failure)
+        self.assertEqual(error.phase, "training")
+        self.assertEqual(error.affected_run_id, long_run_id)
+        self.assertEqual(
+            [result.run_id for result in error.completed_results],
+            [plan.runs[0].id],
+        )
+        self.assertEqual(
+            error.completed_results[0].payload["executionId"],
+            error.execution_id,
+        )
+        self.assertEqual(FailsSecondTrainer.fit_count, 2)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed", "dataset_started", "error"],
+        )
+
+    def test_later_result_commit_failure_preserves_only_prior_receipts(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST", "Cifar10"),
+            ),
+        )
+        original_write = FilesystemRunArtifacts.write_result
+        failure = OSError("second result commit failed")
+        write_count = 0
+
+        def fail_second_write(artifacts, log_dir, result):
+            nonlocal write_count
+            write_count += 1
+            if write_count == 2:
+                raise failure
+            return original_write(artifacts, log_dir, result)
+
+        progress = _Progress()
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch.object(
+                    FilesystemRunArtifacts,
+                    "write_result",
+                    autospec=True,
+                    side_effect=fail_second_write,
+                ),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=FilesystemRunArtifacts(root=Path(tmp)),
+                    progress=progress,
+                )
+
+            first_receipt = Path(
+                raised.exception.completed_results[0].log_dir,
+                "result.json",
+            ).is_file()
+
+        error = raised.exception
+        self.assertIs(error.__cause__, failure)
+        self.assertEqual(error.phase, "result_commit")
+        self.assertEqual(error.affected_run_id, plan.runs[1].id)
+        self.assertEqual(
+            [result.run_id for result in error.completed_results],
+            [plan.runs[0].id],
+        )
+        self.assertTrue(first_receipt)
+        self.assertEqual(len(_Trainer.instances), 2)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed", "dataset_started", "error"],
+        )
+
+    def test_post_commit_best_failure_includes_the_completed_affected_run(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        failure = OSError("best results unavailable")
+        progress = _Progress()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch.object(
+                    FilesystemRunArtifacts,
+                    "update_best_results",
+                    side_effect=failure,
+                ),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=artifacts,
+                    progress=progress,
+                )
+
+            receipt_existed = Path(
+                raised.exception.completed_results[0].log_dir,
+                "result.json",
+            ).is_file()
+
+        error = raised.exception
+        self.assertIs(error.__cause__, failure)
+        self.assertEqual(error.phase, "best_results_projection")
+        self.assertEqual(error.affected_run_id, plan.runs[0].id)
+        self.assertEqual(len(error.completed_results), 1)
+        completed = error.completed_results[0]
+        self.assertEqual(completed.run_id, plan.runs[0].id)
+        self.assertEqual(completed.payload["status"], "completed")
+        self.assertEqual(completed.payload["executionId"], error.execution_id)
+        self.assertTrue(receipt_existed)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed"],
+        )
+
+    def test_post_commit_progress_failure_is_a_projection_failure(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        failure = OSError("completion progress unavailable")
+
+        class FailingCompletionProgress(_Progress):
+            def write_event(self, event) -> None:
+                payload = dict(event)
+                if payload["type"] == "dataset_completed":
+                    raise failure
+                self.events.append(payload)
+
+        progress = FailingCompletionProgress()
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(package, plan, artifacts=artifacts, progress=progress)
+
+            best = artifacts.read_best_results(package.identity)
+
+        error = raised.exception
+        self.assertIs(error.__cause__, failure)
+        self.assertEqual(error.phase, "progress_projection")
+        self.assertEqual(error.affected_run_id, plan.runs[0].id)
+        self.assertEqual(
+            [result.run_id for result in error.completed_results],
+            [plan.runs[0].id],
+        )
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started"],
+        )
+        self.assertEqual(len(best["Mnist"]), 1)
+
+    def test_best_results_lock_timeout_keeps_receipt_and_completion(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        progress = _Progress()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(
+                root=Path(tmp),
+                best_results_lock_timeout_seconds=0.02,
+            )
+            summary = artifacts.best_results_path(package.identity)
+            lock_path = summary.with_suffix(summary.suffix + ".lock")
+            lock_path.parent.mkdir(parents=True)
+            held_lock = FileLock(str(lock_path))
+            held_lock.acquire()
+            try:
+                with (
+                    patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                    patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                    patch("model_runtime.runs.experiment.seed_everything"),
+                    self.assertRaises(RunPlanExecutionError) as raised,
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=artifacts,
+                        progress=progress,
+                    )
+            finally:
+                held_lock.release()
+
+            receipt_exists = Path(
+                raised.exception.completed_results[0].log_dir,
+                "result.json",
+            ).is_file()
+
+        error = raised.exception
+        self.assertIsInstance(error.__cause__, TimeoutError)
+        self.assertEqual(error.phase, "best_results_projection")
+        self.assertTrue(receipt_exists)
+        self.assertEqual(
+            [event["type"] for event in progress.events],
+            ["dataset_started", "dataset_completed"],
+        )
+
+    def test_explicit_retry_skips_exact_committed_prefix_and_runs_pending(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline",),
+                datasets=("Mnist", "FashionMNIST"),
+            ),
+        )
+        failure = RuntimeError("second Run training failed")
+
+        class FailsSecondTrainer(_Trainer):
+            fit_count = 0
+
+            def fit(self, model, datamodule, **kwargs) -> None:
+                type(self).fit_count += 1
+                if type(self).fit_count == 2:
+                    raise failure
+                super().fit(model, datamodule, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", FailsSecondTrainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(package, plan, artifacts=artifacts)
+
+            partial = raised.exception
+            retry_progress = _Progress()
+            _Trainer.instances.clear()
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+            ):
+                results = execute_runs(
+                    package,
+                    plan,
+                    artifacts=artifacts,
+                    progress=retry_progress,
+                    retry=RunPlanRetry(
+                        execution_id=partial.execution_id,
+                        completed_results=partial.completed_results,
+                    ),
+                )
+
+            best = artifacts.read_best_results(package.identity)
+
+        self.assertEqual(results[0], partial.completed_results[0])
+        self.assertEqual(
+            [result.run_id for result in results],
+            [run.id for run in plan.runs],
+        )
+        self.assertEqual(results[1].payload["executionId"], partial.execution_id)
+        self.assertEqual(len(_Trainer.instances), 1)
+        self.assertEqual(
+            [event["type"] for event in retry_progress.events],
+            ["dataset_started", "dataset_completed"],
+        )
+        self.assertEqual(retry_progress.events[0]["runId"], plan.runs[1].id)
+        self.assertEqual(len(best["Mnist"]), 1)
+        self.assertEqual(len(best["FashionMNIST"]), 1)
+
+    def test_retry_builds_only_the_later_pending_preset_experiment(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(
+                presets=("baseline", "gating"),
+                datasets=("Mnist",),
+            ),
+        )
+        failure = RuntimeError("later preset training failed")
+
+        class FailsSecondTrainer(_Trainer):
+            fit_count = 0
+
+            def fit(self, model, datamodule, **kwargs) -> None:
+                type(self).fit_count += 1
+                if type(self).fit_count == 2:
+                    raise failure
+                super().fit(model, datamodule, **kwargs)
+
+        original_build_experiment = ModelPackage.build_experiment
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", FailsSecondTrainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                self.assertRaises(RunPlanExecutionError) as raised,
+            ):
+                execute_runs(package, plan, artifacts=artifacts)
+
+            partial = raised.exception
+            built_presets: list[str] = []
+
+            def tracked_build_experiment(
+                selected_package,
+                preset,
+                *,
+                experiment_task,
+                run_artifacts,
+            ):
+                built_presets.append(selected_package.preset_name(preset))
+                return original_build_experiment(
+                    selected_package,
+                    preset,
+                    experiment_task=experiment_task,
+                    run_artifacts=run_artifacts,
+                )
+
+            _Trainer.instances.clear()
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+                patch.object(
+                    ModelPackage,
+                    "build_experiment",
+                    autospec=True,
+                    side_effect=tracked_build_experiment,
+                ),
+            ):
+                results = execute_runs(
+                    package,
+                    plan,
+                    artifacts=artifacts,
+                    retry=RunPlanRetry(
+                        execution_id=partial.execution_id,
+                        completed_results=partial.completed_results,
+                    ),
+                )
+
+        self.assertEqual(built_presets, ["gating"])
+        self.assertEqual(
+            [result.run_id for result in results],
+            [run.id for run in plan.runs],
+        )
+        self.assertEqual(results[1].payload["executionId"], partial.execution_id)
+
+    def test_retry_rejects_tampered_receipt_before_framework_work(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp) / "logs")
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+            ):
+                original = execute_runs(package, plan, artifacts=artifacts)[0]
+
+            receipt_path = Path(original.log_dir, "result.json")
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["params"] = {"batch_size": 999}
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            _Trainer.instances.clear()
+
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                self.assertRaisesRegex(InvalidRunPlan, "retry receipt"),
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=artifacts,
+                    retry=RunPlanRetry(
+                        execution_id=original.payload["executionId"],
+                        completed_results=(original,),
+                    ),
+                )
+
+        self.assertEqual(_Trainer.instances, [])
+
+    def test_retry_rejects_structural_artifacts_before_framework_work(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+
+            class StructuralArtifacts:
+                root = Path(tmp)
+
+                def run_name(self, identity, preset_key, dataset, parameters):
+                    raise AssertionError("retry must not allocate artifacts")
+
+                def result_metrics_payload(self, metrics):
+                    raise AssertionError("retry must not project metrics")
+
+                def write_result(self, log_dir, result):
+                    raise AssertionError("retry must not write a receipt")
+
+                def read_best_results(self, identity):
+                    raise AssertionError("retry must not read projections")
+
+                def update_best_results(self, identity, experiment_task, result):
+                    raise AssertionError("retry must not write projections")
+
+            filesystem_artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+            ):
+                completed = execute_runs(
+                    package,
+                    plan,
+                    artifacts=filesystem_artifacts,
+                )[0]
+
+            _Trainer.instances.clear()
+            structural_artifacts = StructuralArtifacts()
+            self.assertIsInstance(structural_artifacts, RunArtifacts)
+            with (
+                patch.object(ModelPackage, "build_experiment") as build_experiment,
+                self.assertRaisesRegex(
+                    InvalidRunRequest,
+                    "requires FilesystemRunArtifacts",
+                ),
+            ):
+                execute_runs(
+                    package,
+                    plan,
+                    artifacts=structural_artifacts,
+                    retry=RunPlanRetry(
+                        execution_id=completed.payload["executionId"],
+                        completed_results=(completed,),
+                    ),
+                )
+
+        build_experiment.assert_not_called()
+        self.assertEqual(_Trainer.instances, [])
+
+    def test_retry_binds_every_receipt_semantic_to_the_selected_run(self) -> None:
+        package = _linears_linear()
+        plan = plan_runs(
+            package,
+            RunRequest(presets=("baseline",), datasets=("Mnist",)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp) / "logs")
+            with (
+                patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                patch("model_runtime.runs.experiment.TensorBoardLogger", _Logger),
+                patch("model_runtime.runs.experiment.seed_everything"),
+            ):
+                original = execute_runs(package, plan, artifacts=artifacts)[0]
+
+            receipt_path = Path(original.log_dir, "result.json")
+            original_payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+            cases = (
+                ("model", "foreign"),
+                ("presetKey", "FOREIGN"),
+                ("params", {"batch_size": 999}),
+                ("executionId", "foreign-execution"),
+            )
+            for key, value in cases:
+                tampered_payload = {**original_payload, key: value}
+                receipt_path.write_text(json.dumps(tampered_payload), encoding="utf-8")
+                tampered = replace(original, payload=tampered_payload)
+                _Trainer.instances.clear()
+                with (
+                    self.subTest(key=key),
+                    patch("model_runtime.runs.experiment.Trainer", _Trainer),
+                    self.assertRaisesRegex(InvalidRunPlan, "retry receipt"),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=artifacts,
+                        retry=RunPlanRetry(
+                            execution_id=original_payload["executionId"],
+                            completed_results=(tampered,),
+                        ),
+                    )
+                self.assertEqual(_Trainer.instances, [])
+
+            receipt_path.write_text(json.dumps(original_payload), encoding="utf-8")
+            for completed_results in (
+                (replace(original, run_id="foreign-run"),),
+                (original, original),
+            ):
+                with (
+                    self.subTest(completed_count=len(completed_results)),
+                    self.assertRaisesRegex(InvalidRunPlan, "retry receipt"),
+                ):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=artifacts,
+                        retry=RunPlanRetry(
+                            execution_id=original_payload["executionId"],
+                            completed_results=completed_results,
+                        ),
+                    )
+
+            outside = Path(tmp) / "escaped-retry-receipt"
+            outside.mkdir()
+            outside.joinpath("result.json").write_text(
+                json.dumps(original_payload),
+                encoding="utf-8",
+            )
+            escaped = replace(original, log_dir=str(outside))
+            try:
+                with self.assertRaisesRegex(InvalidRunPlan, "retry receipt"):
+                    execute_runs(
+                        package,
+                        plan,
+                        artifacts=artifacts,
+                        retry=RunPlanRetry(
+                            execution_id=original_payload["executionId"],
+                            completed_results=(escaped,),
+                        ),
+                    )
+            finally:
+                outside.joinpath("result.json").unlink()
+                outside.rmdir()
 
     def test_invalid_monitor_rejects_before_package_config_materialization(
         self,

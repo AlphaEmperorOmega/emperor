@@ -4,12 +4,15 @@ import json
 import math
 import multiprocessing
 import tempfile
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
+
+from filelock import FileLock
 
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import ModelIdentity
@@ -372,6 +375,103 @@ class RunsArtifactsTests(unittest.TestCase):
                 [0.9, 0.8],
             )
             self.assertEqual(merged["FashionMnist"][0]["params"]["score"], 0.7)
+
+    def test_best_result_replay_is_idempotent_per_artifact_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(root=Path(tmp))
+            identity = ModelIdentity("linears", "linear")
+            result = {
+                "status": "completed",
+                "artifactId": "attempt-a",
+                "runId": "run-0001",
+                "dataset": "Mnist",
+                "params": {},
+                "metrics": {"validation_accuracy": 0.8},
+            }
+
+            artifacts.update_best_results(
+                identity,
+                ExperimentTask.IMAGE_CLASSIFICATION,
+                result,
+            )
+            replayed = artifacts.update_best_results(
+                identity,
+                ExperimentTask.IMAGE_CLASSIFICATION,
+                {**result, "rank": 99},
+            )
+            with self.assertRaisesRegex(ValueError, "artifactId.*attempt-a"):
+                artifacts.update_best_results(
+                    identity,
+                    ExperimentTask.IMAGE_CLASSIFICATION,
+                    {**result, "dataset": "FashionMNIST"},
+                )
+            distinct_attempt = artifacts.update_best_results(
+                identity,
+                ExperimentTask.IMAGE_CLASSIFICATION,
+                {**result, "artifactId": "attempt-b"},
+            )
+
+            self.assertEqual(len(replayed["Mnist"]), 1)
+            self.assertNotIn("FashionMNIST", replayed)
+            self.assertEqual(
+                [entry["artifactId"] for entry in distinct_attempt["Mnist"]],
+                ["attempt-a", "attempt-b"],
+            )
+            with self.assertRaisesRegex(ValueError, "artifactId.*attempt-a"):
+                artifacts.update_best_results(
+                    identity,
+                    ExperimentTask.IMAGE_CLASSIFICATION,
+                    {
+                        **result,
+                        "metrics": {"validation_accuracy": 0.1},
+                    },
+                )
+
+    def test_best_results_lock_timeout_is_finite_and_recovers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifacts = FilesystemRunArtifacts(
+                Path(tmp),
+                None,
+                datetime.now,
+                best_results_lock_timeout_seconds=0.02,
+            )
+            identity = ModelIdentity("linears", "linear")
+            summary_path = artifacts.best_results_path(identity)
+            lock_path = summary_path.with_suffix(summary_path.suffix + ".lock")
+            lock_path.parent.mkdir(parents=True)
+            held_lock = FileLock(str(lock_path))
+            held_lock.acquire()
+            started = time.monotonic()
+            try:
+                with self.assertRaisesRegex(TimeoutError, "best-results lock"):
+                    artifacts.update_best_results(
+                        identity,
+                        None,
+                        {"dataset": "Mnist", "metrics": {}},
+                    )
+            finally:
+                held_lock.release()
+
+            self.assertLess(time.monotonic() - started, 1.0)
+            merged = artifacts.update_best_results(
+                identity,
+                None,
+                {"dataset": "Mnist", "metrics": {}},
+            )
+            self.assertEqual(len(merged["Mnist"]), 1)
+
+    def test_best_results_lock_timeout_policy_is_explicit_and_validated(self) -> None:
+        default = FilesystemRunArtifacts()
+        explicit = FilesystemRunArtifacts(best_results_lock_timeout_seconds=2.5)
+
+        self.assertEqual(default.best_results_lock_timeout_seconds, 30.0)
+        self.assertIn("best_results_lock_timeout_seconds=30.0", repr(default))
+        self.assertNotEqual(default, explicit)
+        with self.assertRaises(TypeError):
+            FilesystemRunArtifacts(Path("logs"), None, datetime.now, 2.5)
+        for value in (True, 0, -1, math.inf, math.nan, "1"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                FilesystemRunArtifacts(best_results_lock_timeout_seconds=value)
 
     def test_result_metrics_preserve_limits_and_drop_large_structures(self) -> None:
         payload = FilesystemRunArtifacts().result_metrics_payload(

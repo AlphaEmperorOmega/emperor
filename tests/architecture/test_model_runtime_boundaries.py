@@ -222,6 +222,44 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
 
         self.assertTrue(methods.isdisjoint(artifact_forwarders))
 
+    def test_run_outcome_coordination_stays_private_and_artifact_local(self) -> None:
+        artifacts_path = RUNS_ROOT / "artifacts.py"
+        artifacts_tree = ast.parse(
+            artifacts_path.read_text(encoding="utf-8"),
+            artifacts_path.as_posix(),
+        )
+        classes = {
+            node.name: node
+            for node in artifacts_tree.body
+            if isinstance(node, ast.ClassDef)
+        }
+        protocol_operations = {
+            node.name
+            for node in classes["RunArtifacts"].body
+            if isinstance(node, ast.FunctionDef)
+        }
+        filesystem_operations = {
+            node.name
+            for node in classes["FilesystemRunArtifacts"].body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertTrue({"reserve_run", "read_result"}.isdisjoint(protocol_operations))
+        self.assertTrue({"reserve_run", "read_result"}.issubset(filesystem_operations))
+
+        outcomes_source = (RUNS_ROOT / "_outcomes.py").read_text(encoding="utf-8")
+        self.assertNotIn("FileLock", outcomes_source)
+        self.assertNotIn("_result_path", outcomes_source)
+        self.assertIn("__all__: list[str] = []", outcomes_source)
+
+        facade_source = (RUNS_ROOT / "__init__.py").read_text(encoding="utf-8")
+        for private_name in (
+            "TrainingOutcomeObserver",
+            "RunRetryContext",
+            "admit_run_plan_retry",
+        ):
+            with self.subTest(private_name=private_name):
+                self.assertNotIn(private_name, facade_source)
+
     def test_inspection_modules_do_not_import_each_others_private_names(
         self,
     ) -> None:
