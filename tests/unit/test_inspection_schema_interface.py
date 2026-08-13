@@ -8,7 +8,7 @@ from dataclasses import asdict, astuple, fields, replace
 from enum import Enum
 from inspect import signature
 from types import ModuleType, SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -46,6 +46,7 @@ from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.inspection.schema import _configuration_field_applicability
 from model_runtime.packages import (
     ModelIdentity,
+    ModelMetadata,
     ModelPackage,
     RuntimeDefaultsError,
     configuration_field_metadata,
@@ -764,6 +765,125 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
 
         self.assertIs(first, second)
         self.assertEqual(metadata.call_count, 2)
+
+    def test_runtime_defaults_metadata_is_a_defensive_cached_snapshot(self) -> None:
+        catalog_package = model_package("linears/linear")
+        assert catalog_package is not None
+        catalog_metadata = catalog_package._adapter.load_metadata()
+        legacy_metadata = ModelMetadata(
+            catalog_package.identity,
+            catalog_metadata._runtime_defaults_source,
+            catalog_metadata._dataset_options_source,
+            catalog_metadata._monitor_options_source,
+            catalog_metadata._search_space_source,
+        )
+        package = ModelPackage(
+            catalog_package.identity,
+            _SchemaReplacingAdapter(catalog_package._adapter, legacy_metadata),
+            catalog_package.inspection_construction_limits,
+        )
+        captured_metadata: list[dict[str, dict[str, Any]]] = []
+
+        def capture_metadata(*args: Any, **kwargs: Any) -> dict[str, dict[str, Any]]:
+            metadata = configuration_field_metadata(*args, **kwargs)
+            captured_metadata.append(metadata)
+            return metadata
+
+        with patch(
+            "model_runtime.packages.metadata.configuration_field_metadata",
+            autospec=True,
+            side_effect=capture_metadata,
+        ):
+            spec = runtime_defaults_spec(package)
+
+        self.assertEqual(len(captured_metadata), 2)
+        configuration_source, search_source = captured_metadata
+        configuration_key = next(
+            key
+            for key, entry in configuration_source.items()
+            if isinstance(entry.get("sortKey"), list)
+            and isinstance(entry.get("sectionPath"), list)
+        )
+        search_key = next(
+            key
+            for key, entry in search_source.items()
+            if isinstance(entry.get("sortKey"), list)
+        )
+
+        first_configuration = spec.configuration_metadata[configuration_key]
+        first_search = spec.search_metadata[search_key]
+        expected_configuration = deepcopy(dict(first_configuration))
+        expected_search = deepcopy(dict(first_search))
+        expected_configuration_order = spec.ordered_configuration_keys()
+        expected_search_order = spec.ordered_search_items()
+        expected_schema_order = tuple(
+            field.key for field in configuration_schema(package).fields
+        )
+        expected_search_schema_order = tuple(
+            axis.search_key for axis in search_space_schema(package).axes
+        )
+        spec_representation = repr(spec)
+        self.assertIn("configuration_metadata=mappingproxy({", spec_representation)
+        self.assertIn("search_metadata=mappingproxy({", spec_representation)
+        self.assertNotIn("_MetadataSnapshot", spec_representation)
+        self.assertNotIn(" object at 0x", spec_representation)
+
+        with self.assertRaises(TypeError):
+            cast(Any, first_configuration)["line"] = -1
+        configuration_sort_key = first_configuration["sortKey"]
+        configuration_section_path = first_configuration["sectionPath"]
+        search_sort_key = first_search["sortKey"]
+        assert isinstance(configuration_sort_key, list)
+        assert isinstance(configuration_section_path, list)
+        assert isinstance(search_sort_key, list)
+        cast(list[Any], configuration_sort_key).append(10**9)
+        cast(list[Any], configuration_section_path).append("Mutated Projection")
+        cast(list[Any], search_sort_key).append(10**9)
+
+        source_configuration_sort_key = configuration_source[configuration_key][
+            "sortKey"
+        ]
+        source_configuration_section_path = configuration_source[configuration_key][
+            "sectionPath"
+        ]
+        source_search_sort_key = search_source[search_key]["sortKey"]
+        assert isinstance(source_configuration_sort_key, list)
+        assert isinstance(source_configuration_section_path, list)
+        assert isinstance(source_search_sort_key, list)
+        cast(list[Any], source_configuration_sort_key).append(-1)
+        cast(list[Any], source_configuration_section_path).append("Mutated Source")
+        cast(list[Any], source_search_sort_key).append(-1)
+        search_source[search_key]["line"] = -1
+
+        second_configuration = spec.configuration_metadata[configuration_key]
+        second_search = spec.search_metadata[search_key]
+        self.assertEqual(dict(second_configuration), expected_configuration)
+        self.assertEqual(dict(second_search), expected_search)
+        self.assertIsNot(first_configuration, second_configuration)
+        self.assertIsNot(
+            first_configuration["sortKey"],
+            second_configuration["sortKey"],
+        )
+        self.assertIsNot(
+            first_configuration["sectionPath"],
+            second_configuration["sectionPath"],
+        )
+        self.assertIsNot(first_search["sortKey"], second_search["sortKey"])
+        self.assertIsInstance(second_configuration["sortKey"], list)
+        self.assertIsInstance(second_configuration["sectionPath"], list)
+        self.assertIsInstance(second_search["sortKey"], list)
+        self.assertEqual(
+            spec.ordered_configuration_keys(), expected_configuration_order
+        )
+        self.assertEqual(spec.ordered_search_items(), expected_search_order)
+        self.assertEqual(
+            tuple(field.key for field in configuration_schema(package).fields),
+            expected_schema_order,
+        )
+        self.assertEqual(
+            tuple(axis.search_key for axis in search_space_schema(package).axes),
+            expected_search_schema_order,
+        )
 
     def test_runtime_defaults_cache_uses_selected_package_identity(self) -> None:
         catalog_package = model_package("linears/linear")

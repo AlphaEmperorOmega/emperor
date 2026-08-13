@@ -770,6 +770,26 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
 
         self.assertEqual(exposed, {})
 
+    def test_runtime_defaults_metadata_has_one_private_snapshot_owner(self) -> None:
+        metadata_path = MODEL_RUNTIME_ROOT / "packages" / "metadata.py"
+        metadata_source = metadata_path.read_text(encoding="utf-8")
+        metadata_tree = ast.parse(metadata_source, metadata_path.as_posix())
+        snapshot_classes = {
+            node.name
+            for node in metadata_tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "_MetadataSnapshot"
+        }
+
+        self.assertEqual(snapshot_classes, {"_MetadataSnapshot"})
+        self.assertIn("return _MetadataSnapshot(metadata)", metadata_source)
+        self.assertEqual(metadata_source.count("_nested_metadata("), 3)
+        self.assertNotIn("MappingProxyType(dict(value))", metadata_source)
+
+        packages_facade = (MODEL_RUNTIME_ROOT / "packages" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("_MetadataSnapshot", packages_facade)
+
     def test_runtime_defaults_owns_typed_preset_lock_normalization(self) -> None:
         runtime_defaults_path = MODEL_RUNTIME_ROOT / "packages" / "runtime_defaults.py"
         runtime_defaults_source = runtime_defaults_path.read_text(encoding="utf-8")
