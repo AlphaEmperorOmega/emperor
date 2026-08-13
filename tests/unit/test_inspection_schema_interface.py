@@ -41,7 +41,9 @@ from model_runtime.inspection import (
 )
 from model_runtime.inspection.materialization import (
     materialize_configuration,
+    materialize_inspection,
 )
+from model_runtime.inspection.preflight import preflight_inspection_configuration
 from model_runtime.inspection.runtime_defaults import runtime_defaults_spec
 from model_runtime.inspection.schema import _configuration_field_applicability
 from model_runtime.packages import (
@@ -283,6 +285,61 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
             prepared.overrides.values["stack_residual_connection_option"],
             AdditiveResidualConfig,
         )
+
+    def test_materialization_preflights_one_configuration_before_model_build(
+        self,
+    ) -> None:
+        package = model_package("linears/linear")
+        assert package is not None
+        original_build_configuration = ModelPackage.build_configuration
+        configurations: list[object] = []
+        preflight_configurations: list[object | None] = []
+        model_configurations: list[object] = []
+
+        def build_configuration(
+            selected_package: ModelPackage,
+            *args: Any,
+            **kwargs: Any,
+        ) -> object:
+            configuration = original_build_configuration(
+                selected_package,
+                *args,
+                **kwargs,
+            )
+            configurations.append(configuration)
+            return configuration
+
+        def record_preflight(*args: Any, **kwargs: Any) -> int:
+            preflight_configurations.append(kwargs.get("effective_configuration"))
+            return preflight_inspection_configuration(*args, **kwargs)
+
+        def build_model(_package: ModelPackage, configuration: object) -> object:
+            model_configurations.append(configuration)
+            return object()
+
+        with (
+            patch.object(
+                ModelPackage,
+                "build_configuration",
+                new=build_configuration,
+            ),
+            patch.object(ModelPackage, "build_model", new=build_model),
+            patch(
+                "model_runtime.inspection.materialization."
+                "preflight_inspection_configuration",
+                new=record_preflight,
+            ),
+        ):
+            materialized = materialize_inspection(
+                package,
+                InspectionRequest(preset="baseline", dataset="Cifar100"),
+            )
+
+        self.assertEqual(len(configurations), 1)
+        configuration = configurations[0]
+        self.assertEqual(preflight_configurations, [None, configuration])
+        self.assertEqual(model_configurations, [configuration])
+        self.assertIs(materialized.prepared.configuration, configuration)
 
     def test_typed_override_admission_rejects_unknowns_types_and_abstracts(
         self,

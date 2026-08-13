@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
+from emperor.config import ModelConfig
 from model_runtime.inspection.errors import InspectionError
 from model_runtime.inspection.runtime_defaults import (
     RuntimeDefaultsSpec,
@@ -18,6 +19,12 @@ from model_runtime.packages.inspection_limits import (
 
 _DENSE_PARAMETER_ALLOWANCE = 6
 _PARAMETER_MEMORY_SHARE_DIVISOR = 2
+_EFFECTIVE_CONFIGURATION_FIELDS = (
+    ("input_dim", "INPUT_DIM"),
+    ("hidden_dim", "HIDDEN_DIM"),
+    ("output_dim", "OUTPUT_DIM"),
+    ("sequence_length", "SEQUENCE_LENGTH"),
+)
 
 
 def _numeric(value: Any) -> int | float | None:
@@ -30,6 +37,7 @@ def _effective_values(
     spec: RuntimeDefaultsSpec,
     overrides: Mapping[str, Any],
     preset: Enum,
+    effective_configuration: ModelConfig | None = None,
 ) -> dict[str, tuple[str, int | float]]:
     effective: dict[str, tuple[str, int | float]] = {}
     for config_key in spec.supported_keys:
@@ -44,6 +52,12 @@ def _effective_values(
         if numeric is not None:
             config_key = spec.resolve_key(model_param) or model_param.upper()
             effective[model_param] = (config_key, numeric)
+
+    if effective_configuration is not None:
+        for field_name, config_key in _EFFECTIVE_CONFIGURATION_FIELDS:
+            numeric = _numeric(getattr(effective_configuration, field_name))
+            if numeric is not None:
+                effective[field_name] = (config_key, numeric)
     return effective
 
 
@@ -84,10 +98,16 @@ class _InspectionPreflight:
         overrides: Mapping[str, Any],
         preset: Enum,
         memory_limit_bytes: int | None,
+        effective_configuration: ModelConfig | None = None,
     ) -> None:
         self._spec = runtime_defaults_spec(package)
         self._limits = self._spec.inspection_limits
-        self._effective = _effective_values(self._spec, overrides, preset)
+        self._effective = _effective_values(
+            self._spec,
+            overrides,
+            preset,
+            effective_configuration,
+        )
         self._effective_by_key = {
             config_key.upper(): value for config_key, value in self._effective.values()
         }
@@ -223,16 +243,34 @@ def preflight_inspection_configuration(
     preset: Enum,
     *,
     memory_limit_bytes: int | None = None,
+    effective_configuration: ModelConfig | None = None,
 ) -> int:
     """Validate construction bounds and return a structural parameter estimate."""
 
+    untrusted_configuration = cast(object, effective_configuration)
+    if untrusted_configuration is None:
+        validated_configuration = None
+    elif isinstance(untrusted_configuration, ModelConfig):
+        validated_configuration = untrusted_configuration
+    else:
+        raise TypeError("Inspection effective configuration must be a ModelConfig.")
     try:
-        return _InspectionPreflight(
+        raw_estimate = _InspectionPreflight(
             package,
             overrides,
             preset,
             memory_limit_bytes,
         ).validate()
+        if validated_configuration is None:
+            return raw_estimate
+        effective_estimate = _InspectionPreflight(
+            package,
+            overrides,
+            preset,
+            memory_limit_bytes,
+            validated_configuration,
+        ).validate()
+        return max(raw_estimate, effective_estimate)
     except RuntimeDefaultsError as exc:
         raise_runtime_defaults_inspection_error(exc)
 
