@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal, TypeVar, cast
+from typing import Any, ClassVar, Literal, TypeVar, cast
 
 from model_runtime.inspection.capture_limits import InspectionCaptureLimits
 from model_runtime.packages.identity import ModelIdentity
@@ -72,10 +72,34 @@ class InspectionRequest:
 
 @dataclass(frozen=True)
 class ParsedOverrides:
+    """Typed Runtime Defaults overrides with optional transient provenance.
+
+    Package parsing may attach a process-local diagnostic identifying the Model
+    Package that performed validation. That diagnostic is excluded from this
+    public value's fields, equality, repr, pattern matching, and wire shape; it
+    may be lost through reconstruction or ``dataclasses.replace``. It is never
+    authorization and never skips validation against the selected Model Package.
+    """
+
+    _validated_identity: ClassVar[ModelIdentity | None] = None
     values: Mapping[str, Any] = field(default_factory=dict[str, Any])
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "values", freeze_value(self.values))
+
+
+def parsed_overrides_for_identity(
+    values: Mapping[str, Any],
+    identity: ModelIdentity,
+) -> ParsedOverrides:
+    record = ParsedOverrides(values)
+    object.__setattr__(record, "_validated_identity", identity)
+    return record
+
+
+def parsed_overrides_identity(record: ParsedOverrides) -> ModelIdentity | None:
+    identity = record.__dict__.get("_validated_identity")
+    return identity if isinstance(identity, ModelIdentity) else None
 
 
 SerializedConfigValue = bool | int | float | str | None
