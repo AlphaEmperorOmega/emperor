@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -165,8 +166,9 @@ class CheckpointContinuationIntegrationTests(unittest.TestCase):
                 continued_result.payload["resumedFrom"],
                 {
                     "checkpoint": "last.ckpt",
-                    "epoch": 0,
+                    "epoch": source_checkpoint["epoch"],
                     "globalStep": source_checkpoint["global_step"],
+                    "sha256": hashlib.sha256(source_bytes).hexdigest(),
                 },
             )
             written_result = json.loads(

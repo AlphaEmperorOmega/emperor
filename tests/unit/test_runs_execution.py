@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -19,6 +20,7 @@ from lightning.pytorch.callbacks import Callback, ModelCheckpoint
 from emperor.monitoring import MonitorOption
 from model_runtime.packages import ModelIdentity, ModelPackage
 from model_runtime.runs import (
+    DEFAULT_CHECKPOINT_ADMISSION_POLICY,
     CheckpointContinuation,
     InvalidCheckpointContinuation,
     InvalidRunPlan,
@@ -311,6 +313,7 @@ class RunsExecutionTests(unittest.TestCase):
                 "monitors",
                 "continuation",
                 "budget",
+                "checkpoint_admission",
             ],
         )
         self.assertEqual(
@@ -318,6 +321,7 @@ class RunsExecutionTests(unittest.TestCase):
             [
                 Parameter.POSITIONAL_OR_KEYWORD,
                 Parameter.POSITIONAL_OR_KEYWORD,
+                Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
                 Parameter.KEYWORD_ONLY,
@@ -336,9 +340,10 @@ class RunsExecutionTests(unittest.TestCase):
                     "monitors",
                     "continuation",
                     "budget",
+                    "checkpoint_admission",
                 )
             ],
-            [None, 1, (), None, None],
+            [None, 1, (), None, None, DEFAULT_CHECKPOINT_ADMISSION_POLICY],
         )
 
         training_parameters = signature(ExperimentBase.execute_training_run).parameters
@@ -949,9 +954,15 @@ class RunsExecutionTests(unittest.TestCase):
                     continuation=CheckpointContinuation(checkpoint_path),
                 )
 
+            fit_kwargs = _Trainer.instances[0].fit_kwargs
+            admitted_path = fit_kwargs["ckpt_path"]
+            self.assertIsInstance(admitted_path, Path)
+            self.assertNotEqual(admitted_path, checkpoint_path)
+            self.assertEqual(Path(admitted_path).name, "admitted.ckpt")
+            self.assertFalse(Path(admitted_path).exists())
             self.assertEqual(
-                _Trainer.instances[0].fit_kwargs,
-                {"ckpt_path": checkpoint_path},
+                fit_kwargs,
+                {"ckpt_path": admitted_path, "weights_only": True},
             )
 
     def test_continuation_rejects_multi_run_plan_before_materialization(self) -> None:
@@ -1063,7 +1074,7 @@ class RunsExecutionTests(unittest.TestCase):
                 ) as build_experiment,
                 self.assertRaisesRegex(
                     InvalidCheckpointContinuation,
-                    "could not be loaded",
+                    "isolated decoder failed|could not be loaded",
                 ),
             ):
                 execute_runs(
@@ -1333,6 +1344,7 @@ class RunsExecutionTests(unittest.TestCase):
                 "checkpoint": "last.ckpt",
                 "epoch": 0,
                 "globalStep": 17,
+                "sha256": hashlib.sha256(source_bytes).hexdigest(),
             }
             self.assertEqual(results[0].payload["resumedFrom"], expected)
             result_json = json.loads(

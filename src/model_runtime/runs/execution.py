@@ -16,6 +16,10 @@ from model_runtime.runs._handoff import (
     require_run_experiment,
 )
 from model_runtime.runs.artifacts import RunArtifacts
+from model_runtime.runs.checkpoint_admission import (
+    DEFAULT_CHECKPOINT_ADMISSION_POLICY,
+    CheckpointAdmissionPolicy,
+)
 from model_runtime.runs.checkpoints import (
     CheckpointContinuation,
     CheckpointContinuationLifecycle,
@@ -41,6 +45,14 @@ def _selected_execution_budget(value: object) -> PlanningBudget:
         return PlanningBudget()
     if not isinstance(value, PlanningBudget):
         raise TypeError("Run execution budget must be a PlanningBudget.")
+    return value
+
+
+def _selected_checkpoint_admission(
+    value: object,
+) -> CheckpointAdmissionPolicy:
+    if not isinstance(value, CheckpointAdmissionPolicy):
+        raise TypeError("Checkpoint admission must be a CheckpointAdmissionPolicy.")
     return value
 
 
@@ -240,6 +252,7 @@ class _RunExecutionOptions:
     monitors: Sequence[str]
     continuation: CheckpointContinuation | None
     budget: PlanningBudget | None
+    checkpoint_admission: CheckpointAdmissionPolicy
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,25 +348,26 @@ class _RunExecutor:
             _validated_materialized_runs(package, self.plan, selected_budget)
         )
         callback_groups = self._callback_groups(package, materialized_runs)
-        continuation_lifecycle = CheckpointContinuationLifecycle.admit(
+        with CheckpointContinuationLifecycle.admit(
             self.options.continuation,
             self.plan,
-        )
-        experiment, training_runs = self._materialize_training_runs(
-            package,
-            experiment_task,
-            selected_presets,
-            materialized_runs,
-        )
-        continuation = continuation_lifecycle.bind_training_runs(training_runs)
-        prepared = _PreparedRunExecution(
-            experiment=experiment,
-            training_runs=training_runs,
-            callback_groups=callback_groups,
-            progress=selected_progress,
-            continuation=continuation,
-        )
-        return self._execute_training_runs(prepared)
+            admission_policy=self.options.checkpoint_admission,
+        ) as continuation_lifecycle:
+            experiment, training_runs = self._materialize_training_runs(
+                package,
+                experiment_task,
+                selected_presets,
+                materialized_runs,
+            )
+            continuation = continuation_lifecycle.bind_training_runs(training_runs)
+            prepared = _PreparedRunExecution(
+                experiment=experiment,
+                training_runs=training_runs,
+                callback_groups=callback_groups,
+                progress=selected_progress,
+                continuation=continuation,
+            )
+            return self._execute_training_runs(prepared)
 
     def _callback_groups(
         self,
@@ -414,7 +428,7 @@ class _RunExecutor:
                     progress=prepared.progress,
                     progress_step_interval=self.options.progress_step_interval,
                     ckpt_path=prepared.continuation.checkpoint_path,
-                    model_validator=prepared.continuation.model_validator,
+                    model_validator=prepared.continuation.strict_model_preloader,
                     resumed_from=prepared.continuation.provenance,
                 )
             )
@@ -441,6 +455,9 @@ def execute_runs(
     monitors: Sequence[str] = (),
     continuation: CheckpointContinuation | None = None,
     budget: PlanningBudget | None = None,
+    checkpoint_admission: CheckpointAdmissionPolicy = (
+        DEFAULT_CHECKPOINT_ADMISSION_POLICY
+    ),
 ) -> tuple[RunResult, ...]:
     options = _RunExecutionOptions(
         artifacts=artifacts,
@@ -449,6 +466,7 @@ def execute_runs(
         monitors=monitors,
         continuation=continuation,
         budget=budget,
+        checkpoint_admission=_selected_checkpoint_admission(checkpoint_admission),
     )
     return _RunExecutor(package, plan, options).execute()
 
