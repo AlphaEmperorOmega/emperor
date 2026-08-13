@@ -8,6 +8,11 @@ from pathlib import Path
 
 from model_runtime.packages.identity import is_safe_model_segment, split_model_id
 from models.catalog import (
+    EMPTY_CATEGORY_PACKAGES,
+    MODEL_CATALOG,
+    MODEL_ORDER,
+    ModelCatalog,
+    ModelRegistration,
     discover_model_identities_for_type,
     discover_model_ids,
     discover_model_types,
@@ -20,6 +25,62 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class TestModelCatalogDiscovery(unittest.TestCase):
+    def test_public_catalog_state_is_read_only(self):
+        with self.assertRaises(TypeError):
+            MODEL_CATALOG["bert/new_model"] = MODEL_CATALOG["bert/linear"]
+        with self.assertRaises(TypeError):
+            MODEL_ORDER["bert/linear"] = 99
+        self.assertIsInstance(EMPTY_CATEGORY_PACKAGES, frozenset)
+
+    def test_every_catalog_entry_has_a_unique_explicit_family_order(self):
+        self.assertEqual(set(MODEL_ORDER), set(MODEL_CATALOG))
+
+        orders_by_family: dict[str, set[int]] = {}
+        for catalog_key, display_order in MODEL_ORDER.items():
+            family = catalog_key.split("/", 1)[0]
+            family_orders = orders_by_family.setdefault(family, set())
+            self.assertIs(type(display_order), int)
+            self.assertGreaterEqual(display_order, 0)
+            self.assertNotIn(display_order, family_orders)
+            family_orders.add(display_order)
+
+    def test_catalog_registry_rejects_duplicate_package_identity(self):
+        package = MODEL_CATALOG["bert/linear"]
+
+        with self.assertRaisesRegex(ValueError, "duplicate.*bert/linear"):
+            ModelCatalog(
+                (
+                    ModelRegistration(package=package, display_order=0),
+                    ModelRegistration(package=package, display_order=1),
+                )
+            )
+
+    def test_catalog_registry_rejects_duplicate_family_display_order(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "duplicate Model Package display order 0 for bert",
+        ):
+            ModelCatalog(
+                (
+                    ModelRegistration(
+                        package=MODEL_CATALOG["bert/linear"],
+                        display_order=0,
+                    ),
+                    ModelRegistration(
+                        package=MODEL_CATALOG["bert/linear_adaptive"],
+                        display_order=0,
+                    ),
+                )
+            )
+
+    def test_model_registration_requires_a_non_negative_integer_order(self):
+        package = MODEL_CATALOG["bert/linear"]
+
+        with self.assertRaisesRegex(TypeError, "display order must be an integer"):
+            ModelRegistration(package=package, display_order=True)
+        with self.assertRaisesRegex(ValueError, "display order must be non-negative"):
+            ModelRegistration(package=package, display_order=-1)
+
     def test_model_types_are_sorted_and_unique(self):
         model_types = discover_model_types()
 

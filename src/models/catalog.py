@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 from model_runtime.packages import (
@@ -65,72 +67,126 @@ from models.vit.expert_linear_adaptive import (
 from models.vit.linear import MODEL_PACKAGE as VIT_LINEAR
 from models.vit.linear_adaptive import MODEL_PACKAGE as VIT_LINEAR_ADAPTIVE
 
-_PACKAGES = (
-    BERT_LINEAR,
-    BERT_LINEAR_ADAPTIVE,
-    BERT_EXPERT_LINEAR,
-    BERT_EXPERT_LINEAR_ADAPTIVE,
-    GPT_LINEAR,
-    GPT_LINEAR_ADAPTIVE,
-    GPT_EXPERT_LINEAR,
-    GPT_EXPERT_LINEAR_ADAPTIVE,
-    VIT_LINEAR,
-    VIT_LINEAR_ADAPTIVE,
-    VIT_EXPERT_LINEAR,
-    VIT_EXPERT_LINEAR_ADAPTIVE,
-    MLP_MIXER_LINEAR,
-    MLP_MIXER_LINEAR_ADAPTIVE,
-    MLP_MIXER_EXPERT_LINEAR,
-    MLP_MIXER_EXPERT_LINEAR_ADAPTIVE,
-    TRANSFORMER_LINEAR,
-    TRANSFORMER_LINEAR_ADAPTIVE,
-    TRANSFORMER_EXPERT_LINEAR,
-    TRANSFORMER_EXPERT_LINEAR_ADAPTIVE,
-    LINEARS_LINEAR,
-    LINEARS_LINEAR_ADAPTIVE,
-    EXPERTS_LINEAR,
-    EXPERTS_LINEAR_ADAPTIVE,
-    PARAMETRIC_VECTOR,
-    PARAMETRIC_MATRIX,
-    PARAMETRIC_GENERATOR,
-    NEURON_LINEAR,
-    NEURON_LINEAR_ADAPTIVE,
-    NEURON_EXPERT_LINEAR,
-    NEURON_EXPERT_LINEAR_ADAPTIVE,
+
+@dataclass(frozen=True, slots=True)
+class ModelRegistration:
+    """One validated Model Package registration and its family display order."""
+
+    package: ModelPackage
+    display_order: int
+
+    def __post_init__(self) -> None:
+        if type(self.display_order) is not int:
+            raise TypeError("Model registration display order must be an integer")
+        if self.display_order < 0:
+            raise ValueError("Model registration display order must be non-negative")
+
+
+class ModelCatalog(Mapping[str, ModelPackage]):
+    """Immutable, validated registry of selectable Model Packages."""
+
+    def __init__(self, registrations: Iterable[ModelRegistration]) -> None:
+        resolved_registrations = tuple(registrations)
+        packages: dict[str, ModelPackage] = {}
+        orders: dict[str, int] = {}
+        ordered_identity_by_family: dict[tuple[str, int], str] = {}
+
+        for registration in resolved_registrations:
+            package = registration.package
+            catalog_key = package.identity.catalog_key
+            if catalog_key in packages:
+                raise ValueError(
+                    f"duplicate Model Package identity in catalog: {catalog_key}"
+                )
+            family_order = (package.identity.model_type, registration.display_order)
+            existing_identity = ordered_identity_by_family.get(family_order)
+            if existing_identity is not None:
+                raise ValueError(
+                    "duplicate Model Package display order "
+                    f"{registration.display_order} for {package.identity.model_type}: "
+                    f"{existing_identity}, {catalog_key}"
+                )
+            packages[catalog_key] = package
+            orders[catalog_key] = registration.display_order
+            ordered_identity_by_family[family_order] = catalog_key
+
+        self.__registrations = resolved_registrations
+        self.__packages = MappingProxyType(packages)
+        self.__orders = MappingProxyType(orders)
+
+    @property
+    def registrations(self) -> tuple[ModelRegistration, ...]:
+        return self.__registrations
+
+    @property
+    def display_orders(self) -> Mapping[str, int]:
+        return self.__orders
+
+    def __getitem__(self, catalog_key: str) -> ModelPackage:
+        return self.__packages[catalog_key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.__packages)
+
+    def __len__(self) -> int:
+        return len(self.__packages)
+
+    def discover_model_ids(self) -> list[str]:
+        return sorted(
+            self.__packages,
+            key=lambda key: (
+                self.__packages[key].identity.model_type,
+                self.__orders[key],
+            ),
+        )
+
+    def discover_model_packages(self) -> list[ModelPackage]:
+        return [self.__packages[key] for key in self.discover_model_ids()]
+
+    def discover_model_types(self) -> list[str]:
+        return sorted(
+            {package.identity.model_type for package in self.__packages.values()}
+        )
+
+
+_MODEL_REGISTRATIONS = (
+    ModelRegistration(BERT_LINEAR, 0),
+    ModelRegistration(BERT_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(BERT_EXPERT_LINEAR, 2),
+    ModelRegistration(BERT_EXPERT_LINEAR_ADAPTIVE, 3),
+    ModelRegistration(GPT_LINEAR, 0),
+    ModelRegistration(GPT_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(GPT_EXPERT_LINEAR, 2),
+    ModelRegistration(GPT_EXPERT_LINEAR_ADAPTIVE, 3),
+    ModelRegistration(VIT_LINEAR, 0),
+    ModelRegistration(VIT_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(VIT_EXPERT_LINEAR, 2),
+    ModelRegistration(VIT_EXPERT_LINEAR_ADAPTIVE, 3),
+    ModelRegistration(MLP_MIXER_LINEAR, 0),
+    ModelRegistration(MLP_MIXER_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(MLP_MIXER_EXPERT_LINEAR, 2),
+    ModelRegistration(MLP_MIXER_EXPERT_LINEAR_ADAPTIVE, 3),
+    ModelRegistration(TRANSFORMER_LINEAR, 0),
+    ModelRegistration(TRANSFORMER_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(TRANSFORMER_EXPERT_LINEAR, 2),
+    ModelRegistration(TRANSFORMER_EXPERT_LINEAR_ADAPTIVE, 3),
+    ModelRegistration(LINEARS_LINEAR, 0),
+    ModelRegistration(LINEARS_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(EXPERTS_LINEAR, 0),
+    ModelRegistration(EXPERTS_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(PARAMETRIC_VECTOR, 2),
+    ModelRegistration(PARAMETRIC_MATRIX, 1),
+    ModelRegistration(PARAMETRIC_GENERATOR, 0),
+    ModelRegistration(NEURON_LINEAR, 0),
+    ModelRegistration(NEURON_LINEAR_ADAPTIVE, 1),
+    ModelRegistration(NEURON_EXPERT_LINEAR, 2),
+    ModelRegistration(NEURON_EXPERT_LINEAR_ADAPTIVE, 3),
 )
 
-MODEL_CATALOG: dict[str, ModelPackage] = {
-    package.identity.catalog_key: package for package in _PACKAGES
-}
+MODEL_CATALOG = ModelCatalog(_MODEL_REGISTRATIONS)
+MODEL_ORDER = MODEL_CATALOG.display_orders
 
-MODEL_ORDER: dict[str, int] = {
-    "bert/linear": 0,
-    "bert/linear_adaptive": 1,
-    "bert/expert_linear": 2,
-    "bert/expert_linear_adaptive": 3,
-    "gpt/linear": 0,
-    "gpt/linear_adaptive": 1,
-    "gpt/expert_linear": 2,
-    "gpt/expert_linear_adaptive": 3,
-    "vit/linear": 0,
-    "vit/linear_adaptive": 1,
-    "vit/expert_linear": 2,
-    "vit/expert_linear_adaptive": 3,
-    "mlp_mixer/linear": 0,
-    "mlp_mixer/linear_adaptive": 1,
-    "mlp_mixer/expert_linear": 2,
-    "mlp_mixer/expert_linear_adaptive": 3,
-    "transformer/linear": 0,
-    "transformer/linear_adaptive": 1,
-    "transformer/expert_linear": 2,
-    "transformer/expert_linear_adaptive": 3,
-    "neuron/linear": 0,
-    "neuron/linear_adaptive": 1,
-    "neuron/expert_linear": 2,
-    "neuron/expert_linear_adaptive": 3,
-}
-
-EMPTY_CATEGORY_PACKAGES: set[str] = set()
+EMPTY_CATEGORY_PACKAGES: frozenset[str] = frozenset()
 
 
 def is_safe_model_id(model_id: object) -> bool:
@@ -172,18 +228,15 @@ def model_identity_payload(catalog_key: str) -> dict[str, str]:
 
 
 def discover_model_ids() -> list[str]:
-    return sorted(
-        MODEL_CATALOG,
-        key=lambda key: (key.split("/", 1)[0], MODEL_ORDER.get(key, key)),
-    )
+    return MODEL_CATALOG.discover_model_ids()
 
 
 def discover_model_packages() -> list[ModelPackage]:
-    return [MODEL_CATALOG[key] for key in discover_model_ids()]
+    return MODEL_CATALOG.discover_model_packages()
 
 
 def discover_model_types() -> list[str]:
-    return sorted({package.identity.model_type for package in _PACKAGES})
+    return MODEL_CATALOG.discover_model_types()
 
 
 def model_type_exists(model_type: str) -> bool:
@@ -240,8 +293,10 @@ __all__ = [
     "MODEL_CATALOG",
     "MODEL_ID_SEGMENT_RE",
     "MODEL_ORDER",
+    "ModelCatalog",
     "ModelIdentity",
     "ModelPackage",
+    "ModelRegistration",
     "discover_model_identities",
     "discover_model_identities_for_type",
     "discover_model_identity_payloads",
