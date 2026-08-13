@@ -4,6 +4,7 @@ import runpy
 import sys
 import unittest
 from copy import deepcopy
+from typing import cast
 from unittest.mock import patch
 
 import models.parametric.parametric_vector.dataset_options as dataset_options
@@ -186,7 +187,7 @@ class TestParametricVectorModel(unittest.TestCase):
         sampler_options = ParametricSamplerOptions(
             threshold=0.2,
             filter_above_threshold=True,
-            num_topk_samples=3,
+            num_topk_samples=2,
             normalize_probabilities_flag=False,
             noisy_topk_flag=True,
             coefficient_of_variation_loss_weight=0.01,
@@ -292,6 +293,59 @@ class TestParametricVectorModel(unittest.TestCase):
             layer_model_config.weight_mixture_config.output_dim,
             hidden_dim,
         )
+
+    def test_runtime_rejects_invalid_package_owned_semantics_before_build(self):
+        package = model_package("parametric/parametric_vector")
+        cases = (
+            ({"hidden_dim": 0}, "'hidden_dim' must be positive"),
+            ({"stack_dropout_probability": 1.5}, r"must be in \[0.0, 1.0\)"),
+            (
+                {"adaptive_mixture_top_k": 0},
+                "'adaptive_mixture_top_k' must be positive",
+            ),
+            (
+                {
+                    "adaptive_mixture_top_k": 3,
+                    "adaptive_mixture_num_experts": 2,
+                },
+                "top_k cannot exceed num_experts",
+            ),
+            ({"sampler_threshold": -0.1}, r"must be in \[0.0, 1.0\]"),
+            ({"sampler_switch_loss_weight": -0.1}, "must be finite and non-negative"),
+        )
+
+        for overrides, message in cases:
+            with self.subTest(overrides=overrides):
+                with self.assertRaisesRegex(ValueError, message):
+                    package.bind_runtime_defaults(overrides)
+
+    def test_direct_runtime_rejects_fractional_sampler_count_before_build(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            "sampler_num_topk_samples.*float.*int",
+        ):
+            RuntimeOptions({"sampler_num_topk_samples": 0.5})
+
+    def test_direct_grouped_runtime_rejects_fractional_sampler_count_before_build(
+        self,
+    ):
+        sampler_options = ParametricSamplerOptions(
+            threshold=0.0,
+            filter_above_threshold=False,
+            num_topk_samples=cast(int, 0.5),
+            normalize_probabilities_flag=True,
+            noisy_topk_flag=False,
+            coefficient_of_variation_loss_weight=0.0,
+            switch_loss_weight=0.0,
+            zero_centred_loss_weight=0.0,
+            mutual_information_loss_weight=0.0,
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "sampler_num_topk_samples.*float.*int",
+        ):
+            RuntimeOptions({"sampler_options": sampler_options})
 
     def test_vector_shared_router_is_rejected(self):
         cfg = model_package("parametric/parametric_vector").presets._preset(
