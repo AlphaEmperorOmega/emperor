@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import cast
 
 from emperor.halting import (
     HaltingConfig,
@@ -13,6 +14,9 @@ from emperor.layers import (
 )
 from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
+from models.neuron.linear._hidden.runtime_options import (
+    RuntimeOptions as HiddenRuntimeOptions,
+)
 from models.neuron.linear._residual import ResidualStackOptions
 
 
@@ -86,4 +90,40 @@ class ClusterRouteHaltingOptions:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions(ResolvedRuntimeOptions):
-    pass
+    """Package-owned outer neuron construction roles."""
+
+    @property
+    def hidden_runtime(self) -> HiddenRuntimeOptions:
+        return cast(HiddenRuntimeOptions, self._values["hidden_runtime"])
+
+    @property
+    def cluster_capacity_options(self) -> NeuronClusterCapacityOptions:
+        return cast(
+            NeuronClusterCapacityOptions,
+            self._values["cluster_capacity_options"],
+        )
+
+    @property
+    def terminal_options(self) -> NeuronTerminalOptions:
+        return cast(NeuronTerminalOptions, self._values["terminal_options"])
+
+    @property
+    def terminal_router_options(self) -> NeuronSubmoduleStackOptions:
+        return cast(
+            NeuronSubmoduleStackOptions,
+            self._values["terminal_router_options"],
+        )
+
+    @property
+    def terminal_sampler_options(self) -> NeuronTerminalSamplerOptions:
+        return cast(
+            NeuronTerminalSamplerOptions,
+            self._values["terminal_sampler_options"],
+        )
+
+    @property
+    def cluster_halting_options(self) -> ClusterRouteHaltingOptions:
+        return cast(
+            ClusterRouteHaltingOptions,
+            self._values["cluster_halting_options"],
+        )

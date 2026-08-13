@@ -26,6 +26,13 @@ from models.neuron.linear.presets import (
     Experiment,
     ExperimentPreset,
 )
+from models.neuron.linear.runtime_options import (
+    ClusterRouteHaltingOptions,
+    NeuronClusterCapacityOptions,
+    NeuronSubmoduleStackOptions,
+    NeuronTerminalOptions,
+    NeuronTerminalSamplerOptions,
+)
 
 
 def _build_config(**runtime_defaults):
@@ -105,6 +112,29 @@ class TestNeuronLinearModel(unittest.TestCase):
         )
         self.assertIsNot(
             hidden_block.model_config, experiment_config.output_model_config
+        )
+
+    def test_runtime_exposes_cohesive_outer_neuron_role_objects(self):
+        package = model_package("neuron/linear")
+        runtime = package.bind_runtime_defaults()
+
+        self.assertEqual(runtime.hidden_runtime.hidden_dim, config.HIDDEN_DIM)
+        self.assertIsInstance(
+            runtime.cluster_capacity_options,
+            NeuronClusterCapacityOptions,
+        )
+        self.assertIsInstance(runtime.terminal_options, NeuronTerminalOptions)
+        self.assertIsInstance(
+            runtime.terminal_router_options,
+            NeuronSubmoduleStackOptions,
+        )
+        self.assertIsInstance(
+            runtime.terminal_sampler_options,
+            NeuronTerminalSamplerOptions,
+        )
+        self.assertIsInstance(
+            runtime.cluster_halting_options,
+            ClusterRouteHaltingOptions,
         )
 
     def test_hidden_flat_overrides_build_locally(self):
