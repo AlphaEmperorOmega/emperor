@@ -872,6 +872,7 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             _PRESET_DEFINITIONS,
             builder_type=VitLinearAdaptiveConfigBuilder,
             default_preset=ExperimentPreset.BASELINE,
+            runtime_factory=runtime_from_flat,
         )
 
     def _dataset_config(self, dataset: type) -> dict:
@@ -882,9 +883,6 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             "image_height": dataset.default_height,
             "output_dim": dataset.num_classes,
         }
-
-    def _preset(self, **kwargs):
-        return self._builder_type(runtime=runtime_from_flat(kwargs)).build()
 
 
 class Experiment(ExperimentBase):
