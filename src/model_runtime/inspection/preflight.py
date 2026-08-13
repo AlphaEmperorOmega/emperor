@@ -40,7 +40,7 @@ def _effective_values(
             effective[model_param] = (config_key, numeric)
 
     for model_param, lock in spec.locks_for_preset(preset).items():
-        numeric = _numeric(getattr(lock, "value", None))
+        numeric = _numeric(lock.value)
         if numeric is not None:
             config_key = spec.resolve_key(model_param) or model_param.upper()
             effective[model_param] = (config_key, numeric)

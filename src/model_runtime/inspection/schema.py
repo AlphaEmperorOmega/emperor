@@ -249,8 +249,8 @@ def _preset_lock_details(
             details.setdefault(field, []).append(
                 {
                     "preset": preset.name,
-                    "value": getattr(lock, "value", None),
-                    "reason": getattr(lock, "reason", ""),
+                    "value": lock.value,
+                    "reason": lock.reason,
                 }
             )
     return details
@@ -455,7 +455,7 @@ def _configuration_schema(
         section_path = _field_section_path(key, metadata.get(key, {}))
         nullable = value is None or _annotation_is_nullable(annotation)
         lock = locks.get(spec.model_parameter(key))
-        locked_value = getattr(lock, "value", None) if lock is not None else None
+        locked_value = lock.value if lock is not None else None
         fields.append(
             ConfigurationField(
                 key=key,
@@ -486,7 +486,7 @@ def _configuration_schema(
                 locked_value=(
                     spec.serialize_value(locked_value) if lock is not None else None
                 ),
-                locked_reason=(getattr(lock, "reason", "") if lock else ""),
+                locked_reason=(lock.reason if lock is not None else ""),
             )
         )
     return ConfigurationSchema(identity=package.identity, fields=tuple(fields))
