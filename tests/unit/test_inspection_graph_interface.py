@@ -7,6 +7,7 @@ import unittest
 from collections.abc import Mapping, Sequence
 from dataclasses import FrozenInstanceError, dataclass, field, replace
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -802,26 +803,34 @@ assert semantic_module not in sys.modules
         self.assertIs(details["coordinates_truncated"], True)
 
     def test_terminal_connections_are_sliced_before_host_materialization(self) -> None:
-        class ConnectionProbe:
-            shape = (5, 3)
+        class ConnectionProbe(torch.Tensor):
+            events: ClassVar[list[tuple[str, object]]] = []
 
-            def __init__(self) -> None:
-                self.slice_stop: int | None = None
+            @staticmethod
+            def __new__(_cls):
+                return torch.tensor(
+                    [
+                        [1, 1, 1],
+                        [2, 1, 1],
+                        [3, 1, 1],
+                        [4, 1, 1],
+                        [5, 1, 1],
+                    ]
+                ).as_subclass(ConnectionProbe)
 
-            def __getitem__(self, selected_slice: slice):
-                self.slice_stop = selected_slice.stop
-                return self
+            def __getitem__(self, selected_slice):
+                self.events.append(("slice", selected_slice))
+                return super().__getitem__(selected_slice)
 
             def detach(self):
-                return self
+                self.events.append(("detach", tuple(self.shape)))
+                return super().detach()
 
-            def cpu(self):
-                if self.slice_stop != 2:
+            def cpu(self, *args, **kwargs):
+                self.events.append(("cpu", tuple(self.shape)))
+                if tuple(self.shape) != (2, 3):
                     raise AssertionError("connections reached CPU before slicing")
-                return self
-
-            def tolist(self):
-                return [[1, 1, 1], [2, 1, 1]]
+                return super().cpu(*args, **kwargs)
 
         terminal = nn.Module()
         terminal.x_axis_position = 1
@@ -839,6 +848,86 @@ assert semantic_module not in sys.modules
         self.assertEqual(details["connections"], ((1, 1, 1), (2, 1, 1)))
         self.assertEqual(details["total"], 5)
         self.assertIs(details["truncated"], True)
+        self.assertEqual(
+            ConnectionProbe.events,
+            [
+                ("slice", slice(None, 2, None)),
+                ("detach", (2, 3)),
+                ("cpu", (2, 3)),
+            ],
+        )
+
+    def test_terminal_connections_reject_wide_tensor_before_host_transfer(
+        self,
+    ) -> None:
+        class HostTransferTrap(torch.Tensor):
+            @staticmethod
+            def __new__(_cls):
+                return torch.zeros((1, 4_096)).as_subclass(HostTransferTrap)
+
+            def cpu(self, *_args, **_kwargs):
+                raise AssertionError("invalid connections reached host transfer")
+
+        terminal = nn.Module()
+        terminal.x_axis_position = 1
+        terminal.y_axis_position = 1
+        terminal.z_axis_position = 1
+        terminal.neuron_connections = HostTransferTrap()
+
+        with self.assertRaisesRegex(
+            InspectionError,
+            r"neuron_connections must be a Tensor shaped \[connections, 3\]",
+        ):
+            module_details(terminal)
+
+    def test_terminal_connections_reject_invalid_structural_values(self) -> None:
+        invalid_connections = (
+            torch.zeros(3),
+            torch.zeros((1, 2)),
+            torch.zeros((1, 4)),
+            torch.zeros((1, 2, 3)),
+            [[1, 2, 3]],
+        )
+
+        for connections in invalid_connections:
+            with self.subTest(connections=connections):
+                terminal = nn.Module()
+                terminal.x_axis_position = 1
+                terminal.y_axis_position = 1
+                terminal.z_axis_position = 1
+                terminal.neuron_connections = connections
+
+                with self.assertRaisesRegex(
+                    InspectionError,
+                    r"neuron_connections must be a Tensor shaped \[connections, 3\]",
+                ):
+                    module_details(terminal)
+
+    def test_terminal_connection_row_boundaries_preserve_projection(self) -> None:
+        cases = (
+            (torch.empty((0, 3), dtype=torch.long), 2, 0, False),
+            (torch.tensor([[1, 2, 3], [4, 5, 6]]), 2, 2, False),
+            (torch.tensor([[1, 2, 3], [4, 5, 6], [7, 8, 9]]), 2, 3, True),
+        )
+
+        for connections, limit, expected_total, expected_truncated in cases:
+            with self.subTest(total=expected_total, limit=limit):
+                terminal = nn.Module()
+                terminal.x_axis_position = 1
+                terminal.y_axis_position = 1
+                terminal.z_axis_position = 1
+                terminal.neuron_connections = connections
+
+                details = module_details(
+                    terminal,
+                    limits=InspectionCaptureLimits(
+                        maximum_terminal_connections=limit,
+                    ),
+                )["terminalReach"]
+
+                self.assertEqual(details["connections"], connections[:limit].tolist())
+                self.assertEqual(details["total"], expected_total)
+                self.assertIs(details["truncated"], expected_truncated)
 
     def test_graph_output_budget_aborts_before_returning_oversized_result(self) -> None:
         class VerboseModule(nn.Module):
