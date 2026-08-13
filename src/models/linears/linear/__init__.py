@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from model_runtime.packages import ModelIdentity, ModelMetadata, ModelPackage
 
 _IDENTITY = ModelIdentity("linears", "linear")
@@ -68,12 +71,19 @@ class _ModelPackageAdapter:
             run_artifacts=run_artifacts,
         )
 
-    def checkpoint_config_overrides(self, tensor_shapes):
-        from .checkpoint_metadata import checkpoint_config_overrides
 
-        return checkpoint_config_overrides(tensor_shapes)
+def _checkpoint_config_interpreter(
+    tensor_shapes: Mapping[str, tuple[int, ...]],
+) -> Mapping[str, Any]:
+    from .checkpoint_metadata import checkpoint_config_overrides
+
+    return checkpoint_config_overrides(tensor_shapes)
 
 
-MODEL_PACKAGE = ModelPackage(_IDENTITY, _ModelPackageAdapter())
+MODEL_PACKAGE = ModelPackage(
+    _IDENTITY,
+    _ModelPackageAdapter(),
+    _checkpoint_config_interpreter=_checkpoint_config_interpreter,
+)
 
 __all__ = ["MODEL_PACKAGE"]
