@@ -30,16 +30,18 @@ def _standard_schedule(**overrides: object) -> RecurrentIterationSchedule:
 
 
 class TestRecurrentIterationSchedule(unittest.TestCase):
-    def test_smooth_handoff_source_branch_validator_rejects_missing_branch(
-        self,
-    ) -> None:
-        with self.assertRaisesRegex(
-            ValueError,
-            "smooth handoff execution plan requires a source branch",
-        ):
-            RecurrentIterationScheduleValidator.validate_smooth_handoff_source_branch(
-                None
+    def test_execution_plan_models_only_reachable_schedule_states(self) -> None:
+        execution_plan = _standard_schedule().execution_plan()
+
+        self.assertFalse(hasattr(execution_plan, "transitioning"))
+        self.assertFalse(hasattr(execution_plan, "common_prefix_transition_count"))
+        self.assertFalse(hasattr(execution_plan, "transition_weight"))
+        self.assertFalse(
+            hasattr(
+                RecurrentIterationScheduleValidator,
+                "validate_smooth_handoff_source_branch",
             )
+        )
 
     def test_constructor_accepts_only_the_recurrent_config(self) -> None:
         parameters = inspect.signature(RecurrentIterationSchedule.__init__).parameters
@@ -82,7 +84,10 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         for config, expected in cases:
             with self.subTest(config_type=type(config).__name__):
                 schedule = RecurrentIterationSchedule(config)
-                self.assertFalse(schedule.execution_plan().transitioning)
+                self.assertNotIsInstance(
+                    schedule.execution_plan(),
+                    RecurrentSmoothHandoffExecutionPlan,
+                )
                 self.assertEqual(
                     (
                         schedule.iteration_unit,
@@ -277,14 +282,7 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
                     execution_plan,
                     RecurrentSmoothHandoffExecutionPlan,
                 )
-                self.assertTrue(execution_plan.transitioning)
-                self.assertIsNone(
-                    RecurrentIterationScheduleValidator.validate_smooth_handoff_source_branch(
-                        execution_plan.source_branch
-                    )
-                )
                 source_plan = execution_plan.source_branch
-                self.assertIsNotNone(source_plan)
                 self.assertEqual(
                     (
                         schedule.active_transition_count,
@@ -401,14 +399,18 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
             forward_calls_before_iteration_increment=1,
         )
 
+        branch_plan = schedule.execution_plan().target_branch
         observed_gradient_modes = []
         for transition_index in range(schedule.active_transition_count):
-            with schedule.gradient_context(transition_index):
+            with branch_plan.gradient_context(transition_index):
                 observed_gradient_modes.append(torch.is_grad_enabled())
 
         self.assertEqual(observed_gradient_modes, [False, True, True])
-        self.assertTrue(schedule.starts_gradient_suffix(1))
-        self.assertFalse(schedule.tracks_gradients(0))
+        self.assertTrue(branch_plan.starts_gradient_suffix(1))
+        self.assertFalse(branch_plan.tracks_gradients(0))
+        self.assertFalse(hasattr(schedule, "gradient_context"))
+        self.assertFalse(hasattr(schedule, "starts_gradient_suffix"))
+        self.assertFalse(hasattr(schedule, "tracks_gradients"))
 
         schedule.record_successful_forward()
 
@@ -452,6 +454,16 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         self.assertEqual(restored.snapshot().forward_call_progress, 3)
         self.assertEqual(restored.active_iterations, 4)
         self.assertEqual(restored.active_transition_count, 4)
+
+    def test_progress_buffer_is_the_only_schedule_runtime_state(self) -> None:
+        schedule = _standard_schedule()
+
+        schedule.forward_call_progress.fill_(3)
+
+        snapshot = schedule.snapshot()
+        self.assertEqual(snapshot.forward_call_progress, 3)
+        self.assertEqual(snapshot.active_iterations, 4)
+        self.assertEqual(schedule.execution_plan().target_branch.transition_count, 4)
 
     def test_smooth_checkpoint_round_trip_restores_every_handoff_phase(self):
         values = {

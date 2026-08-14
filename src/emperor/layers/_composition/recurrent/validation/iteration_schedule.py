@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import torch
 from torch import Tensor
 
@@ -14,11 +12,6 @@ from emperor.layers._composition.recurrent.config import (
 from emperor.layers._composition.recurrent.validation.common import (
     _validate_smooth_iteration_growth_controls,
 )
-
-if TYPE_CHECKING:
-    from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
-        RecurrentBranchExecutionPlan,
-    )
 
 
 class RecurrentIterationScheduleValidator(ValidatorBase):
@@ -44,13 +37,6 @@ class RecurrentIterationScheduleValidator(ValidatorBase):
             config,
             transitions_per_iteration=transitions_per_iteration,
         )
-
-    @staticmethod
-    def validate_smooth_handoff_source_branch(
-        source_branch: RecurrentBranchExecutionPlan | None,
-    ) -> None:
-        if source_branch is None:
-            raise ValueError("smooth handoff execution plan requires a source branch.")
 
     @staticmethod
     def validate_checkpoint_progress(
