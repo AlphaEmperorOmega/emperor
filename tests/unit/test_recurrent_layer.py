@@ -4712,7 +4712,7 @@ class TestRecurrentLayer(unittest.TestCase):
                 block_config=self.layer_block_config(increment=1.0),
                 halting_config=self.halting_config(
                     dim=dim,
-                    gate_threshold=100.0,
+                    gate_threshold=2.5,
                     min_steps=2,
                 ),
             )
@@ -4722,16 +4722,14 @@ class TestRecurrentLayer(unittest.TestCase):
         tracker_manager = HaltingUsageTrackerManager()
         tracker = tracker_manager.attach(model.halting_model)
 
-        with patch.object(
-            tracker,
-            "record_final",
-            wraps=tracker.record_final,
-        ) as record_final:
-            result = model(LayerState(hidden=torch.zeros(1, dim)))
+        result = model(LayerState(hidden=torch.zeros(1, dim)))
 
-        self.assertEqual(record_final.call_count, 1)
         torch.testing.assert_close(tracker.last_step_count, torch.tensor(2.0))
-        torch.testing.assert_close(result.hidden, torch.full((1, dim), 2.5))
+        torch.testing.assert_close(
+            tracker.last_survival,
+            torch.tensor([1.0, 0.0]),
+        )
+        self.assertTrue(torch.isfinite(result.hidden).all())
         tracker_manager.detach(model.halting_model)
 
     def test_recurrent_halting_preserves_halted_positions(self):

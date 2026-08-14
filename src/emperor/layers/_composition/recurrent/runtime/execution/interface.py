@@ -11,7 +11,6 @@ from emperor.layers._state import LayerState
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from contextlib import AbstractContextManager
 
     from emperor.halting import HaltingStateBase
     from emperor.layers._composition.recurrent.base import RecurrentTransitionResult
@@ -109,12 +108,6 @@ class RecurrentExecutionAdapter(Protocol[_StateT]):
         loss: Tensor | None,
         halting_state: HaltingStateBase | None,
     ) -> tuple[Tensor, Tensor | None]: ...
-
-    def _halting_usage_tracking_context(
-        self,
-        *,
-        enabled: bool,
-    ) -> AbstractContextManager[None]: ...
 
     def _blend_recurrent_branch_losses(
         self,

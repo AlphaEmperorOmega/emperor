@@ -49,6 +49,29 @@ def _declared_protected_method_names(owner: type) -> set[str]:
 
 
 class TestRecurrentCompositionConfig(unittest.TestCase):
+    def test_usage_monitoring_does_not_enter_base_or_variant_contracts(self) -> None:
+        emperor_root = Path(__file__).parents[2] / "src" / "emperor"
+        recurrent_root = emperor_root / "layers" / "_composition" / "recurrent"
+        source_paths = (
+            emperor_root / "halting" / "_base.py",
+            *(emperor_root / "halting" / "_variants").glob("*.py"),
+            recurrent_root / "base.py",
+            *(recurrent_root / "variants").glob("*.py"),
+        )
+
+        for source_path in source_paths:
+            source = source_path.read_text(encoding="utf-8")
+            for monitoring_term in (
+                "HaltingUsageTracker",
+                "_usage_tracker",
+                "suppress_usage_tracking",
+            ):
+                with self.subTest(
+                    source_path=source_path,
+                    monitoring_term=monitoring_term,
+                ):
+                    self.assertNotIn(monitoring_term, source)
+
     def test_recurrent_execution_interface_is_separate_from_implementation(
         self,
     ) -> None:
@@ -480,7 +503,6 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 "_expand_recurrent_initial",
                 "_finalize_recurrent_halting",
                 "_blend_recurrent_branch_losses",
-                "_halting_usage_tracking_context",
                 "_new_recurrent_initial_buffer",
                 "_observe_recurrent_step",
                 "_recurrent_row_layout_for_transitions",
