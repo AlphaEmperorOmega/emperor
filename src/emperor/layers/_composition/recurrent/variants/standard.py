@@ -49,17 +49,12 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         overrides: RecurrentLayerConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        resolved_config = self.cfg
-        if TYPE_CHECKING:
-            # RecurrentLayerValidator has already enforced these invariants.
-            assert isinstance(resolved_config, RecurrentLayerConfig)
-            assert resolved_config.max_steps is not None
-            assert resolved_config.block_config is not None
-        self.max_steps: int = resolved_config.max_steps
+        self.cfg: RecurrentLayerConfig
+        self.max_steps: int = self.cfg.max_steps
         self.reinject_original_hidden_flag: bool = (
-            resolved_config.reinject_original_hidden_flag is True
+            self.cfg.reinject_original_hidden_flag is True
         )
-        self.block_config: ConfigBase = resolved_config.block_config
+        self.block_config: ConfigBase = self.cfg.block_config
         self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
             self.max_steps
         )

@@ -133,6 +133,14 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             recurrent_base_module_name,
         )
 
+        base_initializer_source = inspect.getsource(
+            RecurrentCompositionAbstract.__init__
+        )
+        self.assertLess(
+            base_initializer_source.index("self.VALIDATOR.validate(self)"),
+            base_initializer_source.index("RecurrentIterationSchedule(self.cfg)"),
+        )
+
     def test_variant_classes_are_adapters_for_shared_recurrent_execution(
         self,
     ) -> None:
@@ -189,7 +197,10 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         for recurrent_variant in recurrent_variants:
             with self.subTest(recurrent_variant=recurrent_variant.__name__):
                 recurrent_variant_source = inspect.getsource(recurrent_variant)
+                initializer_source = inspect.getsource(recurrent_variant.__init__)
                 self.assertTrue(adapter_method_names <= vars(recurrent_variant).keys())
+                self.assertNotIn("TYPE_CHECKING", initializer_source)
+                self.assertNotIn("assert ", initializer_source)
                 self.assertNotIn(
                     "EXECUTION_ADAPTER",
                     vars(recurrent_variant),
