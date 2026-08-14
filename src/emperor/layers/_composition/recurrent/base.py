@@ -9,6 +9,9 @@ import torch
 from torch import Tensor, nn
 
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.recurrent.runtime.execution.runtime_state import (
+    RecurrentRuntimeStateGuard,
+)
 from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentIterationSchedule,
 )
@@ -62,25 +65,6 @@ class _RecurrentTransitionCandidate:
     loss: Tensor | None
 
 
-@dataclass(frozen=True)
-class _BufferValueSnapshot:
-    buffer: Tensor | None
-    value: Tensor | None
-
-
-@dataclass(frozen=True)
-class _ModuleBufferSnapshot:
-    module: nn.Module
-    buffers: dict[str, _BufferValueSnapshot]
-
-
-@dataclass(frozen=True)
-class _RecurrentRuntimeStateSnapshot:
-    module_buffers: list[_ModuleBufferSnapshot]
-    cpu_rng_state: Tensor
-    cuda_rng_states: list[Tensor] | None
-
-
 _ProvisionalSourceBranchOutput = TypeVar("_ProvisionalSourceBranchOutput")
 
 
@@ -88,6 +72,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     """Private stable interface implemented by every recurrent variant."""
 
     supports_recurrent_diagnostics = False
+    __runtime_state_guard = RecurrentRuntimeStateGuard()
 
     def __init__(
         self,
@@ -282,7 +267,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             residual_schedule=residual_schedule,
             transition_index=transition_index,
         )
-        with self.__preserve_recurrent_runtime_state_during_provisional_branch():
+        with self.__runtime_state_guard.isolate_provisional_branch(self):
             source_result = self.__apply_halting_and_observe_recurrent_transition(
                 recurrent_state,
                 transition_candidate,
@@ -385,78 +370,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             halting_state=halting_state,
             all_items_halted=self.__all_items_halted(halting_state),
         )
-
-    @contextmanager
-    def __preserve_recurrent_runtime_state_during_provisional_branch(
-        self,
-    ) -> Iterator[None]:
-        """Restore module buffers and RNG after a provisional source branch."""
-        runtime_state_snapshot = self.__snapshot_recurrent_runtime_state()
-        try:
-            yield
-        finally:
-            self.__restore_recurrent_runtime_state(runtime_state_snapshot)
-
-    @contextmanager
-    def _rollback_recurrent_runtime_state_on_failure(self) -> Iterator[None]:
-        """Roll back a failed smooth handoff without affecting successful commits."""
-        runtime_state_snapshot = self.__snapshot_recurrent_runtime_state()
-        try:
-            yield
-        except BaseException:
-            self.__restore_recurrent_runtime_state(runtime_state_snapshot)
-            raise
-
-    def __snapshot_recurrent_runtime_state(
-        self,
-    ) -> _RecurrentRuntimeStateSnapshot:
-        return _RecurrentRuntimeStateSnapshot(
-            module_buffers=self.__snapshot_recurrent_module_buffers(),
-            cpu_rng_state=torch.get_rng_state(),
-            cuda_rng_states=(
-                torch.cuda.get_rng_state_all()
-                if torch.cuda.is_initialized()
-                else None
-            ),
-        )
-
-    def __restore_recurrent_runtime_state(
-        self,
-        snapshot: _RecurrentRuntimeStateSnapshot,
-    ) -> None:
-        self.__restore_recurrent_module_buffers(snapshot.module_buffers)
-        torch.set_rng_state(snapshot.cpu_rng_state)
-        if snapshot.cuda_rng_states is not None:
-            torch.cuda.set_rng_state_all(snapshot.cuda_rng_states)
-
-    def __snapshot_recurrent_module_buffers(self) -> list[_ModuleBufferSnapshot]:
-        snapshots: list[_ModuleBufferSnapshot] = []
-        for module in self.modules():
-            buffers = {
-                name: _BufferValueSnapshot(
-                    buffer=buffer,
-                    value=None if buffer is None else buffer.detach().clone(),
-                )
-                for name, buffer in module._buffers.items()
-            }
-            snapshots.append(_ModuleBufferSnapshot(module=module, buffers=buffers))
-        return snapshots
-
-    @staticmethod
-    def __restore_recurrent_module_buffers(
-        snapshots: list[_ModuleBufferSnapshot],
-    ) -> None:
-        for snapshot in snapshots:
-            snapshot.module._buffers.clear()
-            for name, buffer_snapshot in snapshot.buffers.items():
-                buffer = buffer_snapshot.buffer
-                if buffer is not None:
-                    restored_value = buffer_snapshot.value
-                    if TYPE_CHECKING:
-                        assert restored_value is not None
-                    with torch.no_grad():
-                        buffer.copy_(restored_value)
-                snapshot.module._buffers[name] = buffer
 
     def __maybe_apply_layer_norm_before(self, hidden: Tensor) -> Tensor:
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.BEFORE:

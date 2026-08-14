@@ -2582,6 +2582,63 @@ class TestRecurrentLayer(unittest.TestCase):
                 model.recurrent_iteration_schedule,
             )
 
+    def test_schedule_recording_failure_rolls_back_complete_smooth_handoff(
+        self,
+    ) -> None:
+        dim = 2
+        model = self.recurrent_config(
+            dim=dim,
+            max_steps=3,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            block_config=FailingStochasticStateBlockConfig(
+                input_dim=dim,
+                output_dim=dim,
+                fail_on_transition_step=999,
+            ),
+        ).build()
+        schedule = model.recurrent_iteration_schedule
+        schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        original_record_success = schedule.record_successful_forward
+        initial_hidden = torch.ones(1, dim)
+        initial_loss = torch.tensor(3.0)
+        state = LayerState(hidden=initial_hidden, loss=initial_loss)
+        transition_step_buffer = model.block_model.transition_step
+        initial_transition_step = transition_step_buffer.clone()
+        torch.manual_seed(41)
+        expected_next_random_value = torch.rand(())
+        torch.manual_seed(41)
+
+        def record_then_fail() -> None:
+            original_record_success()
+            raise RuntimeError("schedule recording failed")
+
+        with (
+            patch.object(
+                schedule,
+                "record_successful_forward",
+                side_effect=record_then_fail,
+            ),
+            self.assertRaisesRegex(RuntimeError, "schedule recording failed"),
+        ):
+            model(state)
+
+        self.assertIs(state.hidden, initial_hidden)
+        self.assertIs(state.loss, initial_loss)
+        self.assertEqual(schedule.snapshot().forward_call_progress, 4)
+        self.assertIs(model.block_model.transition_step, transition_step_buffer)
+        torch.testing.assert_close(
+            model.block_model.transition_step,
+            initial_transition_step,
+        )
+        torch.testing.assert_close(torch.rand(()), expected_next_random_value)
+
     def test_transition_failure_does_not_commit_or_advance_iteration_schedule(
         self,
     ) -> None:
