@@ -26,6 +26,10 @@ if TYPE_CHECKING:
     from torch.nn import Module
     from torch.utils.hooks import RemovableHandle
 
+    from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
+        RecurrentIterationScheduleSnapshot,
+    )
+
 
 class RecurrentLayerMonitorCallback(Callback):
     """Log recurrent-layer step dynamics without changing recurrent outputs."""
@@ -120,17 +124,27 @@ class RecurrentLayerMonitorCallback(Callback):
             if should_sample:
                 observation = _RecurrentObservation()
                 self._observations[layer_id] = observation
+                schedule_snapshot = (
+                    recurrent_layer.recurrent_iteration_schedule.snapshot()
+                )
             else:
                 observation = None
+                schedule_snapshot = None
                 self._observations.pop(layer_id, None)
             self._latest_gate_logits.pop(layer_id, None)
-            output = original_forward(*args, **kwargs)
+            try:
+                output = original_forward(*args, **kwargs)
+            except BaseException:
+                self._observations.pop(layer_id, None)
+                self._latest_gate_logits.pop(layer_id, None)
+                raise
             if observation is not None:
                 self.__emit_observation(
                     pl_module,
                     module_name,
                     recurrent_layer,
                     observation,
+                    schedule_snapshot,
                 )
             return output
 
@@ -182,7 +196,10 @@ class RecurrentLayerMonitorCallback(Callback):
             _inputs: tuple[object, ...],
             output: object,
         ) -> None:
-            if not self.__should_sample(pl_module):
+            if (
+                not self.__should_sample(pl_module)
+                or not recurrent_layer._recurrent_diagnostic_observation_enabled
+            ):
                 return
             gate_logits = _extract_hidden_tensor(output)
             if gate_logits is not None:
@@ -200,12 +217,16 @@ class RecurrentLayerMonitorCallback(Callback):
         module_name: str,
         recurrent_layer: Module,
         observation: _RecurrentObservation,
+        schedule_snapshot: RecurrentIterationScheduleSnapshot | None = None,
     ) -> None:
+        if schedule_snapshot is None:
+            schedule_snapshot = recurrent_layer.recurrent_iteration_schedule.snapshot()
         context = _RecurrentTrackingContext(
             pl_module=pl_module,
             module_name=module_name,
             metric_prefix=f"{module_name}/recurrent",
             recurrent_layer=recurrent_layer,
+            schedule_snapshot=schedule_snapshot,
             metrics=_RecurrentDiagnostics.calculate(observation),
             device=getattr(pl_module, "device", torch.device("cpu")),
             experiment=getattr(
@@ -227,6 +248,10 @@ class RecurrentLayerMonitorCallback(Callback):
         self.__track_final_hidden_delta(context)
         self.__track_convergence_ratio(context)
         self.__track_maximum_step_fraction(context)
+        self.__track_settled_steps(context)
+        self.__track_active_steps(context)
+        self.__track_depth_transition_active(context)
+        self.__track_depth_transition_weight(context)
         self.__track_per_step_hidden_delta_mean(context)
         self.__track_gate_open_mean(context)
         self.__track_gate_open_fraction(context)
@@ -286,15 +311,73 @@ class RecurrentLayerMonitorCallback(Callback):
     def __track_maximum_step_fraction(context: _RecurrentTrackingContext) -> None:
         if context.metrics is None:
             return
-        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
+        schedule_snapshot = context.schedule_snapshot
+        active_transition_count = (
+            schedule_snapshot.active_transition_count
+            if schedule_snapshot is not None
+            else context.recurrent_layer.recurrent_iteration_schedule.active_transition_count
+        )
         maximum_steps = max(
-            float(iteration_schedule.active_transition_count),
+            float(active_transition_count),
             1.0,
         )
         context.pl_module.log(
             f"{context.metric_prefix}/max_step_fraction",
             torch.tensor(
                 context.metrics.actual_steps / maximum_steps,
+                device=context.device,
+            ),
+        )
+
+    @staticmethod
+    def __track_settled_steps(context: _RecurrentTrackingContext) -> None:
+        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
+        schedule_snapshot = context.schedule_snapshot or iteration_schedule.snapshot()
+        settled_steps = (
+            schedule_snapshot.settled_iterations
+            * iteration_schedule.transitions_per_iteration
+        )
+        context.pl_module.log(
+            f"{context.metric_prefix}/settled_steps",
+            torch.tensor(float(settled_steps), device=context.device),
+        )
+
+    @staticmethod
+    def __track_active_steps(context: _RecurrentTrackingContext) -> None:
+        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
+        schedule_snapshot = context.schedule_snapshot or iteration_schedule.snapshot()
+        context.pl_module.log(
+            f"{context.metric_prefix}/active_steps",
+            torch.tensor(
+                float(schedule_snapshot.active_transition_count),
+                device=context.device,
+            ),
+        )
+
+    @staticmethod
+    def __track_depth_transition_active(
+        context: _RecurrentTrackingContext,
+    ) -> None:
+        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
+        schedule_snapshot = context.schedule_snapshot or iteration_schedule.snapshot()
+        context.pl_module.log(
+            f"{context.metric_prefix}/depth_transition_active",
+            torch.tensor(
+                float(schedule_snapshot.transitioning),
+                device=context.device,
+            ),
+        )
+
+    @staticmethod
+    def __track_depth_transition_weight(
+        context: _RecurrentTrackingContext,
+    ) -> None:
+        iteration_schedule = context.recurrent_layer.recurrent_iteration_schedule
+        schedule_snapshot = context.schedule_snapshot or iteration_schedule.snapshot()
+        context.pl_module.log(
+            f"{context.metric_prefix}/depth_transition_weight",
+            torch.tensor(
+                schedule_snapshot.transition_weight,
                 device=context.device,
             ),
         )

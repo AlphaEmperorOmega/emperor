@@ -8,10 +8,11 @@ from torch import Tensor
 from emperor.config import ConfigBase
 from emperor.layers._composition.recurrent.validation.common import (
     _GRADIENT_WINDOW_FIELDS,
-    _RECURRENT_CONTROLLER_OPTIONAL_FIELDS,
+    _RECURRENT_SHARED_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
     _validate_recurrent_controller_config,
     _validate_recurrent_iteration_controls,
+    _validate_smooth_iteration_growth_controls,
 )
 from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._validation.common import (
@@ -33,7 +34,7 @@ _SUPPORTED_RESIDUAL_REQUIREMENTS = frozenset(
 
 class RecurrentLayerValidator(_RecurrentCompositionValidator):
     OPTIONAL_FIELDS = {
-        *_RECURRENT_CONTROLLER_OPTIONAL_FIELDS,
+        *_RECURRENT_SHARED_OPTIONAL_FIELDS,
         "reinject_original_hidden_flag",
         "override_config",
         *_GRADIENT_WINDOW_FIELDS,
@@ -73,6 +74,10 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             transitions_per_iteration=1,
         )
         cls.__validate_reinject_original_hidden_flag(cfg.reinject_original_hidden_flag)
+        _validate_smooth_iteration_growth_controls(
+            cfg,
+            transitions_per_iteration=1,
+        )
         cls.__validate_stable_dimensions(
             cfg.input_dim,
             cfg.output_dim,

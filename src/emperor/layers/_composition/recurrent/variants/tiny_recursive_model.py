@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING
 from torch import Tensor
 
 from emperor.layers._composition.recurrent.base import RecurrentCompositionAbstract
+from emperor.layers._composition.recurrent.runtime.execution import (
+    PreparedRecurrentTransition,
+    RecurrentExecution,
+)
 from emperor.layers._composition.recurrent.validation import (
     TinyRecursiveModelRecurrentValidator,
 )
@@ -13,6 +17,7 @@ from emperor.layers._composition.recurrent.validation import (
 if TYPE_CHECKING:
     from emperor.config import ConfigBase
     from emperor.halting import HaltingStateBase
+    from emperor.layers._composition.recurrent.base import RecurrentTransitionResult
     from emperor.layers._composition.recurrent.config import (
         TinyRecursiveModelRecurrentConfig,
     )
@@ -26,11 +31,17 @@ class _TinyRecursiveModelState:
     fixed_input: Tensor
     answer: Tensor
     latent: Tensor
+    initial_loss: Tensor | None
+    auxiliary_losses: list[Tensor]
     context_state: LayerState
     row_layout: RowLayout | None
     transition_index: int
     halting_state: HaltingStateBase | None = None
     all_items_halted: bool = False
+
+    @property
+    def output_hidden(self) -> Tensor:
+        return self.answer
 
 
 class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
@@ -39,24 +50,38 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
     VALIDATOR = TinyRecursiveModelRecurrentValidator
     supports_recurrent_diagnostics = True
 
+    if TYPE_CHECKING:
+        answer_initial: Tensor
+        latent_initial: Tensor
+
     def __init__(
         self,
         cfg: TinyRecursiveModelRecurrentConfig,
         overrides: TinyRecursiveModelRecurrentConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.cfg: TinyRecursiveModelRecurrentConfig
-        self.block_config: ConfigBase = self.cfg.block_config
+        resolved_config = self.cfg
+        if TYPE_CHECKING:
+            # The validator has already enforced every required leaf field.
+            assert isinstance(resolved_config, TinyRecursiveModelRecurrentConfig)
+            assert resolved_config.block_config is not None
+            assert resolved_config.latent_updates_per_answer_update is not None
+            assert resolved_config.answer_update_count is not None
+            assert resolved_config.initialization_standard_deviation is not None
+        self.block_config: ConfigBase = resolved_config.block_config
         self.latent_updates_per_answer_update: int = (
-            self.cfg.latent_updates_per_answer_update
+            resolved_config.latent_updates_per_answer_update
         )
-        self.answer_update_count: int = self.cfg.answer_update_count
+        self.answer_update_count: int = resolved_config.answer_update_count
         self.initialization_standard_deviation: float = (
-            self.cfg.initialization_standard_deviation
+            resolved_config.initialization_standard_deviation
         )
         self.__register_initial_buffer("answer_initial")
         self.__register_initial_buffer("latent_initial")
         self.block_model: Module = self._build_transition_model(self.block_config)
+        self.__recurrent_execution: RecurrentExecution[_TinyRecursiveModelState] = (
+            RecurrentExecution()
+        )
 
     def __register_initial_buffer(self, buffer_name: str) -> None:
         initial_buffer = self._new_recurrent_initial_buffer(
@@ -66,135 +91,132 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
 
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
-        fixed_input = state.hidden
         self.VALIDATOR.validate_initial_buffers(
-            fixed_input,
+            state.hidden,
             answer_initial=self.answer_initial,
             latent_initial=self.latent_initial,
             expected_feature_dim=self.output_dim,
         )
-        tiny_recursive_state = _TinyRecursiveModelState(
+
+        return self.__recurrent_execution.execute(
+            self,
+            state,
+            self.recurrent_iteration_schedule,
+        )
+
+    def _initialize_recurrent_execution_state(
+        self,
+        layer_state: LayerState,
+        *,
+        branch_base_loss: Tensor | None,
+    ) -> _TinyRecursiveModelState:
+        fixed_input = layer_state.hidden
+        return _TinyRecursiveModelState(
             fixed_input=fixed_input,
-            answer=self._expand_recurrent_initial(self.answer_initial, fixed_input),
-            latent=self._expand_recurrent_initial(self.latent_initial, fixed_input),
-            context_state=state,
-            row_layout=self._recurrent_row_layout_for_transitions(state),
+            answer=self._expand_recurrent_initial(
+                self.answer_initial,
+                fixed_input,
+            ),
+            latent=self._expand_recurrent_initial(
+                self.latent_initial,
+                fixed_input,
+            ),
+            initial_loss=branch_base_loss,
+            auxiliary_losses=[],
+            context_state=layer_state,
+            row_layout=self._recurrent_row_layout_for_transitions(layer_state),
             transition_index=0,
         )
-        auxiliary_losses: list[Tensor] = []
 
-        for _ in range(self.recurrent_iteration_schedule.active_iterations):
-            tiny_recursive_state = self.__run_answer_cycle(
-                tiny_recursive_state, auxiliary_losses
-            )
-            if tiny_recursive_state.all_items_halted:
-                break
-
-        accumulated_loss = self._accumulate_recurrent_losses(
-            state.loss, auxiliary_losses
-        )
-        finalized_answer, finalized_loss = self._finalize_recurrent_halting(
-            tiny_recursive_state.answer,
-            accumulated_loss,
-            tiny_recursive_state.halting_state,
-        )
-        state.hidden = finalized_answer
-        state.loss = finalized_loss
-        self.recurrent_iteration_schedule.record_successful_forward()
-        return state
-
-    def __run_answer_cycle(
-        self,
-        tiny_recursive_state: _TinyRecursiveModelState,
-        auxiliary_losses: list[Tensor],
+    @staticmethod
+    def _detach_recurrent_execution_state(
+        recurrent_state: _TinyRecursiveModelState,
     ) -> _TinyRecursiveModelState:
-        for _ in range(self.latent_updates_per_answer_update):
-            tiny_recursive_state = self.__run_latent_update(
-                tiny_recursive_state,
-                auxiliary_losses,
-            )
-        return self.__run_answer_update(tiny_recursive_state, auxiliary_losses)
-
-    def __run_latent_update(
-        self,
-        tiny_recursive_state: _TinyRecursiveModelState,
-        auxiliary_losses: list[Tensor],
-    ) -> _TinyRecursiveModelState:
-        transition_index = tiny_recursive_state.transition_index
-        answer, previous_latent = self.__detach_evolving_state_at_gradient_boundary(
-            transition_index,
-            answer=tiny_recursive_state.answer,
-            latent=tiny_recursive_state.latent,
-        )
-        with self.recurrent_iteration_schedule.gradient_context(transition_index):
-            latent_transition_input = (
-                previous_latent + answer + tiny_recursive_state.fixed_input
-            )
-            transition_result = self._run_recurrent_transition(
-                tiny_recursive_state,
-                run_transition=self.block_model,
-                transition_input=latent_transition_input,
-                previous_evolving_hidden=previous_latent,
-                halting_update_enabled=False,
-            )
-            if transition_result.loss is not None:
-                auxiliary_losses.append(
-                    self._reduce_auxiliary_loss(transition_result.loss)
-                )
         return replace(
-            tiny_recursive_state,
-            answer=answer,
-            latent=transition_result.hidden,
-            transition_index=transition_index + 1,
-            halting_state=transition_result.halting_state,
-            all_items_halted=transition_result.all_items_halted,
+            recurrent_state,
+            answer=recurrent_state.answer.detach(),
+            latent=recurrent_state.latent.detach(),
         )
 
-    def __run_answer_update(
+    def _prepare_recurrent_transition(
         self,
-        tiny_recursive_state: _TinyRecursiveModelState,
-        auxiliary_losses: list[Tensor],
-    ) -> _TinyRecursiveModelState:
-        transition_index = tiny_recursive_state.transition_index
-        previous_answer, latent = self.__detach_evolving_state_at_gradient_boundary(
-            transition_index,
-            answer=tiny_recursive_state.answer,
-            latent=tiny_recursive_state.latent,
-        )
-        with self.recurrent_iteration_schedule.gradient_context(transition_index):
-            answer_transition_input = previous_answer + latent
-            halting_update_enabled = self.recurrent_iteration_schedule.tracks_gradients(
-                transition_index
-            )
-            transition_result = self._run_recurrent_transition(
-                tiny_recursive_state,
-                run_transition=self.block_model,
-                transition_input=answer_transition_input,
-                previous_evolving_hidden=previous_answer,
-                halting_update_enabled=halting_update_enabled,
-            )
-            if transition_result.loss is not None:
-                auxiliary_losses.append(
-                    self._reduce_auxiliary_loss(transition_result.loss)
-                )
-        return replace(
-            tiny_recursive_state,
-            answer=transition_result.hidden,
-            latent=latent,
-            transition_index=transition_index + 1,
-            halting_state=transition_result.halting_state,
-            all_items_halted=transition_result.all_items_halted,
-        )
-
-    def __detach_evolving_state_at_gradient_boundary(
-        self,
-        transition_index: int,
+        recurrent_state: _TinyRecursiveModelState,
         *,
-        answer: Tensor,
-        latent: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        if not self.recurrent_iteration_schedule.starts_gradient_suffix(
-            transition_index
-        ):
-            return answer, latent
-        return answer.detach(), latent.detach()
+        tracks_gradients: bool,
+    ) -> PreparedRecurrentTransition:
+        if self.__updates_answer(recurrent_state):
+            return PreparedRecurrentTransition(
+                run_transition=self.block_model,
+                transition_input=recurrent_state.answer + recurrent_state.latent,
+                previous_evolving_hidden=recurrent_state.answer,
+                halting_update_enabled=tracks_gradients,
+            )
+        return PreparedRecurrentTransition(
+            run_transition=self.block_model,
+            transition_input=(
+                recurrent_state.latent
+                + recurrent_state.answer
+                + recurrent_state.fixed_input
+            ),
+            previous_evolving_hidden=recurrent_state.latent,
+            halting_update_enabled=False,
+        )
+
+    def _apply_recurrent_transition_result(
+        self,
+        recurrent_state: _TinyRecursiveModelState,
+        transition_result: RecurrentTransitionResult,
+    ) -> _TinyRecursiveModelState:
+        self.__append_reduced_transition_loss(
+            recurrent_state.auxiliary_losses,
+            transition_result.loss,
+        )
+        state_updates = (
+            {"answer": transition_result.hidden}
+            if self.__updates_answer(recurrent_state)
+            else {"latent": transition_result.hidden}
+        )
+        return replace(
+            recurrent_state,
+            **state_updates,
+            transition_index=recurrent_state.transition_index + 1,
+            halting_state=transition_result.halting_state,
+            all_items_halted=transition_result.all_items_halted,
+        )
+
+    def __append_reduced_transition_loss(
+        self,
+        auxiliary_losses: list[Tensor],
+        transition_loss: Tensor | None,
+    ) -> None:
+        if transition_loss is None:
+            return
+        auxiliary_losses.append(self._reduce_auxiliary_loss(transition_loss))
+
+    @staticmethod
+    def _fork_recurrent_handoff_state(
+        recurrent_state: _TinyRecursiveModelState,
+    ) -> _TinyRecursiveModelState:
+        return replace(
+            recurrent_state,
+            auxiliary_losses=list(recurrent_state.auxiliary_losses),
+        )
+
+    def _recurrent_branch_loss(
+        self,
+        recurrent_state: _TinyRecursiveModelState,
+    ) -> Tensor | None:
+        return self._accumulate_recurrent_losses(
+            recurrent_state.initial_loss,
+            recurrent_state.auxiliary_losses,
+        )
+
+    def __updates_answer(
+        self,
+        recurrent_state: _TinyRecursiveModelState,
+    ) -> bool:
+        transitions_per_iteration = (
+            self.recurrent_iteration_schedule.transitions_per_iteration
+        )
+        phase_index = recurrent_state.transition_index % transitions_per_iteration
+        return phase_index >= self.latent_updates_per_answer_update

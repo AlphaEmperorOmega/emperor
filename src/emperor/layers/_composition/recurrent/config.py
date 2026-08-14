@@ -46,6 +46,11 @@ class RecurrentCompositionConfig(ConfigBase):
         "length increases by iteration_increment. The counter advances after each "
         "completed call; failed calls do not count. Required."
     )
+    smooth_iteration_growth_flag: bool | None = optional_field(
+        "Linearly hand off each one-iteration loop-length increase during the "
+        "first half of its successful-forward interval. False or None preserves "
+        "hard iteration growth."
+    )
     recurrent_layer_norm_position: LayerNormPositionOptions | None = optional_field(
         "Where layer normalization is applied within each recurrent transition. "
         "Set to None to disable."

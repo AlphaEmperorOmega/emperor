@@ -11,6 +11,10 @@ from emperor.layers._composition.recurrent.config import (
 )
 from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentIterationSchedule,
+    RecurrentSmoothHandoffExecutionPlan,
+)
+from emperor.layers._composition.recurrent.validation.iteration_schedule import (
+    RecurrentIterationScheduleValidator,
 )
 
 
@@ -26,6 +30,17 @@ def _standard_schedule(**overrides: object) -> RecurrentIterationSchedule:
 
 
 class TestRecurrentIterationSchedule(unittest.TestCase):
+    def test_smooth_handoff_source_branch_validator_rejects_missing_branch(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "smooth handoff execution plan requires a source branch",
+        ):
+            RecurrentIterationScheduleValidator.validate_smooth_handoff_source_branch(
+                None
+            )
+
     def test_constructor_accepts_only_the_recurrent_config(self) -> None:
         parameters = inspect.signature(RecurrentIterationSchedule.__init__).parameters
 
@@ -67,6 +82,7 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         for config, expected in cases:
             with self.subTest(config_type=type(config).__name__):
                 schedule = RecurrentIterationSchedule(config)
+                self.assertFalse(schedule.execution_plan().transitioning)
                 self.assertEqual(
                     (
                         schedule.iteration_unit,
@@ -113,6 +129,268 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         self.assertEqual(schedule.snapshot().forward_call_progress, 0)
         self.assertEqual(schedule.active_iterations, 2)
         self.assertTrue(schedule.complete)
+
+    def test_smooth_growth_hands_depth_off_during_each_first_half_interval(
+        self,
+    ) -> None:
+        schedule = _standard_schedule(
+            max_steps=4,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        )
+
+        observed = []
+        for _ in range(11):
+            snapshot = schedule.snapshot()
+            observed.append(
+                (
+                    snapshot.forward_call_progress,
+                    snapshot.settled_iterations,
+                    snapshot.active_iterations,
+                    snapshot.transitioning,
+                    snapshot.transition_source_iterations,
+                    snapshot.transition_target_iterations,
+                    snapshot.transition_forward_index,
+                    snapshot.transition_weight,
+                    snapshot.complete,
+                )
+            )
+            schedule.record_successful_forward()
+
+        self.assertEqual(
+            observed,
+            [
+                (0, 2, 2, False, None, None, None, 0.0, False),
+                (1, 2, 2, False, None, None, None, 0.0, False),
+                (2, 2, 2, False, None, None, None, 0.0, False),
+                (3, 2, 2, False, None, None, None, 0.0, False),
+                (4, 2, 3, True, 2, 3, 1, 0.5, False),
+                (5, 2, 3, True, 2, 3, 2, 1.0, False),
+                (6, 3, 3, False, None, None, None, 0.0, False),
+                (7, 3, 3, False, None, None, None, 0.0, False),
+                (8, 3, 4, True, 3, 4, 1, 0.5, False),
+                (9, 3, 4, True, 3, 4, 2, 1.0, False),
+                (10, 4, 4, False, None, None, None, 0.0, True),
+            ],
+        )
+
+    def test_smooth_growth_matches_production_handoff_boundaries_without_replay(
+        self,
+    ) -> None:
+        schedule = _standard_schedule(
+            max_steps=5,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=20_000,
+            smooth_iteration_growth_flag=True,
+        )
+        expected_boundaries = {
+            19_999: (2, 2, False, None, None, None, 0.0),
+            20_000: (2, 3, True, 2, 3, 1, 0.0001),
+            24_999: (2, 3, True, 2, 3, 5_000, 0.5),
+            25_000: (2, 3, True, 2, 3, 5_001, 0.5001),
+            29_999: (2, 3, True, 2, 3, 10_000, 1.0),
+            30_000: (3, 3, False, None, None, None, 0.0),
+            39_999: (3, 3, False, None, None, None, 0.0),
+            40_000: (3, 4, True, 3, 4, 1, 0.0001),
+        }
+
+        for progress, expected in expected_boundaries.items():
+            with self.subTest(progress=progress):
+                schedule.load_state_dict(
+                    {
+                        "forward_call_progress": torch.tensor(
+                            progress,
+                            dtype=torch.long,
+                        )
+                    },
+                    strict=True,
+                )
+                snapshot = schedule.snapshot()
+
+                self.assertEqual(
+                    (
+                        snapshot.settled_iterations,
+                        snapshot.active_iterations,
+                        snapshot.transitioning,
+                        snapshot.transition_source_iterations,
+                        snapshot.transition_target_iterations,
+                        snapshot.transition_forward_index,
+                        snapshot.transition_weight,
+                    ),
+                    expected,
+                )
+
+    def test_smooth_execution_plan_uses_transition_units_for_every_variant(
+        self,
+    ) -> None:
+        cases = (
+            (
+                RecurrentLayerConfig(
+                    max_steps=3,
+                    initial_iterations=2,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (3, 0, 2, 0, 3, 1),
+            ),
+            (
+                TinyRecursiveModelRecurrentConfig(
+                    latent_updates_per_answer_update=2,
+                    answer_update_count=2,
+                    initial_iterations=1,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (6, 1, 3, 1, 6, 4),
+            ),
+            (
+                HierarchicalReasoningModelRecurrentConfig(
+                    high_cycles=2,
+                    low_cycles=2,
+                    initial_iterations=1,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (6, 1, 3, 1, 6, 4),
+            ),
+        )
+
+        for config, expected in cases:
+            with self.subTest(config_type=type(config).__name__):
+                schedule = RecurrentIterationSchedule(config)
+                for _ in range(4):
+                    schedule.record_successful_forward()
+
+                execution_plan = schedule.execution_plan()
+                self.assertIsInstance(
+                    execution_plan,
+                    RecurrentSmoothHandoffExecutionPlan,
+                )
+                self.assertTrue(execution_plan.transitioning)
+                self.assertIsNone(
+                    RecurrentIterationScheduleValidator.validate_smooth_handoff_source_branch(
+                        execution_plan.source_branch
+                    )
+                )
+                source_plan = execution_plan.source_branch
+                self.assertIsNotNone(source_plan)
+                self.assertEqual(
+                    (
+                        schedule.active_transition_count,
+                        execution_plan.common_prefix_transition_count,
+                        source_plan.transition_count,
+                        source_plan.no_gradient_transition_count,
+                        execution_plan.target_branch.transition_count,
+                        execution_plan.target_branch.no_gradient_transition_count,
+                    ),
+                    expected,
+                )
+                self.assertEqual(execution_plan.transition_weight, 0.5)
+
+    def test_smooth_schedule_constructor_rejects_an_odd_handoff_cadence(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "even integer greater than or equal to 2",
+        ):
+            _standard_schedule(
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=3,
+                smooth_iteration_growth_flag=True,
+            )
+
+    def test_smooth_schedule_constructor_rejects_every_unsupported_control(self):
+        invalid_cases = (
+            (
+                {"gradient_transition_count": None},
+                "requires gradient_transition_count",
+            ),
+            (
+                {"iteration_increment": 2},
+                "iteration_increment to equal 1",
+            ),
+            (
+                {"no_gradient_transition_count": 0},
+                "mutually exclusive",
+            ),
+        )
+
+        for overrides, message in invalid_cases:
+            values = {
+                "max_steps": 4,
+                "initial_iterations": 2,
+                "gradient_transition_count": 2,
+                "iteration_increment": 1,
+                "forward_calls_before_iteration_increment": 4,
+                "smooth_iteration_growth_flag": True,
+            }
+            values.update(overrides)
+            with (
+                self.subTest(overrides=overrides),
+                self.assertRaisesRegex(
+                    ValueError,
+                    message,
+                ),
+            ):
+                _standard_schedule(**values)
+
+    def test_smooth_schedule_rejects_invalid_gradient_windows_directly(self):
+        cases = (
+            (
+                True,
+                TypeError,
+                "gradient_transition_count must be int",
+            ),
+            (
+                3,
+                ValueError,
+                "minimum active transition count of 2",
+            ),
+        )
+
+        for gradient_transition_count, error_type, message in cases:
+            with self.subTest(gradient_transition_count=gradient_transition_count):
+                with self.assertRaisesRegex(error_type, message):
+                    _standard_schedule(
+                        max_steps=3,
+                        initial_iterations=2,
+                        gradient_transition_count=gradient_transition_count,
+                        iteration_increment=1,
+                        forward_calls_before_iteration_increment=4,
+                        smooth_iteration_growth_flag=True,
+                    )
+
+    def test_fixed_smooth_depth_is_an_immediately_complete_no_op(self):
+        schedule = _standard_schedule(
+            max_steps=2,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        )
+
+        schedule.record_successful_forward()
+
+        snapshot = schedule.snapshot()
+        self.assertTrue(snapshot.smooth_iteration_growth)
+        self.assertEqual(snapshot.settled_iterations, 2)
+        self.assertEqual(snapshot.active_iterations, 2)
+        self.assertFalse(snapshot.transitioning)
+        self.assertTrue(snapshot.complete)
+        self.assertEqual(snapshot.forward_call_progress, 0)
 
     def test_gradient_suffix_moves_as_active_depth_grows(self) -> None:
         schedule = _standard_schedule(
@@ -174,6 +452,31 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         self.assertEqual(restored.snapshot().forward_call_progress, 3)
         self.assertEqual(restored.active_iterations, 4)
         self.assertEqual(restored.active_transition_count, 4)
+
+    def test_smooth_checkpoint_round_trip_restores_every_handoff_phase(self):
+        values = {
+            "max_steps": 4,
+            "initial_iterations": 2,
+            "gradient_transition_count": 2,
+            "iteration_increment": 1,
+            "forward_calls_before_iteration_increment": 4,
+            "smooth_iteration_growth_flag": True,
+        }
+        for progress in (3, 4, 5, 6, 8, 9, 10):
+            with self.subTest(progress=progress):
+                source = _standard_schedule(**values)
+                for _ in range(progress):
+                    source.record_successful_forward()
+
+                restored = _standard_schedule(**values)
+                restored.load_state_dict(source.state_dict(), strict=True)
+
+                self.assertEqual(restored.snapshot(), source.snapshot())
+                self.assertEqual(restored.execution_plan(), source.execution_plan())
+                self.assertEqual(
+                    set(restored.state_dict()),
+                    {"forward_call_progress"},
+                )
 
     def test_checkpoint_without_progress_loads_strictly_from_zero(self) -> None:
         restored = _standard_schedule()

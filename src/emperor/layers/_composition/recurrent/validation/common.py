@@ -26,7 +26,8 @@ _GRADIENT_WINDOW_FIELDS = {
     "no_gradient_transition_count",
     "gradient_transition_count",
 }
-_RECURRENT_CONTROLLER_OPTIONAL_FIELDS = {
+_RECURRENT_SHARED_OPTIONAL_FIELDS = {
+    "smooth_iteration_growth_flag",
     "recurrent_layer_norm_position",
     "gate_config",
     "residual_config",
@@ -35,6 +36,9 @@ _RECURRENT_CONTROLLER_OPTIONAL_FIELDS = {
 }
 
 if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.config import (
+        RecurrentCompositionConfig,
+    )
     from emperor.layers._composition.recurrent.runtime.residual_schedule import (
         DepthwiseRecurrentResidualSchedule,
         RecurrentResidualSchedule,
@@ -225,6 +229,68 @@ def _validate_recurrent_iteration_controls(
             "gradient_transition_count and no_gradient_transition_count are "
             "mutually exclusive."
         )
+
+
+def _validate_smooth_iteration_growth_controls(
+    config: RecurrentCompositionConfig,
+    *,
+    transitions_per_iteration: int,
+) -> None:
+    value = config.smooth_iteration_growth_flag
+    if value is not None and not isinstance(value, bool):
+        raise TypeError(
+            "smooth_iteration_growth_flag must be bool or None for "
+            f"{type(config).__name__}, "
+            f"got {type(value).__name__}."
+        )
+    if value is not True:
+        return
+
+    gradient_count = config.gradient_transition_count
+    if gradient_count is None:
+        raise ValueError(
+            "smooth iteration growth requires gradient_transition_count to be "
+            "configured explicitly."
+        )
+    _validate_positive_integer("gradient_transition_count", gradient_count)
+    initial_iterations = config.initial_iterations
+    _validate_positive_integer("initial_iterations", initial_iterations)
+    minimum_transition_count = initial_iterations * transitions_per_iteration
+    if gradient_count > minimum_transition_count:
+        raise ValueError(
+            "gradient_transition_count must be less than or equal to the "
+            f"minimum active transition count of {minimum_transition_count}."
+        )
+    if config.no_gradient_transition_count is not None:
+        raise ValueError(
+            "gradient_transition_count and no_gradient_transition_count are "
+            "mutually exclusive."
+        )
+
+    iteration_increment = config.iteration_increment
+    if (
+        isinstance(iteration_increment, bool)
+        or not isinstance(iteration_increment, int)
+        or iteration_increment != 1
+    ):
+        raise ValueError(
+            "smooth iteration growth requires iteration_increment to equal 1."
+        )
+
+    cadence = config.forward_calls_before_iteration_increment
+    if (
+        isinstance(cadence, bool)
+        or not isinstance(cadence, int)
+        or cadence < 2
+        or cadence % 2 != 0
+    ):
+        raise ValueError(
+            "smooth iteration growth requires "
+            "forward_calls_before_iteration_increment to be an even integer "
+            "greater than or equal to 2."
+        )
+    if config.memory_config is not None:
+        raise ValueError("smooth iteration growth does not support memory_config.")
 
 
 def _validate_positive_integer(field_name: str, value: object) -> None:

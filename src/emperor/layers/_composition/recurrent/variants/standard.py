@@ -8,25 +8,35 @@ from torch import Tensor
 from emperor.config import ConfigBase
 from emperor.layers._composition.recurrent.base import RecurrentCompositionAbstract
 from emperor.layers._composition.recurrent.config import RecurrentLayerConfig
+from emperor.layers._composition.recurrent.runtime.execution import (
+    PreparedRecurrentTransition,
+    RecurrentExecution,
+)
 from emperor.layers._composition.recurrent.validation import RecurrentLayerValidator
 from emperor.layers._state import LayerState
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingStateBase
+    from emperor.layers._composition.recurrent.base import RecurrentTransitionResult
     from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._row_layout import RowLayout
 
 
 @dataclass(frozen=True)
-class _RecurrentState:
+class _StandardRecurrentState:
     hidden: Tensor
     fixed_input: Tensor
     loss: Tensor | None
     context_state: LayerState
-    row_layout: RowLayout | None = None
+    row_layout: RowLayout | None
+    transition_index: int
     residual_state: ResidualState | None = None
     halting_state: HaltingStateBase | None = None
     all_items_halted: bool = False
+
+    @property
+    def output_hidden(self) -> Tensor:
+        return self.hidden
 
 
 class RecurrentLayer(RecurrentCompositionAbstract):
@@ -39,61 +49,46 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         overrides: RecurrentLayerConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.cfg: RecurrentLayerConfig
-        self.max_steps: int = self.cfg.max_steps
+        resolved_config = self.cfg
+        if TYPE_CHECKING:
+            # RecurrentLayerValidator has already enforced these invariants.
+            assert isinstance(resolved_config, RecurrentLayerConfig)
+            assert resolved_config.max_steps is not None
+            assert resolved_config.block_config is not None
+        self.max_steps: int = resolved_config.max_steps
         self.reinject_original_hidden_flag: bool = (
-            self.cfg.reinject_original_hidden_flag is True
+            resolved_config.reinject_original_hidden_flag is True
         )
-        self.block_config: ConfigBase | None = self.cfg.block_config
+        self.block_config: ConfigBase = resolved_config.block_config
         self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
             self.max_steps
         )
         self.block_model = self._build_transition_model(self.block_config)
+        self.__recurrent_execution: RecurrentExecution[_StandardRecurrentState] = (
+            RecurrentExecution()
+        )
 
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)
-
-        recurrent_state = self.__run_recurrent_steps(state)
-        finalized_hidden, finalized_loss = self._finalize_recurrent_halting(
-            recurrent_state.hidden,
-            recurrent_state.loss,
-            recurrent_state.halting_state,
+        return self.__recurrent_execution.execute(
+            self,
+            state,
+            self.recurrent_iteration_schedule,
         )
-        state.hidden = finalized_hidden
-        state.loss = finalized_loss
-        self.recurrent_iteration_schedule.record_successful_forward()
-        return state
 
-    def __run_recurrent_steps(
+    def _initialize_recurrent_execution_state(
         self,
         layer_state: LayerState,
-    ) -> _RecurrentState:
-        recurrent_state = self.__initialize_recurrent_state(layer_state)
-        schedule = self.recurrent_iteration_schedule
-        for transition_index in range(schedule.active_iterations):
-            recurrent_state = self.__detach_evolving_state_at_gradient_boundary(
-                recurrent_state, transition_index
-            )
-            with schedule.gradient_context(transition_index):
-                recurrent_state = self.__run_standard_transition(
-                    recurrent_state, transition_index
-                )
-
-            if recurrent_state.all_items_halted:
-                break
-
-        return recurrent_state
-
-    def __initialize_recurrent_state(
-        self,
-        layer_state: LayerState,
-    ) -> _RecurrentState:
-        return _RecurrentState(
+        *,
+        branch_base_loss: Tensor | None,
+    ) -> _StandardRecurrentState:
+        return _StandardRecurrentState(
             hidden=layer_state.hidden,
             fixed_input=layer_state.hidden,
-            loss=layer_state.loss,
+            loss=branch_base_loss,
             context_state=layer_state,
             row_layout=self._recurrent_row_layout_for_transitions(layer_state),
+            transition_index=0,
             residual_state=self.__initialize_recurrent_residual_state(layer_state),
         )
 
@@ -110,47 +105,34 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             layer_state.hidden,
         )
 
-    def __detach_evolving_state_at_gradient_boundary(
-        self,
-        recurrent_state: _RecurrentState,
-        transition_index: int,
-    ) -> _RecurrentState:
-        if not self.recurrent_iteration_schedule.starts_gradient_suffix(
-            transition_index
-        ):
-            return recurrent_state
-        detached_hidden = recurrent_state.hidden.detach()
-        return replace(recurrent_state, hidden=detached_hidden)
+    @staticmethod
+    def _detach_recurrent_execution_state(
+        recurrent_state: _StandardRecurrentState,
+    ) -> _StandardRecurrentState:
+        return replace(
+            recurrent_state,
+            hidden=recurrent_state.hidden.detach(),
+        )
 
-    def __run_standard_transition(
+    def _prepare_recurrent_transition(
         self,
-        recurrent_state: _RecurrentState,
-        transition_index: int,
-    ) -> _RecurrentState:
+        recurrent_state: _StandardRecurrentState,
+        *,
+        tracks_gradients: bool,
+    ) -> PreparedRecurrentTransition:
         previous_hidden = recurrent_state.hidden
         transition_input = self.__maybe_reinject_original_hidden(
-            previous_hidden, recurrent_state.fixed_input
+            previous_hidden,
+            recurrent_state.fixed_input,
         )
-        halting_update_enabled = self.recurrent_iteration_schedule.tracks_gradients(
-            transition_index
-        )
-        transition_result = self._run_recurrent_transition(
-            recurrent_state,
+        return PreparedRecurrentTransition(
             run_transition=self.block_model,
             transition_input=transition_input,
             previous_evolving_hidden=previous_hidden,
+            halting_update_enabled=tracks_gradients,
             loss=recurrent_state.loss,
-            halting_update_enabled=halting_update_enabled,
             residual_state=recurrent_state.residual_state,
             residual_schedule=self.recurrent_residual_schedule,
-            transition_index=transition_index,
-        )
-        return replace(
-            recurrent_state,
-            hidden=transition_result.hidden,
-            loss=transition_result.loss,
-            halting_state=transition_result.halting_state,
-            all_items_halted=transition_result.all_items_halted,
         )
 
     def __maybe_reinject_original_hidden(
@@ -161,3 +143,35 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         if not self.reinject_original_hidden_flag:
             return hidden
         return hidden + fixed_input
+
+    @staticmethod
+    def _apply_recurrent_transition_result(
+        recurrent_state: _StandardRecurrentState,
+        transition_result: RecurrentTransitionResult,
+    ) -> _StandardRecurrentState:
+        return replace(
+            recurrent_state,
+            hidden=transition_result.hidden,
+            loss=transition_result.loss,
+            transition_index=recurrent_state.transition_index + 1,
+            halting_state=transition_result.halting_state,
+            all_items_halted=transition_result.all_items_halted,
+        )
+
+    @staticmethod
+    def _fork_recurrent_handoff_state(
+        recurrent_state: _StandardRecurrentState,
+    ) -> _StandardRecurrentState:
+        residual_state = recurrent_state.residual_state
+        if residual_state is None:
+            return replace(recurrent_state)
+        return replace(
+            recurrent_state,
+            residual_state=residual_state.fork(),
+        )
+
+    @staticmethod
+    def _recurrent_branch_loss(
+        recurrent_state: _StandardRecurrentState,
+    ) -> Tensor | None:
+        return recurrent_state.loss
