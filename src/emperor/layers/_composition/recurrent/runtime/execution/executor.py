@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Generic
 
 import torch
@@ -208,24 +209,12 @@ class RecurrentExecution(Generic[_StateT]):
                 source_boundary_state,
                 tracks_gradients=source_tracks_gradients,
             )
-
-            def run_and_finalize_provisional_source_branch(
-                source_transition_result: RecurrentTransitionResult,
-            ) -> RecurrentExecutionResult:
-                source_state = adapter._fork_recurrent_handoff_state(
-                    source_boundary_state
-                )
-                source_state = adapter._apply_recurrent_transition_result(
-                    source_state,
-                    source_transition_result,
-                )
-                source_state = self.__run_branch_suffix(
-                    adapter,
-                    source_state,
-                    source_plan,
-                    observe_transitions=False,
-                )
-                return self.__finalize_branch(adapter, source_state)
+            provisional_source_continuation = partial(
+                self.__continue_and_finalize_provisional_source_branch,
+                adapter,
+                source_boundary_state,
+                source_plan,
+            )
 
             source_result, target_transition_result = (
                 adapter._run_shared_handoff_boundary_transition(
@@ -238,9 +227,7 @@ class RecurrentExecution(Generic[_StateT]):
                     source_halting_update_enabled=(
                         prepared_transition.halting_update_enabled
                     ),
-                    run_provisional_source_branch=(
-                        run_and_finalize_provisional_source_branch
-                    ),
+                    run_provisional_source_branch=provisional_source_continuation,
                     loss=prepared_transition.loss,
                     residual_state=prepared_transition.residual_state,
                     residual_schedule=prepared_transition.residual_schedule,
@@ -254,6 +241,26 @@ class RecurrentExecution(Generic[_StateT]):
             target_transition_result,
         )
         return source_result, target_state
+
+    def __continue_and_finalize_provisional_source_branch(
+        self,
+        adapter: RecurrentExecutionAdapter[_StateT],
+        source_boundary_state: _StateT,
+        source_plan: RecurrentBranchExecutionPlan,
+        source_transition_result: RecurrentTransitionResult,
+    ) -> RecurrentExecutionResult:
+        source_state = adapter._fork_recurrent_handoff_state(source_boundary_state)
+        source_state = adapter._apply_recurrent_transition_result(
+            source_state,
+            source_transition_result,
+        )
+        source_state = self.__run_branch_suffix(
+            adapter,
+            source_state,
+            source_plan,
+            observe_transitions=False,
+        )
+        return self.__finalize_branch(adapter, source_state)
 
     def __run_branch_suffix(
         self,
