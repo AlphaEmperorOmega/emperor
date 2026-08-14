@@ -64,11 +64,13 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         package_interface_path = execution_package_path / "__init__.py"
         execution_path = execution_package_path / "executor.py"
         interface_path = execution_package_path / "interface.py"
+        runtime_state_path = execution_package_path / "runtime_state.py"
         execution_validation_path = recurrent_root / "validation" / "execution.py"
 
         self.assertTrue(package_interface_path.is_file())
         self.assertTrue(execution_path.is_file())
         self.assertTrue(interface_path.is_file())
+        self.assertTrue(runtime_state_path.is_file())
         self.assertTrue(execution_validation_path.is_file())
         self.assertFalse((recurrent_root / "runtime" / "execution.py").exists())
         self.assertFalse(
@@ -76,6 +78,7 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         )
         execution_source = execution_path.read_text(encoding="utf-8")
         interface_source = interface_path.read_text(encoding="utf-8")
+        runtime_state_source = runtime_state_path.read_text(encoding="utf-8")
         base_source = (recurrent_root / "base.py").read_text(encoding="utf-8")
 
         self.assertNotIn("@dataclass", execution_source)
@@ -102,9 +105,24 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 self.assertIn(declaration, interface_source)
 
         self.assertNotIn("class _RecurrentExecutionOwner", interface_source)
+        self.assertNotIn(
+            "_rollback_recurrent_runtime_state_on_failure", interface_source
+        )
         self.assertNotIn("class RecurrentTransitionResult", interface_source)
         self.assertIn("class RecurrentTransitionResult", base_source)
         self.assertNotIn("class _RecurrentTransitionResult", base_source)
+        self.assertIn("class RecurrentRuntimeStateGuard", runtime_state_source)
+        for runtime_state_declaration in (
+            "class _BufferSnapshot",
+            "class _NamedBufferSnapshot",
+            "class _ModuleBufferSnapshot",
+            "class _RecurrentRuntimeStateSnapshot",
+        ):
+            with self.subTest(runtime_state_declaration=runtime_state_declaration):
+                self.assertIn(runtime_state_declaration, runtime_state_source)
+                self.assertNotIn(runtime_state_declaration, base_source)
+        self.assertIn("isolate_provisional_branch", base_source)
+        self.assertIn("rollback_handoff_on_failure", execution_source)
         self.assertIn(
             "self.VALIDATOR.validate_adapter_is_module(adapter)",
             execution_source,
@@ -466,7 +484,6 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 "_new_recurrent_initial_buffer",
                 "_observe_recurrent_step",
                 "_recurrent_row_layout_for_transitions",
-                "_rollback_recurrent_runtime_state_on_failure",
                 "_run_recurrent_transition",
                 "_run_shared_handoff_boundary_transition",
                 "_set_recurrent_diagnostic_observer",

@@ -68,7 +68,7 @@ _ProvisionalSourceBranchOutput = TypeVar("_ProvisionalSourceBranchOutput")
 
 
 class RecurrentExecutionAdapter(Protocol[_StateT]):
-    """Variant Interface consumed by generalized Recurrent Execution."""
+    """Recurrent variant ``nn.Module`` Interface consumed by Recurrent Execution."""
 
     def _run_recurrent_transition(
         self,
@@ -114,10 +114,6 @@ class RecurrentExecutionAdapter(Protocol[_StateT]):
         self,
         *,
         enabled: bool,
-    ) -> AbstractContextManager[None]: ...
-
-    def _rollback_recurrent_runtime_state_on_failure(
-        self,
     ) -> AbstractContextManager[None]: ...
 
     def _blend_recurrent_branch_losses(
