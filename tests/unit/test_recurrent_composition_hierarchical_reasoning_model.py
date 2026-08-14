@@ -1418,7 +1418,7 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             high=high,
             low=low,
             initial_loss=None,
-            auxiliary_losses=[],
+            auxiliary_losses=(),
             context_state=LayerState(hidden=fixed_input),
             row_layout=None,
             transition_index=2,
@@ -1434,6 +1434,38 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
         self.assertIsNone(detached.high.grad_fn)
         self.assertIsNone(detached.low.grad_fn)
         self.assertTrue(detached.fixed_input.requires_grad)
+
+    def test_execution_state_accumulates_losses_without_mutating_prior_state(
+        self,
+    ) -> None:
+        recurrent = self._smooth_oracle_config(
+            high_cycles=1,
+            initial_iterations=1,
+        ).build()
+        state = recurrent._initialize_recurrent_execution_state(
+            LayerState(hidden=torch.ones(1, 1)),
+            branch_base_loss=None,
+        )
+        transition_loss = torch.tensor(2.0, requires_grad=True)
+
+        updated = recurrent._apply_recurrent_transition_result(
+            state,
+            SimpleNamespace(
+                hidden=torch.ones(1, 1),
+                loss=transition_loss,
+                halting_state=None,
+                all_items_halted=False,
+            ),
+        )
+
+        self.assertEqual(state.auxiliary_losses, ())
+        self.assertIsInstance(updated.auxiliary_losses, tuple)
+        self.assertEqual(len(updated.auxiliary_losses), 1)
+        loss_gradient = torch.autograd.grad(
+            updated.auxiliary_losses[0],
+            transition_loss,
+        )[0]
+        torch.testing.assert_close(loss_gradient, torch.tensor(1.0))
 
 
 if __name__ == "__main__":

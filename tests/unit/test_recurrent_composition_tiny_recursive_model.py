@@ -1048,7 +1048,7 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
             answer=answer,
             latent=latent,
             initial_loss=None,
-            auxiliary_losses=[],
+            auxiliary_losses=(),
             context_state=LayerState(hidden=source),
             row_layout=None,
             transition_index=2,
@@ -1062,6 +1062,39 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
         self.assertIsNone(detached.answer.grad_fn)
         self.assertIsNone(detached.latent.grad_fn)
         self.assertTrue(source.requires_grad)
+
+    def test_execution_state_accumulates_losses_without_mutating_prior_state(
+        self,
+    ) -> None:
+        runtime = _config(
+            latent_updates_per_answer_update=1,
+            answer_update_count=1,
+            auxiliary_loss=0.5,
+        ).build()
+        state = runtime._initialize_recurrent_execution_state(
+            LayerState(hidden=torch.ones(1, 1)),
+            branch_base_loss=None,
+        )
+        transition_loss = torch.tensor(2.0, requires_grad=True)
+
+        updated = runtime._apply_recurrent_transition_result(
+            state,
+            SimpleNamespace(
+                hidden=torch.ones(1, 1),
+                loss=transition_loss,
+                halting_state=None,
+                all_items_halted=False,
+            ),
+        )
+
+        self.assertEqual(state.auxiliary_losses, ())
+        self.assertIsInstance(updated.auxiliary_losses, tuple)
+        self.assertEqual(len(updated.auxiliary_losses), 1)
+        loss_gradient = torch.autograd.grad(
+            updated.auxiliary_losses[0],
+            transition_loss,
+        )[0]
+        torch.testing.assert_close(loss_gradient, torch.tensor(1.0))
 
     def test_initializers_are_persistent_buffers_and_losses_accumulate(self) -> None:
         runtime = _config(

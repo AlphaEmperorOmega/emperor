@@ -32,7 +32,7 @@ class _HierarchicalReasoningModelState:
     high: Tensor
     low: Tensor
     initial_loss: Tensor | None
-    auxiliary_losses: list[Tensor]
+    auxiliary_losses: tuple[Tensor, ...]
     context_state: LayerState
     row_layout: RowLayout | None
     transition_index: int
@@ -109,7 +109,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
             high=self._expand_recurrent_initial(self.high_initial, fixed_input),
             low=self._expand_recurrent_initial(self.low_initial, fixed_input),
             initial_loss=branch_base_loss,
-            auxiliary_losses=[],
+            auxiliary_losses=(),
             context_state=layer_state,
             row_layout=self._recurrent_row_layout_for_transitions(layer_state),
             transition_index=0,
@@ -152,7 +152,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         recurrent_state: _HierarchicalReasoningModelState,
         transition_result: RecurrentTransitionResult,
     ) -> _HierarchicalReasoningModelState:
-        self.__append_reduced_transition_loss(
+        auxiliary_losses = self.__with_reduced_transition_loss(
             recurrent_state.auxiliary_losses,
             transition_result.loss,
         )
@@ -164,28 +164,26 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         return replace(
             recurrent_state,
             **state_updates,
+            auxiliary_losses=auxiliary_losses,
             transition_index=recurrent_state.transition_index + 1,
             halting_state=transition_result.halting_state,
             all_items_halted=transition_result.all_items_halted,
         )
 
-    def __append_reduced_transition_loss(
+    def __with_reduced_transition_loss(
         self,
-        auxiliary_losses: list[Tensor],
+        auxiliary_losses: tuple[Tensor, ...],
         transition_loss: Tensor | None,
-    ) -> None:
+    ) -> tuple[Tensor, ...]:
         if transition_loss is None:
-            return
-        auxiliary_losses.append(self._reduce_auxiliary_loss(transition_loss))
+            return auxiliary_losses
+        return (*auxiliary_losses, self._reduce_auxiliary_loss(transition_loss))
 
     @staticmethod
     def _fork_recurrent_handoff_state(
         recurrent_state: _HierarchicalReasoningModelState,
     ) -> _HierarchicalReasoningModelState:
-        return replace(
-            recurrent_state,
-            auxiliary_losses=list(recurrent_state.auxiliary_losses),
-        )
+        return replace(recurrent_state)
 
     def _recurrent_branch_loss(
         self,

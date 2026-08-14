@@ -25,7 +25,7 @@ from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
 
     from emperor.config import ConfigBase
     from emperor.halting import HaltingStateBase
@@ -491,7 +491,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     def _accumulate_recurrent_losses(
         self,
         initial_loss: Tensor | None,
-        auxiliary_losses: list[Tensor],
+        auxiliary_losses: Iterable[Tensor],
     ) -> Tensor | None:
         accumulated_loss = initial_loss
         for auxiliary_loss in auxiliary_losses:
