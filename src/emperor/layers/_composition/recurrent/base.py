@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager, contextmanager, nullcontext
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
@@ -500,19 +500,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
                 auxiliary_loss,
             )
         return accumulated_loss
-
-    def _halting_usage_tracking_context(
-        self,
-        *,
-        enabled: bool,
-    ) -> AbstractContextManager[None]:
-        if enabled or self.halting_model is None:
-            return nullcontext()
-        usage_tracker = getattr(self.halting_model, "_usage_tracker", None)
-        suppress_recording = getattr(usage_tracker, "suppress_recording", None)
-        if suppress_recording is None:
-            return nullcontext()
-        return suppress_recording()
 
     @staticmethod
     def _blend_recurrent_branch_losses(

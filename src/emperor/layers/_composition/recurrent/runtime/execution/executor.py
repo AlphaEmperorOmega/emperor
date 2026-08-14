@@ -140,14 +140,13 @@ class RecurrentExecution(Generic[_StateT]):
             observe_transitions=True,
         )
 
-        with adapter._halting_usage_tracking_context(enabled=False):
-            source_result, target_state = (
-                self.__advance_handoff_branches_through_shared_boundary(
-                    adapter,
-                    common_state,
-                    execution_plan.source_branch,
-                )
+        source_result, target_state = (
+            self.__advance_handoff_branches_through_shared_boundary(
+                adapter,
+                common_state,
+                execution_plan.source_branch,
             )
+        )
 
         target_state = self.__run_branch_suffix(
             adapter,
