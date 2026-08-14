@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import torch
 from torch import Tensor, nn
@@ -47,25 +47,31 @@ class RecurrentBranchExecutionPlan:
     transition_count: int
     no_gradient_transition_count: int
 
+    def gradient_context(self, transition_index: int) -> AbstractContextManager[None]:
+        if self.tracks_gradients(transition_index):
+            return nullcontext()
+        return torch.no_grad()
+
+    def starts_gradient_suffix(self, transition_index: int) -> bool:
+        return (
+            self.no_gradient_transition_count > 0
+            and transition_index == self.no_gradient_transition_count
+        )
+
+    def tracks_gradients(self, transition_index: int) -> bool:
+        return transition_index >= self.no_gradient_transition_count
+
 
 @dataclass(frozen=True)
 class RecurrentIterationExecutionPlan:
-    common_prefix_transition_count: int
     target_branch: RecurrentBranchExecutionPlan
-    transition_weight: float
-
-    @property
-    def transitioning(self) -> bool:
-        return False
 
 
 @dataclass(frozen=True)
 class RecurrentSmoothHandoffExecutionPlan(RecurrentIterationExecutionPlan):
+    common_prefix_transition_count: int
     source_branch: RecurrentBranchExecutionPlan
-
-    @property
-    def transitioning(self) -> bool:
-        return True
+    transition_weight: float
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,23 @@ class _RecurrentIterationProfile:
     maximum_iterations: int
     transitions_per_iteration: int
     default_gradient_transition_count: int | None
+
+
+@dataclass(frozen=True)
+class _RecurrentIterationRuntime:
+    settled_iterations: int
+    active_iterations: int
+    active_transition_count: int
+    no_gradient_transition_count: int
+    complete: bool
+
+
+@dataclass(frozen=True)
+class _RecurrentSmoothHandoffRuntime(_RecurrentIterationRuntime):
+    source_iterations: int
+    target_iterations: int
+    transition_forward_index: int
+    transition_weight: float
 
 
 class RecurrentIterationSchedule(nn.Module):
@@ -112,19 +135,6 @@ class RecurrentIterationSchedule(nn.Module):
             profile.default_gradient_transition_count
         )
         self.__saturation_progress = self.__compute_saturation_progress()
-        self.__forward_call_progress = 0
-
-        self.active_iterations = self.initial_iterations
-        self.settled_iterations = self.initial_iterations
-        self.transitioning = False
-        self.transition_source_iterations: int | None = None
-        self.transition_target_iterations: int | None = None
-        self.transition_forward_index: int | None = None
-        self.transition_weight = 0.0
-        self.active_transition_count = 0
-        self.complete = False
-        self.no_gradient_transition_count = 0
-        self.__refresh_runtime(0)
 
         self.register_buffer(
             "forward_call_progress",
@@ -132,7 +142,6 @@ class RecurrentIterationSchedule(nn.Module):
             persistent=True,
         )
         self.register_load_state_dict_pre_hook(self.__prepare_checkpoint)
-        self.register_load_state_dict_post_hook(self.__restore_runtime)
 
     @staticmethod
     def __profile_from_config(
@@ -190,31 +199,20 @@ class RecurrentIterationSchedule(nn.Module):
         )
         return min(self.maximum_iterations, scheduled_iterations)
 
-    def __refresh_runtime(self, progress: int) -> None:
+    def __runtime_for_progress(self, progress: int) -> _RecurrentIterationRuntime:
         if self.smooth_iteration_growth:
-            self.__refresh_smooth_runtime(progress)
-        else:
-            self.active_iterations = self.__active_iterations_for_progress(progress)
-            self.settled_iterations = self.active_iterations
-            self.transitioning = False
-            self.transition_source_iterations = None
-            self.transition_target_iterations = None
-            self.transition_forward_index = None
-            self.transition_weight = 0.0
-        self.active_transition_count = (
-            self.active_iterations * self.transitions_per_iteration
+            return self.__smooth_runtime_for_progress(progress)
+        return self.__stable_runtime(
+            self.__active_iterations_for_progress(progress),
         )
-        self.complete = (
-            not self.transitioning
-            and self.settled_iterations == self.maximum_iterations
-        )
-        self.__refresh_gradient_window()
 
-    def __refresh_smooth_runtime(self, progress: int) -> None:
+    def __smooth_runtime_for_progress(
+        self,
+        progress: int,
+    ) -> _RecurrentIterationRuntime:
         cadence = self.forward_calls_before_iteration_increment
         if progress < cadence:
-            self.__set_stable_smooth_depth(self.initial_iterations)
-            return
+            return self.__stable_runtime(self.initial_iterations)
 
         growth_interval = progress // cadence
         interval_offset = progress % cadence
@@ -227,135 +225,148 @@ class RecurrentIterationSchedule(nn.Module):
             and interval_offset < self.transition_forward_count
         ):
             transition_index = interval_offset + 1
-            self.settled_iterations = source_depth
-            self.active_iterations = source_depth + 1
-            self.transitioning = True
-            self.transition_source_iterations = source_depth
-            self.transition_target_iterations = source_depth + 1
-            self.transition_forward_index = transition_index
-            self.transition_weight = transition_index / self.transition_forward_count
-            return
+            target_depth = source_depth + 1
+            active_transition_count = target_depth * self.transitions_per_iteration
+            return _RecurrentSmoothHandoffRuntime(
+                settled_iterations=source_depth,
+                active_iterations=target_depth,
+                active_transition_count=active_transition_count,
+                no_gradient_transition_count=(
+                    self.__no_gradient_transition_count(active_transition_count)
+                ),
+                complete=False,
+                source_iterations=source_depth,
+                target_iterations=target_depth,
+                transition_forward_index=transition_index,
+                transition_weight=(transition_index / self.transition_forward_count),
+            )
 
-        self.__set_stable_smooth_depth(min(self.maximum_iterations, source_depth + 1))
+        return self.__stable_runtime(
+            min(self.maximum_iterations, source_depth + 1),
+        )
 
-    def __set_stable_smooth_depth(self, depth: int) -> None:
-        self.settled_iterations = depth
-        self.active_iterations = depth
-        self.transitioning = False
-        self.transition_source_iterations = None
-        self.transition_target_iterations = None
-        self.transition_forward_index = None
-        self.transition_weight = 0.0
+    def __stable_runtime(self, depth: int) -> _RecurrentIterationRuntime:
+        active_transition_count = depth * self.transitions_per_iteration
+        return _RecurrentIterationRuntime(
+            settled_iterations=depth,
+            active_iterations=depth,
+            active_transition_count=active_transition_count,
+            no_gradient_transition_count=(
+                self.__no_gradient_transition_count(active_transition_count)
+            ),
+            complete=depth == self.maximum_iterations,
+        )
 
-    def __refresh_gradient_window(self) -> None:
+    def __no_gradient_transition_count(self, active_transition_count: int) -> int:
         configured_no_gradient_count = self.__configured_no_gradient_transition_count
         if configured_no_gradient_count is not None:
-            self.no_gradient_transition_count = configured_no_gradient_count
-            return
+            return configured_no_gradient_count
         gradient_transition_count = self.gradient_transition_count
         if gradient_transition_count is None:
             gradient_transition_count = self.__default_gradient_transition_count
         if gradient_transition_count is None:
-            self.no_gradient_transition_count = 0
-            return
-        self.no_gradient_transition_count = (
-            self.active_transition_count - gradient_transition_count
-        )
+            return 0
+        return active_transition_count - gradient_transition_count
+
+    def __current_runtime(self) -> _RecurrentIterationRuntime:
+        return self.__runtime_for_progress(self.__current_progress())
+
+    def __current_progress(self) -> int:
+        return int(self.forward_call_progress.item())
+
+    @property
+    def active_iterations(self) -> int:
+        return self.__current_runtime().active_iterations
+
+    @property
+    def active_transition_count(self) -> int:
+        return self.__current_runtime().active_transition_count
+
+    @property
+    def no_gradient_transition_count(self) -> int:
+        return self.__current_runtime().no_gradient_transition_count
+
+    @property
+    def complete(self) -> bool:
+        return self.__current_runtime().complete
 
     def record_successful_forward(self) -> None:
         """Advance after one complete direct invocation of the recurrent owner."""
-        if self.complete:
+        runtime = self.__current_runtime()
+        if runtime.complete:
             return
         progress = min(
-            self.__forward_call_progress + 1,
+            self.__current_progress() + 1,
             self.__saturation_progress,
         )
-        self.__forward_call_progress = progress
         self.forward_call_progress.fill_(progress)
-        self.__refresh_runtime(progress)
-
-    def gradient_context(
-        self,
-        transition_index: int,
-    ) -> AbstractContextManager[None]:
-        if not self.tracks_gradients(transition_index):
-            return torch.no_grad()
-        return nullcontext()
-
-    def starts_gradient_suffix(self, transition_index: int) -> bool:
-        return (
-            self.no_gradient_transition_count > 0
-            and transition_index == self.no_gradient_transition_count
-        )
-
-    def tracks_gradients(self, transition_index: int) -> bool:
-        return transition_index >= self.no_gradient_transition_count
 
     def snapshot(self) -> RecurrentIterationScheduleSnapshot:
+        progress = self.__current_progress()
+        runtime = self.__runtime_for_progress(progress)
+        if isinstance(runtime, _RecurrentSmoothHandoffRuntime):
+            transition_source_iterations = runtime.source_iterations
+            transition_target_iterations = runtime.target_iterations
+            transition_forward_index = runtime.transition_forward_index
+            transition_weight = runtime.transition_weight
+        else:
+            transition_source_iterations = None
+            transition_target_iterations = None
+            transition_forward_index = None
+            transition_weight = 0.0
         return RecurrentIterationScheduleSnapshot(
             iteration_unit=self.iteration_unit,
             initial_iterations=self.initial_iterations,
             maximum_iterations=self.maximum_iterations,
-            active_iterations=self.active_iterations,
+            active_iterations=runtime.active_iterations,
             maximum_transition_count=self.maximum_transition_count,
-            active_transition_count=self.active_transition_count,
+            active_transition_count=runtime.active_transition_count,
             gradient_transition_count=self.gradient_transition_count,
-            no_gradient_transition_count=self.no_gradient_transition_count,
+            no_gradient_transition_count=runtime.no_gradient_transition_count,
             iteration_increment=self.iteration_increment,
             forward_calls_before_iteration_increment=(
                 self.forward_calls_before_iteration_increment
             ),
-            forward_call_progress=self.__forward_call_progress,
-            complete=self.complete,
+            forward_call_progress=progress,
+            complete=runtime.complete,
             smooth_iteration_growth=self.smooth_iteration_growth,
-            settled_iterations=self.settled_iterations,
-            transitioning=self.transitioning,
-            transition_source_iterations=self.transition_source_iterations,
-            transition_target_iterations=self.transition_target_iterations,
-            transition_forward_index=self.transition_forward_index,
+            settled_iterations=runtime.settled_iterations,
+            transitioning=isinstance(runtime, _RecurrentSmoothHandoffRuntime),
+            transition_source_iterations=transition_source_iterations,
+            transition_target_iterations=transition_target_iterations,
+            transition_forward_index=transition_forward_index,
             transition_forward_count=self.transition_forward_count,
-            transition_weight=self.transition_weight,
+            transition_weight=transition_weight,
         )
 
     def execution_plan(self) -> RecurrentIterationExecutionPlan:
-        if not self.transitioning:
+        runtime = self.__current_runtime()
+        if not isinstance(runtime, _RecurrentSmoothHandoffRuntime):
             return RecurrentIterationExecutionPlan(
-                common_prefix_transition_count=0,
                 target_branch=RecurrentBranchExecutionPlan(
-                    transition_count=self.active_transition_count,
-                    no_gradient_transition_count=self.no_gradient_transition_count,
+                    transition_count=runtime.active_transition_count,
+                    no_gradient_transition_count=(runtime.no_gradient_transition_count),
                 ),
-                transition_weight=0.0,
             )
 
-        source_iterations = self.transition_source_iterations
-        target_iterations = self.transition_target_iterations
-        gradient_transition_count = self.gradient_transition_count
-        if TYPE_CHECKING:
-            # Smooth-growth validation and runtime refresh enforce these invariants.
-            assert source_iterations is not None
-            assert target_iterations is not None
-            assert gradient_transition_count is not None
-        source_transition_count = source_iterations * self.transitions_per_iteration
-        target_transition_count = target_iterations * self.transitions_per_iteration
-        source_no_gradient_count = source_transition_count - gradient_transition_count
-        target_no_gradient_count = target_transition_count - gradient_transition_count
-        execution_plan = RecurrentSmoothHandoffExecutionPlan(
+        source_transition_count = (
+            runtime.source_iterations * self.transitions_per_iteration
+        )
+        source_no_gradient_count = self.__no_gradient_transition_count(
+            source_transition_count
+        )
+        return RecurrentSmoothHandoffExecutionPlan(
             common_prefix_transition_count=source_no_gradient_count,
             source_branch=RecurrentBranchExecutionPlan(
                 transition_count=source_transition_count,
                 no_gradient_transition_count=source_no_gradient_count,
             ),
             target_branch=RecurrentBranchExecutionPlan(
-                transition_count=target_transition_count,
-                no_gradient_transition_count=target_no_gradient_count,
+                transition_count=runtime.active_transition_count,
+                no_gradient_transition_count=runtime.no_gradient_transition_count,
             ),
-            transition_weight=self.transition_weight,
+            transition_weight=runtime.transition_weight,
         )
-        self.VALIDATOR.validate_smooth_handoff_source_branch(
-            execution_plan.source_branch
-        )
-        return execution_plan
 
     def __prepare_checkpoint(
         self,
@@ -380,11 +391,3 @@ class RecurrentIterationSchedule(nn.Module):
         state_dict[checkpoint_key] = incoming_progress.new_tensor(
             min(progress, self.__saturation_progress)
         )
-
-    def __restore_runtime(
-        self,
-        _module: nn.Module,
-        _incompatible_keys: object,
-    ) -> None:
-        self.__forward_call_progress = int(self.forward_call_progress.item())
-        self.__refresh_runtime(self.__forward_call_progress)
