@@ -14,6 +14,9 @@ from emperor.layers._composition.recurrent.runtime.execution.interface import (
     RecurrentExecutionResult,
     _StateT,
 )
+from emperor.layers._composition.recurrent.runtime.execution.runtime_state import (
+    RecurrentRuntimeStateGuard,
+)
 from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentBranchExecutionPlan,
     RecurrentIterationExecutionPlan,
@@ -33,6 +36,7 @@ class RecurrentExecution(Generic[_StateT]):
     """Execute and commit recurrent schedules for any recurrent state Adapter."""
 
     VALIDATOR = RecurrentExecutionValidator
+    __runtime_state_guard = RecurrentRuntimeStateGuard()
 
     def execute(
         self,
@@ -41,29 +45,35 @@ class RecurrentExecution(Generic[_StateT]):
         iteration_schedule: RecurrentIterationSchedule,
     ) -> LayerState:
         self.VALIDATOR.validate_adapter_is_module(adapter)
-        execution_result = self.__execute_plan(
-            adapter,
-            layer_state,
-            iteration_schedule.execution_plan(),
-        )
-        layer_state.hidden = execution_result.hidden
-        layer_state.loss = execution_result.loss
-        iteration_schedule.record_successful_forward()
-        return layer_state
-
-    def __execute_plan(
-        self,
-        adapter: RecurrentExecutionAdapter[_StateT],
-        layer_state: LayerState,
-        execution_plan: RecurrentIterationExecutionPlan,
-    ) -> RecurrentExecutionResult:
+        execution_plan = iteration_schedule.execution_plan()
         if isinstance(execution_plan, RecurrentSmoothHandoffExecutionPlan):
             return self.__execute_smooth_depth_handoff(
                 adapter,
                 layer_state,
+                iteration_schedule,
                 execution_plan,
             )
-        return self.__execute_stable_plan(adapter, layer_state, execution_plan)
+        execution_result = self.__execute_stable_plan(
+            adapter,
+            layer_state,
+            execution_plan,
+        )
+        return self.__commit_execution_result(
+            layer_state,
+            iteration_schedule,
+            execution_result,
+        )
+
+    @staticmethod
+    def __commit_execution_result(
+        layer_state: LayerState,
+        iteration_schedule: RecurrentIterationSchedule,
+        execution_result: RecurrentExecutionResult,
+    ) -> LayerState:
+        layer_state.hidden = execution_result.hidden
+        layer_state.loss = execution_result.loss
+        iteration_schedule.record_successful_forward()
+        return layer_state
 
     def __execute_stable_plan(
         self,
@@ -87,14 +97,27 @@ class RecurrentExecution(Generic[_StateT]):
         self,
         adapter: RecurrentExecutionAdapter[_StateT],
         layer_state: LayerState,
+        iteration_schedule: RecurrentIterationSchedule,
         execution_plan: RecurrentSmoothHandoffExecutionPlan,
-    ) -> RecurrentExecutionResult:
-        with adapter._rollback_recurrent_runtime_state_on_failure():
-            return self.__execute_committed_smooth_depth_handoff(
-                adapter,
-                layer_state,
-                execution_plan,
-            )
+    ) -> LayerState:
+        original_hidden = layer_state.hidden
+        original_loss = layer_state.loss
+        try:
+            with self.__runtime_state_guard.rollback_handoff_on_failure(adapter):
+                execution_result = self.__execute_committed_smooth_depth_handoff(
+                    adapter,
+                    layer_state,
+                    execution_plan,
+                )
+                return self.__commit_execution_result(
+                    layer_state,
+                    iteration_schedule,
+                    execution_result,
+                )
+        except BaseException:
+            layer_state.hidden = original_hidden
+            layer_state.loss = original_loss
+            raise
 
     def __execute_committed_smooth_depth_handoff(
         self,
