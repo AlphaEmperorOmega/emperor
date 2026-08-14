@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 from typing import TYPE_CHECKING, Generic
 
 import torch
@@ -200,14 +199,11 @@ class RecurrentExecution(Generic[_StateT]):
         source_boundary_state = self.__detach_state_at_gradient_boundary(
             adapter,
             common_state,
-            source_plan.no_gradient_transition_count,
+            source_plan,
         )
         transition_index = source_boundary_state.transition_index
-        source_tracks_gradients = (
-            transition_index >= source_plan.no_gradient_transition_count
-        )
-        gradient_context = nullcontext() if source_tracks_gradients else torch.no_grad()
-        with gradient_context:
+        source_tracks_gradients = source_plan.tracks_gradients(transition_index)
+        with source_plan.gradient_context(transition_index):
             prepared_transition = adapter._prepare_recurrent_transition(
                 source_boundary_state,
                 tracks_gradients=source_tracks_gradients,
@@ -290,12 +286,11 @@ class RecurrentExecution(Generic[_StateT]):
         recurrent_state = self.__detach_state_at_gradient_boundary(
             adapter,
             recurrent_state,
-            branch_plan.no_gradient_transition_count,
+            branch_plan,
         )
         transition_index = recurrent_state.transition_index
-        tracks_gradients = transition_index >= branch_plan.no_gradient_transition_count
-        gradient_context = nullcontext() if tracks_gradients else torch.no_grad()
-        with gradient_context:
+        tracks_gradients = branch_plan.tracks_gradients(transition_index)
+        with branch_plan.gradient_context(transition_index):
             prepared_transition = adapter._prepare_recurrent_transition(
                 recurrent_state,
                 tracks_gradients=tracks_gradients,
@@ -321,13 +316,9 @@ class RecurrentExecution(Generic[_StateT]):
         self,
         adapter: RecurrentExecutionAdapter[_StateT],
         recurrent_state: _StateT,
-        no_gradient_transition_count: int,
+        branch_plan: RecurrentBranchExecutionPlan,
     ) -> _StateT:
-        starts_gradient_suffix = (
-            no_gradient_transition_count > 0
-            and recurrent_state.transition_index == no_gradient_transition_count
-        )
-        if not starts_gradient_suffix:
+        if not branch_plan.starts_gradient_suffix(recurrent_state.transition_index):
             return recurrent_state
         return adapter._detach_recurrent_execution_state(recurrent_state)
 
