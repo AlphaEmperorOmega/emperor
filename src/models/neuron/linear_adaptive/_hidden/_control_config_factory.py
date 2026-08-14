@@ -80,6 +80,7 @@ class ControlConfigFactory:
             initial_iterations=recurrence.initial_iterations,
             iteration_increment=recurrence.iteration_increment,
             forward_calls_before_iteration_increment=recurrence.forward_calls_before_iteration_increment,
+            smooth_iteration_growth_flag=recurrence.smooth_iteration_growth_flag,
             recurrent_layer_norm_position=recurrence.layer_norm_position,
             block_config=block_config,
             gate_config=self.build_gate_config(recurrence.gate),

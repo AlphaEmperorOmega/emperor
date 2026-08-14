@@ -124,6 +124,7 @@ class RecurrentOptions:
     initial_iterations: int
     iteration_increment: int
     forward_calls_before_iteration_increment: int
+    smooth_iteration_growth_flag: bool
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
@@ -192,6 +193,9 @@ def main_control_options(runtime: RuntimeOptions) -> ControlOptions:
             iteration_increment=runtime.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(
                 runtime.recurrent_forward_calls_before_iteration_increment
+            ),
+            smooth_iteration_growth_flag=(
+                runtime.recurrent_smooth_iteration_growth_flag
             ),
             layer_norm_position=runtime.recurrent_layer_norm_position,
             residual_connection_option=runtime.recurrent_residual_connection_option,
@@ -343,6 +347,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             forward_calls_before_iteration_increment=(
                 runtime.recurrent_forward_calls_before_iteration_increment
             ),
+            smooth_iteration_growth_flag=False,
             layer_norm_position=runtime.token_mixer_recurrent_layer_norm_position,
             residual_connection_option=(
                 runtime.token_mixer_recurrent_residual_connection_option
@@ -530,6 +535,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             forward_calls_before_iteration_increment=(
                 runtime.recurrent_forward_calls_before_iteration_increment
             ),
+            smooth_iteration_growth_flag=False,
             layer_norm_position=runtime.channel_mixer_recurrent_layer_norm_position,
             residual_connection_option=(
                 runtime.channel_mixer_recurrent_residual_connection_option

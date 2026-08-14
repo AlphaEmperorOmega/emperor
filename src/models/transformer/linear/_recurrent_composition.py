@@ -36,6 +36,7 @@ def build_recurrent_composition(
     initial_iterations: int,
     iteration_increment: int = 1,
     forward_calls_before_iteration_increment: int = 1,
+    smooth_iteration_growth_flag: bool = False,
 ) -> RecurrentCompositionConfig:
     """Build the selected recurrent config leaf from package-local options."""
 
@@ -58,6 +59,7 @@ def build_recurrent_composition(
         "initial_iterations": initial_iterations,
         "iteration_increment": iteration_increment,
         "forward_calls_before_iteration_increment": forward_calls_before_iteration_increment,
+        "smooth_iteration_growth_flag": smooth_iteration_growth_flag,
         "recurrent_layer_norm_position": recurrent_layer_norm_position,
         "gate_config": gate_config,
         "residual_config": residual_config,

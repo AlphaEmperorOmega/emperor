@@ -79,6 +79,9 @@ def main_control_defaults(config: ModuleType) -> ControlDefaults:
             recurrent_forward_calls_before_iteration_increment=(
                 config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
             ),
+            recurrent_smooth_iteration_growth_flag=(
+                config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+            ),
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,
@@ -132,6 +135,7 @@ def expert_control_defaults(config: ModuleType) -> ControlDefaults:
             recurrent_gradient_transition_count=None,
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
+            recurrent_smooth_iteration_growth_flag=False,
             recurrent_layer_norm_position=config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
             recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
@@ -407,6 +411,7 @@ def _recurrent_options(
     recurrent_gradient_transition_count: int | None,
     recurrent_iteration_increment: int,
     recurrent_forward_calls_before_iteration_increment: int,
+    recurrent_smooth_iteration_growth_flag: bool,
     recurrent_layer_norm_position: LayerNormPositionOptions,
     recurrent_stack_gate_flag: bool,
     recurrent_gate_option: LayerGateOptions | None,
@@ -428,6 +433,7 @@ def _recurrent_options(
         recurrent_forward_calls_before_iteration_increment=(
             recurrent_forward_calls_before_iteration_increment
         ),
+        recurrent_smooth_iteration_growth_flag=(recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=recurrent_layer_norm_position,
         recurrent_stack_gate_flag=recurrent_stack_gate_flag,
         recurrent_gate_option=recurrent_gate_option,

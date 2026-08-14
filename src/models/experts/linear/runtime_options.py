@@ -212,6 +212,10 @@ class ExpertsRecurrentControllerOptions:
         default=1,
         kw_only=True,
     )
+    recurrent_smooth_iteration_growth_flag: bool = field(
+        default=False,
+        kw_only=True,
+    )
     recurrent_layer_norm_position: LayerNormPositionOptions
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None

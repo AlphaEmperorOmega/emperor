@@ -62,6 +62,7 @@ class TransformerStackOptions:
     recurrent_gradient_transition_count: int | None = None
     recurrent_iteration_increment: int = 1
     recurrent_forward_calls_before_iteration_increment: int = 1
+    recurrent_smooth_iteration_growth_flag: bool = False
     stack_residual_connection_option: type[ResidualConfig] | None = None
     stack_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_residual_connection_option: type[ResidualConfig] | None = None

@@ -59,6 +59,7 @@ class ControlConfigFactory:
             initial_iterations=options.initial_iterations,
             iteration_increment=options.iteration_increment,
             forward_calls_before_iteration_increment=options.forward_calls_before_iteration_increment,
+            smooth_iteration_growth_flag=options.smooth_iteration_growth_flag,
             recurrent_layer_norm_position=options.layer_norm_position,
             block_config=block_config,
             gate_config=self._gate_config(options.gate),

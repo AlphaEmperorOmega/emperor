@@ -374,6 +374,7 @@ def _recurrence_options(
         forward_calls_before_iteration_increment=(
             values.forward_calls_before_iteration_increment
         ),
+        smooth_iteration_growth_flag=values.smooth_iteration_growth_flag,
         layer_norm_position=values.layer_norm_position,
         gate=GateOptions(
             enabled=gate_condition.enabled,
