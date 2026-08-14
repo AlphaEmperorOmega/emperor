@@ -93,6 +93,14 @@ class _RecurrentScheduleSnapshot(Protocol):
     forward_call_progress: Any
     complete: Any
     no_gradient_transition_count: Any
+    smooth_iteration_growth: Any
+    settled_iterations: Any
+    transitioning: Any
+    transition_source_iterations: Any
+    transition_target_iterations: Any
+    transition_forward_index: Any
+    transition_forward_count: Any
+    transition_weight: Any
 
 
 def _neuron_cluster_capability(
@@ -459,6 +467,18 @@ class _RecurrentDetailsAdapter:
             ),
             "forwardCallProgress": schedule_snapshot.forward_call_progress,
             "complete": schedule_snapshot.complete,
+            "smoothIterationGrowth": (schedule_snapshot.smooth_iteration_growth),
+            "settledIterations": schedule_snapshot.settled_iterations,
+            "transitioning": schedule_snapshot.transitioning,
+            "transitionSourceIterations": (
+                schedule_snapshot.transition_source_iterations
+            ),
+            "transitionTargetIterations": (
+                schedule_snapshot.transition_target_iterations
+            ),
+            "transitionForwardIndex": (schedule_snapshot.transition_forward_index),
+            "transitionForwardCount": (schedule_snapshot.transition_forward_count),
+            "transitionWeight": schedule_snapshot.transition_weight,
         }
 
     @staticmethod
