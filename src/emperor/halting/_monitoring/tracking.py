@@ -1,7 +1,5 @@
 """Capture halting usage without monitoring-framework concerns."""
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import wraps
 from itertools import chain
@@ -41,19 +39,6 @@ class HaltingUsageTracker(Module):
             persistent=False,
         )
         self._survival_stage: list[HaltingStateBase] = []
-        self._recording_suppression_depth = 0
-
-    @property
-    def recording_enabled(self) -> bool:
-        return self._recording_suppression_depth == 0
-
-    @contextmanager
-    def suppress_recording(self) -> Iterator[None]:
-        self._recording_suppression_depth += 1
-        try:
-            yield
-        finally:
-            self._recording_suppression_depth -= 1
 
     def _load_from_state_dict(
         self,
@@ -349,18 +334,16 @@ class HaltingUsageTrackerManager:
 
         @wraps(original_update)
         def update_halting_state(previous_state, *args, **kwargs):
-            if tracker.recording_enabled and previous_state is None:
+            if previous_state is None:
                 tracker.begin_forward()
             state, hidden = original_update(previous_state, *args, **kwargs)
-            if tracker.recording_enabled:
-                tracker.record_step(state)
+            tracker.record_step(state)
             return state, hidden
 
         @wraps(original_finalize)
         def finalize_weighted_accumulation(state, *args, **kwargs):
             hidden, ponder_loss = original_finalize(state, *args, **kwargs)
-            if tracker.recording_enabled:
-                tracker.record_final(ponder_loss, state)
+            tracker.record_final(ponder_loss, state)
             return hidden, ponder_loss
 
         halting_model.update_halting_state = update_halting_state
