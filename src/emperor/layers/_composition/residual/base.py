@@ -23,10 +23,12 @@ class ResidualRuntimeRequirement(Enum):
     DEPTH_SPECIFIC_CONNECTIONS = "depth-specific residual connections"
 
 
-class ResidualState:
+class ResidualState(ABC):
     """Private marker for residual state scoped to one forward execution."""
 
+    @abstractmethod
     def fork(self) -> ResidualState:
+        """Return branch-local state for an independently executed branch."""
         raise NotImplementedError(
             f"{type(self).__name__} does not implement branch-local state forking."
         )

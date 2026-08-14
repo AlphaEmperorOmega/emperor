@@ -39,11 +39,11 @@ def _apply_attention_residual(residual, current, state):
 
 class TestAttentionResidual(unittest.TestCase):
     def test_residual_state_requires_an_explicit_branch_fork_contract(self):
-        with self.assertRaisesRegex(
-            NotImplementedError,
-            "ResidualState does not implement branch-local state forking",
-        ):
-            ResidualState().fork()
+        class MissingForkResidualState(ResidualState):
+            pass
+
+        with self.assertRaisesRegex(TypeError, "abstract method 'fork'"):
+            MissingForkResidualState()
 
     def test_full_state_keeps_initial_and_raw_sources_separate(self):
         initial_source = torch.tensor([[1.0, 2.0]])
