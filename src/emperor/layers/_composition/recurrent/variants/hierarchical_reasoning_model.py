@@ -60,24 +60,13 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         overrides: HierarchicalReasoningModelRecurrentConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        resolved_config = self.cfg
-        if TYPE_CHECKING:
-            # The validator has already enforced every required leaf field.
-            assert isinstance(
-                resolved_config,
-                HierarchicalReasoningModelRecurrentConfig,
-            )
-            assert resolved_config.high_block_config is not None
-            assert resolved_config.low_block_config is not None
-            assert resolved_config.high_cycles is not None
-            assert resolved_config.low_cycles is not None
-            assert resolved_config.initialization_standard_deviation is not None
-        self.high_block_config: ConfigBase = resolved_config.high_block_config
-        self.low_block_config: ConfigBase = resolved_config.low_block_config
-        self.high_cycles: int = resolved_config.high_cycles
-        self.low_cycles: int = resolved_config.low_cycles
+        self.cfg: HierarchicalReasoningModelRecurrentConfig
+        self.high_block_config: ConfigBase = self.cfg.high_block_config
+        self.low_block_config: ConfigBase = self.cfg.low_block_config
+        self.high_cycles: int = self.cfg.high_cycles
+        self.low_cycles: int = self.cfg.low_cycles
         self.initialization_standard_deviation: float = (
-            resolved_config.initialization_standard_deviation
+            self.cfg.initialization_standard_deviation
         )
         self.__register_initial_buffer("high_initial")
         self.__register_initial_buffer("low_initial")
