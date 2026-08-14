@@ -1233,6 +1233,14 @@ assert semantic_module not in sys.modules
             forward_call_progress: int = 0
             complete: bool = False
             no_gradient_transition_count: int = 0
+            smooth_iteration_growth: bool = False
+            settled_iterations: int = 1
+            transitioning: bool = False
+            transition_source_iterations: int | None = None
+            transition_target_iterations: int | None = None
+            transition_forward_index: int | None = None
+            transition_forward_count: int = 0
+            transition_weight: float = 0.0
 
         class Schedule:
             @staticmethod
@@ -1372,6 +1380,14 @@ assert semantic_module not in sys.modules
             forward_call_progress: int = 2
             complete: bool = False
             no_gradient_transition_count: int = 3
+            smooth_iteration_growth: bool = False
+            settled_iterations: int = 4
+            transitioning: bool = False
+            transition_source_iterations: int | None = None
+            transition_target_iterations: int | None = None
+            transition_forward_index: int | None = None
+            transition_forward_count: int = 0
+            transition_weight: float = 0.0
 
         class Schedule:
             @staticmethod
@@ -1433,6 +1449,14 @@ assert semantic_module not in sys.modules
                     "forward_calls_before_iteration_increment": 3,
                     "forward_call_progress": 2,
                     "complete": False,
+                    "smooth_iteration_growth": False,
+                    "settled_iterations": 4,
+                    "transitioning": False,
+                    "transition_source_iterations": None,
+                    "transition_target_iterations": None,
+                    "transition_forward_index": None,
+                    "transition_forward_count": 0,
+                    "transition_weight": 0.0,
                 },
                 "min_steps": 2,
                 "no_gradient_transition_count": 3,
@@ -1546,6 +1570,65 @@ assert semantic_module not in sys.modules
                 "forward_calls_before_iteration_increment": 3,
                 "forward_call_progress": 3,
                 "complete": False,
+                "smooth_iteration_growth": False,
+                "settled_iterations": 4,
+                "transitioning": False,
+                "transition_source_iterations": None,
+                "transition_target_iterations": None,
+                "transition_forward_index": None,
+                "transition_forward_count": 0,
+                "transition_weight": 0.0,
+            },
+        )
+
+    def test_smooth_recurrent_handoff_phase_is_exposed_in_graph_inspection(
+        self,
+    ) -> None:
+        recurrent = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            block_config=LayerConfig(
+                activation=ActivationOptions.DISABLED,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=4,
+                    output_dim=4,
+                    bias_flag=False,
+                ),
+            ),
+            max_steps=3,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        ).build()
+        for _ in range(4):
+            recurrent(LayerState(hidden=torch.ones(1, 4)))
+
+        details = inspect_model_graph(recurrent).nodes[0].details["recurrent"]
+
+        self.assertEqual(details["active_steps"], 3)
+        self.assertEqual(
+            details["iteration_schedule"],
+            {
+                "unit": "transition",
+                "initial_iterations": 2,
+                "maximum_iterations": 3,
+                "active_iterations": 3,
+                "iteration_increment": 1,
+                "forward_calls_before_iteration_increment": 4,
+                "forward_call_progress": 4,
+                "complete": False,
+                "smooth_iteration_growth": True,
+                "settled_iterations": 2,
+                "transitioning": True,
+                "transition_source_iterations": 2,
+                "transition_target_iterations": 3,
+                "transition_forward_index": 1,
+                "transition_forward_count": 2,
+                "transition_weight": 0.5,
             },
         )
 
