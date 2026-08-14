@@ -20,6 +20,9 @@ from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentIterationSchedule,
     RecurrentSmoothHandoffExecutionPlan,
 )
+from emperor.layers._composition.recurrent.validation import (
+    RecurrentExecutionValidator,
+)
 from emperor.layers._state import LayerState
 
 if TYPE_CHECKING:
@@ -29,12 +32,15 @@ if TYPE_CHECKING:
 class RecurrentExecution(Generic[_StateT]):
     """Execute and commit recurrent schedules for any recurrent state Adapter."""
 
+    VALIDATOR = RecurrentExecutionValidator
+
     def execute(
         self,
         adapter: RecurrentExecutionAdapter[_StateT],
         layer_state: LayerState,
         iteration_schedule: RecurrentIterationSchedule,
     ) -> LayerState:
+        self.VALIDATOR.validate_adapter_is_module(adapter)
         execution_result = self.__execute_plan(
             adapter,
             layer_state,
