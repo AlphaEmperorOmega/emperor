@@ -4,6 +4,8 @@ import unittest
 from dataclasses import fields
 from pathlib import Path
 
+from torch import nn
+
 from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig
 from emperor.layers import (
@@ -21,6 +23,7 @@ from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
 )
 from emperor.layers._composition.recurrent.validation import (
     HierarchicalReasoningModelRecurrentValidator,
+    RecurrentExecutionValidator,
     RecurrentIterationScheduleValidator,
     RecurrentLayerValidator,
     TinyRecursiveModelRecurrentValidator,
@@ -61,10 +64,12 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         package_interface_path = execution_package_path / "__init__.py"
         execution_path = execution_package_path / "executor.py"
         interface_path = execution_package_path / "interface.py"
+        execution_validation_path = recurrent_root / "validation" / "execution.py"
 
         self.assertTrue(package_interface_path.is_file())
         self.assertTrue(execution_path.is_file())
         self.assertTrue(interface_path.is_file())
+        self.assertTrue(execution_validation_path.is_file())
         self.assertFalse((recurrent_root / "runtime" / "execution.py").exists())
         self.assertFalse(
             (recurrent_root / "runtime" / "execution_interface.py").exists()
@@ -100,6 +105,12 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         self.assertNotIn("class RecurrentTransitionResult", interface_source)
         self.assertIn("class RecurrentTransitionResult", base_source)
         self.assertNotIn("class _RecurrentTransitionResult", base_source)
+        self.assertIn(
+            "self.VALIDATOR.validate_adapter_is_module(adapter)",
+            execution_source,
+        )
+        self.assertNotIn("__require_recurrent_module", execution_source)
+        self.assertNotIn("isinstance(adapter, nn.Module)", execution_source)
 
         execution_package_module_name = (
             "emperor.layers._composition.recurrent.runtime.execution"
@@ -363,11 +374,27 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 RecurrentIterationScheduleValidator,
                 "emperor.layers._composition.recurrent.validation.iteration_schedule",
             ),
+            (
+                RecurrentExecutionValidator,
+                "emperor.layers._composition.recurrent.validation.execution",
+            ),
         )
 
         for validator, expected_module in cases:
             with self.subTest(validator=validator.__name__):
                 self.assertEqual(validator.__module__, expected_module)
+
+    def test_recurrent_execution_validator_only_checks_module_ownership(
+        self,
+    ) -> None:
+        self.assertIsNone(
+            RecurrentExecutionValidator.validate_adapter_is_module(nn.Identity())
+        )
+        with self.assertRaisesRegex(
+            TypeError,
+            "Recurrent Execution Adapter must be an nn.Module",
+        ):
+            RecurrentExecutionValidator.validate_adapter_is_module(object())
 
     def test_recurrent_controller_fields_belong_to_the_family_config(self) -> None:
         controller_field_names = {
@@ -458,6 +485,7 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             TinyRecursiveModelRecurrentValidator: set(),
             HierarchicalReasoningModelRecurrentValidator: set(),
             RecurrentIterationScheduleValidator: set(),
+            RecurrentExecutionValidator: set(),
             RecurrentIterationSchedule: set(),
             RecurrentLayer: {
                 "_apply_recurrent_transition_result",

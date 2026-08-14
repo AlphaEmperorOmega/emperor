@@ -63,6 +63,7 @@ from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     SharedRecurrentResidualSchedule,
 )
 from emperor.layers._composition.recurrent.validation import (
+    RecurrentExecutionValidator,
     RecurrentResidualScheduleValidator,
 )
 from emperor.layers._composition.residual.base import (
@@ -2523,6 +2524,63 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIs(result.loss, initial_loss)
         self.assertEqual(schedule.snapshot().forward_call_progress, 1)
         self.assertEqual(schedule.active_iterations, 2)
+
+    def test_recurrent_execution_rejects_non_module_adapters_consistently(self) -> None:
+        stable_model = self.recurrent_config(
+            max_steps=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        ).build()
+        smooth_model = self.recurrent_config(
+            max_steps=2,
+            initial_iterations=1,
+            gradient_transition_count=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        ).build()
+        smooth_model.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+
+        for schedule in (
+            stable_model.recurrent_iteration_schedule,
+            smooth_model.recurrent_iteration_schedule,
+        ):
+            with (
+                self.subTest(plan_type=type(schedule.execution_plan()).__name__),
+                self.assertRaisesRegex(
+                    TypeError,
+                    "Recurrent Execution Adapter must be an nn.Module",
+                ),
+            ):
+                RecurrentExecution().execute(
+                    object(),
+                    LayerState(hidden=torch.zeros(1, 4)),
+                    schedule,
+                )
+
+    def test_recurrent_execution_dispatches_through_substituted_validator(
+        self,
+    ) -> None:
+        class RejectingValidator(RecurrentExecutionValidator):
+            @staticmethod
+            def validate_adapter_is_module(adapter: object) -> None:
+                raise RuntimeError("substituted execution validator was called")
+
+        class RejectingExecution(RecurrentExecution):
+            VALIDATOR = RejectingValidator
+
+        model = self.recurrent_config(max_steps=1, initial_iterations=1).build()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "substituted execution validator was called",
+        ):
+            RejectingExecution().execute(
+                model,
+                LayerState(hidden=torch.zeros(1, 4)),
+                model.recurrent_iteration_schedule,
+            )
 
     def test_transition_failure_does_not_commit_or_advance_iteration_schedule(
         self,
