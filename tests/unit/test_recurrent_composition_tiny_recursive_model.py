@@ -696,9 +696,7 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
         source_input = torch.ones(1, 1, requires_grad=True)
         restored_input = torch.ones(1, 1, requires_grad=True)
 
-        source_output = source(
-            LayerState(hidden=source_input, loss=torch.tensor(3.0))
-        )
+        source_output = source(LayerState(hidden=source_input, loss=torch.tensor(3.0)))
         restored_output = restored(
             LayerState(hidden=restored_input, loss=torch.tensor(3.0))
         )
