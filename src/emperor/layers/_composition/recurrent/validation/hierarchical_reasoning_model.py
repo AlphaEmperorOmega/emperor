@@ -7,11 +7,12 @@ from torch import Tensor
 from emperor.config import ConfigBase
 from emperor.layers._composition.recurrent.validation.common import (
     _GRADIENT_WINDOW_FIELDS,
-    _RECURRENT_CONTROLLER_OPTIONAL_FIELDS,
+    _RECURRENT_SHARED_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
     _validate_initialization_standard_deviation,
     _validate_recurrent_controller_config,
     _validate_recurrent_iteration_controls,
+    _validate_smooth_iteration_growth_controls,
     _validate_variant_hidden,
     _validate_variant_state,
     _validate_variant_transition_output,
@@ -23,7 +24,7 @@ from emperor.layers._validation.common import (
 
 class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidator):
     OPTIONAL_FIELDS = {
-        *_RECURRENT_CONTROLLER_OPTIONAL_FIELDS,
+        *_RECURRENT_SHARED_OPTIONAL_FIELDS,
         *_GRADIENT_WINDOW_FIELDS,
     }
 
@@ -59,6 +60,10 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
         _validate_recurrent_iteration_controls(
             config,
             maximum_iterations=config.high_cycles,
+            transitions_per_iteration=transitions_per_iteration,
+        )
+        _validate_smooth_iteration_growth_controls(
+            config,
             transitions_per_iteration=transitions_per_iteration,
         )
         if config.input_dim != config.output_dim:

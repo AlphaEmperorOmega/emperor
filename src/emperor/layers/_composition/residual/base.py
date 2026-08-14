@@ -26,6 +26,11 @@ class ResidualRuntimeRequirement(Enum):
 class ResidualState:
     """Private marker for residual state scoped to one forward execution."""
 
+    def fork(self) -> ResidualState:
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement branch-local state forking."
+        )
+
 
 class ResidualConnectionAbstract(Module, ABC):
     """Stable runtime Interface implemented by every residual variant."""

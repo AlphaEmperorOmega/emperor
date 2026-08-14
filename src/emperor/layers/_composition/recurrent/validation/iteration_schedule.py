@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import torch
 from torch import Tensor
 
@@ -9,6 +11,14 @@ from emperor.layers._composition.recurrent.config import (
     RecurrentLayerConfig,
     TinyRecursiveModelRecurrentConfig,
 )
+from emperor.layers._composition.recurrent.validation.common import (
+    _validate_smooth_iteration_growth_controls,
+)
+
+if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
+        RecurrentBranchExecutionPlan,
+    )
 
 
 class RecurrentIterationScheduleValidator(ValidatorBase):
@@ -24,6 +34,23 @@ class RecurrentIterationScheduleValidator(ValidatorBase):
                 "config must be a concrete RecurrentCompositionConfig, got "
                 f"{type(config).__name__}."
             )
+        if isinstance(config, RecurrentLayerConfig):
+            transitions_per_iteration = 1
+        elif isinstance(config, TinyRecursiveModelRecurrentConfig):
+            transitions_per_iteration = config.latent_updates_per_answer_update + 1
+        else:
+            transitions_per_iteration = config.low_cycles + 1
+        _validate_smooth_iteration_growth_controls(
+            config,
+            transitions_per_iteration=transitions_per_iteration,
+        )
+
+    @staticmethod
+    def validate_smooth_handoff_source_branch(
+        source_branch: RecurrentBranchExecutionPlan | None,
+    ) -> None:
+        if source_branch is None:
+            raise ValueError("smooth handoff execution plan requires a source branch.")
 
     @staticmethod
     def validate_checkpoint_progress(

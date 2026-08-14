@@ -1,9 +1,21 @@
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from unittest.mock import patch
 
 import torch
 
 from emperor.attention import AttentionLayerState
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    AdaptiveParameterAugmentationConfig,
+    AdaptiveParameterGroupingScopeOptions,
+    DynamicDepthOptions,
+    GeneratorDynamicBiasConfig,
+    SingleModelDynamicWeightConfig,
+    WeightDecayScheduleOptions,
+    WeightNormalizationOptions,
+    WeightNormalizationPositionOptions,
+)
 from emperor.config import ConfigBase, optional_field
 from emperor.experts import (
     DroppedTokenOptions,
@@ -44,6 +56,7 @@ from emperor.layers import (
     WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.recurrent.runtime.execution import RecurrentExecution
 from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     DepthwiseRecurrentResidualSchedule,
     RecurrentResidualSchedule,
@@ -276,6 +289,7 @@ class TrainableScaleFeatureLastLayer(Module):
         self.output_dim = self.cfg.output_dim
         self.scale = torch.nn.Parameter(torch.tensor(self.cfg.scale))
         self.grad_modes: list[bool] = []
+        self.outputs: list[torch.Tensor] = []
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         self.grad_modes.append(torch.is_grad_enabled())
@@ -283,7 +297,9 @@ class TrainableScaleFeatureLastLayer(Module):
             raise ValueError(
                 "TrainableScaleFeatureLastLayer requires stable dimensions"
             )
-        return X * self.scale
+        output = X * self.scale
+        self.outputs.append(output)
+        return output
 
 
 @dataclass
@@ -373,6 +389,63 @@ class StateSpyBlock(Module):
         if state.hidden.shape[-1] != self.input_dim:
             raise ValueError("StateSpyBlock received the wrong input dimension")
         state.hidden = state.hidden + self.increment
+        return state
+
+
+@dataclass
+class StochasticStateBlockConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
+
+    def _registry_owner(self) -> type:
+        return StochasticStateBlock
+
+
+class StochasticStateBlock(Module):
+    def __init__(
+        self,
+        cfg: StochasticStateBlockConfig,
+        overrides: StochasticStateBlockConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self.call_count = 0
+
+    def forward(self, state: LayerState) -> LayerState:
+        self.call_count += 1
+        state.hidden = state.hidden * self.scale + torch.rand_like(state.hidden)
+        return state
+
+
+@dataclass
+class FailingStochasticStateBlockConfig(ConfigBase):
+    input_dim: int | None = optional_field("Input feature dimension.")
+    output_dim: int | None = optional_field("Output feature dimension.")
+    fail_on_transition_step: int | None = optional_field(
+        "One-based mutable transition step that raises."
+    )
+
+    def _registry_owner(self) -> type:
+        return FailingStochasticStateBlock
+
+
+class FailingStochasticStateBlock(Module):
+    def __init__(
+        self,
+        cfg: FailingStochasticStateBlockConfig,
+        overrides: FailingStochasticStateBlockConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+        self.scale = torch.nn.Parameter(torch.tensor(1.0))
+        self.register_buffer("transition_step", torch.zeros(()))
+
+    def forward(self, state: LayerState) -> LayerState:
+        self.transition_step.add_(1.0)
+        state.hidden = state.hidden * self.scale + torch.rand_like(state.hidden)
+        if int(self.transition_step.item()) == self.cfg.fail_on_transition_step:
+            raise RuntimeError("target transition failed")
         return state
 
 
@@ -507,6 +580,56 @@ class LegacyHalting(Module):
         return current_hidden, current_hidden.new_zeros(())
 
 
+@dataclass
+class StochasticHaltingState(HaltingStateBase):
+    update_count: int
+
+
+@dataclass
+class StochasticHaltingConfig(HaltingConfig):
+    def _registry_owner(self) -> type:
+        return StochasticHalting
+
+
+class StochasticHalting(Module):
+    supports_minimum_step_delay = True
+
+    @classmethod
+    def implements_halting_interface(cls) -> bool:
+        return True
+
+    def __init__(
+        self,
+        cfg: StochasticHaltingConfig,
+        overrides: StochasticHaltingConfig | None = None,
+    ) -> None:
+        super().__init__()
+        self.cfg = self._override_config(cfg, overrides)
+        self.register_buffer("update_step", torch.zeros(()))
+
+    def update_halting_state(
+        self,
+        previous_state: StochasticHaltingState | None,
+        model_hidden_state: torch.Tensor,
+    ) -> tuple[StochasticHaltingState, torch.Tensor]:
+        self.update_step.add_(1.0)
+        update_count = 1 if previous_state is None else previous_state.update_count + 1
+        state = StochasticHaltingState(update_count=update_count)
+        state.halt_mask = torch.zeros(
+            model_hidden_state.shape[:-1],
+            dtype=torch.bool,
+            device=model_hidden_state.device,
+        )
+        return state, model_hidden_state + torch.rand_like(model_hidden_state)
+
+    def finalize_weighted_accumulation(
+        self,
+        state: StochasticHaltingState,
+        current_hidden: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return current_hidden, current_hidden.new_zeros(())
+
+
 class RecordingTransform(torch.nn.Module):
     def __init__(self, scale: float = 1.0, offset: float = 0.0):
         super().__init__()
@@ -570,6 +693,79 @@ class TestRecurrentLayer(unittest.TestCase):
             halting_config=None,
             memory_config=None,
             layer_model_config=TrainableScaleFeatureLastConfig(scale=scale),
+        )
+
+    def adaptive_parameter_generator_config(self, dim: int) -> LayerStackConfig:
+        return LayerStackConfig(
+            input_dim=dim,
+            hidden_dim=dim,
+            output_dim=dim,
+            num_layers=1,
+            last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+            apply_output_pipeline_flag=False,
+            layer_config=LayerConfig(
+                input_dim=dim,
+                output_dim=dim,
+                activation=ActivationOptions.DISABLED,
+                residual_config=None,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    bias_flag=True,
+                ),
+            ),
+        )
+
+    def adaptive_parameter_block_config(self, dim: int) -> LayerConfig:
+        generator_config = self.adaptive_parameter_generator_config(dim)
+        decay_config = {
+            "decay_schedule": WeightDecayScheduleOptions.EXPONENTIAL,
+            "decay_rate": 0.1,
+            "decay_warmup_batches": 0,
+            "model_config": generator_config,
+        }
+        adaptive_linear_config = AdaptiveLinearLayerConfig(
+            input_dim=dim,
+            output_dim=dim,
+            bias_flag=True,
+            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                input_dim=dim,
+                output_dim=dim,
+                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                weight_config=SingleModelDynamicWeightConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
+                    normalization_option=WeightNormalizationOptions.DISABLED,
+                    normalization_position_option=(
+                        WeightNormalizationPositionOptions.DISABLED
+                    ),
+                    **decay_config,
+                ),
+                bias_config=GeneratorDynamicBiasConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    **decay_config,
+                ),
+                model_config=generator_config,
+            ),
+        )
+        return LayerConfig(
+            input_dim=dim,
+            output_dim=dim,
+            activation=ActivationOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=0.0,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=adaptive_linear_config,
         )
 
     def stack_block_config(
@@ -806,6 +1002,7 @@ class TestRecurrentLayer(unittest.TestCase):
         iteration_increment: int | None = None,
         forward_calls_before_iteration_increment: int | None = None,
         reinject_original_hidden_flag: bool | None = None,
+        smooth_iteration_growth_flag: bool | None = None,
         block_config: ConfigBase | None = None,
         gate_config: LayerStackConfig | GateConfig | None = None,
         gate_option: LayerGateOptions | None = None,
@@ -836,6 +1033,7 @@ class TestRecurrentLayer(unittest.TestCase):
             iteration_increment=iteration_increment,
             forward_calls_before_iteration_increment=forward_calls_before_iteration_increment,
             reinject_original_hidden_flag=reinject_original_hidden_flag,
+            smooth_iteration_growth_flag=smooth_iteration_growth_flag,
             recurrent_layer_norm_position=recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=self.recurrent_gate_config(
@@ -1401,6 +1599,91 @@ class TestRecurrentLayer(unittest.TestCase):
                 ):
                     cfg.build()
 
+    def test_smooth_iteration_growth_requires_an_explicit_gradient_window(self):
+        config = self.recurrent_config(
+            max_steps=4,
+            initial_iterations=2,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "smooth iteration growth requires gradient_transition_count",
+        ):
+            config.build()
+
+    def test_smooth_iteration_growth_flag_rejects_non_boolean_values(self):
+        for invalid_value in (1, "true", object()):
+            with self.subTest(invalid_value=invalid_value):
+                config = self.recurrent_config()
+                config.smooth_iteration_growth_flag = invalid_value
+
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "smooth_iteration_growth_flag must be bool or None",
+                ):
+                    config.build()
+
+    def test_smooth_iteration_growth_rejects_unsupported_schedule_shapes(self):
+        invalid_cases = (
+            (
+                "multi-depth increment",
+                {"iteration_increment": 2},
+                "iteration_increment to equal 1",
+            ),
+            (
+                "unit cadence",
+                {"forward_calls_before_iteration_increment": 1},
+                "even integer greater than or equal to 2",
+            ),
+            (
+                "odd cadence",
+                {"forward_calls_before_iteration_increment": 3},
+                "even integer greater than or equal to 2",
+            ),
+            (
+                "fixed no-gradient prefix",
+                {"no_gradient_transition_count": 0},
+                "mutually exclusive",
+            ),
+        )
+
+        for name, overrides, message in invalid_cases:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, message):
+                self.recurrent_config(
+                    max_steps=4,
+                    initial_iterations=2,
+                    gradient_transition_count=2,
+                    smooth_iteration_growth_flag=True,
+                    **overrides,
+                ).build()
+
+    def test_smooth_iteration_growth_rejects_stateful_dynamic_memory(self):
+        dim = 2
+        memory_config = GatedResidualDynamicMemoryConfig(
+            input_dim=dim,
+            output_dim=dim,
+            memory_position_option=MemoryPositionOptions.BEFORE_AFFINE,
+            test_time_training_learning_rate=None,
+            test_time_training_num_inner_steps=None,
+            model_config=self.trainable_gate_config(dim),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "smooth iteration growth does not support memory_config",
+        ):
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                memory_config=memory_config,
+            ).build()
+
     def test_non_default_minimum_requires_halting_delay_support(self):
         config = self.recurrent_config(
             max_steps=3,
@@ -1880,6 +2163,61 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIsNone(gate_state.loss)
         self.assertIsNone(gate_state.halting_state)
 
+    def test_smooth_handoff_preserves_caller_metadata_layout_and_dtype(self):
+        dim = 3
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                block_config=StateSpyBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    increment=1.0,
+                ),
+            )
+        ).to(dtype=torch.float64)
+        model.recurrent_iteration_schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        hidden = torch.arange(6, dtype=torch.float64).reshape(2, dim)
+        key_padding_mask = torch.tensor([[False, True], [False, False]])
+        attention_mask = torch.zeros(2, 2)
+        row_layout = RowLayout.rows(2, context_sharing_restricted=False)
+        existing_loss = torch.tensor(4.0, dtype=torch.float64)
+        owner_halting_state = object()
+        state = AttentionLayerState(
+            hidden=hidden,
+            loss=existing_loss,
+            halting_state=owner_halting_state,
+            key_padding_mask=key_padding_mask,
+            attention_mask=attention_mask,
+            row_layout=row_layout,
+        )
+
+        result = model(state)
+
+        self.assertIs(result, state)
+        self.assertEqual(result.hidden.shape, hidden.shape)
+        self.assertEqual(result.hidden.dtype, torch.float64)
+        self.assertEqual(result.hidden.device, hidden.device)
+        self.assertIs(result.loss, existing_loss)
+        self.assertIs(result.halting_state, owner_halting_state)
+        self.assertIs(result.key_padding_mask, key_padding_mask)
+        self.assertIs(result.attention_mask, attention_mask)
+        self.assertIs(result.row_layout, row_layout)
+        self.assertTrue(
+            all(
+                transition_state.row_layout is row_layout
+                for transition_state in model.block_model.received_states
+            )
+        )
+
     def test_runs_exact_max_steps_without_halting_and_reuses_block_instance(self):
         dim = 4
         max_steps = 5
@@ -2165,6 +2503,145 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(schedule.snapshot().forward_call_progress, 0)
         self.assertEqual(schedule.active_iterations, 2)
 
+    def test_recurrent_execution_commits_and_records_one_successful_forward(
+        self,
+    ) -> None:
+        model = self.recurrent_config(
+            max_steps=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        ).build()
+        schedule = model.recurrent_iteration_schedule
+        initial_loss = torch.tensor(3.0)
+        state = LayerState(hidden=torch.zeros(1, 4), loss=initial_loss)
+
+        result = RecurrentExecution().execute(model, state, schedule)
+
+        self.assertIs(result, state)
+        torch.testing.assert_close(result.hidden, torch.ones(1, 4))
+        self.assertIs(result.loss, initial_loss)
+        self.assertEqual(schedule.snapshot().forward_call_progress, 1)
+        self.assertEqual(schedule.active_iterations, 2)
+
+    def test_transition_failure_does_not_commit_or_advance_iteration_schedule(
+        self,
+    ) -> None:
+        class FailingTransition(Module):
+            def forward(self, _state: LayerState) -> LayerState:
+                raise RuntimeError("transition failed")
+
+        model = self.recurrent_config(
+            max_steps=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        ).build()
+        model.block_model = FailingTransition()
+        schedule = model.recurrent_iteration_schedule
+        initial_hidden = torch.ones(1, 4)
+        initial_loss = torch.tensor(3.0)
+        state = LayerState(hidden=initial_hidden, loss=initial_loss)
+
+        with self.assertRaisesRegex(RuntimeError, "transition failed"):
+            model(state)
+
+        self.assertIs(state.hidden, initial_hidden)
+        self.assertIs(state.loss, initial_loss)
+        self.assertEqual(schedule.snapshot().forward_call_progress, 0)
+        self.assertEqual(schedule.active_iterations, 1)
+
+    def test_failed_smooth_handoff_rolls_back_runtime_state_and_rng(self) -> None:
+        dim = 2
+        model = self.recurrent_config(
+            dim=dim,
+            max_steps=4,
+            initial_iterations=3,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            block_config=FailingStochasticStateBlockConfig(
+                input_dim=dim,
+                output_dim=dim,
+                fail_on_transition_step=4,
+            ),
+        ).build()
+        schedule = model.recurrent_iteration_schedule
+        schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        starting_hidden = torch.ones(1, dim)
+        starting_loss = torch.tensor(3.0)
+        state = LayerState(hidden=starting_hidden, loss=starting_loss)
+        starting_schedule_progress_buffer = schedule.forward_call_progress
+        starting_transition_step_buffer = model.block_model.transition_step
+        starting_transition_step = model.block_model.transition_step.clone()
+        torch.manual_seed(47)
+        expected_next_random_value = torch.rand(())
+        torch.manual_seed(47)
+
+        with self.assertRaisesRegex(RuntimeError, "target transition failed"):
+            model(state)
+        actual_next_random_value = torch.rand(())
+
+        self.assertIs(state.hidden, starting_hidden)
+        self.assertIs(state.loss, starting_loss)
+        self.assertIs(
+            schedule.forward_call_progress,
+            starting_schedule_progress_buffer,
+        )
+        self.assertIs(
+            model.block_model.transition_step,
+            starting_transition_step_buffer,
+        )
+        self.assertEqual(schedule.snapshot().forward_call_progress, 4)
+        torch.testing.assert_close(
+            model.block_model.transition_step,
+            starting_transition_step,
+        )
+        torch.testing.assert_close(
+            actual_next_random_value,
+            expected_next_random_value,
+        )
+
+    def test_failed_smooth_handoff_restores_captured_cuda_rng_state(self) -> None:
+        dim = 2
+        model = self.recurrent_config(
+            dim=dim,
+            max_steps=4,
+            initial_iterations=3,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            block_config=FailingStochasticStateBlockConfig(
+                input_dim=dim,
+                output_dim=dim,
+                fail_on_transition_step=1,
+            ),
+        ).build()
+        model.recurrent_iteration_schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        captured_cuda_rng_states = [torch.tensor([7, 11], dtype=torch.uint8)]
+
+        with (
+            patch.object(torch.cuda, "is_initialized", return_value=True),
+            patch.object(
+                torch.cuda,
+                "get_rng_state_all",
+                return_value=captured_cuda_rng_states,
+            ),
+            patch.object(torch.cuda, "set_rng_state_all") as restore_cuda_rng,
+            self.assertRaisesRegex(RuntimeError, "target transition failed"),
+        ):
+            model(LayerState(hidden=torch.ones(1, dim)))
+
+        restore_cuda_rng.assert_called_once_with(captured_cuda_rng_states)
+
     def test_iteration_schedule_counts_training_and_inference_forwards(self) -> None:
         model = RecurrentLayer(
             self.recurrent_config(
@@ -2211,6 +2688,70 @@ class TestRecurrentLayer(unittest.TestCase):
         call_count_before = restored.block_model.model.call_count
         restored(LayerState(hidden=torch.zeros(1, 4)))
         self.assertEqual(restored.block_model.model.call_count - call_count_before, 4)
+
+    def test_smooth_checkpoint_restores_the_exact_next_forward_and_gradients(self):
+        dim = 2
+        config = self.recurrent_config(
+            dim=dim,
+            max_steps=3,
+            initial_iterations=2,
+            gradient_transition_count=2,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            block_config=self.trainable_scale_block_config(
+                dim=dim,
+                scale=0.5,
+            ),
+        )
+
+        for progress in (3, 4, 5, 6):
+            with self.subTest(progress=progress):
+                source = config.build()
+                source.recurrent_iteration_schedule.load_state_dict(
+                    {
+                        "forward_call_progress": torch.tensor(
+                            progress,
+                            dtype=torch.long,
+                        )
+                    },
+                    strict=True,
+                )
+                checkpoint = source.state_dict()
+                restored = config.build()
+                restored.load_state_dict(checkpoint, strict=True)
+                source_input = torch.ones(1, dim, requires_grad=True)
+                restored_input = torch.ones(1, dim, requires_grad=True)
+
+                source_output = source(LayerState(hidden=source_input)).hidden
+                restored_output = restored(LayerState(hidden=restored_input)).hidden
+                source_output.sum().backward()
+                restored_output.sum().backward()
+
+                torch.testing.assert_close(restored_output, source_output)
+                source_parameters = dict(source.named_parameters())
+                restored_parameters = dict(restored.named_parameters())
+                self.assertEqual(source_parameters.keys(), restored_parameters.keys())
+                for parameter_name in source_parameters:
+                    with self.subTest(
+                        progress=progress,
+                        parameter_name=parameter_name,
+                    ):
+                        torch.testing.assert_close(
+                            restored_parameters[parameter_name].grad,
+                            source_parameters[parameter_name].grad,
+                        )
+                if source_input.grad is None:
+                    self.assertIsNone(restored_input.grad)
+                else:
+                    torch.testing.assert_close(
+                        restored_input.grad,
+                        source_input.grad,
+                    )
+                self.assertEqual(
+                    restored.recurrent_iteration_schedule.snapshot(),
+                    source.recurrent_iteration_schedule.snapshot(),
+                )
 
     def test_legacy_checkpoint_missing_only_schedule_progress_loads_strictly(self):
         config = RecurrentLayerConfig(
@@ -2310,6 +2851,896 @@ class TestRecurrentLayer(unittest.TestCase):
             model.block_model.model.grad_modes,
             [False, False, False, True, True],
         )
+
+    def test_smooth_growth_interpolates_exact_source_and_target_depth_outputs(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                block_config=self.layer_block_config(increment=1.0),
+            )
+        ).eval()
+        hidden = torch.zeros(1, dim)
+
+        for _ in range(4):
+            stable_result = model(LayerState(hidden=hidden.clone()))
+            torch.testing.assert_close(stable_result.hidden, hidden + 2.0)
+
+        self.assertEqual(
+            model.recurrent_iteration_schedule.snapshot().transition_weight,
+            0.5,
+        )
+        model.block_model.model.call_count = 0
+
+        transition_result = model(LayerState(hidden=hidden.clone()))
+
+        torch.testing.assert_close(transition_result.hidden, hidden + 2.5)
+        self.assertEqual(model.block_model.model.call_count, 4)
+
+        model.block_model.model.call_count = 0
+        endpoint_result = model(LayerState(hidden=hidden.clone()))
+        self.assertEqual(
+            model.recurrent_iteration_schedule.snapshot().settled_iterations,
+            3,
+        )
+        model.block_model.model.call_count = 0
+        stable_target_result = model(LayerState(hidden=hidden.clone()))
+
+        torch.testing.assert_close(endpoint_result.hidden, hidden + 3.0)
+        torch.testing.assert_close(stable_target_result.hidden, endpoint_result.hidden)
+        self.assertEqual(model.block_model.model.call_count, 3)
+
+    def test_smooth_growth_interpolates_legacy_gradient_window_oracles(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=3 if smooth else depth,
+                    initial_iterations=2 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.trainable_scale_block_config(
+                        dim=dim,
+                        scale=0.5,
+                    ),
+                )
+            ).eval()
+
+        smooth_model = build_model(2, smooth=True)
+        for _ in range(4):
+            smooth_model(LayerState(hidden=torch.ones(1, dim)))
+        source_model = build_model(2, smooth=False)
+        target_model = build_model(3, smooth=False)
+
+        source_output = source_model(LayerState(hidden=torch.ones(1, dim))).hidden
+        source_gradient = torch.autograd.grad(
+            source_output.sum(),
+            source_model.block_model.model.scale,
+        )[0]
+        target_output = target_model(LayerState(hidden=torch.ones(1, dim))).hidden
+        target_gradient = torch.autograd.grad(
+            target_output.sum(),
+            target_model.block_model.model.scale,
+        )[0]
+
+        smooth_output = smooth_model(LayerState(hidden=torch.ones(1, dim))).hidden
+        smooth_gradient = torch.autograd.grad(
+            smooth_output.sum(),
+            smooth_model.block_model.model.scale,
+        )[0]
+
+        torch.testing.assert_close(
+            smooth_output,
+            0.5 * source_output + 0.5 * target_output,
+        )
+        torch.testing.assert_close(
+            smooth_gradient,
+            0.5 * source_gradient + 0.5 * target_gradient,
+        )
+
+    def test_smooth_growth_endpoints_match_legacy_output_and_gradients(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=3 if smooth else depth,
+                    initial_iterations=2 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.trainable_scale_block_config(
+                        dim=dim,
+                        scale=0.5,
+                    ),
+                )
+            ).eval()
+
+        for transition_weight in (0.0, 0.5, 1.0):
+            with self.subTest(transition_weight=transition_weight):
+                source_model = build_model(2, smooth=False)
+                target_model = build_model(3, smooth=False)
+                smooth_model = build_model(2, smooth=True)
+                schedule = smooth_model.recurrent_iteration_schedule
+                schedule.load_state_dict(
+                    {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+                    strict=True,
+                )
+                execution_plan = replace(
+                    schedule.execution_plan(),
+                    transition_weight=transition_weight,
+                )
+
+                source_input = torch.ones(1, dim, requires_grad=True)
+                target_input = torch.ones(1, dim, requires_grad=True)
+                smooth_input = torch.ones(1, dim, requires_grad=True)
+                source_output = source_model(LayerState(hidden=source_input)).hidden
+                target_output = target_model(LayerState(hidden=target_input)).hidden
+                with patch.object(
+                    schedule,
+                    "execution_plan",
+                    return_value=execution_plan,
+                ):
+                    smooth_output = smooth_model(
+                        LayerState(hidden=smooth_input)
+                    ).hidden
+
+                source_parameter_gradient, source_input_gradient = (
+                    torch.autograd.grad(
+                        source_output.sum(),
+                        (source_model.block_model.model.scale, source_input),
+                        allow_unused=True,
+                    )
+                )
+                target_parameter_gradient, target_input_gradient = (
+                    torch.autograd.grad(
+                        target_output.sum(),
+                        (target_model.block_model.model.scale, target_input),
+                        allow_unused=True,
+                    )
+                )
+                smooth_parameter_gradient, smooth_input_gradient = (
+                    torch.autograd.grad(
+                        smooth_output.sum(),
+                        (smooth_model.block_model.model.scale, smooth_input),
+                        allow_unused=True,
+                    )
+                )
+
+                torch.testing.assert_close(
+                    smooth_output,
+                    (1.0 - transition_weight) * source_output
+                    + transition_weight * target_output,
+                )
+                torch.testing.assert_close(
+                    smooth_parameter_gradient,
+                    (1.0 - transition_weight) * source_parameter_gradient
+                    + transition_weight * target_parameter_gradient,
+                )
+                expected_input_gradient = (
+                    source_input_gradient
+                    if transition_weight == 0.0
+                    else target_input_gradient
+                    if transition_weight == 1.0
+                    else (1.0 - transition_weight) * source_input_gradient
+                )
+                if expected_input_gradient is None:
+                    self.assertIsNone(smooth_input_gradient)
+                else:
+                    torch.testing.assert_close(
+                        smooth_input_gradient,
+                        expected_input_gradient,
+                    )
+
+    def test_smooth_growth_weights_each_logical_gradient_contribution(self):
+        dim = 2
+        transition_weight = 0.25
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                block_config=self.trainable_scale_block_config(
+                    dim=dim,
+                    scale=1.0,
+                ),
+            )
+        ).eval()
+        schedule = model.recurrent_iteration_schedule
+        schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        execution_plan = replace(
+            schedule.execution_plan(),
+            transition_weight=transition_weight,
+        )
+        transition_model = model.block_model.model
+        transition_model.outputs.clear()
+
+        with patch.object(
+            schedule,
+            "execution_plan",
+            return_value=execution_plan,
+        ):
+            output = model(
+                LayerState(hidden=torch.ones(1, dim, requires_grad=True))
+            ).hidden
+
+        retained_gradients = torch.autograd.grad(
+            output.sum(),
+            tuple(transition_model.outputs),
+            allow_unused=True,
+        )
+        expected_weights = (
+            1.0 - transition_weight,
+            1.0 - transition_weight,
+            transition_weight,
+            transition_weight,
+        )
+
+        self.assertEqual(len(retained_gradients), len(expected_weights))
+        for transition_index, (gradient, expected_weight) in enumerate(
+            zip(retained_gradients, expected_weights, strict=True)
+        ):
+            with self.subTest(transition_index=transition_index):
+                torch.testing.assert_close(
+                    gradient,
+                    torch.full((1, dim), expected_weight),
+                )
+
+    def test_smooth_growth_blends_only_branch_local_auxiliary_loss_deltas(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                block_config=LossAccumulatingBlockConfig(
+                    input_dim=dim,
+                    output_dim=dim,
+                    increment=1.0,
+                    per_step_loss=2.0,
+                ),
+            )
+        ).eval()
+        for _ in range(4):
+            model(LayerState(hidden=torch.zeros(1, dim)))
+        incoming_loss = torch.tensor(5.0, requires_grad=True)
+
+        result = model(
+            LayerState(
+                hidden=torch.zeros(1, dim),
+                loss=incoming_loss,
+            )
+        )
+
+        torch.testing.assert_close(result.loss, torch.tensor(10.0))
+        result.loss.backward()
+        torch.testing.assert_close(incoming_loss.grad, torch.tensor(1.0))
+
+    def test_smooth_growth_loss_endpoints_match_legacy_branches(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=3 if smooth else depth,
+                    initial_iterations=2 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=LossAccumulatingBlockConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                        increment=1.0,
+                        per_step_loss=2.0,
+                    ),
+                )
+            ).eval()
+
+        for transition_weight in (0.0, 0.5, 1.0):
+            with self.subTest(transition_weight=transition_weight):
+                source_model = build_model(2, smooth=False)
+                target_model = build_model(3, smooth=False)
+                smooth_model = build_model(2, smooth=True)
+                schedule = smooth_model.recurrent_iteration_schedule
+                schedule.load_state_dict(
+                    {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+                    strict=True,
+                )
+                execution_plan = replace(
+                    schedule.execution_plan(),
+                    transition_weight=transition_weight,
+                )
+                source_incoming_loss = torch.tensor(5.0, requires_grad=True)
+                target_incoming_loss = torch.tensor(5.0, requires_grad=True)
+                smooth_incoming_loss = torch.tensor(5.0, requires_grad=True)
+
+                source_loss = source_model(
+                    LayerState(
+                        hidden=torch.zeros(1, dim),
+                        loss=source_incoming_loss,
+                    )
+                ).loss
+                target_loss = target_model(
+                    LayerState(
+                        hidden=torch.zeros(1, dim),
+                        loss=target_incoming_loss,
+                    )
+                ).loss
+                with patch.object(
+                    schedule,
+                    "execution_plan",
+                    return_value=execution_plan,
+                ):
+                    smooth_loss = smooth_model(
+                        LayerState(
+                            hidden=torch.zeros(1, dim),
+                            loss=smooth_incoming_loss,
+                        )
+                    ).loss
+
+                self.assertIsNotNone(source_loss)
+                self.assertIsNotNone(target_loss)
+                self.assertIsNotNone(smooth_loss)
+                torch.testing.assert_close(
+                    smooth_loss,
+                    (1.0 - transition_weight) * source_loss
+                    + transition_weight * target_loss,
+                )
+                smooth_incoming_gradient = torch.autograd.grad(
+                    smooth_loss,
+                    smooth_incoming_loss,
+                )[0]
+                torch.testing.assert_close(
+                    smooth_incoming_gradient,
+                    torch.tensor(1.0),
+                )
+
+    def test_smooth_branch_loss_blend_preserves_the_zero_weight_endpoint(self):
+        common_loss = torch.tensor(2.0)
+        source_loss = torch.tensor(3.0)
+        target_loss = torch.tensor(5.0)
+
+        blended_loss = RecurrentLayer._blend_recurrent_branch_losses(
+            common_loss,
+            source_loss,
+            target_loss,
+            0.0,
+        )
+
+        self.assertIs(blended_loss, source_loss)
+
+    def test_smooth_growth_blends_independent_legacy_halting_oracles(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=3 if smooth else depth,
+                    initial_iterations=2 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.layer_block_config(increment=1.0),
+                    halting_config=self.halting_config(
+                        dim=dim,
+                        gate_threshold=2.5,
+                        high_logit=20.0,
+                        low_logit=-20.0,
+                        min_steps=2,
+                    ),
+                )
+            ).eval()
+
+        hidden = torch.zeros(1, dim)
+        smooth_model = build_model(2, smooth=True)
+        for _ in range(4):
+            smooth_model(LayerState(hidden=hidden.clone()))
+        source_result = build_model(2, smooth=False)(LayerState(hidden=hidden.clone()))
+        target_result = build_model(3, smooth=False)(LayerState(hidden=hidden.clone()))
+
+        smooth_result = smooth_model(LayerState(hidden=hidden.clone()))
+
+        torch.testing.assert_close(
+            smooth_result.hidden,
+            0.5 * source_result.hidden + 0.5 * target_result.hidden,
+        )
+        torch.testing.assert_close(
+            smooth_result.loss,
+            0.5 * source_result.loss + 0.5 * target_result.loss,
+        )
+
+    def test_smooth_growth_matches_independent_soft_halting_oracles(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=3 if smooth else depth,
+                    initial_iterations=2 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.layer_block_config(increment=1.0),
+                    halting_config=SoftHaltingConfig(
+                        input_dim=dim,
+                        threshold=0.99,
+                        ponder_cost_weight=1.0,
+                        min_steps=2,
+                        dropout_probability=0.0,
+                        hidden_state_mode=HaltingHiddenStateModeOptions.RAW,
+                        halting_gate_config=self.halting_gate_config(
+                            threshold=2.5,
+                            high_logit=20.0,
+                            low_logit=-20.0,
+                        ),
+                    ),
+                )
+            ).eval()
+
+        smooth_model = build_model(2, smooth=True)
+        smooth_model.recurrent_iteration_schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        source_model = build_model(2, smooth=False)
+        target_model = build_model(3, smooth=False)
+        source_model.halting_model.load_state_dict(
+            smooth_model.halting_model.state_dict(),
+            strict=True,
+        )
+        target_model.halting_model.load_state_dict(
+            smooth_model.halting_model.state_dict(),
+            strict=True,
+        )
+        hidden = torch.zeros(1, dim)
+
+        source_result = source_model(LayerState(hidden=hidden.clone()))
+        target_result = target_model(LayerState(hidden=hidden.clone()))
+        smooth_result = smooth_model(LayerState(hidden=hidden.clone()))
+
+        torch.testing.assert_close(
+            smooth_result.hidden,
+            0.5 * source_result.hidden + 0.5 * target_result.hidden,
+        )
+        torch.testing.assert_close(
+            smooth_result.loss,
+            0.5 * source_result.loss + 0.5 * target_result.loss,
+        )
+
+    def test_smooth_growth_keeps_source_halting_rng_branch_local(self) -> None:
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=4 if smooth else depth,
+                    initial_iterations=3 if smooth else depth,
+                    gradient_transition_count=2,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.layer_block_config(increment=1.0),
+                    halting_config=StochasticHaltingConfig(min_steps=2),
+                )
+            )
+
+        smooth_model = build_model(3, smooth=True)
+        for _ in range(4):
+            smooth_model(LayerState(hidden=torch.zeros(1, dim)))
+        starting_update_step = smooth_model.halting_model.update_step.clone()
+        source_model = build_model(3, smooth=False)
+        target_model = build_model(4, smooth=False)
+        source_model.halting_model.load_state_dict(
+            smooth_model.halting_model.state_dict()
+        )
+        target_model.halting_model.load_state_dict(
+            smooth_model.halting_model.state_dict()
+        )
+
+        torch.manual_seed(31)
+        source_result = source_model(LayerState(hidden=torch.zeros(1, dim)))
+        torch.manual_seed(31)
+        target_result = target_model(LayerState(hidden=torch.zeros(1, dim)))
+        expected_next_random_value = torch.rand(())
+        torch.manual_seed(31)
+        smooth_result = smooth_model(LayerState(hidden=torch.zeros(1, dim)))
+        actual_next_random_value = torch.rand(())
+
+        torch.testing.assert_close(
+            smooth_result.hidden,
+            0.5 * source_result.hidden + 0.5 * target_result.hidden,
+        )
+        torch.testing.assert_close(
+            smooth_model.halting_model.update_step,
+            starting_update_step + 2.0,
+        )
+        torch.testing.assert_close(
+            smooth_model.halting_model.update_step,
+            target_model.halting_model.update_step,
+        )
+        torch.testing.assert_close(
+            actual_next_random_value,
+            expected_next_random_value,
+        )
+
+    def test_smooth_growth_forks_partial_attention_residual_history(self):
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            config = self.recurrent_config(
+                dim=dim,
+                max_steps=4 if smooth else depth,
+                initial_iterations=2 if smooth else depth,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4 if smooth else 1,
+                smooth_iteration_growth_flag=smooth,
+                block_config=self.layer_block_config(increment=1.0),
+                residual_connection_option=AttentionResidualConfig,
+            )
+            config.residual_config.block_size = 2
+            return RecurrentLayer(config).eval()
+
+        smooth_model = build_model(3, smooth=True)
+        hidden = torch.tensor([[1.0, 2.0]])
+        for _ in range(8):
+            smooth_model(LayerState(hidden=hidden.clone()))
+        source_model = build_model(3, smooth=False)
+        target_model = build_model(4, smooth=False)
+        source_output = source_model(LayerState(hidden=hidden.clone())).hidden
+        target_output = target_model(LayerState(hidden=hidden.clone())).hidden
+        smooth_model.block_model.model.call_count = 0
+
+        smooth_output = smooth_model(LayerState(hidden=hidden.clone())).hidden
+
+        torch.testing.assert_close(
+            smooth_output,
+            0.5 * source_output + 0.5 * target_output,
+        )
+        self.assertEqual(smooth_model.block_model.model.call_count, 5)
+
+    def test_smooth_growth_matches_each_attention_residual_router_gradient(self):
+        dim = 2
+
+        def build_model(
+            initial_iterations: int,
+            *,
+            smooth: bool,
+        ) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=4,
+                    initial_iterations=initial_iterations,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.layer_block_config(increment=1.0),
+                    residual_connection_option=AttentionResidualConfig,
+                )
+            ).eval()
+
+        smooth_model = build_model(3, smooth=True)
+        with torch.no_grad():
+            for parameter_index, (parameter_name, parameter) in enumerate(
+                smooth_model.named_parameters(),
+                start=1,
+            ):
+                if parameter_name.endswith("query"):
+                    parameter.fill_(0.1 * parameter_index)
+                else:
+                    parameter.fill_(1.0 + 0.05 * parameter_index)
+        source_model = build_model(3, smooth=False)
+        target_model = build_model(4, smooth=False)
+        source_model.load_state_dict(smooth_model.state_dict(), strict=True)
+        target_model.load_state_dict(smooth_model.state_dict(), strict=True)
+        smooth_model.recurrent_iteration_schedule.load_state_dict(
+            {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
+            strict=True,
+        )
+        source_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
+        target_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
+        smooth_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
+
+        source_output = source_model(LayerState(hidden=source_input)).hidden
+        target_output = target_model(LayerState(hidden=target_input)).hidden
+        smooth_output = smooth_model(LayerState(hidden=smooth_input)).hidden
+        source_parameters = dict(source_model.named_parameters())
+        target_parameters = dict(target_model.named_parameters())
+        smooth_parameters = dict(smooth_model.named_parameters())
+        parameter_names = tuple(smooth_parameters)
+        source_gradients = torch.autograd.grad(
+            source_output.sum(),
+            tuple(source_parameters[name] for name in parameter_names),
+            allow_unused=True,
+        )
+        target_gradients = torch.autograd.grad(
+            target_output.sum(),
+            tuple(target_parameters[name] for name in parameter_names),
+            allow_unused=True,
+        )
+        smooth_gradients = torch.autograd.grad(
+            smooth_output.sum(),
+            tuple(smooth_parameters[name] for name in parameter_names),
+            allow_unused=True,
+        )
+
+        torch.testing.assert_close(
+            smooth_output,
+            0.5 * source_output + 0.5 * target_output,
+        )
+        for parameter_name, source_gradient, target_gradient, smooth_gradient in zip(
+            parameter_names,
+            source_gradients,
+            target_gradients,
+            smooth_gradients,
+            strict=True,
+        ):
+            with self.subTest(parameter_name=parameter_name):
+                expected_gradient = None
+                if source_gradient is not None:
+                    expected_gradient = 0.5 * source_gradient
+                if target_gradient is not None:
+                    weighted_target_gradient = 0.5 * target_gradient
+                    expected_gradient = (
+                        weighted_target_gradient
+                        if expected_gradient is None
+                        else expected_gradient + weighted_target_gradient
+                    )
+                if expected_gradient is None:
+                    self.assertIsNone(smooth_gradient)
+                else:
+                    torch.testing.assert_close(
+                        smooth_gradient,
+                        expected_gradient,
+                    )
+
+        provisional_router_name = (
+            "recurrent_residual_schedule.subsequent_connections.2.query"
+        )
+        provisional_router_index = parameter_names.index(provisional_router_name)
+        self.assertIsNone(source_gradients[provisional_router_index])
+        self.assertIsNotNone(target_gradients[provisional_router_index])
+        self.assertTrue(target_gradients[provisional_router_index].ne(0).any())
+
+    def test_smooth_growth_shares_adaptive_boundary_and_commits_target_progress(
+        self,
+    ) -> None:
+        torch.manual_seed(7)
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=4 if smooth else depth,
+                    initial_iterations=3 if smooth else depth,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4 if smooth else 1,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=self.adaptive_parameter_block_config(dim),
+                )
+            )
+
+        smooth_model = build_model(3, smooth=True).eval()
+        schedule_input = torch.tensor([[0.25, -0.5]])
+        for _ in range(4):
+            smooth_model(LayerState(hidden=schedule_input.clone()))
+
+        source_model = build_model(3, smooth=False)
+        target_model = build_model(4, smooth=False)
+        source_model.block_model.load_state_dict(
+            smooth_model.block_model.state_dict(),
+            strict=True,
+        )
+        target_model.block_model.load_state_dict(
+            smooth_model.block_model.state_dict(),
+            strict=True,
+        )
+        smooth_model.train()
+        source_model.train()
+        target_model.train()
+
+        source_input = schedule_input.clone().requires_grad_()
+        target_input = schedule_input.clone().requires_grad_()
+        smooth_input = schedule_input.clone().requires_grad_()
+        source_result = source_model(LayerState(hidden=source_input))
+        target_result = target_model(LayerState(hidden=target_input))
+
+        adaptive_linear = smooth_model.block_model.model
+        adaptive_weight = adaptive_linear.adaptive_behaviour.weight_model
+        adaptive_bias = adaptive_linear.adaptive_behaviour.bias_model
+        schedule_progress_buffer = (
+            smooth_model.recurrent_iteration_schedule.forward_call_progress
+        )
+        adaptive_decay_step_buffer = adaptive_weight.decay_step
+        with (
+            patch.object(
+                adaptive_linear,
+                "forward",
+                wraps=adaptive_linear.forward,
+            ) as adaptive_forward,
+            patch.object(
+                adaptive_weight,
+                "forward",
+                wraps=adaptive_weight.forward,
+            ) as adaptive_weight_forward,
+            patch.object(
+                adaptive_bias,
+                "forward",
+                wraps=adaptive_bias.forward,
+            ) as adaptive_bias_forward,
+        ):
+            smooth_result = smooth_model(LayerState(hidden=smooth_input))
+
+        torch.testing.assert_close(adaptive_weight.decay_step, torch.tensor([4.0]))
+        self.assertIs(
+            smooth_model.recurrent_iteration_schedule.forward_call_progress,
+            schedule_progress_buffer,
+        )
+        self.assertIs(adaptive_weight.decay_step, adaptive_decay_step_buffer)
+        self.assertEqual(adaptive_forward.call_count, 5)
+        self.assertEqual(adaptive_weight_forward.call_count, 5)
+        self.assertEqual(adaptive_bias_forward.call_count, 5)
+        torch.testing.assert_close(
+            smooth_result.hidden,
+            0.5 * source_result.hidden + 0.5 * target_result.hidden,
+        )
+
+        source_parameters = dict(source_model.block_model.named_parameters())
+        target_parameters = dict(target_model.block_model.named_parameters())
+        smooth_parameters = dict(smooth_model.block_model.named_parameters())
+        parameter_names = tuple(smooth_parameters)
+        source_gradients = torch.autograd.grad(
+            source_result.hidden.sum(),
+            tuple(source_parameters[name] for name in parameter_names),
+            allow_unused=True,
+            retain_graph=True,
+        )
+        target_gradients = torch.autograd.grad(
+            target_result.hidden.sum(),
+            tuple(target_parameters[name] for name in parameter_names),
+            allow_unused=True,
+            retain_graph=True,
+        )
+        smooth_gradients = torch.autograd.grad(
+            smooth_result.hidden.sum(),
+            tuple(smooth_parameters[name] for name in parameter_names),
+            allow_unused=True,
+            retain_graph=True,
+        )
+        for name, source_gradient, target_gradient, smooth_gradient in zip(
+            parameter_names,
+            source_gradients,
+            target_gradients,
+            smooth_gradients,
+            strict=True,
+        ):
+            with self.subTest(parameter=name):
+                if smooth_gradient is None:
+                    self.assertIsNone(source_gradient)
+                    self.assertIsNone(target_gradient)
+                    continue
+                expected_gradient = torch.zeros_like(smooth_gradient)
+                if source_gradient is not None:
+                    expected_gradient = expected_gradient + 0.5 * source_gradient
+                if target_gradient is not None:
+                    expected_gradient = expected_gradient + 0.5 * target_gradient
+                torch.testing.assert_close(smooth_gradient, expected_gradient)
+
+        smooth_input_gradient = torch.autograd.grad(
+            smooth_result.hidden.sum(),
+            smooth_input,
+            allow_unused=True,
+        )[0]
+        source_input_gradient = torch.autograd.grad(
+            source_result.hidden.sum(),
+            source_input,
+            allow_unused=True,
+        )[0]
+        target_input_gradient = torch.autograd.grad(
+            target_result.hidden.sum(),
+            target_input,
+            allow_unused=True,
+        )[0]
+        self.assertIsNone(smooth_input_gradient)
+        self.assertIsNone(source_input_gradient)
+        self.assertIsNone(target_input_gradient)
+
+    def test_smooth_growth_restores_rng_before_committing_target_branch(self) -> None:
+        dim = 2
+
+        def build_model(depth: int, *, smooth: bool) -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=4 if smooth else depth,
+                    initial_iterations=3 if smooth else depth,
+                    gradient_transition_count=2,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=smooth,
+                    block_config=StochasticStateBlockConfig(
+                        input_dim=dim,
+                        output_dim=dim,
+                    ),
+                )
+            )
+
+        smooth_model = build_model(3, smooth=True)
+        for _ in range(4):
+            smooth_model(LayerState(hidden=torch.ones(1, dim)))
+        source_model = build_model(3, smooth=False)
+        target_model = build_model(4, smooth=False)
+        source_model.block_model.load_state_dict(smooth_model.block_model.state_dict())
+        target_model.block_model.load_state_dict(smooth_model.block_model.state_dict())
+
+        torch.manual_seed(23)
+        source_result = source_model(LayerState(hidden=torch.ones(1, dim)))
+        source_gradient = torch.autograd.grad(
+            source_result.hidden.sum(),
+            source_model.block_model.scale,
+        )[0]
+        torch.manual_seed(23)
+        target_result = target_model(LayerState(hidden=torch.ones(1, dim)))
+        target_gradient = torch.autograd.grad(
+            target_result.hidden.sum(),
+            target_model.block_model.scale,
+        )[0]
+        expected_next_random_value = torch.rand(())
+
+        torch.manual_seed(23)
+        smooth_model.block_model.call_count = 0
+        smooth_result = smooth_model(LayerState(hidden=torch.ones(1, dim)))
+        smooth_gradient = torch.autograd.grad(
+            smooth_result.hidden.sum(),
+            smooth_model.block_model.scale,
+        )[0]
+        actual_next_random_value = torch.rand(())
+
+        torch.testing.assert_close(
+            smooth_result.hidden,
+            0.5 * source_result.hidden + 0.5 * target_result.hidden,
+        )
+        torch.testing.assert_close(
+            smooth_gradient,
+            0.5 * source_gradient + 0.5 * target_gradient,
+        )
+        torch.testing.assert_close(
+            actual_next_random_value,
+            expected_next_random_value,
+        )
+        self.assertEqual(smooth_model.block_model.call_count, 5)
 
     def test_recurrent_step_controls_reject_ambiguous_or_invalid_windows(self):
         invalid_cases = (
@@ -3158,6 +4589,42 @@ class TestRecurrentLayer(unittest.TestCase):
             torch.tensor(0.5),
         )
         torch.testing.assert_close(result.loss, torch.tensor(0.5))
+        tracker_manager.detach(model.halting_model)
+
+    def test_smooth_growth_commits_only_target_branch_halting_usage(self):
+        dim = 2
+        model = RecurrentLayer(
+            self.recurrent_config(
+                dim=dim,
+                max_steps=3,
+                initial_iterations=2,
+                gradient_transition_count=2,
+                iteration_increment=1,
+                forward_calls_before_iteration_increment=4,
+                smooth_iteration_growth_flag=True,
+                block_config=self.layer_block_config(increment=1.0),
+                halting_config=self.halting_config(
+                    dim=dim,
+                    gate_threshold=100.0,
+                    min_steps=2,
+                ),
+            )
+        ).eval()
+        for _ in range(4):
+            model(LayerState(hidden=torch.zeros(1, dim)))
+        tracker_manager = HaltingUsageTrackerManager()
+        tracker = tracker_manager.attach(model.halting_model)
+
+        with patch.object(
+            tracker,
+            "record_final",
+            wraps=tracker.record_final,
+        ) as record_final:
+            result = model(LayerState(hidden=torch.zeros(1, dim)))
+
+        self.assertEqual(record_final.call_count, 1)
+        torch.testing.assert_close(tracker.last_step_count, torch.tensor(2.0))
+        torch.testing.assert_close(result.hidden, torch.full((1, dim), 2.5))
         tracker_manager.detach(model.halting_model)
 
     def test_recurrent_halting_preserves_halted_positions(self):

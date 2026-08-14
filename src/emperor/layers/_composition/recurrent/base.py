@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 
 import torch
 from torch import Tensor, nn
@@ -21,7 +22,7 @@ from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from emperor.config import ConfigBase
     from emperor.halting import HaltingStateBase
@@ -37,17 +38,50 @@ if TYPE_CHECKING:
 class _RecurrentTransitionContext(Protocol):
     """Common schedule state consumed by the shared transition pipeline."""
 
-    context_state: LayerState
-    row_layout: RowLayout | None
-    halting_state: HaltingStateBase | None
+    @property
+    def context_state(self) -> LayerState: ...
+
+    @property
+    def row_layout(self) -> RowLayout | None: ...
+
+    @property
+    def halting_state(self) -> HaltingStateBase | None: ...
 
 
 @dataclass(frozen=True)
-class _RecurrentTransitionResult:
+class RecurrentTransitionResult:
     hidden: Tensor
     loss: Tensor | None
     halting_state: HaltingStateBase | None
     all_items_halted: bool
+
+
+@dataclass(frozen=True)
+class _RecurrentTransitionCandidate:
+    hidden: Tensor
+    loss: Tensor | None
+
+
+@dataclass(frozen=True)
+class _BufferValueSnapshot:
+    buffer: Tensor | None
+    value: Tensor | None
+
+
+@dataclass(frozen=True)
+class _ModuleBufferSnapshot:
+    module: nn.Module
+    buffers: dict[str, _BufferValueSnapshot]
+
+
+@dataclass(frozen=True)
+class _RecurrentRuntimeStateSnapshot:
+    module_buffers: list[_ModuleBufferSnapshot]
+    cpu_rng_state: Tensor
+    cuda_rng_states: list[Tensor] | None
+
+
+_ProvisionalSourceBranchOutput = TypeVar("_ProvisionalSourceBranchOutput")
 
 
 class RecurrentCompositionAbstract(LayerModuleBase, ABC):
@@ -83,6 +117,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         self._recurrent_diagnostic_observer: Callable[[Tensor, Tensor], None] | None = (
             None
         )
+        self.__recurrent_diagnostic_observation_suppression_depth = 0
 
     def _build_transition_model(self, transition_config: ConfigBase) -> Module:
         return self._build_from_config(
@@ -148,6 +183,25 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         if observer is not None:
             observer(previous_hidden, output_hidden)
 
+    @property
+    def _recurrent_diagnostic_observation_enabled(self) -> bool:
+        return self.__recurrent_diagnostic_observation_suppression_depth == 0
+
+    @contextmanager
+    def __recurrent_diagnostic_observation_context(
+        self,
+        *,
+        enabled: bool,
+    ) -> Iterator[None]:
+        if enabled:
+            yield
+            return
+        self.__recurrent_diagnostic_observation_suppression_depth += 1
+        try:
+            yield
+        finally:
+            self.__recurrent_diagnostic_observation_suppression_depth -= 1
+
     def _new_recurrent_initial_buffer(self, standard_deviation: float) -> Tensor:
         initial = torch.empty(self.output_dim)
         if standard_deviation == 0:
@@ -177,7 +231,97 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         residual_state: ResidualState | None = None,
         residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
-    ) -> _RecurrentTransitionResult:
+        observe_transition: bool = True,
+    ) -> RecurrentTransitionResult:
+        with self.__recurrent_diagnostic_observation_context(
+            enabled=observe_transition,
+        ):
+            transition_candidate = self.__compute_recurrent_transition_candidate(
+                recurrent_state,
+                run_transition=run_transition,
+                transition_input=transition_input,
+                previous_evolving_hidden=previous_evolving_hidden,
+                loss=loss,
+                residual_state=residual_state,
+                residual_schedule=residual_schedule,
+                transition_index=transition_index,
+            )
+        return self.__apply_halting_and_observe_recurrent_transition(
+            recurrent_state,
+            transition_candidate,
+            previous_evolving_hidden=previous_evolving_hidden,
+            halting_update_enabled=halting_update_enabled,
+            observe_transition=observe_transition,
+        )
+
+    def _run_shared_handoff_boundary_transition(
+        self,
+        recurrent_state: _RecurrentTransitionContext,
+        *,
+        run_transition: Callable[[LayerState], LayerState],
+        transition_input: Tensor,
+        previous_evolving_hidden: Tensor,
+        source_halting_update_enabled: bool,
+        run_provisional_source_branch: Callable[
+            [RecurrentTransitionResult],
+            _ProvisionalSourceBranchOutput,
+        ],
+        loss: Tensor | None = None,
+        residual_state: ResidualState | None = None,
+        residual_schedule: RecurrentResidualSchedule | None = None,
+        transition_index: int = 0,
+    ) -> tuple[_ProvisionalSourceBranchOutput, RecurrentTransitionResult]:
+        """Share one candidate, roll back the full source branch, then commit target."""
+        transition_candidate = self.__compute_recurrent_transition_candidate(
+            recurrent_state,
+            run_transition=run_transition,
+            transition_input=transition_input,
+            previous_evolving_hidden=previous_evolving_hidden,
+            loss=loss,
+            residual_state=residual_state,
+            residual_schedule=residual_schedule,
+            transition_index=transition_index,
+        )
+        with self.__preserve_recurrent_runtime_state_during_provisional_branch():
+            source_result = self.__apply_halting_and_observe_recurrent_transition(
+                recurrent_state,
+                transition_candidate,
+                previous_evolving_hidden=previous_evolving_hidden,
+                halting_update_enabled=source_halting_update_enabled,
+                observe_transition=False,
+            )
+            provisional_source_branch_output = run_provisional_source_branch(
+                source_result
+            )
+        target_candidate = _RecurrentTransitionCandidate(
+            hidden=transition_candidate.hidden.detach(),
+            loss=(
+                None
+                if transition_candidate.loss is None
+                else transition_candidate.loss.detach()
+            ),
+        )
+        target_result = self.__apply_halting_and_observe_recurrent_transition(
+            recurrent_state,
+            target_candidate,
+            previous_evolving_hidden=previous_evolving_hidden,
+            halting_update_enabled=False,
+            observe_transition=True,
+        )
+        return provisional_source_branch_output, target_result
+
+    def __compute_recurrent_transition_candidate(
+        self,
+        recurrent_state: _RecurrentTransitionContext,
+        *,
+        run_transition: Callable[[LayerState], LayerState],
+        transition_input: Tensor,
+        previous_evolving_hidden: Tensor,
+        loss: Tensor | None,
+        residual_state: ResidualState | None,
+        residual_schedule: RecurrentResidualSchedule | None,
+        transition_index: int,
+    ) -> _RecurrentTransitionCandidate:
         transition_model_input = self.__maybe_apply_layer_norm_before(transition_input)
         transition_model_input = self.__maybe_apply_memory_before(
             transition_model_input
@@ -211,21 +355,108 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             transition_index,
         )
         candidate_hidden = self.__maybe_apply_layer_norm_after(candidate_hidden)
+        return _RecurrentTransitionCandidate(
+            hidden=candidate_hidden,
+            loss=output_state.loss,
+        )
+
+    def __apply_halting_and_observe_recurrent_transition(
+        self,
+        recurrent_state: _RecurrentTransitionContext,
+        transition_candidate: _RecurrentTransitionCandidate,
+        *,
+        previous_evolving_hidden: Tensor,
+        halting_update_enabled: bool,
+        observe_transition: bool,
+    ) -> RecurrentTransitionResult:
         halting_state, output_hidden = self.__maybe_apply_halting(
             recurrent_state.halting_state,
-            candidate_hidden,
+            transition_candidate.hidden,
             update_enabled=halting_update_enabled,
         )
-        self._observe_recurrent_step(
-            previous_evolving_hidden,
-            output_hidden,
-        )
-        return _RecurrentTransitionResult(
+        if observe_transition:
+            self._observe_recurrent_step(
+                previous_evolving_hidden,
+                output_hidden,
+            )
+        return RecurrentTransitionResult(
             hidden=output_hidden,
-            loss=output_state.loss,
+            loss=transition_candidate.loss,
             halting_state=halting_state,
             all_items_halted=self.__all_items_halted(halting_state),
         )
+
+    @contextmanager
+    def __preserve_recurrent_runtime_state_during_provisional_branch(
+        self,
+    ) -> Iterator[None]:
+        """Restore module buffers and RNG after a provisional source branch."""
+        runtime_state_snapshot = self.__snapshot_recurrent_runtime_state()
+        try:
+            yield
+        finally:
+            self.__restore_recurrent_runtime_state(runtime_state_snapshot)
+
+    @contextmanager
+    def _rollback_recurrent_runtime_state_on_failure(self) -> Iterator[None]:
+        """Roll back a failed smooth handoff without affecting successful commits."""
+        runtime_state_snapshot = self.__snapshot_recurrent_runtime_state()
+        try:
+            yield
+        except BaseException:
+            self.__restore_recurrent_runtime_state(runtime_state_snapshot)
+            raise
+
+    def __snapshot_recurrent_runtime_state(
+        self,
+    ) -> _RecurrentRuntimeStateSnapshot:
+        return _RecurrentRuntimeStateSnapshot(
+            module_buffers=self.__snapshot_recurrent_module_buffers(),
+            cpu_rng_state=torch.get_rng_state(),
+            cuda_rng_states=(
+                torch.cuda.get_rng_state_all()
+                if torch.cuda.is_initialized()
+                else None
+            ),
+        )
+
+    def __restore_recurrent_runtime_state(
+        self,
+        snapshot: _RecurrentRuntimeStateSnapshot,
+    ) -> None:
+        self.__restore_recurrent_module_buffers(snapshot.module_buffers)
+        torch.set_rng_state(snapshot.cpu_rng_state)
+        if snapshot.cuda_rng_states is not None:
+            torch.cuda.set_rng_state_all(snapshot.cuda_rng_states)
+
+    def __snapshot_recurrent_module_buffers(self) -> list[_ModuleBufferSnapshot]:
+        snapshots: list[_ModuleBufferSnapshot] = []
+        for module in self.modules():
+            buffers = {
+                name: _BufferValueSnapshot(
+                    buffer=buffer,
+                    value=None if buffer is None else buffer.detach().clone(),
+                )
+                for name, buffer in module._buffers.items()
+            }
+            snapshots.append(_ModuleBufferSnapshot(module=module, buffers=buffers))
+        return snapshots
+
+    @staticmethod
+    def __restore_recurrent_module_buffers(
+        snapshots: list[_ModuleBufferSnapshot],
+    ) -> None:
+        for snapshot in snapshots:
+            snapshot.module._buffers.clear()
+            for name, buffer_snapshot in snapshot.buffers.items():
+                buffer = buffer_snapshot.buffer
+                if buffer is not None:
+                    restored_value = buffer_snapshot.value
+                    if TYPE_CHECKING:
+                        assert restored_value is not None
+                    with torch.no_grad():
+                        buffer.copy_(restored_value)
+                snapshot.module._buffers[name] = buffer
 
     def __maybe_apply_layer_norm_before(self, hidden: Tensor) -> Tensor:
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.BEFORE:
@@ -356,6 +587,49 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
                 auxiliary_loss,
             )
         return accumulated_loss
+
+    def _halting_usage_tracking_context(
+        self,
+        *,
+        enabled: bool,
+    ) -> AbstractContextManager[None]:
+        if enabled or self.halting_model is None:
+            return nullcontext()
+        usage_tracker = getattr(self.halting_model, "_usage_tracker", None)
+        suppress_recording = getattr(usage_tracker, "suppress_recording", None)
+        if suppress_recording is None:
+            return nullcontext()
+        return suppress_recording()
+
+    @staticmethod
+    def _blend_recurrent_branch_losses(
+        common_loss: Tensor | None,
+        source_loss: Tensor | None,
+        target_loss: Tensor | None,
+        transition_weight: float,
+    ) -> Tensor | None:
+        if transition_weight == 0.0:
+            return source_loss
+        if transition_weight == 1.0:
+            return target_loss
+
+        blended_loss = common_loss
+        for branch_loss, branch_weight in (
+            (source_loss, 1.0 - transition_weight),
+            (target_loss, transition_weight),
+        ):
+            if branch_loss is None:
+                continue
+            branch_delta = (
+                branch_loss if common_loss is None else branch_loss - common_loss
+            )
+            weighted_delta = branch_weight * branch_delta
+            blended_loss = (
+                weighted_delta
+                if blended_loss is None
+                else blended_loss + weighted_delta
+            )
+        return blended_loss
 
     @abstractmethod
     def forward(self, state: LayerState) -> LayerState:

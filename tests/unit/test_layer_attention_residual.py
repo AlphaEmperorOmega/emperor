@@ -3,6 +3,7 @@ import unittest
 import torch
 import torch.nn.functional as F
 
+from emperor.layers._composition.residual.base import ResidualState
 from emperor.layers._composition.residual.config import AttentionResidualConfig
 from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
@@ -37,6 +38,13 @@ def _apply_attention_residual(residual, current, state):
 
 
 class TestAttentionResidual(unittest.TestCase):
+    def test_residual_state_requires_an_explicit_branch_fork_contract(self):
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            "ResidualState does not implement branch-local state forking",
+        ):
+            ResidualState().fork()
+
     def test_full_state_keeps_initial_and_raw_sources_separate(self):
         initial_source = torch.tensor([[1.0, 2.0]])
         first_raw_output = torch.tensor([[3.0, 4.0]])
@@ -79,6 +87,62 @@ class TestAttentionResidual(unittest.TestCase):
             raw_outputs[0] + raw_outputs[1],
         )
         self.assertIs(state.sources[2], raw_outputs[2])
+
+    def test_forked_partial_block_histories_evolve_independently(self):
+        initial_source = torch.tensor([[10.0, 20.0]])
+        common_partial = torch.tensor([[1.0, 2.0]])
+        source_output = torch.tensor([[3.0, 4.0]])
+        target_output = torch.tensor([[5.0, 6.0]])
+        common_state = AttentionResidualState(initial_source, block_size=2)
+        common_state.append(common_partial)
+
+        source_state = common_state.fork()
+        target_state = common_state.fork()
+        source_state.append(source_output)
+        target_state.append(target_output)
+
+        self.assertIs(common_state.sources[1], common_partial)
+        torch.testing.assert_close(
+            source_state.sources[1],
+            common_partial + source_output,
+        )
+        torch.testing.assert_close(
+            target_state.sources[1],
+            common_partial + target_output,
+        )
+
+    def test_forked_completed_block_histories_evolve_independently(self):
+        initial_source = torch.tensor([[10.0, 20.0]])
+        common_output = torch.tensor([[1.0, 2.0]])
+        source_output = torch.tensor([[3.0, 4.0]])
+        target_output = torch.tensor([[5.0, 6.0]])
+        common_state = AttentionResidualState(initial_source, block_size=1)
+        common_state.append(common_output)
+
+        source_state = common_state.fork()
+        target_state = common_state.fork()
+        source_state.append(source_output)
+        target_state.append(target_output)
+
+        expected_histories = (
+            (common_state.sources, (initial_source, common_output)),
+            (
+                source_state.sources,
+                (initial_source, common_output, source_output),
+            ),
+            (
+                target_state.sources,
+                (initial_source, common_output, target_output),
+            ),
+        )
+        for actual_sources, expected_sources in expected_histories:
+            self.assertEqual(len(actual_sources), len(expected_sources))
+            for actual, expected in zip(
+                actual_sources,
+                expected_sources,
+                strict=True,
+            ):
+                self.assertIs(actual, expected)
 
     def test_state_rejects_invalid_block_sizes(self):
         for block_size in (0, -1, True, 1.5):
