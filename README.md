@@ -40,11 +40,11 @@ mise run dev
 ```
 
 Setup creates `./torchenv` with the native `bin` or `Scripts` layout, installs
-binary Python dependencies from the matching platform lock, runs `npm ci`, and
-records a hash of every setup input. Repeating setup is idempotent. Switching
-profiles recreates the launcher-owned virtualenv. CUDA profiles are available
-only on Linux x86-64. The current profile uses PyTorch 2.12.0's CUDA 13.0
-wheels:
+binary Python dependencies from the matching platform lock, and runs `npm ci`
+for the locked root development tools and Workbench frontend. It records a hash
+of every setup input. Repeating setup is idempotent. Switching profiles
+recreates the launcher-owned virtualenv. CUDA profiles are available only on
+Linux x86-64. The current profile uses PyTorch 2.12.0's CUDA 13.0 wheels:
 
 ```text
 mise run setup --profile cuda
@@ -277,16 +277,27 @@ or random search.
 
 Only continue from a trusted local Lightning checkpoint. Use the same Model
 Package, preset, dataset, compatible Runtime Defaults, and code-compatible
-model structure that created it. Emperor validates the complete checkpoint and
-exact model state keys and tensor shapes; Lightning then restores optimizer,
-scheduler, precision, loop, and compatible callback state.
+model structure that created it. Emperor copies the opened source into a
+private immutable snapshot, binds its SHA-256 digest, applies finite archive,
+payload, tensor, and storage admission limits, and strictly loads the selected
+model before Lightning restores optimizer, scheduler, precision, loop, and
+compatible callback state. Lightning receives that snapshot rather than the
+source path.
+
+On Linux, checkpoint decoding also runs under a bounded private decoder process.
+This is defense in depth, not a complete hostile-checkpoint sandbox. A service
+that accepts checkpoints from untrusted parties must additionally contain the
+entire Training Job using deployment-owned process, memory, filesystem, and
+cancellation controls. Other platforms retain the trusted-local path unless a
+caller explicitly requires isolated decoding through `CheckpointAdmissionPolicy`.
 
 When checkpointing is requested, `last.ckpt` records the most recently
 completed epoch while the other retained checkpoint is the best monitored
 epoch; these can be different. Continuation writes a new Run Artifact and
-records only the source filename, epoch, and global step as lineage in progress
-events and `result.json`. It never appends to or modifies the source Run
-Artifact or checkpoint.
+records the source filename, epoch, global step, and admitted SHA-256 digest as
+lineage in progress events and `result.json`. It never appends to or modifies
+the source Run Artifact or checkpoint, and the digest lets the resumed bytes be
+verified independently.
 
 Important scaling rules:
 
@@ -461,6 +472,14 @@ Shape inspection uses a synthetic batch of size 1 in evaluation mode with
 gradients disabled. It does not download the selected dataset. Tensor-variable
 tracing covers executed Python under `models` and `emperor`; native PyTorch kernel
 temporaries are represented by their surrounding module inputs and outputs.
+
+Shape tracing is a trusted, sequential local diagnostic. It executes Model
+Package code synchronously in the caller process without a deadline or memory
+isolation, temporarily changes the process CPU Torch RNG, and does not isolate
+CUDA, Python, NumPy, or arbitrary package side effects. Do not overlap it with
+other Torch RNG work. A hosted or untrusted caller must provide process-level
+resource and cancellation containment; Workbench does not currently expose
+shape tracing.
 
 Monitor callbacks apply to training runs, not model inspection flags.
 
@@ -815,15 +834,16 @@ python -P tools/verify_distribution.py
 The verification uses the dependencies already available in the active
 environment and never downloads or upgrades them.
 
-Run strict Python type checking with:
+Run the exact locked strict type checker with:
 
 ```bash
-pyright --project pyrightconfig.json
+mise run test:model-runtime-types
 ```
 
 The strict Pyright include list covers stable capability areas and may only
-grow. CI supplies the pinned Pyright executable; local Pyright use requires the
-command to already be available.
+grow. `mise run setup --profile cpu` provisions Pyright 1.1.411 from the root
+Node lockfile. GitHub workflow enforcement is currently deferred, so run this
+task locally before committing Runtime changes.
 
 Capture the production Workbench browser and long-session baseline after a
 frontend build with:
