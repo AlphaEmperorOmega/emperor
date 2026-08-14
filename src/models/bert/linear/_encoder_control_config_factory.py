@@ -247,6 +247,9 @@ class RecurrentConfigFactory:
             forward_calls_before_iteration_increment=(
                 self.recurrent_controller_options.recurrent_forward_calls_before_iteration_increment
             ),
+            smooth_iteration_growth_flag=(
+                self.recurrent_controller_options.recurrent_smooth_iteration_growth_flag
+            ),
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
             block_config=block_config,
             gate_config=gate_config,

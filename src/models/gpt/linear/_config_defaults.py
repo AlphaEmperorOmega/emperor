@@ -665,6 +665,9 @@ def linears_recurrent_controller_options(
         recurrent_forward_calls_before_iteration_increment = (
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         )
+        recurrent_smooth_iteration_growth_flag = (
+            config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+        )
         recurrent_layer_norm_position = config.RECURRENT_LAYER_NORM_POSITION
         recurrent_stack_gate_flag = config.RECURRENT_STACK_GATE_FLAG
         recurrent_gate_option = config.RECURRENT_GATE_OPTION
@@ -683,6 +686,7 @@ def linears_recurrent_controller_options(
         recurrent_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
+        recurrent_smooth_iteration_growth_flag = False
         recurrent_layer_norm_position = config.ATTN_RECURRENT_LAYER_NORM_POSITION
         recurrent_stack_gate_flag = config.ATTN_RECURRENT_STACK_GATE_FLAG
         recurrent_gate_option = config.ATTN_RECURRENT_GATE_OPTION
@@ -701,6 +705,7 @@ def linears_recurrent_controller_options(
         recurrent_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
+        recurrent_smooth_iteration_growth_flag = False
         recurrent_layer_norm_position = config.FF_RECURRENT_LAYER_NORM_POSITION
         recurrent_stack_gate_flag = config.FF_RECURRENT_STACK_GATE_FLAG
         recurrent_gate_option = config.FF_RECURRENT_GATE_OPTION
@@ -722,6 +727,7 @@ def linears_recurrent_controller_options(
         recurrent_forward_calls_before_iteration_increment=(
             recurrent_forward_calls_before_iteration_increment
         ),
+        recurrent_smooth_iteration_growth_flag=(recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=recurrent_layer_norm_position,
         recurrent_stack_gate_flag=recurrent_stack_gate_flag,
         recurrent_gate_option=recurrent_gate_option,

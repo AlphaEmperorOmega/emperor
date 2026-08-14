@@ -411,6 +411,7 @@ class ControlValues:
     recurrent_gradient_transition_count: int | None
     recurrent_iteration_increment: int
     recurrent_forward_calls_before_iteration_increment: int
+    recurrent_smooth_iteration_growth_flag: bool
     recurrent_layer_norm_position: LayerNormPositionOptions
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
@@ -444,6 +445,7 @@ class ControlFields:
     recurrent_gradient_transition_count: RuntimeField[int | None]
     recurrent_iteration_increment: RuntimeField[int]
     recurrent_forward_calls_before_iteration_increment: RuntimeField[int]
+    recurrent_smooth_iteration_growth_flag: RuntimeField[bool]
     recurrent_layer_norm_position: RuntimeField[LayerNormPositionOptions]
     recurrent_stack_gate_flag: RuntimeField[bool]
     recurrent_gate_option: RuntimeField[LayerGateOptions | None]
@@ -1272,6 +1274,10 @@ _CONTROL_FIELDS = ControlFields(
         "recurrent_forward_calls_before_iteration_increment",
         config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT,
     ),
+    recurrent_smooth_iteration_growth_flag=_boolean_field(
+        "recurrent_smooth_iteration_growth_flag",
+        config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG,
+    ),
     recurrent_layer_norm_position=_enum_field(
         "recurrent_layer_norm_position",
         config.RECURRENT_LAYER_NORM_POSITION,
@@ -1630,6 +1636,9 @@ def _read_control(reader: RuntimeOverrideReader) -> ControlValues:
         recurrent_iteration_increment=reader.read(fields.recurrent_iteration_increment),
         recurrent_forward_calls_before_iteration_increment=reader.read(
             fields.recurrent_forward_calls_before_iteration_increment
+        ),
+        recurrent_smooth_iteration_growth_flag=reader.read(
+            fields.recurrent_smooth_iteration_growth_flag
         ),
         recurrent_layer_norm_position=reader.read(fields.recurrent_layer_norm_position),
         recurrent_stack_gate_flag=reader.read(fields.recurrent_stack_gate_flag),

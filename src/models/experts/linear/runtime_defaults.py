@@ -487,6 +487,9 @@ def _recurrent_options(
             f"{recurrent_flat}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
             ),
+            f"{recurrent_flat}smooth_iteration_growth_flag": (
+                "recurrent_smooth_iteration_growth_flag"
+            ),
             f"{recurrent_flat}layer_norm_position": "recurrent_layer_norm_position",
             f"{recurrent_flat}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{recurrent_flat}gate_option": "recurrent_gate_option",
