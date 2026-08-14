@@ -545,6 +545,7 @@ def _controlled_stack(
         forward_calls_before_iteration_increment=(
             options.recurrent_forward_calls_before_iteration_increment
         ),
+        smooth_iteration_growth_flag=(options.recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
         block_config=stack,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),

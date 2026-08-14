@@ -752,6 +752,9 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_forward_calls_before_iteration_increment=(
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         ),
+        recurrent_smooth_iteration_growth_flag=(
+            config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+        ),
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
         stack_residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         recurrent_residual_connection_option=(

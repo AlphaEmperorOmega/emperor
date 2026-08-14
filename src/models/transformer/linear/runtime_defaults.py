@@ -603,6 +603,9 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_forward_calls_before_iteration_increment=(
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         ),
+        recurrent_smooth_iteration_growth_flag=(
+            config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+        ),
         recurrent_composition_option=config.RECURRENT_COMPOSITION_OPTION,
         recurrent_no_gradient_transition_count=(
             config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT

@@ -518,6 +518,9 @@ def linears_recurrent_controller_options(
             recurrent_forward_calls_before_iteration_increment=(
                 config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
             ),
+            recurrent_smooth_iteration_growth_flag=(
+                config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+            ),
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,

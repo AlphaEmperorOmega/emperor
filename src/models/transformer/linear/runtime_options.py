@@ -46,6 +46,7 @@ class TransformerStackOptions:
     recurrent_gradient_transition_count: int | None = None
     recurrent_iteration_increment: int = 1
     recurrent_forward_calls_before_iteration_increment: int = 1
+    recurrent_smooth_iteration_growth_flag: bool = False
     recurrent_composition_option: type[RecurrentCompositionConfig] = (
         RecurrentLayerConfig
     )

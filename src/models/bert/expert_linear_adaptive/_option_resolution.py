@@ -866,6 +866,9 @@ def _recurrent_controller_options_from_kwargs(
         recurrent_forward_calls_before_iteration_increment=(
             config_module.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         ),
+        recurrent_smooth_iteration_growth_flag=(
+            config_module.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+        ),
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
         recurrent_residual_connection_option=(
             config_module.RECURRENT_RESIDUAL_CONNECTION_OPTION
@@ -892,6 +895,9 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_iteration_increment": "recurrent_iteration_increment",
             "recurrent_forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
+            ),
+            "recurrent_smooth_iteration_growth_flag": (
+                "recurrent_smooth_iteration_growth_flag"
             ),
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
             "recurrent_residual_connection_option": (

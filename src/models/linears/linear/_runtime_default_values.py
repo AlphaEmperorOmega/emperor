@@ -298,6 +298,7 @@ class RecurrenceValues:
     gradient_transition_count: int | None
     iteration_increment: int
     forward_calls_before_iteration_increment: int
+    smooth_iteration_growth_flag: bool
     layer_norm_position: LayerNormPositionOptions
     gate_activation: ActivationOptions | None
     halting_enabled: bool
@@ -331,6 +332,7 @@ class ControlDefaultValues:
     recurrent_gradient_transition_count: int | None
     recurrent_iteration_increment: int
     recurrent_forward_calls_before_iteration_increment: int
+    recurrent_smooth_iteration_growth_flag: bool
     recurrent_layer_norm_position: LayerNormPositionOptions
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
@@ -579,6 +581,9 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
         recurrent_forward_calls_before_iteration_increment=(
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
+        ),
+        recurrent_smooth_iteration_growth_flag=(
+            config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
         ),
         recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
         recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
@@ -966,6 +971,10 @@ def read_recurrence_values(reader: RuntimeOverrideReader) -> RecurrenceValues:
         forward_calls_before_iteration_increment=reader.integer(
             "recurrent_forward_calls_before_iteration_increment",
             defaults.recurrent_forward_calls_before_iteration_increment,
+        ),
+        smooth_iteration_growth_flag=reader.boolean(
+            "recurrent_smooth_iteration_growth_flag",
+            defaults.recurrent_smooth_iteration_growth_flag,
         ),
         layer_norm_position=reader.enum(
             "recurrent_layer_norm_position",

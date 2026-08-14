@@ -537,6 +537,9 @@ class ControlDefaultValues:
     recurrent_forward_calls_before_iteration_increment: int = (
         config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
     )
+    recurrent_smooth_iteration_growth_flag: bool = (
+        config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
+    )
     recurrent_layer_norm_position: LayerNormPositionOptions = (
         config.RECURRENT_LAYER_NORM_POSITION
     )
@@ -1325,6 +1328,9 @@ def _recurrent_defaults(
             recurrent_iteration_increment=values.recurrent_iteration_increment,
             recurrent_forward_calls_before_iteration_increment=(
                 values.recurrent_forward_calls_before_iteration_increment
+            ),
+            recurrent_smooth_iteration_growth_flag=(
+                values.recurrent_smooth_iteration_growth_flag
             ),
             recurrent_layer_norm_position=values.recurrent_layer_norm_position,
             recurrent_stack_gate_flag=values.recurrent_stack_gate_flag,

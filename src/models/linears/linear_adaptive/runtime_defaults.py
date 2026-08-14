@@ -471,6 +471,9 @@ def _resolve_control_defaults(
             forward_calls_before_iteration_increment=(
                 control.recurrent_forward_calls_before_iteration_increment
             ),
+            smooth_iteration_growth_flag=(
+                control.recurrent_smooth_iteration_growth_flag
+            ),
             layer_norm_position=control.recurrent_layer_norm_position,
             gate=GateOptions(
                 enabled=control.recurrent_stack_gate_flag,

@@ -758,6 +758,9 @@ def _modern_recurrent_controller_options(
             f"{flat_lead}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
             ),
+            f"{flat_lead}smooth_iteration_growth_flag": (
+                "recurrent_smooth_iteration_growth_flag"
+            ),
             f"{flat_lead}layer_norm_position": "recurrent_layer_norm_position",
             f"{flat_lead}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{flat_lead}gate_option": "recurrent_gate_option",
@@ -910,6 +913,7 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
         f"{prefix}_gradient_transition_count",
         f"{prefix}_iteration_increment",
         f"{prefix}_forward_calls_before_iteration_increment",
+        f"{prefix}_smooth_iteration_growth_flag",
         f"{prefix}_layer_norm_position",
         f"{prefix}_stack_gate_flag",
         f"{prefix}_gate_option",

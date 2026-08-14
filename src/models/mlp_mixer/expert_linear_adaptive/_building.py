@@ -840,6 +840,7 @@ def _configure_controls(
         forward_calls_before_iteration_increment=(
             recurrent.forward_calls_before_iteration_increment
         ),
+        smooth_iteration_growth_flag=recurrent.smooth_iteration_growth_flag,
         recurrent_layer_norm_position=recurrent.layer_norm_position,
         block_config=model_config,
         gate_config=_configured_gate(

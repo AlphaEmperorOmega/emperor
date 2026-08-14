@@ -28,6 +28,7 @@ ITERATION_SCHEDULE_CONTROL_KEYS = frozenset(
         "RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT",
     }
 )
+SMOOTH_ITERATION_GROWTH_CONTROL_KEY = "RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG"
 RECURRENT_MODEL_PACKAGES = frozenset(
     {
         "bert/expert_linear",
@@ -126,6 +127,35 @@ def _standard_recurrent_configs(value: object) -> Iterator[RecurrentLayerConfig]
     yield from visit(value)
 
 
+def _smooth_iteration_growth_values(value: object) -> Iterator[bool]:
+    seen: set[int] = set()
+
+    def visit(candidate: object) -> Iterator[bool]:
+        candidate_id = id(candidate)
+        if candidate_id in seen:
+            return
+        seen.add(candidate_id)
+
+        for field_name in (
+            "recurrent_smooth_iteration_growth_flag",
+            "smooth_iteration_growth_flag",
+        ):
+            if hasattr(candidate, field_name):
+                yield getattr(candidate, field_name)
+
+        if is_dataclass(candidate) and not isinstance(candidate, type):
+            for field in fields(candidate):
+                yield from visit(getattr(candidate, field.name))
+        elif isinstance(candidate, Mapping):
+            for item in candidate.values():
+                yield from visit(item)
+        elif isinstance(candidate, (list, tuple)):
+            for item in candidate:
+                yield from visit(item)
+
+    yield from visit(value)
+
+
 def _config_builder_type(catalog_key: str) -> type:
     module_name = f"models.{catalog_key.replace('/', '.')}.config_builder"
     module = import_module(module_name)
@@ -145,6 +175,62 @@ def _config_builder_type(catalog_key: str) -> type:
 
 
 class TestRecurrentRuntimeControlScope(unittest.TestCase):
+    def test_smooth_iteration_growth_has_an_explicit_package_scope(self) -> None:
+        supported_keys = {
+            package.catalog_key: frozenset(
+                runtime_defaults_spec(package).supported_keys
+            )
+            for package in discover_model_packages()
+        }
+
+        self.assertEqual(
+            {
+                catalog_key
+                for catalog_key, keys in supported_keys.items()
+                if SMOOTH_ITERATION_GROWTH_CONTROL_KEY in keys
+            },
+            RECURRENT_MODEL_PACKAGES,
+        )
+
+    def test_smooth_iteration_growth_binds_and_builds_every_recurrent_config(
+        self,
+    ) -> None:
+        overrides = {
+            "recurrent_flag": True,
+            "recurrent_max_steps": 3,
+            "recurrent_initial_iterations": 2,
+            "recurrent_gradient_transition_count": 2,
+            "recurrent_iteration_increment": 1,
+            "recurrent_forward_calls_before_iteration_increment": 4,
+            "recurrent_smooth_iteration_growth_flag": True,
+        }
+
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key):
+                runtime = package.bind_runtime_defaults(overrides)
+                smooth_runtime_values = set(_smooth_iteration_growth_values(runtime))
+                self.assertIn(True, smooth_runtime_values)
+
+                configuration = _config_builder_type(package.catalog_key)(
+                    runtime=runtime
+                ).build()
+                recurrent_configs = list(_standard_recurrent_configs(configuration))
+                self.assertTrue(recurrent_configs)
+                self.assertTrue(
+                    any(
+                        recurrent.max_steps == 3
+                        and recurrent.gradient_transition_count == 2
+                        and recurrent.initial_iterations == 2
+                        and recurrent.iteration_increment == 1
+                        and recurrent.forward_calls_before_iteration_increment == 4
+                        and recurrent.smooth_iteration_growth_flag is True
+                        for recurrent in recurrent_configs
+                    ),
+                    "top-level recurrent config did not receive smooth iteration growth",
+                )
+
     def test_iteration_schedule_controls_cover_every_recurrent_package(self) -> None:
         supported_keys = {
             package.catalog_key: frozenset(
