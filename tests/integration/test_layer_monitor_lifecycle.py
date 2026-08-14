@@ -388,7 +388,6 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         )
         initial_scale = model.recurrent.block_model.scale.detach().clone()
         original_forward = model.recurrent.forward
-        original_transition = model.recurrent._RecurrentLayer__run_standard_transition
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             tensorboard_logger = TensorBoardLogger(
@@ -458,12 +457,6 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(callback._delta_history, {})
         self.assertEqual(callback._latest_gate_logits, {})
         self.assertTrue(same_bound_method(model.recurrent.forward, original_forward))
-        self.assertTrue(
-            same_bound_method(
-                model.recurrent._RecurrentLayer__run_standard_transition,
-                original_transition,
-            )
-        )
 
     @pytest.mark.training
     def test_real_trainer_exception_restores_both_monitor_types(self) -> None:
@@ -498,9 +491,6 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         recurrent_model = RecurrentTrainingModule(fail_after_forward=True)
         recurrent_callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
         recurrent_forward = recurrent_model.recurrent.forward
-        recurrent_transition = (
-            recurrent_model.recurrent._RecurrentLayer__run_standard_transition
-        )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             fit_trainer = trainer(Path(temporary_directory), [recurrent_callback])
@@ -523,12 +513,6 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
             same_bound_method(
                 recurrent_model.recurrent.forward,
                 recurrent_forward,
-            )
-        )
-        self.assertTrue(
-            same_bound_method(
-                recurrent_model.recurrent._RecurrentLayer__run_standard_transition,
-                recurrent_transition,
             )
         )
 

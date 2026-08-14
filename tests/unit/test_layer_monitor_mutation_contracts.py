@@ -21,7 +21,6 @@ from emperor.layers import (
     RecurrentLayerMonitorCallback,
     ResidualConfig,
 )
-from emperor.layers._composition.recurrent.variants.standard import _RecurrentState
 from emperor.layers._monitoring.diagnostics import (
     _LayerActivationTrackingContext,
     _LayerDropoutTrackingContext,
@@ -627,25 +626,16 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
             torch.tanh(expected_candidate) * expected_candidate,
         )
 
-        observation = _RecurrentObservation()
-        callback._observations[id(recurrent)] = observation
-        recurrent_state = _RecurrentState(
-            hidden=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-            fixed_input=torch.zeros(2, 2),
-            loss=None,
-            context_state=LayerState(hidden=torch.zeros(2, 2)),
-        )
-        transition_output = recurrent._RecurrentLayer__run_standard_transition(
-            recurrent_state=recurrent_state,
-            transition_index=0,
-        )
-        expected_hidden = torch.tanh(recurrent_state.hidden) * recurrent_state.hidden
+        transition_input = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+        transition_output = recurrent(LayerState(hidden=transition_input))
+        observation = callback._observations[id(recurrent)]
+        expected_hidden = torch.tanh(transition_input) * transition_input
         torch.testing.assert_close(transition_output.hidden, expected_hidden)
-        expected_delta = (expected_hidden - recurrent_state.hidden).norm(dim=-1)
+        expected_delta = (expected_hidden - transition_input).norm(dim=-1)
         torch.testing.assert_close(observation.step_deltas[-1], expected_delta)
         torch.testing.assert_close(
             observation.gate_values[-1],
-            torch.tanh(recurrent_state.hidden).reshape(-1),
+            torch.tanh(transition_input).reshape(-1),
         )
         callback.on_fit_end(TrainerStub(), module)
 
@@ -709,18 +699,8 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
         mixed_module = CaptureLightningModule(recurrent=mixed_recurrent)
         mixed_callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
         mixed_callback.on_fit_start(TrainerStub(), mixed_module)
-        mixed_observation = _RecurrentObservation()
-        mixed_callback._observations[id(mixed_recurrent)] = mixed_observation
-        mixed_state = _RecurrentState(
-            hidden=torch.tensor([[2.0, 3.0]]),
-            fixed_input=torch.zeros(1, 2),
-            loss=None,
-            context_state=LayerState(hidden=torch.zeros(1, 2)),
-        )
-        mixed_recurrent._RecurrentLayer__run_standard_transition(
-            recurrent_state=mixed_state,
-            transition_index=0,
-        )
+        mixed_recurrent(LayerState(hidden=torch.tensor([[2.0, 3.0]])))
+        mixed_observation = mixed_callback._observations[id(mixed_recurrent)]
         self.assertEqual(len(mixed_observation.step_deltas), 1)
         mixed_callback.on_fit_end(TrainerStub(), mixed_module)
 

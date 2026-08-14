@@ -61,6 +61,16 @@ class AttentionResidualState(ResidualState):
             self._partial_block = None
             self._partial_count = 0
 
+    def fork(self) -> AttentionResidualState:
+        forked = AttentionResidualState(
+            self.initial_source,
+            block_size=self.block_size,
+        )
+        forked._completed_blocks = list(self._completed_blocks)
+        forked._partial_block = self._partial_block
+        forked._partial_count = self._partial_count
+        return forked
+
 
 class AttentionResidual(ResidualConnectionAbstract):
     """Learned softmax routing across raw residual-depth sources."""

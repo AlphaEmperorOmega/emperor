@@ -10,6 +10,10 @@ if TYPE_CHECKING:
     from torch import Tensor
     from torch.nn import Module
 
+    from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
+        RecurrentIterationScheduleSnapshot,
+    )
+
 
 @dataclass
 class _RecurrentObservation:
@@ -36,6 +40,7 @@ class _RecurrentTrackingContext:
     device: torch.device | str
     experiment: object | None
     global_step: int
+    schedule_snapshot: RecurrentIterationScheduleSnapshot | None = None
 
 
 @dataclass(frozen=True)

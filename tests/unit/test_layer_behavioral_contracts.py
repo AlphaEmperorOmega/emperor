@@ -644,7 +644,16 @@ class LayerBehavioralContractTests(unittest.TestCase):
             _RecurrentObservation(),
         )
 
-        self.assertEqual(module.logged_tags, ["recurrent/recurrent/actual_steps"])
+        self.assertEqual(
+            module.logged_tags,
+            [
+                "recurrent/recurrent/actual_steps",
+                "recurrent/recurrent/settled_steps",
+                "recurrent/recurrent/active_steps",
+                "recurrent/recurrent/depth_transition_active",
+                "recurrent/recurrent/depth_transition_weight",
+            ],
+        )
         torch.testing.assert_close(
             torch.as_tensor(module.logged_value("recurrent/recurrent/actual_steps")),
             torch.tensor(0.0),
@@ -774,7 +783,6 @@ class LayerBehavioralContractTests(unittest.TestCase):
         module = CaptureLightningModule(recurrent=recurrent)
         callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
         original_forward = recurrent.forward
-        original_transition = recurrent._RecurrentLayer__run_standard_transition
         callback.on_fit_start(TrainerStub(), module)
 
         callback.on_exception(
@@ -784,12 +792,6 @@ class LayerBehavioralContractTests(unittest.TestCase):
         )
 
         self.assertTrue(same_bound_method(recurrent.forward, original_forward))
-        self.assertTrue(
-            same_bound_method(
-                recurrent._RecurrentLayer__run_standard_transition,
-                original_transition,
-            )
-        )
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._wrapped_methods, [])
         self.assertEqual(callback._observations, {})

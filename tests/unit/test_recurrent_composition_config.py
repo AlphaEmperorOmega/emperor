@@ -1,4 +1,5 @@
 import importlib
+import inspect
 import unittest
 from dataclasses import fields
 from pathlib import Path
@@ -45,6 +46,190 @@ def _declared_protected_method_names(owner: type) -> set[str]:
 
 
 class TestRecurrentCompositionConfig(unittest.TestCase):
+    def test_recurrent_execution_interface_is_separate_from_implementation(
+        self,
+    ) -> None:
+        recurrent_root = (
+            Path(__file__).parents[2]
+            / "src"
+            / "emperor"
+            / "layers"
+            / "_composition"
+            / "recurrent"
+        )
+        execution_package_path = recurrent_root / "runtime" / "execution"
+        package_interface_path = execution_package_path / "__init__.py"
+        execution_path = execution_package_path / "executor.py"
+        interface_path = execution_package_path / "interface.py"
+
+        self.assertTrue(package_interface_path.is_file())
+        self.assertTrue(execution_path.is_file())
+        self.assertTrue(interface_path.is_file())
+        self.assertFalse((recurrent_root / "runtime" / "execution.py").exists())
+        self.assertFalse(
+            (recurrent_root / "runtime" / "execution_interface.py").exists()
+        )
+        execution_source = execution_path.read_text(encoding="utf-8")
+        interface_source = interface_path.read_text(encoding="utf-8")
+        base_source = (recurrent_root / "base.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("@dataclass", execution_source)
+        self.assertNotIn("Protocol", execution_source)
+
+        for declaration in (
+            "class PreparedRecurrentTransition",
+            "class RecurrentExecutionAdapter",
+            "class RecurrentExecutionResult",
+            "class RecurrentExecutionState",
+            "class RecurrentTransitionResult",
+            "class _RecurrentExecutionOwner",
+        ):
+            with self.subTest(declaration=declaration):
+                self.assertNotIn(declaration, execution_source)
+
+        for declaration in (
+            "class PreparedRecurrentTransition",
+            "class RecurrentExecutionAdapter",
+            "class RecurrentExecutionResult",
+            "class RecurrentExecutionState",
+        ):
+            with self.subTest(interface_declaration=declaration):
+                self.assertIn(declaration, interface_source)
+
+        self.assertNotIn("class _RecurrentExecutionOwner", interface_source)
+        self.assertNotIn("class RecurrentTransitionResult", interface_source)
+        self.assertIn("class RecurrentTransitionResult", base_source)
+        self.assertNotIn("class _RecurrentTransitionResult", base_source)
+
+        execution_package_module_name = (
+            "emperor.layers._composition.recurrent.runtime.execution"
+        )
+        execution_package = importlib.import_module(execution_package_module_name)
+        expected_execution_symbol_modules = {
+            "RecurrentExecution": (f"{execution_package_module_name}.executor"),
+            "PreparedRecurrentTransition": (
+                f"{execution_package_module_name}.interface"
+            ),
+            "RecurrentExecutionAdapter": (f"{execution_package_module_name}.interface"),
+            "RecurrentExecutionResult": (f"{execution_package_module_name}.interface"),
+            "RecurrentExecutionState": (f"{execution_package_module_name}.interface"),
+        }
+        self.assertEqual(
+            set(execution_package.__all__),
+            set(expected_execution_symbol_modules),
+        )
+        for (
+            symbol_name,
+            expected_module_name,
+        ) in expected_execution_symbol_modules.items():
+            with self.subTest(symbol_name=symbol_name):
+                symbol = getattr(execution_package, symbol_name)
+                self.assertEqual(symbol.__module__, expected_module_name)
+
+        recurrent_base_module_name = "emperor.layers._composition.recurrent.base"
+        recurrent_base_module = importlib.import_module(recurrent_base_module_name)
+        self.assertEqual(
+            recurrent_base_module.RecurrentTransitionResult.__module__,
+            recurrent_base_module_name,
+        )
+
+    def test_variant_classes_are_adapters_for_shared_recurrent_execution(
+        self,
+    ) -> None:
+        recurrent_variants = (
+            RecurrentLayer,
+            TinyRecursiveModelRecurrent,
+            HierarchicalReasoningModelRecurrent,
+        )
+        adapter_method_names = {
+            "_apply_recurrent_transition_result",
+            "_detach_recurrent_execution_state",
+            "_fork_recurrent_handoff_state",
+            "_initialize_recurrent_execution_state",
+            "_prepare_recurrent_transition",
+            "_recurrent_branch_loss",
+        }
+
+        recurrent_root = (
+            Path(__file__).parents[2]
+            / "src"
+            / "emperor"
+            / "layers"
+            / "_composition"
+            / "recurrent"
+        )
+        variant_specific_execution_files = [
+            path.name
+            for owner_directory in (
+                recurrent_root / "runtime",
+                recurrent_root / "variants",
+            )
+            for path in owner_directory.rglob("*_execution.py")
+        ]
+        self.assertEqual(variant_specific_execution_files, [])
+
+        execution_source = (
+            recurrent_root / "runtime" / "execution" / "executor.py"
+        ).read_text(encoding="utf-8")
+        interface_source = (
+            recurrent_root / "runtime" / "execution" / "interface.py"
+        ).read_text(encoding="utf-8")
+        shared_execution_source = "\n".join((execution_source, interface_source))
+        for variant_term in (
+            "StandardRecurrent",
+            "TinyRecursiveModel",
+            "HierarchicalReasoningModel",
+            "reinject_original_hidden_flag",
+            "latent_updates_per_answer_update",
+            "low_cycles",
+        ):
+            with self.subTest(variant_term=variant_term):
+                self.assertNotIn(variant_term, shared_execution_source)
+
+        for recurrent_variant in recurrent_variants:
+            with self.subTest(recurrent_variant=recurrent_variant.__name__):
+                recurrent_variant_source = inspect.getsource(recurrent_variant)
+                self.assertTrue(adapter_method_names <= vars(recurrent_variant).keys())
+                self.assertNotIn(
+                    "EXECUTION_ADAPTER",
+                    vars(recurrent_variant),
+                )
+                normalized_source = " ".join(recurrent_variant_source.split())
+                self.assertIn(
+                    "return self.__recurrent_execution.execute( self, state, "
+                    "self.recurrent_iteration_schedule, )",
+                    normalized_source,
+                )
+                self.assertLess(
+                    normalized_source.index("self.VALIDATOR.validate_state"),
+                    normalized_source.index("self.__recurrent_execution.execute"),
+                )
+                for delegated_lifecycle_statement in (
+                    "execution_plan()",
+                    "record_successful_forward()",
+                    "state.hidden =",
+                    "state.loss =",
+                ):
+                    with self.subTest(
+                        delegated_lifecycle_statement=delegated_lifecycle_statement,
+                    ):
+                        self.assertNotIn(
+                            delegated_lifecycle_statement,
+                            recurrent_variant_source,
+                        )
+
+        for shared_lifecycle_statement in (
+            "iteration_schedule.execution_plan()",
+            "layer_state.hidden = execution_result.hidden",
+            "layer_state.loss = execution_result.loss",
+            "iteration_schedule.record_successful_forward()",
+            "return layer_state",
+        ):
+            with self.subTest(
+                shared_lifecycle_statement=shared_lifecycle_statement,
+            ):
+                self.assertIn(shared_lifecycle_statement, execution_source)
+
     def test_halting_floor_policy_does_not_live_in_the_recurrent_package(self) -> None:
         recurrent_package = (
             Path(__file__).parents[2]
@@ -103,12 +288,23 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                     gradient_transition_count=3,
                     iteration_increment=4,
                     forward_calls_before_iteration_increment=5,
+                    smooth_iteration_growth_flag=True,
                 )
 
                 self.assertEqual(config.initial_iterations, 2)
                 self.assertEqual(config.gradient_transition_count, 3)
                 self.assertEqual(config.iteration_increment, 4)
                 self.assertEqual(config.forward_calls_before_iteration_increment, 5)
+                self.assertTrue(config.smooth_iteration_growth_flag)
+
+        self.assertIn(
+            "smooth_iteration_growth_flag",
+            RecurrentCompositionConfig.__annotations__,
+        )
+        self.assertNotIn(
+            "smooth_iteration_growth_flag",
+            RecurrentLayerConfig.__annotations__,
+        )
 
         self.assertIs(RecurrentLayerConfig().registry_owner(), RecurrentLayer)
 
@@ -227,10 +423,14 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 "_build_transition_model",
                 "_expand_recurrent_initial",
                 "_finalize_recurrent_halting",
+                "_blend_recurrent_branch_losses",
+                "_halting_usage_tracking_context",
                 "_new_recurrent_initial_buffer",
                 "_observe_recurrent_step",
                 "_recurrent_row_layout_for_transitions",
+                "_rollback_recurrent_runtime_state_on_failure",
                 "_run_recurrent_transition",
+                "_run_shared_handoff_boundary_transition",
                 "_set_recurrent_diagnostic_observer",
             },
             RecurrentCompositionConfig: {
@@ -248,9 +448,30 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             HierarchicalReasoningModelRecurrentValidator: set(),
             RecurrentIterationScheduleValidator: set(),
             RecurrentIterationSchedule: set(),
-            RecurrentLayer: set(),
-            TinyRecursiveModelRecurrent: set(),
-            HierarchicalReasoningModelRecurrent: set(),
+            RecurrentLayer: {
+                "_apply_recurrent_transition_result",
+                "_detach_recurrent_execution_state",
+                "_fork_recurrent_handoff_state",
+                "_initialize_recurrent_execution_state",
+                "_prepare_recurrent_transition",
+                "_recurrent_branch_loss",
+            },
+            TinyRecursiveModelRecurrent: {
+                "_apply_recurrent_transition_result",
+                "_detach_recurrent_execution_state",
+                "_fork_recurrent_handoff_state",
+                "_initialize_recurrent_execution_state",
+                "_prepare_recurrent_transition",
+                "_recurrent_branch_loss",
+            },
+            HierarchicalReasoningModelRecurrent: {
+                "_apply_recurrent_transition_result",
+                "_detach_recurrent_execution_state",
+                "_fork_recurrent_handoff_state",
+                "_initialize_recurrent_execution_state",
+                "_prepare_recurrent_transition",
+                "_recurrent_branch_loss",
+            },
         }
 
         for owner, expected_method_names in expected_protected_methods.items():
