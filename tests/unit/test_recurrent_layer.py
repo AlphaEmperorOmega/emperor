@@ -2993,30 +2993,22 @@ class TestRecurrentLayer(unittest.TestCase):
                     "execution_plan",
                     return_value=execution_plan,
                 ):
-                    smooth_output = smooth_model(
-                        LayerState(hidden=smooth_input)
-                    ).hidden
+                    smooth_output = smooth_model(LayerState(hidden=smooth_input)).hidden
 
-                source_parameter_gradient, source_input_gradient = (
-                    torch.autograd.grad(
-                        source_output.sum(),
-                        (source_model.block_model.model.scale, source_input),
-                        allow_unused=True,
-                    )
+                source_parameter_gradient, source_input_gradient = torch.autograd.grad(
+                    source_output.sum(),
+                    (source_model.block_model.model.scale, source_input),
+                    allow_unused=True,
                 )
-                target_parameter_gradient, target_input_gradient = (
-                    torch.autograd.grad(
-                        target_output.sum(),
-                        (target_model.block_model.model.scale, target_input),
-                        allow_unused=True,
-                    )
+                target_parameter_gradient, target_input_gradient = torch.autograd.grad(
+                    target_output.sum(),
+                    (target_model.block_model.model.scale, target_input),
+                    allow_unused=True,
                 )
-                smooth_parameter_gradient, smooth_input_gradient = (
-                    torch.autograd.grad(
-                        smooth_output.sum(),
-                        (smooth_model.block_model.model.scale, smooth_input),
-                        allow_unused=True,
-                    )
+                smooth_parameter_gradient, smooth_input_gradient = torch.autograd.grad(
+                    smooth_output.sum(),
+                    (smooth_model.block_model.model.scale, smooth_input),
+                    allow_unused=True,
                 )
 
                 torch.testing.assert_close(
