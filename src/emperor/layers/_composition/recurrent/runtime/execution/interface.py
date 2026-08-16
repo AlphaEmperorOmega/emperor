@@ -98,6 +98,7 @@ class RecurrentExecutionAdapter(Protocol[_StateT]):
         ],
         loss: Tensor | None = None,
         residual_state: ResidualState | None = None,
+        target_residual_state: ResidualState | None = None,
         residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
     ) -> tuple[_ProvisionalSourceBranchOutput, RecurrentTransitionResult]: ...

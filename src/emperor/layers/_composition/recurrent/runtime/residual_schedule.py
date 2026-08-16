@@ -38,6 +38,35 @@ class RecurrentResidualSchedule(nn.Module, ABC):
     ) -> ResidualState | None:
         return primary_connection.new_state(initial_source)
 
+    @staticmethod
+    def fork_state(residual_state: ResidualState | None) -> ResidualState | None:
+        """Fork state for an independently evolving recurrent branch."""
+        if residual_state is None:
+            return None
+        return residual_state.fork()
+
+    def advance_state(
+        self,
+        primary_connection: ResidualConnectionAbstract,
+        transition_index: int,
+        current: Tensor,
+        previous: Tensor,
+        *,
+        residual_state: ResidualState | None,
+        row_layout: RowLayout | None = None,
+    ) -> None:
+        """Replay a residual application to advance one forked recurrent branch."""
+        if residual_state is None:
+            return
+        self.apply(
+            primary_connection,
+            transition_index,
+            current,
+            previous,
+            residual_state=residual_state,
+            row_layout=row_layout,
+        )
+
     def apply(
         self,
         primary_connection: ResidualConnectionAbstract,

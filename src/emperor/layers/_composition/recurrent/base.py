@@ -63,6 +63,7 @@ class RecurrentTransitionResult:
 class _RecurrentTransitionCandidate:
     hidden: Tensor
     loss: Tensor | None
+    residual_input: Tensor
 
 
 _ProvisionalSourceBranchOutput = TypeVar("_ProvisionalSourceBranchOutput")
@@ -253,6 +254,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         ],
         loss: Tensor | None = None,
         residual_state: ResidualState | None = None,
+        target_residual_state: ResidualState | None = None,
         residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
     ) -> tuple[_ProvisionalSourceBranchOutput, RecurrentTransitionResult]:
@@ -267,6 +269,14 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             residual_schedule=residual_schedule,
             transition_index=transition_index,
         )
+        self.__advance_detached_target_residual_state(
+            transition_candidate.residual_input,
+            previous_evolving_hidden,
+            target_residual_state,
+            residual_schedule,
+            transition_index,
+            recurrent_state.row_layout,
+        )
         with self.__runtime_state_guard.isolate_provisional_branch(self):
             source_result = self.__apply_halting_and_observe_recurrent_transition(
                 recurrent_state,
@@ -278,13 +288,15 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             provisional_source_branch_output = run_provisional_source_branch(
                 source_result
             )
-        target_candidate = _RecurrentTransitionCandidate(
+        target_candidate = replace(
+            transition_candidate,
             hidden=transition_candidate.hidden.detach(),
             loss=(
                 None
                 if transition_candidate.loss is None
                 else transition_candidate.loss.detach()
             ),
+            residual_input=transition_candidate.residual_input.detach(),
         )
         target_result = self.__apply_halting_and_observe_recurrent_transition(
             recurrent_state,
@@ -331,6 +343,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             candidate_hidden,
             recurrent_state.row_layout,
         )
+        residual_input = candidate_hidden
         candidate_hidden = self.__maybe_apply_residual_connection(
             candidate_hidden,
             previous_evolving_hidden,
@@ -343,7 +356,34 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         return _RecurrentTransitionCandidate(
             hidden=candidate_hidden,
             loss=output_state.loss,
+            residual_input=residual_input,
         )
+
+    def __advance_detached_target_residual_state(
+        self,
+        residual_input: Tensor,
+        previous_evolving_hidden: Tensor,
+        target_residual_state: ResidualState | None,
+        residual_schedule: RecurrentResidualSchedule | None,
+        transition_index: int,
+        row_layout: RowLayout | None,
+    ) -> None:
+        if target_residual_state is None:
+            return
+        residual_connection = self.residual_connection
+        if residual_connection is None or residual_schedule is None:
+            raise RuntimeError(
+                "forward-local residual state requires a recurrent residual schedule."
+            )
+        with torch.no_grad():
+            residual_schedule.advance_state(
+                residual_connection,
+                transition_index,
+                residual_input.detach(),
+                previous_evolving_hidden.detach(),
+                residual_state=target_residual_state,
+                row_layout=row_layout,
+            )
 
     def __apply_halting_and_observe_recurrent_transition(
         self,

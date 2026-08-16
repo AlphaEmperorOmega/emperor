@@ -185,6 +185,11 @@ class EmperorSourceLayoutTests(unittest.TestCase):
 
     def test_residual_composition_does_not_own_recurrent_integration(self):
         residual_root = SOURCE_ROOT / "emperor" / "layers" / "_composition" / "residual"
+        recurrent_lifecycle_names = {
+            "advance_state",
+            "fork_at_gradient_boundary",
+            "fork_with_detached_generated_sources",
+        }
         violations = []
 
         for path in residual_root.rglob("*.py"):
@@ -217,7 +222,10 @@ class EmperorSourceLayoutTests(unittest.TestCase):
                     if isinstance(node, ast.Attribute)
                     else None
                 )
-                if identifier is not None and "recurrent" in identifier.lower():
+                if identifier is not None and (
+                    "recurrent" in identifier.lower()
+                    or identifier in recurrent_lifecycle_names
+                ):
                     violations.append((relative_path, node.lineno, identifier))
 
         self.assertFalse((residual_root / "recurrent.py").exists())

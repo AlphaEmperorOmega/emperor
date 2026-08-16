@@ -153,16 +153,17 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             all_items_halted=transition_result.all_items_halted,
         )
 
-    @staticmethod
     def _fork_recurrent_handoff_state(
+        self,
         recurrent_state: _StandardRecurrentState,
     ) -> _StandardRecurrentState:
+        residual_schedule = self.recurrent_residual_schedule
         residual_state = recurrent_state.residual_state
-        if residual_state is None:
+        if residual_schedule is None:
             return replace(recurrent_state)
         return replace(
             recurrent_state,
-            residual_state=residual_state.fork(),
+            residual_state=residual_schedule.fork_state(residual_state),
         )
 
     @staticmethod
