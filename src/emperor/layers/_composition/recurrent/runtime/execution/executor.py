@@ -204,11 +204,23 @@ class RecurrentExecution(Generic[_StateT]):
         )
         transition_index = source_boundary_state.transition_index
         source_tracks_gradients = source_plan.tracks_gradients(transition_index)
+        target_state = None
+        target_residual_state = None
         with source_plan.gradient_context(transition_index):
             prepared_transition = adapter._prepare_recurrent_transition(
                 source_boundary_state,
                 tracks_gradients=source_tracks_gradients,
             )
+            if prepared_transition.residual_state is not None:
+                target_state = adapter._fork_recurrent_handoff_state(
+                    source_boundary_state
+                )
+                with torch.no_grad():
+                    target_prepared_transition = adapter._prepare_recurrent_transition(
+                        target_state,
+                        tracks_gradients=False,
+                    )
+                target_residual_state = target_prepared_transition.residual_state
             provisional_source_continuation = partial(
                 self.__continue_and_finalize_provisional_source_branch,
                 adapter,
@@ -230,12 +242,14 @@ class RecurrentExecution(Generic[_StateT]):
                     run_provisional_source_branch=provisional_source_continuation,
                     loss=prepared_transition.loss,
                     residual_state=prepared_transition.residual_state,
+                    target_residual_state=target_residual_state,
                     residual_schedule=prepared_transition.residual_schedule,
                     transition_index=transition_index,
                 )
             )
 
-        target_state = adapter._fork_recurrent_handoff_state(source_boundary_state)
+        if target_state is None:
+            target_state = adapter._fork_recurrent_handoff_state(source_boundary_state)
         target_state = adapter._apply_recurrent_transition_result(
             target_state,
             target_transition_result,

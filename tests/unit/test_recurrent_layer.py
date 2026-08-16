@@ -69,6 +69,7 @@ from emperor.layers._composition.recurrent.validation import (
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
     ResidualRuntimeRequirement,
+    ResidualState,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
@@ -216,6 +217,28 @@ class TestRecurrentResidualScheduleValidatorAdapter(unittest.TestCase):
         ):
             DepthwiseRecurrentResidualSchedule(2, ())
 
+    def test_schedule_forks_state_without_a_gradient_lifecycle(self):
+        class ForkOnlyState(ResidualState):
+            def __init__(self, source):
+                self.source = source
+                self.branch_fork_count = 0
+
+            def fork(self):
+                self.branch_fork_count += 1
+                return type(self)(self.source)
+
+        schedule = SharedRecurrentResidualSchedule(1)
+        source = torch.tensor([[1.0, 2.0]], requires_grad=True)
+        state = ForkOnlyState(source)
+
+        forked_state = schedule.fork_state(state)
+
+        self.assertEqual(state.branch_fork_count, 1)
+        self.assertIsNot(forked_state, state)
+        self.assertIs(forked_state.source, source)
+        self.assertTrue(forked_state.source.requires_grad)
+        self.assertFalse(hasattr(schedule, "fork_state_at_gradient_boundary"))
+
 
 @dataclass
 class ConstantFeatureLastConfig(ConfigBase):
@@ -301,6 +324,39 @@ class TrainableScaleFeatureLastLayer(Module):
         output = X * self.scale
         self.outputs.append(output)
         return output
+
+
+@dataclass(frozen=True)
+class _ForwardGradientSnapshot:
+    output: torch.Tensor
+    input_gradient: torch.Tensor | None
+    parameter_gradients: dict[str, torch.Tensor | None]
+
+
+def _capture_forward_gradients(
+    model: RecurrentLayer,
+    input_values: torch.Tensor,
+) -> _ForwardGradientSnapshot:
+    model_input = input_values.detach().clone().requires_grad_()
+    output = model(LayerState(hidden=model_input)).hidden
+    named_parameters = tuple(model.named_parameters())
+    gradients = torch.autograd.grad(
+        output.sum(),
+        (model_input, *(parameter for _, parameter in named_parameters)),
+        allow_unused=True,
+    )
+    return _ForwardGradientSnapshot(
+        output=output.detach(),
+        input_gradient=(None if gradients[0] is None else gradients[0].detach()),
+        parameter_gradients={
+            name: None if gradient is None else gradient.detach()
+            for (name, _), gradient in zip(
+                named_parameters,
+                gradients[1:],
+                strict=True,
+            )
+        },
+    )
 
 
 @dataclass
@@ -3535,6 +3591,95 @@ class TestRecurrentLayer(unittest.TestCase):
         )
         self.assertEqual(smooth_model.block_model.model.call_count, 5)
 
+    def test_attention_residual_smooth_endpoint_matches_settled_target_gradients(
+        self,
+    ) -> None:
+        dim = 2
+
+        def build_model() -> RecurrentLayer:
+            return RecurrentLayer(
+                self.recurrent_config(
+                    dim=dim,
+                    max_steps=4,
+                    initial_iterations=2,
+                    gradient_transition_count=2,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                    block_config=self.trainable_scale_block_config(
+                        dim=dim,
+                        scale=1.2,
+                    ),
+                    residual_connection_option=AttentionResidualConfig,
+                )
+            ).eval()
+
+        for endpoint_progress, settled_progress in ((5, 6), (9, 10)):
+            with self.subTest(
+                endpoint_progress=endpoint_progress,
+                settled_progress=settled_progress,
+            ):
+                endpoint_model = build_model()
+                with torch.no_grad():
+                    for parameter_index, (parameter_name, parameter) in enumerate(
+                        endpoint_model.named_parameters(),
+                        start=1,
+                    ):
+                        if parameter_name.endswith("query"):
+                            parameter.copy_(
+                                torch.linspace(
+                                    0.1 * parameter_index,
+                                    -0.05 * parameter_index,
+                                    parameter.numel(),
+                                ).reshape_as(parameter)
+                            )
+                        elif parameter_name.endswith("key_norm.weight"):
+                            parameter.copy_(
+                                torch.linspace(
+                                    0.7 + 0.02 * parameter_index,
+                                    1.3 + 0.02 * parameter_index,
+                                    parameter.numel(),
+                                ).reshape_as(parameter)
+                            )
+                settled_model = build_model()
+                settled_model.load_state_dict(
+                    endpoint_model.state_dict(),
+                    strict=True,
+                )
+                endpoint_model.recurrent_iteration_schedule.forward_call_progress.fill_(
+                    endpoint_progress
+                )
+                settled_model.recurrent_iteration_schedule.forward_call_progress.fill_(
+                    settled_progress
+                )
+                input_values = torch.tensor([[1.0, 2.0]])
+
+                endpoint = _capture_forward_gradients(endpoint_model, input_values)
+                settled = _capture_forward_gradients(settled_model, input_values)
+
+                torch.testing.assert_close(endpoint.output, settled.output)
+                self.assertIsNotNone(endpoint.input_gradient)
+                self.assertIsNotNone(settled.input_gradient)
+                torch.testing.assert_close(
+                    endpoint.input_gradient,
+                    settled.input_gradient,
+                )
+                self.assertEqual(
+                    endpoint.parameter_gradients.keys(),
+                    settled.parameter_gradients.keys(),
+                )
+                for parameter_name in endpoint.parameter_gradients:
+                    endpoint_gradient = endpoint.parameter_gradients[parameter_name]
+                    settled_gradient = settled.parameter_gradients[parameter_name]
+                    with self.subTest(parameter_name=parameter_name):
+                        if endpoint_gradient is None or settled_gradient is None:
+                            self.assertIs(endpoint_gradient, settled_gradient)
+                        else:
+                            torch.testing.assert_close(
+                                endpoint_gradient,
+                                settled_gradient,
+                            )
+
     def test_smooth_growth_matches_each_attention_residual_router_gradient(self):
         dim = 2
 
@@ -3552,12 +3697,15 @@ class TestRecurrentLayer(unittest.TestCase):
                     iteration_increment=1,
                     forward_calls_before_iteration_increment=4,
                     smooth_iteration_growth_flag=smooth,
-                    block_config=self.layer_block_config(increment=1.0),
+                    block_config=self.trainable_scale_block_config(
+                        dim=dim,
+                        scale=1.2,
+                    ),
                     residual_connection_option=AttentionResidualConfig,
                 )
             ).eval()
 
-        smooth_model = build_model(3, smooth=True)
+        smooth_model = build_model(2, smooth=True)
         with torch.no_grad():
             for parameter_index, (parameter_name, parameter) in enumerate(
                 smooth_model.named_parameters(),
@@ -3565,55 +3713,45 @@ class TestRecurrentLayer(unittest.TestCase):
             ):
                 if parameter_name.endswith("query"):
                     parameter.fill_(0.1 * parameter_index)
-                else:
+                elif parameter_name.endswith("key_norm.weight"):
                     parameter.fill_(1.0 + 0.05 * parameter_index)
-        source_model = build_model(3, smooth=False)
-        target_model = build_model(4, smooth=False)
+        source_model = build_model(2, smooth=False)
+        target_model = build_model(3, smooth=False)
         source_model.load_state_dict(smooth_model.state_dict(), strict=True)
         target_model.load_state_dict(smooth_model.state_dict(), strict=True)
         smooth_model.recurrent_iteration_schedule.load_state_dict(
             {"forward_call_progress": torch.tensor(4, dtype=torch.long)},
             strict=True,
         )
-        source_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
-        target_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
-        smooth_input = torch.tensor([[1.0, 2.0]], requires_grad=True)
+        input_values = torch.tensor([[1.0, 2.0]])
 
-        source_output = source_model(LayerState(hidden=source_input)).hidden
-        target_output = target_model(LayerState(hidden=target_input)).hidden
-        smooth_output = smooth_model(LayerState(hidden=smooth_input)).hidden
-        source_parameters = dict(source_model.named_parameters())
-        target_parameters = dict(target_model.named_parameters())
-        smooth_parameters = dict(smooth_model.named_parameters())
-        parameter_names = tuple(smooth_parameters)
-        source_gradients = torch.autograd.grad(
-            source_output.sum(),
-            tuple(source_parameters[name] for name in parameter_names),
-            allow_unused=True,
-        )
-        target_gradients = torch.autograd.grad(
-            target_output.sum(),
-            tuple(target_parameters[name] for name in parameter_names),
-            allow_unused=True,
-        )
-        smooth_gradients = torch.autograd.grad(
-            smooth_output.sum(),
-            tuple(smooth_parameters[name] for name in parameter_names),
-            allow_unused=True,
-        )
+        source = _capture_forward_gradients(source_model, input_values)
+        target = _capture_forward_gradients(target_model, input_values)
+        smooth = _capture_forward_gradients(smooth_model, input_values)
 
         torch.testing.assert_close(
-            smooth_output,
-            0.5 * source_output + 0.5 * target_output,
+            smooth.output,
+            0.5 * source.output + 0.5 * target.output,
         )
-        for parameter_name, source_gradient, target_gradient, smooth_gradient in zip(
-            parameter_names,
-            source_gradients,
-            target_gradients,
-            smooth_gradients,
-            strict=True,
-        ):
+        self.assertIsNotNone(source.input_gradient)
+        self.assertIsNotNone(target.input_gradient)
+        self.assertIsNotNone(smooth.input_gradient)
+        torch.testing.assert_close(
+            smooth.input_gradient,
+            0.5 * source.input_gradient + 0.5 * target.input_gradient,
+        )
+        self.assertEqual(
+            smooth.parameter_gradients.keys(),
+            source.parameter_gradients.keys(),
+        )
+        self.assertEqual(
+            smooth.parameter_gradients.keys(),
+            target.parameter_gradients.keys(),
+        )
+        for parameter_name, smooth_gradient in smooth.parameter_gradients.items():
             with self.subTest(parameter_name=parameter_name):
+                source_gradient = source.parameter_gradients[parameter_name]
+                target_gradient = target.parameter_gradients[parameter_name]
                 expected_gradient = None
                 if source_gradient is not None:
                     expected_gradient = 0.5 * source_gradient
@@ -3633,12 +3771,12 @@ class TestRecurrentLayer(unittest.TestCase):
                     )
 
         provisional_router_name = (
-            "recurrent_residual_schedule.subsequent_connections.2.query"
+            "recurrent_residual_schedule.subsequent_connections.1.query"
         )
-        provisional_router_index = parameter_names.index(provisional_router_name)
-        self.assertIsNone(source_gradients[provisional_router_index])
-        self.assertIsNotNone(target_gradients[provisional_router_index])
-        self.assertTrue(target_gradients[provisional_router_index].ne(0).any())
+        self.assertIsNone(source.parameter_gradients[provisional_router_name])
+        target_router_gradient = target.parameter_gradients[provisional_router_name]
+        self.assertIsNotNone(target_router_gradient)
+        self.assertTrue(target_router_gradient.ne(0).any())
 
     def test_smooth_growth_shares_adaptive_boundary_and_commits_target_progress(
         self,
