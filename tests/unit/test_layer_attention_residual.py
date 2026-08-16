@@ -38,12 +38,27 @@ def _apply_attention_residual(residual, current, state):
 
 
 class TestAttentionResidual(unittest.TestCase):
-    def test_residual_state_requires_an_explicit_branch_fork_contract(self):
+    def test_residual_state_requires_only_an_explicit_branch_fork_contract(self):
         class MissingForkResidualState(ResidualState):
             pass
 
         with self.assertRaisesRegex(TypeError, "abstract method 'fork'"):
             MissingForkResidualState()
+
+        class ForkOnlyResidualState(ResidualState):
+            def fork(self):
+                return self
+
+        state = ForkOnlyResidualState()
+        self.assertIs(state.fork(), state)
+        self.assertFalse(hasattr(state, "fork_at_gradient_boundary"))
+        self.assertFalse(hasattr(state, "fork_with_detached_generated_sources"))
+
+    def test_attention_state_exposes_no_recurrent_gradient_lifecycle(self):
+        state = AttentionResidualState(torch.zeros(1, 2), block_size=1)
+
+        self.assertFalse(hasattr(state, "fork_at_gradient_boundary"))
+        self.assertFalse(hasattr(state, "fork_with_detached_generated_sources"))
 
     def test_full_state_keeps_initial_and_raw_sources_separate(self):
         initial_source = torch.tensor([[1.0, 2.0]])
