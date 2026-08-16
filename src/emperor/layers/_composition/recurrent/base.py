@@ -370,11 +370,12 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     ) -> None:
         if target_residual_state is None:
             return
-        residual_connection = self.residual_connection
-        if residual_connection is None or residual_schedule is None:
-            raise RuntimeError(
-                "forward-local residual state requires a recurrent residual schedule."
+        residual_connection, residual_schedule = (
+            self.VALIDATOR.validate_forward_local_residual_runtime(
+                self.residual_connection,
+                residual_schedule,
             )
+        )
         with torch.no_grad():
             residual_schedule.advance_state(
                 residual_connection,

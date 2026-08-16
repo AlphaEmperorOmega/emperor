@@ -43,6 +43,7 @@ if TYPE_CHECKING:
         DepthwiseRecurrentResidualSchedule,
         RecurrentResidualSchedule,
     )
+    from emperor.layers._composition.residual.base import ResidualConnectionAbstract
 
 
 class RecurrentResidualScheduleValidator(ValidatorBase):
@@ -384,6 +385,17 @@ def _validate_recurrent_controller_config(
 
 
 class _RecurrentCompositionValidator(ValidatorBase):
+    @staticmethod
+    def validate_forward_local_residual_runtime(
+        residual_connection: ResidualConnectionAbstract | None,
+        residual_schedule: RecurrentResidualSchedule | None,
+    ) -> tuple[ResidualConnectionAbstract, RecurrentResidualSchedule]:
+        if residual_connection is None or residual_schedule is None:
+            raise RuntimeError(
+                "forward-local residual state requires a recurrent residual schedule."
+            )
+        return residual_connection, residual_schedule
+
     @staticmethod
     def validate_halting_output(
         output_hidden: Tensor,
