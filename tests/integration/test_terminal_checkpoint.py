@@ -17,10 +17,13 @@ from lightning.pytorch.callbacks import Callback, ModelCheckpoint, Timer
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from emperor.layers._composition.recurrent.config import RecurrentLayerConfig
-from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
-    RecurrentIterationSchedule,
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    RecurrentLayerConfig,
 )
+from emperor.linears import LinearLayerConfig
 from model_runtime.runs import (
     FilesystemRunArtifacts,
     RunRequest,
@@ -85,14 +88,32 @@ class _FullStateModule(LightningModule):
     def __init__(self) -> None:
         super().__init__()
         self.linear = nn.Linear(2, 1)
-        self.recurrent_iteration_schedule = RecurrentIterationSchedule(
-            RecurrentLayerConfig(
-                max_steps=100,
-                initial_iterations=1,
-                iteration_increment=1,
-                forward_calls_before_iteration_increment=1,
-            )
-        )
+        recurrent_layer = RecurrentLayerConfig(
+            input_dim=2,
+            output_dim=2,
+            max_steps=100,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=LayerConfig(
+                input_dim=2,
+                output_dim=2,
+                activation=ActivationOptions.DISABLED,
+                residual_config=None,
+                dropout_probability=0.0,
+                layer_norm_position=LayerNormPositionOptions.DISABLED,
+                gate_config=None,
+                halting_config=None,
+                memory_config=None,
+                layer_model_config=LinearLayerConfig(
+                    input_dim=2,
+                    output_dim=2,
+                    bias_flag=False,
+                ),
+            ),
+        ).build()
+        self.recurrent_iteration_schedule = recurrent_layer.recurrent_iteration_schedule
 
     def training_step(self, batch, batch_index):
         self.recurrent_iteration_schedule.record_successful_forward()
