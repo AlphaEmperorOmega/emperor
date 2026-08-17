@@ -29,6 +29,7 @@ ITERATION_SCHEDULE_CONTROL_KEYS = frozenset(
     }
 )
 SMOOTH_ITERATION_GROWTH_CONTROL_KEY = "RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG"
+NO_GRADIENT_TRANSITION_COUNT_CONTROL_KEY = "RECURRENT_NO_GRADIENT_TRANSITION_COUNT"
 RECURRENT_MODEL_PACKAGES = frozenset(
     {
         "bert/expert_linear",
@@ -156,6 +157,35 @@ def _smooth_iteration_growth_values(value: object) -> Iterator[bool]:
     yield from visit(value)
 
 
+def _no_gradient_transition_count_values(value: object) -> Iterator[int | None]:
+    seen: set[int] = set()
+
+    def visit(candidate: object) -> Iterator[int | None]:
+        candidate_id = id(candidate)
+        if candidate_id in seen:
+            return
+        seen.add(candidate_id)
+
+        for field_name in (
+            "recurrent_no_gradient_transition_count",
+            "no_gradient_transition_count",
+        ):
+            if hasattr(candidate, field_name):
+                yield getattr(candidate, field_name)
+
+        if is_dataclass(candidate) and not isinstance(candidate, type):
+            for field in fields(candidate):
+                yield from visit(getattr(candidate, field.name))
+        elif isinstance(candidate, Mapping):
+            for item in candidate.values():
+                yield from visit(item)
+        elif isinstance(candidate, (list, tuple)):
+            for item in candidate:
+                yield from visit(item)
+
+    yield from visit(value)
+
+
 def _config_builder_type(catalog_key: str) -> type:
     module_name = f"models.{catalog_key.replace('/', '.')}.config_builder"
     module = import_module(module_name)
@@ -175,6 +205,145 @@ def _config_builder_type(catalog_key: str) -> type:
 
 
 class TestRecurrentRuntimeControlScope(unittest.TestCase):
+    def test_no_gradient_transition_count_has_an_explicit_package_scope(self) -> None:
+        supported_keys = {
+            package.catalog_key: frozenset(
+                runtime_defaults_spec(package).supported_keys
+            )
+            for package in discover_model_packages()
+        }
+
+        self.assertEqual(
+            {
+                catalog_key
+                for catalog_key, keys in supported_keys.items()
+                if NO_GRADIENT_TRANSITION_COUNT_CONTROL_KEY in keys
+            },
+            RECURRENT_MODEL_PACKAGES,
+        )
+
+    def test_full_gradient_smooth_growth_binds_and_builds_every_package(
+        self,
+    ) -> None:
+        overrides = {
+            "recurrent_flag": True,
+            "recurrent_max_steps": 3,
+            "recurrent_initial_iterations": 2,
+            "recurrent_no_gradient_transition_count": 0,
+            "recurrent_gradient_transition_count": None,
+            "recurrent_iteration_increment": 1,
+            "recurrent_forward_calls_before_iteration_increment": 4,
+            "recurrent_smooth_iteration_growth_flag": True,
+        }
+
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key):
+                runtime = package.bind_runtime_defaults(overrides)
+                self.assertIn(
+                    0,
+                    set(_no_gradient_transition_count_values(runtime)),
+                )
+
+                configuration = _config_builder_type(package.catalog_key)(
+                    runtime=runtime
+                ).build()
+                recurrent_configs = list(_standard_recurrent_configs(configuration))
+                self.assertTrue(recurrent_configs)
+                matching_configs = [
+                    recurrent
+                    for recurrent in recurrent_configs
+                    if recurrent.max_steps == 3
+                    and recurrent.initial_iterations == 2
+                    and recurrent.no_gradient_transition_count == 0
+                    and recurrent.gradient_transition_count is None
+                    and recurrent.iteration_increment == 1
+                    and recurrent.forward_calls_before_iteration_increment == 4
+                    and recurrent.smooth_iteration_growth_flag is True
+                ]
+                self.assertTrue(
+                    matching_configs,
+                    "top-level recurrent config did not receive the explicit "
+                    "full-gradient smooth-growth window",
+                )
+                for recurrent in matching_configs:
+                    recurrent_dimension = (
+                        recurrent.input_dim
+                        or getattr(recurrent.block_config, "input_dim", None)
+                        or 4
+                    )
+                    recurrent_model = recurrent.build(
+                        overrides=type(recurrent)(
+                            input_dim=recurrent_dimension,
+                            output_dim=recurrent_dimension,
+                        )
+                    )
+                    schedule = recurrent_model.recurrent_iteration_schedule
+                    schedule.forward_call_progress.fill_(4)
+                    self.assertEqual(
+                        type(schedule.execution_plan()).__name__,
+                        "RecurrentNestedSmoothHandoffExecutionPlan",
+                    )
+
+    def test_no_gradient_transition_count_preserves_none_and_rejects_bool(
+        self,
+    ) -> None:
+        for package in discover_model_packages():
+            if package.catalog_key not in RECURRENT_MODEL_PACKAGES:
+                continue
+            with self.subTest(catalog_key=package.catalog_key, value=None):
+                runtime = package.bind_runtime_defaults(
+                    {"recurrent_no_gradient_transition_count": None}
+                )
+                values = list(_no_gradient_transition_count_values(runtime))
+                self.assertTrue(values)
+                self.assertTrue(all(value is None for value in values))
+            with self.subTest(catalog_key=package.catalog_key, value=True):
+                with self.assertRaisesRegex(
+                    TypeError,
+                    "recurrent_no_gradient_transition_count",
+                ):
+                    package.bind_runtime_defaults(
+                        {"recurrent_no_gradient_transition_count": True}
+                    )
+
+    def test_no_gradient_transition_count_rejects_negative_package_config(
+        self,
+    ) -> None:
+        overrides = {
+            "recurrent_flag": True,
+            "recurrent_max_steps": 3,
+            "recurrent_initial_iterations": 2,
+            "recurrent_no_gradient_transition_count": -1,
+            "recurrent_gradient_transition_count": None,
+            "recurrent_iteration_increment": 1,
+            "recurrent_forward_calls_before_iteration_increment": 1,
+            "recurrent_smooth_iteration_growth_flag": False,
+        }
+
+        package = next(
+            package
+            for package in discover_model_packages()
+            if package.catalog_key == "gpt/linear"
+        )
+        runtime = package.bind_runtime_defaults(overrides)
+        configuration = _config_builder_type(package.catalog_key)(
+            runtime=runtime
+        ).build()
+        matching_configs = [
+            recurrent
+            for recurrent in _standard_recurrent_configs(configuration)
+            if recurrent.no_gradient_transition_count == -1
+        ]
+        self.assertTrue(matching_configs)
+        for recurrent in matching_configs:
+            with self.assertRaisesRegex(
+                ValueError,
+                "no_gradient_transition_count",
+            ):
+                recurrent.build()
+
     def test_smooth_iteration_growth_has_an_explicit_package_scope(self) -> None:
         supported_keys = {
             package.catalog_key: frozenset(

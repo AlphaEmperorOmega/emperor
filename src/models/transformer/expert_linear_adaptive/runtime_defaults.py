@@ -757,6 +757,7 @@ def runtime_from_config() -> RuntimeOptions:
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
         recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
         recurrent_gradient_transition_count=config.RECURRENT_GRADIENT_TRANSITION_COUNT,
+        recurrent_no_gradient_transition_count=config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT,
         recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
         recurrent_forward_calls_before_iteration_increment=(
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT

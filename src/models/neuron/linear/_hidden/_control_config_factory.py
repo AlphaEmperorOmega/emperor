@@ -56,6 +56,7 @@ class ControlConfigFactory:
         return RecurrentLayerConfig(
             max_steps=options.max_steps,
             gradient_transition_count=options.gradient_transition_count,
+            no_gradient_transition_count=options.no_gradient_transition_count,
             initial_iterations=options.initial_iterations,
             iteration_increment=options.iteration_increment,
             forward_calls_before_iteration_increment=options.forward_calls_before_iteration_increment,

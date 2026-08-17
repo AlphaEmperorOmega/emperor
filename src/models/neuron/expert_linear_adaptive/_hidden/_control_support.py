@@ -255,6 +255,9 @@ class ExpertsRecurrentConfigFactory:
             gradient_transition_count=(
                 self.recurrent_controller_options.recurrent_gradient_transition_count
             ),
+            no_gradient_transition_count=(
+                self.recurrent_controller_options.recurrent_no_gradient_transition_count
+            ),
             initial_iterations=self.recurrent_controller_options.recurrent_initial_iterations,
             iteration_increment=self.recurrent_controller_options.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(

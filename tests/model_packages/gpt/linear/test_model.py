@@ -102,6 +102,55 @@ class TestGptLinearModel(unittest.TestCase):
             **overrides,
         )
 
+    def test_explicit_zero_prefix_selects_full_gradient_smooth_handoff(self):
+        package = model_package("gpt/linear")
+        parser = get_experiment_parser(package)
+        args = parser.parse_args(
+            [
+                "--preset",
+                "baseline",
+                "--recurrent-flag",
+                "true",
+                "--recurrent-max-steps",
+                "10",
+                "--recurrent-initial-iterations",
+                "2",
+                "--recurrent-no-gradient-transition-count",
+                "0",
+                "--recurrent-iteration-increment",
+                "1",
+                "--recurrent-forward-calls-before-iteration-increment",
+                "20000",
+                "--recurrent-smooth-iteration-growth-flag",
+                "true",
+            ]
+        )
+        selection = resolve_cli_selection(args, package, ExperimentPreset)
+        self.assertEqual(
+            selection.config_overrides["recurrent_no_gradient_transition_count"],
+            0,
+        )
+        runtime = package.bind_runtime_defaults(
+            {
+                "input_dim": 16,
+                "output_dim": 16,
+                "sequence_length": 6,
+                **selection.config_overrides,
+            }
+        )
+        model_config = GptLinearConfigBuilder(runtime=runtime).build()
+        recurrent_config = model_config.experiment_config.decoder_config
+        self.assertIsInstance(recurrent_config, RecurrentLayerConfig)
+        recurrent_model = recurrent_config.build()
+        schedule = recurrent_model.recurrent_iteration_schedule
+        schedule.forward_call_progress.fill_(20_000)
+
+        self.assertEqual(recurrent_config.no_gradient_transition_count, 0)
+        self.assertEqual(
+            type(schedule.execution_plan()).__name__,
+            "RecurrentNestedSmoothHandoffExecutionPlan",
+        )
+
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
         self.assertIsNotNone(Experiment)

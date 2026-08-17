@@ -121,6 +121,7 @@ class RecurrentOptions:
     enabled: bool
     max_steps: int
     gradient_transition_count: int | None
+    no_gradient_transition_count: int | None
     initial_iterations: int
     iteration_increment: int
     forward_calls_before_iteration_increment: int
@@ -189,6 +190,7 @@ def main_control_options(runtime: RuntimeOptions) -> ControlOptions:
             enabled=runtime.recurrent_flag,
             max_steps=runtime.recurrent_max_steps,
             gradient_transition_count=runtime.recurrent_gradient_transition_count,
+            no_gradient_transition_count=runtime.recurrent_no_gradient_transition_count,
             initial_iterations=runtime.recurrent_initial_iterations,
             iteration_increment=runtime.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(
@@ -342,6 +344,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             enabled=runtime.token_mixer_recurrent_flag,
             max_steps=runtime.token_mixer_recurrent_max_steps,
             gradient_transition_count=None,
+            no_gradient_transition_count=None,
             initial_iterations=runtime.token_mixer_recurrent_max_steps,
             iteration_increment=runtime.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(
@@ -530,6 +533,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             enabled=runtime.channel_mixer_recurrent_flag,
             max_steps=runtime.channel_mixer_recurrent_max_steps,
             gradient_transition_count=None,
+            no_gradient_transition_count=None,
             initial_iterations=runtime.channel_mixer_recurrent_max_steps,
             iteration_increment=runtime.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(

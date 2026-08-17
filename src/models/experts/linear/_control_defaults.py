@@ -75,6 +75,9 @@ def main_control_defaults(config: ModuleType) -> ControlDefaults:
             recurrent_gradient_transition_count=(
                 config.RECURRENT_GRADIENT_TRANSITION_COUNT
             ),
+            recurrent_no_gradient_transition_count=(
+                config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
+            ),
             recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
             recurrent_forward_calls_before_iteration_increment=(
                 config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
@@ -133,6 +136,7 @@ def expert_control_defaults(config: ModuleType) -> ControlDefaults:
             recurrent_max_steps=config.EXPERT_RECURRENT_MAX_STEPS,
             recurrent_initial_iterations=2,
             recurrent_gradient_transition_count=None,
+            recurrent_no_gradient_transition_count=None,
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_smooth_iteration_growth_flag=False,
@@ -409,6 +413,7 @@ def _recurrent_options(
     recurrent_max_steps: int,
     recurrent_initial_iterations: int,
     recurrent_gradient_transition_count: int | None,
+    recurrent_no_gradient_transition_count: int | None,
     recurrent_iteration_increment: int,
     recurrent_forward_calls_before_iteration_increment: int,
     recurrent_smooth_iteration_growth_flag: bool,
@@ -429,6 +434,7 @@ def _recurrent_options(
         recurrent_max_steps=recurrent_max_steps,
         recurrent_initial_iterations=recurrent_initial_iterations,
         recurrent_gradient_transition_count=recurrent_gradient_transition_count,
+        recurrent_no_gradient_transition_count=recurrent_no_gradient_transition_count,
         recurrent_iteration_increment=recurrent_iteration_increment,
         recurrent_forward_calls_before_iteration_increment=(
             recurrent_forward_calls_before_iteration_increment

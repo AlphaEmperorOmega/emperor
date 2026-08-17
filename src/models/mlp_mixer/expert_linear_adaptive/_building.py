@@ -835,6 +835,7 @@ def _configure_controls(
         output_dim=model_dim,
         max_steps=recurrent.max_steps,
         gradient_transition_count=recurrent.gradient_transition_count,
+        no_gradient_transition_count=recurrent.no_gradient_transition_count,
         initial_iterations=recurrent.initial_iterations,
         iteration_increment=recurrent.iteration_increment,
         forward_calls_before_iteration_increment=(

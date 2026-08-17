@@ -785,6 +785,17 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 "changing capacity, regularization, or runtime limits. Use None to "
                 "inherit the builder default when inheritance is supported.",
             ),
+            (
+                "RECURRENT_NO_GRADIENT_TRANSITION_COUNT",
+                "Recurrent Layer Options",
+                "int",
+                True,
+                None,
+                "Sets how many initial recurrent transitions run without gradients. "
+                "Explicit zero keeps every executed transition in one autograd "
+                "chain and, with smooth growth and no gradient suffix, selects the "
+                "nested handoff.",
+            ),
         )
 
         for key, section, kind, nullable, default, expected in cases:

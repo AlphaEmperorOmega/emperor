@@ -27,6 +27,21 @@ EXPLICIT_FIELD_DESCRIPTIONS = {
         "Defines the number of output logits produced by the model. For "
         "classification runs this should match the selected dataset class count."
     ),
+    "RECURRENT_GRADIENT_TRANSITION_COUNT": (
+        "Sets how many final active recurrent transitions track gradients. Earlier "
+        "transitions run without gradients. A positive value with smooth growth "
+        "selects the legacy source/target branch handoff."
+    ),
+    "RECURRENT_NO_GRADIENT_TRANSITION_COUNT": (
+        "Sets how many initial recurrent transitions run without gradients. "
+        "Explicit zero keeps every executed transition in one autograd chain and, "
+        "with smooth growth and no gradient suffix, selects the nested handoff."
+    ),
+    "RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG": (
+        "Controls adjacent-depth interpolation while recurrent depth grows. A "
+        "positive gradient suffix uses the legacy branch handoff; explicit zero for "
+        "the no-gradient prefix uses the full-gradient nested handoff."
+    ),
     "RUN_TEST_AFTER_FIT": (
         "Controls whether the trainer runs the test loop after fitting finishes. "
         "Disable this for quick smoke tests when you only need to verify training "

@@ -533,6 +533,9 @@ class ControlDefaultValues:
     recurrent_gradient_transition_count: int | None = (
         config.RECURRENT_GRADIENT_TRANSITION_COUNT
     )
+    recurrent_no_gradient_transition_count: int | None = (
+        config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
+    )
     recurrent_iteration_increment: int = config.RECURRENT_ITERATION_INCREMENT
     recurrent_forward_calls_before_iteration_increment: int = (
         config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
@@ -1325,6 +1328,7 @@ def _recurrent_defaults(
             recurrent_max_steps=values.recurrent_max_steps,
             recurrent_initial_iterations=values.recurrent_initial_iterations,
             recurrent_gradient_transition_count=values.recurrent_gradient_transition_count,
+            recurrent_no_gradient_transition_count=values.recurrent_no_gradient_transition_count,
             recurrent_iteration_increment=values.recurrent_iteration_increment,
             recurrent_forward_calls_before_iteration_increment=(
                 values.recurrent_forward_calls_before_iteration_increment
