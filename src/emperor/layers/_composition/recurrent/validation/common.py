@@ -248,21 +248,28 @@ def _validate_smooth_iteration_growth_controls(
         return
 
     gradient_count = config.gradient_transition_count
-    if gradient_count is None:
+    no_gradient_count = config.no_gradient_transition_count
+    if gradient_count is None and no_gradient_count is None:
         raise ValueError(
-            "smooth iteration growth requires gradient_transition_count to be "
-            "configured explicitly."
+            "smooth iteration growth requires either gradient_transition_count or "
+            "explicit no_gradient_transition_count=0."
         )
-    _validate_positive_integer("gradient_transition_count", gradient_count)
-    initial_iterations = config.initial_iterations
-    _validate_positive_integer("initial_iterations", initial_iterations)
-    minimum_transition_count = initial_iterations * transitions_per_iteration
-    if gradient_count > minimum_transition_count:
+    if gradient_count is not None:
+        _validate_positive_integer("gradient_transition_count", gradient_count)
+        initial_iterations = config.initial_iterations
+        _validate_positive_integer("initial_iterations", initial_iterations)
+        minimum_transition_count = initial_iterations * transitions_per_iteration
+        if gradient_count > minimum_transition_count:
+            raise ValueError(
+                "gradient_transition_count must be less than or equal to the "
+                f"minimum active transition count of {minimum_transition_count}."
+            )
+    elif no_gradient_count != 0:
         raise ValueError(
-            "gradient_transition_count must be less than or equal to the "
-            f"minimum active transition count of {minimum_transition_count}."
+            "smooth iteration growth only supports "
+            "no_gradient_transition_count equal to 0."
         )
-    if config.no_gradient_transition_count is not None:
+    if gradient_count is not None and no_gradient_count is not None:
         raise ValueError(
             "gradient_transition_count and no_gradient_transition_count are "
             "mutually exclusive."

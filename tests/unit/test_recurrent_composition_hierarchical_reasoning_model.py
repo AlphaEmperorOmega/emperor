@@ -754,6 +754,110 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             0.5 * source_input.grad + 0.5 * target_input.grad,
         )
 
+    def test_full_gradient_smooth_growth_extends_one_high_cycle_chain(self) -> None:
+        smooth = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=1,
+            output_dim=1,
+            high_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=10.0,
+                auxiliary_loss=2.0,
+            ),
+            low_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+                auxiliary_loss=1.0,
+            ),
+            high_cycles=2,
+            low_cycles=2,
+            initial_iterations=1,
+            no_gradient_transition_count=0,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            initialization_standard_deviation=0.0,
+        ).build()
+        smooth.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+        smooth_input = torch.ones(1, 1, requires_grad=True)
+        incoming_loss = torch.tensor(3.0, requires_grad=True)
+
+        result = smooth(LayerState(hidden=smooth_input, loss=incoming_loss))
+        input_gradient, low_gradient, high_gradient = torch.autograd.grad(
+            result.hidden.sum(),
+            (smooth_input, smooth.low_model.scale, smooth.high_model.scale),
+        )
+
+        oracle_input = torch.ones(1, 1, requires_grad=True)
+        oracle_low_scale = smooth.low_model.scale.detach().clone().requires_grad_()
+        oracle_high_scale = smooth.high_model.scale.detach().clone().requires_grad_()
+        high = torch.zeros_like(oracle_input)
+        low = torch.zeros_like(oracle_input)
+        source_high = high
+        for transition_index in range(6):
+            if transition_index % 3 == 2:
+                high = (high + low) * oracle_high_scale + 10.0
+                if transition_index == 2:
+                    source_high = high
+            else:
+                low = (low + high + oracle_input) * oracle_low_scale + 1.0
+        oracle_output = 0.5 * source_high + 0.5 * high
+        oracle_input_gradient, oracle_low_gradient, oracle_high_gradient = (
+            torch.autograd.grad(
+                oracle_output.sum(),
+                (oracle_input, oracle_low_scale, oracle_high_scale),
+            )
+        )
+
+        torch.testing.assert_close(result.hidden, oracle_output)
+        torch.testing.assert_close(result.loss, torch.tensor(9.0))
+        torch.testing.assert_close(input_gradient, oracle_input_gradient)
+        torch.testing.assert_close(low_gradient, oracle_low_gradient)
+        torch.testing.assert_close(high_gradient, oracle_high_gradient)
+        self.assertEqual(len(smooth.low_model.inputs), 4)
+        self.assertEqual(len(smooth.high_model.inputs), 2)
+        self.assertEqual(smooth.low_model.grad_modes, [True] * 4)
+        self.assertEqual(smooth.high_model.grad_modes, [True] * 2)
+        recurrent_loss_gradient = torch.autograd.grad(result.loss, incoming_loss)[0]
+        torch.testing.assert_close(recurrent_loss_gradient, torch.tensor(1.0))
+
+    def test_full_gradient_smooth_growth_halts_at_the_source_high_cycle(
+        self,
+    ) -> None:
+        config = HierarchicalReasoningModelRecurrentConfig(
+            input_dim=1,
+            output_dim=1,
+            high_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=10.0,
+            ),
+            low_block_config=_IncrementBlockConfig(
+                input_dim=1,
+                output_dim=1,
+                increment=1.0,
+            ),
+            high_cycles=2,
+            low_cycles=2,
+            initial_iterations=1,
+            no_gradient_transition_count=0,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            initialization_standard_deviation=0.0,
+            halting_config=_RecordingHaltingConfig(halt_after_updates=1),
+        )
+        runtime = config.build()
+        runtime.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+
+        runtime(LayerState(hidden=torch.ones(1, 1)))
+
+        self.assertEqual(len(runtime.low_model.inputs), 2)
+        self.assertEqual(len(runtime.high_model.inputs), 1)
+        self.assertEqual(len(runtime.halting_model.update_inputs), 1)
+        self.assertEqual(runtime.halting_model.finalize_calls, 1)
+
     def test_smooth_checkpoint_restores_the_exact_next_high_cycle(self) -> None:
         config = self._smooth_oracle_config(
             high_cycles=2,

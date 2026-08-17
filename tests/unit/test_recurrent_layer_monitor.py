@@ -423,6 +423,43 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
         )
         callback.on_fit_end(TrainerStub(), module)
 
+    def test_full_gradient_smooth_handoff_reports_each_nested_transition_once(
+        self,
+    ) -> None:
+        recurrent = RecurrentLayerConfig(
+            input_dim=4,
+            output_dim=4,
+            max_steps=3,
+            initial_iterations=2,
+            no_gradient_transition_count=0,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+            recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+            block_config=IncrementBlockConfig(
+                input_dim=4,
+                output_dim=4,
+                increment=0.25,
+            ),
+        ).build()
+        recurrent.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+        module = CaptureLightningModule(recurrent=recurrent)
+        callback = RecurrentLayerMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(TrainerStub(), module)
+
+        recurrent(self.state())
+
+        observation = callback._observations[id(recurrent)]
+        self.assertEqual(recurrent.block_model.call_count, 3)
+        self.assertEqual(len(observation.step_deltas), 3)
+        torch.testing.assert_close(
+            torch.as_tensor(
+                module.logged_value("recurrent/recurrent/depth_transition_weight")
+            ),
+            torch.tensor(0.5),
+        )
+        callback.on_fit_end(TrainerStub(), module)
+
     def test_smooth_handoff_gate_metrics_exclude_the_provisional_source_suffix(
         self,
     ) -> None:

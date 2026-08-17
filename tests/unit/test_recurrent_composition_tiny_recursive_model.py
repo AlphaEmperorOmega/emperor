@@ -676,6 +676,75 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
             [False, True, True, False, False, True, True],
         )
 
+    def test_full_gradient_smooth_growth_extends_one_answer_cycle_chain(self) -> None:
+        smooth = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=2,
+            increment=1.0,
+            auxiliary_loss=0.5,
+            no_gradient_transition_count=0,
+            initial_iterations=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        ).build()
+        smooth.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+        smooth_input = torch.ones(1, 1, requires_grad=True)
+        incoming_loss = torch.tensor(3.0, requires_grad=True)
+
+        result = smooth(LayerState(hidden=smooth_input, loss=incoming_loss))
+        input_gradient, scale_gradient = torch.autograd.grad(
+            result.hidden.sum(),
+            (smooth_input, smooth.block_model.scale),
+        )
+
+        oracle_input = torch.ones(1, 1, requires_grad=True)
+        oracle_scale = smooth.block_model.scale.detach().clone().requires_grad_()
+        answer = torch.zeros_like(oracle_input)
+        latent = torch.zeros_like(oracle_input)
+        source_answer = answer
+        for transition_index in range(6):
+            if transition_index % 3 == 2:
+                answer = (answer + latent) * oracle_scale + 1.0
+                if transition_index == 2:
+                    source_answer = answer
+            else:
+                latent = (latent + answer + oracle_input) * oracle_scale + 1.0
+        oracle_output = 0.5 * source_answer + 0.5 * answer
+        oracle_input_gradient, oracle_scale_gradient = torch.autograd.grad(
+            oracle_output.sum(),
+            (oracle_input, oracle_scale),
+        )
+
+        torch.testing.assert_close(result.hidden, oracle_output)
+        torch.testing.assert_close(result.loss, torch.tensor(5.25))
+        torch.testing.assert_close(input_gradient, oracle_input_gradient)
+        torch.testing.assert_close(scale_gradient, oracle_scale_gradient)
+        self.assertEqual(len(smooth.block_model.inputs), 6)
+        self.assertEqual(smooth.block_model.grad_modes, [True] * 6)
+        recurrent_loss_gradient = torch.autograd.grad(result.loss, incoming_loss)[0]
+        torch.testing.assert_close(recurrent_loss_gradient, torch.tensor(1.0))
+
+    def test_full_gradient_smooth_growth_halts_at_the_source_answer_cycle(
+        self,
+    ) -> None:
+        config = _config(
+            latent_updates_per_answer_update=2,
+            answer_update_count=2,
+            no_gradient_transition_count=0,
+            initial_iterations=1,
+            forward_calls_before_iteration_increment=4,
+            smooth_iteration_growth_flag=True,
+        )
+        config.halting_config = _RecordingHaltingConfig(halt_after_updates=1)
+        runtime = config.build()
+        runtime.recurrent_iteration_schedule.forward_call_progress.fill_(4)
+
+        runtime(LayerState(hidden=torch.ones(1, 1)))
+
+        self.assertEqual(len(runtime.block_model.inputs), 3)
+        self.assertEqual(len(runtime.halting_model.update_inputs), 1)
+        self.assertEqual(runtime.halting_model.finalize_calls, 1)
+
     def test_smooth_checkpoint_restores_the_exact_next_answer_cycle(self) -> None:
         config = _config(
             latent_updates_per_answer_update=2,
