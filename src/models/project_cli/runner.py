@@ -26,7 +26,7 @@ def run_tests(argv: Sequence[str], *, repository_root: Path | None = None) -> in
     environment = {
         **os.environ,
         "PYTHONSAFEPATH": "1",
-        "PYTHONPATH": str(test_root),
+        "PYTHONPATH": os.pathsep.join((str(root), str(test_root))),
     }
     arguments = list(argv)
     if arguments:
