@@ -388,6 +388,7 @@ def _controlled_stack(
         output_dim=runtime.model_dim,
         max_steps=options.recurrent_max_steps,
         gradient_transition_count=options.recurrent_gradient_transition_count,
+        no_gradient_transition_count=options.recurrent_no_gradient_transition_count,
         initial_iterations=options.recurrent_initial_iterations,
         iteration_increment=options.recurrent_iteration_increment,
         forward_calls_before_iteration_increment=(

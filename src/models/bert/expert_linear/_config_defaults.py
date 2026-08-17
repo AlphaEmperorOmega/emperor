@@ -663,6 +663,9 @@ def linears_recurrent_controller_options(
         recurrent_max_steps = config.RECURRENT_MAX_STEPS
         recurrent_initial_iterations = config.RECURRENT_INITIAL_ITERATIONS
         recurrent_gradient_transition_count = config.RECURRENT_GRADIENT_TRANSITION_COUNT
+        recurrent_no_gradient_transition_count = (
+            config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
+        )
         recurrent_iteration_increment = config.RECURRENT_ITERATION_INCREMENT
         recurrent_forward_calls_before_iteration_increment = (
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
@@ -686,6 +689,7 @@ def linears_recurrent_controller_options(
         recurrent_max_steps = config.ATTN_RECURRENT_MAX_STEPS
         recurrent_initial_iterations = 2
         recurrent_gradient_transition_count = None
+        recurrent_no_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
         recurrent_smooth_iteration_growth_flag = False
@@ -705,6 +709,7 @@ def linears_recurrent_controller_options(
         recurrent_max_steps = config.FF_RECURRENT_MAX_STEPS
         recurrent_initial_iterations = 2
         recurrent_gradient_transition_count = None
+        recurrent_no_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
         recurrent_smooth_iteration_growth_flag = False
@@ -725,6 +730,7 @@ def linears_recurrent_controller_options(
         recurrent_max_steps=recurrent_max_steps,
         recurrent_initial_iterations=recurrent_initial_iterations,
         recurrent_gradient_transition_count=recurrent_gradient_transition_count,
+        recurrent_no_gradient_transition_count=recurrent_no_gradient_transition_count,
         recurrent_iteration_increment=recurrent_iteration_increment,
         recurrent_forward_calls_before_iteration_increment=(
             recurrent_forward_calls_before_iteration_increment
@@ -1190,6 +1196,9 @@ def experts_recurrent_controller_options(
         recurrent_max_steps = config.RECURRENT_MAX_STEPS
         recurrent_initial_iterations = config.RECURRENT_INITIAL_ITERATIONS
         recurrent_gradient_transition_count = config.RECURRENT_GRADIENT_TRANSITION_COUNT
+        recurrent_no_gradient_transition_count = (
+            config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
+        )
         recurrent_iteration_increment = config.RECURRENT_ITERATION_INCREMENT
         recurrent_forward_calls_before_iteration_increment = (
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
@@ -1210,6 +1219,7 @@ def experts_recurrent_controller_options(
         recurrent_max_steps = config.EXPERT_RECURRENT_MAX_STEPS
         recurrent_initial_iterations = 2
         recurrent_gradient_transition_count = None
+        recurrent_no_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
         recurrent_layer_norm_position = config.EXPERT_RECURRENT_LAYER_NORM_POSITION
@@ -1228,6 +1238,7 @@ def experts_recurrent_controller_options(
         recurrent_max_steps = config.ROUTER_RECURRENT_MAX_STEPS
         recurrent_initial_iterations = 2
         recurrent_gradient_transition_count = None
+        recurrent_no_gradient_transition_count = None
         recurrent_iteration_increment = 1
         recurrent_forward_calls_before_iteration_increment = 1
         recurrent_layer_norm_position = config.ROUTER_RECURRENT_LAYER_NORM_POSITION
@@ -1247,6 +1258,7 @@ def experts_recurrent_controller_options(
         recurrent_max_steps=recurrent_max_steps,
         recurrent_initial_iterations=recurrent_initial_iterations,
         recurrent_gradient_transition_count=recurrent_gradient_transition_count,
+        recurrent_no_gradient_transition_count=recurrent_no_gradient_transition_count,
         recurrent_iteration_increment=recurrent_iteration_increment,
         recurrent_forward_calls_before_iteration_increment=(
             recurrent_forward_calls_before_iteration_increment

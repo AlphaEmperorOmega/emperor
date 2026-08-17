@@ -55,6 +55,7 @@ class TransformerStackOptions:
     recurrent_max_steps: int = 2
     recurrent_initial_iterations: int = 2
     recurrent_gradient_transition_count: int | None = None
+    recurrent_no_gradient_transition_count: int | None = None
     recurrent_iteration_increment: int = 1
     recurrent_forward_calls_before_iteration_increment: int = 1
     recurrent_smooth_iteration_growth_flag: bool = False

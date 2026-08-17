@@ -296,6 +296,7 @@ class RecurrenceValues:
     enabled: bool
     initial_iterations: int | None
     gradient_transition_count: int | None
+    no_gradient_transition_count: int | None
     iteration_increment: int
     forward_calls_before_iteration_increment: int
     smooth_iteration_growth_flag: bool
@@ -330,6 +331,7 @@ class ControlDefaultValues:
     recurrent_max_steps: int
     recurrent_initial_iterations: int | None
     recurrent_gradient_transition_count: int | None
+    recurrent_no_gradient_transition_count: int | None
     recurrent_iteration_increment: int
     recurrent_forward_calls_before_iteration_increment: int
     recurrent_smooth_iteration_growth_flag: bool
@@ -577,6 +579,9 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
         recurrent_gradient_transition_count=(
             config.RECURRENT_GRADIENT_TRANSITION_COUNT
+        ),
+        recurrent_no_gradient_transition_count=(
+            config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT
         ),
         recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
         recurrent_forward_calls_before_iteration_increment=(
@@ -964,6 +969,10 @@ def read_recurrence_values(reader: RuntimeOverrideReader) -> RecurrenceValues:
         gradient_transition_count=reader.optional_integer(
             "recurrent_gradient_transition_count",
             defaults.recurrent_gradient_transition_count,
+        ),
+        no_gradient_transition_count=reader.optional_integer(
+            "recurrent_no_gradient_transition_count",
+            defaults.recurrent_no_gradient_transition_count,
         ),
         iteration_increment=reader.integer(
             "recurrent_iteration_increment", defaults.recurrent_iteration_increment

@@ -370,6 +370,7 @@ def _recurrence_options(
         max_steps=max_steps,
         initial_iterations=cast(int, values.initial_iterations),
         gradient_transition_count=values.gradient_transition_count,
+        no_gradient_transition_count=values.no_gradient_transition_count,
         iteration_increment=values.iteration_increment,
         forward_calls_before_iteration_increment=(
             values.forward_calls_before_iteration_increment

@@ -23,7 +23,9 @@ class RecurrentCompositionConfig(ConfigBase):
     output_dim: int | None = optional_field("Output feature dimension.")
     no_gradient_transition_count: int | None = optional_field(
         "Optional number of initial transition invocations executed without "
-        "gradient tracking. Every subsequently executed transition uses gradients."
+        "gradient tracking. Every subsequently executed transition uses gradients. "
+        "With smooth iteration growth, explicit zero and an omitted gradient suffix "
+        "select the single-chain full-gradient adjacent-depth handoff."
     )
     gradient_transition_count: int | None = optional_field(
         "Number of final active recurrent transitions in each forward call that "
@@ -49,7 +51,9 @@ class RecurrentCompositionConfig(ConfigBase):
     smooth_iteration_growth_flag: bool | None = optional_field(
         "Linearly hand off each one-iteration loop-length increase during the "
         "first half of its successful-forward interval. False or None preserves "
-        "hard iteration growth."
+        "hard iteration growth. A positive gradient suffix uses the legacy branch "
+        "handoff; an explicit zero no-gradient prefix uses the nested all-gradient "
+        "handoff."
     )
     recurrent_layer_norm_position: LayerNormPositionOptions | None = optional_field(
         "Where layer normalization is applied within each recurrent transition. "

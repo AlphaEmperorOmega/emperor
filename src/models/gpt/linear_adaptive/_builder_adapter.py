@@ -586,6 +586,7 @@ def _recurrent_controller_keys(
             f"{flat_prefix}_max_steps",
             f"{flat_prefix}_initial_iterations",
             f"{flat_prefix}_gradient_transition_count",
+            f"{flat_prefix}_no_gradient_transition_count",
             f"{flat_prefix}_iteration_increment",
             f"{flat_prefix}_forward_calls_before_iteration_increment",
             f"{flat_prefix}_smooth_iteration_growth_flag",
@@ -1521,6 +1522,7 @@ def _recurrent_controller_options_from_kwargs(
             f"{prefix}max_steps": "recurrent_max_steps",
             f"{prefix}initial_iterations": "recurrent_initial_iterations",
             f"{prefix}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{prefix}no_gradient_transition_count": "recurrent_no_gradient_transition_count",
             f"{prefix}iteration_increment": "recurrent_iteration_increment",
             f"{prefix}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
