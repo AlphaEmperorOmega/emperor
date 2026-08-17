@@ -11,6 +11,7 @@ from emperor.layers._composition.recurrent.config import (
 )
 from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentIterationSchedule,
+    RecurrentNestedSmoothHandoffExecutionPlan,
     RecurrentSmoothHandoffExecutionPlan,
 )
 from emperor.layers._composition.recurrent.validation.iteration_schedule import (
@@ -296,6 +297,100 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
                 )
                 self.assertEqual(execution_plan.transition_weight, 0.5)
 
+    def test_full_gradient_smooth_execution_plan_uses_one_nested_chain(self) -> None:
+        cases = (
+            (
+                RecurrentLayerConfig(
+                    max_steps=3,
+                    initial_iterations=2,
+                    no_gradient_transition_count=0,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (2, 3),
+            ),
+            (
+                TinyRecursiveModelRecurrentConfig(
+                    latent_updates_per_answer_update=2,
+                    answer_update_count=2,
+                    initial_iterations=1,
+                    no_gradient_transition_count=0,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (3, 6),
+            ),
+            (
+                HierarchicalReasoningModelRecurrentConfig(
+                    high_cycles=2,
+                    low_cycles=2,
+                    initial_iterations=1,
+                    no_gradient_transition_count=0,
+                    iteration_increment=1,
+                    forward_calls_before_iteration_increment=4,
+                    smooth_iteration_growth_flag=True,
+                ),
+                (3, 6),
+            ),
+        )
+
+        for config, expected_transition_counts in cases:
+            with self.subTest(config_type=type(config).__name__):
+                schedule = RecurrentIterationSchedule(config)
+                for _ in range(4):
+                    schedule.record_successful_forward()
+
+                execution_plan = schedule.execution_plan()
+
+                self.assertIsInstance(
+                    execution_plan,
+                    RecurrentNestedSmoothHandoffExecutionPlan,
+                )
+                self.assertNotIsInstance(
+                    execution_plan,
+                    RecurrentSmoothHandoffExecutionPlan,
+                )
+                self.assertEqual(
+                    (
+                        execution_plan.source_branch.transition_count,
+                        execution_plan.target_branch.transition_count,
+                    ),
+                    expected_transition_counts,
+                )
+                self.assertEqual(
+                    execution_plan.source_branch.no_gradient_transition_count,
+                    0,
+                )
+                self.assertEqual(
+                    execution_plan.target_branch.no_gradient_transition_count,
+                    0,
+                )
+                self.assertEqual(execution_plan.transition_weight, 0.5)
+
+    def test_explicit_zero_prefix_keeps_the_stable_execution_plan(self) -> None:
+        schedule = _standard_schedule(
+            no_gradient_transition_count=0,
+            gradient_transition_count=None,
+            smooth_iteration_growth_flag=False,
+        )
+
+        execution_plan = schedule.execution_plan()
+
+        self.assertNotIsInstance(
+            execution_plan,
+            RecurrentNestedSmoothHandoffExecutionPlan,
+        )
+        self.assertNotIsInstance(
+            execution_plan,
+            RecurrentSmoothHandoffExecutionPlan,
+        )
+        self.assertEqual(
+            execution_plan.target_branch.no_gradient_transition_count,
+            0,
+        )
+
     def test_smooth_schedule_constructor_rejects_an_odd_handoff_cadence(self):
         with self.assertRaisesRegex(
             ValueError,
@@ -313,7 +408,8 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
         invalid_cases = (
             (
                 {"gradient_transition_count": None},
-                "requires gradient_transition_count",
+                "requires either gradient_transition_count or explicit "
+                "no_gradient_transition_count=0",
             ),
             (
                 {"iteration_increment": 2},
@@ -322,6 +418,13 @@ class TestRecurrentIterationSchedule(unittest.TestCase):
             (
                 {"no_gradient_transition_count": 0},
                 "mutually exclusive",
+            ),
+            (
+                {
+                    "gradient_transition_count": None,
+                    "no_gradient_transition_count": 1,
+                },
+                "only supports no_gradient_transition_count equal to 0",
             ),
         )
 
