@@ -467,6 +467,7 @@ def _resolve_control_defaults(
             max_steps=control.recurrent_max_steps,
             initial_iterations=control.recurrent_initial_iterations,
             gradient_transition_count=control.recurrent_gradient_transition_count,
+            no_gradient_transition_count=control.recurrent_no_gradient_transition_count,
             iteration_increment=control.recurrent_iteration_increment,
             forward_calls_before_iteration_increment=(
                 control.recurrent_forward_calls_before_iteration_increment

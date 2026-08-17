@@ -87,6 +87,29 @@ class TestGptExpertLinearModel(unittest.TestCase):
         )
         return GptExpertLinearConfigBuilder(runtime=runtime).build()
 
+    def test_explicit_zero_prefix_selects_full_gradient_smooth_handoff(self):
+        model_config = self.config(
+            recurrent_flag=True,
+            recurrent_max_steps=10,
+            recurrent_initial_iterations=2,
+            recurrent_no_gradient_transition_count=0,
+            recurrent_gradient_transition_count=None,
+            recurrent_iteration_increment=1,
+            recurrent_forward_calls_before_iteration_increment=20_000,
+            recurrent_smooth_iteration_growth_flag=True,
+        )
+        recurrent_config = model_config.experiment_config.decoder_config
+        self.assertIsInstance(recurrent_config, RecurrentLayerConfig)
+        recurrent_model = recurrent_config.build()
+        schedule = recurrent_model.recurrent_iteration_schedule
+        schedule.forward_call_progress.fill_(20_000)
+
+        self.assertEqual(recurrent_config.no_gradient_transition_count, 0)
+        self.assertEqual(
+            type(schedule.execution_plan()).__name__,
+            "RecurrentNestedSmoothHandoffExecutionPlan",
+        )
+
     def test_public_imports_and_catalog_identity(self):
         self.assertTrue(issubclass(Model, LanguageModelExperiment))
         self.assertIsNotNone(Experiment)

@@ -483,6 +483,7 @@ def _recurrent_options(
             f"{recurrent_flat}max_steps": "recurrent_max_steps",
             f"{recurrent_flat}initial_iterations": "recurrent_initial_iterations",
             f"{recurrent_flat}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{recurrent_flat}no_gradient_transition_count": "recurrent_no_gradient_transition_count",
             f"{recurrent_flat}iteration_increment": "recurrent_iteration_increment",
             f"{recurrent_flat}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"

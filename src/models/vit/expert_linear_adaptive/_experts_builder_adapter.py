@@ -218,6 +218,7 @@ def _recurrent_controller_options_from_kwargs(
             "recurrent_max_steps": "recurrent_max_steps",
             "recurrent_initial_iterations": "recurrent_initial_iterations",
             "recurrent_gradient_transition_count": "recurrent_gradient_transition_count",
+            "recurrent_no_gradient_transition_count": "recurrent_no_gradient_transition_count",
             "recurrent_iteration_increment": "recurrent_iteration_increment",
             "recurrent_forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"

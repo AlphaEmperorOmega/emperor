@@ -409,6 +409,7 @@ class ControlValues:
     recurrent_max_steps: int
     recurrent_initial_iterations: int
     recurrent_gradient_transition_count: int | None
+    recurrent_no_gradient_transition_count: int | None
     recurrent_iteration_increment: int
     recurrent_forward_calls_before_iteration_increment: int
     recurrent_smooth_iteration_growth_flag: bool
@@ -443,6 +444,7 @@ class ControlFields:
     recurrent_max_steps: RuntimeField[int]
     recurrent_initial_iterations: RuntimeField[int]
     recurrent_gradient_transition_count: RuntimeField[int | None]
+    recurrent_no_gradient_transition_count: RuntimeField[int | None]
     recurrent_iteration_increment: RuntimeField[int]
     recurrent_forward_calls_before_iteration_increment: RuntimeField[int]
     recurrent_smooth_iteration_growth_flag: RuntimeField[bool]
@@ -1267,6 +1269,10 @@ _CONTROL_FIELDS = ControlFields(
         "recurrent_gradient_transition_count",
         config.RECURRENT_GRADIENT_TRANSITION_COUNT,
     ),
+    recurrent_no_gradient_transition_count=_optional_integer_field(
+        "recurrent_no_gradient_transition_count",
+        config.RECURRENT_NO_GRADIENT_TRANSITION_COUNT,
+    ),
     recurrent_iteration_increment=_integer_field(
         "recurrent_iteration_increment", config.RECURRENT_ITERATION_INCREMENT
     ),
@@ -1632,6 +1638,9 @@ def _read_control(reader: RuntimeOverrideReader) -> ControlValues:
         recurrent_initial_iterations=reader.read(fields.recurrent_initial_iterations),
         recurrent_gradient_transition_count=reader.read(
             fields.recurrent_gradient_transition_count
+        ),
+        recurrent_no_gradient_transition_count=reader.read(
+            fields.recurrent_no_gradient_transition_count
         ),
         recurrent_iteration_increment=reader.read(fields.recurrent_iteration_increment),
         recurrent_forward_calls_before_iteration_increment=reader.read(

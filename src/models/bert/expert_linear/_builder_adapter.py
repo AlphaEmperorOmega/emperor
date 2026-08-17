@@ -754,6 +754,7 @@ def _modern_recurrent_controller_options(
             f"{flat_lead}max_steps": "recurrent_max_steps",
             f"{flat_lead}initial_iterations": "recurrent_initial_iterations",
             f"{flat_lead}gradient_transition_count": "recurrent_gradient_transition_count",
+            f"{flat_lead}no_gradient_transition_count": "recurrent_no_gradient_transition_count",
             f"{flat_lead}iteration_increment": "recurrent_iteration_increment",
             f"{flat_lead}forward_calls_before_iteration_increment": (
                 "recurrent_forward_calls_before_iteration_increment"
@@ -911,6 +912,7 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
         f"{prefix}_max_steps",
         f"{prefix}_initial_iterations",
         f"{prefix}_gradient_transition_count",
+        f"{prefix}_no_gradient_transition_count",
         f"{prefix}_iteration_increment",
         f"{prefix}_forward_calls_before_iteration_increment",
         f"{prefix}_smooth_iteration_growth_flag",
