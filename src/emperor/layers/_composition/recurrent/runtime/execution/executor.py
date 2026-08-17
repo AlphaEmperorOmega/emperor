@@ -21,6 +21,7 @@ from emperor.layers._composition.recurrent.runtime.iteration_schedule import (
     RecurrentBranchExecutionPlan,
     RecurrentIterationExecutionPlan,
     RecurrentIterationSchedule,
+    RecurrentNestedSmoothHandoffExecutionPlan,
     RecurrentSmoothHandoffExecutionPlan,
 )
 from emperor.layers._composition.recurrent.validation import (
@@ -46,6 +47,13 @@ class RecurrentExecution(Generic[_StateT]):
     ) -> LayerState:
         self.VALIDATOR.validate_adapter_is_module(adapter)
         execution_plan = iteration_schedule.execution_plan()
+        if isinstance(execution_plan, RecurrentNestedSmoothHandoffExecutionPlan):
+            return self.__execute_nested_smooth_depth_handoff(
+                adapter,
+                layer_state,
+                iteration_schedule,
+                execution_plan,
+            )
         if isinstance(execution_plan, RecurrentSmoothHandoffExecutionPlan):
             return self.__execute_smooth_depth_handoff(
                 adapter,
@@ -62,6 +70,107 @@ class RecurrentExecution(Generic[_StateT]):
             layer_state,
             iteration_schedule,
             execution_result,
+        )
+
+    def __execute_nested_smooth_depth_handoff(
+        self,
+        adapter: RecurrentExecutionAdapter[_StateT],
+        layer_state: LayerState,
+        iteration_schedule: RecurrentIterationSchedule,
+        execution_plan: RecurrentNestedSmoothHandoffExecutionPlan,
+    ) -> LayerState:
+        original_hidden = layer_state.hidden
+        original_loss = layer_state.loss
+        try:
+            with self.__runtime_state_guard.rollback_handoff_on_failure(adapter):
+                execution_result = self.__execute_committed_nested_smooth_depth_handoff(
+                    adapter,
+                    layer_state,
+                    execution_plan,
+                )
+                return self.__commit_execution_result(
+                    layer_state,
+                    iteration_schedule,
+                    execution_result,
+                )
+        except BaseException:
+            layer_state.hidden = original_hidden
+            layer_state.loss = original_loss
+            raise
+
+    def __execute_committed_nested_smooth_depth_handoff(
+        self,
+        adapter: RecurrentExecutionAdapter[_StateT],
+        layer_state: LayerState,
+        execution_plan: RecurrentNestedSmoothHandoffExecutionPlan,
+    ) -> RecurrentExecutionResult:
+        recurrent_state = adapter._initialize_recurrent_execution_state(
+            layer_state,
+            branch_base_loss=None,
+        )
+        recurrent_state = self.__run_branch_suffix(
+            adapter,
+            recurrent_state,
+            execution_plan.source_branch,
+            observe_transitions=True,
+        )
+        source_result = self.__finalize_branch(adapter, recurrent_state)
+        if recurrent_state.all_items_halted:
+            return self.__accumulate_caller_loss_once(
+                adapter,
+                layer_state.loss,
+                source_result,
+            )
+
+        transition_index_before_target = recurrent_state.transition_index
+        recurrent_state = self.__run_branch_suffix(
+            adapter,
+            recurrent_state,
+            execution_plan.target_branch,
+            observe_transitions=True,
+        )
+        if recurrent_state.transition_index == transition_index_before_target:
+            return self.__accumulate_caller_loss_once(
+                adapter,
+                layer_state.loss,
+                source_result,
+            )
+
+        target_result = self.__finalize_branch(adapter, recurrent_state)
+        transition_weight = execution_plan.transition_weight
+        blended_result = RecurrentExecutionResult(
+            hidden=self.__blend_recurrent_branch_hidden(
+                source_result.hidden,
+                target_result.hidden,
+                transition_weight,
+            ),
+            loss=adapter._blend_recurrent_branch_losses(
+                source_result.loss,
+                source_result.loss,
+                target_result.loss,
+                transition_weight,
+            ),
+        )
+        return self.__accumulate_caller_loss_once(
+            adapter,
+            layer_state.loss,
+            blended_result,
+        )
+
+    @staticmethod
+    def __accumulate_caller_loss_once(
+        adapter: RecurrentExecutionAdapter[_StateT],
+        caller_loss: torch.Tensor | None,
+        recurrent_result: RecurrentExecutionResult,
+    ) -> RecurrentExecutionResult:
+        if recurrent_result.loss is None:
+            return RecurrentExecutionResult(recurrent_result.hidden, caller_loss)
+        return RecurrentExecutionResult(
+            recurrent_result.hidden,
+            adapter._accumulate_auxiliary_loss(
+                caller_loss,
+                recurrent_result.loss,
+            ),
         )
 
     @staticmethod

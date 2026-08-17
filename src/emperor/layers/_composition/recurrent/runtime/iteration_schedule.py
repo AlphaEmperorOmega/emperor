@@ -75,6 +75,12 @@ class RecurrentSmoothHandoffExecutionPlan(RecurrentIterationExecutionPlan):
 
 
 @dataclass(frozen=True)
+class RecurrentNestedSmoothHandoffExecutionPlan(RecurrentIterationExecutionPlan):
+    source_branch: RecurrentBranchExecutionPlan
+    transition_weight: float
+
+
+@dataclass(frozen=True)
 class _RecurrentIterationProfile:
     iteration_unit: str
     maximum_iterations: int
@@ -130,6 +136,11 @@ class RecurrentIterationSchedule(nn.Module):
         )
         self.__configured_no_gradient_transition_count = (
             config.no_gradient_transition_count
+        )
+        self.__full_gradient_smooth_handoff = (
+            self.smooth_iteration_growth
+            and self.__configured_no_gradient_transition_count == 0
+            and self.gradient_transition_count is None
         )
         self.__default_gradient_transition_count = (
             profile.default_gradient_transition_count
@@ -355,6 +366,18 @@ class RecurrentIterationSchedule(nn.Module):
         source_no_gradient_count = self.__no_gradient_transition_count(
             source_transition_count
         )
+        if self.__full_gradient_smooth_handoff:
+            return RecurrentNestedSmoothHandoffExecutionPlan(
+                source_branch=RecurrentBranchExecutionPlan(
+                    transition_count=source_transition_count,
+                    no_gradient_transition_count=source_no_gradient_count,
+                ),
+                target_branch=RecurrentBranchExecutionPlan(
+                    transition_count=runtime.active_transition_count,
+                    no_gradient_transition_count=runtime.no_gradient_transition_count,
+                ),
+                transition_weight=runtime.transition_weight,
+            )
         return RecurrentSmoothHandoffExecutionPlan(
             common_prefix_transition_count=source_no_gradient_count,
             source_branch=RecurrentBranchExecutionPlan(
