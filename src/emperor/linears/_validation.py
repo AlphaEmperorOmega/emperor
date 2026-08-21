@@ -21,7 +21,7 @@ class LinearValidator(ValidatorBase):
         )
 
     @staticmethod
-    def validate_input_tensor(X: Tensor, input_dim: int) -> None:
+    def validate_linear_input_tensor_shape(X: Tensor, input_dim: int) -> None:
         if not isinstance(X, Tensor):
             raise TypeError(f"Input must be a Tensor, got {type(X).__name__}")
         if X.dim() < 2:
