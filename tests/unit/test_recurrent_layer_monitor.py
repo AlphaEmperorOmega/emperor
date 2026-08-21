@@ -119,7 +119,7 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             output_dim=dim,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=dim,
                 output_dim=dim,
@@ -317,7 +317,7 @@ class TestRecurrentLayerMonitorCallback(unittest.TestCase):
             output_dim=2,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 activation=ActivationOptions.DISABLED,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,

@@ -35,7 +35,7 @@ def _linear_stack(input_dim: int, output_dim: int) -> LayerStackConfig:
         output_dim=output_dim,
         num_layers=1,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -95,7 +95,7 @@ def _model_config(
             output_dim=output_dim,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=MixtureOfExpertsLayerConfig(
                 activation=ActivationOptions.DISABLED,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -381,7 +381,7 @@ class ExpertValidationContractTests(unittest.TestCase):
             output_dim=2,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=layer_config,
         )
         model = config.build()

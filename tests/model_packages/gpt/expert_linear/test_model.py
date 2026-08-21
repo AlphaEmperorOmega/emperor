@@ -67,12 +67,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
         self.assertEqual(config.FF_NUM_LAYERS, 1)
         self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
-        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG)
         self.assertEqual(
             config.FF_STACK_LAYER_NORM_POSITION,
             LayerNormPositionOptions.DISABLED,
         )
-        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG)
 
     backend_module_name = "MixtureOfExperts"
 

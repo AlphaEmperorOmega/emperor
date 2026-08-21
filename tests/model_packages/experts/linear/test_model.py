@@ -183,7 +183,7 @@ class TestLinearModel(unittest.TestCase):
                 output_dim=dim,
                 num_layers=1,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     input_dim=dim,
                     output_dim=dim,
@@ -215,13 +215,13 @@ class TestLinearModel(unittest.TestCase):
             residual_connection_option=None,
             dropout_probability=0.13,
             last_layer_bias_option=LastLayerBiasOptions.ENABLED,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
         )
         submodule_stack_options = ExpertsSubmoduleStackOptions(
             hidden_dim=stack_options.hidden_dim,
             num_layers=4,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             activation=ActivationOptions.ELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
             residual_connection_option=None,
@@ -242,7 +242,7 @@ class TestLinearModel(unittest.TestCase):
             hidden_dim=stack_options.hidden_dim,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             activation=ActivationOptions.GELU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,
@@ -265,7 +265,7 @@ class TestLinearModel(unittest.TestCase):
             hidden_dim=stack_options.hidden_dim,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
             residual_connection_option=None,
@@ -276,7 +276,7 @@ class TestLinearModel(unittest.TestCase):
             hidden_dim=18,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             activation=ActivationOptions.TANH,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,
@@ -287,7 +287,7 @@ class TestLinearModel(unittest.TestCase):
             hidden_dim=20,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.AFTER,
             residual_connection_option=None,
@@ -298,7 +298,7 @@ class TestLinearModel(unittest.TestCase):
             hidden_dim=22,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             activation=ActivationOptions.SILU,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,
@@ -316,7 +316,7 @@ class TestLinearModel(unittest.TestCase):
                 hidden_dim=options.hidden_dim,
                 num_layers=options.num_layers,
                 last_layer_bias_option=options.last_layer_bias_option,
-                apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+                apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
                 residual_connection_option=options.residual_connection_option,
@@ -375,16 +375,16 @@ class TestLinearModel(unittest.TestCase):
             ),
             "stack_dropout_probability": stack_options.dropout_probability,
             "stack_last_layer_bias_option": (stack_options.last_layer_bias_option),
-            "stack_apply_output_pipeline_flag": (
-                stack_options.apply_output_pipeline_flag
+            "stack_apply_output_postprocessing_flag": (
+                stack_options.apply_output_postprocessing_flag
             ),
             "submodule_stack_hidden_dim": submodule_stack_options.hidden_dim,
             "submodule_stack_num_layers": submodule_stack_options.num_layers,
             "submodule_stack_last_layer_bias_option": (
                 submodule_stack_options.last_layer_bias_option
             ),
-            "submodule_stack_apply_output_pipeline_flag": (
-                submodule_stack_options.apply_output_pipeline_flag
+            "submodule_stack_apply_output_postprocessing_flag": (
+                submodule_stack_options.apply_output_postprocessing_flag
             ),
             "submodule_stack_activation": submodule_stack_options.activation,
             "submodule_stack_layer_norm_position": (
@@ -423,8 +423,8 @@ class TestLinearModel(unittest.TestCase):
             "expert_stack_last_layer_bias_option": (
                 expert_stack_options.last_layer_bias_option
             ),
-            "expert_stack_apply_output_pipeline_flag": (
-                expert_stack_options.apply_output_pipeline_flag
+            "expert_stack_apply_output_postprocessing_flag": (
+                expert_stack_options.apply_output_postprocessing_flag
             ),
             "expert_bias_flag": expert_stack_options.bias_flag,
             "sampler_threshold": sampler_options.threshold,
@@ -460,8 +460,8 @@ class TestLinearModel(unittest.TestCase):
             "router_stack_last_layer_bias_option": (
                 router_stack_options.last_layer_bias_option
             ),
-            "router_stack_apply_output_pipeline_flag": (
-                router_stack_options.apply_output_pipeline_flag
+            "router_stack_apply_output_postprocessing_flag": (
+                router_stack_options.apply_output_postprocessing_flag
             ),
             "router_bias_flag": router_stack_options.bias_flag,
             "stack_gate_flag": layer_controller_options.stack_gate_flag,
@@ -479,8 +479,8 @@ class TestLinearModel(unittest.TestCase):
             "gate_stack_last_layer_bias_option": (
                 gate_stack_options.last_layer_bias_option
             ),
-            "gate_stack_apply_output_pipeline_flag": (
-                gate_stack_options.apply_output_pipeline_flag
+            "gate_stack_apply_output_postprocessing_flag": (
+                gate_stack_options.apply_output_postprocessing_flag
             ),
             "gate_stack_bias_flag": gate_stack_options.bias_flag,
             "stack_halting_flag": layer_controller_options.stack_halting_flag,
@@ -506,8 +506,8 @@ class TestLinearModel(unittest.TestCase):
             "halting_stack_last_layer_bias_option": (
                 halting_stack_options.last_layer_bias_option
             ),
-            "halting_stack_apply_output_pipeline_flag": (
-                halting_stack_options.apply_output_pipeline_flag
+            "halting_stack_apply_output_postprocessing_flag": (
+                halting_stack_options.apply_output_postprocessing_flag
             ),
             "halting_stack_bias_flag": halting_stack_options.bias_flag,
             "memory_flag": dynamic_memory_options.memory_flag,
@@ -535,8 +535,8 @@ class TestLinearModel(unittest.TestCase):
             "memory_stack_last_layer_bias_option": (
                 memory_stack_options.last_layer_bias_option
             ),
-            "memory_stack_apply_output_pipeline_flag": (
-                memory_stack_options.apply_output_pipeline_flag
+            "memory_stack_apply_output_postprocessing_flag": (
+                memory_stack_options.apply_output_postprocessing_flag
             ),
             "memory_stack_bias_flag": memory_stack_options.bias_flag,
             "recurrent_flag": recurrent_controller_options.recurrent_flag,
@@ -569,8 +569,8 @@ class TestLinearModel(unittest.TestCase):
             "recurrent_gate_stack_last_layer_bias_option": (
                 gate_stack_options.last_layer_bias_option
             ),
-            "recurrent_gate_stack_apply_output_pipeline_flag": (
-                gate_stack_options.apply_output_pipeline_flag
+            "recurrent_gate_stack_apply_output_postprocessing_flag": (
+                gate_stack_options.apply_output_postprocessing_flag
             ),
             "recurrent_gate_stack_bias_flag": gate_stack_options.bias_flag,
             "recurrent_stack_halting_flag": (
@@ -601,8 +601,8 @@ class TestLinearModel(unittest.TestCase):
             "recurrent_halting_stack_last_layer_bias_option": (
                 halting_stack_options.last_layer_bias_option
             ),
-            "recurrent_halting_stack_apply_output_pipeline_flag": (
-                halting_stack_options.apply_output_pipeline_flag
+            "recurrent_halting_stack_apply_output_postprocessing_flag": (
+                halting_stack_options.apply_output_postprocessing_flag
             ),
             "recurrent_halting_stack_bias_flag": halting_stack_options.bias_flag,
         }
@@ -692,7 +692,7 @@ class TestLinearModel(unittest.TestCase):
                     hidden_dim=8,
                     num_layers=1,
                     last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
                     residual_connection_option=None,
@@ -775,7 +775,7 @@ class TestLinearModel(unittest.TestCase):
         cfg = self.experts_preset(
             submodule_stack_hidden_dim=44,
             submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            submodule_stack_apply_output_pipeline_flag=True,
+            submodule_stack_apply_output_postprocessing_flag=True,
             submodule_stack_bias_flag=False,
         )
         router_stack = (
@@ -810,8 +810,8 @@ class TestLinearModel(unittest.TestCase):
             config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
         )
         self.assertEqual(
-            router_stack.apply_output_pipeline_flag,
-            config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            router_stack.apply_output_postprocessing_flag,
+            config.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         )
         self.assertEqual(
             router_stack.layer_config.layer_model_config.bias_flag,
@@ -822,11 +822,11 @@ class TestLinearModel(unittest.TestCase):
         cfg = self.experts_preset(
             submodule_stack_hidden_dim=44,
             submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            submodule_stack_apply_output_pipeline_flag=False,
+            submodule_stack_apply_output_postprocessing_flag=False,
             submodule_stack_bias_flag=True,
             router_stack_hidden_dim=88,
             router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
-            router_stack_apply_output_pipeline_flag=True,
+            router_stack_apply_output_postprocessing_flag=True,
             router_bias_flag=False,
         )
         router_stack = (
@@ -838,7 +838,7 @@ class TestLinearModel(unittest.TestCase):
             router_stack.layer_config.layer_norm_position,
             LayerNormPositionOptions.AFTER,
         )
-        self.assertTrue(router_stack.apply_output_pipeline_flag)
+        self.assertTrue(router_stack.apply_output_postprocessing_flag)
         self.assertFalse(router_stack.layer_config.layer_model_config.bias_flag)
 
     def test_disabled_memory_is_absent_from_stack_and_layer_configs(self):
@@ -900,7 +900,7 @@ class TestLinearModel(unittest.TestCase):
             memory_stack_residual_connection_option=None,
             memory_stack_dropout_probability=0.1,
             memory_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            memory_stack_apply_output_pipeline_flag=True,
+            memory_stack_apply_output_postprocessing_flag=True,
             memory_stack_bias_flag=False,
         )
         memory_cfg = (
@@ -921,7 +921,7 @@ class TestLinearModel(unittest.TestCase):
             memory_stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertTrue(memory_stack.apply_output_pipeline_flag)
+        self.assertTrue(memory_stack.apply_output_postprocessing_flag)
         self.assertEqual(
             memory_stack.layer_config.layer_norm_position,
             LayerNormPositionOptions.AFTER,

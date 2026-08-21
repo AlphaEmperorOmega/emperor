@@ -28,8 +28,8 @@ _CLUSTER_HALTING_HIDDEN_STATE_MODE_DEFAULT = config.CLUSTER_HALTING_HIDDEN_STATE
 _CLUSTER_HALTING_OPTION_DEFAULT = config.CLUSTER_HALTING_OPTION
 _CLUSTER_HALTING_OUTPUT_DIM_DEFAULT = config.CLUSTER_HALTING_OUTPUT_DIM
 _CLUSTER_HALTING_STACK_ACTIVATION_DEFAULT = config.CLUSTER_HALTING_STACK_ACTIVATION
-_CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT = (
-    config.CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+_CLUSTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
 )
 _CLUSTER_HALTING_STACK_BIAS_FLAG_DEFAULT = config.CLUSTER_HALTING_STACK_BIAS_FLAG
 _CLUSTER_HALTING_STACK_DROPOUT_PROBABILITY_DEFAULT = (
@@ -66,8 +66,8 @@ _CLUSTER_MITOSIS_INITIALIZATION_FLAG_DEFAULT = (
 )
 _CLUSTER_PRUNING_THRESHOLD_DEFAULT = config.CLUSTER_PRUNING_THRESHOLD
 _CLUSTER_TERMINAL_ROUTER_ACTIVATION_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_ACTIVATION
-_CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT = (
-    config.CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG
+_CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_POSTPROCESSING_FLAG_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_POSTPROCESSING_FLAG
 )
 _CLUSTER_TERMINAL_ROUTER_BIAS_FLAG_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_BIAS_FLAG
 _CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY_DEFAULT = (
@@ -269,10 +269,10 @@ def _terminal_router_options(
         "cluster_terminal_router_last_layer_bias_option",
         _CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION_DEFAULT,
     )
-    apply_output_pipeline_flag = _pop(
+    apply_output_postprocessing_flag = _pop(
         values,
-        "cluster_terminal_router_apply_output_pipeline_flag",
-        _CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT,
+        "cluster_terminal_router_apply_output_postprocessing_flag",
+        _CLUSTER_TERMINAL_ROUTER_APPLY_OUTPUT_POSTPROCESSING_FLAG_DEFAULT,
     )
     activation = _pop(
         values,
@@ -310,7 +310,7 @@ def _terminal_router_options(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
@@ -425,10 +425,10 @@ def _cluster_halting_options(
         "cluster_halting_stack_last_layer_bias_option",
         _CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION_DEFAULT,
     )
-    apply_output_pipeline_flag = _pop(
+    apply_output_postprocessing_flag = _pop(
         values,
-        "cluster_halting_stack_apply_output_pipeline_flag",
-        _CLUSTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG_DEFAULT,
+        "cluster_halting_stack_apply_output_postprocessing_flag",
+        _CLUSTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG_DEFAULT,
     )
     activation = _pop(
         values,
@@ -472,7 +472,7 @@ def _cluster_halting_options(
             hidden_dim=hidden_dim,
             num_layers=num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             activation=activation,
             layer_norm_position=layer_norm_position,
             residual_connection_option=residual_connection_option,

@@ -42,7 +42,7 @@ class TestLayerStack(unittest.TestCase):
                 hidden_dim=dim,
                 output_dim=dim,
                 num_layers=len(scales),
-                apply_output_pipeline_flag=True,
+                apply_output_postprocessing_flag=True,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
                 shared_gate_config=None,
                 shared_halting_config=None,
@@ -364,7 +364,7 @@ class TestLayerStack(unittest.TestCase):
         shared_gate_config: "LayerStackConfig | GateConfig | None" = None,
         shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
         gate_enabled: bool = True,
         gate_config: "LayerStackConfig | GateConfig | None" = None,
         gate_option: LayerGateOptions | None = None,
@@ -375,7 +375,7 @@ class TestLayerStack(unittest.TestCase):
                 hidden_dim=hidden_dim,
                 num_layers=stack_num_layers,
                 last_layer_bias_option=last_layer_bias_option,
-                apply_output_pipeline_flag=apply_output_pipeline_flag,
+                apply_output_postprocessing_flag=apply_output_postprocessing_flag,
                 layer_config=LayerConfig(
                     activation=stack_activation,
                     layer_norm_position=layer_norm_position,
@@ -408,7 +408,7 @@ class TestLayerStack(unittest.TestCase):
                     output_dim=2,
                     num_layers=stack_num_layers,
                     last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     layer_config=LayerConfig(
                         activation=ActivationOptions.DISABLED,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -431,7 +431,7 @@ class TestLayerStack(unittest.TestCase):
             output_dim=output_dim,
             num_layers=stack_num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             shared_gate_config=self.layer_gate_config(shared_gate_config, gate_option),
             shared_halting_config=shared_halting_config,
             layer_config=LayerConfig(
@@ -472,7 +472,7 @@ class TestLayerStack(unittest.TestCase):
         hidden_dim: int | None = None,
         output_dim: int | None = None,
         num_layers: int = 1,
-        apply_output_pipeline_flag: bool = False,
+        apply_output_postprocessing_flag: bool = False,
     ) -> LayerStackConfig:
         return LayerStackConfig(
             input_dim=dim,
@@ -480,7 +480,7 @@ class TestLayerStack(unittest.TestCase):
             output_dim=output_dim if output_dim is not None else dim,
             num_layers=num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             layer_config=LayerConfig(
                 input_dim=dim,
                 output_dim=output_dim if output_dim is not None else dim,
@@ -517,7 +517,7 @@ class TestLayerStack(unittest.TestCase):
                 output_dim=2,
                 num_layers=1,
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -542,7 +542,7 @@ class TestLayerStack(unittest.TestCase):
         self.assertEqual(stack.output_dim, cfg.output_dim)
         self.assertEqual(stack.num_layers, cfg.num_layers)
         self.assertEqual(
-            stack.apply_output_pipeline_flag, cfg.apply_output_pipeline_flag
+            stack.apply_output_postprocessing_flag, cfg.apply_output_postprocessing_flag
         )
         self.assertEqual(stack.shared_gate_config, cfg.shared_gate_config)
         self.assertEqual(stack.shared_halting_config, cfg.shared_halting_config)
@@ -562,7 +562,7 @@ class TestLayerStack(unittest.TestCase):
                     cfg.output_dim if is_last_layer else cfg.hidden_dim,
                 )
 
-                if is_last_layer and not cfg.apply_output_pipeline_flag:
+                if is_last_layer and not cfg.apply_output_postprocessing_flag:
                     self.assertEqual(
                         layer.activation_function, ActivationOptions.DISABLED
                     )
@@ -636,7 +636,7 @@ class TestLayerStack(unittest.TestCase):
             "hidden_dim",
             "output_dim",
             "num_layers",
-            "apply_output_pipeline_flag",
+            "apply_output_postprocessing_flag",
             "last_layer_bias_option",
             "layer_config",
         ]
@@ -654,7 +654,7 @@ class TestLayerStack(unittest.TestCase):
             ("hidden_dim", "8", TypeError),
             ("output_dim", "8", TypeError),
             ("num_layers", "2", TypeError),
-            ("apply_output_pipeline_flag", "yes", TypeError),
+            ("apply_output_postprocessing_flag", "yes", TypeError),
             ("layer_config", object(), TypeError),
         ]
         for field_name, value, error_type in wrong_type_cases:
@@ -775,21 +775,21 @@ class TestLayerStack(unittest.TestCase):
     def test_add_output_layer(self):
         num_layers_options = [1, 2, 3]
         output_dims = [6, 16]
-        apply_pipeline_flags = [True, False]
+        apply_postprocessing_flags = [True, False]
 
         for num_layers in num_layers_options:
             for output_dim in output_dims:
-                for apply_pipeline in apply_pipeline_flags:
+                for apply_postprocessing in apply_postprocessing_flags:
                     message = (
                         f"num_layers={num_layers}, "
                         f"output_dim={output_dim}, "
-                        f"apply_pipeline={apply_pipeline}"
+                        f"apply_postprocessing={apply_postprocessing}"
                     )
                     with self.subTest(msg=message):
                         cfg = self.preset(
                             stack_num_layers=num_layers,
                             output_dim=output_dim,
-                            apply_output_pipeline_flag=apply_pipeline,
+                            apply_output_postprocessing_flag=apply_postprocessing,
                         )
                         stack = LayerStack(cfg)
                         layer = stack.layers[-1]
@@ -801,7 +801,7 @@ class TestLayerStack(unittest.TestCase):
                         self.assertEqual(layer.output_dim, output_dim)
                         self.assertTrue(layer.last_layer_flag)
 
-                        if apply_pipeline:
+                        if apply_postprocessing:
                             self.assertEqual(
                                 layer.activation_function,
                                 cfg.layer_config.activation,
@@ -824,7 +824,7 @@ class TestLayerStack(unittest.TestCase):
             output_dim=6,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=6,
                 output_dim=6,
@@ -883,7 +883,7 @@ class TestLayerStack(unittest.TestCase):
                     output_dim=6,
                     num_layers=1,
                     last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     layer_config=gate_layer_config,
                     **stack_invalid,
                 )
@@ -1152,21 +1152,21 @@ class TestLayerStack(unittest.TestCase):
                 ]
                 self.assertTrue(len(nonzero_gradients) > 0)
 
-    def test_output_pipeline_flag_false_does_not_disable_gates(self):
+    def test_output_postprocessing_flag_false_does_not_disable_gates(self):
         dim = 8
         per_layer_cfg = self.preset(
             input_dim=dim + 1,
             hidden_dim=dim,
             output_dim=dim,
             stack_num_layers=3,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
         )
         shared_cfg = self.preset(
             input_dim=dim + 1,
             hidden_dim=dim,
             output_dim=dim,
             stack_num_layers=3,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             shared_gate_config=self.gate_stack_config(dim),
         )
         no_gate_cfg = self.preset(
@@ -1174,7 +1174,7 @@ class TestLayerStack(unittest.TestCase):
             hidden_dim=dim,
             output_dim=dim,
             stack_num_layers=3,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             gate_enabled=False,
         )
 
@@ -1204,7 +1204,7 @@ class TestLayerStack(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,

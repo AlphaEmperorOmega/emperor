@@ -40,7 +40,7 @@ def _coefficient_stack_config(
     return LayerStackConfig(
         hidden_dim=3,
         num_layers=2,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=last_layer_bias_option,
         shared_gate_config=None,
         shared_halting_config=None,

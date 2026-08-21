@@ -221,7 +221,7 @@ class GptBackendConfigBuilder:
             output_dim=self.hidden_dim,
             num_layers=self.decoder_options.num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             shared_gate_config=self.layer_controller_options.shared_gate_config,
             shared_halting_config=halting_config,
             shared_memory_config=memory_factory.build_memory_config(),
@@ -311,7 +311,7 @@ class GptBackendConfigBuilder:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
 
     def _apply_attention_projection_controls(
@@ -375,7 +375,7 @@ class GptBackendConfigBuilder:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
 
     def _apply_feed_forward_controls(self, stack_config: "ConfigBase") -> None:
@@ -443,7 +443,7 @@ class GptBackendConfigBuilder:
         residual_model_flag: bool = False,
         residual_stack_options=None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
     ) -> LayerStackConfig:
         layer_model_config = self._build_linear_layer_config(bias_flag=bias_flag)
         layer_config = LayerConfig(
@@ -467,7 +467,7 @@ class GptBackendConfigBuilder:
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             layer_config=layer_config,
         )
 
@@ -498,7 +498,7 @@ class GptBackendConfigBuilder:
             residual_stack_options=self.submodule_stack_options.residual_stack_options,
             dropout_probability=self.decoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
         )
         return GptMemoryConfigFactory(
             stack_options=stack_options,
@@ -515,7 +515,7 @@ class GptBackendConfigBuilder:
             hidden_dim=self.hidden_dim,
             num_layers=self.attention_options.num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
             residual_connection_option=None,
@@ -532,7 +532,7 @@ class GptBackendConfigBuilder:
             hidden_dim=self.hidden_dim,
             num_layers=self.feed_forward_options.num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
             residual_connection_option=None,

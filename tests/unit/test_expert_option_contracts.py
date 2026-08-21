@@ -27,7 +27,7 @@ def _linear_expert_stack(*, dimension: int = 1, bias: bool = True) -> LayerStack
         output_dim=dimension,
         num_layers=1,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,

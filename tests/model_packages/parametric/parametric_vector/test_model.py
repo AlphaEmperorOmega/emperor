@@ -285,7 +285,7 @@ class TestParametricVectorModel(unittest.TestCase):
         self.assertEqual(stack_config.input_dim, hidden_dim)
         self.assertEqual(stack_config.hidden_dim, hidden_dim)
         self.assertEqual(stack_config.output_dim, hidden_dim)
-        self.assertTrue(stack_config.apply_output_pipeline_flag)
+        self.assertTrue(stack_config.apply_output_postprocessing_flag)
         self.assertEqual(layer_model_config.input_dim, hidden_dim)
         self.assertEqual(layer_model_config.output_dim, hidden_dim)
         self.assertEqual(layer_model_config.weight_mixture_config.input_dim, hidden_dim)
@@ -381,7 +381,7 @@ class TestParametricVectorModel(unittest.TestCase):
                 "router_model_output_dim": 2,
                 "router_num_layers": 1,
                 "router_last_layer_bias_option": LastLayerBiasOptions.DEFAULT,
-                "router_apply_output_pipeline_flag": False,
+                "router_apply_output_postprocessing_flag": False,
                 "router_activation": ActivationOptions.GELU,
                 "router_residual_connection_option": None,
                 "router_dropout_probability": 0.0,
@@ -482,8 +482,8 @@ class TestParametricVectorModel(unittest.TestCase):
             "router_last_layer_bias_option": (
                 router_model_config.last_layer_bias_option
             ),
-            "router_apply_output_pipeline_flag": (
-                router_model_config.apply_output_pipeline_flag
+            "router_apply_output_postprocessing_flag": (
+                router_model_config.apply_output_postprocessing_flag
             ),
             "router_activation": router_layer_config.activation,
             "router_residual_connection_option": (

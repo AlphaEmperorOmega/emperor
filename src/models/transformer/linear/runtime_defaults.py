@@ -41,8 +41,8 @@ def _controller_stack_from_config(
         last_layer_bias_option=getattr(
             config_module, f"{prefix}_LAST_LAYER_BIAS_OPTION"
         ),
-        apply_output_pipeline_flag=getattr(
-            config_module, f"{prefix}_APPLY_OUTPUT_PIPELINE_FLAG"
+        apply_output_postprocessing_flag=getattr(
+            config_module, f"{prefix}_APPLY_OUTPUT_POSTPROCESSING_FLAG"
         ),
         activation=getattr(config_module, f"{prefix}_ACTIVATION"),
         layer_norm_position=getattr(config_module, f"{prefix}_LAYER_NORM_POSITION"),
@@ -185,10 +185,10 @@ def attention_options_from_config(
                 config_module,
                 f"{prefix}_STACK_LAST_LAYER_BIAS_OPTION",
             ),
-            apply_output_pipeline_flag=(
+            apply_output_postprocessing_flag=(
                 getattr(
                     config_module,
-                    f"{prefix}_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                    f"{prefix}_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG",
                 )
             ),
             activation=getattr(config_module, f"{prefix}_STACK_ACTIVATION"),
@@ -230,10 +230,10 @@ def feed_forward_options_from_config(
                 config_module,
                 f"{prefix}_STACK_LAST_LAYER_BIAS_OPTION",
             ),
-            apply_output_pipeline_flag=(
+            apply_output_postprocessing_flag=(
                 getattr(
                     config_module,
-                    f"{prefix}_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                    f"{prefix}_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG",
                 )
             ),
             activation=getattr(config_module, f"{prefix}_STACK_ACTIVATION"),
@@ -267,7 +267,7 @@ _STACK_OPTION_FIELDS = (
     "hidden_dim",
     "num_layers",
     "last_layer_bias_option",
-    "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag",
     "activation",
     "layer_norm_position",
     "residual_connection_option",
@@ -650,8 +650,8 @@ def runtime_from_config() -> RuntimeOptions:
         residual_stack_last_layer_bias_option=(
             config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        residual_stack_apply_output_pipeline_flag=(
-            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        residual_stack_apply_output_postprocessing_flag=(
+            config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         residual_stack_bias_flag=config.RESIDUAL_STACK_BIAS_FLAG,
         positional_embedding_option=config.POSITIONAL_EMBEDDING_OPTION,

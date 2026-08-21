@@ -64,7 +64,7 @@ class PatchConfigFactory:
                 bias_flag=options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
                 dropout_probability=self.encoder_options.dropout_probability,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
             )
         )
         return LinearPatchEmbeddingConfig(

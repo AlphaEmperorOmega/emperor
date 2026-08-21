@@ -40,7 +40,7 @@ _CONTROLLER_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
     "num_layers": "num_layers",
     "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
@@ -360,9 +360,9 @@ def _attach_residual_stack_options(
                 "residual_stack_last_layer_bias_option",
                 config_module.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
             ),
-            apply_output_pipeline_flag=kwargs.get(
-                "residual_stack_apply_output_pipeline_flag",
-                config_module.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=kwargs.get(
+                "residual_stack_apply_output_postprocessing_flag",
+                config_module.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             ),
             bias_flag=kwargs.get(
                 "residual_stack_bias_flag", config_module.RESIDUAL_STACK_BIAS_FLAG
@@ -528,7 +528,7 @@ def _modern_main_stack_options(
                 "stack_residual_model_flag": "residual_model_flag",
                 "stack_dropout_probability": "dropout_probability",
                 "stack_last_layer_bias_option": "last_layer_bias_option",
-                "stack_apply_output_pipeline_flag": "apply_output_pipeline_flag",
+                "stack_apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
             },
         ),
     )
@@ -796,7 +796,7 @@ def _modern_supported_flat_keys() -> set[str]:
         "stack_residual_connection_option",
         "stack_residual_model_flag",
         "stack_last_layer_bias_option",
-        "stack_apply_output_pipeline_flag",
+        "stack_apply_output_postprocessing_flag",
         "stack_bias_flag",
         "positional_embedding_option",
         "positional_embedding_padding_idx",
@@ -822,7 +822,7 @@ def _modern_supported_flat_keys() -> set[str]:
             "residual_model_flag",
             "dropout_probability",
             "last_layer_bias_option",
-            "apply_output_pipeline_flag",
+            "apply_output_postprocessing_flag",
             "bias_flag",
         )
     )

@@ -1610,7 +1610,7 @@ describe("config section controls", () => {
         section: "Expert Stack Options",
       }),
       field({
-        key: "expert_stack_apply_output_pipeline_flag",
+        key: "expert_stack_apply_output_postprocessing_flag",
         type: "bool",
         default: true,
         choices: [true, false],
@@ -2098,7 +2098,7 @@ describe("config section controls", () => {
         choices: [true, false],
       }),
       field({
-        key: "stack_apply_output_pipeline_flag",
+        key: "stack_apply_output_postprocessing_flag",
         section: "Layer Stack Options",
         type: "bool",
         default: false,
@@ -2133,7 +2133,7 @@ describe("config section controls", () => {
             section: "Gate Stack Options",
           }),
           stackFieldFromCanonical(canonicalStackFields, {
-            key: "gate_stack_apply_output_pipeline_flag",
+            key: "gate_stack_apply_output_postprocessing_flag",
             default: null,
             nullable: true,
             section: "Gate Stack Options",
@@ -2150,7 +2150,7 @@ describe("config section controls", () => {
       (item) => item.key === "gate_stack_bias_flag",
     );
     const gatePipeline = gateStackSection?.fields.find(
-      (item) => item.key === "gate_stack_apply_output_pipeline_flag",
+      (item) => item.key === "gate_stack_apply_output_postprocessing_flag",
     );
 
     expect(gateBias?.type).toBe("bool");

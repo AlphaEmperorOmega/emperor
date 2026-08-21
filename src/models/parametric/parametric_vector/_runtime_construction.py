@@ -242,10 +242,10 @@ def resolve_runtime_construction(
             "residual_stack_last_layer_bias_option",
             config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
         ),
-        apply_output_pipeline_flag=_pop(
+        apply_output_postprocessing_flag=_pop(
             values,
-            "residual_stack_apply_output_pipeline_flag",
-            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            "residual_stack_apply_output_postprocessing_flag",
+            config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         ),
         bias_flag=_pop(
             values,

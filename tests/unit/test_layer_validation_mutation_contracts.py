@@ -91,7 +91,7 @@ def _stack_config(
         output_dim=dim if output_dim is None else output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         shared_gate_config=shared_gate_config,
         shared_halting_config=shared_halting_config,
         shared_memory_config=shared_memory_config,

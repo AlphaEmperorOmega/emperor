@@ -302,7 +302,7 @@ def _stack(values: StackValues) -> StackOptions:
         hidden_dim=values.hidden_dim,
         num_layers=values.num_layers,
         last_layer_bias_option=values.last_layer_bias_option,
-        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
         residual_connection_option=values.residual_connection_option,
@@ -331,10 +331,10 @@ def _resolved_stack(
             if values.last_layer_bias_option is None
             else values.last_layer_bias_option
         ),
-        apply_output_pipeline_flag=(
-            defaults.apply_output_pipeline_flag
-            if values.apply_output_pipeline_flag is None
-            else values.apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            defaults.apply_output_postprocessing_flag
+            if values.apply_output_postprocessing_flag is None
+            else values.apply_output_postprocessing_flag
         ),
         activation=(
             defaults.activation if values.activation is None else values.activation
@@ -399,7 +399,9 @@ def _resolve_stacks(values: RuntimeDefaultValues) -> _ResolvedStacks:
             residual_model_flag=residual_values.residual_model_flag,
             dropout_probability=residual_values.dropout_probability,
             last_layer_bias_option=residual_values.last_layer_bias_option,
-            apply_output_pipeline_flag=(residual_values.apply_output_pipeline_flag),
+            apply_output_postprocessing_flag=(
+                residual_values.apply_output_postprocessing_flag
+            ),
             bias_flag=residual_values.bias_flag,
         ),
         submodule,

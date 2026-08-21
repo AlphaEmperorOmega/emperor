@@ -93,7 +93,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
                 output_dim=embedding_dim,
                 num_layers=projection_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -134,7 +134,7 @@ class TestTransformerEncoderLayer(unittest.TestCase):
                 output_dim=embedding_dim,
                 num_layers=feed_forward_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -546,7 +546,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
                 output_dim=embedding_dim,
                 num_layers=projection_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.DISABLED,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -606,7 +606,7 @@ class TestTransformerDecoderLayer(unittest.TestCase):
                 output_dim=embedding_dim,
                 num_layers=feed_forward_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=ActivationOptions.RELU,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,

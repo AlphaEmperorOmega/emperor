@@ -47,8 +47,8 @@ def adaptive_generator_stack_options(
         residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=(config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION),
-        apply_output_pipeline_flag=(
-            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
     )
@@ -71,7 +71,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -87,7 +87,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.BIAS_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -103,7 +103,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -119,7 +119,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.MASK_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -135,7 +135,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ATTN_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ATTN_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ATTN_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -151,7 +151,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ATTN_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ATTN_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ATTN_BIAS_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -167,7 +167,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ATTN_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ATTN_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ATTN_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -183,7 +183,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ATTN_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ATTN_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ATTN_MASK_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -199,7 +199,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.FF_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.FF_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.FF_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.FF_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.FF_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -215,7 +215,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.FF_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.FF_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.FF_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.FF_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.FF_BIAS_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -231,7 +231,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.FF_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.FF_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.FF_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.FF_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.FF_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -247,7 +247,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.FF_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.FF_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.FF_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.FF_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.FF_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.FF_MASK_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -263,7 +263,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ROUTER_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ROUTER_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -279,7 +279,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ROUTER_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ROUTER_BIAS_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -295,7 +295,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ROUTER_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ROUTER_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         ),
         (
@@ -311,7 +311,7 @@ _GENERATOR_SOURCE_FACTORIES: Mapping[
             residual_model_flag=config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=config.ROUTER_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             bias_flag=config.ROUTER_MASK_GENERATOR_STACK_BIAS_FLAG,
         ),
     }

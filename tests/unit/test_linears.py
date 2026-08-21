@@ -59,7 +59,7 @@ def make_layer_stack_config(
         output_dim=output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -816,7 +816,7 @@ class TestLinearLayerStack(unittest.TestCase):
         stack_dropout_probability: float = 0.2,
         shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
         gate_config: "GateConfig | None" = None,
         use_gate_config: bool = True,
     ) -> LayerStackConfig:
@@ -826,7 +826,7 @@ class TestLinearLayerStack(unittest.TestCase):
                     hidden_dim=hidden_dim,
                     num_layers=stack_num_layers,
                     last_layer_bias_option=last_layer_bias_option,
-                    apply_output_pipeline_flag=apply_output_pipeline_flag,
+                    apply_output_postprocessing_flag=apply_output_postprocessing_flag,
                     layer_config=LayerConfig(
                         activation=stack_activation,
                         layer_norm_position=layer_norm_position,
@@ -863,7 +863,7 @@ class TestLinearLayerStack(unittest.TestCase):
                     output_dim=2,
                     num_layers=stack_num_layers,
                     last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     layer_config=LayerConfig(
                         activation=ActivationOptions.DISABLED,
                         layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -886,7 +886,7 @@ class TestLinearLayerStack(unittest.TestCase):
             output_dim=output_dim,
             num_layers=stack_num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             shared_halting_config=shared_halting_config,
             layer_config=LayerConfig(
                 activation=stack_activation,
@@ -1444,7 +1444,7 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
             output_dim=output_dim,
             num_layers=stack_num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=layer_norm_position,

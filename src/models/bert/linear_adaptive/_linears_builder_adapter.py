@@ -27,7 +27,7 @@ _ADAPTIVE_GENERATOR_SOURCE_FIELD_MAP = {
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "bias_flag": "bias_flag",
 }
 _HIDDEN_ADAPTIVE_WEIGHT_FIELD_MAP = {
@@ -96,7 +96,7 @@ def _adaptive_generator_stack_options_from_kwargs(
             "adaptive_generator_stack_residual_model_flag": "residual_model_flag",
             "adaptive_generator_stack_dropout_probability": "dropout_probability",
             "adaptive_generator_stack_last_layer_bias_option": "last_layer_bias_option",
-            "adaptive_generator_stack_apply_output_pipeline_flag": "apply_output_pipeline_flag",
+            "adaptive_generator_stack_apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
             "adaptive_generator_stack_bias_flag": "bias_flag",
         },
     )

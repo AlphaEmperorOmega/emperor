@@ -19,7 +19,7 @@ def make_config(**overrides) -> LayerStackConfig:
         "hidden_dim": 3,
         "output_dim": 3,
         "num_layers": 1,
-        "apply_output_pipeline_flag": False,
+        "apply_output_postprocessing_flag": False,
         "last_layer_bias_option": LastLayerBiasOptions.DEFAULT,
         "shared_gate_config": None,
         "shared_halting_config": None,
@@ -47,15 +47,15 @@ def attention_residual_layer_config() -> LayerConfig:
 
 
 class TestLayerStackValidatorAdapter(unittest.TestCase):
-    def test_attention_residual_requires_the_final_output_pipeline(self):
+    def test_attention_residual_requires_the_final_output_postprocessing(self):
         with self.assertRaisesRegex(
             ValueError,
-            "apply_output_pipeline_flag must be True",
+            "apply_output_postprocessing_flag must be True",
         ):
             LayerStack(
                 make_config(
                     num_layers=2,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     layer_config=attention_residual_layer_config(),
                 )
             )
@@ -70,7 +70,7 @@ class TestLayerStackValidatorAdapter(unittest.TestCase):
                     input_dim=2,
                     hidden_dim=3,
                     output_dim=3,
-                    apply_output_pipeline_flag=True,
+                    apply_output_postprocessing_flag=True,
                     layer_config=attention_residual_layer_config(),
                 )
             )

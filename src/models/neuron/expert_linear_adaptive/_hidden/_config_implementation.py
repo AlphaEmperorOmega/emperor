@@ -53,7 +53,9 @@ class CoreDefaultValues:
     stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.STACK_LAST_LAYER_BIAS_OPTION
     )
-    stack_apply_output_pipeline_flag: bool = config.STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    stack_apply_output_postprocessing_flag: bool = (
+        config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
+    )
     submodule_stack_hidden_dim: int = config.SUBMODULE_STACK_HIDDEN_DIM
     submodule_stack_num_layers: int = config.SUBMODULE_STACK_NUM_LAYERS
     submodule_stack_activation: ActivationOptions = config.SUBMODULE_STACK_ACTIVATION
@@ -72,8 +74,8 @@ class CoreDefaultValues:
     submodule_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    submodule_stack_apply_output_pipeline_flag: bool = (
-        config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    submodule_stack_apply_output_postprocessing_flag: bool = (
+        config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     submodule_stack_bias_flag: bool = config.SUBMODULE_STACK_BIAS_FLAG
     top_k: int = config.TOP_K
@@ -98,8 +100,8 @@ class CoreDefaultValues:
         config.EXPERT_STACK_LAYER_NORM_POSITION
     )
     expert_stack_last_layer_bias_option: LastLayerBiasOptions | None = None
-    expert_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_bias_flag: bool | None = None
     sampler_threshold: float = config.SAMPLER_THRESHOLD
@@ -161,13 +163,13 @@ def resolve_core_defaults(values: CoreDefaultValues) -> CoreDefaults:
         residual_model_flag=values.stack_residual_model_flag,
         dropout_probability=values.stack_dropout_probability,
         last_layer_bias_option=values.stack_last_layer_bias_option,
-        apply_output_pipeline_flag=values.stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.stack_apply_output_postprocessing_flag,
     )
     submodule_stack_options = submodule_stack_options or ExpertsSubmoduleStackOptions(
         hidden_dim=values.submodule_stack_hidden_dim,
         num_layers=values.submodule_stack_num_layers,
         last_layer_bias_option=values.submodule_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=values.submodule_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.submodule_stack_apply_output_postprocessing_flag,
         activation=values.submodule_stack_activation,
         layer_norm_position=values.submodule_stack_layer_norm_position,
         residual_connection_option=(values.submodule_stack_residual_connection_option),
@@ -197,7 +199,7 @@ def resolve_core_defaults(values: CoreDefaultValues) -> CoreDefaults:
             hidden_dim=values.expert_stack_hidden_dim,
             num_layers=values.expert_stack_num_layers,
             last_layer_bias_option=values.expert_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=values.expert_stack_apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=values.expert_stack_apply_output_postprocessing_flag,
             activation=values.expert_stack_activation,
             layer_norm_position=values.expert_stack_layer_norm_position,
             residual_connection_option=values.expert_stack_residual_connection_option,

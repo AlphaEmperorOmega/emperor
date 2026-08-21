@@ -49,9 +49,9 @@ class AdaptiveGeneratorStackConfigFactory:
             last_layer_bias_option=self.__resolve(
                 source.last_layer_bias_option, defaults.last_layer_bias_option
             ),
-            apply_output_pipeline_flag=self.__resolve(
-                source.apply_output_pipeline_flag,
-                defaults.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=self.__resolve(
+                source.apply_output_postprocessing_flag,
+                defaults.apply_output_postprocessing_flag,
             ),
             bias_flag=self.__resolve(source.bias_flag, defaults.bias_flag),
             residual_stack_options=defaults.residual_stack_options,
@@ -69,7 +69,7 @@ class AdaptiveGeneratorStackConfigFactory:
             hidden_dim=options.hidden_dim,
             num_layers=options.num_layers,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,

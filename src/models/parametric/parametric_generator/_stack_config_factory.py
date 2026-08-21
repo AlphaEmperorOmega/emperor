@@ -41,7 +41,7 @@ def build_linear_stack_config(
     residual_connection_option: type[ResidualConfig],
     residual_model_flag: bool,
     dropout_probability: float,
-    apply_output_pipeline_flag: bool,
+    apply_output_postprocessing_flag: bool,
 ) -> LayerStackConfig:
     layer_model_config = LinearLayerConfig(
         input_dim=input_dim, output_dim=output_dim, bias_flag=True
@@ -66,7 +66,7 @@ def build_linear_stack_config(
         output_dim=output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         layer_config=layer_config,
     )
 
@@ -86,7 +86,7 @@ def build_router_config(
         residual_connection_option=None,
         residual_model_flag=False,
         dropout_probability=0.0,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
     )
     return RouterConfig(
         input_dim=input_dim,

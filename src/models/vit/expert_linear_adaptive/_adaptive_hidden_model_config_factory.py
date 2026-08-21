@@ -198,7 +198,9 @@ class HiddenModelConfigFactory:
             hidden_dim=self.hidden_dim,
             num_layers=self.stack_options.num_layers,
             last_layer_bias_option=self.stack_options.last_layer_bias_option,
-            apply_output_pipeline_flag=(self.stack_options.apply_output_pipeline_flag),
+            apply_output_postprocessing_flag=(
+                self.stack_options.apply_output_postprocessing_flag
+            ),
             shared_gate_config=self.layer_controller_options.shared_gate_config,
             shared_memory_config=memory_config,
             layer_config=layer_config,

@@ -37,7 +37,7 @@ def _controller_stack(
             if output_dim is None
             else LastLayerBiasOptions.DISABLED
         ),
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,

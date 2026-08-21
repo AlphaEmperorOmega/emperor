@@ -81,8 +81,9 @@ class LayerStackConfig(ConfigBase):
     hidden_dim: int | None = optional_field("Hidden feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
     num_layers: int | None = optional_field("Total number of layers in the stack.")
-    apply_output_pipeline_flag: bool | None = optional_field(
-        "Apply the full layer pipeline to the final layer."
+    apply_output_postprocessing_flag: bool | None = optional_field(
+        "Apply activation, dropout, layer normalization, and residual processing "
+        "to the final layer."
     )
     last_layer_bias_option: "LastLayerBiasOptions | None" = optional_field(
         "Bias behavior for the final layer."

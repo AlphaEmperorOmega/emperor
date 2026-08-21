@@ -106,8 +106,8 @@ def _residual(runtime: RuntimeOptions, option, model_flag):
                 residual_model_flag=(runtime.residual_stack_residual_model_flag),
                 dropout_probability=(runtime.residual_stack_dropout_probability),
                 last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
-                apply_output_pipeline_flag=(
-                    runtime.residual_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.residual_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.residual_stack_bias_flag,
             ),
@@ -159,7 +159,7 @@ def _generator_stack(
         hidden_dim=options.hidden_dim,
         output_dim=None,
         num_layers=options.num_layers,
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         last_layer_bias_option=options.last_layer_bias_option,
         shared_gate_config=None,
         shared_halting_config=None,
@@ -347,7 +347,7 @@ def _affine_stack(
     residual_connection_option,
     residual_model_flag,
     last_layer_bias_option,
-    apply_output_pipeline_flag: bool,
+    apply_output_postprocessing_flag: bool,
     bias_flag: bool,
     mirrored: bool = False,
     backend: bool = True,
@@ -373,7 +373,7 @@ def _affine_stack(
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         num_layers=stack_depth,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         last_layer_bias_option=last_layer_bias_option,
         shared_gate_config=None,
         shared_halting_config=None,
@@ -407,7 +407,7 @@ def _affine_stack(
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         bias_flag=bias_flag,
     )
     return _configure_controls(
@@ -433,7 +433,7 @@ def patch_config(runtime: RuntimeOptions) -> LinearPatchEmbeddingConfig:
         residual_connection_option=None,
         residual_model_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         bias_flag=runtime.patch_bias_flag,
         backend=False,
     )
@@ -462,7 +462,7 @@ def _router_stack(runtime: RuntimeOptions) -> LayerStackConfig:
         residual_connection_option=runtime.router_stack_residual_connection_option,
         residual_model_flag=runtime.router_stack_residual_model_flag,
         last_layer_bias_option=runtime.router_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=runtime.router_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.router_stack_apply_output_postprocessing_flag,
         bias_flag=runtime.router_bias_flag,
         backend=False,
     )
@@ -507,7 +507,9 @@ def _expert_stack(
         residual_connection_option=(runtime.expert_stack_residual_connection_option),
         residual_model_flag=runtime.expert_stack_residual_model_flag,
         last_layer_bias_option=runtime.expert_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(runtime.expert_stack_apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=(
+            runtime.expert_stack_apply_output_postprocessing_flag
+        ),
         bias_flag=runtime.expert_bias_flag,
         backend=True,
     )
@@ -520,7 +522,9 @@ def _expert_stack(
         residual_connection_option=runtime.expert_stack_residual_connection_option,
         residual_model_flag=runtime.expert_stack_residual_model_flag,
         last_layer_bias_option=runtime.expert_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(runtime.expert_stack_apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=(
+            runtime.expert_stack_apply_output_postprocessing_flag
+        ),
         bias_flag=runtime.expert_bias_flag,
     )
     return _configure_controls(
@@ -548,7 +552,7 @@ def _mixture_model_config(
     residual_connection_option,
     residual_model_flag,
     last_layer_bias_option,
-    apply_output_pipeline_flag: bool,
+    apply_output_postprocessing_flag: bool,
     mirrored: bool,
     control_options: ControlOptions,
 ) -> MixtureOfExpertsModelConfig:
@@ -593,7 +597,7 @@ def _mixture_model_config(
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         num_layers=stack_depth,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         last_layer_bias_option=last_layer_bias_option,
         shared_gate_config=None,
         shared_halting_config=None,
@@ -632,7 +636,7 @@ def _mixture_model_config(
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         bias_flag=runtime.stack_bias_flag,
     )
     return _configure_controls(
@@ -660,8 +664,8 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
         ),
         residual_model_flag=runtime.token_mixer_stack_residual_model_flag,
         last_layer_bias_option=(runtime.token_mixer_stack_last_layer_bias_option),
-        apply_output_pipeline_flag=(
-            runtime.token_mixer_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.token_mixer_stack_apply_output_postprocessing_flag
         ),
         mirrored=False,
         control_options=token_mixer_control_options(runtime),
@@ -683,8 +687,8 @@ def _channel_mixing_model(runtime: RuntimeOptions):
         ),
         residual_model_flag=runtime.channel_mixer_stack_residual_model_flag,
         last_layer_bias_option=(runtime.channel_mixer_stack_last_layer_bias_option),
-        apply_output_pipeline_flag=(
-            runtime.channel_mixer_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.channel_mixer_stack_apply_output_postprocessing_flag
         ),
         mirrored=True,
         control_options=channel_mixer_control_options(runtime),
@@ -715,7 +719,7 @@ def _controller_stack_config(
             if output_dim is None
             else LastLayerBiasOptions.DISABLED
         ),
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         bias_flag=options.bias_flag,
         backend=False,
     )
@@ -911,7 +915,7 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
         hidden_dim=runtime.hidden_dim,
         output_dim=runtime.hidden_dim,
         num_layers=runtime.stack_num_layers,
-        apply_output_pipeline_flag=runtime.stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.stack_apply_output_postprocessing_flag,
         last_layer_bias_option=runtime.stack_last_layer_bias_option,
         shared_gate_config=None,
         shared_halting_config=None,

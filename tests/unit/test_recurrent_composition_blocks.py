@@ -35,7 +35,7 @@ def _linear_stack(input_dim: int, output_dim: int) -> LayerStackConfig:
         hidden_dim=input_dim,
         output_dim=output_dim,
         num_layers=1,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         shared_gate_config=None,
         shared_halting_config=None,

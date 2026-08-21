@@ -337,7 +337,7 @@ const canonicalStackFixtureFields = [
     choices: ["DISABLED", "DEFAULT", "BEFORE", "AFTER"],
   }),
   configFixtureField({
-    key: "stack_apply_output_pipeline_flag",
+    key: "stack_apply_output_postprocessing_flag",
     section: "Layer Stack Options",
     type: "bool",
     default: false,
@@ -2796,7 +2796,7 @@ describe("WorkbenchApp Full Config", () => {
           ...schemaResponse.fields,
           canonicalStackFixtureFields.find((field) => field.key === "stack_bias_flag")!,
           canonicalStackFixtureFields.find(
-            (field) => field.key === "stack_apply_output_pipeline_flag",
+            (field) => field.key === "stack_apply_output_postprocessing_flag",
           )!,
           stackFixtureField({
             key: "gate_stack_bias_flag",
@@ -2805,7 +2805,7 @@ describe("WorkbenchApp Full Config", () => {
             nullable: true,
           }),
           stackFixtureField({
-            key: "gate_stack_apply_output_pipeline_flag",
+            key: "gate_stack_apply_output_postprocessing_flag",
             section: "Gate Stack Options",
             default: null,
             nullable: true,
@@ -2824,7 +2824,7 @@ describe("WorkbenchApp Full Config", () => {
       await user.click(layerAccordion);
     }
     const layerPanel = accordionPanelFor(layerAccordion);
-    expectBooleanSegmentedControl(layerPanel, /apply output pipeline flag/i);
+    expectBooleanSegmentedControl(layerPanel, /apply output postprocessing flag/i);
     expectBooleanSegmentedControl(layerPanel, /bias flag/i);
 
     const gateSection = fullConfigSectionFor(
@@ -2851,7 +2851,7 @@ describe("WorkbenchApp Full Config", () => {
     );
     const gatePipeline = expectBooleanSegmentedControl(
       gateModelStackPanel,
-      /apply output pipeline flag/i,
+      /apply output postprocessing flag/i,
     );
 
     expect(gateBias.on).toHaveAttribute("aria-checked", "true");
@@ -2863,7 +2863,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.on).toHaveAttribute("aria-checked", "true");
     let commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-pipeline-flag true",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-postprocessing-flag true",
     );
     await user.click(
       within(commandDialog).getByRole("button", {
@@ -2875,7 +2875,7 @@ describe("WorkbenchApp Full Config", () => {
     expect(gatePipeline.off).toHaveAttribute("aria-checked", "true");
     commandDialog = await openTrainingCommand(user, dialog);
     expect(commandField(commandDialog)).toHaveValue(
-      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-pipeline-flag false",
+      "mise run experiment -- --model-type linears --model linear --preset baseline --config --stack-gate-flag true --gate-stack-apply-output-postprocessing-flag false",
     );
   });
 

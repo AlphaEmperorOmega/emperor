@@ -185,7 +185,7 @@ class TestVitLinearModel(unittest.TestCase):
             **self._small_image_overrides(batch_size=2),
             stack_residual_connection_option=AdditiveResidualConfig,
             stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            stack_apply_output_pipeline_flag=False,
+            stack_apply_output_postprocessing_flag=False,
             stack_bias_flag=False,
         )
         encoder_cfg = self._encoder_stack_config(cfg)
@@ -198,7 +198,7 @@ class TestVitLinearModel(unittest.TestCase):
             encoder_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertFalse(encoder_cfg.apply_output_pipeline_flag)
+        self.assertFalse(encoder_cfg.apply_output_postprocessing_flag)
         self.assertTrue(
             cfg.experiment_config.output_config.layer_model_config.bias_flag
         )
@@ -349,7 +349,7 @@ class TestVitLinearModel(unittest.TestCase):
             attention_projection_stack_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DEFAULT,
         )
-        self.assertTrue(attention_projection_stack_cfg.apply_output_pipeline_flag)
+        self.assertTrue(attention_projection_stack_cfg.apply_output_postprocessing_flag)
         feed_forward_layer_cfg = (
             inner_layer_cfg.feed_forward_config.stack_config.layer_config
         )
@@ -376,7 +376,7 @@ class TestVitLinearModel(unittest.TestCase):
             feed_forward_stack_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DEFAULT,
         )
-        self.assertTrue(feed_forward_stack_cfg.apply_output_pipeline_flag)
+        self.assertTrue(feed_forward_stack_cfg.apply_output_postprocessing_flag)
 
     def test_attention_projection_stack_overrides_configure_projection_stack(self):
         cfg = self._build_config(
@@ -387,7 +387,7 @@ class TestVitLinearModel(unittest.TestCase):
             attn_stack_dropout_probability=0.2,
             attn_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             attn_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            attn_stack_apply_output_pipeline_flag=False,
+            attn_stack_apply_output_postprocessing_flag=False,
         )
         projection_stack_cfg = self._attention_projection_stack_config(cfg)
 
@@ -409,7 +409,7 @@ class TestVitLinearModel(unittest.TestCase):
             projection_stack_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertFalse(projection_stack_cfg.apply_output_pipeline_flag)
+        self.assertFalse(projection_stack_cfg.apply_output_postprocessing_flag)
 
     def test_attention_num_layers_and_bias_remain_canonical_for_projection_stack(self):
         overrides = self._small_image_overrides(batch_size=2)
@@ -527,7 +527,7 @@ class TestVitLinearModel(unittest.TestCase):
             ff_stack_dropout_probability=0.2,
             ff_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             ff_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            ff_stack_apply_output_pipeline_flag=False,
+            ff_stack_apply_output_postprocessing_flag=False,
         )
         feed_forward_stack_cfg = self._feed_forward_stack_config(cfg)
 
@@ -549,7 +549,7 @@ class TestVitLinearModel(unittest.TestCase):
             feed_forward_stack_cfg.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertFalse(feed_forward_stack_cfg.apply_output_pipeline_flag)
+        self.assertFalse(feed_forward_stack_cfg.apply_output_postprocessing_flag)
 
     def test_feed_forward_num_layers_and_bias_remain_canonical(self):
         cfg = self._build_config(

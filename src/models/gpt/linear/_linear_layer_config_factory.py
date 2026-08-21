@@ -54,7 +54,7 @@ class LinearLayerConfigFactory:
         dropout_probability: float,
         input_dim: int | None = None,
         output_dim: int | None = None,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
     ) -> LayerStackConfig:
         return self.build_linear_stack_config(
             layer_model_config=self.build_backend_linear_layer_config(
@@ -65,7 +65,7 @@ class LinearLayerConfigFactory:
             dropout_probability=dropout_probability,
             input_dim=input_dim,
             output_dim=output_dim,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         )
 
     def build_plain_linear_stack_config(
@@ -77,7 +77,7 @@ class LinearLayerConfigFactory:
         dropout_probability: float,
         input_dim: int | None = None,
         output_dim: int | None = None,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
     ) -> LayerStackConfig:
         return self.build_linear_stack_config(
             layer_model_config=self.build_plain_linear_layer_config(
@@ -88,7 +88,7 @@ class LinearLayerConfigFactory:
             dropout_probability=dropout_probability,
             input_dim=input_dim,
             output_dim=output_dim,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         )
 
     def build_linear_stack_config(
@@ -106,7 +106,7 @@ class LinearLayerConfigFactory:
         residual_model_flag: bool = False,
         residual_stack_options: ResidualStackOptions | None = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
     ) -> LayerStackConfig:
         layer_config = LayerConfig(
             activation=(
@@ -129,6 +129,6 @@ class LinearLayerConfigFactory:
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             layer_config=layer_config,
         )

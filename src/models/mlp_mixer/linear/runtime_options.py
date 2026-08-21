@@ -35,7 +35,7 @@ class RuntimeOptions:
     stack_residual_connection_option: type[ResidualConfig] | None
     stack_residual_model_flag: bool = field(default=False, kw_only=True)
     stack_last_layer_bias_option: LastLayerBiasOptions
-    stack_apply_output_pipeline_flag: bool
+    stack_apply_output_postprocessing_flag: bool
     stack_bias_flag: bool
     submodule_stack_hidden_dim: int
     submodule_stack_layer_norm_position: LayerNormPositionOptions
@@ -45,7 +45,7 @@ class RuntimeOptions:
     submodule_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     submodule_stack_dropout_probability: float
     submodule_stack_last_layer_bias_option: LastLayerBiasOptions
-    submodule_stack_apply_output_pipeline_flag: bool
+    submodule_stack_apply_output_postprocessing_flag: bool
     submodule_stack_bias_flag: bool
     residual_stack_independent_flag: bool
     residual_stack_hidden_dim: int | None
@@ -56,7 +56,7 @@ class RuntimeOptions:
     residual_stack_residual_model_flag: bool
     residual_stack_dropout_probability: float | None
     residual_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    residual_stack_apply_output_pipeline_flag: bool | None
+    residual_stack_apply_output_postprocessing_flag: bool | None
     residual_stack_bias_flag: bool | None
     controller_stack_hidden_dim: int
     controller_stack_layer_norm_position: LayerNormPositionOptions
@@ -66,7 +66,7 @@ class RuntimeOptions:
     controller_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     controller_stack_dropout_probability: float
     controller_stack_last_layer_bias_option: LastLayerBiasOptions
-    controller_stack_apply_output_pipeline_flag: bool
+    controller_stack_apply_output_postprocessing_flag: bool
     controller_stack_bias_flag: bool
     token_mixer_stack_hidden_dim: int
     token_mixer_num_layers: int
@@ -76,7 +76,7 @@ class RuntimeOptions:
     token_mixer_stack_residual_connection_option: type[ResidualConfig] | None
     token_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     token_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
-    token_mixer_stack_apply_output_pipeline_flag: bool
+    token_mixer_stack_apply_output_postprocessing_flag: bool
     token_mixer_bias_flag: bool
     channel_mixer_stack_hidden_dim: int
     channel_mixer_num_layers: int
@@ -86,7 +86,7 @@ class RuntimeOptions:
     channel_mixer_stack_residual_connection_option: type[ResidualConfig] | None
     channel_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     channel_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
-    channel_mixer_stack_apply_output_pipeline_flag: bool
+    channel_mixer_stack_apply_output_postprocessing_flag: bool
     channel_mixer_bias_flag: bool
     stack_gate_flag: bool
     gate_option: LayerGateOptions | None
@@ -138,7 +138,7 @@ class RuntimeOptions:
     gate_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     gate_stack_dropout_probability: float | None
     gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    gate_stack_apply_output_pipeline_flag: bool | None
+    gate_stack_apply_output_postprocessing_flag: bool | None
     gate_stack_bias_flag: bool | None
     halting_stack_independent_flag: bool
     halting_stack_hidden_dim: int | None
@@ -149,7 +149,7 @@ class RuntimeOptions:
     halting_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     halting_stack_dropout_probability: float | None
     halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    halting_stack_apply_output_pipeline_flag: bool | None
+    halting_stack_apply_output_postprocessing_flag: bool | None
     halting_stack_bias_flag: bool | None
     memory_stack_independent_flag: bool
     memory_stack_hidden_dim: int | None
@@ -160,7 +160,7 @@ class RuntimeOptions:
     memory_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     memory_stack_dropout_probability: float | None
     memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    memory_stack_apply_output_pipeline_flag: bool | None
+    memory_stack_apply_output_postprocessing_flag: bool | None
     memory_stack_bias_flag: bool | None
     recurrent_gate_stack_independent_flag: bool
     recurrent_gate_stack_hidden_dim: int | None
@@ -171,7 +171,7 @@ class RuntimeOptions:
     recurrent_gate_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_gate_stack_dropout_probability: float | None
     recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    recurrent_gate_stack_apply_output_pipeline_flag: bool | None
+    recurrent_gate_stack_apply_output_postprocessing_flag: bool | None
     recurrent_gate_stack_bias_flag: bool | None
     recurrent_halting_stack_independent_flag: bool
     recurrent_halting_stack_hidden_dim: int | None
@@ -184,7 +184,7 @@ class RuntimeOptions:
     )
     recurrent_halting_stack_dropout_probability: float | None
     recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    recurrent_halting_stack_apply_output_pipeline_flag: bool | None
+    recurrent_halting_stack_apply_output_postprocessing_flag: bool | None
     recurrent_halting_stack_bias_flag: bool | None
     token_mixer_stack_gate_flag: bool
     token_mixer_gate_option: LayerGateOptions | None
@@ -200,7 +200,7 @@ class RuntimeOptions:
     )
     token_mixer_gate_stack_dropout_probability: float | None
     token_mixer_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    token_mixer_gate_stack_apply_output_pipeline_flag: bool | None
+    token_mixer_gate_stack_apply_output_postprocessing_flag: bool | None
     token_mixer_gate_stack_bias_flag: bool | None
     token_mixer_stack_halting_flag: bool
     token_mixer_halting_option: type[HaltingConfig]
@@ -218,7 +218,7 @@ class RuntimeOptions:
     )
     token_mixer_halting_stack_dropout_probability: float | None
     token_mixer_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    token_mixer_halting_stack_apply_output_pipeline_flag: bool | None
+    token_mixer_halting_stack_apply_output_postprocessing_flag: bool | None
     token_mixer_halting_stack_bias_flag: bool | None
     token_mixer_memory_flag: bool
     token_mixer_memory_option: type[DynamicMemoryConfig]
@@ -236,7 +236,7 @@ class RuntimeOptions:
     )
     token_mixer_memory_stack_dropout_probability: float | None
     token_mixer_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    token_mixer_memory_stack_apply_output_pipeline_flag: bool | None
+    token_mixer_memory_stack_apply_output_postprocessing_flag: bool | None
     token_mixer_memory_stack_bias_flag: bool | None
     token_mixer_recurrent_flag: bool
     token_mixer_recurrent_max_steps: int
@@ -261,7 +261,7 @@ class RuntimeOptions:
     )
     token_mixer_recurrent_gate_stack_dropout_probability: float | None
     token_mixer_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    token_mixer_recurrent_gate_stack_apply_output_pipeline_flag: bool | None
+    token_mixer_recurrent_gate_stack_apply_output_postprocessing_flag: bool | None
     token_mixer_recurrent_gate_stack_bias_flag: bool | None
     token_mixer_recurrent_stack_halting_flag: bool
     token_mixer_recurrent_halting_option: type[HaltingConfig]
@@ -285,7 +285,7 @@ class RuntimeOptions:
     token_mixer_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     )
-    token_mixer_recurrent_halting_stack_apply_output_pipeline_flag: bool | None
+    token_mixer_recurrent_halting_stack_apply_output_postprocessing_flag: bool | None
     token_mixer_recurrent_halting_stack_bias_flag: bool | None
     channel_mixer_stack_gate_flag: bool
     channel_mixer_gate_option: LayerGateOptions | None
@@ -301,7 +301,7 @@ class RuntimeOptions:
     )
     channel_mixer_gate_stack_dropout_probability: float | None
     channel_mixer_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    channel_mixer_gate_stack_apply_output_pipeline_flag: bool | None
+    channel_mixer_gate_stack_apply_output_postprocessing_flag: bool | None
     channel_mixer_gate_stack_bias_flag: bool | None
     channel_mixer_stack_halting_flag: bool
     channel_mixer_halting_option: type[HaltingConfig]
@@ -319,7 +319,7 @@ class RuntimeOptions:
     )
     channel_mixer_halting_stack_dropout_probability: float | None
     channel_mixer_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    channel_mixer_halting_stack_apply_output_pipeline_flag: bool | None
+    channel_mixer_halting_stack_apply_output_postprocessing_flag: bool | None
     channel_mixer_halting_stack_bias_flag: bool | None
     channel_mixer_memory_flag: bool
     channel_mixer_memory_option: type[DynamicMemoryConfig]
@@ -337,7 +337,7 @@ class RuntimeOptions:
     )
     channel_mixer_memory_stack_dropout_probability: float | None
     channel_mixer_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None
-    channel_mixer_memory_stack_apply_output_pipeline_flag: bool | None
+    channel_mixer_memory_stack_apply_output_postprocessing_flag: bool | None
     channel_mixer_memory_stack_bias_flag: bool | None
     channel_mixer_recurrent_flag: bool
     channel_mixer_recurrent_max_steps: int
@@ -366,7 +366,7 @@ class RuntimeOptions:
     channel_mixer_recurrent_gate_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     )
-    channel_mixer_recurrent_gate_stack_apply_output_pipeline_flag: bool | None
+    channel_mixer_recurrent_gate_stack_apply_output_postprocessing_flag: bool | None
     channel_mixer_recurrent_gate_stack_bias_flag: bool | None
     channel_mixer_recurrent_stack_halting_flag: bool
     channel_mixer_recurrent_halting_option: type[HaltingConfig]
@@ -390,7 +390,7 @@ class RuntimeOptions:
     channel_mixer_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     )
-    channel_mixer_recurrent_halting_stack_apply_output_pipeline_flag: bool | None
+    channel_mixer_recurrent_halting_stack_apply_output_postprocessing_flag: bool | None
     channel_mixer_recurrent_halting_stack_bias_flag: bool | None
 
 

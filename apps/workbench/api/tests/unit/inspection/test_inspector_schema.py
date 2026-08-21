@@ -82,11 +82,13 @@ class InspectorSchemaTests(unittest.TestCase):
         stack_field = next(
             field
             for field in fields
-            if field["configKey"] == "STACK_APPLY_OUTPUT_PIPELINE_FLAG"
+            if field["configKey"] == "STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG"
         )
-        self.assertEqual(stack_field["key"], "STACK_APPLY_OUTPUT_PIPELINE_FLAG")
+        self.assertEqual(stack_field["key"], "STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG")
         self.assertEqual(stack_field["key"], stack_field["configKey"])
-        self.assertEqual(stack_field["flag"], "--stack-apply-output-pipeline-flag")
+        self.assertEqual(
+            stack_field["flag"], "--stack-apply-output-postprocessing-flag"
+        )
         for field in fields:
             self.assertEqual(field["key"], field["configKey"])
             self.assertTrue(field["key"].isupper())
@@ -726,8 +728,10 @@ class InspectorSchemaTests(unittest.TestCase):
             adaptive_fields["halting_stack_bias_flag"]["description"],
         )
         self.assertIn(
-            "output pipeline",
-            adaptive_fields["halting_stack_apply_output_pipeline_flag"]["description"],
+            "output postprocessing",
+            adaptive_fields["halting_stack_apply_output_postprocessing_flag"][
+                "description"
+            ],
         )
         self.assertIn(
             "smoke tests",
@@ -1734,13 +1738,17 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertTrue(fields["memory_stack_activation"]["nullable"])
         self.assertIn("GELU", fields["memory_stack_activation"]["choices"])
         self.assertEqual(
-            fields["memory_stack_apply_output_pipeline_flag"]["type"],
+            fields["memory_stack_apply_output_postprocessing_flag"]["type"],
             "bool",
         )
-        self.assertIsNone(fields["memory_stack_apply_output_pipeline_flag"]["default"])
-        self.assertTrue(fields["memory_stack_apply_output_pipeline_flag"]["nullable"])
+        self.assertIsNone(
+            fields["memory_stack_apply_output_postprocessing_flag"]["default"]
+        )
+        self.assertTrue(
+            fields["memory_stack_apply_output_postprocessing_flag"]["nullable"]
+        )
         self.assertEqual(
-            fields["memory_stack_apply_output_pipeline_flag"]["choices"],
+            fields["memory_stack_apply_output_postprocessing_flag"]["choices"],
             [True, False],
         )
         self.assertEqual(fields["gate_stack_activation"]["type"], "enum")
@@ -1780,7 +1788,7 @@ class InspectorSchemaTests(unittest.TestCase):
             "num_layers",
             "activation",
             "layer_norm_position",
-            "apply_output_pipeline_flag",
+            "apply_output_postprocessing_flag",
             "bias_flag",
         }
 
@@ -1815,13 +1823,17 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertFalse(linear_fields["hidden_dim"]["nullable"])
         self.assertIsNone(linear_fields["gate_stack_hidden_dim"]["default"])
         self.assertTrue(linear_fields["gate_stack_hidden_dim"]["nullable"])
-        self.assertTrue(linear_fields["stack_apply_output_pipeline_flag"]["default"])
-        self.assertFalse(linear_fields["stack_apply_output_pipeline_flag"]["nullable"])
+        self.assertTrue(
+            linear_fields["stack_apply_output_postprocessing_flag"]["default"]
+        )
+        self.assertFalse(
+            linear_fields["stack_apply_output_postprocessing_flag"]["nullable"]
+        )
         self.assertIsNone(
-            linear_fields["memory_stack_apply_output_pipeline_flag"]["default"]
+            linear_fields["memory_stack_apply_output_postprocessing_flag"]["default"]
         )
         self.assertTrue(
-            linear_fields["memory_stack_apply_output_pipeline_flag"]["nullable"]
+            linear_fields["memory_stack_apply_output_postprocessing_flag"]["nullable"]
         )
 
     def test_parse_config_value_supports_nullable_memory_primitives(self) -> None:
@@ -1874,7 +1886,7 @@ class InspectorSchemaTests(unittest.TestCase):
         self.assertIsNone(
             parse_config_value(
                 linear_config,
-                "MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                "MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG",
                 "None",
             )
         )

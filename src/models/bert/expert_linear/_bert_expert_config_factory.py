@@ -136,8 +136,8 @@ class _BertExpertConfigFactoryBase:
             residual_stack_options=feed_forward_stack_options.residual_stack_options,
             dropout_probability=feed_forward_stack_options.dropout_probability,
             last_layer_bias_option=feed_forward_stack_options.last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                feed_forward_stack_options.apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                feed_forward_stack_options.apply_output_postprocessing_flag
             ),
         )
 
@@ -156,7 +156,7 @@ class _BertExpertConfigFactoryBase:
             ),
             dropout_probability=dependencies.encoder_options.dropout_probability,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
         )
 
     def _build_control_config(self, stack_options: ExpertsStackOptions):
