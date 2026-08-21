@@ -282,7 +282,9 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
         self.assertIs(stack.cfg, layer_stack_config)
         torch.testing.assert_close(output, hidden)
 
-    def test_stack_output_override_merges_pipeline_and_bias_behavior(self) -> None:
+    def test_stack_output_override_merges_postprocessing_and_bias_behavior(
+        self,
+    ) -> None:
         stack = LayerStack(
             LayerStackConfig(
                 input_dim=2,
@@ -290,7 +292,7 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.ENABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 shared_gate_config=None,
                 shared_halting_config=None,
                 shared_memory_config=None,
@@ -366,7 +368,7 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 shared_gate_config=None,
                 shared_halting_config=None,
                 shared_memory_config=memory_config,
@@ -402,7 +404,7 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 shared_gate_config=None,
                 shared_halting_config=halting_config,
                 shared_memory_config=None,

@@ -71,7 +71,7 @@ class MixtureOfExpertsPresetMixin:
                 output_dim=output_dim,
                 num_layers=stack_num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=stack_activation,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -135,7 +135,7 @@ class MixtureOfExpertsPresetMixin:
             output_dim=output_dim,
             num_layers=stack_num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 activation=stack_activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -244,7 +244,7 @@ class MixtureOfExpertsPresetMixin:
             output_dim=output_dim,
             num_layers=experts_stack_num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=MixtureOfExpertsLayerConfig(
                 activation=experts_stack_activation,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,

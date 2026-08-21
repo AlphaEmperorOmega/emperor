@@ -150,7 +150,7 @@ def main_layer_stack_options(config: ModuleType) -> MainLayerStackOptions:
         residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     )
 
 
@@ -163,8 +163,8 @@ def linears_submodule_stack_options(
             hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
             num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
             last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
@@ -180,7 +180,7 @@ def linears_submodule_stack_options(
             hidden_dim=config.ATTN_STACK_HIDDEN_DIM,
             num_layers=config.ATTN_NUM_LAYERS,
             last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ATTN_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -192,7 +192,7 @@ def linears_submodule_stack_options(
         hidden_dim=config.FF_STACK_HIDDEN_DIM,
         num_layers=config.FF_NUM_LAYERS,
         last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.FF_STACK_ACTIVATION,
         layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -207,7 +207,7 @@ def _submodule_stack_options(
     hidden_dim: int,
     num_layers: int,
     last_layer_bias_option: LastLayerBiasOptions,
-    apply_output_pipeline_flag: bool,
+    apply_output_postprocessing_flag: bool,
     activation: ActivationOptions,
     layer_norm_position: LayerNormPositionOptions,
     residual_connection_option: type[ResidualConfig] | None,
@@ -219,7 +219,7 @@ def _submodule_stack_options(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
@@ -262,7 +262,7 @@ def _main_controller_stack_source(
             config.GATE_STACK_HIDDEN_DIM,
             config.GATE_STACK_NUM_LAYERS,
             config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.GATE_STACK_ACTIVATION,
             config.GATE_STACK_LAYER_NORM_POSITION,
             config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -276,7 +276,7 @@ def _main_controller_stack_source(
             config.HALTING_STACK_HIDDEN_DIM,
             config.HALTING_STACK_NUM_LAYERS,
             config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.HALTING_STACK_ACTIVATION,
             config.HALTING_STACK_LAYER_NORM_POSITION,
             config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -290,7 +290,7 @@ def _main_controller_stack_source(
             config.MEMORY_STACK_HIDDEN_DIM,
             config.MEMORY_STACK_NUM_LAYERS,
             config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.MEMORY_STACK_ACTIVATION,
             config.MEMORY_STACK_LAYER_NORM_POSITION,
             config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -304,7 +304,7 @@ def _main_controller_stack_source(
             config.RECURRENT_GATE_STACK_HIDDEN_DIM,
             config.RECURRENT_GATE_STACK_NUM_LAYERS,
             config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.RECURRENT_GATE_STACK_ACTIVATION,
             config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
             config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -318,7 +318,7 @@ def _main_controller_stack_source(
             config.RECURRENT_HALTING_STACK_HIDDEN_DIM,
             config.RECURRENT_HALTING_STACK_NUM_LAYERS,
             config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.RECURRENT_HALTING_STACK_ACTIVATION,
             config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
             config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -338,7 +338,7 @@ def _attention_controller_stack_source(
             config.ATTN_GATE_STACK_HIDDEN_DIM,
             config.ATTN_GATE_STACK_NUM_LAYERS,
             config.ATTN_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_GATE_STACK_ACTIVATION,
             config.ATTN_GATE_STACK_LAYER_NORM_POSITION,
             config.ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -352,7 +352,7 @@ def _attention_controller_stack_source(
             config.ATTN_HALTING_STACK_HIDDEN_DIM,
             config.ATTN_HALTING_STACK_NUM_LAYERS,
             config.ATTN_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_HALTING_STACK_ACTIVATION,
             config.ATTN_HALTING_STACK_LAYER_NORM_POSITION,
             config.ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -366,7 +366,7 @@ def _attention_controller_stack_source(
             config.ATTN_MEMORY_STACK_HIDDEN_DIM,
             config.ATTN_MEMORY_STACK_NUM_LAYERS,
             config.ATTN_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_MEMORY_STACK_ACTIVATION,
             config.ATTN_MEMORY_STACK_LAYER_NORM_POSITION,
             config.ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -380,7 +380,7 @@ def _attention_controller_stack_source(
             config.ATTN_RECURRENT_GATE_STACK_HIDDEN_DIM,
             config.ATTN_RECURRENT_GATE_STACK_NUM_LAYERS,
             config.ATTN_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_RECURRENT_GATE_STACK_ACTIVATION,
             config.ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
             config.ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -394,7 +394,7 @@ def _attention_controller_stack_source(
             config.ATTN_RECURRENT_HALTING_STACK_HIDDEN_DIM,
             config.ATTN_RECURRENT_HALTING_STACK_NUM_LAYERS,
             config.ATTN_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_RECURRENT_HALTING_STACK_ACTIVATION,
             config.ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
             config.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -414,7 +414,7 @@ def _feed_forward_controller_stack_source(
             config.FF_GATE_STACK_HIDDEN_DIM,
             config.FF_GATE_STACK_NUM_LAYERS,
             config.FF_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_GATE_STACK_ACTIVATION,
             config.FF_GATE_STACK_LAYER_NORM_POSITION,
             config.FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -428,7 +428,7 @@ def _feed_forward_controller_stack_source(
             config.FF_HALTING_STACK_HIDDEN_DIM,
             config.FF_HALTING_STACK_NUM_LAYERS,
             config.FF_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_HALTING_STACK_ACTIVATION,
             config.FF_HALTING_STACK_LAYER_NORM_POSITION,
             config.FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -442,7 +442,7 @@ def _feed_forward_controller_stack_source(
             config.FF_MEMORY_STACK_HIDDEN_DIM,
             config.FF_MEMORY_STACK_NUM_LAYERS,
             config.FF_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_MEMORY_STACK_ACTIVATION,
             config.FF_MEMORY_STACK_LAYER_NORM_POSITION,
             config.FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -456,7 +456,7 @@ def _feed_forward_controller_stack_source(
             config.FF_RECURRENT_GATE_STACK_HIDDEN_DIM,
             config.FF_RECURRENT_GATE_STACK_NUM_LAYERS,
             config.FF_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_RECURRENT_GATE_STACK_ACTIVATION,
             config.FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
             config.FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -469,7 +469,7 @@ def _feed_forward_controller_stack_source(
         config.FF_RECURRENT_HALTING_STACK_HIDDEN_DIM,
         config.FF_RECURRENT_HALTING_STACK_NUM_LAYERS,
         config.FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        config.FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        config.FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.FF_RECURRENT_HALTING_STACK_ACTIVATION,
         config.FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
         config.FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -484,7 +484,7 @@ def _controller_stack_source(
     hidden_dim: int | None,
     num_layers: int | None,
     last_layer_bias_option: LastLayerBiasOptions | None,
-    apply_output_pipeline_flag: bool | None,
+    apply_output_postprocessing_flag: bool | None,
     activation: ActivationOptions | None,
     layer_norm_position: LayerNormPositionOptions | None,
     residual_connection_option: type[ResidualConfig] | None,
@@ -497,7 +497,7 @@ def _controller_stack_source(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
@@ -784,8 +784,8 @@ def adaptive_generator_stack_options(
         residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
     )
@@ -818,7 +818,7 @@ def _main_adaptive_generator_stack_source(
             config.WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.BIAS:
@@ -832,7 +832,7 @@ def _main_adaptive_generator_stack_source(
             config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.BIAS_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
@@ -846,7 +846,7 @@ def _main_adaptive_generator_stack_source(
             config.DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         )
     return _adaptive_stack_source(
@@ -859,7 +859,7 @@ def _main_adaptive_generator_stack_source(
         config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
         config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.MASK_GENERATOR_STACK_BIAS_FLAG,
     )
 
@@ -879,7 +879,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.ATTN_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.BIAS:
@@ -893,7 +893,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.ATTN_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_BIAS_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
@@ -907,7 +907,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.ATTN_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.ATTN_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.ATTN_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         )
     return _adaptive_stack_source(
@@ -920,7 +920,7 @@ def _attention_adaptive_generator_stack_source(
         config.ATTN_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         config.ATTN_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
         config.ATTN_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        config.ATTN_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        config.ATTN_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.ATTN_MASK_GENERATOR_STACK_BIAS_FLAG,
     )
 
@@ -940,7 +940,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.FF_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.BIAS:
@@ -954,7 +954,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.FF_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_BIAS_GENERATOR_STACK_BIAS_FLAG,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
@@ -968,7 +968,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             config.FF_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-            config.FF_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            config.FF_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         )
     return _adaptive_stack_source(
@@ -981,7 +981,7 @@ def _feed_forward_adaptive_generator_stack_source(
         config.FF_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         config.FF_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
         config.FF_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        config.FF_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        config.FF_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.FF_MASK_GENERATOR_STACK_BIAS_FLAG,
     )
 
@@ -996,7 +996,7 @@ def _adaptive_stack_source(
     residual_model_flag: bool,
     dropout_probability: float | None,
     last_layer_bias_option: LastLayerBiasOptions | None,
-    apply_output_pipeline_flag: bool | None,
+    apply_output_postprocessing_flag: bool | None,
     bias_flag: bool | None,
 ) -> AdaptiveGeneratorStackSource:
     return AdaptiveGeneratorStackSource(
@@ -1009,7 +1009,7 @@ def _adaptive_stack_source(
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         bias_flag=bias_flag,
     )
 

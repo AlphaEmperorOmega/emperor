@@ -13,7 +13,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
     "num_layers": "num_layers",
     "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",

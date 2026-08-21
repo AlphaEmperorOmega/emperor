@@ -102,7 +102,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
             output_dim=dim,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=dim,
                 output_dim=dim,
@@ -490,7 +490,7 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 output_dim=4,
                 num_layers=3,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 shared_gate_config=GateConfig(
                     model_config=self.linear_stack_config(4),
                     option=LayerGateOptions.MULTIPLIER,

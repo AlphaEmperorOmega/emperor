@@ -74,7 +74,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('RESIDUAL_STACK_RESIDUAL_MODEL_FLAG', 81, (81,)),
         ('RESIDUAL_STACK_DROPOUT_PROBABILITY', 82, (82,)),
         ('RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION', 83, (83,)),
-        ('RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 84, (84,)),
+        ('RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 84, (84,)),
         ('RESIDUAL_STACK_BIAS_FLAG', 85, (85,)),
     )),
     RuntimeDefaultsSection(('Parametric Vector Mixture Options',), (

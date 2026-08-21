@@ -21,7 +21,7 @@ _STACK_FIELDS = {
     "hidden_dim": "hidden_dim",
     "num_layers": "num_layers",
     "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
@@ -87,9 +87,9 @@ def builder_kwargs_from_flat(
                 "residual_stack_last_layer_bias_option",
                 config_module.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
             ),
-            apply_output_pipeline_flag=kwargs.pop(
-                "residual_stack_apply_output_pipeline_flag",
-                config_module.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=kwargs.pop(
+                "residual_stack_apply_output_postprocessing_flag",
+                config_module.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             ),
             bias_flag=kwargs.pop(
                 "residual_stack_bias_flag",
@@ -195,7 +195,7 @@ def _stack_options(
         residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     )
     updates = _pop_updates(
         kwargs,
@@ -209,7 +209,7 @@ def _stack_options(
             "stack_residual_model_flag": "residual_model_flag",
             "stack_dropout_probability": "dropout_probability",
             "stack_last_layer_bias_option": "last_layer_bias_option",
-            "stack_apply_output_pipeline_flag": "apply_output_pipeline_flag",
+            "stack_apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
         },
     )
     return replace(value, **updates) if updates else value
@@ -224,7 +224,7 @@ def _submodule_stack_options(
         hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
         num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
         last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -248,8 +248,8 @@ def _expert_stack_options(
     value = provided or replace(
         inherited,
         layer_norm_position=config_module.EXPERT_STACK_LAYER_NORM_POSITION,
-        apply_output_pipeline_flag=(
-            config_module.EXPERT_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
     )
     updates = _pop_updates(
@@ -258,7 +258,9 @@ def _expert_stack_options(
             "expert_stack_hidden_dim": "hidden_dim",
             "expert_stack_num_layers": "num_layers",
             "expert_stack_last_layer_bias_option": "last_layer_bias_option",
-            "expert_stack_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            "expert_stack_apply_output_postprocessing_flag": (
+                "apply_output_postprocessing_flag"
+            ),
             "expert_stack_activation": "activation",
             "expert_stack_layer_norm_position": "layer_norm_position",
             "expert_stack_residual_connection_option": ("residual_connection_option"),
@@ -283,7 +285,9 @@ def _router_stack_options(
             "router_stack_hidden_dim": "hidden_dim",
             "router_stack_num_layers": "num_layers",
             "router_stack_last_layer_bias_option": "last_layer_bias_option",
-            "router_stack_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            "router_stack_apply_output_postprocessing_flag": (
+                "apply_output_postprocessing_flag"
+            ),
             "router_stack_activation": "activation",
             "router_stack_layer_norm_position": "layer_norm_position",
             "router_stack_residual_connection_option": ("residual_connection_option"),
@@ -389,7 +393,9 @@ def _stack_source_updates(
             f"{flat_prefix}_hidden_dim": "hidden_dim",
             f"{flat_prefix}_num_layers": "num_layers",
             f"{flat_prefix}_last_layer_bias_option": "last_layer_bias_option",
-            f"{flat_prefix}_apply_output_pipeline_flag": ("apply_output_pipeline_flag"),
+            f"{flat_prefix}_apply_output_postprocessing_flag": (
+                "apply_output_postprocessing_flag"
+            ),
             f"{flat_prefix}_activation": "activation",
             f"{flat_prefix}_layer_norm_position": "layer_norm_position",
             f"{flat_prefix}_residual_connection_option": ("residual_connection_option"),

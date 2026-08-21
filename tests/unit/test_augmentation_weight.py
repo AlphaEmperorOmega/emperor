@@ -62,7 +62,7 @@ class TestWeightHandlerForward(unittest.TestCase):
         bias_flag: bool = True,
         generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_TWO,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
         normalization_option: WeightNormalizationOptions = (
             WeightNormalizationOptions.L2_SCALE
         ),
@@ -91,7 +91,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                 output_dim=output_dim,
                 num_layers=2,
                 last_layer_bias_option=last_layer_bias_option,
-                apply_output_pipeline_flag=apply_output_pipeline_flag,
+                apply_output_postprocessing_flag=apply_output_postprocessing_flag,
                 layer_config=LayerConfig(
                     input_dim=input_dim,
                     output_dim=output_dim,
@@ -518,7 +518,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                     hidden_dim=4,
                     output_dim=output_dim,
                     generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     normalization_option=WeightNormalizationOptions.DISABLED,
                     normalization_position_option=(
                         WeightNormalizationPositionOptions.DISABLED
@@ -631,7 +631,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                     hidden_dim=4,
                     output_dim=output_dim,
                     generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     normalization_option=WeightNormalizationOptions.DISABLED,
                     normalization_position_option=(
                         WeightNormalizationPositionOptions.DISABLED

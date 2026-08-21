@@ -25,7 +25,7 @@ class StackOptions:
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     bias_flag: bool
 
 
@@ -40,7 +40,7 @@ class ControllerStackSource:
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
     def resolve(self, defaults: StackOptions) -> StackOptions:
@@ -77,10 +77,10 @@ class ControllerStackSource:
                 if self.last_layer_bias_option is None
                 else self.last_layer_bias_option
             ),
-            apply_output_pipeline_flag=(
-                defaults.apply_output_pipeline_flag
-                if self.apply_output_pipeline_flag is None
-                else self.apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                defaults.apply_output_postprocessing_flag
+                if self.apply_output_postprocessing_flag is None
+                else self.apply_output_postprocessing_flag
             ),
             bias_flag=(
                 defaults.bias_flag if self.bias_flag is None else self.bias_flag
@@ -152,7 +152,7 @@ def submodule_stack_options(runtime: RuntimeOptions) -> StackOptions:
         residual_connection_option=runtime.submodule_stack_residual_connection_option,
         residual_model_flag=runtime.submodule_stack_residual_model_flag,
         last_layer_bias_option=runtime.submodule_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=runtime.submodule_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.submodule_stack_apply_output_postprocessing_flag,
         bias_flag=runtime.submodule_stack_bias_flag,
     )
 
@@ -260,8 +260,8 @@ def expert_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.expert_gate_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.expert_gate_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.expert_gate_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.expert_gate_stack_bias_flag,
             ),
@@ -286,8 +286,8 @@ def expert_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.expert_halting_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.expert_halting_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.expert_halting_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.expert_halting_stack_bias_flag,
             ),
@@ -316,8 +316,8 @@ def expert_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.expert_memory_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.expert_memory_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.expert_memory_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.expert_memory_stack_bias_flag,
             ),
@@ -364,8 +364,8 @@ def expert_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.expert_recurrent_gate_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.expert_recurrent_gate_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.expert_recurrent_gate_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=runtime.expert_recurrent_gate_stack_bias_flag,
                 ),
@@ -398,8 +398,8 @@ def expert_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.expert_recurrent_halting_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.expert_recurrent_halting_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.expert_recurrent_halting_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=runtime.expert_recurrent_halting_stack_bias_flag,
                 ),
@@ -435,8 +435,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.token_mixer_gate_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.token_mixer_gate_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.token_mixer_gate_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.token_mixer_gate_stack_bias_flag,
             ),
@@ -467,8 +467,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.token_mixer_halting_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.token_mixer_halting_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.token_mixer_halting_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.token_mixer_halting_stack_bias_flag,
             ),
@@ -503,8 +503,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.token_mixer_memory_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.token_mixer_memory_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.token_mixer_memory_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.token_mixer_memory_stack_bias_flag,
             ),
@@ -551,8 +551,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.token_mixer_recurrent_gate_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.token_mixer_recurrent_gate_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.token_mixer_recurrent_gate_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=runtime.token_mixer_recurrent_gate_stack_bias_flag,
                 ),
@@ -587,8 +587,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.token_mixer_recurrent_halting_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.token_mixer_recurrent_halting_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.token_mixer_recurrent_halting_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=(runtime.token_mixer_recurrent_halting_stack_bias_flag),
                 ),
@@ -624,8 +624,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.channel_mixer_gate_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.channel_mixer_gate_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.channel_mixer_gate_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.channel_mixer_gate_stack_bias_flag,
             ),
@@ -656,8 +656,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.channel_mixer_halting_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.channel_mixer_halting_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.channel_mixer_halting_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.channel_mixer_halting_stack_bias_flag,
             ),
@@ -692,8 +692,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 last_layer_bias_option=(
                     runtime.channel_mixer_memory_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    runtime.channel_mixer_memory_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    runtime.channel_mixer_memory_stack_apply_output_postprocessing_flag
                 ),
                 bias_flag=runtime.channel_mixer_memory_stack_bias_flag,
             ),
@@ -740,8 +740,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.channel_mixer_recurrent_gate_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.channel_mixer_recurrent_gate_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.channel_mixer_recurrent_gate_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=runtime.channel_mixer_recurrent_gate_stack_bias_flag,
                 ),
@@ -782,8 +782,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     last_layer_bias_option=(
                         runtime.channel_mixer_recurrent_halting_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        runtime.channel_mixer_recurrent_halting_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        runtime.channel_mixer_recurrent_halting_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=(runtime.channel_mixer_recurrent_halting_stack_bias_flag),
                 ),
@@ -804,7 +804,7 @@ def _main_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         residual_connection_option=runtime.gate_stack_residual_connection_option,
         residual_model_flag=runtime.gate_stack_residual_model_flag,
         last_layer_bias_option=runtime.gate_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=runtime.gate_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.gate_stack_apply_output_postprocessing_flag,
         bias_flag=runtime.gate_stack_bias_flag,
     )
 
@@ -820,7 +820,7 @@ def _main_halting_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         residual_connection_option=runtime.halting_stack_residual_connection_option,
         residual_model_flag=runtime.halting_stack_residual_model_flag,
         last_layer_bias_option=runtime.halting_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=runtime.halting_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.halting_stack_apply_output_postprocessing_flag,
         bias_flag=runtime.halting_stack_bias_flag,
     )
 
@@ -836,7 +836,7 @@ def _main_memory_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         residual_connection_option=runtime.memory_stack_residual_connection_option,
         residual_model_flag=runtime.memory_stack_residual_model_flag,
         last_layer_bias_option=runtime.memory_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=runtime.memory_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=runtime.memory_stack_apply_output_postprocessing_flag,
         bias_flag=runtime.memory_stack_bias_flag,
     )
 
@@ -854,8 +854,8 @@ def _main_recurrent_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource
         ),
         residual_model_flag=runtime.recurrent_gate_stack_residual_model_flag,
         last_layer_bias_option=runtime.recurrent_gate_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(
-            runtime.recurrent_gate_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.recurrent_gate_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.recurrent_gate_stack_bias_flag,
     )
@@ -874,8 +874,8 @@ def _main_recurrent_halting_stack(runtime: RuntimeOptions) -> ControllerStackSou
         ),
         residual_model_flag=runtime.recurrent_halting_stack_residual_model_flag,
         last_layer_bias_option=(runtime.recurrent_halting_stack_last_layer_bias_option),
-        apply_output_pipeline_flag=(
-            runtime.recurrent_halting_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.recurrent_halting_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.recurrent_halting_stack_bias_flag,
     )

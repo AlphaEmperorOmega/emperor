@@ -61,7 +61,7 @@ class ParametricPresetMixin:
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -403,7 +403,7 @@ class TestParametricLayerRouting(ParametricPresetMixin, unittest.TestCase):
             output_dim=3,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             layer_config=ParametricLayerHandlerConfig(
                 input_dim=4,
                 output_dim=3,

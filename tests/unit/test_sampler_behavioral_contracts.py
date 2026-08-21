@@ -64,7 +64,7 @@ def router_network_config(input_dim: int, output_dim: int) -> LayerStackConfig:
         output_dim=output_dim,
         num_layers=1,
         last_layer_bias_option=LastLayerBiasOptions.ENABLED,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             activation=ActivationOptions.DISABLED,
             residual_config=None,

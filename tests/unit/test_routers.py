@@ -86,7 +86,7 @@ class TestRouterModel(unittest.TestCase):
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             layer_config=LayerConfig(
                 activation=ActivationOptions.RELU,
                 residual_config=None,

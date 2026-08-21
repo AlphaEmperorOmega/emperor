@@ -198,7 +198,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             output_dim=4,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=4,
                 output_dim=4,
@@ -275,7 +275,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
                     output_dim=4,
                     num_layers=1,
                     last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     layer_config=block_config,
                 ),
                 option=LayerGateOptions.MULTIPLIER,
@@ -365,7 +365,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             output_dim=2,
             num_layers=2,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             layer_config=LayerConfig(
                 input_dim=4,
                 output_dim=5,
@@ -395,7 +395,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
         self.assertEqual(config_fields(root)["output_dim"], 2)
         self.assertEqual(config_fields(root)["num_layers"], 2)
         self.assertEqual(config_fields(root)["last_layer_bias_option"], "DISABLED")
-        self.assertTrue(config_fields(root)["apply_output_pipeline_flag"])
+        self.assertTrue(config_fields(root)["apply_output_postprocessing_flag"])
         self.assertIsNone(config_fields(root)["shared_gate_config"])
         self.assertEqual(config_fields(root)["layer_config"], "LayerConfig")
 
@@ -406,7 +406,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             output_dim=4,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=4,
                 output_dim=4,
@@ -430,7 +430,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             output_dim=4,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=True,
+            apply_output_postprocessing_flag=True,
             shared_gate_config=GateConfig(
                 model_config=gate_config,
                 option=LayerGateOptions.MULTIPLIER,

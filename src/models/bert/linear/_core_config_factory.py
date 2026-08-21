@@ -173,7 +173,9 @@ class CoreConfigFactory:
             output_dim=self.hidden_dim,
             num_layers=self.encoder_options.num_layers,
             last_layer_bias_option=self.stack_options.last_layer_bias_option,
-            apply_output_pipeline_flag=(self.stack_options.apply_output_pipeline_flag),
+            apply_output_postprocessing_flag=(
+                self.stack_options.apply_output_postprocessing_flag
+            ),
             shared_gate_config=self.layer_controller_options.shared_gate_config,
             shared_halting_config=halting_config,
             shared_memory_config=memory_factory.build_memory_config(),
@@ -243,7 +245,7 @@ class CoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
         gate_factory = self.__attention_projection_gate_factory()
         halting_factory = self.__attention_projection_halting_factory()
@@ -279,7 +281,7 @@ class CoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
         gate_factory = self.__feed_forward_gate_factory()
         halting_factory = self.__feed_forward_halting_factory()

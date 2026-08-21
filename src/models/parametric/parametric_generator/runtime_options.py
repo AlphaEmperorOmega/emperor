@@ -20,7 +20,7 @@ class ParametricStackOptions:
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
     last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
-    apply_output_pipeline_flag: bool = True
+    apply_output_postprocessing_flag: bool = True
     bias_flag: bool = True
 
 

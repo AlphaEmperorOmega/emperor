@@ -30,7 +30,7 @@ class _SubmoduleStackDefaults(Protocol):
     residual_model_flag: bool
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     bias_flag: bool
 
 
@@ -45,7 +45,7 @@ class ResidualStackSource:
     residual_model_flag: bool
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
 
@@ -59,7 +59,7 @@ class ResidualStackOptions:
     residual_model_flag: bool
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     bias_flag: bool
 
 
@@ -79,7 +79,7 @@ def resolve_residual_stack_options(
             residual_model_flag=source.residual_model_flag,
             dropout_probability=defaults.dropout_probability,
             last_layer_bias_option=defaults.last_layer_bias_option,
-            apply_output_pipeline_flag=defaults.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag,
             bias_flag=defaults.bias_flag,
         )
     return ResidualStackOptions(
@@ -113,10 +113,10 @@ def resolve_residual_stack_options(
             if source.last_layer_bias_option is None
             else source.last_layer_bias_option
         ),
-        apply_output_pipeline_flag=(
-            defaults.apply_output_pipeline_flag
-            if source.apply_output_pipeline_flag is None
-            else source.apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            defaults.apply_output_postprocessing_flag
+            if source.apply_output_postprocessing_flag is None
+            else source.apply_output_postprocessing_flag
         ),
         bias_flag=defaults.bias_flag if source.bias_flag is None else source.bias_flag,
     )
@@ -138,7 +138,7 @@ def build_residual_stack_config(
         hidden_dim=options.hidden_dim,
         num_layers=options.num_layers,
         last_layer_bias_option=options.last_layer_bias_option,
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         shared_gate_config=None,
         shared_halting_config=None,
         shared_memory_config=None,

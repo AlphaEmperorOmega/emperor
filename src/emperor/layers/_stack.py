@@ -48,7 +48,9 @@ class LayerStack(LayerModuleBase):
         self.hidden_dim: int = self.cfg.hidden_dim
         self.output_dim: int = self.cfg.output_dim
         self.num_layers: int = self.cfg.num_layers
-        self.apply_output_pipeline_flag: bool = self.cfg.apply_output_pipeline_flag
+        self.apply_output_postprocessing_flag: bool = (
+            self.cfg.apply_output_postprocessing_flag
+        )
         self.last_layer_bias_option: LastLayerBiasOptions = (
             self.cfg.last_layer_bias_option
         )
@@ -190,7 +192,7 @@ class LayerStack(LayerModuleBase):
 
     def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
         output_layer_overrides: LayerConfig | None = None
-        if not self.apply_output_pipeline_flag:
+        if not self.apply_output_postprocessing_flag:
             output_layer_overrides = LayerConfig(
                 activation=ActivationOptions.DISABLED,
                 dropout_probability=0.0,
@@ -252,12 +254,12 @@ class LayerStack(LayerModuleBase):
         is_last_layer: bool,
         has_stable_dimension: bool,
     ) -> bool:
-        output_layer_pipeline_is_disabled = (
-            is_last_layer and not self.apply_output_pipeline_flag
+        output_layer_postprocessing_is_disabled = (
+            is_last_layer and not self.apply_output_postprocessing_flag
         )
         layer_dimensions_do_not_support_residual = not has_stable_dimension
         return (
-            output_layer_pipeline_is_disabled
+            output_layer_postprocessing_is_disabled
             or layer_dimensions_do_not_support_residual
         )
 

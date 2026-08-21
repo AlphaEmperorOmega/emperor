@@ -92,7 +92,7 @@ def main_layer_stack_options(config: ModuleType) -> MainLayerStackOptions:
         residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     )
 
 
@@ -105,8 +105,8 @@ def linears_submodule_stack_options(
             hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
             num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
             last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
@@ -122,7 +122,7 @@ def linears_submodule_stack_options(
             hidden_dim=config.ATTN_STACK_HIDDEN_DIM,
             num_layers=config.ATTN_NUM_LAYERS,
             last_layer_bias_option=config.ATTN_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ATTN_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -134,7 +134,7 @@ def linears_submodule_stack_options(
         hidden_dim=config.FF_STACK_HIDDEN_DIM,
         num_layers=config.FF_NUM_LAYERS,
         last_layer_bias_option=config.FF_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.FF_STACK_ACTIVATION,
         layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -166,7 +166,7 @@ def _main_controller_stack_source(
             hidden_dim=config.GATE_STACK_HIDDEN_DIM,
             num_layers=config.GATE_STACK_NUM_LAYERS,
             last_layer_bias_option=config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.GATE_STACK_ACTIVATION,
             layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -180,8 +180,8 @@ def _main_controller_stack_source(
             hidden_dim=config.HALTING_STACK_HIDDEN_DIM,
             num_layers=config.HALTING_STACK_NUM_LAYERS,
             last_layer_bias_option=config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.HALTING_STACK_ACTIVATION,
             layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
@@ -198,7 +198,7 @@ def _main_controller_stack_source(
             hidden_dim=config.MEMORY_STACK_HIDDEN_DIM,
             num_layers=config.MEMORY_STACK_NUM_LAYERS,
             last_layer_bias_option=config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+            apply_output_postprocessing_flag=config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
             residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -212,8 +212,8 @@ def _main_controller_stack_source(
             hidden_dim=config.RECURRENT_GATE_STACK_HIDDEN_DIM,
             num_layers=config.RECURRENT_GATE_STACK_NUM_LAYERS,
             last_layer_bias_option=(config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION),
-            apply_output_pipeline_flag=(
-                config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
@@ -229,8 +229,8 @@ def _main_controller_stack_source(
         hidden_dim=config.RECURRENT_HALTING_STACK_HIDDEN_DIM,
         num_layers=config.RECURRENT_HALTING_STACK_NUM_LAYERS,
         last_layer_bias_option=(config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION),
-        apply_output_pipeline_flag=(
-            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
@@ -253,8 +253,8 @@ def _attention_controller_stack_source(
             hidden_dim=config.ATTN_GATE_STACK_HIDDEN_DIM,
             num_layers=config.ATTN_GATE_STACK_NUM_LAYERS,
             last_layer_bias_option=config.ATTN_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ATTN_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.ATTN_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_GATE_STACK_LAYER_NORM_POSITION,
@@ -271,8 +271,8 @@ def _attention_controller_stack_source(
             hidden_dim=config.ATTN_HALTING_STACK_HIDDEN_DIM,
             num_layers=config.ATTN_HALTING_STACK_NUM_LAYERS,
             last_layer_bias_option=config.ATTN_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.ATTN_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ATTN_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.ATTN_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_HALTING_STACK_LAYER_NORM_POSITION,
@@ -289,8 +289,8 @@ def _attention_controller_stack_source(
             hidden_dim=config.ATTN_MEMORY_STACK_HIDDEN_DIM,
             num_layers=config.ATTN_MEMORY_STACK_NUM_LAYERS,
             last_layer_bias_option=config.ATTN_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.ATTN_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ATTN_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.ATTN_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_MEMORY_STACK_LAYER_NORM_POSITION,
@@ -309,8 +309,8 @@ def _attention_controller_stack_source(
             last_layer_bias_option=(
                 config.ATTN_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.ATTN_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
@@ -328,8 +328,8 @@ def _attention_controller_stack_source(
         last_layer_bias_option=(
             config.ATTN_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        apply_output_pipeline_flag=(
-            config.ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config.ATTN_RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
@@ -352,8 +352,8 @@ def _feed_forward_controller_stack_source(
             hidden_dim=config.FF_GATE_STACK_HIDDEN_DIM,
             num_layers=config.FF_GATE_STACK_NUM_LAYERS,
             last_layer_bias_option=config.FF_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.FF_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.FF_GATE_STACK_ACTIVATION,
             layer_norm_position=config.FF_GATE_STACK_LAYER_NORM_POSITION,
@@ -370,8 +370,8 @@ def _feed_forward_controller_stack_source(
             hidden_dim=config.FF_HALTING_STACK_HIDDEN_DIM,
             num_layers=config.FF_HALTING_STACK_NUM_LAYERS,
             last_layer_bias_option=config.FF_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.FF_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.FF_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.FF_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.FF_HALTING_STACK_LAYER_NORM_POSITION,
@@ -388,8 +388,8 @@ def _feed_forward_controller_stack_source(
             hidden_dim=config.FF_MEMORY_STACK_HIDDEN_DIM,
             num_layers=config.FF_MEMORY_STACK_NUM_LAYERS,
             last_layer_bias_option=config.FF_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-            apply_output_pipeline_flag=(
-                config.FF_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.FF_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.FF_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.FF_MEMORY_STACK_LAYER_NORM_POSITION,
@@ -408,8 +408,8 @@ def _feed_forward_controller_stack_source(
             last_layer_bias_option=(
                 config.FF_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config.FF_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
@@ -427,8 +427,8 @@ def _feed_forward_controller_stack_source(
         last_layer_bias_option=(
             config.FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        apply_output_pipeline_flag=(
-            config.FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config.FF_RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,

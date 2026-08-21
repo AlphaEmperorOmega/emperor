@@ -207,7 +207,7 @@ class MainStackValues:
     residual_model_flag: bool
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,7 +215,7 @@ class SubmoduleStackValues:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig] | None
@@ -230,7 +230,7 @@ class OptionalStackValues:
     hidden_dim: int | None
     num_layers: int | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -245,7 +245,7 @@ class OptionalStackFields:
     hidden_dim: str
     num_layers: str
     last_layer_bias_option: str
-    apply_output_pipeline_flag: str
+    apply_output_postprocessing_flag: str
     activation: str
     layer_norm_position: str
     residual_connection_option: str
@@ -365,7 +365,7 @@ _RESIDUAL_STACK_FIELDS = OptionalStackFields(
     hidden_dim="residual_stack_hidden_dim",
     num_layers="residual_stack_num_layers",
     last_layer_bias_option="residual_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="residual_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="residual_stack_apply_output_postprocessing_flag",
     activation="residual_stack_activation",
     layer_norm_position="residual_stack_layer_norm_position",
     residual_connection_option="residual_stack_residual_connection_option",
@@ -378,7 +378,7 @@ _GATE_STACK_FIELDS = OptionalStackFields(
     hidden_dim="gate_stack_hidden_dim",
     num_layers="gate_stack_num_layers",
     last_layer_bias_option="gate_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="gate_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="gate_stack_apply_output_postprocessing_flag",
     activation="gate_stack_activation",
     layer_norm_position="gate_stack_layer_norm_position",
     residual_connection_option="gate_stack_residual_connection_option",
@@ -391,7 +391,7 @@ _HALTING_STACK_FIELDS = OptionalStackFields(
     hidden_dim="halting_stack_hidden_dim",
     num_layers="halting_stack_num_layers",
     last_layer_bias_option="halting_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="halting_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="halting_stack_apply_output_postprocessing_flag",
     activation="halting_stack_activation",
     layer_norm_position="halting_stack_layer_norm_position",
     residual_connection_option="halting_stack_residual_connection_option",
@@ -404,7 +404,7 @@ _MEMORY_STACK_FIELDS = OptionalStackFields(
     hidden_dim="memory_stack_hidden_dim",
     num_layers="memory_stack_num_layers",
     last_layer_bias_option="memory_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="memory_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="memory_stack_apply_output_postprocessing_flag",
     activation="memory_stack_activation",
     layer_norm_position="memory_stack_layer_norm_position",
     residual_connection_option="memory_stack_residual_connection_option",
@@ -417,7 +417,7 @@ _RECURRENT_GATE_STACK_FIELDS = OptionalStackFields(
     hidden_dim="recurrent_gate_stack_hidden_dim",
     num_layers="recurrent_gate_stack_num_layers",
     last_layer_bias_option="recurrent_gate_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="recurrent_gate_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="recurrent_gate_stack_apply_output_postprocessing_flag",
     activation="recurrent_gate_stack_activation",
     layer_norm_position="recurrent_gate_stack_layer_norm_position",
     residual_connection_option="recurrent_gate_stack_residual_connection_option",
@@ -430,7 +430,7 @@ _RECURRENT_HALTING_STACK_FIELDS = OptionalStackFields(
     hidden_dim="recurrent_halting_stack_hidden_dim",
     num_layers="recurrent_halting_stack_num_layers",
     last_layer_bias_option="recurrent_halting_stack_last_layer_bias_option",
-    apply_output_pipeline_flag="recurrent_halting_stack_apply_output_pipeline_flag",
+    apply_output_postprocessing_flag="recurrent_halting_stack_apply_output_postprocessing_flag",
     activation="recurrent_halting_stack_activation",
     layer_norm_position="recurrent_halting_stack_layer_norm_position",
     residual_connection_option="recurrent_halting_stack_residual_connection_option",
@@ -456,13 +456,13 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     submodule_stack=SubmoduleStackValues(
         hidden_dim=config.SUBMODULE_STACK_HIDDEN_DIM,
         num_layers=config.SUBMODULE_STACK_NUM_LAYERS,
         last_layer_bias_option=config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -475,7 +475,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.RESIDUAL_STACK_HIDDEN_DIM,
         num_layers=config.RESIDUAL_STACK_NUM_LAYERS,
         last_layer_bias_option=config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.RESIDUAL_STACK_ACTIVATION,
         layer_norm_position=config.RESIDUAL_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -488,7 +488,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.GATE_STACK_HIDDEN_DIM,
         num_layers=config.GATE_STACK_NUM_LAYERS,
         last_layer_bias_option=config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.GATE_STACK_ACTIVATION,
         layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -501,7 +501,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.HALTING_STACK_HIDDEN_DIM,
         num_layers=config.HALTING_STACK_NUM_LAYERS,
         last_layer_bias_option=config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.HALTING_STACK_ACTIVATION,
         layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -514,7 +514,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.MEMORY_STACK_HIDDEN_DIM,
         num_layers=config.MEMORY_STACK_NUM_LAYERS,
         last_layer_bias_option=config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.MEMORY_STACK_ACTIVATION,
         layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -527,8 +527,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.RECURRENT_GATE_STACK_HIDDEN_DIM,
         num_layers=config.RECURRENT_GATE_STACK_NUM_LAYERS,
         last_layer_bias_option=config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config.RECURRENT_GATE_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
@@ -544,8 +544,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         hidden_dim=config.RECURRENT_HALTING_STACK_HIDDEN_DIM,
         num_layers=config.RECURRENT_HALTING_STACK_NUM_LAYERS,
         last_layer_bias_option=config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
@@ -659,9 +659,9 @@ def read_main_stack_values(
             defaults.last_layer_bias_option,
             LastLayerBiasOptions,
         ),
-        apply_output_pipeline_flag=reader.boolean(
-            "stack_apply_output_pipeline_flag",
-            defaults.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=reader.boolean(
+            "stack_apply_output_postprocessing_flag",
+            defaults.apply_output_postprocessing_flag,
         ),
     )
 
@@ -692,9 +692,9 @@ def read_submodule_stack_values(
             defaults.last_layer_bias_option,
             LastLayerBiasOptions,
         ),
-        apply_output_pipeline_flag=reader.boolean(
-            "submodule_stack_apply_output_pipeline_flag",
-            defaults.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=reader.boolean(
+            "submodule_stack_apply_output_postprocessing_flag",
+            defaults.apply_output_postprocessing_flag,
         ),
         activation=reader.enum(
             "submodule_stack_activation", defaults.activation, ActivationOptions
@@ -765,9 +765,9 @@ def read_residual_stack_values(
                 defaults.last_layer_bias_option,
                 LastLayerBiasOptions,
             ),
-            apply_output_pipeline_flag=reader.optional_boolean(
-                fields.apply_output_pipeline_flag,
-                defaults.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=reader.optional_boolean(
+                fields.apply_output_postprocessing_flag,
+                defaults.apply_output_postprocessing_flag,
             ),
             bias_flag=reader.optional_boolean(fields.bias_flag, defaults.bias_flag),
         ),
@@ -792,9 +792,9 @@ def _read_optional_stack(
                 defaults.last_layer_bias_option,
                 LastLayerBiasOptions,
             ),
-            apply_output_pipeline_flag=reader.optional_boolean(
-                fields.apply_output_pipeline_flag,
-                defaults.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=reader.optional_boolean(
+                fields.apply_output_postprocessing_flag,
+                defaults.apply_output_postprocessing_flag,
             ),
             activation=reader.optional_enum(
                 fields.activation, defaults.activation, ActivationOptions

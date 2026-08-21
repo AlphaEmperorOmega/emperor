@@ -142,7 +142,7 @@ class InspectionGraphTopologyTests(unittest.TestCase):
                     output_dim=2,
                     num_layers=1,
                     last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                    apply_output_pipeline_flag=True,
+                    apply_output_postprocessing_flag=True,
                     layer_config=LayerConfig(
                         input_dim=4,
                         output_dim=2,

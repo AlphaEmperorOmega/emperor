@@ -48,8 +48,8 @@ class ControlDefaultValues:
     residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
     )
-    residual_stack_apply_output_pipeline_flag: bool | None = (
-        config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    residual_stack_apply_output_postprocessing_flag: bool | None = (
+        config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     residual_stack_bias_flag: bool | None = config.RESIDUAL_STACK_BIAS_FLAG
     expert_stack_gate_flag: bool = config.EXPERT_STACK_GATE_FLAG
@@ -76,8 +76,8 @@ class ControlDefaultValues:
     expert_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.EXPERT_GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    expert_gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_gate_stack_bias_flag: bool | None = config.EXPERT_GATE_STACK_BIAS_FLAG
     expert_stack_halting_flag: bool = config.EXPERT_STACK_HALTING_FLAG
@@ -110,8 +110,8 @@ class ControlDefaultValues:
     expert_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.EXPERT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
     )
-    expert_halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_halting_stack_bias_flag: bool | None = config.EXPERT_HALTING_STACK_BIAS_FLAG
     expert_memory_flag: bool = config.EXPERT_MEMORY_FLAG
@@ -148,8 +148,8 @@ class ControlDefaultValues:
     expert_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.EXPERT_MEMORY_STACK_LAST_LAYER_BIAS_OPTION
     )
-    expert_memory_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_memory_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_memory_stack_bias_flag: bool | None = config.EXPERT_MEMORY_STACK_BIAS_FLAG
     expert_recurrent_flag: bool = config.EXPERT_RECURRENT_FLAG
@@ -191,8 +191,8 @@ class ControlDefaultValues:
     expert_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.EXPERT_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    expert_recurrent_gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_recurrent_gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_recurrent_gate_stack_bias_flag: bool | None = (
         config.EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG
@@ -234,8 +234,8 @@ class ControlDefaultValues:
     expert_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     ) = config.EXPERT_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
-    expert_recurrent_halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    expert_recurrent_halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     expert_recurrent_halting_stack_bias_flag: bool | None = (
         config.EXPERT_RECURRENT_HALTING_STACK_BIAS_FLAG
@@ -255,8 +255,8 @@ class ControlDefaultValues:
     router_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_stack_apply_output_pipeline_flag: bool = (
-        config.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_stack_apply_output_postprocessing_flag: bool = (
+        config.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_bias_flag: bool = config.ROUTER_BIAS_FLAG
     router_stack_gate_flag: bool = config.ROUTER_STACK_GATE_FLAG
@@ -283,8 +283,8 @@ class ControlDefaultValues:
     router_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_gate_stack_bias_flag: bool | None = config.ROUTER_GATE_STACK_BIAS_FLAG
     router_stack_halting_flag: bool = config.ROUTER_STACK_HALTING_FLAG
@@ -317,8 +317,8 @@ class ControlDefaultValues:
     router_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_halting_stack_bias_flag: bool | None = config.ROUTER_HALTING_STACK_BIAS_FLAG
     router_memory_flag: bool = config.ROUTER_MEMORY_FLAG
@@ -355,8 +355,8 @@ class ControlDefaultValues:
     router_memory_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_MEMORY_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_memory_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_memory_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_memory_stack_bias_flag: bool | None = config.ROUTER_MEMORY_STACK_BIAS_FLAG
     router_recurrent_flag: bool = config.ROUTER_RECURRENT_FLAG
@@ -398,8 +398,8 @@ class ControlDefaultValues:
     router_recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_recurrent_gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_recurrent_gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_recurrent_gate_stack_bias_flag: bool | None = (
         config.ROUTER_RECURRENT_GATE_STACK_BIAS_FLAG
@@ -441,8 +441,8 @@ class ControlDefaultValues:
     router_recurrent_halting_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     ) = config.ROUTER_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
-    router_recurrent_halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_recurrent_halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_recurrent_halting_stack_bias_flag: bool | None = (
         config.ROUTER_RECURRENT_HALTING_STACK_BIAS_FLAG
@@ -465,8 +465,8 @@ class ControlDefaultValues:
     gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     gate_stack_bias_flag: bool | None = config.GATE_STACK_BIAS_FLAG
     stack_halting_flag: bool = config.STACK_HALTING_FLAG
@@ -493,8 +493,8 @@ class ControlDefaultValues:
     halting_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.HALTING_STACK_LAST_LAYER_BIAS_OPTION
     )
-    halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     halting_stack_bias_flag: bool | None = config.HALTING_STACK_BIAS_FLAG
     memory_flag: bool = config.MEMORY_FLAG
@@ -523,8 +523,8 @@ class ControlDefaultValues:
     memory_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION
     )
-    memory_stack_apply_output_pipeline_flag: bool | None = (
-        config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    memory_stack_apply_output_postprocessing_flag: bool | None = (
+        config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     memory_stack_bias_flag: bool | None = config.MEMORY_STACK_BIAS_FLAG
     recurrent_flag: bool = config.RECURRENT_FLAG
@@ -574,8 +574,8 @@ class ControlDefaultValues:
     recurrent_gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
     )
-    recurrent_gate_stack_apply_output_pipeline_flag: bool | None = (
-        config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    recurrent_gate_stack_apply_output_postprocessing_flag: bool | None = (
+        config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     recurrent_gate_stack_bias_flag: bool | None = config.RECURRENT_GATE_STACK_BIAS_FLAG
     recurrent_stack_halting_flag: bool = config.RECURRENT_STACK_HALTING_FLAG
@@ -611,8 +611,8 @@ class ControlDefaultValues:
     recurrent_halting_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
     )
-    recurrent_halting_stack_apply_output_pipeline_flag: bool | None = (
-        config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    recurrent_halting_stack_apply_output_postprocessing_flag: bool | None = (
+        config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     recurrent_halting_stack_bias_flag: bool | None = (
         config.RECURRENT_HALTING_STACK_BIAS_FLAG
@@ -691,7 +691,7 @@ class _StackSourceValues:
     hidden_dim: int | None
     num_layers: int | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -748,7 +748,7 @@ def _stack_source(values: _StackSourceValues) -> ExpertsSubmoduleStackSource:
         hidden_dim=values.hidden_dim,
         num_layers=values.num_layers,
         last_layer_bias_option=values.last_layer_bias_option,
-        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
         residual_connection_option=values.residual_connection_option,
@@ -839,8 +839,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         last_layer_bias_option=(
                             values.expert_gate_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.expert_gate_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.expert_gate_stack_apply_output_postprocessing_flag
                         ),
                         activation=values.expert_gate_stack_activation,
                         layer_norm_position=values.expert_gate_stack_layer_norm_position,
@@ -865,8 +865,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         last_layer_bias_option=(
                             values.expert_halting_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.expert_halting_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.expert_halting_stack_apply_output_postprocessing_flag
                         ),
                         activation=values.expert_halting_stack_activation,
                         layer_norm_position=values.expert_halting_stack_layer_norm_position,
@@ -903,8 +903,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         last_layer_bias_option=(
                             values.expert_memory_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.expert_memory_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.expert_memory_stack_apply_output_postprocessing_flag
                         ),
                         activation=values.expert_memory_stack_activation,
                         layer_norm_position=values.expert_memory_stack_layer_norm_position,
@@ -941,8 +941,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         last_layer_bias_option=(
                             values.expert_recurrent_gate_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.expert_recurrent_gate_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.expert_recurrent_gate_stack_apply_output_postprocessing_flag
                         ),
                         activation=values.expert_recurrent_gate_stack_activation,
                         layer_norm_position=(
@@ -975,8 +975,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         last_layer_bias_option=(
                             values.expert_recurrent_halting_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.expert_recurrent_halting_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.expert_recurrent_halting_stack_apply_output_postprocessing_flag
                         ),
                         activation=values.expert_recurrent_halting_stack_activation,
                         layer_norm_position=(
@@ -1030,7 +1030,7 @@ def _router_stack_defaults(
         hidden_dim=values.router_stack_hidden_dim,
         num_layers=values.router_stack_num_layers,
         last_layer_bias_option=values.router_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=values.router_stack_apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.router_stack_apply_output_postprocessing_flag,
         activation=values.router_stack_activation,
         layer_norm_position=values.router_stack_layer_norm_position,
         residual_connection_option=values.router_stack_residual_connection_option,
@@ -1060,8 +1060,8 @@ def _router_layer_defaults(
                     last_layer_bias_option=(
                         values.router_gate_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_gate_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_gate_stack_apply_output_postprocessing_flag
                     ),
                     activation=values.router_gate_stack_activation,
                     layer_norm_position=values.router_gate_stack_layer_norm_position,
@@ -1086,8 +1086,8 @@ def _router_layer_defaults(
                     last_layer_bias_option=(
                         values.router_halting_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_halting_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_halting_stack_apply_output_postprocessing_flag
                     ),
                     activation=values.router_halting_stack_activation,
                     layer_norm_position=values.router_halting_stack_layer_norm_position,
@@ -1130,8 +1130,8 @@ def _router_memory_defaults(
                     last_layer_bias_option=(
                         values.router_memory_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_memory_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_memory_stack_apply_output_postprocessing_flag
                     ),
                     activation=values.router_memory_stack_activation,
                     layer_norm_position=values.router_memory_stack_layer_norm_position,
@@ -1172,8 +1172,8 @@ def _router_recurrent_defaults(
                     last_layer_bias_option=(
                         values.router_recurrent_gate_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_recurrent_gate_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_recurrent_gate_stack_apply_output_postprocessing_flag
                     ),
                     activation=values.router_recurrent_gate_stack_activation,
                     layer_norm_position=(
@@ -1208,8 +1208,8 @@ def _router_recurrent_defaults(
                     last_layer_bias_option=(
                         values.router_recurrent_halting_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_recurrent_halting_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_recurrent_halting_stack_apply_output_postprocessing_flag
                     ),
                     activation=values.router_recurrent_halting_stack_activation,
                     layer_norm_position=(
@@ -1249,7 +1249,7 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 hidden_dim=values.gate_stack_hidden_dim,
                 num_layers=values.gate_stack_num_layers,
                 last_layer_bias_option=values.gate_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=values.gate_stack_apply_output_pipeline_flag,
+                apply_output_postprocessing_flag=values.gate_stack_apply_output_postprocessing_flag,
                 activation=values.gate_stack_activation,
                 layer_norm_position=values.gate_stack_layer_norm_position,
                 residual_connection_option=values.gate_stack_residual_connection_option,
@@ -1267,8 +1267,8 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 hidden_dim=values.halting_stack_hidden_dim,
                 num_layers=values.halting_stack_num_layers,
                 last_layer_bias_option=values.halting_stack_last_layer_bias_option,
-                apply_output_pipeline_flag=(
-                    values.halting_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    values.halting_stack_apply_output_postprocessing_flag
                 ),
                 activation=values.halting_stack_activation,
                 layer_norm_position=values.halting_stack_layer_norm_position,
@@ -1298,7 +1298,9 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
             hidden_dim=values.memory_stack_hidden_dim,
             num_layers=values.memory_stack_num_layers,
             last_layer_bias_option=values.memory_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(values.memory_stack_apply_output_pipeline_flag),
+            apply_output_postprocessing_flag=(
+                values.memory_stack_apply_output_postprocessing_flag
+            ),
             activation=values.memory_stack_activation,
             layer_norm_position=values.memory_stack_layer_norm_position,
             residual_connection_option=(values.memory_stack_residual_connection_option),
@@ -1347,8 +1349,8 @@ def _recurrent_defaults(
                 last_layer_bias_option=(
                     values.recurrent_gate_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    values.recurrent_gate_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    values.recurrent_gate_stack_apply_output_postprocessing_flag
                 ),
                 activation=values.recurrent_gate_stack_activation,
                 layer_norm_position=values.recurrent_gate_stack_layer_norm_position,
@@ -1373,8 +1375,8 @@ def _recurrent_defaults(
                 last_layer_bias_option=(
                     values.recurrent_halting_stack_last_layer_bias_option
                 ),
-                apply_output_pipeline_flag=(
-                    values.recurrent_halting_stack_apply_output_pipeline_flag
+                apply_output_postprocessing_flag=(
+                    values.recurrent_halting_stack_apply_output_postprocessing_flag
                 ),
                 activation=values.recurrent_halting_stack_activation,
                 layer_norm_position=(
@@ -1404,8 +1406,8 @@ def _recurrent_defaults(
             residual_model_flag=values.residual_stack_residual_model_flag,
             dropout_probability=values.residual_stack_dropout_probability,
             last_layer_bias_option=values.residual_stack_last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                values.residual_stack_apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                values.residual_stack_apply_output_postprocessing_flag
             ),
             bias_flag=values.residual_stack_bias_flag,
         ),

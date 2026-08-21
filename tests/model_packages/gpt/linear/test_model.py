@@ -87,12 +87,12 @@ class TestGptLinearModel(unittest.TestCase):
         self.assertFalse(config.EMBEDDING_LAYER_NORM_FLAG)
         self.assertEqual(config.FF_NUM_LAYERS, 1)
         self.assertEqual(config.ATTN_STACK_ACTIVATION, ActivationOptions.DISABLED)
-        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertFalse(config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG)
         self.assertEqual(
             config.FF_STACK_LAYER_NORM_POSITION,
             LayerNormPositionOptions.DISABLED,
         )
-        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG)
+        self.assertFalse(config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG)
 
     def config(self, **overrides):
         return _build_typed_config(
@@ -488,7 +488,7 @@ class TestGptLinearModel(unittest.TestCase):
                     runtime.stack_options,
                     residual_connection_option=AdditiveResidualConfig,
                     last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                    apply_output_pipeline_flag=False,
+                    apply_output_postprocessing_flag=False,
                     bias_flag=False,
                 ),
             )
@@ -502,7 +502,7 @@ class TestGptLinearModel(unittest.TestCase):
             stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertFalse(stack.apply_output_pipeline_flag)
+        self.assertFalse(stack.apply_output_postprocessing_flag)
 
     def test_submodule_bias_inherits_main_stack_unless_overridden(self):
         defaults = self._default_runtime()
@@ -584,13 +584,13 @@ class TestGptLinearModel(unittest.TestCase):
                 "attn_stack_layer_norm_position": LayerNormPositionOptions.AFTER,
                 "attn_stack_dropout_probability": 0.2,
                 "attn_stack_last_layer_bias_option": (LastLayerBiasOptions.DISABLED),
-                "attn_stack_apply_output_pipeline_flag": False,
+                "attn_stack_apply_output_postprocessing_flag": False,
             }
         )
         stack = self._attention_projection_stack_config(cfg)
         self.assertIsInstance(stack, LayerStackConfig)
         self.assertEqual((stack.num_layers, stack.hidden_dim), (3, 24))
-        self.assertFalse(stack.apply_output_pipeline_flag)
+        self.assertFalse(stack.apply_output_postprocessing_flag)
         self.assertEqual(
             stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
@@ -708,13 +708,13 @@ class TestGptLinearModel(unittest.TestCase):
                 "ff_stack_layer_norm_position": LayerNormPositionOptions.AFTER,
                 "ff_stack_dropout_probability": 0.2,
                 "ff_stack_last_layer_bias_option": LastLayerBiasOptions.DISABLED,
-                "ff_stack_apply_output_pipeline_flag": False,
+                "ff_stack_apply_output_postprocessing_flag": False,
             }
         )
         stack = self._feed_forward_stack_config(cfg)
         self.assertIsInstance(stack, LayerStackConfig)
         self.assertEqual((stack.num_layers, stack.hidden_dim), (3, 24))
-        self.assertFalse(stack.apply_output_pipeline_flag)
+        self.assertFalse(stack.apply_output_postprocessing_flag)
         self.assertEqual(
             stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,

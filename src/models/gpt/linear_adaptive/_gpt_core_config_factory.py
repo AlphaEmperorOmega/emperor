@@ -148,8 +148,8 @@ class GptCoreConfigFactory:
             output_dim=self.hidden_dim,
             num_layers=self.decoder_options.num_layers,
             last_layer_bias_option=(self.decoder_stack_options.last_layer_bias_option),
-            apply_output_pipeline_flag=(
-                self.decoder_stack_options.apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                self.decoder_stack_options.apply_output_postprocessing_flag
             ),
             shared_gate_config=(
                 self.decoder_layer_controller_options.shared_gate_config
@@ -233,7 +233,7 @@ class GptCoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
         self._apply_attention_projection_controls(stack_config)
         recurrent_factory = GptRecurrentConfigFactory(
@@ -289,7 +289,7 @@ class GptCoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
         self._apply_feed_forward_controls(stack_config)
         recurrent_factory = GptRecurrentConfigFactory(

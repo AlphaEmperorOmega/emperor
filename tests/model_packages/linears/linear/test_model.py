@@ -384,7 +384,7 @@ def _shared_gate_config(dim: int = 16) -> GateConfig:
             output_dim=dim,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=LayerConfig(
                 input_dim=dim,
                 output_dim=dim,
@@ -562,7 +562,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
                 "submodule_stack_last_layer_bias_option": (
                     LastLayerBiasOptions.DEFAULT
                 ),
-                "submodule_stack_apply_output_pipeline_flag": True,
+                "submodule_stack_apply_output_postprocessing_flag": True,
                 "submodule_stack_bias_flag": False,
                 "gate_stack_hidden_dim": 99,
                 "halting_stack_num_layers": 8,

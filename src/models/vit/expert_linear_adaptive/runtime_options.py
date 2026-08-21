@@ -44,7 +44,7 @@ class SubmoduleStackSource:
     hidden_dim: int | None
     num_layers: int | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -58,7 +58,7 @@ class SubmoduleStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
@@ -82,10 +82,10 @@ def resolve_controller_stack_options(
         if source.last_layer_bias_option is None
         else source.last_layer_bias_option
     )
-    apply_output_pipeline_flag = (
-        defaults.apply_output_pipeline_flag
-        if source.apply_output_pipeline_flag is None
-        else source.apply_output_pipeline_flag
+    apply_output_postprocessing_flag = (
+        defaults.apply_output_postprocessing_flag
+        if source.apply_output_postprocessing_flag is None
+        else source.apply_output_postprocessing_flag
     )
     activation = defaults.activation if source.activation is None else source.activation
     layer_norm_position = (
@@ -108,7 +108,7 @@ def resolve_controller_stack_options(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
@@ -132,7 +132,7 @@ class MainLayerStackOptions:
     )
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
 
 
 @dataclass(frozen=True)
@@ -250,7 +250,7 @@ class ExpertsStackOptions:
     )
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
 
 
 @dataclass(frozen=True)
@@ -258,7 +258,7 @@ class ExpertsSubmoduleStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
@@ -276,7 +276,7 @@ class ExpertsSubmoduleStackSource:
     hidden_dim: int | None
     num_layers: int | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -291,7 +291,7 @@ def resolve_experts_submodule_stack_options(
     hidden_dim: int | None = None,
     num_layers: int | None = None,
     last_layer_bias_option: LastLayerBiasOptions | None = None,
-    apply_output_pipeline_flag: bool | None = None,
+    apply_output_postprocessing_flag: bool | None = None,
     activation: ActivationOptions | None = None,
     layer_norm_position: LayerNormPositionOptions | None = None,
     residual_connection_option: type[ResidualConfig] | None = None,
@@ -305,9 +305,9 @@ def resolve_experts_submodule_stack_options(
         last_layer_bias_option=defaults.last_layer_bias_option
         if last_layer_bias_option is None
         else last_layer_bias_option,
-        apply_output_pipeline_flag=defaults.apply_output_pipeline_flag
-        if apply_output_pipeline_flag is None
-        else apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag
+        if apply_output_postprocessing_flag is None
+        else apply_output_postprocessing_flag,
         activation=defaults.activation if activation is None else activation,
         layer_norm_position=defaults.layer_norm_position
         if layer_norm_position is None
@@ -338,7 +338,7 @@ def resolve_experts_controller_stack_options(
         hidden_dim=source.hidden_dim,
         num_layers=source.num_layers,
         last_layer_bias_option=source.last_layer_bias_option,
-        apply_output_pipeline_flag=source.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=source.apply_output_postprocessing_flag,
         activation=source.activation,
         layer_norm_position=source.layer_norm_position,
         residual_connection_option=source.residual_connection_option,
@@ -436,7 +436,7 @@ class ExpertsAdaptiveGeneratorStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]
@@ -458,7 +458,7 @@ class AdaptiveGeneratorStackSource:
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
 
@@ -475,7 +475,7 @@ class AdaptiveGeneratorStackOptions:
     )
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     bias_flag: bool
 
 

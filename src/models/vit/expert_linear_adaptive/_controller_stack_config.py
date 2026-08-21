@@ -28,7 +28,7 @@ def build_controller_stack_config(
         output_dim=output_dim,
         num_layers=options.num_layers,
         last_layer_bias_option=options.last_layer_bias_option,
-        apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,

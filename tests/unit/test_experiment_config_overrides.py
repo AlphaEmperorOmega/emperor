@@ -839,7 +839,7 @@ class TestExperimentConfigOverrideParsing(
         self.assertIn("RECURRENT_FLAG", bert_keys)
         self.assertIn("STACK_RESIDUAL_CONNECTION_OPTION", bert_keys)
         self.assertIn("STACK_LAST_LAYER_BIAS_OPTION", bert_keys)
-        self.assertIn("STACK_APPLY_OUTPUT_PIPELINE_FLAG", bert_keys)
+        self.assertIn("STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG", bert_keys)
         self.assertIn("STACK_BIAS_FLAG", bert_keys)
         self.assertIn("TOKEN_TYPE_VOCAB_SIZE", bert_keys)
         self.assertIn("EMBEDDING_LAYER_NORM_FLAG", bert_keys)

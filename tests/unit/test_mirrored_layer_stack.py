@@ -50,7 +50,7 @@ def make_mirrored_config(
         hidden_dim=hidden_dim,
         output_dim=output_dim,
         num_layers=num_layers,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         shared_gate_config=None,
         shared_halting_config=None,
@@ -76,7 +76,7 @@ def make_halting_config(dim: int) -> StickBreakingConfig:
             hidden_dim=dim,
             output_dim=2,
             num_layers=1,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             shared_gate_config=None,
             shared_halting_config=None,
@@ -129,7 +129,7 @@ class TestMirroredLayerStack(unittest.TestCase):
         self.assertTrue(contraction_parameters)
         self.assertTrue(expansion_parameters.isdisjoint(contraction_parameters))
 
-    def test_only_final_contraction_uses_output_pipeline_policy(self):
+    def test_only_final_contraction_uses_output_postprocessing_policy(self):
         stack = make_mirrored_config(
             4,
             8,

@@ -136,7 +136,7 @@ def _linear_stack(input_dim: int, output_dim: int) -> LayerStackConfig:
         hidden_dim=max(input_dim, output_dim),
         output_dim=output_dim,
         num_layers=1,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         layer_config=LayerConfig(
             activation=ActivationOptions.RELU,
@@ -236,7 +236,7 @@ def _shared_model() -> MixtureOfExpertsModel:
         hidden_dim=4,
         output_dim=4,
         num_layers=2,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         layer_config=expert_layer_config,
     )

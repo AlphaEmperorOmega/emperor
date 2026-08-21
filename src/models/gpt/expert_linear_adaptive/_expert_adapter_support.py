@@ -24,7 +24,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
     "num_layers": "num_layers",
     "last_layer_bias_option": "last_layer_bias_option",
-    "apply_output_pipeline_flag": "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
     "residual_connection_option": "residual_connection_option",
@@ -65,7 +65,7 @@ def _router_stack_options_from_config(
         hidden_dim=config_module.ROUTER_STACK_HIDDEN_DIM,
         num_layers=config_module.ROUTER_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.ROUTER_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config_module.ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config_module.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config_module.ROUTER_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -160,7 +160,7 @@ def _controller_stack_source(
     hidden_dim: int | None,
     num_layers: int | None,
     last_layer_bias_option: LastLayerBiasOptions | None,
-    apply_output_pipeline_flag: bool | None,
+    apply_output_postprocessing_flag: bool | None,
     activation: ActivationOptions | None,
     layer_norm_position: LayerNormPositionOptions | None,
     residual_connection_option: type[ResidualConfig] | None,
@@ -173,7 +173,7 @@ def _controller_stack_source(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         last_layer_bias_option=last_layer_bias_option,
-        apply_output_pipeline_flag=apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
         residual_connection_option=residual_connection_option,
@@ -191,7 +191,7 @@ def _gate_stack_source(
         hidden_dim=config_module.GATE_STACK_HIDDEN_DIM,
         num_layers=config_module.GATE_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.GATE_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=config_module.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+        apply_output_postprocessing_flag=config_module.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.GATE_STACK_ACTIVATION,
         layer_norm_position=config_module.GATE_STACK_LAYER_NORM_POSITION,
         residual_connection_option=config_module.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -209,8 +209,8 @@ def _halting_stack_source(
         hidden_dim=config_module.HALTING_STACK_HIDDEN_DIM,
         num_layers=config_module.HALTING_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.HALTING_STACK_ACTIVATION,
         layer_norm_position=config_module.HALTING_STACK_LAYER_NORM_POSITION,
@@ -231,8 +231,8 @@ def _memory_stack_source(
         hidden_dim=config_module.MEMORY_STACK_HIDDEN_DIM,
         num_layers=config_module.MEMORY_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.MEMORY_STACK_LAYER_NORM_POSITION,
@@ -255,8 +255,8 @@ def _recurrent_gate_stack_source(
         last_layer_bias_option=(
             config_module.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        apply_output_pipeline_flag=(
-            config_module.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.RECURRENT_GATE_STACK_ACTIVATION,
         layer_norm_position=config_module.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
@@ -279,8 +279,8 @@ def _recurrent_halting_stack_source(
         last_layer_bias_option=(
             config_module.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        apply_output_pipeline_flag=(
-            config_module.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config_module.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
@@ -671,8 +671,8 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             last_layer_bias_option=(
                 config_module.EXPERT_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.EXPERT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.EXPERT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.EXPERT_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.EXPERT_GATE_STACK_LAYER_NORM_POSITION,
@@ -690,8 +690,8 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             last_layer_bias_option=(
                 config_module.EXPERT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.EXPERT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.EXPERT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.EXPERT_HALTING_STACK_ACTIVATION,
             layer_norm_position=(
@@ -719,8 +719,8 @@ def _expert_memory_stack_source(
         hidden_dim=config_module.EXPERT_MEMORY_STACK_HIDDEN_DIM,
         num_layers=config_module.EXPERT_MEMORY_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.EXPERT_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.EXPERT_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.EXPERT_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.EXPERT_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION,
@@ -746,8 +746,8 @@ def _expert_recurrent_stack_sources(
             last_layer_bias_option=(
                 config_module.EXPERT_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=(
@@ -773,8 +773,8 @@ def _expert_recurrent_stack_sources(
             last_layer_bias_option=(
                 config_module.EXPERT_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
             layer_norm_position=(
@@ -803,8 +803,8 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             last_layer_bias_option=(
                 config_module.ROUTER_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.ROUTER_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.ROUTER_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.ROUTER_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.ROUTER_GATE_STACK_LAYER_NORM_POSITION,
@@ -822,8 +822,8 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             last_layer_bias_option=(
                 config_module.ROUTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.ROUTER_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.ROUTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.ROUTER_HALTING_STACK_ACTIVATION,
             layer_norm_position=(
@@ -851,8 +851,8 @@ def _router_memory_stack_source(
         hidden_dim=config_module.ROUTER_MEMORY_STACK_HIDDEN_DIM,
         num_layers=config_module.ROUTER_MEMORY_STACK_NUM_LAYERS,
         last_layer_bias_option=config_module.ROUTER_MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config_module.ROUTER_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config_module.ROUTER_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         activation=config_module.ROUTER_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.ROUTER_MEMORY_STACK_LAYER_NORM_POSITION,
@@ -878,8 +878,8 @@ def _router_recurrent_stack_sources(
             last_layer_bias_option=(
                 config_module.ROUTER_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.ROUTER_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=(
@@ -905,8 +905,8 @@ def _router_recurrent_stack_sources(
             last_layer_bias_option=(
                 config_module.ROUTER_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config_module.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config_module.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             activation=config_module.ROUTER_RECURRENT_HALTING_STACK_ACTIVATION,
             layer_norm_position=(
