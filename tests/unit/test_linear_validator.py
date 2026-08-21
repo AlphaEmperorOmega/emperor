@@ -142,7 +142,7 @@ class TestLinearValidatorAdapter(unittest.TestCase):
     def test_forward_dispatches_through_substituted_validator(self):
         class RejectingLinearValidator(LinearValidator):
             @staticmethod
-            def validate_input_tensor(X, input_dim):
+            def validate_linear_input_tensor_shape(X, input_dim):
                 raise RuntimeError("substituted runtime validator was called")
 
         class RejectingLinearLayer(LinearLayer):

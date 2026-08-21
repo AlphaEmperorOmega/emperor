@@ -52,5 +52,5 @@ class LinearLayer(LinearAbstract):
         super().__init__(cfg, overrides)
 
     def forward(self, X: Tensor) -> Tensor:
-        self.VALIDATOR.validate_input_tensor(X, self.input_dim)
+        self.VALIDATOR.validate_linear_input_tensor_shape(X, self.input_dim)
         return F.linear(X, self.weight_params.T, self.bias_params)
