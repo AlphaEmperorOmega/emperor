@@ -289,7 +289,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
             router_stack.last_layer_bias_option,
             LastLayerBiasOptions.DEFAULT,
         )
-        self.assertFalse(router_stack.apply_output_pipeline_flag)
+        self.assertFalse(router_stack.apply_output_postprocessing_flag)
         self.assertEqual(router_layer.activation, ActivationOptions.GELU)
         self.assertIsNone(router_layer.residual_config)
         self.assertEqual(router_layer.dropout_probability, 0.0)
@@ -346,7 +346,7 @@ class TestParametricGeneratorModel(unittest.TestCase):
         self.assertEqual(stack_config.input_dim, hidden_dim)
         self.assertEqual(stack_config.hidden_dim, hidden_dim)
         self.assertEqual(stack_config.output_dim, hidden_dim)
-        self.assertTrue(stack_config.apply_output_pipeline_flag)
+        self.assertTrue(stack_config.apply_output_postprocessing_flag)
         self.assertEqual(layer_model_config.input_dim, hidden_dim)
         self.assertEqual(layer_model_config.output_dim, hidden_dim)
         self.assertEqual(layer_model_config.weight_mixture_config.input_dim, hidden_dim)

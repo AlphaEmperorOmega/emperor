@@ -71,7 +71,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('STACK_DROPOUT_PROBABILITY', 100, (100,)),
         ('LAYER_NORM_POSITION', 101, (101,)),
         ('STACK_LAST_LAYER_BIAS_OPTION', 102, (102,)),
-        ('STACK_APPLY_OUTPUT_PIPELINE_FLAG', 103, (103,)),
+        ('STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 103, (103,)),
         ('STACK_BIAS_FLAG', 104, (104,)),
     )),
     RuntimeDefaultsSection(('Layer Stack Submodule Options',), (
@@ -83,7 +83,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('SUBMODULE_STACK_RESIDUAL_MODEL_FLAG', 113, (113,)),
         ('SUBMODULE_STACK_DROPOUT_PROBABILITY', 114, (114,)),
         ('SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION', 115, (115,)),
-        ('SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 118, (118,)),
+        ('SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 118, (118,)),
         ('SUBMODULE_STACK_BIAS_FLAG', 119, (119,)),
     )),
     RuntimeDefaultsSection(('Residual Options',), (
@@ -100,7 +100,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('RESIDUAL_STACK_RESIDUAL_MODEL_FLAG', 135, (135,)),
         ('RESIDUAL_STACK_DROPOUT_PROBABILITY', 136, (136,)),
         ('RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION', 137, (137,)),
-        ('RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 138, (138,)),
+        ('RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 138, (138,)),
         ('RESIDUAL_STACK_BIAS_FLAG', 139, (139,)),
     )),
     RuntimeDefaultsSection(('Gate Options',), (
@@ -118,7 +118,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('GATE_STACK_RESIDUAL_MODEL_FLAG', 154, (154,)),
         ('GATE_STACK_DROPOUT_PROBABILITY', 155, (155,)),
         ('GATE_STACK_LAST_LAYER_BIAS_OPTION', 156, (156,)),
-        ('GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 157, (157,)),
+        ('GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 157, (157,)),
         ('GATE_STACK_BIAS_FLAG', 158, (158,)),
     )),
     RuntimeDefaultsSection(('Halting Options',), (
@@ -138,7 +138,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('HALTING_STACK_RESIDUAL_MODEL_FLAG', 178, (178,)),
         ('HALTING_STACK_DROPOUT_PROBABILITY', 179, (179,)),
         ('HALTING_STACK_LAST_LAYER_BIAS_OPTION', 180, (180,)),
-        ('HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 183, (183,)),
+        ('HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 183, (183,)),
         ('HALTING_STACK_BIAS_FLAG', 184, (184,)),
     )),
     RuntimeDefaultsSection(('Memory Options',), (
@@ -158,7 +158,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('MEMORY_STACK_RESIDUAL_MODEL_FLAG', 200, (200,)),
         ('MEMORY_STACK_DROPOUT_PROBABILITY', 201, (201,)),
         ('MEMORY_STACK_LAST_LAYER_BIAS_OPTION', 202, (202,)),
-        ('MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 203, (203,)),
+        ('MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 203, (203,)),
         ('MEMORY_STACK_BIAS_FLAG', 204, (204,)),
     )),
     RuntimeDefaultsSection(('Recurrent Layer Options',), (
@@ -187,7 +187,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG', 231, (231,)),
         ('RECURRENT_GATE_STACK_DROPOUT_PROBABILITY', 232, (232,)),
         ('RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION', 233, (233,)),
-        ('RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 234, (234,)),
+        ('RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 234, (234,)),
         ('RECURRENT_GATE_STACK_BIAS_FLAG', 235, (235,)),
     )),
     RuntimeDefaultsSection(('Recurrent Layer Options', 'Recurrent Halting Options'), (
@@ -207,7 +207,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG', 252, (252,)),
         ('RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY', 253, (253,)),
         ('RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION', 254, (254,)),
-        ('RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 255, (255,)),
+        ('RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 255, (255,)),
         ('RECURRENT_HALTING_STACK_BIAS_FLAG', 256, (256,)),
     )),
     RuntimeDefaultsSection(('Attention Options',), (
@@ -224,7 +224,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_STACK_DROPOUT_PROBABILITY', 271, (271,)),
         ('ATTN_STACK_LAYER_NORM_POSITION', 272, (272,)),
         ('ATTN_STACK_LAST_LAYER_BIAS_OPTION', 275, (275,)),
-        ('ATTN_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 276, (276,)),
+        ('ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 276, (276,)),
     )),
     RuntimeDefaultsSection(('Attention Options', 'Attention Projection Stack Options', 'Attention Projection Gate Options'), (
         ('ATTN_STACK_GATE_FLAG', 280, (280,)),
@@ -241,7 +241,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_GATE_STACK_RESIDUAL_MODEL_FLAG', 290, (290,)),
         ('ATTN_GATE_STACK_DROPOUT_PROBABILITY', 291, (291,)),
         ('ATTN_GATE_STACK_LAST_LAYER_BIAS_OPTION', 292, (292,)),
-        ('ATTN_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 293, (293,)),
+        ('ATTN_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 293, (293,)),
         ('ATTN_GATE_STACK_BIAS_FLAG', 296, (296,)),
     )),
     RuntimeDefaultsSection(('Attention Options', 'Attention Projection Stack Options', 'Attention Projection Halting Options'), (
@@ -261,7 +261,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_HALTING_STACK_RESIDUAL_MODEL_FLAG', 316, (316,)),
         ('ATTN_HALTING_STACK_DROPOUT_PROBABILITY', 317, (317,)),
         ('ATTN_HALTING_STACK_LAST_LAYER_BIAS_OPTION', 318, (318,)),
-        ('ATTN_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 321, (321,)),
+        ('ATTN_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 321, (321,)),
         ('ATTN_HALTING_STACK_BIAS_FLAG', 322, (322,)),
     )),
     RuntimeDefaultsSection(('Attention Options', 'Attention Projection Stack Options', 'Attention Projection Memory Options'), (
@@ -281,7 +281,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_MEMORY_STACK_RESIDUAL_MODEL_FLAG', 342, (342,)),
         ('ATTN_MEMORY_STACK_DROPOUT_PROBABILITY', 343, (343,)),
         ('ATTN_MEMORY_STACK_LAST_LAYER_BIAS_OPTION', 344, (344,)),
-        ('ATTN_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 345, (345,)),
+        ('ATTN_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 345, (345,)),
         ('ATTN_MEMORY_STACK_BIAS_FLAG', 346, (346,)),
     )),
     RuntimeDefaultsSection(('Attention Options', 'Attention Projection Stack Options', 'Attention Projection Recurrent Layer Options'), (
@@ -304,7 +304,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG', 368, (368,)),
         ('ATTN_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY', 369, (369,)),
         ('ATTN_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION', 370, (370,)),
-        ('ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 371, (371,)),
+        ('ATTN_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 371, (371,)),
         ('ATTN_RECURRENT_GATE_STACK_BIAS_FLAG', 372, (372,)),
     )),
     RuntimeDefaultsSection(('Attention Options', 'Attention Projection Stack Options', 'Attention Projection Recurrent Layer Options', 'Attention Projection Recurrent Halting Options'), (
@@ -324,7 +324,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('ATTN_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG', 392, (392,)),
         ('ATTN_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY', 393, (393,)),
         ('ATTN_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION', 394, (394,)),
-        ('ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 395, (395,)),
+        ('ATTN_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 395, (395,)),
         ('ATTN_RECURRENT_HALTING_STACK_BIAS_FLAG', 396, (396,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options',), (
@@ -337,7 +337,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_STACK_DROPOUT_PROBABILITY', 406, (406,)),
         ('FF_STACK_LAYER_NORM_POSITION', 407, (407,)),
         ('FF_STACK_LAST_LAYER_BIAS_OPTION', 408, (408,)),
-        ('FF_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 409, (409,)),
+        ('FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 409, (409,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options', 'Feed-Forward Gate Options'), (
         ('FF_STACK_GATE_FLAG', 413, (413,)),
@@ -354,7 +354,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_GATE_STACK_RESIDUAL_MODEL_FLAG', 423, (423,)),
         ('FF_GATE_STACK_DROPOUT_PROBABILITY', 424, (424,)),
         ('FF_GATE_STACK_LAST_LAYER_BIAS_OPTION', 425, (425,)),
-        ('FF_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 426, (426,)),
+        ('FF_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 426, (426,)),
         ('FF_GATE_STACK_BIAS_FLAG', 429, (429,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options', 'Feed-Forward Halting Options'), (
@@ -374,7 +374,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_HALTING_STACK_RESIDUAL_MODEL_FLAG', 447, (447,)),
         ('FF_HALTING_STACK_DROPOUT_PROBABILITY', 448, (448,)),
         ('FF_HALTING_STACK_LAST_LAYER_BIAS_OPTION', 449, (449,)),
-        ('FF_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 452, (452,)),
+        ('FF_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 452, (452,)),
         ('FF_HALTING_STACK_BIAS_FLAG', 453, (453,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options', 'Feed-Forward Memory Options'), (
@@ -394,7 +394,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_MEMORY_STACK_RESIDUAL_MODEL_FLAG', 473, (473,)),
         ('FF_MEMORY_STACK_DROPOUT_PROBABILITY', 474, (474,)),
         ('FF_MEMORY_STACK_LAST_LAYER_BIAS_OPTION', 475, (475,)),
-        ('FF_MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 476, (476,)),
+        ('FF_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 476, (476,)),
         ('FF_MEMORY_STACK_BIAS_FLAG', 477, (477,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options', 'Feed-Forward Recurrent Layer Options'), (
@@ -417,7 +417,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG', 499, (499,)),
         ('FF_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY', 500, (500,)),
         ('FF_RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION', 501, (501,)),
-        ('FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 502, (502,)),
+        ('FF_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 502, (502,)),
         ('FF_RECURRENT_GATE_STACK_BIAS_FLAG', 503, (503,)),
     )),
     RuntimeDefaultsSection(('Feed-Forward Stack Options', 'Feed-Forward Recurrent Layer Options', 'Feed-Forward Recurrent Halting Options'), (
@@ -437,7 +437,7 @@ CONFIGURATION_METADATA_SECTIONS: tuple[RuntimeDefaultsSection, ...] = (
         ('FF_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG', 523, (523,)),
         ('FF_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY', 524, (524,)),
         ('FF_RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION', 525, (525,)),
-        ('FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG', 526, (526,)),
+        ('FF_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG', 526, (526,)),
         ('FF_RECURRENT_HALTING_STACK_BIAS_FLAG', 527, (527,)),
     )),
     RuntimeDefaultsSection(('Output Head',), (

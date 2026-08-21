@@ -69,9 +69,9 @@ class LayerStackValidator(ValidatorBase):
                 f"got input_dim={cfg.input_dim}, hidden_dim={cfg.hidden_dim}, "
                 f"output_dim={cfg.output_dim}."
             )
-        if not cfg.apply_output_pipeline_flag:
+        if not cfg.apply_output_postprocessing_flag:
             raise ValueError(
-                "apply_output_pipeline_flag must be True when "
+                "apply_output_postprocessing_flag must be True when "
                 "AttentionResidualConfig is enabled so the final layer performs "
                 "the "
                 "required final aggregation."

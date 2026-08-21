@@ -131,7 +131,7 @@ def build_parametric_stack_config(
         output_dim=output_dim,
         num_layers=stack_options.num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=True,
+        apply_output_postprocessing_flag=True,
         layer_config=layer_config,
     )
 
@@ -152,7 +152,7 @@ def build_generator_config(
         residual_connection_option=None,
         residual_model_flag=False,
         dropout_probability=generator_stack_options.dropout_probability,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
     )
     return MixtureOfExpertsConfig(
         input_dim=input_dim,

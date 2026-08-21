@@ -61,7 +61,7 @@ def linear_stack_config(input_dim: int, output_dim: int) -> LayerStackConfig:
         output_dim=output_dim,
         num_layers=1,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,

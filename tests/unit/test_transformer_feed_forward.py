@@ -42,7 +42,7 @@ class TestFeedForward(unittest.TestCase):
                 output_dim=output_dim,
                 num_layers=num_layers,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     activation=activation,
                     layer_norm_position=layer_norm_position,
@@ -124,7 +124,7 @@ class TestFeedForward(unittest.TestCase):
             hidden_dim=base_config.hidden_dim,
             output_dim=7,
             num_layers=base_config.num_layers,
-            apply_output_pipeline_flag=base_config.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=base_config.apply_output_postprocessing_flag,
             last_layer_bias_option=base_config.last_layer_bias_option,
             shared_gate_config=base_config.shared_gate_config,
             shared_halting_config=base_config.shared_halting_config,
@@ -176,7 +176,7 @@ class TestFeedForward(unittest.TestCase):
         self.assertTrue(contraction_parameters)
         self.assertTrue(expansion_parameters.isdisjoint(contraction_parameters))
 
-    def test_only_final_contraction_uses_output_pipeline_policy(self):
+    def test_only_final_contraction_uses_output_postprocessing_policy(self):
         model = FeedForward(
             self.preset(
                 num_layers=3,

@@ -70,8 +70,8 @@ class AdaptiveDefaultValues:
     weight_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    weight_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    weight_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     weight_generator_stack_bias_flag: bool | None = (
         config.WEIGHT_GENERATOR_STACK_BIAS_FLAG
@@ -117,8 +117,8 @@ class AdaptiveDefaultValues:
     bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    bias_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    bias_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     bias_generator_stack_bias_flag: bool | None = config.BIAS_GENERATOR_STACK_BIAS_FLAG
     diagonal_generator_stack_independent_flag: bool = (
@@ -148,8 +148,8 @@ class AdaptiveDefaultValues:
     diagonal_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    diagonal_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    diagonal_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     diagonal_generator_stack_bias_flag: bool | None = (
         config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG
@@ -184,8 +184,8 @@ class AdaptiveDefaultValues:
     mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    mask_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    mask_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     mask_generator_stack_bias_flag: bool | None = config.MASK_GENERATOR_STACK_BIAS_FLAG
     adaptive_generator_stack_num_layers: int = (
@@ -212,8 +212,8 @@ class AdaptiveDefaultValues:
     adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    adaptive_generator_stack_apply_output_pipeline_flag: bool = (
-        config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    adaptive_generator_stack_apply_output_postprocessing_flag: bool = (
+        config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     adaptive_generator_stack_bias_flag: bool = config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG
     input_layer_weight_option: type[DynamicWeightConfig] | None = (
@@ -354,8 +354,8 @@ class AdaptiveDefaultValues:
     router_weight_generator_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     ) = config.ROUTER_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-    router_weight_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_weight_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_weight_generator_stack_bias_flag: bool | None = (
         config.ROUTER_WEIGHT_GENERATOR_STACK_BIAS_FLAG
@@ -397,8 +397,8 @@ class AdaptiveDefaultValues:
     router_bias_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_bias_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_bias_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_bias_generator_stack_bias_flag: bool | None = (
         config.ROUTER_BIAS_GENERATOR_STACK_BIAS_FLAG
@@ -434,8 +434,8 @@ class AdaptiveDefaultValues:
     router_diagonal_generator_stack_last_layer_bias_option: (
         LastLayerBiasOptions | None
     ) = config.ROUTER_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
-    router_diagonal_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_diagonal_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_diagonal_generator_stack_bias_flag: bool | None = (
         config.ROUTER_DIAGONAL_GENERATOR_STACK_BIAS_FLAG
@@ -476,8 +476,8 @@ class AdaptiveDefaultValues:
     router_mask_generator_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.ROUTER_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
     )
-    router_mask_generator_stack_apply_output_pipeline_flag: bool | None = (
-        config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+    router_mask_generator_stack_apply_output_postprocessing_flag: bool | None = (
+        config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
     )
     router_mask_generator_stack_bias_flag: bool | None = (
         config.ROUTER_MASK_GENERATOR_STACK_BIAS_FLAG
@@ -545,7 +545,7 @@ class _GeneratorStackSourceValues:
     residual_model_flag: bool
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
 
@@ -630,7 +630,7 @@ def _generator_stack_source(
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         last_layer_bias_option=values.last_layer_bias_option,
-        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         bias_flag=values.bias_flag,
     )
 
@@ -740,8 +740,8 @@ def _adaptive_generator_defaults(
             last_layer_bias_option=(
                 values.adaptive_generator_stack_last_layer_bias_option
             ),
-            apply_output_pipeline_flag=(
-                values.adaptive_generator_stack_apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                values.adaptive_generator_stack_apply_output_postprocessing_flag
             ),
             bias_flag=values.adaptive_generator_stack_bias_flag,
         )
@@ -756,7 +756,7 @@ def _adaptive_generator_defaults(
         residual_model_flag=provided.residual_model_flag,
         dropout_probability=provided.dropout_probability,
         last_layer_bias_option=provided.last_layer_bias_option,
-        apply_output_pipeline_flag=provided.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=provided.apply_output_postprocessing_flag,
         bias_flag=values.adaptive_generator_stack_bias_flag,
         residual_stack_options=provided.residual_stack_options,
     )
@@ -812,8 +812,8 @@ def _hidden_adaptive_defaults(
                     last_layer_bias_option=(
                         values.weight_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.weight_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.weight_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.weight_generator_stack_bias_flag,
                 )
@@ -847,8 +847,8 @@ def _hidden_adaptive_defaults(
                     last_layer_bias_option=(
                         values.bias_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.bias_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.bias_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.bias_generator_stack_bias_flag,
                 )
@@ -884,8 +884,8 @@ def _hidden_adaptive_defaults(
                         last_layer_bias_option=(
                             values.diagonal_generator_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.diagonal_generator_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.diagonal_generator_stack_apply_output_postprocessing_flag
                         ),
                         bias_flag=values.diagonal_generator_stack_bias_flag,
                     )
@@ -921,8 +921,8 @@ def _hidden_adaptive_defaults(
                     last_layer_bias_option=(
                         values.mask_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.mask_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.mask_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.mask_generator_stack_bias_flag,
                 )
@@ -1056,8 +1056,8 @@ def _router_adaptive_defaults(
                     last_layer_bias_option=(
                         values.router_weight_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_weight_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_weight_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.router_weight_generator_stack_bias_flag,
                 )
@@ -1097,8 +1097,8 @@ def _router_adaptive_defaults(
                     last_layer_bias_option=(
                         values.router_bias_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_bias_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_bias_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.router_bias_generator_stack_bias_flag,
                 )
@@ -1136,8 +1136,8 @@ def _router_adaptive_defaults(
                         last_layer_bias_option=(
                             values.router_diagonal_generator_stack_last_layer_bias_option
                         ),
-                        apply_output_pipeline_flag=(
-                            values.router_diagonal_generator_stack_apply_output_pipeline_flag
+                        apply_output_postprocessing_flag=(
+                            values.router_diagonal_generator_stack_apply_output_postprocessing_flag
                         ),
                         bias_flag=values.router_diagonal_generator_stack_bias_flag,
                     )
@@ -1177,8 +1177,8 @@ def _router_adaptive_defaults(
                     last_layer_bias_option=(
                         values.router_mask_generator_stack_last_layer_bias_option
                     ),
-                    apply_output_pipeline_flag=(
-                        values.router_mask_generator_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        values.router_mask_generator_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=values.router_mask_generator_stack_bias_flag,
                 )

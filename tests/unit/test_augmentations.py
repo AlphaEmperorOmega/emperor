@@ -332,7 +332,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         residual_connection_option: type[ResidualConfig] | None = None,
         dropout_probability: float = 0.0,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
     ) -> LayerStackConfig:
         return LayerStackConfig(
             input_dim=input_dim,
@@ -340,7 +340,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
             output_dim=output_dim,
             num_layers=num_layers,
             last_layer_bias_option=last_layer_bias_option,
-            apply_output_pipeline_flag=apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             layer_config=LayerConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,

@@ -52,7 +52,7 @@ class NeuronSubmoduleStackOptions:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig]

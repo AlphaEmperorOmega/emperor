@@ -176,15 +176,15 @@ EXPLICIT_FIELD_DESCRIPTIONS = {
         "run. When enabled, checkpoint selection follows the configured early "
         "stopping metric."
     ),
-    "STACK_APPLY_OUTPUT_PIPELINE_FLAG": (
-        "Controls whether the main layer stack applies its configured output "
-        "pipeline after each layer. Disable it only when testing raw layer "
-        "outputs or specialized stack behavior."
+    "STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG": (
+        "Controls whether the main layer stack applies activation, dropout, layer "
+        "normalization, and residual processing to its final layer."
     ),
-    "HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG": (
-        "Controls whether the dedicated halting stack applies its output "
-        "pipeline. Only matters when halting uses an independent stack; None "
-        "lets the builder inherit the default stack behavior."
+    "HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG": (
+        "Controls whether the dedicated halting stack applies activation, dropout, "
+        "layer normalization, and residual processing to its final layer. Only "
+        "matters when halting uses an independent stack; None lets the builder "
+        "inherit the default stack behavior."
     ),
     "HALTING_STACK_BIAS_FLAG": (
         "Controls whether linear layers in the dedicated halting stack include "

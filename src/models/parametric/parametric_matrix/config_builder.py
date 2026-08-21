@@ -65,8 +65,8 @@ class _ParametricMatrixConfigBuilderImplementation:
         residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
             config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION
         ),
-        residual_stack_apply_output_pipeline_flag: bool | None = (
-            config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        residual_stack_apply_output_postprocessing_flag: bool | None = (
+            config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         residual_stack_bias_flag: bool | None = (config.RESIDUAL_STACK_BIAS_FLAG),
         adaptive_mixture_top_k: int = config.ADAPTIVE_MIXTURE_TOP_K,
@@ -127,8 +127,8 @@ class _ParametricMatrixConfigBuilderImplementation:
                     residual_model_flag=(residual_stack_residual_model_flag),
                     dropout_probability=(residual_stack_dropout_probability),
                     last_layer_bias_option=(residual_stack_last_layer_bias_option),
-                    apply_output_pipeline_flag=(
-                        residual_stack_apply_output_pipeline_flag
+                    apply_output_postprocessing_flag=(
+                        residual_stack_apply_output_postprocessing_flag
                     ),
                     bias_flag=residual_stack_bias_flag,
                 ),

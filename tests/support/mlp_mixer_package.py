@@ -285,7 +285,7 @@ class MlpMixerPackageContractMixin:
                 "ROUTER_STACK_DROPOUT_PROBABILITY",
                 "ROUTER_STACK_LAYER_NORM_POSITION",
                 "ROUTER_STACK_LAST_LAYER_BIAS_OPTION",
-                "ROUTER_STACK_APPLY_OUTPUT_PIPELINE_FLAG",
+                "ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG",
                 "ROUTER_BIAS_FLAG",
             }
             exclusions.update(
@@ -307,7 +307,7 @@ class MlpMixerPackageContractMixin:
             submodule_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             submodule_stack_dropout_probability=0.1,
             submodule_stack_last_layer_bias_option=(LastLayerBiasOptions.DISABLED),
-            submodule_stack_apply_output_pipeline_flag=True,
+            submodule_stack_apply_output_postprocessing_flag=True,
             submodule_stack_bias_flag=False,
             stack_gate_flag=True,
             token_mixer_stack_gate_flag=True,
@@ -338,7 +338,7 @@ class MlpMixerPackageContractMixin:
             outer_gate_stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertTrue(outer_gate_stack.apply_output_pipeline_flag)
+        self.assertTrue(outer_gate_stack.apply_output_postprocessing_flag)
         self.assertFalse(outer_gate_stack.layer_config.layer_model_config.bias_flag)
 
         token_gate_stack = token_stack.layer_config.gate_config.model_config
@@ -549,7 +549,7 @@ class MlpMixerPackageContractMixin:
             router_stack_layer_norm_position=LayerNormPositionOptions.AFTER,
             router_stack_residual_connection_option=(AdditiveResidualConfig),
             router_stack_last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            router_stack_apply_output_pipeline_flag=True,
+            router_stack_apply_output_postprocessing_flag=True,
             router_bias_flag=False,
         )
         token_mixture = config.experiment_config.encoder_config.layer_config.layer_model_config.attention_config.mixing_model_config
@@ -571,7 +571,7 @@ class MlpMixerPackageContractMixin:
             router_stack.last_layer_bias_option,
             LastLayerBiasOptions.DISABLED,
         )
-        self.assertTrue(router_stack.apply_output_pipeline_flag)
+        self.assertTrue(router_stack.apply_output_postprocessing_flag)
         self.assertFalse(router_stack.layer_config.layer_model_config.bias_flag)
         self.assertIsInstance(expert_config, RecurrentLayerConfig)
         self.assertIsNotNone(expert_config.gate_config)

@@ -55,7 +55,7 @@ def _linear_stack(
     return LayerStackConfig(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         layer_config=LayerConfig(
             activation=activation,
@@ -83,7 +83,7 @@ def _controller_stack(model_dim: int, output_dim: int | None = None):
             hidden_dim=model_dim,
             output_dim=output_dim,
             num_layers=1,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             last_layer_bias_option=LastLayerBiasOptions.DISABLED,
             layer_config=LayerConfig(
                 activation=ActivationOptions.SIGMOID,
@@ -154,8 +154,8 @@ def _residual_stack(runtime: RuntimeOptions):
             residual_model_flag=runtime.residual_stack_residual_model_flag,
             dropout_probability=runtime.residual_stack_dropout_probability,
             last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
-            apply_output_pipeline_flag=(
-                runtime.residual_stack_apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                runtime.residual_stack_apply_output_postprocessing_flag
             ),
             bias_flag=runtime.residual_stack_bias_flag,
         ),
@@ -168,7 +168,9 @@ def _projection_stack(runtime: RuntimeOptions, options: TransformerAttentionOpti
     stack = LayerStackConfig(
         hidden_dim=stack_options.hidden_dim,
         num_layers=stack_options.num_layers,
-        apply_output_pipeline_flag=(stack_options.apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=(
+            stack_options.apply_output_postprocessing_flag
+        ),
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
@@ -256,7 +258,9 @@ def _feed_forward(
     stack = LayerStackConfig(
         hidden_dim=stack_options.hidden_dim,
         num_layers=stack_options.num_layers,
-        apply_output_pipeline_flag=(stack_options.apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=(
+            stack_options.apply_output_postprocessing_flag
+        ),
         last_layer_bias_option=stack_options.last_layer_bias_option,
         layer_config=LayerConfig(
             activation=stack_options.activation,
@@ -299,7 +303,7 @@ def _controlled_stack(
         hidden_dim=runtime.model_dim,
         output_dim=runtime.model_dim,
         num_layers=options.num_layers,
-        apply_output_pipeline_flag=True,
+        apply_output_postprocessing_flag=True,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         shared_gate_config=None,
         shared_halting_config=shared_halting_config,

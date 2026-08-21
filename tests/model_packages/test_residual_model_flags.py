@@ -41,7 +41,7 @@ _STACK_OPTION_SUFFIXES = (
     "RESIDUAL_MODEL_FLAG",
     "DROPOUT_PROBABILITY",
     "LAST_LAYER_BIAS_OPTION",
-    "APPLY_OUTPUT_PIPELINE_FLAG",
+    "APPLY_OUTPUT_POSTPROCESSING_FLAG",
     "BIAS_FLAG",
 )
 
@@ -232,7 +232,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                 residual_model_flag=False,
                 dropout_probability=0.0,
                 last_layer_bias_option=LastLayerBiasOptions.ENABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 bias_flag=True,
             )
 
@@ -457,7 +457,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                     "residual_stack_last_layer_bias_option": (
                         LastLayerBiasOptions.ENABLED
                     ),
-                    "residual_stack_apply_output_pipeline_flag": True,
+                    "residual_stack_apply_output_postprocessing_flag": True,
                     "residual_stack_bias_flag": True,
                 }
             )
@@ -484,7 +484,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         stack.last_layer_bias_option,
                         LastLayerBiasOptions.ENABLED,
                     )
-                    self.assertIs(stack.apply_output_pipeline_flag, True)
+                    self.assertIs(stack.apply_output_postprocessing_flag, True)
                     self.assertIs(
                         stack.layer_config.layer_model_config.bias_flag,
                         True,
@@ -504,7 +504,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                 "residual_stack_layer_norm_position": (LayerNormPositionOptions.AFTER),
                 "residual_stack_dropout_probability": 0.2,
                 "residual_stack_last_layer_bias_option": (LastLayerBiasOptions.ENABLED),
-                "residual_stack_apply_output_pipeline_flag": True,
+                "residual_stack_apply_output_postprocessing_flag": True,
                 "residual_stack_bias_flag": True,
             }
         )
@@ -525,7 +525,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                 stack.last_layer_bias_option,
                 LastLayerBiasOptions.ENABLED,
             )
-            self.assertIs(stack.apply_output_pipeline_flag, True)
+            self.assertIs(stack.apply_output_postprocessing_flag, True)
             self.assertIs(stack.layer_config.layer_model_config.bias_flag, True)
 
     def test_invalid_flat_and_direct_runtime_pairs_name_both_fields(self) -> None:

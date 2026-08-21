@@ -184,7 +184,7 @@ class BertCoreConfigFactory:
             output_dim=self.hidden_dim,
             num_layers=options.num_layers,
             last_layer_bias_option=self._stack_last_layer_bias_option(),
-            apply_output_pipeline_flag=self._stack_apply_output_pipeline_flag(),
+            apply_output_postprocessing_flag=self._stack_apply_output_postprocessing_flag(),
             shared_gate_config=self._shared_gate_config(),
             shared_halting_config=halting_config,
             shared_memory_config=(
@@ -293,7 +293,7 @@ class BertCoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
 
     def _apply_attention_projection_controls(
@@ -373,7 +373,7 @@ class BertCoreConfigFactory:
             layer_norm_position=options.layer_norm_position,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
-            apply_output_pipeline_flag=options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
         )
 
     def _apply_feed_forward_controls(self, stack_config) -> None:
@@ -432,8 +432,8 @@ class BertCoreConfigFactory:
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
         return self.encoder_stack_options.last_layer_bias_option
 
-    def _stack_apply_output_pipeline_flag(self) -> bool:
-        return self.encoder_stack_options.apply_output_pipeline_flag
+    def _stack_apply_output_postprocessing_flag(self) -> bool:
+        return self.encoder_stack_options.apply_output_postprocessing_flag
 
     def _shared_gate_config(self):
         if self.encoder_layer_controller_options is None:

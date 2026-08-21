@@ -28,7 +28,9 @@ class HiddenModelConfigFactory:
             hidden_dim=runtime.hidden_dim,
             num_layers=runtime.stack.num_layers,
             last_layer_bias_option=runtime.stack.last_layer_bias_option,
-            apply_output_pipeline_flag=(runtime.stack.apply_output_pipeline_flag),
+            apply_output_postprocessing_flag=(
+                runtime.stack.apply_output_postprocessing_flag
+            ),
             shared_gate_config=runtime.gate.shared_config,
             shared_memory_config=self._control_factory.build_memory_config(),
             layer_config=LayerConfig(

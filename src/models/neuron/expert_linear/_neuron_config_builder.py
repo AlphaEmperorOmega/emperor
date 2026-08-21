@@ -81,8 +81,8 @@ class NeuronConfigBuilder:
         self.cluster_terminal_router_last_layer_bias_option = (
             terminal_router_options.last_layer_bias_option
         )
-        self.cluster_terminal_router_apply_output_pipeline_flag = (
-            terminal_router_options.apply_output_pipeline_flag
+        self.cluster_terminal_router_apply_output_postprocessing_flag = (
+            terminal_router_options.apply_output_postprocessing_flag
         )
         self.cluster_terminal_router_bias_flag = terminal_router_options.bias_flag
         self.terminal_sampler_options = terminal_sampler_options
@@ -144,8 +144,8 @@ class NeuronConfigBuilder:
         self.cluster_halting_stack_last_layer_bias_option = (
             self.cluster_halting_stack_options.last_layer_bias_option
         )
-        self.cluster_halting_stack_apply_output_pipeline_flag = (
-            self.cluster_halting_stack_options.apply_output_pipeline_flag
+        self.cluster_halting_stack_apply_output_postprocessing_flag = (
+            self.cluster_halting_stack_options.apply_output_postprocessing_flag
         )
         self.cluster_halting_stack_bias_flag = (
             self.cluster_halting_stack_options.bias_flag

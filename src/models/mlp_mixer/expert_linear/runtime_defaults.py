@@ -19,7 +19,7 @@ _CONTROLLER_STACK_FIELDS = (
     "residual_model_flag",
     "dropout_probability",
     "last_layer_bias_option",
-    "apply_output_pipeline_flag",
+    "apply_output_postprocessing_flag",
     "bias_flag",
 )
 _INHERITED_RUNTIME_FIELDS = {

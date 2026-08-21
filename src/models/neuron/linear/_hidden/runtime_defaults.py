@@ -110,7 +110,7 @@ def _main_stack(reader: RuntimeOverrideReader) -> MainStackOptions:
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         last_layer_bias_option=values.last_layer_bias_option,
-        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
     )
 
 
@@ -127,7 +127,7 @@ def _submodule_stack(reader: RuntimeOverrideReader) -> ControllerStackOptions:
         hidden_dim=values.hidden_dim,
         num_layers=values.num_layers,
         last_layer_bias_option=values.last_layer_bias_option,
-        apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
         residual_connection_option=values.residual_connection_option,
@@ -170,10 +170,10 @@ def _resolved_controller_stack(
             if values.last_layer_bias_option is None
             else values.last_layer_bias_option
         ),
-        apply_output_pipeline_flag=(
-            defaults.apply_output_pipeline_flag
-            if values.apply_output_pipeline_flag is None
-            else values.apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            defaults.apply_output_postprocessing_flag
+            if values.apply_output_postprocessing_flag is None
+            else values.apply_output_postprocessing_flag
         ),
         activation=(
             defaults.activation if values.activation is None else values.activation
@@ -228,7 +228,7 @@ def _residual_stack(
             residual_model_flag=values.residual_model_flag,
             dropout_probability=values.dropout_probability,
             last_layer_bias_option=values.last_layer_bias_option,
-            apply_output_pipeline_flag=values.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
             bias_flag=values.bias_flag,
         ),
         submodule_stack,

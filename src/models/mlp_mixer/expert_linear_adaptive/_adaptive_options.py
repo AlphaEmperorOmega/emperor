@@ -36,7 +36,7 @@ class GeneratorStackSource:
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
     def resolve(self, defaults: StackOptions) -> StackOptions | None:
@@ -73,10 +73,10 @@ class GeneratorStackSource:
                 if self.last_layer_bias_option is None
                 else self.last_layer_bias_option
             ),
-            apply_output_pipeline_flag=(
-                defaults.apply_output_pipeline_flag
-                if self.apply_output_pipeline_flag is None
-                else self.apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                defaults.apply_output_postprocessing_flag
+                if self.apply_output_postprocessing_flag is None
+                else self.apply_output_postprocessing_flag
             ),
             bias_flag=(
                 defaults.bias_flag if self.bias_flag is None else self.bias_flag
@@ -152,8 +152,8 @@ def adaptive_options(runtime: RuntimeOptions) -> AdaptiveOptions:
             last_layer_bias_option=(
                 runtime.adaptive_generator_stack_last_layer_bias_option
             ),
-            apply_output_pipeline_flag=(
-                runtime.adaptive_generator_stack_apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                runtime.adaptive_generator_stack_apply_output_postprocessing_flag
             ),
             bias_flag=runtime.adaptive_generator_stack_bias_flag,
         ),
@@ -211,8 +211,8 @@ def _weight_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         ),
         residual_model_flag=runtime.weight_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.weight_generator_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(
-            runtime.weight_generator_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.weight_generator_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.weight_generator_stack_bias_flag,
     )
@@ -231,8 +231,8 @@ def _bias_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         ),
         residual_model_flag=runtime.bias_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.bias_generator_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(
-            runtime.bias_generator_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.bias_generator_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.bias_generator_stack_bias_flag,
     )
@@ -253,8 +253,8 @@ def _diagonal_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         last_layer_bias_option=(
             runtime.diagonal_generator_stack_last_layer_bias_option
         ),
-        apply_output_pipeline_flag=(
-            runtime.diagonal_generator_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.diagonal_generator_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.diagonal_generator_stack_bias_flag,
     )
@@ -273,8 +273,8 @@ def _mask_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         ),
         residual_model_flag=runtime.mask_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.mask_generator_stack_last_layer_bias_option,
-        apply_output_pipeline_flag=(
-            runtime.mask_generator_stack_apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            runtime.mask_generator_stack_apply_output_postprocessing_flag
         ),
         bias_flag=runtime.mask_generator_stack_bias_flag,
     )

@@ -199,7 +199,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
         stack_dropout_probability: float = 0.2,
         shared_halting_config: "StickBreakingConfig | None" = None,
         last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag: bool = True,
+        apply_output_postprocessing_flag: bool = True,
         shared_gate_config: "GateConfig | None" = None,
         gate_config: "GateConfig | None" = None,
         halting_config: "StickBreakingConfig | None" = None,
@@ -217,7 +217,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 output_dim=output_dim,
                 num_layers=stack_num_layers,
                 last_layer_bias_option=last_layer_bias_option,
-                apply_output_pipeline_flag=apply_output_pipeline_flag,
+                apply_output_postprocessing_flag=apply_output_postprocessing_flag,
                 shared_gate_config=shared_gate_config,
                 shared_halting_config=shared_halting_config,
                 shared_memory_config=shared_memory_config,
@@ -251,7 +251,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 output_dim=dim,
                 num_layers=1,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     input_dim=dim,
                     output_dim=dim,
@@ -285,7 +285,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 output_dim=dim,
                 num_layers=1,
                 last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     input_dim=dim,
                     output_dim=dim,
@@ -322,19 +322,21 @@ class TestDepthMappingLayerStack(unittest.TestCase):
             DynamicDepthOptions.DEPTH_OF_THREE,
         ]
         valid_num_layers = [1, 2, 3]
-        pipeline_flags = [True, False]
+        postprocessing_flags = [True, False]
         for depth in valid_depths:
             for num_layers in valid_num_layers:
-                for pipeline_flag in pipeline_flags:
+                for postprocessing_flag in postprocessing_flags:
                     with self.subTest(
-                        depth=depth, num_layers=num_layers, pipeline_flag=pipeline_flag
+                        depth=depth,
+                        num_layers=num_layers,
+                        postprocessing_flag=postprocessing_flag,
                     ):
                         cfg = self.preset(
                             input_dim=input_dim,
                             output_dim=output_dim,
                             generator_depth=depth,
                             stack_num_layers=num_layers,
-                            apply_output_pipeline_flag=pipeline_flag,
+                            apply_output_postprocessing_flag=postprocessing_flag,
                         )
                         model = DepthMappingLayerStack(cfg)
                         input_tensor = torch.randn(batch_size, input_dim)
@@ -352,12 +354,14 @@ class TestDepthMappingLayerStack(unittest.TestCase):
             DynamicDepthOptions.DEPTH_OF_THREE,
         ]
         valid_num_layers = [1, 2, 3]
-        pipeline_flags = [True, False]
+        postprocessing_flags = [True, False]
         for depth in valid_depths:
             for num_layers in valid_num_layers:
-                for pipeline_flag in pipeline_flags:
+                for postprocessing_flag in postprocessing_flags:
                     with self.subTest(
-                        depth=depth, num_layers=num_layers, pipeline_flag=pipeline_flag
+                        depth=depth,
+                        num_layers=num_layers,
+                        postprocessing_flag=postprocessing_flag,
                     ):
                         cfg = self.preset(
                             input_dim=dim,
@@ -366,7 +370,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                             generator_depth=depth,
                             stack_num_layers=num_layers,
                             stack_residual_connection_option=AdditiveResidualConfig,
-                            apply_output_pipeline_flag=pipeline_flag,
+                            apply_output_postprocessing_flag=postprocessing_flag,
                         )
                         model = DepthMappingLayerStack(cfg)
                         input_tensor = torch.randn(batch_size, dim)
@@ -397,7 +401,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     input_dim=12,
                     output_dim=12,
@@ -434,7 +438,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
                 output_dim=2,
                 num_layers=2,
                 last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-                apply_output_pipeline_flag=False,
+                apply_output_postprocessing_flag=False,
                 layer_config=LayerConfig(
                     input_dim=dim,
                     output_dim=dim,
@@ -544,7 +548,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
             generator_depth=depth,
             stack_activation=ActivationOptions.DISABLED,
             stack_dropout_probability=0.0,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
         )
         model = DepthMappingLayerStack(cfg)
 
@@ -572,7 +576,7 @@ class TestDepthMappingLayerStack(unittest.TestCase):
             stack_num_layers=2,
             stack_activation=ActivationOptions.DISABLED,
             stack_dropout_probability=0.0,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
         )
         torch.manual_seed(29)
         source = DepthMappingLayerStack(config).double().eval()

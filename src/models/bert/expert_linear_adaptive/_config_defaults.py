@@ -31,8 +31,8 @@ def adaptive_generator_stack_options(
         residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
-        apply_output_pipeline_flag=(
-            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+        apply_output_postprocessing_flag=(
+            config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
         bias_flag=config.ADAPTIVE_GENERATOR_STACK_BIAS_FLAG,
     )
@@ -49,7 +49,7 @@ class _AdaptiveGeneratorStackDefaults:
     residual_model_flag: bool
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
 
 
@@ -66,7 +66,7 @@ def _adaptive_generator_stack_source(
         residual_model_flag=defaults.residual_model_flag,
         dropout_probability=defaults.dropout_probability,
         last_layer_bias_option=defaults.last_layer_bias_option,
-        apply_output_pipeline_flag=defaults.apply_output_pipeline_flag,
+        apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag,
         bias_flag=defaults.bias_flag,
     )
 
@@ -87,8 +87,8 @@ def weight_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackS
             last_layer_bias_option=(
                 config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -109,8 +109,8 @@ def bias_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             residual_model_flag=config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION),
-            apply_output_pipeline_flag=(
-                config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.BIAS_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -135,8 +135,8 @@ def diagonal_generator_stack_source(
             last_layer_bias_option=(
                 config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -157,8 +157,8 @@ def mask_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             residual_model_flag=config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION),
-            apply_output_pipeline_flag=(
-                config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.MASK_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -189,8 +189,8 @@ def router_weight_generator_stack_source(
             last_layer_bias_option=(
                 config.ROUTER_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ROUTER_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.ROUTER_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -221,8 +221,8 @@ def router_bias_generator_stack_source(
             last_layer_bias_option=(
                 config.ROUTER_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ROUTER_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.ROUTER_BIAS_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -253,8 +253,8 @@ def router_diagonal_generator_stack_source(
             last_layer_bias_option=(
                 config.ROUTER_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ROUTER_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.ROUTER_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
         )
@@ -285,8 +285,8 @@ def router_mask_generator_stack_source(
             last_layer_bias_option=(
                 config.ROUTER_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
             ),
-            apply_output_pipeline_flag=(
-                config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG
+            apply_output_postprocessing_flag=(
+                config.ROUTER_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
             ),
             bias_flag=config.ROUTER_MASK_GENERATOR_STACK_BIAS_FLAG,
         )

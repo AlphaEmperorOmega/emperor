@@ -57,7 +57,7 @@ def make_layer_stack_config(
         output_dim=output_dim,
         num_layers=num_layers,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-        apply_output_pipeline_flag=False,
+        apply_output_postprocessing_flag=False,
         layer_config=LayerConfig(
             input_dim=input_dim,
             output_dim=output_dim,
@@ -920,7 +920,7 @@ class TestMemoryHandlers(unittest.TestCase):
             output_dim=4,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=make_layer_stack_config().layer_config,
         )
         cfg = self.preset(model_config=invalid_model_config)
@@ -935,7 +935,7 @@ class TestMemoryHandlers(unittest.TestCase):
             output_dim=4,
             num_layers=1,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             layer_config=make_layer_stack_config().layer_config,
         )
 
@@ -1572,7 +1572,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
             output_dim=dim,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             shared_memory_config=memory_config,
             layer_config=self.layer_config_without_memory(dim),
         )
@@ -1609,7 +1609,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
             output_dim=dim,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             shared_memory_config=shared_memory_config,
             layer_config=layer_config,
         )
@@ -1625,7 +1625,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
             output_dim=dim,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             shared_memory_config=object(),
             layer_config=self.layer_config_without_memory(dim),
         )
@@ -1646,7 +1646,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
             output_dim=dim,
             num_layers=3,
             last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-            apply_output_pipeline_flag=False,
+            apply_output_postprocessing_flag=False,
             shared_memory_config=memory_config,
             layer_config=self.layer_config_without_memory(dim),
         )

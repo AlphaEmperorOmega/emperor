@@ -336,7 +336,7 @@ class StackValues:
     hidden_dim: int
     num_layers: int
     last_layer_bias_option: LastLayerBiasOptions
-    apply_output_pipeline_flag: bool
+    apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
     residual_connection_option: type[ResidualConfig] | None
@@ -350,7 +350,7 @@ class StackFields:
     hidden_dim: RuntimeField[int]
     num_layers: RuntimeField[int]
     last_layer_bias_option: RuntimeField[LastLayerBiasOptions]
-    apply_output_pipeline_flag: RuntimeField[bool]
+    apply_output_postprocessing_flag: RuntimeField[bool]
     activation: RuntimeField[ActivationOptions]
     layer_norm_position: RuntimeField[LayerNormPositionOptions]
     residual_connection_option: RuntimeField[type[ResidualConfig] | None]
@@ -365,7 +365,7 @@ class OptionalStackValues:
     hidden_dim: int | None
     num_layers: int | None
     last_layer_bias_option: LastLayerBiasOptions | None
-    apply_output_pipeline_flag: bool | None
+    apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -380,7 +380,7 @@ class OptionalStackFields:
     hidden_dim: RuntimeField[int | None]
     num_layers: RuntimeField[int | None]
     last_layer_bias_option: RuntimeField[LastLayerBiasOptions | None]
-    apply_output_pipeline_flag: RuntimeField[bool | None]
+    apply_output_postprocessing_flag: RuntimeField[bool | None]
     activation: RuntimeField[ActivationOptions | None]
     layer_norm_position: RuntimeField[LayerNormPositionOptions | None]
     residual_connection_option: RuntimeField[type[ResidualConfig] | None]
@@ -629,9 +629,9 @@ _MAIN_STACK_FIELDS = StackFields(
         config.STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_boolean_field(
-        "stack_apply_output_pipeline_flag",
-        config.STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_boolean_field(
+        "stack_apply_output_postprocessing_flag",
+        config.STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     activation=_enum_field(
         "stack_activation", config.STACK_ACTIVATION, ActivationOptions
@@ -666,9 +666,9 @@ _SUBMODULE_STACK_FIELDS = StackFields(
         config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_boolean_field(
-        "submodule_stack_apply_output_pipeline_flag",
-        config.SUBMODULE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_boolean_field(
+        "submodule_stack_apply_output_postprocessing_flag",
+        config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     activation=_enum_field(
         "submodule_stack_activation",
@@ -711,9 +711,9 @@ _ADAPTIVE_GENERATOR_STACK_FIELDS = StackFields(
         config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_boolean_field(
-        "adaptive_generator_stack_apply_output_pipeline_flag",
-        config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_boolean_field(
+        "adaptive_generator_stack_apply_output_postprocessing_flag",
+        config.ADAPTIVE_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     activation=_enum_field(
         "adaptive_generator_stack_activation",
@@ -783,9 +783,9 @@ _RESIDUAL_STACK_FIELDS = OptionalStackFields(
         config.RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "residual_stack_apply_output_pipeline_flag",
-        config.RESIDUAL_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "residual_stack_apply_output_postprocessing_flag",
+        config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "residual_stack_bias_flag", config.RESIDUAL_STACK_BIAS_FLAG
@@ -825,9 +825,9 @@ _GATE_STACK_FIELDS = OptionalStackFields(
         config.GATE_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "gate_stack_apply_output_pipeline_flag",
-        config.GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "gate_stack_apply_output_postprocessing_flag",
+        config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "gate_stack_bias_flag", config.GATE_STACK_BIAS_FLAG
@@ -871,9 +871,9 @@ _HALTING_STACK_FIELDS = OptionalStackFields(
         config.HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "halting_stack_apply_output_pipeline_flag",
-        config.HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "halting_stack_apply_output_postprocessing_flag",
+        config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "halting_stack_bias_flag", config.HALTING_STACK_BIAS_FLAG
@@ -913,9 +913,9 @@ _MEMORY_STACK_FIELDS = OptionalStackFields(
         config.MEMORY_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "memory_stack_apply_output_pipeline_flag",
-        config.MEMORY_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "memory_stack_apply_output_postprocessing_flag",
+        config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "memory_stack_bias_flag", config.MEMORY_STACK_BIAS_FLAG
@@ -962,9 +962,9 @@ _RECURRENT_GATE_STACK_FIELDS = OptionalStackFields(
         config.RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "recurrent_gate_stack_apply_output_pipeline_flag",
-        config.RECURRENT_GATE_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "recurrent_gate_stack_apply_output_postprocessing_flag",
+        config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "recurrent_gate_stack_bias_flag",
@@ -1012,9 +1012,9 @@ _RECURRENT_HALTING_STACK_FIELDS = OptionalStackFields(
         config.RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "recurrent_halting_stack_apply_output_pipeline_flag",
-        config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "recurrent_halting_stack_apply_output_postprocessing_flag",
+        config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "recurrent_halting_stack_bias_flag",
@@ -1062,9 +1062,9 @@ _WEIGHT_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "weight_generator_stack_apply_output_pipeline_flag",
-        config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "weight_generator_stack_apply_output_postprocessing_flag",
+        config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "weight_generator_stack_bias_flag",
@@ -1112,9 +1112,9 @@ _BIAS_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "bias_generator_stack_apply_output_pipeline_flag",
-        config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "bias_generator_stack_apply_output_postprocessing_flag",
+        config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "bias_generator_stack_bias_flag",
@@ -1162,9 +1162,9 @@ _DIAGONAL_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "diagonal_generator_stack_apply_output_pipeline_flag",
-        config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "diagonal_generator_stack_apply_output_postprocessing_flag",
+        config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "diagonal_generator_stack_bias_flag",
@@ -1212,9 +1212,9 @@ _MASK_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         LastLayerBiasOptions,
     ),
-    apply_output_pipeline_flag=_optional_boolean_field(
-        "mask_generator_stack_apply_output_pipeline_flag",
-        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_PIPELINE_FLAG,
+    apply_output_postprocessing_flag=_optional_boolean_field(
+        "mask_generator_stack_apply_output_postprocessing_flag",
+        config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     ),
     bias_flag=_optional_boolean_field(
         "mask_generator_stack_bias_flag",
@@ -1587,7 +1587,9 @@ def _read_stack(reader: RuntimeOverrideReader, fields: StackFields) -> StackValu
         hidden_dim=reader.read(fields.hidden_dim),
         num_layers=reader.read(fields.num_layers),
         last_layer_bias_option=reader.read(fields.last_layer_bias_option),
-        apply_output_pipeline_flag=reader.read(fields.apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=reader.read(
+            fields.apply_output_postprocessing_flag
+        ),
         activation=reader.read(fields.activation),
         layer_norm_position=reader.read(fields.layer_norm_position),
         residual_connection_option=reader.read(fields.residual_connection_option),
@@ -1606,7 +1608,9 @@ def _read_optional_stack(
         hidden_dim=reader.read(fields.hidden_dim),
         num_layers=reader.read(fields.num_layers),
         last_layer_bias_option=reader.read(fields.last_layer_bias_option),
-        apply_output_pipeline_flag=reader.read(fields.apply_output_pipeline_flag),
+        apply_output_postprocessing_flag=reader.read(
+            fields.apply_output_postprocessing_flag
+        ),
         activation=reader.read(fields.activation),
         layer_norm_position=reader.read(fields.layer_norm_position),
         residual_connection_option=reader.read(fields.residual_connection_option),

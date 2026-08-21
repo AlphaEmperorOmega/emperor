@@ -70,7 +70,7 @@ class SubmoduleStackOptions:
     hidden_dim: int = 128
     num_layers: int = 1
     last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
-    apply_output_pipeline_flag: bool = False
+    apply_output_postprocessing_flag: bool = False
     activation: ActivationOptions = ActivationOptions.DISABLED
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
     residual_connection_option: type[ResidualConfig] | None = None
@@ -85,7 +85,7 @@ class ControllerStackOptions:
     hidden_dim: int | None = None
     num_layers: int | None = None
     last_layer_bias_option: LastLayerBiasOptions | None = None
-    apply_output_pipeline_flag: bool | None = None
+    apply_output_postprocessing_flag: bool | None = None
     activation: ActivationOptions | None = None
     layer_norm_position: LayerNormPositionOptions | None = None
     residual_connection_option: type[ResidualConfig] | None = None
@@ -112,10 +112,10 @@ def resolve_controller_stack_options(
             if source.last_layer_bias_option is None
             else source.last_layer_bias_option
         ),
-        apply_output_pipeline_flag=(
-            defaults.apply_output_pipeline_flag
-            if source.apply_output_pipeline_flag is None
-            else source.apply_output_pipeline_flag
+        apply_output_postprocessing_flag=(
+            defaults.apply_output_postprocessing_flag
+            if source.apply_output_postprocessing_flag is None
+            else source.apply_output_postprocessing_flag
         ),
         activation=(
             defaults.activation if source.activation is None else source.activation
@@ -287,7 +287,7 @@ class RuntimeOptions:
     residual_stack_residual_model_flag: bool = False
     residual_stack_dropout_probability: float | None = None
     residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = None
-    residual_stack_apply_output_pipeline_flag: bool | None = None
+    residual_stack_apply_output_postprocessing_flag: bool | None = None
     residual_stack_bias_flag: bool | None = None
     positional_embedding_option: type = TextSinusoidalPositionalEmbeddingConfig
     encoder_options: TransformerStackOptions = TransformerStackOptions()

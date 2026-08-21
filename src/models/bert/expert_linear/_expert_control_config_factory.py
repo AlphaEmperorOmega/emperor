@@ -207,7 +207,7 @@ class ControlConfigFactory:
             output_dim=stack_options.hidden_dim,
             num_layers=stack_options.num_layers,
             last_layer_bias_option=stack_options.last_layer_bias_option,
-            apply_output_pipeline_flag=stack_options.apply_output_pipeline_flag,
+            apply_output_postprocessing_flag=stack_options.apply_output_postprocessing_flag,
             shared_gate_config=layer_controller.shared_gate_config,
             shared_memory_config=memory_config,
             layer_config=layer_config,
@@ -265,8 +265,8 @@ class ControlConfigFactory:
             hidden_dim=expert_stack_options.hidden_dim,
             num_layers=expert_stack_options.num_layers,
             last_layer_bias_option=expert_stack_options.last_layer_bias_option,
-            apply_output_pipeline_flag=(
-                expert_stack_options.apply_output_pipeline_flag
+            apply_output_postprocessing_flag=(
+                expert_stack_options.apply_output_postprocessing_flag
             ),
             shared_gate_config=layer_controller.shared_gate_config,
             shared_memory_config=memory_config,
