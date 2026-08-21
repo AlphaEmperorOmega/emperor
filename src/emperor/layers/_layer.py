@@ -113,6 +113,15 @@ class Layer(LayerModuleBase):
         self.last_layer_flag = True
 
     @staticmethod
+    def run_model_returning_hidden(
+        model: "Module",
+        X: Tensor,
+        *,
+        row_layout: "RowLayout | None" = None,
+    ) -> Tensor:
+        return Layer.run_model_returning_state(model, X, row_layout=row_layout).hidden
+
+    @staticmethod
     def run_model_returning_state(
         model: "Module",
         X: Tensor,
@@ -121,15 +130,6 @@ class Layer(LayerModuleBase):
     ) -> "LayerState":
         input_state = LayerState(hidden=X, row_layout=row_layout)
         return model(input_state)
-
-    @staticmethod
-    def run_model_returning_hidden(
-        model: "Module",
-        X: Tensor,
-        *,
-        row_layout: "RowLayout | None" = None,
-    ) -> Tensor:
-        return Layer.run_model_returning_state(model, X, row_layout=row_layout).hidden
 
     def forward(
         self,
