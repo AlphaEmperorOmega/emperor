@@ -60,7 +60,7 @@ review_questions = [
   "Would tests fail if the Layer pipeline changed the order of model execution, memory, normalization, activation, gate, dropout, residual, halting, state mutation, or output handling?",
   "Would tests fail if any activation or residual mode changed its exact equation, initialization, disabled identity, dtype, device, gradient, or optimizer-update behavior?",
   "Would tests fail if LayerGate changed multiplier versus addition semantics, optional activation behavior, plain-state adaptation, output validation, shape ownership, or nested-controller restrictions?",
-  "Would tests fail if LayerStack changed one-layer and multi-layer topology, rectangular dimension transitions, ModelConfig wrapper handling, output-pipeline suppression, last-layer bias precedence, or iteration behavior?",
+  "Would tests fail if LayerStack changed one-layer and multi-layer topology, rectangular dimension transitions, ModelConfig wrapper handling, output-postprocessing suppression, last-layer bias precedence, or iteration behavior?",
   "Would tests fail if shared and per-layer gate, halting, or memory controllers were mixed, rebuilt instead of shared, assigned stale dimensions, leaked across samples, or accumulated the wrong exact output and loss?",
   "Would tests fail if RecurrentLayer changed max-step execution, early stopping, feature-last rank handling, context-state preservation, controller order, normalization position, recurrent loss accumulation, or restoration of the caller halting state?",
   "Would tests fail if train/eval dropout, batch-size-one and multi-sample behavior, leading dimensions, float64, non-contiguous inputs, or per-sample isolation regressed?",
