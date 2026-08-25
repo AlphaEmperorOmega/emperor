@@ -135,7 +135,7 @@ class Module(LightningModule):
     def _resolve_config_overrides(
         self,
         config: "ConfigBase",
-        **kwargs,
+        **kwargs: object,
     ) -> "ConfigBase":
         declared_field_names = {config_field.name for config_field in fields(config)}
         applicable_override_kwargs = {
@@ -149,7 +149,7 @@ class Module(LightningModule):
     def _build_from_config(
         self,
         config: "ConfigBase | None",
-        **kwargs,
+        **kwargs: object,
     ) -> "Module | None":
         if config is None:
             return None
