@@ -339,6 +339,11 @@ class TestMixerAttention(unittest.TestCase):
                 "mixing_model.layers",
                 "mixing_model.layers.0",
                 "mixing_model.layers.0.model",
+                "mixing_model.layers.0.postprocessing",
+                "mixing_model.layers.0.halting",
+                "mixing_model.layers.0.memory",
+                "mixing_model.layers.0.residual",
+                "mixing_model.layers.0.normalization",
             ),
         )
         expected_state_topology = (

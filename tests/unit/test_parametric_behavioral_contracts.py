@@ -41,6 +41,7 @@ from emperor.parametric._mixtures.validation import AdaptiveMixtureValidator
 from emperor.parametric._mixtures.vector import VectorMixtureBase
 from emperor.parametric._validation import (
     ParametricHandlerValidator,
+    ParametricLayerHandlerValidator,
     ParametricLayerValidator,
 )
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -1190,9 +1191,9 @@ class ParametricValidationBehavioralContractTests(unittest.TestCase):
             TypeError,
             "state must be a LayerState",
         ):
-            ParametricHandlerValidator.validate_state(object())
+            ParametricLayerHandlerValidator.validate_state(object())
         with self.assertRaisesRegex(TypeError, "state.hidden must be a Tensor"):
-            ParametricHandlerValidator.validate_state(LayerState(hidden=object()))
+            ParametricLayerHandlerValidator.validate_state(LayerState(hidden=object()))
 
         missing_router = ParameterHandlerBase(_parametric_config())
         missing_router.router_config = None
@@ -1239,14 +1240,14 @@ class ParametricValidationBehavioralContractTests(unittest.TestCase):
             TypeError,
             "ParametricLayerHandler cfg must be ParametricLayerHandlerConfig",
         ):
-            ParametricHandlerValidator._validate_layer_handler(layer_handler)
+            ParametricLayerHandlerValidator._validate_layer_handler(layer_handler)
         layer_handler.cfg = handler_config
         layer_handler.layer_model_config = object()
         with self.assertRaisesRegex(
             TypeError,
             "ParametricLayerHandler.layer_model_config must be ParametricLayerConfig",
         ):
-            ParametricHandlerValidator._validate_layer_handler(layer_handler)
+            ParametricLayerHandlerValidator._validate_layer_handler(layer_handler)
 
     def test_generator_configuration_relationships_are_exact(self) -> None:
         top_k_mismatch = GeneratorWeightsMixtureConfig(

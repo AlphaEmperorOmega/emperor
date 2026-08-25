@@ -60,18 +60,11 @@ class LayerControllerMonitorCallback(Callback):
                 self.__attach_gate_hook(module_name, layer, pl_module)
                 self.__attach_dropout_hook(module_name, layer, pl_module)
                 self.__attach_layer_norm_hook(module_name, layer, pl_module)
-                if self.__should_track_activation(layer):
-                    self.__wrap_activation(module_name, layer, pl_module)
-                self.__wrap_residual(module_name, layer, pl_module)
+                self.__wrap_activation(module_name, layer, pl_module)
+                self.__attach_residual_hook(module_name, layer, pl_module)
         except BaseException:
             self.__cleanup()
             raise
-
-    @staticmethod
-    def __should_track_activation(layer: Module) -> bool:
-        from emperor.layers._options import ActivationOptions
-
-        return layer.activation_function != ActivationOptions.DISABLED
 
     def __attach_gate_hook(
         self,
@@ -79,7 +72,8 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
-        gate = getattr(layer, "gate_model", None)
+        postprocessing = getattr(layer, "postprocessing", None)
+        gate = getattr(postprocessing, "gate", None)
         gate_model = getattr(gate, "model", None)
         if gate_model is None or id(gate_model) in self._hooked_gate_model_ids:
             return
@@ -96,7 +90,8 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
-        dropout_module = getattr(layer, "dropout_module", None)
+        postprocessing = getattr(layer, "postprocessing", None)
+        dropout_module = getattr(postprocessing, "dropout", None)
         if dropout_module is not None:
             self._hooks.append(
                 dropout_module.register_forward_hook(
@@ -110,7 +105,8 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
-        layer_norm_module = getattr(layer, "layer_norm_module", None)
+        normalization = getattr(layer, "normalization", None)
+        layer_norm_module = getattr(normalization, "module", None)
         if layer_norm_module is not None:
             self._hooks.append(
                 layer_norm_module.register_forward_hook(
@@ -200,7 +196,8 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         raw_gate_values: Tensor,
     ) -> Tensor | None:
-        gate = getattr(layer, "gate_model", None)
+        postprocessing = getattr(layer, "postprocessing", None)
+        gate = getattr(postprocessing, "gate", None)
         if gate is None or not hasattr(gate, "effective_values"):
             return raw_gate_values
         return gate.effective_values(raw_gate_values)
@@ -373,8 +370,15 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
-        method_name = "_Layer__maybe_apply_activation"
-        original_activation = getattr(layer, method_name)
+        from emperor.layers._options import ActivationOptions
+
+        postprocessing = getattr(layer, "postprocessing", None)
+        activation = getattr(postprocessing, "activation_function", None)
+        if activation in (None, ActivationOptions.DISABLED):
+            return
+
+        method_name = "_LayerPostprocessingDelegate__maybe_apply_activation"
+        original_activation = getattr(postprocessing, method_name)
 
         def monitored_activation(*args: object, **kwargs: object) -> object:
             output = original_activation(*args, **kwargs)
@@ -389,7 +393,7 @@ class LayerControllerMonitorCallback(Callback):
 
         _install_method_replacement(
             self._wrapped_methods,
-            layer,
+            postprocessing,
             method_name,
             original_activation,
             monitored_activation,
@@ -421,24 +425,41 @@ class LayerControllerMonitorCallback(Callback):
             ((activation_values < -0.99) | (activation_values > 0.99)).float().mean(),
         )
 
-    def __wrap_residual(
+    def __attach_residual_hook(
         self,
         module_name: str,
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
-        method_name = "_Layer__maybe_apply_residual_connection"
-        residual_connection = getattr(layer, "residual_connection", None)
+        residual = getattr(layer, "residual", None)
+        residual_connection = getattr(residual, "connection", None)
         if residual_connection is None:
             return
         if not residual_connection.supports_pairwise_diagnostics:
             return
-        original_residual = getattr(layer, method_name)
+        self._hooks.append(
+            residual_connection.register_forward_hook(
+                self.__make_residual_hook(module_name, pl_module),
+                with_kwargs=True,
+            )
+        )
 
-        def monitored_residual(*args: object, **kwargs: object) -> object:
-            output = original_residual(*args, **kwargs)
-            input_values = args[0] if args else kwargs.get("input")
-            previous_values = args[1] if len(args) > 1 else kwargs.get("prev_input")
+    def __make_residual_hook(
+        self,
+        module_name: str,
+        pl_module: LightningModule,
+    ) -> Callable[
+        [Module, tuple[object, ...], dict[str, object], object],
+        None,
+    ]:
+        def log_residual_output(
+            _residual: Module,
+            inputs: tuple[object, ...],
+            kwargs: dict[str, object],
+            output: object,
+        ) -> None:
+            input_values = inputs[0] if inputs else kwargs.get("current")
+            previous_values = inputs[1] if len(inputs) > 1 else kwargs.get("previous")
             if self.__can_log_residual(
                 pl_module,
                 output,
@@ -453,15 +474,8 @@ class LayerControllerMonitorCallback(Callback):
                     previous_values=previous_values.detach().float(),
                 )
                 self.__track_residual_diagnostics(context)
-            return output
 
-        _install_method_replacement(
-            self._wrapped_methods,
-            layer,
-            method_name,
-            original_residual,
-            monitored_residual,
-        )
+        return log_residual_output
 
     def __can_log_residual(
         self,

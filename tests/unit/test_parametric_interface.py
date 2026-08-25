@@ -484,6 +484,7 @@ print(json.dumps({
             "MatrixMixtureBase",
             "ParameterHandlerBase",
             "ParametricHandlerValidator",
+            "ParametricLayerHandlerValidator",
             "ParametricLayerValidator",
             "VectorMixtureBase",
             "_ParametricObservation",

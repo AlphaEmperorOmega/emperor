@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
+    from emperor.memory import MemoryInterface
     from emperor.nn import Module
 
 
@@ -142,11 +143,14 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             input_dim=self.output_dim,
         )
 
-    def __build_memory_model(self) -> Module | None:
-        return self._build_from_config(
-            self.memory_config,
-            input_dim=self.output_dim,
-            output_dim=self.output_dim,
+    def __build_memory_model(self) -> MemoryInterface | None:
+        return cast(
+            "MemoryInterface | None",
+            self._build_from_config(
+                self.memory_config,
+                input_dim=self.output_dim,
+                output_dim=self.output_dim,
+            ),
         )
 
     def __build_recurrent_layer_norm(self) -> nn.Module | None:
@@ -418,16 +422,28 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         return hidden
 
     def __maybe_apply_memory_before(self, hidden: Tensor) -> Tensor:
-        return self._maybe_apply_memory_by_position(
+        return self.__maybe_apply_memory_by_position(
             hidden,
             MemoryPositionOptions.BEFORE_AFFINE,
         )
 
     def __maybe_apply_memory_after(self, hidden: Tensor) -> Tensor:
-        return self._maybe_apply_memory_by_position(
+        return self.__maybe_apply_memory_by_position(
             hidden,
             MemoryPositionOptions.AFTER_AFFINE,
         )
+
+    def __maybe_apply_memory_by_position(
+        self,
+        hidden: Tensor,
+        position: MemoryPositionOptions,
+    ) -> Tensor:
+        memory_model = self.memory_model
+        if memory_model is None:
+            return hidden
+        if memory_model.memory_position_option != position:
+            return hidden
+        return memory_model(hidden)
 
     def __maybe_apply_layer_norm_default(self, hidden: Tensor) -> Tensor:
         if self.recurrent_layer_norm_position == LayerNormPositionOptions.DEFAULT:

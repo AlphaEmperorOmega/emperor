@@ -35,7 +35,6 @@ from emperor.layers._monitoring.diagnostics import (
     _RecurrentDiagnostics,
     _RecurrentObservation,
 )
-from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation.gate import LayerGateValidator
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions
@@ -49,20 +48,7 @@ from support.layers import (
 )
 from support.monitor import CaptureLightningModule, TrainerStub, same_bound_method
 
-
-class PositionedMemory(nn.Module):
-    def __init__(self, position: MemoryPositionOptions) -> None:
-        super().__init__()
-        self.memory_position_option = position
-
-    def forward(self, hidden: torch.Tensor) -> torch.Tensor:
-        return hidden * 3.0
-
-
-class MemoryDispatchHarness(LayerModuleBase):
-    def __init__(self, position: MemoryPositionOptions) -> None:
-        super().__init__()
-        self.memory_model = PositionedMemory(position)
+ACTIVATION_METHOD_NAME = "_LayerPostprocessingDelegate__maybe_apply_activation"
 
 
 class LayerBehavioralContractTests(unittest.TestCase):
@@ -315,7 +301,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
             )
         )
         set_layer_identity(layer)
-        configure_weighted_memory(layer.memory_model)
+        configure_weighted_memory(layer.memory.model)
         hidden = torch.tensor([[1.0, -2.0], [0.5, 3.0]], requires_grad=True)
 
         output = layer(LayerState(hidden=hidden)).hidden
@@ -326,7 +312,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
         self.assertTrue(hidden.grad.ne(0).all())
         gradients = [
             parameter.grad
-            for parameter in layer.memory_model.parameters()
+            for parameter in layer.memory.model.parameters()
             if parameter.requires_grad
         ]
         self.assertTrue(any(gradient is not None for gradient in gradients))
@@ -358,14 +344,14 @@ class LayerBehavioralContractTests(unittest.TestCase):
         stack = LayerStack(config)
         for layer in stack:
             set_layer_identity(layer)
-        shared_memory = stack[0].memory_model
+        shared_memory = stack[0].memory.model
         configure_weighted_memory(shared_memory)
         hidden = torch.tensor([[1.0, -2.0], [0.5, 3.0]], requires_grad=True)
 
         output = stack(LayerState(hidden=hidden)).hidden
 
         self.assertIsNotNone(shared_memory)
-        self.assertTrue(all(layer.memory_model is shared_memory for layer in stack))
+        self.assertTrue(all(layer.memory.model is shared_memory for layer in stack))
         torch.testing.assert_close(output, hidden * (1.75**2))
         output.sum().backward()
         memory_gradients = [
@@ -382,40 +368,20 @@ class LayerBehavioralContractTests(unittest.TestCase):
             )
         )
 
-    def test_memory_dispatch_applies_only_at_the_model_position(
-        self,
-    ) -> None:
-        hidden = torch.tensor([[1.0, -2.0]])
-        harness = MemoryDispatchHarness(MemoryPositionOptions.AFTER_AFFINE)
-
-        before = harness._maybe_apply_memory_by_position(
-            hidden,
-            MemoryPositionOptions.BEFORE_AFFINE,
-        )
-        after = harness._maybe_apply_memory_by_position(
-            hidden,
-            MemoryPositionOptions.AFTER_AFFINE,
-        )
-
-        self.assertIs(before, hidden)
-        torch.testing.assert_close(after, hidden * 3.0)
-
     def test_absent_residual_config_is_identity_and_abstract_config_is_rejected(
         self,
     ) -> None:
         current = torch.tensor([[1.0, 2.0]])
         previous = torch.tensor([[3.0, 4.0]])
         layer = Layer(base_layer_config())
+        state = LayerState(hidden=current)
 
-        result = layer._Layer__maybe_apply_residual_connection(
-            current,
-            previous,
-            LayerState(hidden=current),
-        )
+        result = layer.residual.apply_residual(state, previous)
 
-        self.assertIsNone(layer.residual_config)
-        self.assertIsNone(layer.residual_connection)
-        self.assertIs(result, current)
+        self.assertIsNone(layer.residual.config)
+        self.assertIsNone(layer.residual.connection)
+        self.assertIs(result, state)
+        self.assertIs(result.hidden, current)
 
         with self.assertRaisesRegex(
             ValueError,
@@ -732,7 +698,7 @@ class LayerBehavioralContractTests(unittest.TestCase):
             module.logged_tags,
         )
 
-    def test_monitor_exception_cleanup_restores_real_layer_methods(self) -> None:
+    def test_monitor_exception_cleanup_removes_real_layer_hooks(self) -> None:
         layer = Layer(
             LayerConfig(
                 input_dim=2,
@@ -753,9 +719,10 @@ class LayerBehavioralContractTests(unittest.TestCase):
         )
         module = CaptureLightningModule(layer=layer)
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)
-        original_activation = layer._Layer__maybe_apply_activation
-        original_residual = layer._Layer__maybe_apply_residual_connection
+        original_activation = getattr(layer.postprocessing, ACTIVATION_METHOD_NAME)
         callback.on_fit_start(TrainerStub(), module)
+        self.assertTrue(callback._wrapped_methods)
+        self.assertTrue(layer.residual.connection._forward_hooks)
 
         callback.on_exception(
             TrainerStub(),
@@ -765,16 +732,11 @@ class LayerBehavioralContractTests(unittest.TestCase):
 
         self.assertTrue(
             same_bound_method(
-                layer._Layer__maybe_apply_activation,
+                getattr(layer.postprocessing, ACTIVATION_METHOD_NAME),
                 original_activation,
             )
         )
-        self.assertTrue(
-            same_bound_method(
-                layer._Layer__maybe_apply_residual_connection,
-                original_residual,
-            )
-        )
+        self.assertEqual(layer.residual.connection._forward_hooks, {})
         self.assertEqual(callback._hooks, [])
         self.assertEqual(callback._wrapped_methods, [])
 

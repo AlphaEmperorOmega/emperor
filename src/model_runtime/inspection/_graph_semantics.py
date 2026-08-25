@@ -221,7 +221,7 @@ class _ExpertDetailsAdapter:
 
 
 def _optional_model(
-    module: GraphModule,
+    module: object,
     attr_name: str,
 ) -> tuple[bool, Any | None]:
     model = getattr(module, attr_name, _MISSING_ATTRIBUTE)
@@ -234,29 +234,56 @@ def _optional_model(
 class _LayerBehaviorDetailsAdapter:
     def apply(self, context: _SemanticDetailContext) -> None:
         module = context.module
-        dropout = getattr(module, "dropout_probability", None)
+        postprocessing = getattr(module, "postprocessing", None)
+        if postprocessing is None:
+            self.__apply_direct_controller_owner(context)
+            return
+
+        normalization = getattr(module, "normalization", None)
+        halting_delegate = getattr(module, "halting", None)
+
+        dropout = getattr(postprocessing, "dropout_probability", None)
         if dropout is not None:
             context.details["dropout"] = dropout
 
-        gate_present, gate = _optional_model(module, "gate_model")
-        gate_option = getattr(gate, "option", None)
-        if gate_option is None:
-            gate_config = getattr(module, "gate_config", None)
-            gate_option = getattr(gate_config, "option", None)
-        gate_option_name = (
-            display_graph_value(gate_option) if gate_option is not None else None
+        self.__append_gate_details(
+            context,
+            *(_optional_model(postprocessing, "gate")),
+            config_owner=postprocessing,
         )
-        if gate_option_name is not None:
-            context.details["gateOption"] = gate_option_name
-
-        if gate_present:
-            context.details["gate"] = gate is not None
-
-        halting_present, halting = _optional_model(module, "halting_model")
+        halting_present, halting = _optional_model(halting_delegate, "model")
         context.halting_model_present = halting_present
         context.halting_model = halting
         if context.halting_model_present:
             context.details["halting"] = context.halting_model is not None
+
+        activation = getattr(postprocessing, "activation_function", None)
+        if activation is not None:
+            context.details["activation"] = display_graph_value(activation)
+
+        layer_norm = getattr(normalization, "position", None)
+        if layer_norm is not None:
+            context.details["layerNorm"] = display_graph_value(layer_norm)
+
+    def __apply_direct_controller_owner(
+        self,
+        context: _SemanticDetailContext,
+    ) -> None:
+        module = context.module
+        dropout = getattr(module, "dropout_probability", None)
+        if dropout is not None:
+            context.details["dropout"] = dropout
+
+        self.__append_gate_details(
+            context,
+            *(_optional_model(module, "gate_model")),
+            config_owner=module,
+        )
+        halting_present, halting = _optional_model(module, "halting_model")
+        context.halting_model_present = halting_present
+        context.halting_model = halting
+        if halting_present:
+            context.details["halting"] = halting is not None
 
         activation = getattr(module, "activation_function", None)
         if activation is not None:
@@ -265,6 +292,23 @@ class _LayerBehaviorDetailsAdapter:
         layer_norm = getattr(module, "layer_norm_position", None)
         if layer_norm is not None:
             context.details["layerNorm"] = display_graph_value(layer_norm)
+
+    @staticmethod
+    def __append_gate_details(
+        context: _SemanticDetailContext,
+        gate_present: bool,
+        gate: Any | None,
+        *,
+        config_owner: GraphModule | Any,
+    ) -> None:
+        gate_option = getattr(gate, "option", None)
+        if gate_option is None:
+            gate_config = getattr(config_owner, "gate_config", None)
+            gate_option = getattr(gate_config, "option", None)
+        if gate_option is not None:
+            context.details["gateOption"] = display_graph_value(gate_option)
+        if gate_present:
+            context.details["gate"] = gate is not None
 
 
 def _coordinate_from_neuron_name(name: str) -> list[int] | None:

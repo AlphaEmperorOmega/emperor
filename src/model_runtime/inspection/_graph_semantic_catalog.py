@@ -208,6 +208,31 @@ SEMANTIC_TYPE_CATALOG = SemanticTypeCatalog(
             "Applies one configured layer block with optional activation, residuals, normalization, gating, halting, and memory hooks.",
         ),
         _semantic_type_policy(
+            "emperor.layers._pipeline.postprocessing.LayerPostprocessingDelegate",
+            "Internal Layer Pipeline Module that applies activation, gating, and dropout in order.",
+            graph_role="internal",
+        ),
+        _semantic_type_policy(
+            "emperor.layers._pipeline.halting.LayerHaltingDelegate",
+            "Internal Layer Pipeline Module that owns halting updates and finalization.",
+            graph_role="internal",
+        ),
+        _semantic_type_policy(
+            "emperor.layers._pipeline.memory.LayerMemoryDelegate",
+            "Internal Layer Pipeline Module that applies dynamic memory at its configured position.",
+            graph_role="internal",
+        ),
+        _semantic_type_policy(
+            "emperor.layers._pipeline.residual.LayerResidualDelegate",
+            "Internal Layer Pipeline Module that owns residual state and composition.",
+            graph_role="internal",
+        ),
+        _semantic_type_policy(
+            "emperor.layers._pipeline.normalization.LayerNormalizationDelegate",
+            "Internal Layer Pipeline Module that applies normalization at its configured position.",
+            graph_role="internal",
+        ),
+        _semantic_type_policy(
             "emperor.layers._config.LayerConfig",
             "Builds a Layer block with optional activation, residuals, normalization, gating, halting, and memory hooks.",
         ),

@@ -1502,10 +1502,10 @@ class TestLayerMemoryIntegration(unittest.TestCase):
                 layer = Layer(cfg)
 
                 self.assertIsInstance(
-                    layer.memory_model,
+                    layer.memory.model,
                     memory_config._registry_owner(),
                 )
-                self.assertIsInstance(layer.memory_model, model_cls)
+                self.assertIsInstance(layer.memory.model, model_cls)
 
     def test_layer_applies_memory_only_at_configured_position(self):
         dim = 4
@@ -1531,10 +1531,10 @@ class TestLayerMemoryIntegration(unittest.TestCase):
                 layer = Layer(cfg)
                 set_scaled_identity(layer, 2.0)
                 self.assertIsInstance(
-                    layer.memory_model,
+                    layer.memory.model,
                     GatedResidualDynamicMemory,
                 )
-                configure_gated_residual_addition(layer.memory_model, 1.0)
+                configure_gated_residual_addition(layer.memory.model, 1.0)
 
                 output = layer(LayerState(hidden=inputs))
 
@@ -1553,7 +1553,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         ).build()
         self.assertIsInstance(memory_model, GatedResidualDynamicMemory)
         configure_gated_residual_addition(memory_model, 1.0)
-        layer.memory_model = memory_model
+        layer.memory.model = memory_model
 
         output = layer(LayerState(hidden=inputs))
 
@@ -1578,7 +1578,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         )
 
         model = LayerStack(cfg)
-        memory_models = [layer.memory_model for layer in model]
+        memory_models = [layer.memory.model for layer in model]
 
         self.assertTrue(all(memory_model is not None for memory_model in memory_models))
         first_memory_model = memory_models[0]
@@ -1587,7 +1587,7 @@ class TestLayerMemoryIntegration(unittest.TestCase):
         )
         for layer in model:
             self.assertIsNone(layer.cfg.memory_config)
-            self.assertIsNone(layer.memory_config)
+            self.assertIsNone(layer.memory.config)
 
     def test_shared_memory_rejects_per_layer_memory_config(self):
         dim = 4

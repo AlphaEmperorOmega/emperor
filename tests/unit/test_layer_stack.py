@@ -120,12 +120,12 @@ class TestLayerStack(unittest.TestCase):
             ):
                 layer.model.weight_params.copy_(matrix)
                 layer.model.bias_params.copy_(bias)
-                attention_residual = layer.residual_connection
+                attention_residual = layer.residual.connection
                 attention_residual.query.copy_(query)
                 attention_residual.key_norm.weight.copy_(norm_weight)
 
         def mix_sources(sources, layer):
-            attention_residual = layer.residual_connection
+            attention_residual = layer.residual.connection
             values = torch.stack(sources, dim=0)
             keys = torch.nn.functional.rms_norm(
                 values,
@@ -223,7 +223,7 @@ class TestLayerStack(unittest.TestCase):
     def test_attention_residual_stack_restores_enclosing_residual_state(self):
         stack = self.attention_residual_stack((2.0, 3.0))
         initial = torch.tensor([[1.0, -2.0]])
-        enclosing_residual_state = stack[0].residual_connection.new_state(initial)
+        enclosing_residual_state = stack[0].residual.connection.new_state(initial)
         state = LayerState(
             hidden=initial.clone(),
             residual_state=enclosing_residual_state,
@@ -243,7 +243,7 @@ class TestLayerStack(unittest.TestCase):
         stack = self.attention_residual_stack((2.0, 3.0))
         stack[1].model = FailingModel()
         initial = torch.tensor([[1.0, -2.0]])
-        enclosing_residual_state = stack[0].residual_connection.new_state(initial)
+        enclosing_residual_state = stack[0].residual.connection.new_state(initial)
         state = LayerState(
             hidden=initial.clone(),
             residual_state=enclosing_residual_state,
@@ -258,7 +258,7 @@ class TestLayerStack(unittest.TestCase):
     def test_attention_residual_stack_owns_one_router_per_layer(self):
         stack = self.attention_residual_stack((2.0, 3.0, 4.0))
 
-        queries = tuple(layer.residual_connection.query for layer in stack)
+        queries = tuple(layer.residual.connection.query for layer in stack)
 
         self.assertEqual(len({id(query) for query in queries}), len(queries))
         for query in queries:
@@ -284,7 +284,7 @@ class TestLayerStack(unittest.TestCase):
             ):
                 layer.model.weight_params.copy_(matrix)
                 layer.model.bias_params.copy_(bias)
-                layer.residual_connection.query.copy_(
+                layer.residual.connection.query.copy_(
                     torch.tensor([0.35 + 0.1 * index, -0.2])
                 )
         initial = torch.tensor(
@@ -299,7 +299,7 @@ class TestLayerStack(unittest.TestCase):
         self.assertTrue(torch.isfinite(initial.grad).all())
         self.assertGreater(torch.count_nonzero(initial.grad).item(), 0)
         for layer in stack:
-            attention_residual = layer.residual_connection
+            attention_residual = layer.residual.connection
             parameters = (
                 layer.model.weight_params,
                 layer.model.bias_params,
@@ -317,7 +317,7 @@ class TestLayerStack(unittest.TestCase):
         stack = self.attention_residual_stack(scales, block_size=2)
         with torch.no_grad():
             for index, layer in enumerate(stack):
-                layer.residual_connection.query.copy_(
+                layer.residual.connection.query.copy_(
                     torch.tensor([0.2 + 0.1 * index, -0.15])
                 )
         initial = torch.tensor([[1.0, -2.0], [0.5, 3.0]])
@@ -327,14 +327,14 @@ class TestLayerStack(unittest.TestCase):
             name: value.detach().clone() for name, value in stack.state_dict().items()
         }
         residual_parameter_names = tuple(
-            name for name in checkpoint if ".residual_connection." in name
+            name for name in checkpoint if ".residual.connection." in name
         )
         expected_residual_parameter_names = tuple(
             parameter_name
             for layer_index in range(len(stack))
             for parameter_name in (
-                f"layers.{layer_index}.residual_connection.query",
-                f"layers.{layer_index}.residual_connection.key_norm.weight",
+                f"layers.{layer_index}.residual.connection.query",
+                f"layers.{layer_index}.residual.connection.key_norm.weight",
             )
         )
         restored = self.attention_residual_stack(scales, block_size=2)
@@ -564,27 +564,30 @@ class TestLayerStack(unittest.TestCase):
 
                 if is_last_layer and not cfg.apply_output_postprocessing_flag:
                     self.assertEqual(
-                        layer.activation_function, ActivationOptions.DISABLED
+                        layer.postprocessing.activation_function,
+                        ActivationOptions.DISABLED,
                     )
-                    self.assertEqual(layer.dropout_probability, 0.0)
-                    self.assertIsNone(layer.residual_config)
+                    self.assertEqual(layer.postprocessing.dropout_probability, 0.0)
+                    self.assertIsNone(layer.residual.config)
                 else:
                     self.assertEqual(
-                        layer.activation_function, cfg.layer_config.activation
+                        layer.postprocessing.activation_function,
+                        cfg.layer_config.activation,
                     )
                     self.assertEqual(
-                        layer.dropout_probability, cfg.layer_config.dropout_probability
+                        layer.postprocessing.dropout_probability,
+                        cfg.layer_config.dropout_probability,
                     )
 
-                if layer.gate_model is not None:
-                    gate = layer.gate_model
+                if layer.postprocessing.gate is not None:
+                    gate = layer.postprocessing.gate
                     gate_layers = [gate] if isinstance(gate, Layer) else list(gate)
                     for j, gate_layer in enumerate(gate_layers):
                         with self.subTest(gate_layer_index=j):
                             self.assertIsInstance(gate_layer, Layer)
                             self.assertIsNotNone(gate_layer.model)
-                            self.assertIsNone(gate_layer.gate_config)
-                            self.assertIsNone(gate_layer.halting_config)
+                            self.assertIsNone(gate_layer.postprocessing.gate_config)
+                            self.assertIsNone(gate_layer.halting.config)
 
     def test_build_returns_correct_type_for_num_layers(self):
         num_layers_options = [1, 2, 3, 4]
@@ -600,7 +603,7 @@ class TestLayerStack(unittest.TestCase):
 
                 self.assertIsInstance(model, LayerStack)
                 for layer in model:
-                    self.assertIsInstance(layer.gate_model.model, LayerStack)
+                    self.assertIsInstance(layer.postprocessing.gate.model, LayerStack)
 
     def test_layer_overrides_apply_correctly(self):
         cfg = self.preset(
@@ -617,8 +620,11 @@ class TestLayerStack(unittest.TestCase):
 
         self.assertEqual(layer.input_dim, 12)
         self.assertEqual(layer.output_dim, 24)
-        self.assertEqual(layer.activation_function, ActivationOptions.RELU)
-        self.assertEqual(layer.dropout_probability, 0.5)
+        self.assertEqual(
+            layer.postprocessing.activation_function,
+            ActivationOptions.RELU,
+        )
+        self.assertEqual(layer.postprocessing.dropout_probability, 0.5)
 
     def test_stack_overrides_apply_correctly(self):
         cfg = self.preset(input_dim=8, hidden_dim=16, output_dim=4, stack_num_layers=3)
@@ -799,23 +805,26 @@ class TestLayerStack(unittest.TestCase):
                         self.assertIsInstance(layer, Layer)
                         self.assertEqual(layer.input_dim, expected_input_dim)
                         self.assertEqual(layer.output_dim, output_dim)
-                        self.assertTrue(layer.last_layer_flag)
+                        self.assertTrue(layer.halting.is_terminal)
 
                         if apply_postprocessing:
                             self.assertEqual(
-                                layer.activation_function,
+                                layer.postprocessing.activation_function,
                                 cfg.layer_config.activation,
                             )
                             self.assertEqual(
-                                layer.dropout_probability,
+                                layer.postprocessing.dropout_probability,
                                 cfg.layer_config.dropout_probability,
                             )
                         else:
                             self.assertEqual(
-                                layer.activation_function, ActivationOptions.DISABLED
+                                layer.postprocessing.activation_function,
+                                ActivationOptions.DISABLED,
                             )
-                            self.assertEqual(layer.dropout_probability, 0.0)
-                            self.assertIsNone(layer.residual_config)
+                            self.assertEqual(
+                                layer.postprocessing.dropout_probability, 0.0
+                            )
+                            self.assertIsNone(layer.residual.config)
 
     def test_gate_config_rejects_nested_gates(self):
         gate_inner = LayerStackConfig(
@@ -902,21 +911,25 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = list(model)
-        gated_layers = [layer for layer in layers if layer.gate_model is not None]
-        gate_models = [layer.gate_model.model for layer in gated_layers]
+        gated_layers = [
+            layer for layer in layers if layer.postprocessing.gate is not None
+        ]
+        gate_models = [layer.postprocessing.gate.model for layer in gated_layers]
 
         self.assertEqual(len(gated_layers), len(layers))
         self.assertTrue(all(gate_model is not None for gate_model in gate_models))
-        shared_gate = gated_layers[0].gate_model
+        shared_gate = gated_layers[0].postprocessing.gate
         self.assertEqual(shared_gate.gate_dim, dim)
-        self.assertTrue(all(layer.gate_model is shared_gate for layer in layers))
+        self.assertTrue(
+            all(layer.postprocessing.gate is shared_gate for layer in layers)
+        )
         shared_gate_model = gate_models[0]
         self.assertTrue(
             all(gate_model is shared_gate_model for gate_model in gate_models)
         )
         for layer in gated_layers:
             self.assertIsNone(layer.cfg.gate_config)
-            self.assertIs(layer.gate_config, cfg.shared_gate_config)
+            self.assertIs(layer.postprocessing.gate_config, cfg.shared_gate_config)
 
     def test_unshared_gate_builds_separate_modules_per_layer(self):
         dim = 8
@@ -928,8 +941,10 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = list(model)
-        gated_layers = [layer for layer in layers if layer.gate_model is not None]
-        gate_models = [layer.gate_model.model for layer in gated_layers]
+        gated_layers = [
+            layer for layer in layers if layer.postprocessing.gate is not None
+        ]
+        gate_models = [layer.postprocessing.gate.model for layer in gated_layers]
 
         self.assertLess(len(gated_layers), len(layers))
         self.assertTrue(all(gate_model is not None for gate_model in gate_models))
@@ -953,11 +968,11 @@ class TestLayerStack(unittest.TestCase):
         for index, layer in enumerate(model):
             with self.subTest(layer_index=index):
                 if layer.input_dim != layer.output_dim:
-                    self.assertIsNone(layer.gate_model)
+                    self.assertIsNone(layer.postprocessing.gate)
                 else:
-                    self.assertIsNotNone(layer.gate_model)
+                    self.assertIsNotNone(layer.postprocessing.gate)
                     self.assertEqual(
-                        layer.gate_model.option, LayerGateOptions.MULTIPLIER
+                        layer.postprocessing.gate.option, LayerGateOptions.MULTIPLIER
                     )
 
     def test_shared_gate_model_works_with_non_default_gate_option(self):
@@ -978,8 +993,10 @@ class TestLayerStack(unittest.TestCase):
                 layer.model.weight_params.zero_()
                 layer.model.weight_params[:dim, :dim].copy_(torch.eye(dim))
                 layer.model.bias_params.zero_()
-        gated_layers = [layer for layer in model if layer.gate_model is not None]
-        shared_gate_model = gated_layers[0].gate_model.model
+        gated_layers = [
+            layer for layer in model if layer.postprocessing.gate is not None
+        ]
+        shared_gate_model = gated_layers[0].postprocessing.gate.model
         with torch.no_grad():
             shared_gate_model[0].model.weight_params.zero_()
             shared_gate_model[0].model.bias_params.zero_()
@@ -988,7 +1005,10 @@ class TestLayerStack(unittest.TestCase):
         result = model(LayerState(hidden=x.clone()))
 
         self.assertTrue(
-            all(layer.gate_model.model is shared_gate_model for layer in gated_layers)
+            all(
+                layer.postprocessing.gate.model is shared_gate_model
+                for layer in gated_layers
+            )
         )
         self.assertEqual(result.hidden.shape, (2, dim))
 
@@ -1059,12 +1079,17 @@ class TestLayerStack(unittest.TestCase):
         model.eval()
 
         state = model(LayerState(hidden=torch.randn(batch_size, dim + 1)))
-        gated_layers = [layer for layer in model if layer.gate_model is not None]
-        shared_gate_model = gated_layers[0].gate_model.model
+        gated_layers = [
+            layer for layer in model if layer.postprocessing.gate is not None
+        ]
+        shared_gate_model = gated_layers[0].postprocessing.gate.model
 
         self.assertEqual(state.hidden.shape, (batch_size, dim))
         self.assertTrue(
-            all(layer.gate_model.model is shared_gate_model for layer in gated_layers)
+            all(
+                layer.postprocessing.gate.model is shared_gate_model
+                for layer in gated_layers
+            )
         )
 
     @pytest.mark.training
@@ -1082,8 +1107,10 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = list(model)
-        gated_layers = [layer for layer in layers if layer.gate_model is not None]
-        shared_gate_model = gated_layers[0].gate_model.model
+        gated_layers = [
+            layer for layer in layers if layer.postprocessing.gate is not None
+        ]
+        shared_gate_model = gated_layers[0].postprocessing.gate.model
         before = [
             parameter.detach().clone()
             for parameter in shared_gate_model.parameters()
@@ -1097,7 +1124,10 @@ class TestLayerStack(unittest.TestCase):
         optimizer.step()
 
         self.assertTrue(
-            all(layer.gate_model.model is shared_gate_model for layer in gated_layers)
+            all(
+                layer.postprocessing.gate.model is shared_gate_model
+                for layer in gated_layers
+            )
         )
         after = [
             parameter.detach()
@@ -1182,12 +1212,16 @@ class TestLayerStack(unittest.TestCase):
         shared_model = LayerStack(shared_cfg)
         no_gate_model = LayerStack(no_gate_cfg)
 
-        self.assertIsNotNone(per_layer_model[-1].gate_model)
-        self.assertIsNotNone(shared_model[-1].gate_model)
-        self.assertIsNotNone(shared_model[0].gate_model)
-        self.assertIs(shared_model[0].gate_model, shared_model[1].gate_model)
-        self.assertIs(shared_model[-1].gate_model, shared_model[1].gate_model)
-        self.assertIsNone(no_gate_model[-1].gate_model)
+        self.assertIsNotNone(per_layer_model[-1].postprocessing.gate)
+        self.assertIsNotNone(shared_model[-1].postprocessing.gate)
+        self.assertIsNotNone(shared_model[0].postprocessing.gate)
+        self.assertIs(
+            shared_model[0].postprocessing.gate, shared_model[1].postprocessing.gate
+        )
+        self.assertIs(
+            shared_model[-1].postprocessing.gate, shared_model[1].postprocessing.gate
+        )
+        self.assertIsNone(no_gate_model[-1].postprocessing.gate)
 
     def test_halting_rejects_single_layer_and_mismatched_dims(self):
         dim = 8
@@ -1322,7 +1356,7 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = [model] if isinstance(model, Layer) else list(model)
-        halting_models = [layer.halting_model for layer in layers]
+        halting_models = [layer.halting.model for layer in layers]
 
         self.assertTrue(
             all(halting_model is not None for halting_model in halting_models)
@@ -1335,7 +1369,7 @@ class TestLayerStack(unittest.TestCase):
         )
         for layer in layers:
             self.assertIsNone(layer.cfg.halting_config)
-            self.assertIsNone(layer.halting_config)
+            self.assertIsNone(layer.halting.config)
 
     def test_unshared_halting_builds_separate_modules_per_layer(self):
         dim = 8
@@ -1348,7 +1382,7 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = [model] if isinstance(model, Layer) else list(model)
-        halting_models = [layer.halting_model for layer in layers]
+        halting_models = [layer.halting.model for layer in layers]
 
         self.assertTrue(
             all(halting_model is not None for halting_model in halting_models)
@@ -1378,7 +1412,7 @@ class TestLayerStack(unittest.TestCase):
         )
         model = LayerStack(cfg)
         layers = [model] if isinstance(model, Layer) else list(model)
-        halting_models = [layer.halting_model for layer in layers]
+        halting_models = [layer.halting.model for layer in layers]
 
         self.assertTrue(
             all(
@@ -1428,7 +1462,7 @@ class TestLayerStack(unittest.TestCase):
         model = LayerStack(cfg)
         model.eval()
         layers = [model] if isinstance(model, Layer) else list(model)
-        shared_halting_model = layers[0].halting_model
+        shared_halting_model = layers[0].halting.model
         before = [
             parameter.detach().clone()
             for parameter in shared_halting_model.parameters()
@@ -1444,7 +1478,7 @@ class TestLayerStack(unittest.TestCase):
         optimizer.step()
 
         self.assertTrue(
-            all(layer.halting_model is shared_halting_model for layer in layers)
+            all(layer.halting.model is shared_halting_model for layer in layers)
         )
         after = [
             parameter.detach()
@@ -1574,10 +1608,10 @@ class TestLayerStack(unittest.TestCase):
                 self.assertEqual(layer.output_dim, output_dim)
 
                 if input_dim != output_dim:
-                    self.assertIsNone(layer.residual_config)
+                    self.assertIsNone(layer.residual.config)
                 else:
                     self.assertEqual(
-                        layer.residual_config,
+                        layer.residual.config,
                         cfg.layer_config.residual_config,
                     )
 
@@ -1593,9 +1627,12 @@ class TestLayerStack(unittest.TestCase):
         self.assertIsInstance(layer, Layer)
         self.assertEqual(layer.input_dim, 8)
         self.assertEqual(layer.output_dim, 16)
-        self.assertIsNone(layer.residual_config)
-        self.assertEqual(layer.activation_function, ActivationOptions.DISABLED)
-        self.assertEqual(layer.dropout_probability, 0.0)
+        self.assertIsNone(layer.residual.config)
+        self.assertEqual(
+            layer.postprocessing.activation_function,
+            ActivationOptions.DISABLED,
+        )
+        self.assertEqual(layer.postprocessing.dropout_probability, 0.0)
 
     def test_build_forward_pass_output_shape(self):
         batch_size = 4
@@ -1663,5 +1700,5 @@ class TestLayerStack(unittest.TestCase):
                                             for layer in layers:
                                                 if layer.input_dim != layer.output_dim:
                                                     self.assertIsNone(
-                                                        layer.residual_config
+                                                        layer.residual.config
                                                     )
