@@ -1156,9 +1156,10 @@ class TestMixtureOfExperts(MixtureOfExpertsPresetMixin, unittest.TestCase):
                                 zero_probs_slice
                             )
                             expert_model: torch.nn.Module = m.expert_modules[0]  # type: ignore[assignment]
-                            expected = Layer.run_model_returning_hidden(
+                            expected_state = Layer.run_model_from_hidden(
                                 expert_model, torch.zeros_like(expert_samples)
                             )
+                            expected = expected_state.hidden
                             self.assertTrue(torch.allclose(zero_output, expected))
 
     def test__compute_expert_mixture(self):
@@ -1541,7 +1542,7 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
             self.assertIsNone(moe_layer.model.sampler)
 
         hidden = torch.randn(10, model.input_dim)
-        result_state = Layer.run_model_returning_state(model, hidden)
+        result_state = Layer.run_model_from_hidden(model, hidden)
         self.assertEqual(result_state.hidden.shape, (10, model.cfg.output_dim))
 
     def test_validator_rejects_invalid_model_reference_types(self):
@@ -1604,7 +1605,7 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
 
         self.assertEqual(model.stack_config.num_layers, 3)
         hidden = torch.randn(10, c.input_dim)
-        result_state = Layer.run_model_returning_state(model, hidden)
+        result_state = Layer.run_model_from_hidden(model, hidden)
         self.assertEqual(result_state.hidden.shape, (10, model.cfg.output_dim))
 
     def test_top_k_returns_configured_value(self):
@@ -1681,7 +1682,7 @@ class TestMixtureOfExpertsModel(MixtureOfExpertsPresetMixin, unittest.TestCase):
 
                         batch_size = 10
                         input = torch.randn(batch_size, c.input_dim)
-                        result_state = Layer.run_model_returning_state(m, input)
+                        result_state = Layer.run_model_from_hidden(m, input)
 
                         self.assertEqual(
                             result_state.hidden.shape,

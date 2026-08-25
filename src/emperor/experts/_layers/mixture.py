@@ -330,7 +330,7 @@ class MixtureOfExperts(Module):
         )
 
         expert_model = self.expert_modules[expert_data.expert_index]
-        expert_state = Layer.run_model_returning_state(expert_model, expert_samples)
+        expert_state = Layer.run_model_from_hidden(expert_model, expert_samples)
         expert_loss = self.__resolve_expert_loss(expert_state.loss, expert_samples)
         return expert_state.hidden, expert_loss
 

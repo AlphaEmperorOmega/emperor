@@ -77,10 +77,14 @@ class ProjectorBase(Module):
         *,
         row_layout: "RowLayout | None" = None,
     ) -> Tensor:
-        state = Layer.run_model_returning_state(model, tensor, row_layout=row_layout)
-        if state.loss is not None:
-            self._accumulate_auxiliary_loss(state.loss)
-        return state.hidden
+        projection_state = Layer.run_model_from_hidden(
+            model,
+            tensor,
+            row_layout=row_layout,
+        )
+        if projection_state.loss is not None:
+            self._accumulate_auxiliary_loss(projection_state.loss)
+        return projection_state.hidden
 
     def compute_output_projection(
         self,

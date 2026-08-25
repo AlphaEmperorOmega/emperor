@@ -476,9 +476,10 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.run_model_returning_hidden(
+                                        mask_state = Layer.run_model_from_hidden(
                                             model.model, logits
                                         )
+                                        mask_logits = mask_state.hidden
                                         output = model(weight_params, logits)
                                         expected = self._expected_global_output(
                                             weight_params,
@@ -788,9 +789,10 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.run_model_returning_hidden(
+                                        mask_state = Layer.run_model_from_hidden(
                                             model.model, logits
                                         )
+                                        mask_logits = mask_state.hidden
                                         output = model(weight_params, logits)
                                         expected = self._expected_per_axis_output(
                                             weight_params,
@@ -1034,9 +1036,10 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                             batch_size, input_dim, output_dim
                                         )
 
-                                        mask_logits = Layer.run_model_returning_hidden(
+                                        mask_state = Layer.run_model_from_hidden(
                                             model.model, logits
                                         )
+                                        mask_logits = mask_state.hidden
                                         output = model(weight_params, logits)
                                         expected = self._expected_top_slice_output(
                                             weight_params,
@@ -1144,9 +1147,10 @@ class TestAxisMaskHandlers(unittest.TestCase):
                                         batch_size, input_dim, output_dim
                                     )
 
-                                    mask_logits = Layer.run_model_returning_hidden(
+                                    mask_state = Layer.run_model_from_hidden(
                                         model.model, logits
                                     )
+                                    mask_logits = mask_state.hidden
                                     output = model(weight_params, logits)
                                     expected = self._expected_diagonal_output(
                                         weight_params,

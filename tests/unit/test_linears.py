@@ -928,7 +928,8 @@ class TestLinearLayerStack(unittest.TestCase):
 
         m = LayerStack(cfg)
         input_batch = torch.randn(2, cfg.input_dim)
-        output = Layer.run_model_returning_hidden(m, input_batch)
+        output_state = Layer.run_model_from_hidden(m, input_batch)
+        output = output_state.hidden
         self.assertEqual(output.shape, (2, cfg.output_dim))
 
         for layer in list(m):
@@ -949,7 +950,8 @@ class TestLinearLayerStack(unittest.TestCase):
                 m = LayerStack(cfg)
 
                 input_batch = torch.randn(batch_size, input_dim, requires_grad=True)
-                output = Layer.run_model_returning_hidden(m, input_batch)
+                output_state = Layer.run_model_from_hidden(m, input_batch)
+                output = output_state.hidden
                 output.sum().backward()
 
                 grads = [p.grad for p in m.parameters() if p.requires_grad]
@@ -1540,9 +1542,10 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                 m = LayerStack(cfg)
 
                                 input_batch = torch.randn(batch_size, input_dim)
-                                output = Layer.run_model_returning_hidden(
+                                output_state = Layer.run_model_from_hidden(
                                     m, input_batch
                                 )
+                                output = output_state.hidden
                                 self.assertEqual(output.shape, (batch_size, output_dim))
 
     def test_gradients_flow_through_adaptive_linear_layer_stack(self):
@@ -1606,9 +1609,10 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                                     input_batch = torch.randn(
                                         batch_size, input_dim, requires_grad=True
                                     )
-                                    output = Layer.run_model_returning_hidden(
+                                    output_state = Layer.run_model_from_hidden(
                                         m, input_batch
                                     )
+                                    output = output_state.hidden
                                     output.sum().backward()
 
                                     grads = [
@@ -1645,7 +1649,8 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
             ],
             requires_grad=True,
         )
-        output = Layer.run_model_returning_hidden(m, input_batch)
+        output_state = Layer.run_model_from_hidden(m, input_batch)
+        output = output_state.hidden
         output.sum().backward()
 
         for layer_index, layer in enumerate(list(m)):

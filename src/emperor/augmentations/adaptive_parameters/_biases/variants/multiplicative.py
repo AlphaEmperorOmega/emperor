@@ -18,5 +18,6 @@ class MultiplicativeDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         self.VALIDATOR.ensure_parameters_exist(bias_params)
-        bias_scale = Layer.run_model_returning_hidden(self.model, logits)
+        bias_scale_state = Layer.run_model_from_hidden(self.model, logits)
+        bias_scale = bias_scale_state.hidden
         return bias_params * bias_scale

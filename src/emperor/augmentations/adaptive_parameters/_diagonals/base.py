@@ -59,5 +59,6 @@ class DynamicDiagonalAbstract(Module):
         return diagonal_matrix
 
     def _compute_diagonal_matrix(self, logits: Tensor) -> Tensor:
-        vectors = Layer.run_model_returning_hidden(self.model, logits)
+        vector_state = Layer.run_model_from_hidden(self.model, logits)
+        vectors = vector_state.hidden
         return self.__convert_to_diagonal_matrix(vectors)
