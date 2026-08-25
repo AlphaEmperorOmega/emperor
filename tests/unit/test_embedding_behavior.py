@@ -979,10 +979,15 @@ class EmbeddingInterfaceBehaviorTests(unittest.TestCase):
     ) -> None:
         import emperor.embedding as embedding
         import emperor.embedding.absolute as absolute
+        import emperor.embedding.contextual as contextual
         import emperor.embedding.relative as relative
 
-        self.assertEqual(embedding.__all__, ("absolute", "relative"))
+        self.assertEqual(
+            embedding.__all__,
+            ("absolute", "contextual", "relative"),
+        )
         self.assertIs(embedding.absolute, absolute)
+        self.assertIs(embedding.contextual, contextual)
         self.assertIs(embedding.relative, relative)
         self.assertEqual(
             absolute.__all__,
@@ -995,13 +1000,21 @@ class EmbeddingInterfaceBehaviorTests(unittest.TestCase):
             ),
         )
         self.assertEqual(
+            contextual.__all__,
+            (
+                "ByteContextualEmbeddingConfig",
+                "CausalPrefixKernelConfig",
+                "ByteContextualEmbeddingState",
+            ),
+        )
+        self.assertEqual(
             relative.__all__,
             (
                 "RelativePositionalEmbeddingConfig",
                 "DynamicPositionalBiasConfig",
             ),
         )
-        for module in (embedding, absolute, relative):
+        for module in (embedding, absolute, contextual, relative):
             with self.subTest(module=module.__name__):
                 self.assertFalse(hasattr(module, "__getattr__"))
                 self.assertFalse(hasattr(module, "_LAZY_EXPORTS"))
@@ -1020,9 +1033,11 @@ root_eager_modules = sorted(
 )
 root_has_children = {
     "absolute": hasattr(embedding, "absolute"),
+    "contextual": hasattr(embedding, "contextual"),
     "relative": hasattr(embedding, "relative"),
 }
 import emperor.embedding.absolute as absolute
+import emperor.embedding.contextual as contextual
 import emperor.embedding.relative as relative
 
 eager_modules = sorted(
@@ -1033,6 +1048,7 @@ print(json.dumps({
     "root_eager_modules": root_eager_modules,
     "root_has_children": root_has_children,
     "absolute_all": absolute.__all__,
+    "contextual_all": contextual.__all__,
     "relative_all": relative.__all__,
     "eager_modules": eager_modules,
     "heavy_modules": {
@@ -1042,6 +1058,10 @@ print(json.dumps({
             "emperor.embedding.absolute._variants.learned",
             "emperor.embedding.absolute._variants.sinusoidal",
             "emperor.embedding.absolute._validation",
+            "emperor.embedding.contextual._component",
+            "emperor.embedding.contextual._encoding",
+            "emperor.embedding.contextual._kernel",
+            "emperor.embedding.contextual._validation",
             "emperor.embedding.relative._variants.bias",
             "emperor.embedding.relative._validation",
         )
@@ -1055,6 +1075,18 @@ print(json.dumps({
         ),
         "AbsolutePositionalEmbeddingValidator": hasattr(
             absolute, "AbsolutePositionalEmbeddingValidator"
+        ),
+        "ByteContextualEmbedding": hasattr(
+            contextual, "ByteContextualEmbedding"
+        ),
+        "CausalPrefixKernel": hasattr(
+            contextual, "CausalPrefixKernel"
+        ),
+        "Utf8BitEncoder": hasattr(
+            contextual, "Utf8BitEncoder"
+        ),
+        "ByteContextualEmbeddingValidator": hasattr(
+            contextual, "ByteContextualEmbeddingValidator"
         ),
         "DynamicPositionalBias": hasattr(
             relative, "DynamicPositionalBias"
@@ -1070,8 +1102,10 @@ print(json.dumps({
     "shortcut_attributes": {
         "root___getattr__": hasattr(embedding, "__getattr__"),
         "absolute___getattr__": hasattr(absolute, "__getattr__"),
+        "contextual___getattr__": hasattr(contextual, "__getattr__"),
         "relative___getattr__": hasattr(relative, "__getattr__"),
         "absolute__LAZY_EXPORTS": hasattr(absolute, "_LAZY_EXPORTS"),
+        "contextual__LAZY_EXPORTS": hasattr(contextual, "_LAZY_EXPORTS"),
         "relative__LAZY_EXPORTS": hasattr(relative, "_LAZY_EXPORTS"),
     },
 }))
@@ -1087,15 +1121,19 @@ print(json.dumps({
         self.assertEqual(
             json.loads(completed.stdout),
             {
-                "root_all": ["absolute", "relative"],
+                "root_all": ["absolute", "contextual", "relative"],
                 "root_eager_modules": [
                     "emperor.embedding.absolute",
                     "emperor.embedding.absolute._config",
+                    "emperor.embedding.contextual",
+                    "emperor.embedding.contextual._config",
+                    "emperor.embedding.contextual._state",
                     "emperor.embedding.relative",
                     "emperor.embedding.relative._config",
                 ],
                 "root_has_children": {
                     "absolute": True,
+                    "contextual": True,
                     "relative": True,
                 },
                 "absolute_all": [
@@ -1105,6 +1143,11 @@ print(json.dumps({
                     "TextSinusoidalPositionalEmbeddingConfig",
                     "ImageSinusoidalPositionalEmbeddingConfig",
                 ],
+                "contextual_all": [
+                    "ByteContextualEmbeddingConfig",
+                    "CausalPrefixKernelConfig",
+                    "ByteContextualEmbeddingState",
+                ],
                 "relative_all": [
                     "RelativePositionalEmbeddingConfig",
                     "DynamicPositionalBiasConfig",
@@ -1112,6 +1155,9 @@ print(json.dumps({
                 "eager_modules": [
                     "emperor.embedding.absolute",
                     "emperor.embedding.absolute._config",
+                    "emperor.embedding.contextual",
+                    "emperor.embedding.contextual._config",
+                    "emperor.embedding.contextual._state",
                     "emperor.embedding.relative",
                     "emperor.embedding.relative._config",
                 ],
@@ -1120,6 +1166,10 @@ print(json.dumps({
                     "emperor.embedding.absolute._variants.learned": False,
                     "emperor.embedding.absolute._variants.sinusoidal": False,
                     "emperor.embedding.absolute._validation": False,
+                    "emperor.embedding.contextual._component": False,
+                    "emperor.embedding.contextual._encoding": False,
+                    "emperor.embedding.contextual._kernel": False,
+                    "emperor.embedding.contextual._validation": False,
                     "emperor.embedding.relative._variants.bias": False,
                     "emperor.embedding.relative._validation": False,
                 },
@@ -1127,6 +1177,10 @@ print(json.dumps({
                     "AbsolutePositionalEmbeddingBase": False,
                     "LearnedPositionalEmbedding": False,
                     "AbsolutePositionalEmbeddingValidator": False,
+                    "ByteContextualEmbedding": False,
+                    "CausalPrefixKernel": False,
+                    "Utf8BitEncoder": False,
+                    "ByteContextualEmbeddingValidator": False,
                     "DynamicPositionalBias": False,
                     "RelativePositionalEmbeddingValidator": False,
                 },
@@ -1137,8 +1191,10 @@ print(json.dumps({
                 "shortcut_attributes": {
                     "root___getattr__": False,
                     "absolute___getattr__": False,
+                    "contextual___getattr__": False,
                     "relative___getattr__": False,
                     "absolute__LAZY_EXPORTS": False,
+                    "contextual__LAZY_EXPORTS": False,
                     "relative__LAZY_EXPORTS": False,
                 },
             },
@@ -1159,6 +1215,12 @@ print(json.dumps({
             "emperor.embedding.relative": (
                 "DynamicPositionalBias",
                 "RelativePositionalEmbeddingValidator",
+            ),
+            "emperor.embedding.contextual": (
+                "ByteContextualEmbedding",
+                "CausalPrefixKernel",
+                "Utf8BitEncoder",
+                "ByteContextualEmbeddingValidator",
             ),
         }
         for module_name, export_names in removed_exports.items():
