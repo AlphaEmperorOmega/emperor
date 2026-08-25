@@ -125,14 +125,20 @@ owners = ["emperor.convs._config"]
 [[interfaces]]
 module = "emperor.embedding"
 kind = "configuration"
-exports = ["absolute", "relative"]
-owners = ["emperor.embedding", "emperor.embedding"]
+exports = ["absolute", "contextual", "relative"]
+owners = ["emperor.embedding", "emperor.embedding", "emperor.embedding"]
 
 [[interfaces]]
 module = "emperor.embedding.absolute"
 kind = "configuration"
 exports = ["AbsolutePositionalEmbeddingConfig", "TextLearnedPositionalEmbeddingConfig", "ImageLearnedPositionalEmbeddingConfig", "TextSinusoidalPositionalEmbeddingConfig", "ImageSinusoidalPositionalEmbeddingConfig"]
 owners = ["emperor.embedding.absolute._config", "emperor.embedding.absolute._config", "emperor.embedding.absolute._config", "emperor.embedding.absolute._config", "emperor.embedding.absolute._config"]
+
+[[interfaces]]
+module = "emperor.embedding.contextual"
+kind = "runtime"
+exports = ["ByteContextualEmbeddingConfig", "CausalPrefixKernelConfig", "ByteContextualEmbeddingState"]
+owners = ["emperor.embedding.contextual._config", "emperor.embedding.contextual._config", "emperor.embedding.contextual._state"]
 
 [[interfaces]]
 module = "emperor.embedding.relative"

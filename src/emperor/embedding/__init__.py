@@ -1,5 +1,5 @@
-"""Public Interface for positional embedding families."""
+"""Public Interface for embedding families."""
 
-from emperor.embedding import absolute, relative
+from emperor.embedding import absolute, contextual, relative
 
-__all__ = ("absolute", "relative")
+__all__ = ("absolute", "contextual", "relative")
