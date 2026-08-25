@@ -66,9 +66,10 @@ class Model(ClassifierExperiment):
     ) -> Tensor | tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
-        X = Layer.run_model_returning_hidden(self.input_model, X)
-        state = Layer.run_model_returning_state(self.main_model, X)
-        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
-        if state.loss is not None:
-            return logits, state.loss
+        input_state = Layer.run_model_from_hidden(self.input_model, X)
+        main_state = Layer.run_model_from_hidden(self.main_model, input_state.hidden)
+        output_state = Layer.run_model_from_hidden(self.output_model, main_state.hidden)
+        logits = output_state.hidden
+        if main_state.loss is not None:
+            return logits, main_state.loss
         return logits

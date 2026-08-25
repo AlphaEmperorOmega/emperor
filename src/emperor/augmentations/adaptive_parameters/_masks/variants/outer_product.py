@@ -23,8 +23,10 @@ class OuterProductMask(AxisMaskAbstract):
         weight_params: Tensor,
         logits: Tensor,
     ) -> Tensor:
-        input_vectors = Layer.run_model_returning_hidden(self.input_model, logits)
-        output_vectors = Layer.run_model_returning_hidden(self.output_model, logits)
+        input_state = Layer.run_model_from_hidden(self.input_model, logits)
+        output_state = Layer.run_model_from_hidden(self.output_model, logits)
+        input_vectors = input_state.hidden
+        output_vectors = output_state.hidden
         outer_product = torch.einsum("bi,bj->bij", input_vectors, output_vectors)
         scores = torch.sigmoid(outer_product)
         hard_mask = self._compute_hard_mask(scores)

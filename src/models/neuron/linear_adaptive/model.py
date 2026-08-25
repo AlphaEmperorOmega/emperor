@@ -50,7 +50,9 @@ class Model(ClassifierExperiment):
     ) -> tuple[Tensor, Tensor]:
         X = X.to(self.device)
         X = torch.flatten(X, start_dim=1)
-        hidden = Layer.run_model_returning_hidden(self.input_model, X)
+        input_state = Layer.run_model_from_hidden(self.input_model, X)
+        hidden = input_state.hidden
         hidden, auxiliary_loss = self.neuron_cluster(hidden)
-        logits = Layer.run_model_returning_hidden(self.output_model, hidden)
+        output_state = Layer.run_model_from_hidden(self.output_model, hidden)
+        logits = output_state.hidden
         return logits, auxiliary_loss

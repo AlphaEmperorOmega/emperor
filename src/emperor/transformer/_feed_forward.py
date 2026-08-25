@@ -115,11 +115,15 @@ class FeedForward(Module):
         original_shape = input_batch.shape
         flattened_input = input_batch.reshape(-1, self.input_dim)
         self.VALIDATOR.validate_forward_inputs(flattened_input, row_layout)
-        state = Layer.run_model_returning_state(
+        feed_forward_state = Layer.run_model_from_hidden(
             self.model,
             flattened_input,
             row_layout=row_layout,
         )
-        output = state.hidden.view(*original_shape[:-1], self.output_dim)
-        loss = state.loss if state.loss is not None else input_batch.new_zeros(())
+        output = feed_forward_state.hidden.view(*original_shape[:-1], self.output_dim)
+        loss = (
+            feed_forward_state.loss
+            if feed_forward_state.loss is not None
+            else input_batch.new_zeros(())
+        )
         return output, loss

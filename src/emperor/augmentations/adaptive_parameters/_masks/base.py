@@ -58,7 +58,8 @@ class AxisMaskAbstract(Module):
         )
 
     def _compute_generator_soft_values(self, logits: Tensor) -> Tensor:
-        mask_logits = Layer.run_model_returning_hidden(self.model, logits)
+        mask_state = Layer.run_model_from_hidden(self.model, logits)
+        mask_logits = mask_state.hidden
         return torch.sigmoid(mask_logits)
 
     def _compute_masked_weight_scores(

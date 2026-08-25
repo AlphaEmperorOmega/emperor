@@ -748,7 +748,7 @@ class ExpertMutationContractTests(unittest.TestCase):
         probabilities = torch.ones(4)
         expected_loss = inputs.new_zeros(())
         for expert_index, expert_stack in enumerate(model.expert_modules):
-            expert_state = Layer.run_model_returning_state(
+            expert_state = Layer.run_model_from_hidden(
                 expert_stack,
                 inputs[indices == expert_index],
             )

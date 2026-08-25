@@ -59,7 +59,7 @@ class Model(ClassifierExperiment):
         hidden = self.patch(images)
         hidden = self.positional_embedding(hidden)
 
-        encoder_state = Layer.run_model_returning_state(self.transformer, hidden)
+        encoder_state = Layer.run_model_from_hidden(self.transformer, hidden)
         hidden = self.encoder_layer_norm(encoder_state.hidden)
 
         cls_hidden = hidden[:, 0, :]

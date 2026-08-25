@@ -264,7 +264,7 @@ class RowLayoutTransportTests(unittest.TestCase):
         spy = LayoutAwareTensorSpy()
         layer.model = spy
 
-        output_state = Layer.run_model_returning_state(
+        output_state = Layer.run_model_from_hidden(
             layer,
             self.inputs,
             row_layout=self.layout,

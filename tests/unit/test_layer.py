@@ -1625,9 +1625,8 @@ class TestLayer(unittest.TestCase):
 
                 self.assertEqual(result.shape, x.shape)
                 if has_gate:
-                    gate_output = Layer.run_model_returning_hidden(
-                        layer.gate_model.model, x
-                    )
+                    gate_state = Layer.run_model_from_hidden(layer.gate_model.model, x)
+                    gate_output = gate_state.hidden
                     gate = torch.sigmoid(gate_output)
                     expected = gate * x
                     torch.testing.assert_close(result, expected)
@@ -1893,7 +1892,7 @@ class TestLayer(unittest.TestCase):
         self.assertIsNone(spy.received_state.halting_state)
         torch.testing.assert_close(result, torch.sigmoid(torch.ones_like(x)) * x)
 
-    def test_run_model_returning_hidden(self):
+    def test_run_model_from_hidden_static_method_returns_layer_state(self):
         batch_size = 4
         dims = [8, 12]
 
@@ -1907,11 +1906,17 @@ class TestLayer(unittest.TestCase):
                 layer = Layer(cfg)
                 layer.eval()
                 x = torch.randn(batch_size, dim)
-                result = Layer.run_model_returning_hidden(layer, x)
+                output_state = Layer.run_model_from_hidden(layer, x)
 
-                self.assertEqual(result.shape, (batch_size, dim))
+                self.assertIs(type(output_state), LayerState)
+                self.assertEqual(output_state.hidden.shape, (batch_size, dim))
 
-    def test_forward_state_helpers_construct_plain_state_and_reject_masks(self):
+        descriptor = inspect.getattr_static(Layer, "run_model_from_hidden")
+        self.assertIsInstance(descriptor, staticmethod)
+        self.assertFalse(hasattr(Layer, "run_model_returning_hidden"))
+        self.assertFalse(hasattr(Layer, "run_model_returning_state"))
+
+    def test_run_model_from_hidden_constructs_plain_state_and_rejects_masks(self):
         class StateSpy(nn.Module):
             def __init__(self):
                 super().__init__()
@@ -1924,20 +1929,20 @@ class TestLayer(unittest.TestCase):
         spy = StateSpy()
         x = torch.randn(2, 3)
 
-        result = Layer.run_model_returning_state(spy, x)
+        result = Layer.run_model_from_hidden(spy, x)
 
         self.assertIs(result, spy.received_state)
         self.assertIs(type(spy.received_state), LayerState)
         self.assertIs(spy.received_state.hidden, x)
 
         with self.assertRaises(TypeError):
-            Layer.run_model_returning_state(
+            Layer.run_model_from_hidden(
                 spy,
                 x,
                 key_padding_mask=torch.ones(2, 3, dtype=torch.bool),
             )
         with self.assertRaises(TypeError):
-            Layer.run_model_returning_hidden(
+            Layer.run_model_from_hidden(
                 spy,
                 x,
                 attention_mask=torch.zeros(3, 3),

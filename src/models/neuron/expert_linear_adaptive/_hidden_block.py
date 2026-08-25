@@ -50,5 +50,5 @@ class HiddenBlockAdapter(Module):
         return type(model_config)(**overrides)
 
     def forward(self, input: Tensor) -> Tensor:
-        state = Layer.run_model_returning_state(self.model, input)
-        return state.hidden
+        hidden_state = Layer.run_model_from_hidden(self.model, input)
+        return hidden_state.hidden

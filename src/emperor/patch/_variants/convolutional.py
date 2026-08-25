@@ -29,7 +29,8 @@ class PatchEmbeddingConv(PatchBase):
 
     def forward(self, X: Tensor):
         self.VALIDATOR.validate_forward_inputs(self, X)
-        X = Layer.run_model_returning_hidden(self.patch_model, X)
+        patch_state = Layer.run_model_from_hidden(self.patch_model, X)
+        X = patch_state.hidden
         X = X.flatten(2)
         X = X.transpose(1, 2)
         X = self._concatenate_class_token(X)

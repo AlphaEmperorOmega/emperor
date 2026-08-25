@@ -76,12 +76,18 @@ class MixerAttention(Module):
         token_vectors = q.movedim(sequence_axis, -1)
         leading_shape = token_vectors.shape[:-1]
         flattened_input = token_vectors.reshape(-1, self.sequence_length)
-        state = Layer.run_model_returning_state(
+        mixing_state = Layer.run_model_from_hidden(
             self.mixing_model,
             flattened_input,
         )
-        state = self.VALIDATOR.validate_mixing_state(state, flattened_input)
+        mixing_state = self.VALIDATOR.validate_mixing_state(
+            mixing_state,
+            flattened_input,
+        )
 
-        mixed_vectors = state.hidden.reshape(*leading_shape, self.sequence_length)
+        mixed_vectors = mixing_state.hidden.reshape(
+            *leading_shape,
+            self.sequence_length,
+        )
         mixed = mixed_vectors.movedim(-1, sequence_axis)
-        return mixed, None, state.loss
+        return mixed, None, mixing_state.loss

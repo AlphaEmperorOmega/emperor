@@ -77,11 +77,19 @@ class Model(ClassifierExperiment):
         X: Tensor,
     ) -> tuple[Tensor, Tensor]:
         X = torch.flatten(X.to(self.device), start_dim=1)
-        X = Layer.run_model_returning_hidden(self.input_model, X)
+        input_state = Layer.run_model_from_hidden(self.input_model, X)
 
-        state = ParametricLayerState(hidden=X)
-        state = self.model(state)
+        parametric_state = ParametricLayerState(hidden=input_state.hidden)
+        parametric_state = self.model(parametric_state)
 
-        logits = Layer.run_model_returning_hidden(self.output_model, state.hidden)
-        loss = state.loss if state.loss is not None else logits.new_zeros(())
+        output_state = Layer.run_model_from_hidden(
+            self.output_model,
+            parametric_state.hidden,
+        )
+        logits = output_state.hidden
+        loss = (
+            parametric_state.loss
+            if parametric_state.loss is not None
+            else logits.new_zeros(())
+        )
         return logits, loss

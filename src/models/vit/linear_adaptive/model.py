@@ -60,12 +60,11 @@ class Model(ClassifierExperiment):
         return self.positional_embedding(patch_embeddings)
 
     def __encode_token_embeddings(self, token_embeddings: Tensor) -> LayerState:
-        encoder_state = Layer.run_model_returning_state(
-            self.transformer, token_embeddings
-        )
+        encoder_state = Layer.run_model_from_hidden(self.transformer, token_embeddings)
         encoder_state.hidden = self.encoder_layer_norm(encoder_state.hidden)
         return encoder_state
 
     def __build_classification_logits(self, encoder_hidden: Tensor) -> Tensor:
         class_token_hidden = encoder_hidden[:, 0, :]
-        return Layer.run_model_returning_hidden(self.output, class_token_hidden)
+        output_state = Layer.run_model_from_hidden(self.output, class_token_hidden)
+        return output_state.hidden
