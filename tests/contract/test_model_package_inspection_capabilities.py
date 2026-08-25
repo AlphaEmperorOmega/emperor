@@ -72,12 +72,22 @@ class ModelPackageInspectionCapabilityTests(unittest.TestCase):
             InspectionRequest(preset="weighted-residual"),
         )
         residual_nodes = {node.path: node for node in residual.nodes}
-        residual_node = residual_nodes["main_model.layers.0.residual_connection"]
+        residual_node = residual_nodes["main_model.layers.0.residual.connection"]
         self.assertEqual(residual_node.type_name, "WeightedResidual")
         self.assertEqual(
             residual_node.configuration.type_name,
             "WeightedResidualConfig",
         )
+        for delegate_path in (
+            "postprocessing",
+            "halting",
+            "memory",
+            "residual",
+            "normalization",
+        ):
+            with self.subTest(delegate_path=delegate_path):
+                delegate_node = residual_nodes[f"main_model.layers.0.{delegate_path}"]
+                self.assertEqual(delegate_node.graph_role, "internal")
 
         dual_gating = inspect_model(
             self.package,
@@ -104,7 +114,7 @@ class ModelPackageInspectionCapabilityTests(unittest.TestCase):
             InspectionRequest(preset="element-wise-weighted-memory"),
         )
         memory_nodes = {node.path: node for node in memory.nodes}
-        memory_node = memory_nodes["main_model.layers.0.memory_model"]
+        memory_node = memory_nodes["main_model.layers.0.memory.model"]
         self.assertEqual(memory_node.type_name, "ElementWiseWeightedDynamicMemory")
         self.assertEqual(
             memory_node.configuration.type_name,

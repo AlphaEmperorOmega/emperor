@@ -30,6 +30,7 @@ def make_config(**overrides) -> LayerConfig:
 class TestLayerValidatorAdapter(unittest.TestCase):
     def test_module_exposes_validator_adapter(self):
         self.assertIs(Layer.VALIDATOR, LayerValidator)
+        self.assertFalse(hasattr(Layer, "_validate_configuration"))
 
     def test_construction_dispatches_through_substituted_validator(self):
         class TrackingValidator(LayerValidator):

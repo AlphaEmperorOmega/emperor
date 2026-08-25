@@ -32,6 +32,8 @@ from model_runtime.task_behavior import SyntheticInputError, experiment_task_beh
 
 ShapeTraceDetail = Literal["outputs", "variables"]
 
+_FIRST_PARTY_PACKAGE_NAMES = frozenset({"emperor", "model_runtime", "models"})
+
 
 @dataclass(frozen=True, slots=True)
 class TensorShape:
@@ -233,7 +235,8 @@ def _trace_module_names(model: nn.Module) -> frozenset[str]:
     return frozenset(
         module_name
         for module_name in registered_module_names
-        if module_name.partition(".")[0] == model_package_name
+        if module_name.partition(".")[0] in _FIRST_PARTY_PACKAGE_NAMES
+        or module_name.partition(".")[0] == model_package_name
         or bool(
             owned_distributions
             & set(distributions.get(module_name.partition(".")[0], ()))

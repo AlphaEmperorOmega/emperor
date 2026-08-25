@@ -1110,11 +1110,14 @@ assert semantic_module not in sys.modules
         module.top_k = 2
         module.num_experts = 4
         module.routing_initialization_mode = "layer"
-        module.dropout_probability = 0.25
-        module.gate_model = SimpleNamespace(option=ActivationOptions.GELU)
-        module.halting_model = SimpleNamespace(min_steps=2)
-        module.activation_function = ActivationOptions.RELU
-        module.layer_norm_position = LayerNormPositionOptions.AFTER
+        module.postprocessing = SimpleNamespace(
+            dropout_probability=0.25,
+            gate=SimpleNamespace(option=ActivationOptions.GELU),
+            gate_config=None,
+            activation_function=ActivationOptions.RELU,
+        )
+        module.halting = SimpleNamespace(model=SimpleNamespace(min_steps=2))
+        module.normalization = SimpleNamespace(position=LayerNormPositionOptions.AFTER)
         module.max_steps = 9
         module.recurrent_gate = SimpleNamespace(
             option=ActivationOptions.GELU,
@@ -1275,21 +1278,30 @@ assert semantic_module not in sys.modules
         self.assertEqual(details["topK"], 2)
         self.assertEqual(top_k.read_count, 1)
 
-    def test_optional_model_descriptors_are_read_once(self) -> None:
-        gate_model = _ReadOnceDescriptor(SimpleNamespace(option=ActivationOptions.GELU))
+    def test_delegated_layer_model_descriptors_are_read_once(self) -> None:
+        gate = _ReadOnceDescriptor(SimpleNamespace(option=ActivationOptions.GELU))
         halting_model = _ReadOnceDescriptor(SimpleNamespace(min_steps=2))
 
-        class Layer(nn.Module):
+        class Postprocessing:
+            gate_config = None
+
+        class Halting:
             pass
 
-        Layer.gate_model = gate_model  # type: ignore[attr-defined]
-        Layer.halting_model = halting_model  # type: ignore[attr-defined]
+        Postprocessing.gate = gate  # type: ignore[attr-defined]
+        Halting.model = halting_model  # type: ignore[attr-defined]
+
+        class Layer(nn.Module):
+            postprocessing = Postprocessing()
+            halting = Halting()
+            normalization = SimpleNamespace(position=None)
+
         details = module_details(Layer())
 
         self.assertEqual(details["gateOption"], "GELU")
         self.assertIs(details["gate"], True)
         self.assertIs(details["halting"], True)
-        self.assertEqual(gate_model.read_count, 1)
+        self.assertEqual(gate.read_count, 1)
         self.assertEqual(halting_model.read_count, 1)
 
     def test_recurrent_halting_descriptor_is_shared_across_detail_adapters(

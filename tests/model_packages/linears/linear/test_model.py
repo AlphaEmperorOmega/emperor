@@ -1291,7 +1291,7 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 layers = Model(cfg).main_model.layers
                 self.assertTrue(layers)
                 self.assertEqual(
-                    all(layer.layer_norm_module is None for layer in layers),
+                    all(layer.normalization.module is None for layer in layers),
                     expected_position is LayerNormPositionOptions.DISABLED,
                 )
 
@@ -1491,7 +1491,7 @@ class TestLinearModelBehavior(unittest.TestCase):
         memory_parameters = [
             parameter
             for name, parameter in model.named_parameters()
-            if "memory_model" in name and parameter.requires_grad
+            if ".memory.model." in name and parameter.requires_grad
         ]
         self.assertTrue(memory_parameters)
         self.assertTrue(
@@ -1539,7 +1539,7 @@ class TestLinearModelBehavior(unittest.TestCase):
                 residual_parameters = [
                     parameter
                     for name, parameter in model.named_parameters()
-                    if "residual_connection" in name and parameter.requires_grad
+                    if ".residual.connection." in name and parameter.requires_grad
                 ]
                 self.assertTrue(residual_parameters)
                 self.assertTrue(
@@ -1578,7 +1578,7 @@ class TestLinearModelBehavior(unittest.TestCase):
                 memory_parameters = [
                     parameter
                     for name, parameter in model.named_parameters()
-                    if "memory_model" in name and parameter.requires_grad
+                    if ".memory.model." in name and parameter.requires_grad
                 ]
                 self.assertTrue(memory_parameters)
                 self.assertTrue(
@@ -1631,7 +1631,7 @@ class TestLinearModelBehavior(unittest.TestCase):
             parameter
             for name, parameter in model.named_parameters()
             if "block_model" in name
-            and "gate_model" in name
+            and ".postprocessing.gate." in name
             and parameter.requires_grad
         ]
         outer_gate_parameters = [
@@ -1685,7 +1685,7 @@ class TestLinearModelBehavior(unittest.TestCase):
             parameter
             for name, parameter in model.named_parameters()
             if "block_model" in name
-            and "halting_model" in name
+            and ".halting.model." in name
             and parameter.requires_grad
         ]
         outer_halting_parameters = [

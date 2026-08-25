@@ -35,6 +35,8 @@ from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
 from support.monitor import same_bound_method
 
+ACTIVATION_METHOD_NAME = "_LayerPostprocessingDelegate__maybe_apply_activation"
+
 
 def linear_stack_config(dim: int, *, bias_flag: bool = True) -> LayerStackConfig:
     return LayerStackConfig(
@@ -102,7 +104,7 @@ def controlled_layer() -> Layer:
         )
     )
     set_linear_identity(layer)
-    gate_layer = layer.gate_model.model[0]
+    gate_layer = layer.postprocessing.gate.model[0]
     with torch.no_grad():
         gate_layer.model.weight_params.zero_()
         gate_layer.model.bias_params.zero_()
@@ -311,9 +313,11 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
     ) -> None:
         model = LayerTrainingModule()
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+        original_activation = getattr(
+            model.controlled.postprocessing,
+            ACTIVATION_METHOD_NAME,
+        )
         initial_weight = model.trainable.model.weight_params.detach().clone()
-        original_activation = model.controlled._Layer__maybe_apply_activation
-        original_residual = model.controlled._Layer__maybe_apply_residual_connection
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             fit_trainer = trainer(Path(temporary_directory), [callback])
@@ -365,16 +369,14 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(callback._hooked_gate_model_ids, set())
         self.assertTrue(
             same_bound_method(
-                model.controlled._Layer__maybe_apply_activation,
+                getattr(
+                    model.controlled.postprocessing,
+                    ACTIVATION_METHOD_NAME,
+                ),
                 original_activation,
             )
         )
-        self.assertTrue(
-            same_bound_method(
-                model.controlled._Layer__maybe_apply_residual_connection,
-                original_residual,
-            )
-        )
+        self.assertEqual(model.controlled.residual.connection._forward_hooks, {})
 
     @pytest.mark.training
     def test_real_trainer_logs_exact_recurrent_metrics_visuals_and_updates(
@@ -462,8 +464,10 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
     def test_real_trainer_exception_restores_both_monitor_types(self) -> None:
         layer_model = LayerTrainingModule(fail_after_forward=True)
         layer_callback = LayerControllerMonitorCallback(log_every_n_steps=1)
-        layer_activation = layer_model.controlled._Layer__maybe_apply_activation
-        layer_residual = layer_model.controlled._Layer__maybe_apply_residual_connection
+        layer_activation = getattr(
+            layer_model.controlled.postprocessing,
+            ACTIVATION_METHOD_NAME,
+        )
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             fit_trainer = trainer(Path(temporary_directory), [layer_callback])
@@ -477,15 +481,16 @@ class LayerMonitorLifecycleTests(unittest.TestCase):
         self.assertEqual(layer_callback._wrapped_methods, [])
         self.assertTrue(
             same_bound_method(
-                layer_model.controlled._Layer__maybe_apply_activation,
+                getattr(
+                    layer_model.controlled.postprocessing,
+                    ACTIVATION_METHOD_NAME,
+                ),
                 layer_activation,
             )
         )
-        self.assertTrue(
-            same_bound_method(
-                layer_model.controlled._Layer__maybe_apply_residual_connection,
-                layer_residual,
-            )
+        self.assertEqual(
+            layer_model.controlled.residual.connection._forward_hooks,
+            {},
         )
 
         recurrent_model = RecurrentTrainingModule(fail_after_forward=True)

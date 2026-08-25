@@ -2,9 +2,9 @@ import unittest
 
 import torch
 
+from emperor._validation import ValidatorBase
 from emperor.layers import (
     ActivationOptions,
-    Layer,
     LayerNormPositionOptions,
     LayerState,
 )
@@ -21,7 +21,27 @@ from emperor.parametric._handlers import (
     ParameterHandlerBase,
     VectorParameterHandler,
 )
-from emperor.parametric._validation import ParametricHandlerValidator
+from emperor.parametric._validation import (
+    ParametricHandlerValidator,
+    ParametricLayerHandlerValidator,
+)
+
+
+def make_layer_handler_config(**overrides) -> ParametricLayerHandlerConfig:
+    values = {
+        "input_dim": 3,
+        "output_dim": 3,
+        "activation": ActivationOptions.DISABLED,
+        "residual_config": None,
+        "dropout_probability": 0.0,
+        "layer_norm_position": LayerNormPositionOptions.DISABLED,
+        "gate_config": None,
+        "halting_config": None,
+        "memory_config": None,
+        "layer_model_config": ParametricLayerConfig(),
+    }
+    values.update(overrides)
+    return ParametricLayerHandlerConfig(**values)
 
 
 class TestParametricHandlerValidatorAdapter(unittest.TestCase):
@@ -37,11 +57,12 @@ class TestParametricHandlerValidatorAdapter(unittest.TestCase):
             with self.subTest(module_type=module_type.__name__):
                 self.assertIs(module_type.VALIDATOR, ParametricHandlerValidator)
 
-        self.assertIs(ParametricLayerHandler.VALIDATOR, Layer.VALIDATOR)
         self.assertIs(
-            ParametricLayerHandler.PARAMETRIC_VALIDATOR,
-            ParametricHandlerValidator,
+            ParametricLayerHandler.VALIDATOR,
+            ParametricLayerHandlerValidator,
         )
+        self.assertTrue(issubclass(ParametricLayerHandlerValidator, ValidatorBase))
+        self.assertFalse(hasattr(ParametricLayerHandler, "PARAMETRIC_VALIDATOR"))
 
     def test_parameter_handler_construction_dispatches_through_adapter(self):
         class TrackingValidator(ParametricHandlerValidator):
@@ -59,41 +80,35 @@ class TestParametricHandlerValidatorAdapter(unittest.TestCase):
             TrackingHandler(ParametricLayerConfig())
 
     def test_layer_handler_construction_dispatches_through_adapter(self):
-        class TrackingValidator(ParametricHandlerValidator):
+        class TrackingValidator(ParametricLayerHandlerValidator):
             @staticmethod
             def _validate_layer_handler(model):
                 raise RuntimeError("substituted layer validator was called")
 
         class TrackingLayerHandler(ParametricLayerHandler):
-            PARAMETRIC_VALIDATOR = TrackingValidator
-
-        cfg = ParametricLayerHandlerConfig(
-            input_dim=3,
-            output_dim=3,
-            activation=ActivationOptions.DISABLED,
-            residual_config=None,
-            dropout_probability=0.0,
-            layer_norm_position=LayerNormPositionOptions.DISABLED,
-            gate_config=None,
-            halting_config=None,
-            memory_config=None,
-            layer_model_config=ParametricLayerConfig(),
-        )
+            VALIDATOR = TrackingValidator
 
         with self.assertRaisesRegex(
             RuntimeError,
             "substituted layer validator was called",
         ):
-            TrackingLayerHandler(cfg)
+            TrackingLayerHandler(make_layer_handler_config())
+
+    def test_layer_handler_validator_preserves_base_layer_validation(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "dropout_probability must be between 0.0 and 1.0",
+        ):
+            ParametricLayerHandler(make_layer_handler_config(dropout_probability=1.1))
 
     def test_runtime_state_dispatches_through_adapter(self):
-        class RejectingValidator(ParametricHandlerValidator):
+        class RejectingValidator(ParametricLayerHandlerValidator):
             @staticmethod
             def validate_state(state):
                 raise RuntimeError("substituted runtime validator was called")
 
         class RejectingLayerHandler(ParametricLayerHandler):
-            PARAMETRIC_VALIDATOR = RejectingValidator
+            VALIDATOR = RejectingValidator
 
         model = RejectingLayerHandler.__new__(RejectingLayerHandler)
         torch.nn.Module.__init__(model)
@@ -101,9 +116,7 @@ class TestParametricHandlerValidatorAdapter(unittest.TestCase):
         with self.assertRaisesRegex(
             RuntimeError, "substituted runtime validator was called"
         ):
-            model._handle_model_processing(
-                torch.ones(1, 3), LayerState(hidden=torch.ones(1, 3))
-            )
+            model._handle_model_processing(LayerState(hidden=torch.ones(1, 3)))
 
     def test_vector_shared_router_error_contract_is_preserved(self):
         cfg = ParametricLayerConfig(

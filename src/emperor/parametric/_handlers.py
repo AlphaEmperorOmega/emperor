@@ -1,13 +1,14 @@
 from typing import TYPE_CHECKING
 
-from torch import Tensor
-
 from emperor.layers import Layer, LayerState
 from emperor.nn import Module
 from emperor.parametric._mixtures.config import (
     GeneratorBiasMixtureConfig,
 )
-from emperor.parametric._validation import ParametricHandlerValidator
+from emperor.parametric._validation import (
+    ParametricHandlerValidator,
+    ParametricLayerHandlerValidator,
+)
 
 if TYPE_CHECKING:
     from emperor.parametric._config import ParametricLayerConfig
@@ -120,27 +121,20 @@ class GeneratorParameterHandler(ParameterHandlerBase):
 
 
 class ParametricLayerHandler(Layer):
-    PARAMETRIC_VALIDATOR = ParametricHandlerValidator
-
-    def __init__(self, cfg, overrides=None):
-        super().__init__(cfg, overrides)
-
-    def _validate_configuration(self) -> None:
-        super()._validate_configuration()
-        self.PARAMETRIC_VALIDATOR.validate(self)
+    VALIDATOR = ParametricLayerHandlerValidator
 
     def forward(self, state: LayerState) -> LayerState:
-        self.PARAMETRIC_VALIDATOR.validate_state(state)
+        self.VALIDATOR.validate_state(state)
         return super().forward(state)
 
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
-        self.PARAMETRIC_VALIDATOR.validate_state(state)
+    ) -> LayerState:
+        self.VALIDATOR.validate_state(state)
         skip_mask = getattr(state, "skip_mask", None)
-        output, skip_mask, loss = self.model(main_model_input, skip_mask)
+        output, skip_mask, loss = self.model(state.hidden, skip_mask)
         state.skip_mask = skip_mask
         state.loss = loss if state.loss is None else state.loss + loss
-        return output
+        state.hidden = output
+        return state

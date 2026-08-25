@@ -933,7 +933,7 @@ class TestLinearLayerStack(unittest.TestCase):
         self.assertEqual(output.shape, (2, cfg.output_dim))
 
         for layer in list(m):
-            self.assertIsNone(layer.gate_model)
+            self.assertIsNone(layer.postprocessing.gate)
 
     def test_gradients_flow_through_linear_layer_stack(self):
         num_layer_options = [1, 2, 3]

@@ -35,6 +35,8 @@ from emperor.linears import LinearLayerConfig
 from emperor.monitoring import MonitorEmissionPolicy, MonitorTensorHistory
 from support.monitor import CaptureLightningModule, TrainerStub
 
+ACTIVATION_METHOD_NAME = "_LayerPostprocessingDelegate__maybe_apply_activation"
+
 
 def _linear_stack_config(dim: int) -> LayerStackConfig:
     return LayerStackConfig(
@@ -325,7 +327,7 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
             0.5,
         )
 
-    def test_layer_wrappers_preserve_keyword_calls_and_malformed_inputs(self) -> None:
+    def test_layer_hooks_preserve_keyword_calls_and_malformed_inputs(self) -> None:
         layer = Layer(
             _layer_config(
                 2,
@@ -340,7 +342,11 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
         callback.on_fit_start(TrainerStub(), module)
 
         activation_input = torch.tensor([[-1.0, 0.5]], requires_grad=True)
-        activation_output = layer._Layer__maybe_apply_activation(input=activation_input)
+        apply_activation = getattr(
+            layer.postprocessing,
+            ACTIVATION_METHOD_NAME,
+        )
+        activation_output = apply_activation(hidden=activation_input)
         torch.testing.assert_close(activation_output, torch.tanh(activation_input))
         self.assertFalse(
             torch.as_tensor(
@@ -350,13 +356,13 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
 
         current = torch.tensor([[3.0, 1.0]], requires_grad=True)
         previous = torch.tensor([[6.0, 8.0]], requires_grad=True)
-        state = LayerState(hidden=current)
-        residual_output = layer._Layer__maybe_apply_residual_connection(
-            input=current,
-            prev_input=previous,
-            state=state,
+        residual_state = LayerState(hidden=current)
+        residual_output = layer.residual.apply_residual(
+            state=residual_state,
+            previous=previous,
         )
-        torch.testing.assert_close(residual_output, current + previous)
+        self.assertIs(residual_output, residual_state)
+        torch.testing.assert_close(residual_output.hidden, current + previous)
         self.assert_logged_close(
             module,
             "layer/residual/contribution_ratio",
@@ -367,18 +373,20 @@ class TestLayerMonitorMutationContracts(unittest.TestCase):
             "layer/residual/input_ratio",
             10.0 / math.sqrt(10.0),
         )
-        positional_output = layer._Layer__maybe_apply_residual_connection(
-            current,
+        positional_state = LayerState(hidden=current)
+        positional_output = layer.residual.apply_residual(
+            positional_state,
             previous,
-            state,
         )
-        torch.testing.assert_close(positional_output, current + previous)
-        mixed_output = layer._Layer__maybe_apply_residual_connection(
-            current,
-            prev_input=previous,
-            state=state,
+        self.assertIs(positional_output, positional_state)
+        torch.testing.assert_close(positional_output.hidden, current + previous)
+        mixed_state = LayerState(hidden=current)
+        mixed_output = layer.residual.apply_residual(
+            mixed_state,
+            previous=previous,
         )
-        torch.testing.assert_close(mixed_output, current + previous)
+        self.assertIs(mixed_output, mixed_state)
+        torch.testing.assert_close(mixed_output.hidden, current + previous)
 
         dropout_hook = callback._LayerControllerMonitorCallback__make_dropout_hook(
             "malformed",

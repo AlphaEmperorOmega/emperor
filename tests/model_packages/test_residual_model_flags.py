@@ -625,7 +625,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
         self.assertTrue(layer_nodes)
         node_ids = {node.id for node in graph.nodes}
         for node in layer_nodes:
-            residual_node = f"{node.id}.residual_connection"
+            residual_node = f"{node.id}.residual.connection"
             coefficient_node = f"{residual_node}.model"
             self.assertIn(residual_node, node_ids)
             self.assertIn(coefficient_node, node_ids)

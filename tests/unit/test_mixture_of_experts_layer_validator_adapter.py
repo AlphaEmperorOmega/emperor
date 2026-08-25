@@ -3,10 +3,16 @@ import unittest
 import torch
 
 from emperor._validation import ValidatorBase
+from emperor.config import ConfigBase
 from emperor.experts import MixtureOfExpertsLayerConfig, MixtureOfExpertsLayerState
 from emperor.experts._layers.layer import MixtureOfExpertsLayer
 from emperor.experts._validation.layer import MixtureOfExpertsLayerValidator
-from emperor.layers import RowLayout
+from emperor.layers import (
+    ActivationOptions,
+    LayerConfig,
+    LayerNormPositionOptions,
+    RowLayout,
+)
 
 
 class _RoutingStub(torch.nn.Module):
@@ -56,6 +62,28 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
         ):
             RejectingLayer(MixtureOfExpertsLayerConfig())
 
+    def test_specialized_validator_preserves_base_layer_validation(self) -> None:
+        layer = MixtureOfExpertsLayer.__new__(MixtureOfExpertsLayer)
+        torch.nn.Module.__init__(layer)
+        layer.cfg = LayerConfig(
+            input_dim=3,
+            output_dim=3,
+            activation=ActivationOptions.DISABLED,
+            residual_config=None,
+            dropout_probability=1.1,
+            layer_norm_position=LayerNormPositionOptions.DISABLED,
+            gate_config=None,
+            halting_config=None,
+            memory_config=None,
+            layer_model_config=ConfigBase(),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "dropout_probability must be between 0.0 and 1.0",
+        ):
+            MixtureOfExpertsLayerValidator.validate(layer)
+
     def test_pre_routing_dispatches_through_substituted_validator(self) -> None:
         class RejectingValidator(MixtureOfExpertsLayerValidator):
             @staticmethod
@@ -77,7 +105,6 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
             "substituted pre-routing validator was called",
         ):
             layer._handle_model_processing(
-                torch.ones(2, 3),
                 MixtureOfExpertsLayerState(hidden=torch.ones(2, 3)),
             )
 
@@ -99,7 +126,6 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
             "substituted post-routing validator was called",
         ):
             layer._handle_model_processing(
-                torch.ones(2, 3),
                 MixtureOfExpertsLayerState(hidden=torch.ones(2, 3)),
             )
 
@@ -117,7 +143,7 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
             ValueError,
             "row_layout row_count=3 does not match input row count 2",
         ):
-            layer._handle_model_processing(torch.ones(2, 3), state)
+            layer._handle_model_processing(state)
 
         self.assertEqual(layer.model.call_count, 0)
 
@@ -135,7 +161,7 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
             ValueError,
             "expected 2, received shape \\(3, 3\\)",
         ):
-            layer._handle_model_processing(torch.ones(2, 3), state)
+            layer._handle_model_processing(state)
 
         self.assertEqual(layer.model.call_count, 1)
 

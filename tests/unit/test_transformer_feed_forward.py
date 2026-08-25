@@ -186,13 +186,16 @@ class TestFeedForward(unittest.TestCase):
         )
 
         for layer in model.model[:-1]:
-            self.assertEqual(layer.activation_function, ActivationOptions.RELU)
-            self.assertIsNotNone(layer.dropout_module)
+            self.assertEqual(
+                layer.postprocessing.activation_function,
+                ActivationOptions.RELU,
+            )
+            self.assertIsNotNone(layer.postprocessing.dropout)
         self.assertEqual(
-            model.model[-1].activation_function,
+            model.model[-1].postprocessing.activation_function,
             ActivationOptions.DISABLED,
         )
-        self.assertIsNone(model.model[-1].dropout_module)
+        self.assertIsNone(model.model[-1].postprocessing.dropout)
 
     def test_mirrored_stack_preserves_dtype_shape_and_gradients(self):
         model = FeedForward(
