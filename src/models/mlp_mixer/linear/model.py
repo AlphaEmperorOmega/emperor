@@ -29,13 +29,14 @@ class Model(ClassifierExperiment):
 
     def forward(self, X: Tensor) -> Tensor | tuple[Tensor, Tensor]:
         patch_tokens = self.patch(X.to(self.device))
-        encoder_state = Layer.run_model_returning_state(
+        encoder_state = Layer.run_model_from_hidden(
             self.transformer,
             patch_tokens,
         )
         normalized_tokens = self.encoder_layer_norm(encoder_state.hidden)
         pooled_hidden = normalized_tokens.mean(dim=1)
-        logits = Layer.run_model_returning_hidden(self.output, pooled_hidden)
+        output_state = Layer.run_model_from_hidden(self.output, pooled_hidden)
+        logits = output_state.hidden
         if encoder_state.loss is not None and encoder_state.loss.item() != 0.0:
             return logits, encoder_state.loss
         return logits

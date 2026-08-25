@@ -45,7 +45,8 @@ class PatchEmbeddingLinear(PatchBase):
         X = X.transpose(1, 2)
         batch_size, sequence_length, patch_dim = X.shape
         X = X.reshape(batch_size * sequence_length, patch_dim)
-        X = Layer.run_model_returning_hidden(self.embedding_model, X)
+        embedding_state = Layer.run_model_from_hidden(self.embedding_model, X)
+        X = embedding_state.hidden
         X = X.reshape(batch_size, sequence_length, self.embedding_dim)
         X = self._concatenate_class_token(X)
         X = self.dropout(X)

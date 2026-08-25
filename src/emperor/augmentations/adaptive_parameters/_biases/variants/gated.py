@@ -20,7 +20,8 @@ class SigmoidGatedDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         self.VALIDATOR.ensure_parameters_exist(bias_params)
-        gate = torch.sigmoid(Layer.run_model_returning_hidden(self.model, logits))
+        gate_state = Layer.run_model_from_hidden(self.model, logits)
+        gate = torch.sigmoid(gate_state.hidden)
         return bias_params * gate
 
 
@@ -35,5 +36,6 @@ class TanhGatedDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         self.VALIDATOR.ensure_parameters_exist(bias_params)
-        gate = torch.tanh(Layer.run_model_returning_hidden(self.model, logits))
+        gate_state = Layer.run_model_from_hidden(self.model, logits)
+        gate = torch.tanh(gate_state.hidden)
         return bias_params * gate

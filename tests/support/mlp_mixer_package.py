@@ -643,16 +643,17 @@ class MlpMixerPackageContractMixin:
         inputs = torch.randn(2, 1, 8, 8)
 
         patch_tokens = model.patch(inputs)
-        encoder_state = Layer.run_model_returning_state(
+        encoder_state = Layer.run_model_from_hidden(
             model.transformer,
             patch_tokens,
         )
         normalized_tokens = model.encoder_layer_norm(encoder_state.hidden)
         expected_pool = normalized_tokens.mean(dim=1)
-        expected_logits = Layer.run_model_returning_hidden(
+        output_state = Layer.run_model_from_hidden(
             model.output,
             expected_pool,
         )
+        expected_logits = output_state.hidden
         actual_logits, _ = self._logits_and_loss(model(inputs))
 
         torch.testing.assert_close(actual_logits, expected_logits)

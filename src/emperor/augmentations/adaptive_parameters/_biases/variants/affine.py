@@ -19,6 +19,7 @@ class AffineTransformDynamicBias(DynamicBiasAbstract):
 
     def forward(self, bias_params: Tensor, logits: Tensor) -> Tensor:
         self.VALIDATOR.ensure_parameters_exist(bias_params)
-        affine_parameters = Layer.run_model_returning_hidden(self.model, logits)
+        affine_parameter_state = Layer.run_model_from_hidden(self.model, logits)
+        affine_parameters = affine_parameter_state.hidden
         bias_scale, bias_offset = affine_parameters.chunk(2, dim=-1)
         return bias_scale * bias_params + bias_offset

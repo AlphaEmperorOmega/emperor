@@ -194,7 +194,8 @@ class StickBreaking(HaltingBase[StickBreakingState]):
     def __compute_gate_logits(self, hidden_state: Tensor) -> Tensor:
         original_shape = hidden_state.shape
         flat = hidden_state.reshape(-1, original_shape[-1])
-        logits = Layer.run_model_returning_hidden(self.halting_gate_model, flat)
+        halting_gate_state = Layer.run_model_from_hidden(self.halting_gate_model, flat)
+        logits = halting_gate_state.hidden
         logits = logits.reshape(*original_shape[:-1], 2)
         if self.training:
             logits = logits + torch.randn_like(logits)
