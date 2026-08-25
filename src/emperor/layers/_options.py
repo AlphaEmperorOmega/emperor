@@ -1,13 +1,17 @@
+from collections.abc import Callable
 from enum import member
+from typing import cast
 
 import torch.nn.functional as F
+from torch import Tensor
 
 from emperor.config import BaseOptions
 
 
 class ActivationOptions(BaseOptions):
-    def __call__(self, x):
-        return self.value(x)
+    def __call__(self, x: Tensor) -> Tensor:
+        activation_function = cast(Callable[[Tensor], Tensor], self.value)
+        return activation_function(x)
 
     DISABLED = 0
     RELU = member(F.relu)
