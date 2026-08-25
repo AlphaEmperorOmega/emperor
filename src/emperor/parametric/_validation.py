@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
-from emperor.layers import LayerState
+from emperor.layers import Layer, LayerState
 from emperor.parametric._config import (
     AdaptiveRouterOptions,
     ParametricLayerConfig,
@@ -296,24 +296,8 @@ class ParametricLayerValidator(ValidatorBase):
 
 class ParametricHandlerValidator(ValidatorBase):
     @classmethod
-    def validate(cls, model: "ParameterHandlerBase | ParametricLayerHandler") -> None:
-        if hasattr(model, "weight_mixture_config"):
-            cls._validate_parameter_handler(model)
-            return
-        cls._validate_layer_handler(model)
-
-    @staticmethod
-    def validate_state(state: LayerState) -> None:
-        if not isinstance(state, LayerState):
-            raise TypeError(
-                "state must be a LayerState for ParametricLayerHandler, "
-                f"got {type(state).__name__}."
-            )
-        if not isinstance(state.hidden, Tensor):
-            raise TypeError(
-                "state.hidden must be a Tensor for ParametricLayerHandler, "
-                f"got {type(state.hidden).__name__}."
-            )
+    def validate(cls, model: "ParameterHandlerBase") -> None:
+        cls._validate_parameter_handler(model)
 
     @staticmethod
     def _validate_parameter_handler(model: "ParameterHandlerBase") -> None:
@@ -331,6 +315,26 @@ class ParametricHandlerValidator(ValidatorBase):
                 raise ValueError(
                     "VectorWeightsMixtureConfig does not support SHARED_ROUTER routing."
                 )
+
+
+class ParametricLayerHandlerValidator(ValidatorBase):
+    @classmethod
+    def validate(cls, model: "ParametricLayerHandler") -> None:
+        Layer.VALIDATOR.validate(model)
+        cls._validate_layer_handler(model)
+
+    @staticmethod
+    def validate_state(state: LayerState) -> None:
+        if not isinstance(state, LayerState):
+            raise TypeError(
+                "state must be a LayerState for ParametricLayerHandler, "
+                f"got {type(state).__name__}."
+            )
+        if not isinstance(state.hidden, Tensor):
+            raise TypeError(
+                "state.hidden must be a Tensor for ParametricLayerHandler, "
+                f"got {type(state.hidden).__name__}."
+            )
 
     @staticmethod
     def _validate_layer_handler(model: "ParametricLayerHandler") -> None:

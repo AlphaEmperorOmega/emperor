@@ -1,5 +1,3 @@
-from torch import Tensor
-
 from emperor.experts._state import MixtureOfExpertsLayerState
 from emperor.experts._validation.layer import MixtureOfExpertsLayerValidator
 from emperor.layers import Layer
@@ -10,9 +8,9 @@ class MixtureOfExpertsLayer(Layer):
 
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: MixtureOfExpertsLayerState,
-    ) -> Tensor:
+    ) -> MixtureOfExpertsLayerState:
+        main_model_input = state.hidden
         self.VALIDATOR.validate_layout_can_cross_routing(
             self,
             state,
@@ -27,4 +25,5 @@ class MixtureOfExpertsLayer(Layer):
         state.skip_mask = skip_mask
         state.loss = loss if state.loss is None else state.loss + loss
         self.VALIDATOR.validate_layout_restored(state, output)
-        return output
+        state.hidden = output
+        return state

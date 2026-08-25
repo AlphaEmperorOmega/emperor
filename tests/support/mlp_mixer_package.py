@@ -433,14 +433,14 @@ class MlpMixerPackageContractMixin:
         block = self._block(model)
         values = torch.randn(2, 4, 8)
 
-        token_normalized = block.self_attention_layer.layer_norm_module(values)
+        token_normalized = block.self_attention_layer.normalization.module(values)
         token_mixed, _, _ = block.self_attention_model(
             token_normalized,
             token_normalized,
             token_normalized,
         )
         after_token_mixing = values + token_mixed
-        channel_normalized = block.feed_forward_layer.layer_norm_module(
+        channel_normalized = block.feed_forward_layer.normalization.module(
             after_token_mixing
         )
         channel_mixed, _ = block.feed_forward_model(channel_normalized)
@@ -449,15 +449,15 @@ class MlpMixerPackageContractMixin:
         actual, auxiliary_loss = block(values)
 
         self.assertIs(
-            block.self_attention_layer.layer_norm_position,
+            block.self_attention_layer.normalization.position,
             LayerNormPositionOptions.BEFORE,
         )
         self.assertIs(
-            block.feed_forward_layer.layer_norm_position,
+            block.feed_forward_layer.normalization.position,
             LayerNormPositionOptions.BEFORE,
         )
-        self.assertIsNotNone(block.self_attention_layer.residual_connection)
-        self.assertIsNotNone(block.feed_forward_layer.residual_connection)
+        self.assertIsNotNone(block.self_attention_layer.residual.connection)
+        self.assertIsNotNone(block.feed_forward_layer.residual.connection)
         torch.testing.assert_close(actual, expected)
         self.assertTrue(torch.isfinite(auxiliary_loss).item())
 

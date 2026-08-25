@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 from copy import deepcopy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 from torch.nn import ModuleList
 
+from emperor.layers._composition.gate import LayerGate
 from emperor.layers._config import (
     GateConfig,
     LayerConfig,
@@ -16,15 +19,28 @@ from emperor.layers._options import (
 )
 from emperor.layers._support import LayerModuleBase
 from emperor.layers._validation import LayerStackValidator
+from emperor.nn import Module
 
 if TYPE_CHECKING:
     from torch import Tensor
 
     from emperor.config import ModelConfig
-    from emperor.halting import HaltingConfig
+    from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
     from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._state import LayerState
-    from emperor.memory import DynamicMemoryConfig
+    from emperor.memory import DynamicMemoryConfig, MemoryInterface
+
+
+def _implements_halting_interface(
+    model: object,
+) -> TypeGuard[HaltingInterface[HaltingStateBase]]:
+    return callable(getattr(model, "update_halting_state", None)) and callable(
+        getattr(model, "finalize_weighted_accumulation", None)
+    )
+
+
+def _implements_memory_interface(model: object) -> TypeGuard[MemoryInterface]:
+    return callable(model) and hasattr(model, "memory_position_option")
 
 
 class LayerStack(LayerModuleBase):
@@ -36,8 +52,8 @@ class LayerStack(LayerModuleBase):
 
     def __init__(
         self,
-        cfg: "LayerStackConfig | ModelConfig",
-        overrides: "LayerStackConfig | None" = None,
+        cfg: LayerStackConfig | ModelConfig,
+        overrides: LayerStackConfig | None = None,
     ):
         super().__init__()
         config = getattr(cfg, "layer_stack_config", cfg)
@@ -160,7 +176,7 @@ class LayerStack(LayerModuleBase):
         )
         layer = resolved_layer_config.build()
         if is_last_layer:
-            layer.mark_as_last_layer()
+            layer._mark_as_last_layer()
         return layer
 
     def __resolve_layer_config(
@@ -190,7 +206,7 @@ class LayerStack(LayerModuleBase):
         )
         return resolved_layer_config
 
-    def __resolve_output_layer_overrides(self) -> "LayerConfig | None":
+    def __resolve_output_layer_overrides(self) -> LayerConfig | None:
         output_layer_overrides: LayerConfig | None = None
         if not self.apply_output_postprocessing_flag:
             output_layer_overrides = LayerConfig(
@@ -226,9 +242,9 @@ class LayerStack(LayerModuleBase):
 
     def __merge_layer_override(
         self,
-        base_override: "LayerConfig | None",
-        additional_override: "LayerConfig | None",
-    ) -> "LayerConfig | None":
+        base_override: LayerConfig | None,
+        additional_override: LayerConfig | None,
+    ) -> LayerConfig | None:
         if additional_override is None:
             return base_override
         if base_override is None:
@@ -266,36 +282,69 @@ class LayerStack(LayerModuleBase):
     def __maybe_share_gate_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_gate_config is None:
             return
-        shared_gate_model = self._build_from_config(
-            self.shared_gate_config,
-            gate_dim=self.output_dim,
+        shared_gate_model = self.__require_shared_gate(
+            self._build_from_config(
+                self.shared_gate_config,
+                gate_dim=self.output_dim,
+            )
         )
         for stack_layer in stack_layers:
-            stack_layer.gate_config = self.shared_gate_config
-            stack_layer.gate_model = shared_gate_model
+            stack_layer._bind_shared_gate(
+                self.shared_gate_config,
+                shared_gate_model,
+            )
 
     def __maybe_share_halting_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_halting_config is None:
             return
-        shared_halting_model = self._build_from_config(
-            self.shared_halting_config,
-            input_dim=self.output_dim,
+        shared_halting_model = self.__require_shared_halting(
+            self._build_from_config(
+                self.shared_halting_config,
+                input_dim=self.output_dim,
+            )
         )
         for stack_layer in stack_layers:
-            stack_layer.halting_model = shared_halting_model
+            stack_layer._bind_shared_halting(shared_halting_model)
 
     def __maybe_share_memory_model(self, stack_layers: list[Layer]) -> None:
         if self.shared_memory_config is None:
             return
-        shared_memory_model = self._build_from_config(
-            self.shared_memory_config,
-            input_dim=self.input_dim,
-            output_dim=self.output_dim,
+        shared_memory_model = self.__require_shared_memory(
+            self._build_from_config(
+                self.shared_memory_config,
+                input_dim=self.input_dim,
+                output_dim=self.output_dim,
+            )
         )
         for stack_layer in stack_layers:
-            stack_layer.memory_model = shared_memory_model
+            stack_layer._bind_shared_memory(shared_memory_model)
 
-    def forward(self, state: "LayerState") -> "LayerState":
+    @staticmethod
+    def __require_shared_gate(model: Module | None) -> LayerGate:
+        if not isinstance(model, LayerGate):
+            raise TypeError("shared_gate_config must build a LayerGate.")
+        return model
+
+    @staticmethod
+    def __require_shared_halting(
+        model: Module | None,
+    ) -> HaltingInterface[HaltingStateBase]:
+        if not _implements_halting_interface(model):
+            raise TypeError(
+                "shared_halting_config must build a model implementing "
+                "HaltingInterface."
+            )
+        return model
+
+    @staticmethod
+    def __require_shared_memory(model: Module | None) -> MemoryInterface:
+        if not _implements_memory_interface(model):
+            raise TypeError(
+                "shared_memory_config must build a model implementing MemoryInterface."
+            )
+        return model
+
+    def forward(self, state: LayerState) -> LayerState:
         layer_state = state
         enclosing_residual_state = state.residual_state
         state.residual_state = self.__initialize_residual_state(state.hidden)
@@ -308,13 +357,10 @@ class LayerStack(LayerModuleBase):
 
     def __initialize_residual_state(
         self,
-        initial_source: "Tensor",
-    ) -> "ResidualState | None":
+        initial_source: Tensor,
+    ) -> ResidualState | None:
         for stack_layer in self.layers:
-            residual_connection = stack_layer.residual_connection
-            if residual_connection is None:
-                continue
-            residual_state = residual_connection.new_state(initial_source)
+            residual_state = stack_layer._new_residual_state(initial_source)
             if residual_state is not None:
                 return residual_state
         return None

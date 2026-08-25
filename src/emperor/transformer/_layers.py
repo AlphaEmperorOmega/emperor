@@ -39,11 +39,11 @@ class _TransformerSubLayer(Layer):
 class _EncoderSelfAttentionLayer(_TransformerSubLayer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         if not isinstance(state, AttentionLayerState):
             raise TypeError("Encoder self-attention requires an AttentionLayerState.")
+        main_model_input = state.hidden
         output, _attention_weights, loss = self.model(
             q=main_model_input,
             k=main_model_input,
@@ -52,19 +52,20 @@ class _EncoderSelfAttentionLayer(_TransformerSubLayer):
             attention_mask=state.attention_mask,
         )
         self._accumulate_model_loss(state, loss)
-        return output
+        state.hidden = output
+        return state
 
 
 class _DecoderSelfAttentionLayer(_TransformerSubLayer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         if not isinstance(state, TransformerDecoderLayerState):
             raise TypeError(
                 "Decoder self-attention requires a TransformerDecoderLayerState."
             )
+        main_model_input = state.hidden
         output, _attention_weights, loss = self.model(
             q=main_model_input,
             k=main_model_input,
@@ -73,19 +74,20 @@ class _DecoderSelfAttentionLayer(_TransformerSubLayer):
             attention_mask=state.target_attention_mask,
         )
         self._accumulate_model_loss(state, loss)
-        return output
+        state.hidden = output
+        return state
 
 
 class _DecoderCrossAttentionLayer(_TransformerSubLayer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         if not isinstance(state, TransformerDecoderLayerState):
             raise TypeError(
                 "Decoder cross-attention requires a TransformerDecoderLayerState."
             )
+        main_model_input = state.hidden
         output, _attention_weights, loss = self.model(
             q=main_model_input,
             k=state.encoder_output,
@@ -94,21 +96,22 @@ class _DecoderCrossAttentionLayer(_TransformerSubLayer):
             attention_mask=state.cross_attention_mask,
         )
         self._accumulate_model_loss(state, loss)
-        return output
+        state.hidden = output
+        return state
 
 
 class _FeedForwardLayer(_TransformerSubLayer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         output, loss = self.model(
-            main_model_input,
+            state.hidden,
             row_layout=state.row_layout,
         )
         self._accumulate_model_loss(state, loss)
-        return output
+        state.hidden = output
+        return state
 
 
 def _sub_layer_config(
@@ -293,16 +296,15 @@ class TransformerEncoderLayer(Module):
 class TransformerEncoderBlockLayer(Layer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         source_key_padding_mask = None
         attention_mask = None
         if isinstance(state, AttentionLayerState):
             source_key_padding_mask = state.key_padding_mask
             attention_mask = state.attention_mask
         output, loss = self.model(
-            main_model_input,
+            state.hidden,
             source_key_padding_mask=source_key_padding_mask,
             attention_mask=attention_mask,
         )
@@ -310,21 +312,21 @@ class TransformerEncoderBlockLayer(Layer):
             state.loss,
             self._reduce_auxiliary_loss(loss),
         )
-        return output
+        state.hidden = output
+        return state
 
 
 class TransformerDecoderBlockLayer(Layer):
     def _handle_model_processing(
         self,
-        main_model_input: Tensor,
         state: LayerState,
-    ) -> Tensor:
+    ) -> LayerState:
         if not isinstance(state, TransformerDecoderLayerState):
             raise TypeError(
                 "TransformerDecoderBlockLayer requires a TransformerDecoderLayerState."
             )
         output, loss = self.model(
-            main_model_input,
+            state.hidden,
             encoder_output=state.encoder_output,
             key_padding_mask=state.target_key_padding_mask,
             encoder_padding_mask=state.encoder_padding_mask,
@@ -335,7 +337,8 @@ class TransformerDecoderBlockLayer(Layer):
             state.loss,
             self._reduce_auxiliary_loss(loss),
         )
-        return output
+        state.hidden = output
+        return state
 
 
 class TransformerDecoderLayer(Module):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
@@ -50,14 +51,18 @@ class InspectionShapeTraceTests(unittest.TestCase):
         package = model_package("linears/linear")
         assert package is not None
 
-        _result, trace = inspect_model_shapes(
-            package,
-            InspectionRequest(
-                preset="baseline",
-                overrides={"stack_num_layers": 1},
-            ),
-            detail="variables",
-        )
+        with patch(
+            "model_runtime.inspection.shape_trace._package_distributions",
+            return_value={},
+        ):
+            _result, trace = inspect_model_shapes(
+                package,
+                InspectionRequest(
+                    preset="baseline",
+                    overrides={"stack_num_layers": 1},
+                ),
+                detail="variables",
+            )
 
         model_forward = next(
             method
@@ -73,22 +78,22 @@ class InspectionShapeTraceTests(unittest.TestCase):
             for tensor in variable.tensors
         }
         self.assertIn(("X", (1, 784)), model_variables)
-        self.assertIn(("X", (1, 32)), model_variables)
+        self.assertIn(("main_state.hidden", (1, 32)), model_variables)
         self.assertIn(("logits", (1, 10)), model_variables)
 
-        layer_forward = next(
+        layer_pipeline = next(
             method
             for method in trace.methods
-            if method.qualified_name == "Layer.forward"
+            if method.qualified_name == "Layer._handle_layer_processing"
             and method.module_path == "main_model.layers.0"
         )
-        same_shape_x_assignments = [
+        same_shape_state_assignments = [
             tensor
-            for variable in layer_forward.variables
+            for variable in layer_pipeline.variables
             for tensor in variable.tensors
-            if tensor.name == "X" and tensor.shape == (1, 32)
+            if tensor.name == "state.hidden" and tensor.shape == (1, 32)
         ]
-        self.assertGreaterEqual(len(same_shape_x_assignments), 2)
+        self.assertGreaterEqual(len(same_shape_state_assignments), 2)
         self.assertTrue(
             all(
                 method.source_path.startswith(("models/", "emperor/"))

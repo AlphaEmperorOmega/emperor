@@ -236,7 +236,7 @@ class TestVitLinearModel(unittest.TestCase):
             SoftHaltingConfig,
         )
         encoder = encoder_stack.build()
-        halting_models = [layer.halting_model for layer in encoder]
+        halting_models = [layer.halting.model for layer in encoder]
         self.assertTrue(
             all(
                 isinstance(halting_model, SoftHalting)

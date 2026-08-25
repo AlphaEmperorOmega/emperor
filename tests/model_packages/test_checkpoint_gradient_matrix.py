@@ -22,58 +22,58 @@ CHECKPOINT_REPRESENTATIVES = {
 }
 EXPECTED_STATE_TOPOLOGY_DIGESTS = {
     "bert/expert_linear": (
-        "671b1ac905bc592db01f3ed2448e1828b054308923c98d80b58da0f9e8beaeca"
+        "0e34f906ff9c15ab2b692422ec3f920a75e2099ea0221db6033ce647558963de"
     ),
     "bert/expert_linear_adaptive": (
-        "671b1ac905bc592db01f3ed2448e1828b054308923c98d80b58da0f9e8beaeca"
+        "0e34f906ff9c15ab2b692422ec3f920a75e2099ea0221db6033ce647558963de"
     ),
-    "bert/linear": "2364fb8a377892d1c8f69f73dfa917624e6ceb4ba3ae3018f708c5070b88fe77",
+    "bert/linear": "4da5c3efec5f6bf0647684b176eb79d5393af751c7dba55d712295c6aae7a578",
     "bert/linear_adaptive": (
-        "1494841f5d1261d9abba80ab6c4d285b741389c5b0d63c4e3595dba73322cd91"
+        "f49635e8c2dec1594c993bcb6ecfdbc0e5fb49871fdc0800a356727fe5fcb3ac"
     ),
     "experts/linear": (
-        "a1fabf86f7668f95cbeecce54693e51562d69a28eb307bca350bd46233ee05c4"
+        "ef1cca635a4c85f84b6dcdb7d051dc987a9f9e67d480bed848173b2c4be3dfc2"
     ),
     "experts/linear_adaptive": (
-        "9264d450fcb207980dcc38a0a2e40b17a4e3f25c998abc5048c1af70830fff63"
+        "9c128ad37e9dab9f2ef405a93ad424f171a287369efea2b02ff5f58dc0fb8404"
     ),
     "gpt/expert_linear": (
-        "c668d3e4ac6ec87e2a89f1cb0b53ebf8b655d5df5e2d1398158e63377a0f7a1b"
+        "a2179fc50c406447af062b21d0533e3aa8bcd9045c9690c7fc934c7f3d1aaed3"
     ),
     "gpt/expert_linear_adaptive": (
-        "c668d3e4ac6ec87e2a89f1cb0b53ebf8b655d5df5e2d1398158e63377a0f7a1b"
+        "a2179fc50c406447af062b21d0533e3aa8bcd9045c9690c7fc934c7f3d1aaed3"
     ),
-    "gpt/linear": "54c78200bb9174a43c25b60945796f9575af9dceb22a9ae8a6a9fd55a64205de",
+    "gpt/linear": "94311c337b236db9e5a4b3ff22487340d2a8dbf67aed7ad12f264a5eafbcd385",
     "gpt/linear_adaptive": (
-        "afa7109da6391eb15dd26c59b6fad07c25add1b80a24f10119d7c3bde98bc8fd"
+        "a7e10c274e8bcc628a90c19f19057c4acf104ca02109bc34f2e525331561dbf2"
     ),
     "linears/linear": (
-        "b2581d7521ca8f3662e48bd8bfa81414d694d734633d5a901e5b3133d9163f56"
+        "efbffe89fe687a962fd9fd1b1c13f089a4739265333fd0e96545155280d7b807"
     ),
     "linears/linear_adaptive": (
-        "b2581d7521ca8f3662e48bd8bfa81414d694d734633d5a901e5b3133d9163f56"
+        "efbffe89fe687a962fd9fd1b1c13f089a4739265333fd0e96545155280d7b807"
     ),
     "mlp_mixer/expert_linear": (
-        "bb4a9a2023e893493e81d1c7ba759001185289f98737b12f500c170f4458566d"
+        "f3110f1d187bbe6186ce5096b44a1a80d4ad1309e1d51e96d22e843971c7320d"
     ),
     "mlp_mixer/expert_linear_adaptive": (
-        "08cf78efb97dadbc83a795f305b1d99937dabb417bfef295c9e8dca88e90b13f"
+        "5f52c2b87c72e873ba0b73b0d556e7677424415e126334b25a2937d8a7284920"
     ),
     "mlp_mixer/linear": (
-        "11177135f206d6071e1447b47a6d89fdce2f7f96ec2a4ea5fde649b583dad10b"
+        "0afa286265806894707abe3ed75352f402718c9b0fab6f9966a8ec1855678f9d"
     ),
     "mlp_mixer/linear_adaptive": (
-        "5bfecc7f0b5da8add8873ae8a6d682b76a32515f9d926499f29d7b0d8eb69077"
+        "56e3ef8de17c47284dec93bac4817e28c55a185f1887c969abd7af558eee0bf4"
     ),
     "neuron/expert_linear": (
-        "4661155abc583ef02100f4f1593ffd325824a83516240301c00dfc62882e75fe"
+        "1f2ffe2f7f3d551009917c36c3c218b25728a09058fe4ac6148a6b88f2c124e5"
     ),
     "neuron/expert_linear_adaptive": (
-        "1bca9cb38caff7822d4f6a642d84ed26a811e0fde53cb078e3e11ac445f26a5a"
+        "08cdd31dd48a29cfcd799efa802ee04e4d9d6ba747f5a8d85f92a0ba28788b26"
     ),
-    "neuron/linear": "13dbc77f380c5cb91816620c01167d6904e9f50084d43d6b291b6ff587d0d5a4",
+    "neuron/linear": "0d19dac15b982b01a20bda8b3b73f6e7e7b9291257e723a42fafb5aece2c2cfe",
     "neuron/linear_adaptive": (
-        "13dbc77f380c5cb91816620c01167d6904e9f50084d43d6b291b6ff587d0d5a4"
+        "0d19dac15b982b01a20bda8b3b73f6e7e7b9291257e723a42fafb5aece2c2cfe"
     ),
     "parametric/parametric_generator": (
         "86ee37a7fe511e6bcdb99a6d95604c6a27c590f040bf7a6dd6765e8be0f930ca"
@@ -85,26 +85,26 @@ EXPECTED_STATE_TOPOLOGY_DIGESTS = {
         "813b5c878296fb417680b6e2d08124704da450c12a144911f0fa006e7ae13902"
     ),
     "transformer/expert_linear": (
-        "da51d64fb0a396d465b4a9e49acdefa8994789112938e42832da55f72c985d90"
+        "206455f265c52feb87899de5ae49475a783c17d46387db4f34cebc6844d02b2e"
     ),
     "transformer/expert_linear_adaptive": (
-        "da51d64fb0a396d465b4a9e49acdefa8994789112938e42832da55f72c985d90"
+        "206455f265c52feb87899de5ae49475a783c17d46387db4f34cebc6844d02b2e"
     ),
     "transformer/linear": (
-        "ad9f6e30e19b24247cba778fb75e3ee25c17eecd56551e595c00e39034e39db7"
+        "fde98a20e29b45427d4d2c63cfbd028593817cbf5f49fdfde06ebd629ceb8189"
     ),
     "transformer/linear_adaptive": (
-        "ad9f6e30e19b24247cba778fb75e3ee25c17eecd56551e595c00e39034e39db7"
+        "fde98a20e29b45427d4d2c63cfbd028593817cbf5f49fdfde06ebd629ceb8189"
     ),
     "vit/expert_linear": (
-        "681abc260f64b79eda52b9b4fdf2fac8f0ad6d876ed5d76e9f8c239b0458e3b8"
+        "2629c55dec5ce67fe7aaae8c28098d431ce7eea7d14ddad8cd6eb0e687e5b997"
     ),
     "vit/expert_linear_adaptive": (
-        "681abc260f64b79eda52b9b4fdf2fac8f0ad6d876ed5d76e9f8c239b0458e3b8"
+        "2629c55dec5ce67fe7aaae8c28098d431ce7eea7d14ddad8cd6eb0e687e5b997"
     ),
-    "vit/linear": "c1394b219688fffe506dd30dbc2d4c4ceafcc4fdbef293f95e19860684b3d357",
+    "vit/linear": "75d24a36a83addef48dff10016d13d3a2b4f07e15f1dacd12ebf10662bc917b9",
     "vit/linear_adaptive": (
-        "073d86cbf22b04b74c91cc9309e7fb69783cfa7568b9dd98cc52d758c664a4bf"
+        "31800b04e35bdf5ce67f93d0b77fa0cf57c030481e22bcc9f86c4d9a0b7308e2"
     ),
 }
 PERSISTENT_BUFFER_FAMILIES = {"experts", "neuron", "parametric"}

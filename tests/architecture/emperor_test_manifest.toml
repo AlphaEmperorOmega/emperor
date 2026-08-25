@@ -277,6 +277,7 @@ modules = [
 [families.layers]
 status = "partial"
 focused_tests = [
+  "tests/unit/test_inspection_shape_trace.py",
   "tests/unit/test_layer*.py",
   "tests/unit/test_mirrored_layer_stack.py",
   "tests/unit/test_recurrent_composition*.py",
@@ -331,6 +332,12 @@ modules = [
   "src/emperor/layers/_composition/recurrent/variants/tiny_recursive_model.py",
   "src/emperor/layers/_config.py",
   "src/emperor/layers/_layer.py",
+  "src/emperor/layers/_pipeline/__init__.py",
+  "src/emperor/layers/_pipeline/halting.py",
+  "src/emperor/layers/_pipeline/memory.py",
+  "src/emperor/layers/_pipeline/normalization.py",
+  "src/emperor/layers/_pipeline/postprocessing.py",
+  "src/emperor/layers/_pipeline/residual.py",
   "src/emperor/layers/_monitoring/__init__.py",
   "src/emperor/layers/_monitoring/callbacks/__init__.py",
   "src/emperor/layers/_monitoring/callbacks/_hooks.py",

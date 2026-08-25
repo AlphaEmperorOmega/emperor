@@ -206,7 +206,7 @@ class RowLayoutTransportTests(unittest.TestCase):
 
     def test_layer_passes_exact_layout_to_grouped_residual_coefficient_model(self):
         layer = plain_layer(residual_config=grouped_residual_config())
-        coefficient_model = layer.residual_connection.model
+        coefficient_model = layer.residual.connection.model
         received_layouts = []
         hook = coefficient_model.register_forward_pre_hook(
             lambda _module, _args, kwargs: received_layouts.append(
@@ -229,7 +229,7 @@ class RowLayoutTransportTests(unittest.TestCase):
                 model_config=LinearLayerConfig(bias_flag=True),
             )
         )
-        coefficient_model = layer.residual_connection.model
+        coefficient_model = layer.residual.connection.model
         received_keywords = []
         hook = coefficient_model.register_forward_pre_hook(
             lambda _module, _args, kwargs: received_keywords.append(kwargs),
@@ -246,7 +246,7 @@ class RowLayoutTransportTests(unittest.TestCase):
 
     def test_layer_layout_does_not_change_attention_residual_contract(self):
         layer = plain_layer(residual_config=AttentionResidualConfig())
-        residual_state = layer.residual_connection.new_state(self.inputs)
+        residual_state = layer.residual.connection.new_state(self.inputs)
 
         output_state = layer(
             LayerState(
@@ -384,14 +384,38 @@ class RowLayoutTransportTests(unittest.TestCase):
         layer = plain_layer()
         spy = LayoutAwareTensorSpy(fail=True)
         layer.model = spy
-        layer.halting_model = nn.Identity()
+        layer.halting.model = nn.Identity()
+        state = LayerState(hidden=self.inputs, row_layout=self.layout)
 
         with self.assertRaisesRegex(RuntimeError, "stop after layout capture"):
-            layer(LayerState(hidden=self.inputs, row_layout=self.layout))
+            layer(state)
 
         self.assertEqual(len(spy.layouts), 1)
         self.assertTrue(spy.layouts[0].context_sharing_restricted)
         self.assertIsNot(spy.layouts[0], self.layout)
+        self.assertIs(state.row_layout, spy.layouts[0])
+
+    def test_halting_delegate_updates_and_returns_layer_state_directly(self):
+        layer = plain_layer()
+        layer.halting.model = PassthroughHalting()
+        state = LayerState(hidden=self.inputs, row_layout=self.layout)
+
+        result = layer.halting.apply_halting(state)
+
+        self.assertIs(result, state)
+        self.assertIs(result.row_layout, self.layout)
+        self.assertIs(result.hidden, self.inputs)
+
+    def test_memory_delegate_updates_and_returns_layer_state_directly(self):
+        layer = plain_layer()
+        layer.memory.model = PassthroughMemory()
+        state = LayerState(hidden=self.inputs, row_layout=self.layout)
+
+        result = layer.memory.before_model(state)
+
+        self.assertIs(result, state)
+        self.assertIs(result.hidden, self.inputs)
+        self.assertTrue(result.row_layout.context_sharing_restricted)
 
     def test_layer_controller_restriction_is_local_to_the_owner_execution(self):
         for controller_name, controller in (
@@ -402,7 +426,12 @@ class RowLayoutTransportTests(unittest.TestCase):
                 layer = plain_layer()
                 spy = LayoutAwareTensorSpy()
                 layer.model = spy
-                setattr(layer, controller_name, controller)
+                delegate = (
+                    layer.halting
+                    if controller_name == "halting_model"
+                    else layer.memory
+                )
+                delegate.model = controller
 
                 output_state = layer(
                     LayerState(hidden=self.inputs, row_layout=self.layout)
@@ -467,7 +496,7 @@ class RowLayoutTransportTests(unittest.TestCase):
         layer = plain_layer()
         spy = LayoutAwareTensorSpy()
         layer.model = spy
-        layer.memory_model = PassthroughMemory()
+        layer.memory.model = PassthroughMemory()
 
         output_state = layer(
             LayerState(hidden=self.inputs, row_layout=restricted_layout)
