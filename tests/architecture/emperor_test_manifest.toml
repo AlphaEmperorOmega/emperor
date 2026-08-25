@@ -93,6 +93,7 @@ modules = [
 status = "partial"
 focused_tests = [
   "tests/unit/test_absolute_positional_embedding_validator.py",
+  "tests/unit/test_byte_contextual_embedding.py",
   "tests/unit/test_embedding_behavior.py",
   "tests/unit/test_embedding_regressions.py",
   "tests/unit/test_relative_positional_embedding_validator.py",
@@ -115,6 +116,13 @@ modules = [
   "src/emperor/embedding/absolute/_variants/learned.py",
   "src/emperor/embedding/absolute/_variants/sinusoidal.py",
   "src/emperor/embedding/absolute/_validation.py",
+  "src/emperor/embedding/contextual/__init__.py",
+  "src/emperor/embedding/contextual/_component.py",
+  "src/emperor/embedding/contextual/_config.py",
+  "src/emperor/embedding/contextual/_encoding.py",
+  "src/emperor/embedding/contextual/_kernel.py",
+  "src/emperor/embedding/contextual/_state.py",
+  "src/emperor/embedding/contextual/_validation.py",
   "src/emperor/embedding/relative/__init__.py",
   "src/emperor/embedding/relative/_variants/__init__.py",
   "src/emperor/embedding/relative/_variants/bias.py",
