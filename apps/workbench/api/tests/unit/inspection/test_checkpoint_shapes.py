@@ -53,19 +53,19 @@ class CheckpointShapeExtractionTests(unittest.TestCase):
             for gate_index in range(3):
                 state_dict[
                     "main_model.layers."
-                    f"{outer_index}.gate_model.model.layers.{gate_index}."
+                    f"{outer_index}.postprocessing.gate.model.layers.{gate_index}."
                     "model.weight_params"
                 ] = torch.zeros(16, 16)
             for halting_index in range(4):
                 state_dict[
                     "main_model.layers."
-                    f"{outer_index}.halting_model.halting_gate_model.layers."
+                    f"{outer_index}.halting.model.halting_gate_model.layers."
                     f"{halting_index}.model.weight_params"
                 ] = torch.zeros(16, 2 if halting_index == 3 else 16)
             for memory_index in range(2):
                 state_dict[
                     "main_model.layers."
-                    f"{outer_index}.memory_model.memory_model.layers."
+                    f"{outer_index}.memory.model.memory_model.layers."
                     f"{memory_index}.model.weight_params"
                 ] = torch.zeros(16, 16)
 
@@ -90,6 +90,73 @@ class CheckpointShapeExtractionTests(unittest.TestCase):
             checkpoint_shapes.config_overrides["memory_stack_num_layers"],
             2,
         )
+
+    def test_checkpoint_shape_extractor_accepts_controller_paths(
+        self,
+    ) -> None:
+        state_dict = checkpoint_state_dict(
+            input_dim=8,
+            hidden_dim=16,
+            output_dim=4,
+            layer_count=1,
+        )
+        state_dict[
+            "main_model.layers.0.postprocessing.gate.model.layers.0.model.weight_params"
+        ] = torch.zeros(16, 16)
+        state_dict[
+            "main_model.layers.0.halting.model.halting_gate_model.layers.0."
+            "model.weight_params"
+        ] = torch.zeros(16, 2)
+        state_dict[
+            "main_model.layers.0.memory.model.memory_model.layers.0.model.weight_params"
+        ] = torch.zeros(16, 16)
+
+        checkpoint_shapes = checkpoint_graph_shapes_from_state_dict(state_dict)
+
+        self.assertIsNotNone(checkpoint_shapes)
+        if checkpoint_shapes is None:
+            self.fail("Expected checkpoint shape extraction to succeed.")
+        self.assertEqual(checkpoint_shapes.config_overrides["gate_stack_num_layers"], 1)
+        self.assertEqual(
+            checkpoint_shapes.config_overrides["halting_stack_num_layers"],
+            1,
+        )
+        self.assertEqual(
+            checkpoint_shapes.config_overrides["memory_stack_num_layers"],
+            1,
+        )
+
+    def test_layer_component_shapes_keep_delegated_graph_paths(
+        self,
+    ) -> None:
+        checkpoint_shapes = checkpoint_graph_shapes_from_state_dict(
+            {
+                "main_model.layers.0.postprocessing.gate.model.layers.0.model."
+                "weight_params": torch.zeros(16, 16),
+                "main_model.layers.0.halting.model.halting_gate_model.layers.0."
+                "model.weight_params": torch.zeros(16, 2),
+                "main_model.layers.0.memory.model.memory_model.layers.0.model."
+                "weight_params": torch.zeros(16, 16),
+                "main_model.layers.0.residual.connection.raw_weight": torch.zeros(()),
+                "main_model.layers.0.normalization.module.weight": torch.zeros(16),
+                "main_model.layers.0.postprocessing.dropout.marker": torch.zeros(()),
+            }
+        )
+
+        self.assertIsNotNone(checkpoint_shapes)
+        if checkpoint_shapes is None:
+            self.fail("Expected checkpoint shape extraction to succeed.")
+        component_paths = (
+            "main_model.layers.0.postprocessing.gate.model.layers.0.model",
+            "main_model.layers.0.halting.model.halting_gate_model.layers.0.model",
+            "main_model.layers.0.memory.model.memory_model.layers.0.model",
+            "main_model.layers.0.residual.connection",
+            "main_model.layers.0.normalization.module",
+            "main_model.layers.0.postprocessing.dropout",
+        )
+        for component_path in component_paths:
+            with self.subTest(component_path=component_path):
+                self.assertIn(component_path, checkpoint_shapes.coverage_counts)
 
     def test_checkpoint_shape_extractor_maps_boundary_generator_counts_to_global(
         self,
@@ -139,30 +206,32 @@ class CheckpointShapeExtractionTests(unittest.TestCase):
         for outer_index in range(2):
             state_dict[
                 "main_model.layers."
-                f"{outer_index}.gate_model.model.layers.0.model.weight_params"
-            ] = torch.zeros(16, 32)
-            state_dict[
-                "main_model.layers."
-                f"{outer_index}.gate_model.model.layers.1.model.weight_params"
-            ] = torch.zeros(32, 16)
-            state_dict[
-                "main_model.layers."
-                f"{outer_index}.memory_model.memory_model.layers.0."
+                f"{outer_index}.postprocessing.gate.model.layers.0."
                 "model.weight_params"
             ] = torch.zeros(16, 32)
             state_dict[
                 "main_model.layers."
-                f"{outer_index}.memory_model.memory_model.layers.1."
+                f"{outer_index}.postprocessing.gate.model.layers.1."
                 "model.weight_params"
             ] = torch.zeros(32, 16)
             state_dict[
                 "main_model.layers."
-                f"{outer_index}.halting_model.halting_gate_model.layers.0."
+                f"{outer_index}.memory.model.memory_model.layers.0."
+                "model.weight_params"
+            ] = torch.zeros(16, 32)
+            state_dict[
+                "main_model.layers."
+                f"{outer_index}.memory.model.memory_model.layers.1."
+                "model.weight_params"
+            ] = torch.zeros(32, 16)
+            state_dict[
+                "main_model.layers."
+                f"{outer_index}.halting.model.halting_gate_model.layers.0."
                 "model.weight_params"
             ] = torch.zeros(16, 24)
             state_dict[
                 "main_model.layers."
-                f"{outer_index}.halting_model.halting_gate_model.layers.2."
+                f"{outer_index}.halting.model.halting_gate_model.layers.2."
                 "model.weight_params"
             ] = torch.zeros(24, 2)
 
