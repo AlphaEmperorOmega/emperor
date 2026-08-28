@@ -19,7 +19,6 @@ from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
 if TYPE_CHECKING:
     from emperor.halting import HaltingInterface, HaltingStateBase
     from emperor.layers._composition.gate import LayerGate
-    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._config import GateConfig
     from emperor.layers._row_layout import RowLayout
     from emperor.memory import MemoryInterface
@@ -135,9 +134,3 @@ class Layer(LayerModuleBase):
 
     def _mark_as_last_layer(self) -> None:
         self.halting.mark_as_terminal_layer()
-
-    def _new_residual_state(
-        self,
-        initial_source: Tensor,
-    ) -> ResidualState | None:
-        return self.residual.new_state(initial_source)

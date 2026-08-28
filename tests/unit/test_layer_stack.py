@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -25,6 +26,7 @@ from emperor.layers import (
     LayerState,
     ResidualConfig,
 )
+from emperor.layers._composition.residual.variants.attention import AttentionResidual
 from emperor.linears import LinearLayerConfig
 
 
@@ -212,13 +214,209 @@ class TestLayerStack(unittest.TestCase):
         scales = (2.0, 3.0, 4.0)
         stack = self.attention_residual_stack(scales)
         fresh_stack = self.attention_residual_stack(scales)
-        stack(LayerState(hidden=torch.tensor([[1.0, -2.0]])))
-        next_input = torch.tensor([[0.5, 3.0], [2.0, -1.0], [-4.0, 0.25]])
-
-        reused_result = stack(LayerState(hidden=next_input.clone()))
+        observed_histories = []
+        handle = stack[0].residual.connection.register_forward_pre_hook(
+            lambda _module, _args, kwargs: observed_histories.append(
+                kwargs["residual_state"]
+            ),
+            with_kwargs=True,
+        )
+        try:
+            stack(LayerState(hidden=torch.tensor([[1.0, -2.0]])))
+            next_input = torch.tensor([[0.5, 3.0], [2.0, -1.0], [-4.0, 0.25]])
+            reused_result = stack(LayerState(hidden=next_input.clone()))
+        finally:
+            handle.remove()
         fresh_result = fresh_stack(LayerState(hidden=next_input.clone()))
 
+        self.assertEqual(len(observed_histories), 2)
+        self.assertIsNot(observed_histories[0], observed_histories[1])
         torch.testing.assert_close(reused_result.hidden, fresh_result.hidden)
+
+    def test_five_attention_layers_lazily_create_and_share_one_history(self):
+        stack = self.attention_residual_stack((1.0, 1.0, 1.0, 1.0, 1.0))
+        observations = []
+        handles = []
+        for layer in stack:
+            handles.append(
+                layer.residual.connection.register_forward_pre_hook(
+                    lambda _module, args, kwargs: observations.append(
+                        (args[0], kwargs["residual_state"])
+                    ),
+                    with_kwargs=True,
+                )
+            )
+
+        state_creation_calls = []
+        original_new_state = AttentionResidual.new_state
+
+        def tracked_new_state(residual, initial_source):
+            state_creation_calls.append((residual, initial_source))
+            return original_new_state(residual, initial_source)
+
+        stack_input = torch.tensor([[1.0, -2.0]])
+        layer_state = LayerState(hidden=stack_input)
+        try:
+            with patch.object(AttentionResidual, "new_state", tracked_new_state):
+                result = stack(layer_state)
+        finally:
+            for handle in handles:
+                handle.remove()
+
+        self.assertIs(result, layer_state)
+        self.assertIsNone(result.residual_state)
+        self.assertEqual(len(state_creation_calls), 1)
+        self.assertIs(state_creation_calls[0][1], stack_input)
+        self.assertEqual(len(observations), 5)
+        shared_history = observations[0][1]
+        self.assertTrue(
+            all(history is shared_history for _current, history in observations)
+        )
+        self.assertIs(shared_history.initial_source, stack_input)
+        self.assertEqual(len(shared_history.sources), 6)
+        for source, (raw_output, _history) in zip(
+            shared_history.sources[1:],
+            observations,
+            strict=True,
+        ):
+            self.assertIs(source, raw_output)
+
+    def test_stateless_stack_masks_and_restores_an_enclosing_residual_state(self):
+        class ResidualStateProbe(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.observed_residual_state = object()
+
+            def forward(self, state):
+                self.observed_residual_state = state.residual_state
+                return state
+
+        stack = LayerStack(
+            self.preset(
+                input_dim=2,
+                hidden_dim=2,
+                output_dim=2,
+                stack_num_layers=1,
+                stack_residual_connection_option=None,
+                gate_enabled=False,
+                halting_config=None,
+            )
+        )
+        probe = ResidualStateProbe()
+        stack.layers = torch.nn.Sequential(probe)
+        enclosing_residual_state = object()
+        state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=enclosing_residual_state,
+        )
+
+        result = stack(state)
+
+        self.assertIsNone(probe.observed_residual_state)
+        self.assertIs(result.residual_state, enclosing_residual_state)
+
+    def test_nested_stateless_stack_masks_outer_attention_history(self):
+        class ResidualStateProbe(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.observed_residual_state = object()
+
+            def forward(self, state):
+                self.observed_residual_state = state.residual_state
+                return state
+
+        outer_stack = self.attention_residual_stack((1.0, 1.0))
+        outer_first, outer_second = tuple(outer_stack)
+        inner_stack = LayerStack(
+            self.preset(
+                input_dim=2,
+                hidden_dim=2,
+                output_dim=2,
+                stack_num_layers=1,
+                stack_residual_connection_option=None,
+                gate_enabled=False,
+                halting_config=None,
+            )
+        )
+        probe = ResidualStateProbe()
+        inner_stack.layers = torch.nn.Sequential(probe)
+        outer_stack.layers = torch.nn.Sequential(
+            outer_first,
+            inner_stack,
+            outer_second,
+        )
+        outer_histories = []
+        handles = [
+            layer.residual.connection.register_forward_pre_hook(
+                lambda _module, _args, kwargs: outer_histories.append(
+                    kwargs["residual_state"]
+                ),
+                with_kwargs=True,
+            )
+            for layer in (outer_first, outer_second)
+        ]
+
+        try:
+            outer_stack(LayerState(hidden=torch.ones(1, 2)))
+        finally:
+            for handle in handles:
+                handle.remove()
+
+        self.assertIsNone(probe.observed_residual_state)
+        self.assertEqual(len(outer_histories), 2)
+        self.assertIs(outer_histories[0], outer_histories[1])
+        self.assertEqual(len(outer_histories[0].sources), 3)
+
+    def test_nested_attention_stack_owns_independent_history(self):
+        outer_stack = self.attention_residual_stack((1.0, 1.0))
+        inner_stack = self.attention_residual_stack((1.0,))
+        outer_first, outer_second = tuple(outer_stack)
+        outer_stack.layers = torch.nn.Sequential(
+            outer_first,
+            inner_stack,
+            outer_second,
+        )
+        outer_histories = []
+        inner_histories = []
+        handles = [
+            outer_first.residual.connection.register_forward_pre_hook(
+                lambda _module, _args, kwargs: outer_histories.append(
+                    kwargs["residual_state"]
+                ),
+                with_kwargs=True,
+            ),
+            inner_stack[0].residual.connection.register_forward_pre_hook(
+                lambda _module, _args, kwargs: inner_histories.append(
+                    kwargs["residual_state"]
+                ),
+                with_kwargs=True,
+            ),
+            outer_second.residual.connection.register_forward_pre_hook(
+                lambda _module, _args, kwargs: outer_histories.append(
+                    kwargs["residual_state"]
+                ),
+                with_kwargs=True,
+            ),
+        ]
+        enclosing_residual_state = object()
+        layer_state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=enclosing_residual_state,
+        )
+
+        try:
+            result = outer_stack(layer_state)
+        finally:
+            for handle in handles:
+                handle.remove()
+
+        self.assertIs(result.residual_state, enclosing_residual_state)
+        self.assertEqual(len(outer_histories), 2)
+        self.assertEqual(len(inner_histories), 1)
+        self.assertIs(outer_histories[0], outer_histories[1])
+        self.assertIsNot(outer_histories[0], inner_histories[0])
+        self.assertEqual(len(outer_histories[0].sources), 3)
+        self.assertEqual(len(inner_histories[0].sources), 2)
 
     def test_attention_residual_stack_restores_enclosing_residual_state(self):
         stack = self.attention_residual_stack((2.0, 3.0))
@@ -532,7 +730,7 @@ class TestLayerStack(unittest.TestCase):
             ),
         )
 
-    def test_init_stores_all_config_attributes(self):
+    def test_init_stores_stack_owned_config_attributes(self):
         cfg = self.preset()
         stack = LayerStack(cfg)
 
@@ -544,10 +742,10 @@ class TestLayerStack(unittest.TestCase):
         self.assertEqual(
             stack.apply_output_postprocessing_flag, cfg.apply_output_postprocessing_flag
         )
-        self.assertEqual(stack.shared_gate_config, cfg.shared_gate_config)
-        self.assertEqual(stack.shared_halting_config, cfg.shared_halting_config)
-        self.assertEqual(stack.shared_memory_config, cfg.shared_memory_config)
-        self.assertEqual(stack.layer_config, cfg.layer_config)
+        self.assertEqual(
+            stack.last_layer_bias_option,
+            cfg.last_layer_bias_option,
+        )
 
         model = stack
         layers = [model] if isinstance(model, Layer) else list(model)
@@ -712,72 +910,6 @@ class TestLayerStack(unittest.TestCase):
                             case LastLayerBiasOptions.ENABLED:
                                 self.assertTrue(last_layer.model.bias_flag)
 
-    def test_add_initial_layer(self):
-        num_layers_options = [1, 2, 3, 4]
-        input_dims = [8, 16]
-        hidden_dim = 16
-        output_dim = 6
-
-        for num_layers in num_layers_options:
-            for input_dim in input_dims:
-                message = (
-                    f"num_layers={num_layers}, "
-                    f"input_dim={input_dim}, "
-                    f"hidden_dim={hidden_dim}"
-                )
-                with self.subTest(msg=message):
-                    cfg = self.preset(
-                        input_dim=input_dim,
-                        hidden_dim=hidden_dim,
-                        output_dim=output_dim,
-                        stack_num_layers=num_layers,
-                    )
-                    stack = LayerStack(cfg)
-                    dimensions = []
-                    adjustment = stack._LayerStack__add_initial_layer_dimensions(
-                        dimensions
-                    )
-
-                    should_add = input_dim != hidden_dim and num_layers > 1
-                    if should_add:
-                        self.assertEqual(len(dimensions), 1)
-                        self.assertEqual(
-                            adjustment, LayerStack.SEPARATE_INPUT_OUTPUT_DIM
-                        )
-                        self.assertEqual(dimensions[0], (input_dim, hidden_dim))
-                    else:
-                        self.assertEqual(len(dimensions), 0)
-                        self.assertEqual(adjustment, LayerStack.SHARED_INPUT_OUTPUT_DIM)
-
-    def test_add_hidden_layers(self):
-        num_layers_options = [1, 2, 3, 4]
-        adjustments = [
-            LayerStack.SHARED_INPUT_OUTPUT_DIM,
-            LayerStack.SEPARATE_INPUT_OUTPUT_DIM,
-        ]
-        hidden_dim = 16
-
-        for num_layers in num_layers_options:
-            for adjustment in adjustments:
-                message = f"num_layers={num_layers}, adjustment={adjustment}"
-                with self.subTest(msg=message):
-                    cfg = self.preset(
-                        hidden_dim=hidden_dim,
-                        stack_num_layers=num_layers,
-                    )
-                    stack = LayerStack(cfg)
-                    dimensions = []
-                    stack._LayerStack__add_hidden_layer_dimensions(
-                        dimensions, adjustment
-                    )
-
-                    expected_count = max(0, num_layers - adjustment)
-                    self.assertEqual(len(dimensions), expected_count)
-
-                    for input_dim, output_dim in dimensions:
-                        self.assertEqual(input_dim, hidden_dim)
-                        self.assertEqual(output_dim, hidden_dim)
-
     def test_add_output_layer(self):
         num_layers_options = [1, 2, 3]
         output_dims = [6, 16]
@@ -926,6 +1058,16 @@ class TestLayerStack(unittest.TestCase):
         shared_gate_model = gate_models[0]
         self.assertTrue(
             all(gate_model is shared_gate_model for gate_model in gate_models)
+        )
+        self.assertEqual(
+            tuple(name for name, _module in model.named_children()),
+            ("shared_controllers", "layers"),
+        )
+        self.assertFalse(
+            any(
+                state_name.startswith(("shared_controllers.", "topology."))
+                for state_name in model.state_dict()
+            )
         )
         for layer in gated_layers:
             self.assertIsNone(layer.cfg.gate_config)
@@ -1563,76 +1705,6 @@ class TestLayerStack(unittest.TestCase):
         self.assertGreater(state.halting_state.step_count, 0)
         self.assertLess(state.halting_state.step_count, num_layers - 1)
         self.assertIsNotNone(state.loss)
-
-    def test_resolve_last_layer_bias_override(self):
-        bias_options = [
-            LastLayerBiasOptions.DEFAULT,
-            LastLayerBiasOptions.DISABLED,
-            LastLayerBiasOptions.ENABLED,
-        ]
-        bias_flags = [True, False]
-
-        for bias_option in bias_options:
-            for bias_flag in bias_flags:
-                message = f"bias_option={bias_option}, bias_flag={bias_flag}"
-                with self.subTest(msg=message):
-                    cfg = self.preset(
-                        bias_flag=bias_flag,
-                        last_layer_bias_option=bias_option,
-                    )
-                    stack = LayerStack(cfg)
-                    result = stack._LayerStack__resolve_last_layer_bias_override()
-
-                    if bias_option == LastLayerBiasOptions.DEFAULT:
-                        self.assertIsNone(result)
-                    else:
-                        self.assertIsInstance(result, LayerConfig)
-                        self.assertIsNotNone(result.layer_model_config)
-                        if bias_option == LastLayerBiasOptions.DISABLED:
-                            self.assertFalse(result.layer_model_config.bias_flag)
-                        elif bias_option == LastLayerBiasOptions.ENABLED:
-                            self.assertTrue(result.layer_model_config.bias_flag)
-
-    def test_create_layer(self):
-        dim_pairs = [(8, 8), (8, 16), (16, 8)]
-
-        for input_dim, output_dim in dim_pairs:
-            message = f"input_dim={input_dim}, output_dim={output_dim}"
-            with self.subTest(msg=message):
-                cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
-                stack = LayerStack(cfg)
-                layer = stack._LayerStack__create_layer(input_dim, output_dim)
-
-                self.assertIsInstance(layer, Layer)
-                self.assertEqual(layer.input_dim, input_dim)
-                self.assertEqual(layer.output_dim, output_dim)
-
-                if input_dim != output_dim:
-                    self.assertIsNone(layer.residual.config)
-                else:
-                    self.assertEqual(
-                        layer.residual.config,
-                        cfg.layer_config.residual_config,
-                    )
-
-    def test_create_layer_with_overrides(self):
-        cfg = self.preset(input_dim=8, output_dim=8)
-        stack = LayerStack(cfg)
-        overrides = LayerConfig(
-            activation=ActivationOptions.DISABLED,
-            dropout_probability=0.0,
-        )
-        layer = stack._LayerStack__create_layer(8, 16, overrides)
-
-        self.assertIsInstance(layer, Layer)
-        self.assertEqual(layer.input_dim, 8)
-        self.assertEqual(layer.output_dim, 16)
-        self.assertIsNone(layer.residual.config)
-        self.assertEqual(
-            layer.postprocessing.activation_function,
-            ActivationOptions.DISABLED,
-        )
-        self.assertEqual(layer.postprocessing.dropout_probability, 0.0)
 
     def test_build_forward_pass_output_shape(self):
         batch_size = 4
