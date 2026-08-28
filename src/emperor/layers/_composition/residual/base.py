@@ -14,6 +14,7 @@ from emperor.nn import Module
 
 if TYPE_CHECKING:
     from emperor.layers._row_layout import RowLayout
+    from emperor.layers._state import LayerState
 
 
 class ResidualRuntimeRequirement(Enum):
@@ -34,6 +35,14 @@ class ResidualState(ABC):
         )
 
 
+class ResidualStateLifecycle(ABC):
+    """Create residual state scoped to one forward execution."""
+
+    @abstractmethod
+    def create_state(self, initial_source: Tensor) -> ResidualState | None:
+        """Create state from the source entering the execution owner."""
+
+
 class ResidualConnectionAbstract(Module, ABC):
     """Stable runtime Interface implemented by every residual variant."""
 
@@ -51,8 +60,29 @@ class ResidualConnectionAbstract(Module, ABC):
         self.VALIDATOR.validate(self)
         self.residual_dim: int | None = self.cfg.residual_dim
 
-    def new_state(self, initial_source: Tensor) -> ResidualState | None:
+    @property
+    def residual_state_lifecycle(self) -> ResidualStateLifecycle | None:
         return None
+
+    def new_state(self, initial_source: Tensor) -> ResidualState | None:
+        lifecycle = self.residual_state_lifecycle
+        if lifecycle is None:
+            return None
+        return lifecycle.create_state(initial_source)
+
+    def apply_to_layer_state(
+        self,
+        state: LayerState,
+        previous: Tensor,
+    ) -> LayerState:
+        """Apply this connection using residual context carried by a LayerState."""
+        state.hidden = self(
+            state.hidden,
+            previous,
+            residual_state=state.residual_state,
+            row_layout=state.row_layout,
+        )
+        return state
 
     @abstractmethod
     def forward(

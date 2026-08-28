@@ -12,6 +12,7 @@ from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
     ResidualRuntimeRequirement,
     ResidualState,
+    ResidualStateLifecycle,
 )
 from emperor.layers._composition.residual.config import AttentionResidualConfig
 from emperor.layers._composition.residual.validation import (
@@ -20,6 +21,7 @@ from emperor.layers._composition.residual.validation import (
 
 if TYPE_CHECKING:
     from emperor.layers._row_layout import RowLayout
+    from emperor.layers._state import LayerState
 
 
 @dataclass(slots=True)
@@ -72,6 +74,23 @@ class AttentionResidualState(ResidualState):
         return forked
 
 
+@dataclass(frozen=True, slots=True)
+class _AttentionResidualStateLifecycle(ResidualStateLifecycle):
+    residual_dim: int
+    block_size: int
+    validator: type[ResidualConnectionValidator]
+
+    def create_state(self, initial_source: Tensor) -> AttentionResidualState:
+        self.validator.validate_source(
+            initial_source,
+            residual_dim=self.residual_dim,
+        )
+        return AttentionResidualState(
+            initial_source,
+            block_size=self.block_size,
+        )
+
+
 class AttentionResidual(ResidualConnectionAbstract):
     """Learned softmax routing across raw residual-depth sources."""
 
@@ -95,6 +114,7 @@ class AttentionResidual(ResidualConnectionAbstract):
         self.rms_norm_epsilon = self.__resolve_rms_norm_epsilon()
         self.query = nn.Parameter(torch.zeros(self.residual_dim))
         self.key_norm = self.__build_key_norm()
+        self.__residual_state_lifecycle = self.__build_residual_state_lifecycle()
 
     def __resolve_block_size(self) -> int:
         return (
@@ -118,12 +138,31 @@ class AttentionResidual(ResidualConnectionAbstract):
             elementwise_affine=True,
         )
 
-    def new_state(self, initial_source: Tensor) -> AttentionResidualState:
-        self.VALIDATOR.validate_source(
-            initial_source,
+    def __build_residual_state_lifecycle(
+        self,
+    ) -> _AttentionResidualStateLifecycle:
+        return _AttentionResidualStateLifecycle(
             residual_dim=self.residual_dim,
+            block_size=self.block_size,
+            validator=self.VALIDATOR,
         )
-        return AttentionResidualState(initial_source, block_size=self.block_size)
+
+    @property
+    def residual_state_lifecycle(self) -> ResidualStateLifecycle:
+        return self.__residual_state_lifecycle
+
+    def apply_to_layer_state(
+        self,
+        state: LayerState,
+        previous: Tensor,
+    ) -> LayerState:
+        if state.residual_state is None:
+            created_residual_state = self.new_state(previous)
+            state.residual_state = self.VALIDATOR.validate_created_attention_state(
+                created_residual_state,
+                block_size=self.block_size,
+            )
+        return super().apply_to_layer_state(state, previous)
 
     def forward(
         self,

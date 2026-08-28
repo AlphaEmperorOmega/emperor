@@ -12,13 +12,12 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
+    LayerState,
     ResidualConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
-from emperor.layers._composition.residual.base import (
-    ResidualConnectionAbstract,
-)
+from emperor.layers._composition.residual.base import ResidualConnectionAbstract
 from emperor.layers._composition.residual.pairwise import (
     PairwiseResidualAbstract,
     WeightedPairwiseResidualAbstract,
@@ -123,7 +122,26 @@ class TestResidualRuntimeHierarchy(unittest.TestCase):
             WeightedBlendResidualConfig(),
         ):
             with self.subTest(config=type(config).__name__):
-                self.assertIsNone(config.build().new_state(initial_source))
+                residual = config.build()
+
+                self.assertIsNone(residual.residual_state_lifecycle)
+                self.assertIsNone(residual.new_state(initial_source))
+
+    def test_default_state_aware_application_preserves_pairwise_state(self):
+        residual = AdditiveResidualConfig(residual_dim=2).build()
+        enclosing_residual_state = object()
+        current = torch.tensor([[2.0, 3.0]])
+        previous = torch.tensor([[5.0, 7.0]])
+        layer_state = LayerState(
+            hidden=current,
+            residual_state=enclosing_residual_state,
+        )
+
+        result = residual.apply_to_layer_state(layer_state, previous)
+
+        self.assertIs(result, layer_state)
+        self.assertIs(result.residual_state, enclosing_residual_state)
+        torch.testing.assert_close(result.hidden, current + previous)
 
 
 class TestPairwiseResidualVariants(unittest.TestCase):
