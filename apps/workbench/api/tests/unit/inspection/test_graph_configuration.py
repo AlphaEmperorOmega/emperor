@@ -319,7 +319,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
         disabled_nodes, _disabled_edges = serialize_graph(disabled_layer)
         enabled_nodes, _enabled_edges = serialize_graph(enabled_layer)
 
-        self.assertIsNone(disabled_layer.residual_connection)
+        self.assertIsNone(disabled_layer.residual.connection)
         self.assertNotIn(
             "AdditiveResidual",
             {node["typeName"] for node in disabled_nodes},
@@ -348,7 +348,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
             for node in result["nodes"]
             if config_fields(node).get("residual_model_config") == "LayerStackConfig"
         )
-        residual_node_id = f"{owning_node['id']}.residual_connection"
+        residual_node_id = f"{owning_node['id']}.residual.connection"
         coefficient_node_id = f"{residual_node_id}.model"
 
         self.assertEqual(nodes[residual_node_id]["typeName"], "WeightedBlendResidual")
