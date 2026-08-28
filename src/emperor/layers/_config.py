@@ -112,6 +112,6 @@ class LayerStackConfig(ConfigBase):
 @dataclass
 class MirroredLayerStackConfig(LayerStackConfig):
     def _registry_owner(self) -> type:
-        from emperor.layers._mirrored import MirroredLayerStack
+        from emperor.layers._stack import MirroredLayerStack
 
         return MirroredLayerStack
