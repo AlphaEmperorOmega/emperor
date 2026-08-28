@@ -10,6 +10,7 @@ from emperor.layers import (
     WeightedResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.validation import (
     ResidualConnectionValidator,
 )
@@ -19,7 +20,6 @@ from emperor.layers._composition.residual.variants.weighted import WeightedResid
 from emperor.layers._composition.residual.variants.weighted_blend import (
     WeightedBlendResidual,
 )
-from emperor.layers._validation import LayerGateValidator
 from emperor.linears import LinearLayerConfig
 
 
