@@ -1,5 +1,6 @@
 import math
 import unittest
+from dataclasses import dataclass
 
 import torch
 
@@ -17,7 +18,10 @@ from emperor.layers import (
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
-from emperor.layers._composition.residual.base import ResidualConnectionAbstract
+from emperor.layers._composition.residual.base import (
+    ResidualConnectionAbstract,
+    ResidualRuntimeRequirement,
+)
 from emperor.layers._composition.residual.pairwise import (
     PairwiseResidualAbstract,
     WeightedPairwiseResidualAbstract,
@@ -28,6 +32,7 @@ from emperor.layers._composition.residual.variants.weighted import WeightedResid
 from emperor.layers._composition.residual.variants.weighted_blend import (
     WeightedBlendResidual,
 )
+from emperor.layers._layer.pipeline.residual import LayerResidualDelegate
 from emperor.linears import LinearLayerConfig
 
 
@@ -126,6 +131,38 @@ class TestResidualRuntimeHierarchy(unittest.TestCase):
 
                 self.assertIsNone(residual.residual_state_lifecycle)
                 self.assertIsNone(residual.new_state(initial_source))
+
+    def test_forward_local_state_requirement_requires_a_lifecycle(self):
+        class MissingLifecycleResidual(ResidualConnectionAbstract):
+            RUNTIME_REQUIREMENTS = frozenset(
+                {ResidualRuntimeRequirement.FORWARD_LOCAL_STATE}
+            )
+
+            def forward(
+                self,
+                current,
+                previous,
+                *,
+                residual_state=None,
+                row_layout=None,
+            ):
+                return current
+
+        @dataclass
+        class MissingLifecycleResidualConfig(ResidualConfig):
+            def _registry_owner(self) -> type:
+                return MissingLifecycleResidual
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "MissingLifecycleResidual declares forward-local residual state",
+        ):
+            LayerResidualDelegate(
+                LayerConfig(
+                    output_dim=2,
+                    residual_config=MissingLifecycleResidualConfig(),
+                )
+            )
 
     def test_default_state_aware_application_preserves_pairwise_state(self):
         residual = AdditiveResidualConfig(residual_dim=2).build()
