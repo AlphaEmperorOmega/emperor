@@ -842,8 +842,8 @@ describe("GraphNodeView", () => {
     renderGraphNode({
       label: "LinearLayer",
       typeName: "LinearLayer",
-      path: "main_model.layers.0.gate_model.model.layers.0.model",
-      subtitle: "main_model.layers.0.gate_model.model.layers.0.model",
+      path: "main_model.layers.0.postprocessing.gate.model.layers.0.model",
+      subtitle: "main_model.layers.0.postprocessing.gate.model.layers.0.model",
       details: {
         dims: "32 -> 32",
         inputDim: 32,

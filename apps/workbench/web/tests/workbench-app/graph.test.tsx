@@ -109,7 +109,9 @@ describe("WorkbenchApp Graph Workspace", () => {
       await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
 
-    const gateNode = await screen.findByTestId("node-main_model.layers.0.gate_model");
+    const gateNode = await screen.findByTestId(
+      "node-main_model.layers.0.postprocessing.gate",
+    );
     expect(within(gateNode).queryByTitle(/parameters/)).not.toBeInTheDocument();
   });
 
@@ -239,8 +241,12 @@ describe("WorkbenchApp Graph Workspace", () => {
     await user.click(screen.getByRole("radio", { name: /full/i }));
 
     const fullLayerNode = screen.getByTestId("node-main_model.layers.0");
-    expect(within(fullLayerNode).getByText("Dropout")).toBeInTheDocument();
-    expect(within(fullLayerNode).getByText("LayerNorm")).toBeInTheDocument();
+    expect(
+      within(fullLayerNode).getByText("LayerPostprocessingDelegate"),
+    ).toBeInTheDocument();
+    expect(
+      within(fullLayerNode).getByText("LayerNormalizationDelegate"),
+    ).toBeInTheDocument();
     expect(within(fullLayerNode).getByText("SelfAttentionProcessor")).toBeInTheDocument();
   });
 
@@ -336,8 +342,12 @@ describe("WorkbenchApp Graph Workspace", () => {
       "16.5K params",
     );
     expect(screen.queryByTestId("node-main_model.layers.0.processor")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.layers.0.layer_norm_module")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("node-main_model.layers.0.normalization.module"),
+    ).not.toBeInTheDocument();
   });
 
   it("renders enabled gate and halting metadata as child summary rows", async () => {
@@ -385,7 +395,11 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(await screen.findByText("main_model.layers.0.model")).toBeInTheDocument();
     expect(screen.getByTestId("edge-main_model.layers.0-main_model.layers.0.model")).toBeInTheDocument();
     expect(await screen.findByText("Sequential")).toBeInTheDocument();
-    expect(screen.getByText("Gate Model · main_model.layers.0.gate_model")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Gate · main_model.layers.0.postprocessing.gate",
+      ),
+    ).toBeInTheDocument();
     expect(await screen.findByText("main_model.layers.0.processor.projection")).toBeInTheDocument();
     expect(
       screen.getByTestId("edge-main_model.layers.0-main_model.layers.0.processor.projection"),
@@ -568,8 +582,12 @@ describe("WorkbenchApp Graph Workspace", () => {
       await screen.findByTestId("node-main_model.layers.0.processor.projection"),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("node-main_model.layers.0.processor")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("node-main_model.layers.0.layer_norm_module")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("node-main_model.layers.0.normalization.module"),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("BEFORE")).not.toBeInTheDocument();
   });
 
@@ -702,8 +720,29 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(screen.queryByText("LayerNorm")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.layers.0.layer_norm_module")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.postprocessing"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.normalization"),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: /select and expand main_model\.layers\.0\.postprocessing/i,
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: /select and expand main_model\.layers\.0\.normalization/i,
+      }),
+    );
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.normalization.module"),
+    ).toBeInTheDocument();
     expect(await screen.findByTestId("node-main_model.layers.0.processor")).toBeInTheDocument();
     expect(
       screen.queryByTestId("node-main_model.layers.0.processor.projection"),
@@ -729,8 +768,12 @@ describe("WorkbenchApp Graph Workspace", () => {
     expect(screen.queryByText("CrossEntropyLoss")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
-    expect(await screen.findByTestId("node-main_model.layers.0.layer_norm_module")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.normalization.module"),
+    ).toBeInTheDocument();
     expect(await screen.findByTestId("node-loss_fn")).toBeInTheDocument();
     expect(await screen.findByTestId("node-metrics")).toBeInTheDocument();
     expect(await screen.findByText("main_model.layers.0.processor.projection")).toBeInTheDocument();
@@ -745,16 +788,27 @@ describe("WorkbenchApp Graph Workspace", () => {
       await screen.findByRole("button", { name: /select and expand main_model\.layers\.0/i }),
     );
     await user.click(screen.getByRole("radio", { name: /full/i }));
-    expect(await screen.findByTestId("node-main_model.layers.0.dropout_module")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: /select and expand main_model\.layers\.0\.postprocessing/i,
+      }),
+    );
+    expect(
+      await screen.findByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /collapse all/i }));
     expect(screen.getByRole("radio", { name: /full/i })).toHaveAttribute(
       "aria-checked",
       "true",
     );
-    expect(screen.queryByTestId("node-main_model.layers.0.dropout_module")).not.toBeInTheDocument();
     expect(
-      within(screen.getByTestId("node-main_model.layers.0")).getByText("Dropout"),
+      screen.queryByTestId("node-main_model.layers.0.postprocessing.dropout"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("node-main_model.layers.0")).getByText(
+        "LayerPostprocessingDelegate",
+      ),
     ).toBeInTheDocument();
   });
 
