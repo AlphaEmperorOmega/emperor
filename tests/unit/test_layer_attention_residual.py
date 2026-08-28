@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from emperor.layers import LayerState
 from emperor.layers._composition.residual.base import (
+    ResidualStackRequirements,
     ResidualState,
     ResidualStateLifecycle,
 )
@@ -207,6 +208,16 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertIs(compatibility_state.initial_source, initial_source)
         self.assertEqual(lifecycle_state.block_size, 2)
         self.assertEqual(compatibility_state.block_size, 2)
+
+    def test_attention_declares_its_stack_requirements(self):
+        self.assertEqual(
+            AttentionResidual.STACK_REQUIREMENTS,
+            ResidualStackRequirements(
+                requires_uniform_dimensions=True,
+                requires_output_postprocessing=True,
+                allows_halting=False,
+            ),
+        )
 
     def test_state_aware_application_lazily_initializes_attention_history(self):
         residual = AttentionResidual(
