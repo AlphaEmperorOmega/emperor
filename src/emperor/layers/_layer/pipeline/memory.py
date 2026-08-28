@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, cast
 
+from emperor.layers._layer.validation import LayerMemoryDelegateValidator
 from emperor.layers._state import LayerState
 from emperor.memory import MemoryPositionOptions
 from emperor.nn import Module
@@ -11,27 +12,22 @@ if TYPE_CHECKING:
     from emperor.memory import MemoryInterface
 
 
-def _implements_memory_interface(model: object) -> TypeGuard[MemoryInterface]:
-    return callable(model) and hasattr(model, "memory_position_option")
-
-
 class LayerMemoryDelegate(Module):
     """Own dynamic-memory construction and position-aware application."""
 
+    VALIDATOR = LayerMemoryDelegateValidator
+
     def __init__(
         self,
-        layer_config: LayerConfig,
+        cfg: LayerConfig,
     ) -> None:
         super().__init__()
-        self.config = layer_config.memory_config
-        input_dim = layer_config.input_dim
-        output_dim = layer_config.output_dim
-        if input_dim is None or output_dim is None:
-            raise ValueError(
-                "Layer memory requires resolved input and output dimensions."
-            )
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.cfg = cfg
+        self.VALIDATOR.validate(self)
+
+        self.config = self.cfg.memory_config
+        self.input_dim = cast(int, self.cfg.input_dim)
+        self.output_dim = cast(int, self.cfg.output_dim)
         self.model: MemoryInterface | None = self.__build_model()
 
     def __build_model(self) -> MemoryInterface | None:
@@ -40,13 +36,7 @@ class LayerMemoryDelegate(Module):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        if model is None:
-            return None
-        if not _implements_memory_interface(model):
-            raise TypeError(
-                "memory_config must build a model implementing MemoryInterface."
-            )
-        return model
+        return self.VALIDATOR.validate_built_memory_model_interface(model)
 
     def bind_shared(self, model: MemoryInterface) -> None:
         self.model = model

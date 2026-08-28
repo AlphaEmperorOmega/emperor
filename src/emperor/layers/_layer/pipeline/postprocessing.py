@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from torch import Tensor, nn
 
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._layer.validation import LayerPostprocessingDelegateValidator
 from emperor.layers._options import ActivationOptions
 from emperor.nn import Module
 
@@ -17,27 +18,21 @@ if TYPE_CHECKING:
 class LayerPostprocessingDelegate(Module):
     """Own activation, gate, and dropout construction and ordering."""
 
+    VALIDATOR = LayerPostprocessingDelegateValidator
+
     def __init__(
         self,
-        layer_config: LayerConfig,
+        cfg: LayerConfig,
     ) -> None:
         super().__init__()
-        activation_function = layer_config.activation
-        output_dim = layer_config.output_dim
-        dropout_probability = layer_config.dropout_probability
-        if activation_function is None:
-            raise ValueError("Layer postprocessing requires a resolved activation.")
-        if output_dim is None:
-            raise ValueError("Layer postprocessing requires a resolved output_dim.")
-        if dropout_probability is None:
-            raise ValueError(
-                "Layer postprocessing requires a resolved dropout_probability."
-            )
-        self.activation_function = activation_function
-        self.output_dim = output_dim
-        self.gate_config = layer_config.gate_config
+        self.cfg = cfg
+        self.VALIDATOR.validate(self)
+
+        self.activation_function = cast(ActivationOptions, self.cfg.activation)
+        self.output_dim = cast(int, self.cfg.output_dim)
+        self.gate_config = self.cfg.gate_config
         self.gate = self.__build_gate()
-        self.dropout_probability = dropout_probability
+        self.dropout_probability = cast(float, self.cfg.dropout_probability)
         self.dropout = self.__build_dropout()
 
     def __build_gate(self) -> LayerGate | None:
@@ -45,11 +40,7 @@ class LayerPostprocessingDelegate(Module):
             self.gate_config,
             gate_dim=self.output_dim,
         )
-        if gate is None:
-            return None
-        if not isinstance(gate, LayerGate):
-            raise TypeError("gate_config must build a LayerGate.")
-        return gate
+        return self.VALIDATOR.validate_built_gate_type(gate)
 
     def __build_dropout(self) -> nn.Dropout | None:
         dropout_is_enabled = self.dropout_probability > 0.0

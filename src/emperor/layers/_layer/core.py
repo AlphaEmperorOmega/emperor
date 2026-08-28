@@ -5,16 +5,16 @@ from typing import TYPE_CHECKING
 from torch import Tensor
 
 from emperor.layers._config import LayerConfig
-from emperor.layers._pipeline import (
+from emperor.layers._layer.pipeline import (
     LayerHaltingDelegate,
     LayerMemoryDelegate,
     LayerNormalizationDelegate,
     LayerPostprocessingDelegate,
     LayerResidualDelegate,
 )
+from emperor.layers._layer.validation import LayerValidator
 from emperor.layers._state import LayerState
 from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
-from emperor.layers._validation import LayerValidator
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingInterface, HaltingStateBase
@@ -53,9 +53,7 @@ class Layer(LayerModuleBase):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        if model is None:
-            raise RuntimeError("layer_model_config must build a model.")
-        return model
+        return self.VALIDATOR.validate_layer_model(model)
 
     @staticmethod
     def run_model_from_hidden(
