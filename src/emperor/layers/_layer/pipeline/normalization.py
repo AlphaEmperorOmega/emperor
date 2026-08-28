@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from torch import nn
 
+from emperor.layers._layer.validation import LayerNormalizationDelegateValidator
 from emperor.layers._options import LayerNormPositionOptions
 from emperor.nn import Module
 
@@ -15,23 +16,19 @@ if TYPE_CHECKING:
 class LayerNormalizationDelegate(Module):
     """Own Layer normalization construction and position dispatch."""
 
+    VALIDATOR = LayerNormalizationDelegateValidator
+
     def __init__(
         self,
-        layer_config: LayerConfig,
+        cfg: LayerConfig,
     ) -> None:
         super().__init__()
-        position = layer_config.layer_norm_position
-        input_dim = layer_config.input_dim
-        output_dim = layer_config.output_dim
-        if position is None:
-            raise ValueError("Layer normalization requires a resolved position.")
-        if input_dim is None or output_dim is None:
-            raise ValueError(
-                "Layer normalization requires resolved input and output dimensions."
-            )
-        self.position = position
-        self.input_dim = input_dim
-        self.output_dim = output_dim
+        self.cfg = cfg
+        self.VALIDATOR.validate(self)
+
+        self.position = cast(LayerNormPositionOptions, self.cfg.layer_norm_position)
+        self.input_dim = cast(int, self.cfg.input_dim)
+        self.output_dim = cast(int, self.cfg.output_dim)
         self.dimension = self.__resolve_dimension(
             self.input_dim,
             self.output_dim,

@@ -204,31 +204,31 @@ SEMANTIC_TYPE_CATALOG = SemanticTypeCatalog(
             "Builds a linear projection that can optionally augment parameters from the current input.",
         ),
         _semantic_type_policy(
-            "emperor.layers._layer.Layer",
+            "emperor.layers._layer.core.Layer",
             "Applies one configured layer block with optional activation, residuals, normalization, gating, halting, and memory hooks.",
         ),
         _semantic_type_policy(
-            "emperor.layers._pipeline.postprocessing.LayerPostprocessingDelegate",
+            "emperor.layers._layer.pipeline.postprocessing.LayerPostprocessingDelegate",
             "Internal Layer Pipeline Module that applies activation, gating, and dropout in order.",
             graph_role="internal",
         ),
         _semantic_type_policy(
-            "emperor.layers._pipeline.halting.LayerHaltingDelegate",
+            "emperor.layers._layer.pipeline.halting.LayerHaltingDelegate",
             "Internal Layer Pipeline Module that owns halting updates and finalization.",
             graph_role="internal",
         ),
         _semantic_type_policy(
-            "emperor.layers._pipeline.memory.LayerMemoryDelegate",
+            "emperor.layers._layer.pipeline.memory.LayerMemoryDelegate",
             "Internal Layer Pipeline Module that applies dynamic memory at its configured position.",
             graph_role="internal",
         ),
         _semantic_type_policy(
-            "emperor.layers._pipeline.residual.LayerResidualDelegate",
+            "emperor.layers._layer.pipeline.residual.LayerResidualDelegate",
             "Internal Layer Pipeline Module that owns residual state and composition.",
             graph_role="internal",
         ),
         _semantic_type_policy(
-            "emperor.layers._pipeline.normalization.LayerNormalizationDelegate",
+            "emperor.layers._layer.pipeline.normalization.LayerNormalizationDelegate",
             "Internal Layer Pipeline Module that applies normalization at its configured position.",
             graph_role="internal",
         ),

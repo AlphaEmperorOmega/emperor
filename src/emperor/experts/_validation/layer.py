@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from emperor._validation import ValidatorBase
+from emperor.layers._layer.validation import LayerValidator
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -11,14 +11,8 @@ if TYPE_CHECKING:
     from emperor.experts._state import MixtureOfExpertsLayerState
 
 
-class MixtureOfExpertsLayerValidator(ValidatorBase):
+class MixtureOfExpertsLayerValidator(LayerValidator):
     """Validate RowLayout contracts at a routed expert-layer boundary."""
-
-    @classmethod
-    def validate(cls, model: "MixtureOfExpertsLayer") -> None:
-        from emperor.layers import Layer
-
-        Layer.VALIDATOR.validate(model)
 
     @staticmethod
     def validate_layout_can_cross_routing(

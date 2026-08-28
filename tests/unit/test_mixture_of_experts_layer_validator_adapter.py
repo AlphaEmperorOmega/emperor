@@ -2,7 +2,6 @@ import unittest
 
 import torch
 
-from emperor._validation import ValidatorBase
 from emperor.config import ConfigBase
 from emperor.experts import MixtureOfExpertsLayerConfig, MixtureOfExpertsLayerState
 from emperor.experts._layers.layer import MixtureOfExpertsLayer
@@ -13,6 +12,7 @@ from emperor.layers import (
     LayerNormPositionOptions,
     RowLayout,
 )
+from emperor.layers._layer.validation import LayerValidator
 
 
 class _RoutingStub(torch.nn.Module):
@@ -45,7 +45,7 @@ def _layer_with_routing_output(output: torch.Tensor) -> MixtureOfExpertsLayer:
 class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
     def test_layer_exposes_specialized_layer_validator(self) -> None:
         self.assertIs(MixtureOfExpertsLayer.VALIDATOR, MixtureOfExpertsLayerValidator)
-        self.assertTrue(issubclass(MixtureOfExpertsLayerValidator, ValidatorBase))
+        self.assertTrue(issubclass(MixtureOfExpertsLayerValidator, LayerValidator))
 
     def test_construction_dispatches_through_substituted_validator(self) -> None:
         class RejectingValidator(MixtureOfExpertsLayerValidator):

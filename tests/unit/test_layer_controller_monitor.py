@@ -380,8 +380,6 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
             residual_option=AttentionResidualConfig,
         )
         state = self.state()
-        residual_state = layer.residual.new_state(state.hidden)
-        state.residual_state = residual_state
         module = CaptureLightningModule(layer=layer)
         callback = LayerControllerMonitorCallback(log_every_n_steps=1)
         callback.on_fit_start(TrainerStub(), module)

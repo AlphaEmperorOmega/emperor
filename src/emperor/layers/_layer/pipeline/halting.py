@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, cast
 
+from emperor.layers._layer.validation import LayerHaltingDelegateValidator
 from emperor.layers._state import LayerState
 from emperor.nn import Module
 
@@ -13,27 +14,21 @@ if TYPE_CHECKING:
     from emperor.layers._row_layout import RowLayout
 
 
-def _implements_halting_interface(
-    model: object,
-) -> TypeGuard[HaltingInterface[HaltingStateBase]]:
-    return callable(getattr(model, "update_halting_state", None)) and callable(
-        getattr(model, "finalize_weighted_accumulation", None)
-    )
-
-
 class LayerHaltingDelegate(Module):
     """Own halting construction and the Layer halting lifecycle."""
 
+    VALIDATOR = LayerHaltingDelegateValidator
+
     def __init__(
         self,
-        layer_config: LayerConfig,
+        cfg: LayerConfig,
     ) -> None:
         super().__init__()
-        self.config = layer_config.halting_config
-        output_dim = layer_config.output_dim
-        if output_dim is None:
-            raise ValueError("Layer halting requires a resolved output_dim.")
-        self.output_dim = output_dim
+        self.cfg = cfg
+        self.VALIDATOR.validate(self)
+
+        self.config = self.cfg.halting_config
+        self.output_dim = cast(int, self.cfg.output_dim)
         self.model: HaltingInterface[HaltingStateBase] | None = self.__build_model()
         self.is_terminal = False
 
@@ -42,13 +37,7 @@ class LayerHaltingDelegate(Module):
             self.config,
             input_dim=self.output_dim,
         )
-        if model is None:
-            return None
-        if not _implements_halting_interface(model):
-            raise TypeError(
-                "halting_config must build a model implementing HaltingInterface."
-            )
-        return model
+        return self.VALIDATOR.validate_built_halting_model_interface(model)
 
     def bind_shared(self, model: HaltingInterface[HaltingStateBase]) -> None:
         self.model = model
@@ -96,8 +85,7 @@ class LayerHaltingDelegate(Module):
         halting_state: HaltingStateBase,
     ) -> LayerState:
         state.hidden, halting_loss = model.finalize_weighted_accumulation(
-            halting_state,
-            state.hidden,
+            halting_state, state.hidden
         )
         auxiliary_loss = self.__maybe_reduce_halting_loss(halting_loss)
         state.loss = self.__maybe_accumulate_auxiliary_loss(state.loss, auxiliary_loss)

@@ -34,6 +34,7 @@ retired_modules = [
   "emperor.layers.monitoring",
   "emperor.layers.execution",
   "emperor.layers._recurrent",
+  "emperor.layers._pipeline",
   "emperor.layers._composition.attention_residual",
   "emperor.layers._composition.pairwise_residual",
   "emperor.layers._composition.residual.connection",
@@ -104,6 +105,7 @@ legacy_cross_owner_private_imports = [
   { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._config._MixtureOfExpertsMapConfig" },
   { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._config._MixtureOfExpertsReduceConfig" },
   { consumer = "emperor.attention._variants.mixture.projection", imported = "emperor.experts._layers.mixture.MixtureOfExperts" },
+  { consumer = "emperor.experts._validation.layer", imported = "emperor.layers._layer.validation.LayerValidator" },
 ]
 
 legacy_dependency_cycles = ["emperor.layers,emperor.memory"]
@@ -216,7 +218,7 @@ owners = ["emperor.halting._config", "emperor.halting._config", "emperor.halting
 module = "emperor.layers"
 kind = "runtime"
 exports = ["ActivationOptions", "AdditiveResidualConfig", "AttentionResidualConfig", "GateConfig", "LastLayerBiasOptions", "LayerConfig", "LayerGateOptions", "LayerNormPositionOptions", "LayerStackConfig", "MirroredLayerStackConfig", "HierarchicalReasoningModelRecurrentConfig", "RecurrentCompositionConfig", "RecurrentLayerConfig", "TinyRecursiveModelRecurrentConfig", "ResidualConfig", "WeightedBlendResidualConfig", "WeightedResidualConfig", "LayerState", "Layer", "LayerStack", "MirroredLayerStack", "RecurrentLayer", "RowLayout", "RowLayoutAwareModule", "LayerControllerMonitorCallback", "RecurrentLayerMonitorCallback"]
-owners = ["emperor.layers._options", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._config", "emperor.layers._options", "emperor.layers._config", "emperor.layers._options", "emperor.layers._options", "emperor.layers._config", "emperor.layers._config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._state", "emperor.layers._layer", "emperor.layers._stack", "emperor.layers._mirrored", "emperor.layers._composition.recurrent.variants.standard", "emperor.layers._row_layout.core", "emperor.layers._support", "emperor.layers._monitoring.callbacks.layer_controller", "emperor.layers._monitoring.callbacks.recurrent"]
+owners = ["emperor.layers._options", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._config", "emperor.layers._options", "emperor.layers._config", "emperor.layers._options", "emperor.layers._options", "emperor.layers._config", "emperor.layers._config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._state", "emperor.layers._layer.core", "emperor.layers._stack", "emperor.layers._mirrored", "emperor.layers._composition.recurrent.variants.standard", "emperor.layers._row_layout.core", "emperor.layers._support", "emperor.layers._monitoring.callbacks.layer_controller", "emperor.layers._monitoring.callbacks.recurrent"]
 
 [[interfaces]]
 module = "emperor.linears"
