@@ -21,7 +21,6 @@ from emperor.layers._config import (
     MirroredLayerStackConfig,
 )
 from emperor.layers._layer import Layer
-from emperor.layers._mirrored import MirroredLayerStack
 from emperor.layers._monitoring.callbacks import (
     LayerControllerMonitorCallback,
     RecurrentLayerMonitorCallback,
@@ -33,7 +32,7 @@ from emperor.layers._options import (
     LayerNormPositionOptions,
 )
 from emperor.layers._row_layout import RowLayout
-from emperor.layers._stack import LayerStack
+from emperor.layers._stack import LayerStack, MirroredLayerStack
 from emperor.layers._state import LayerState
 from emperor.layers._support import RowLayoutAwareModule
 

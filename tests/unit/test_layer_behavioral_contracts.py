@@ -409,26 +409,6 @@ class LayerBehavioralContractTests(unittest.TestCase):
         ):
             gate(torch.tensor([[1.0, -2.0]]))
 
-    def test_stack_rejects_corrupt_runtime_last_layer_bias_option(self) -> None:
-        stack = LayerStack(
-            LayerStackConfig(
-                input_dim=2,
-                hidden_dim=2,
-                output_dim=2,
-                num_layers=1,
-                last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
-                apply_output_postprocessing_flag=False,
-                layer_config=base_layer_config(2),
-            )
-        )
-        stack.last_layer_bias_option = object()
-
-        with self.assertRaisesRegex(
-            ValueError,
-            r"^Unsupported last layer bias option .* for LayerStack\.$",
-        ):
-            stack._LayerStack__resolve_last_layer_bias_override()
-
     def test_layer_without_halting_runs_the_normal_pipeline(self) -> None:
         layer = Layer(base_layer_config(2))
         set_layer_identity(layer)

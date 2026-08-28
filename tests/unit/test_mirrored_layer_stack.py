@@ -92,6 +92,7 @@ class TestMirroredLayerStack(unittest.TestCase):
 
         self.assertIsInstance(stack, MirroredLayerStack)
         self.assertIsInstance(stack, LayerStack)
+        self.assertIsInstance(stack._layer_dimensions(), tuple)
         self.assertEqual(len(stack), 2)
         self.assertTrue(all(isinstance(layer, Layer) for layer in stack))
         self.assertEqual(

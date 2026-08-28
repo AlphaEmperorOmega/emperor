@@ -26,12 +26,12 @@ from emperor.layers import (
 from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.recurrent.validation import RecurrentLayerValidator
 from emperor.layers._layer.validation import LayerValidator
+from emperor.layers._stack.validation import LayerStackValidator
 from emperor.layers._validation.common import (
     _matches_config_contract,
     _validate_halting_lifecycle_owner,
     _validate_no_grouping_with_context_controllers,
 )
-from emperor.layers._validation.stack import LayerStackValidator
 from emperor.linears import LinearLayerConfig
 from emperor.memory import (
     MemoryPositionOptions,

@@ -113,7 +113,7 @@ class TestTransformerInterface(unittest.TestCase):
         self.assertIn("MirroredLayerStackConfig", layers.__all__)
         self.assertEqual(
             MirroredLayerStack.__module__,
-            "emperor.layers._mirrored",
+            "emperor.layers._stack.mirrored",
         )
         self.assertEqual(
             layers.MirroredLayerStackConfig.__module__,

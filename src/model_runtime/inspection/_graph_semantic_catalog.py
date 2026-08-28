@@ -237,7 +237,7 @@ SEMANTIC_TYPE_CATALOG = SemanticTypeCatalog(
             "Builds a Layer block with optional activation, residuals, normalization, gating, halting, and memory hooks.",
         ),
         _semantic_type_policy(
-            "emperor.layers._stack.LayerStack",
+            "emperor.layers._stack.core.LayerStack",
             "Runs an ordered stack of Layer blocks, with shared dimensions and optional shared gate, halting, or memory modules.",
         ),
         _semantic_type_policy(
