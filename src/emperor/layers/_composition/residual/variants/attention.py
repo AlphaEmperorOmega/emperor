@@ -11,6 +11,7 @@ from torch import Tensor
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
     ResidualRuntimeRequirement,
+    ResidualStackRequirements,
     ResidualState,
     ResidualStateLifecycle,
 )
@@ -101,6 +102,11 @@ class AttentionResidual(ResidualConnectionAbstract):
             ResidualRuntimeRequirement.FORWARD_LOCAL_STATE,
             ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS,
         }
+    )
+    STACK_REQUIREMENTS = ResidualStackRequirements(
+        requires_uniform_dimensions=True,
+        requires_output_postprocessing=True,
+        allows_halting=False,
     )
 
     def __init__(
