@@ -51,6 +51,17 @@ class RowLayoutTests(unittest.TestCase):
         self.assertEqual(layout.batch_axis, 1)
         self.assertEqual(layout.sequence_axis, 0)
 
+    def test_sequence_layout_normalizes_negative_axes(self):
+        layout = RowLayout.sequence(
+            leading_shape=(2, 4),
+            batch_axis=-2,
+            sequence_axis=-1,
+            context_sharing_restricted=False,
+        )
+
+        self.assertEqual(layout.batch_axis, 0)
+        self.assertEqual(layout.sequence_axis, 1)
+
     def test_rejects_invalid_structural_metadata(self):
         invalid_cases = (
             (
