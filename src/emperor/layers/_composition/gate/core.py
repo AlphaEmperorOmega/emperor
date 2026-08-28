@@ -2,9 +2,9 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
+from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._config import GateConfig
 from emperor.layers._options import ActivationOptions, LayerGateOptions
-from emperor.layers._validation import LayerGateValidator
 from emperor.nn import Module
 
 if TYPE_CHECKING:

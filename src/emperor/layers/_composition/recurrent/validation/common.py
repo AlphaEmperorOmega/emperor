@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
+from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._composition.residual.validation import (
     ResidualConnectionValidator,
@@ -20,7 +21,6 @@ from emperor.layers._validation.common import (
     _validate_halting_lifecycle_owner,
     _validate_no_grouping_with_context_controllers,
 )
-from emperor.layers._validation.gate import LayerGateValidator
 
 _GRADIENT_WINDOW_FIELDS = {
     "no_gradient_transition_count",
