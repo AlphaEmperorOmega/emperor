@@ -805,6 +805,48 @@ class TestLayer(unittest.TestCase):
         )
         self.assertTrue(state_fields[-1].kw_only)
 
+    def test_layer_state_scopes_a_residual_state_replacement(self):
+        enclosing_residual_state = object()
+        replacement_residual_state = object()
+        state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=enclosing_residual_state,
+        )
+
+        with state.scoped_residual_state(replacement_residual_state):
+            self.assertIs(state.residual_state, replacement_residual_state)
+
+        self.assertIs(state.residual_state, enclosing_residual_state)
+
+    def test_layer_state_restores_nested_residual_scopes_in_lifo_order(self):
+        enclosing_residual_state = object()
+        outer_residual_state = object()
+        inner_residual_state = object()
+        state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=enclosing_residual_state,
+        )
+
+        with state.scoped_residual_state(outer_residual_state):
+            with state.scoped_residual_state(inner_residual_state):
+                self.assertIs(state.residual_state, inner_residual_state)
+            self.assertIs(state.residual_state, outer_residual_state)
+
+        self.assertIs(state.residual_state, enclosing_residual_state)
+
+    def test_layer_state_restores_residual_state_after_an_exception(self):
+        enclosing_residual_state = object()
+        state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=enclosing_residual_state,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "deliberate scope failure"):
+            with state.scoped_residual_state(None):
+                raise RuntimeError("deliberate scope failure")
+
+        self.assertIs(state.residual_state, enclosing_residual_state)
+
     def test_layer_forward_accepts_only_layer_state(self):
         self.assertEqual(
             tuple(inspect.signature(Layer.forward).parameters),

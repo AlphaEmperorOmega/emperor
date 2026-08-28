@@ -8,6 +8,7 @@ import torch
 from torch import Tensor
 
 if TYPE_CHECKING:
+    from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._composition.residual.variants.attention import (
         AttentionResidualState,
     )
@@ -51,6 +52,19 @@ class _AttentionResidualValidationMixin:
                 "attention residual source last dimension must equal "
                 f"residual_dim {residual_dim}."
             )
+
+    @classmethod
+    def validate_created_attention_state(
+        cls,
+        state: ResidualState | None,
+        *,
+        block_size: int,
+    ) -> AttentionResidualState:
+        if state is None:
+            raise RuntimeError(
+                "AttentionResidual failed to create forward-local residual state."
+            )
+        return cls.validate_attention_state(state, block_size=block_size)
 
     @classmethod
     def validate_attention_forward_inputs(

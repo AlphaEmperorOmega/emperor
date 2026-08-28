@@ -1,9 +1,14 @@
 import unittest
+from dataclasses import FrozenInstanceError
 
 import torch
 import torch.nn.functional as F
 
-from emperor.layers._composition.residual.base import ResidualState
+from emperor.layers import LayerState
+from emperor.layers._composition.residual.base import (
+    ResidualState,
+    ResidualStateLifecycle,
+)
 from emperor.layers._composition.residual.config import AttentionResidualConfig
 from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
@@ -170,6 +175,96 @@ class TestAttentionResidual(unittest.TestCase):
                         torch.ones(1, 2),
                         block_size=block_size,
                     )
+
+    def test_attention_owns_an_immutable_forward_state_lifecycle(self):
+        residual = AttentionResidual(
+            AttentionResidualConfig(
+                residual_dim=2,
+                block_size=3,
+            )
+        )
+
+        lifecycle = residual.residual_state_lifecycle
+
+        self.assertIsInstance(lifecycle, ResidualStateLifecycle)
+        self.assertEqual(lifecycle.residual_dim, 2)
+        self.assertEqual(lifecycle.block_size, 3)
+        with self.assertRaises(FrozenInstanceError):
+            lifecycle.block_size = 1
+
+    def test_compatibility_state_creation_delegates_to_the_lifecycle(self):
+        residual = AttentionResidual(
+            AttentionResidualConfig(residual_dim=2, block_size=2)
+        )
+        initial_source = torch.ones(1, 2)
+
+        lifecycle_state = residual.residual_state_lifecycle.create_state(initial_source)
+        compatibility_state = residual.new_state(initial_source)
+
+        self.assertIsInstance(lifecycle_state, AttentionResidualState)
+        self.assertIsInstance(compatibility_state, AttentionResidualState)
+        self.assertIs(lifecycle_state.initial_source, initial_source)
+        self.assertIs(compatibility_state.initial_source, initial_source)
+        self.assertEqual(lifecycle_state.block_size, 2)
+        self.assertEqual(compatibility_state.block_size, 2)
+
+    def test_state_aware_application_lazily_initializes_attention_history(self):
+        residual = AttentionResidual(
+            AttentionResidualConfig(residual_dim=2, block_size=1)
+        )
+        previous = torch.tensor([[2.0, 6.0]])
+        current = torch.tensor([[4.0, 10.0]])
+        layer_state = LayerState(hidden=current)
+
+        result = residual.apply_to_layer_state(layer_state, previous)
+
+        self.assertIs(result, layer_state)
+        self.assertIsInstance(result.residual_state, AttentionResidualState)
+        self.assertIs(result.residual_state.initial_source, previous)
+        self.assertIs(result.residual_state.sources[1], current)
+        torch.testing.assert_close(result.hidden, (previous + current) / 2.0)
+
+    def test_state_aware_application_reuses_existing_attention_history(self):
+        residual = AttentionResidual(
+            AttentionResidualConfig(residual_dim=2, block_size=1)
+        )
+        initial_source = torch.tensor([[1.0, 3.0]])
+        existing_state = residual.new_state(initial_source)
+        layer_state = LayerState(
+            hidden=torch.tensor([[5.0, 7.0]]),
+            residual_state=existing_state,
+        )
+
+        residual.apply_to_layer_state(layer_state, initial_source)
+
+        self.assertIs(layer_state.residual_state, existing_state)
+        self.assertEqual(len(existing_state.sources), 2)
+
+    def test_state_aware_application_rejects_incompatible_residual_state(self):
+        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        layer_state = LayerState(
+            hidden=torch.ones(1, 2),
+            residual_state=object(),
+        )
+
+        with self.assertRaisesRegex(
+            TypeError,
+            "residual_state must be an AttentionResidualState",
+        ):
+            residual.apply_to_layer_state(layer_state, torch.ones(1, 2))
+
+    def test_state_aware_application_keeps_history_off_the_module(self):
+        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        layer_state = LayerState(hidden=torch.ones(1, 2))
+
+        residual.apply_to_layer_state(layer_state, torch.ones(1, 2))
+
+        self.assertFalse(
+            any(
+                isinstance(attribute, AttentionResidualState)
+                for attribute in vars(residual).values()
+            )
+        )
 
     def test_zero_initialized_mixer_averages_all_depth_sources(self):
         residual = AttentionResidual(

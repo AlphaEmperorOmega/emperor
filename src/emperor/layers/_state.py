@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -28,3 +30,14 @@ class LayerState:
         repr=False,
         compare=False,
     )
+
+    @contextmanager
+    def scoped_residual_state(
+        self, replacement: ResidualState | None
+    ) -> Iterator[None]:
+        enclosing_residual_state = self.residual_state
+        self.residual_state = replacement
+        try:
+            yield
+        finally:
+            self.residual_state = enclosing_residual_state
