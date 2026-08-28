@@ -17,30 +17,36 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
         self.assertIs(AttentionResidual.VALIDATOR, ResidualConnectionValidator)
         self.assertIs(AttentionResidualState.VALIDATOR, ResidualConnectionValidator)
 
-    def test_successful_validations_are_check_only(self):
+    def test_successful_validations_preserve_checked_state_identity(self):
         residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
         initial_source = torch.ones(1, 2)
         current = torch.full((1, 2), 2.0)
         state = residual.new_state(initial_source)
         validator = residual.VALIDATOR
 
-        results = (
+        check_only_results = (
             validator.validate_positive_integer(2, name="residual_dim"),
             validator.validate_finite_positive_number(
                 1e-6,
                 name="rms_norm_epsilon",
             ),
             validator.validate_source(initial_source, residual_dim=2),
+        )
+
+        self.assertTupleEqual(check_only_results, (None, None, None))
+        self.assertIs(
             validator.validate_attention_state(state, block_size=1),
+            state,
+        )
+        self.assertIs(
             validator.validate_attention_forward_inputs(
                 current,
                 state,
                 residual_dim=2,
                 block_size=1,
             ),
+            state,
         )
-
-        self.assertTupleEqual(results, (None, None, None, None, None))
 
     def test_construction_dispatches_through_substituted_validator(self):
         class RejectingValidator(ResidualConnectionValidator):

@@ -100,20 +100,21 @@ class TestResidualConnectionValidatorAdapter(unittest.TestCase):
             with self.subTest(runtime_type=runtime_type.__name__):
                 self.assertIs(runtime_type.VALIDATOR, ResidualConnectionValidator)
 
-    def test_successful_runtime_validations_are_check_only(self):
+    def test_successful_runtime_validations_preserve_checked_state_identity(self):
         weighted_connection = WeightedResidualConfig().build()
         attention_connection = AttentionResidualConfig(residual_dim=2).build()
         state = attention_connection.new_state(torch.ones(1, 2))
         validator = attention_connection.VALIDATOR
 
-        results = (
+        self.assertIsNone(
             validator.validate_raw_mix_coefficient(
                 weighted_connection.raw_weight,
-            ),
-            validator.validate_attention_state(state, block_size=1),
+            )
         )
-
-        self.assertTupleEqual(results, (None, None))
+        self.assertIs(
+            validator.validate_attention_state(state, block_size=1),
+            state,
+        )
 
     def test_runtime_rejects_non_residual_config(self):
         connection = AdditiveResidual.__new__(AdditiveResidual)
