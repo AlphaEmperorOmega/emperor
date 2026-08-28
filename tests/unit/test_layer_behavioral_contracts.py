@@ -29,13 +29,13 @@ from emperor.layers import (
     WeightedBlendResidualConfig,
 )
 from emperor.layers._composition.gate import LayerGate
+from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._monitoring.callbacks._hooks import _extract_hidden_tensor
 from emperor.layers._monitoring.diagnostics import (
     _LayerNormTrackingContext,
     _RecurrentDiagnostics,
     _RecurrentObservation,
 )
-from emperor.layers._validation.gate import LayerGateValidator
 from emperor.linears import LinearLayerConfig
 from emperor.memory import MemoryPositionOptions
 from support.layers import (

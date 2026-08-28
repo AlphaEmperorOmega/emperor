@@ -306,7 +306,7 @@ SEMANTIC_TYPE_CATALOG = SemanticTypeCatalog(
             "Builds a model around a mixture-of-experts layer stack.",
         ),
         _semantic_type_policy(
-            "emperor.layers._composition.gate.LayerGate",
+            "emperor.layers._composition.gate.core.LayerGate",
             "Combines a learned gate output with the current layer value by scaling or addition.",
         ),
         _semantic_type_policy(
