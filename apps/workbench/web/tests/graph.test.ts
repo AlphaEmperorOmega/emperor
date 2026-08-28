@@ -1171,14 +1171,14 @@ describe("buildChildSummaries", () => {
           typeName: "LinearLayer",
           path: "main_model.layers.0.model",
         }),
-        node("main_model.layers.0.gate_model", {
+        node("main_model.layers.0.postprocessing.gate", {
           typeName: "Sequential",
-          path: "main_model.layers.0.gate_model",
+          path: "main_model.layers.0.postprocessing.gate",
         }),
       ],
       [
         ["main_model.layers.0", "main_model.layers.0.model"],
-        ["main_model.layers.0", "main_model.layers.0.gate_model"],
+        ["main_model.layers.0", "main_model.layers.0.postprocessing.gate"],
       ],
     );
 
@@ -1189,7 +1189,11 @@ describe("buildChildSummaries", () => {
         kind: "child",
         sourceNodeId: "main_model.layers.0.model",
       },
-      { label: "Gate", kind: "child", sourceNodeId: "main_model.layers.0.gate_model" },
+      {
+        label: "Gate",
+        kind: "child",
+        sourceNodeId: "main_model.layers.0.postprocessing.gate",
+      },
     ]);
   });
 
