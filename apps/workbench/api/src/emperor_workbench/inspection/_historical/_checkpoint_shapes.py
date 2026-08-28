@@ -33,17 +33,20 @@ _PRIMARY_STACK_PATTERNS = (
 )
 _GATE_STACK_RE = re.compile(
     r"^(?P<parent>(?:main_model(?:\.block_model)?\.layers\.\d+|"
-    r"main_model\.expert_stack\.layers\.\d+)\.gate_model\.model)"
+    r"main_model\.expert_stack\.layers\.\d+)"
+    r"\.postprocessing\.gate\.model)"
     r"\.layers\.(?P<index>\d+)(?:\.|$)"
 )
 _HALTING_STACK_RE = re.compile(
     r"^(?P<parent>(?:main_model(?:\.block_model)?\.layers\.\d+|"
-    r"main_model\.expert_stack\.layers\.\d+)\.halting_model"
+    r"main_model\.expert_stack\.layers\.\d+)"
+    r"\.halting\.model"
     r"\.halting_gate_model)\.layers\.(?P<index>\d+)(?:\.|$)"
 )
 _MEMORY_STACK_RE = re.compile(
     r"^(?P<parent>(?:main_model(?:\.block_model)?\.layers\.\d+|"
-    r"main_model\.expert_stack\.layers\.\d+)\.memory_model"
+    r"main_model\.expert_stack\.layers\.\d+)"
+    r"\.memory\.model"
     r"\.memory_model)\.layers\.(?P<index>\d+)(?:\.|$)"
 )
 _EXPERT_STACK_RE = re.compile(
