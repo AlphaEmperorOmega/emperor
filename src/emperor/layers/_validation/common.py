@@ -5,23 +5,6 @@ from numbers import Integral
 from emperor._validation import _adaptive_grouping_paths
 from emperor.config import ConfigBase
 
-
-def _config_classes():
-    from emperor.layers._config import LayerConfig, LayerStackConfig
-
-    return LayerConfig, LayerStackConfig
-
-
-def _gate_config_class():
-    from emperor.layers._config import GateConfig
-
-    return GateConfig
-
-
-def _gate_option_field_path(owner_name: str | None = None) -> str:
-    return f"{owner_name}.option" if owner_name is not None else "gate_config.option"
-
-
 _HALTING_CONFIG_FIELDS = (
     "input_dim",
     "threshold",

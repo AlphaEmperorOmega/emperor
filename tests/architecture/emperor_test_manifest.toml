@@ -363,9 +363,6 @@ modules = [
   "src/emperor/layers/_support.py",
   "src/emperor/layers/_validation/__init__.py",
   "src/emperor/layers/_validation/common.py",
-  "src/emperor/layers/_validation/gate.py",
-  "src/emperor/layers/_validation/layer.py",
-  "src/emperor/layers/_validation/stack.py",
 ]
 
 [families.adaptive_parameters]
