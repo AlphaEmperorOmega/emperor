@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,6 +23,15 @@ class ResidualRuntimeRequirement(Enum):
 
     FORWARD_LOCAL_STATE = "forward-local residual state"
     DEPTH_SPECIFIC_CONNECTIONS = "depth-specific residual connections"
+
+
+@dataclass(frozen=True, slots=True)
+class ResidualStackRequirements:
+    """Stack construction constraints declared by a residual variant."""
+
+    requires_uniform_dimensions: bool = False
+    requires_output_postprocessing: bool = False
+    allows_halting: bool = True
 
 
 class ResidualState(ABC):
@@ -49,6 +59,9 @@ class ResidualConnectionAbstract(Module, ABC):
     VALIDATOR = ResidualConnectionValidator
     supports_pairwise_diagnostics: ClassVar[bool] = False
     RUNTIME_REQUIREMENTS: ClassVar[frozenset[ResidualRuntimeRequirement]] = frozenset()
+    STACK_REQUIREMENTS: ClassVar[ResidualStackRequirements] = (
+        ResidualStackRequirements()
+    )
 
     def __init__(
         self,
