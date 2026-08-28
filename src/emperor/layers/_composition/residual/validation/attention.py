@@ -60,16 +60,24 @@ class _AttentionResidualValidationMixin:
         *,
         residual_dim: int,
         block_size: int,
-    ) -> None:
-        cls.validate_attention_state(state, block_size=block_size)
-        cls.validate_compatible_sources(
+    ) -> AttentionResidualState:
+        attention_state = cls.validate_attention_state(
             state,
+            block_size=block_size,
+        )
+        cls.validate_compatible_sources(
+            attention_state,
             current,
             residual_dim=residual_dim,
         )
+        return attention_state
 
     @staticmethod
-    def validate_attention_state(state: object, *, block_size: int) -> None:
+    def validate_attention_state(
+        state: object,
+        *,
+        block_size: int,
+    ) -> AttentionResidualState:
         from emperor.layers._composition.residual.variants.attention import (
             AttentionResidualState,
         )
@@ -84,6 +92,7 @@ class _AttentionResidualValidationMixin:
                 f"residual_state block_size {state.block_size} does not match "
                 f"configured block_size {block_size}."
             )
+        return state
 
     @classmethod
     def validate_compatible_sources(

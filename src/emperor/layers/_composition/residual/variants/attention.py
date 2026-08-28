@@ -91,19 +91,28 @@ class AttentionResidual(ResidualConnectionAbstract):
     ) -> None:
         super().__init__(cfg, overrides)
         self.residual_dim = cast(int, self.residual_dim)
-        self.block_size = (
+        self.block_size = self.__resolve_block_size()
+        self.rms_norm_epsilon = self.__resolve_rms_norm_epsilon()
+        self.query = nn.Parameter(torch.zeros(self.residual_dim))
+        self.key_norm = self.__build_key_norm()
+
+    def __resolve_block_size(self) -> int:
+        return (
             self.DEFAULT_BLOCK_SIZE
             if self.cfg.block_size is None
             else self.cfg.block_size
         )
+
+    def __resolve_rms_norm_epsilon(self) -> float:
         configured_rms_norm_epsilon = (
             self.DEFAULT_RMS_NORM_EPSILON
             if self.cfg.rms_norm_epsilon is None
             else self.cfg.rms_norm_epsilon
         )
-        self.rms_norm_epsilon = float(configured_rms_norm_epsilon)
-        self.query = nn.Parameter(torch.zeros(self.residual_dim))
-        self.key_norm = nn.RMSNorm(
+        return float(configured_rms_norm_epsilon)
+
+    def __build_key_norm(self) -> nn.RMSNorm:
+        return nn.RMSNorm(
             self.residual_dim,
             eps=self.rms_norm_epsilon,
             elementwise_affine=True,
@@ -124,34 +133,90 @@ class AttentionResidual(ResidualConnectionAbstract):
         residual_state: ResidualState | None = None,
         row_layout: RowLayout | None = None,
     ) -> Tensor:
-        self.VALIDATOR.validate_attention_forward_inputs(
+        attention_state = self.__validate_attention_forward_inputs(
+            current, residual_state
+        )
+        residual_sources = self.__append_and_stack_residual_sources(
+            attention_state, current
+        )
+        accumulator_sources = self.__convert_to_accumulator_precision(
+            residual_sources,
+        )
+        normalized_source_keys = self.__normalize_residual_source_keys(
+            accumulator_sources,
+        )
+        depth_weights = self.__calculate_residual_depth_weights(normalized_source_keys)
+        mixed_residual_sources = self.__mix_depth_weighted_residual_sources(
+            accumulator_sources, depth_weights
+        )
+        return mixed_residual_sources.to(dtype=residual_sources.dtype)
+
+    def __validate_attention_forward_inputs(
+        self,
+        current: Tensor,
+        residual_state: ResidualState | None,
+    ) -> AttentionResidualState:
+        return self.VALIDATOR.validate_attention_forward_inputs(
             current,
             residual_state,
             residual_dim=self.residual_dim,
             block_size=self.block_size,
         )
-        state = cast(AttentionResidualState, residual_state)
-        state.append(current)
-        values = torch.stack(state.sources, dim=0)
-        accumulator_dtype = (
-            torch.float32
-            if values.dtype in (torch.float16, torch.bfloat16)
-            else values.dtype
+
+    @staticmethod
+    def __append_and_stack_residual_sources(
+        attention_state: AttentionResidualState,
+        current: Tensor,
+    ) -> Tensor:
+        attention_state.append(current)
+        return torch.stack(attention_state.sources, dim=0)
+
+    def __convert_to_accumulator_precision(
+        self,
+        residual_sources: Tensor,
+    ) -> Tensor:
+        accumulator_dtype = self.__resolve_accumulator_dtype(
+            residual_sources.dtype,
         )
-        accumulator_values = values.to(dtype=accumulator_dtype)
-        keys = F.rms_norm(
-            accumulator_values,
+        return residual_sources.to(dtype=accumulator_dtype)
+
+    @staticmethod
+    def __resolve_accumulator_dtype(values_dtype: torch.dtype) -> torch.dtype:
+        if values_dtype in (torch.float16, torch.bfloat16):
+            return torch.float32
+        else:
+            return values_dtype
+
+    def __normalize_residual_source_keys(
+        self,
+        accumulator_sources: Tensor,
+    ) -> Tensor:
+        return F.rms_norm(
+            accumulator_sources,
             normalized_shape=(self.residual_dim,),
-            weight=self.key_norm.weight.to(dtype=accumulator_dtype),
+            weight=self.key_norm.weight.to(dtype=accumulator_sources.dtype),
             eps=self.rms_norm_epsilon,
         )
-        logits = torch.sum(
-            keys * self.query.to(dtype=accumulator_dtype),
-            dim=-1,
+
+    def __calculate_residual_depth_weights(
+        self,
+        normalized_source_keys: Tensor,
+    ) -> Tensor:
+        accumulator_query = self.query.to(dtype=normalized_source_keys.dtype)
+        query_weighted_source_keys = normalized_source_keys * accumulator_query
+        depth_attention_logits = torch.sum(query_weighted_source_keys, dim=-1)
+        return torch.softmax(depth_attention_logits, dim=0)
+
+    @staticmethod
+    def __mix_depth_weighted_residual_sources(
+        accumulator_sources: Tensor,
+        depth_weights: Tensor,
+    ) -> Tensor:
+        feature_broadcast_depth_weights = depth_weights.unsqueeze(-1)
+        depth_weighted_residual_sources = (
+            feature_broadcast_depth_weights * accumulator_sources
         )
-        depth_weights = torch.softmax(logits, dim=0)
-        mixed = torch.sum(
-            depth_weights.unsqueeze(-1) * accumulator_values,
+        return torch.sum(
+            depth_weighted_residual_sources,
             dim=0,
         )
-        return mixed.to(dtype=values.dtype)
