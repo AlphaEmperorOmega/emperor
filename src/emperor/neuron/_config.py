@@ -6,6 +6,7 @@ from emperor.halting import HaltingConfig
 from emperor.neuron._options import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
+    TerminalRoutingTreeDepthOptions,
     TerminalZAxisOffsetOptions,
 )
 from emperor.sampler import SamplerConfig
@@ -39,6 +40,26 @@ class AxonsConfig(ConfigBase):
 
 
 @dataclass
+class TerminalRoutingTreeConfig(ConfigBase):
+    depth: TerminalRoutingTreeDepthOptions | None = optional_field(
+        "Total routing depth. TWO adds one direction decision before the "
+        "connection sampler; THREE adds two direction decisions."
+    )
+    direction_branch_counts: tuple[int, ...] | None = optional_field(
+        "Maximum number of spatial regions at each direction level. The tuple "
+        "must contain depth - 1 entries."
+    )
+    direction_top_k: tuple[int, ...] | None = optional_field(
+        "Number of spatial regions selected at each direction level. The tuple "
+        "must contain depth - 1 entries."
+    )
+    direction_sampler_config: SamplerConfig | None = optional_field(
+        "Optional sampler template for direction routers. When omitted, the "
+        "terminal connection sampler is used as the template."
+    )
+
+
+@dataclass
 class TerminalConfig(ConfigBase):
     input_dim: int | None = optional_field(
         "Feature dimension of the tensor routed by the terminal."
@@ -68,6 +89,10 @@ class TerminalConfig(ConfigBase):
         "usual offset window) so signals can jump far along one axis "
         "without the quadratic fan-out of a box. The sampler num_experts "
         "must match the resulting connection count."
+    )
+    routing_tree_config: TerminalRoutingTreeConfig | None = optional_field(
+        "Optional hierarchical spatial router. When omitted, Terminal retains "
+        "the single flat sampler path and checkpoint layout."
     )
 
     def _registry_owner(self) -> type:
