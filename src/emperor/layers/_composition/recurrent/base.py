@@ -84,7 +84,14 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         super().__init__()
         self.cfg: RecurrentCompositionConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
-        self.recurrent_iteration_schedule = RecurrentIterationSchedule(self.cfg)
+        self.__initialize_from_config()
+        self.__initialize_delegates()
+        self._recurrent_diagnostic_observer: Callable[[Tensor, Tensor], None] | None = (
+            None
+        )
+        self.__recurrent_diagnostic_observation_suppression_depth = 0
+
+    def __initialize_from_config(self) -> None:
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.recurrent_layer_norm_position: LayerNormPositionOptions = (
@@ -94,6 +101,9 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         self.residual_config = self.cfg.residual_config
         self.halting_config = self.cfg.halting_config
         self.memory_config = self.cfg.memory_config
+
+    def __initialize_delegates(self) -> None:
+        self.recurrent_iteration_schedule = RecurrentIterationSchedule(self.cfg)
         self.recurrent_gate = self.__build_recurrent_gate()
         self.residual_connection: ResidualConnectionAbstract | None = (
             self.__build_residual_connection()
@@ -101,10 +111,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         self.halting_model = self.__build_halting_model()
         self.memory_model = self.__build_memory_model()
         self.recurrent_layer_norm_module = self.__build_recurrent_layer_norm()
-        self._recurrent_diagnostic_observer: Callable[[Tensor, Tensor], None] | None = (
-            None
-        )
-        self.__recurrent_diagnostic_observation_suppression_depth = 0
 
     def _build_transition_model(self, transition_config: ConfigBase) -> Module:
         return self._build_from_config(
