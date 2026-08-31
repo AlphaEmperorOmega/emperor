@@ -22,10 +22,16 @@ class LayerStackBuilder:
         cfg: LayerStackConfig,
         supports_rectangular_gate: bool,
     ) -> None:
-        self.layer_config = cfg.layer_config
-        self.apply_output_postprocessing_flag = cfg.apply_output_postprocessing_flag
-        self.last_layer_bias_option = cfg.last_layer_bias_option
+        self.cfg = cfg
+        self.__initialize_from_config()
         self.supports_rectangular_gate = supports_rectangular_gate
+
+    def __initialize_from_config(self) -> None:
+        self.layer_config = self.cfg.layer_config
+        self.apply_output_postprocessing_flag = (
+            self.cfg.apply_output_postprocessing_flag
+        )
+        self.last_layer_bias_option = self.cfg.last_layer_bias_option
 
     def build_layer_stack(
         self,
