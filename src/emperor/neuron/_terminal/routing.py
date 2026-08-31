@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from emperor.neuron._terminal.topology import _compile_terminal_routing_tree
 from emperor.neuron._terminal.validation import TerminalRoutingTreeDelegateValidator
 from emperor.nn import Module
-from emperor.sampler import SamplerConfig
+from emperor.sampler import SamplerConfig, SamplerModel
 
 if TYPE_CHECKING:
     from emperor.neuron._config import TerminalConfig, TerminalRoutingTreeConfig
@@ -132,6 +132,7 @@ class TerminalRoutingTreeDelegate(Module):
                 "conditionally executed node manages its own sampler state."
             )
 
+        self.__reset_runtime_observations()
         probabilities, connection_indices, auxiliary_loss = self.root.route(
             input_matrix
         )
@@ -145,6 +146,11 @@ class TerminalRoutingTreeDelegate(Module):
             sorted_path_indices,
         )
         return sorted_probabilities, sorted_connection_indices, None, auxiliary_loss
+
+    def __reset_runtime_observations(self) -> None:
+        for module in self.modules():
+            if isinstance(module, SamplerModel):
+                module.reset_runtime_observation()
 
 
 class _TerminalRoutingTreeNode(Module):

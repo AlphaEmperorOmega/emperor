@@ -76,3 +76,12 @@ class SamplerModel(Module):
 
     def get_auxiliary_loss(self) -> Tensor:
         return self.sampler_model.auxiliary_loss
+
+    def reset_runtime_observation(self) -> None:
+        """Mark this sampler as unvisited without clearing cumulative usage."""
+
+        self.sampler_model.set_updated_skip_mask(None)
+        self.sampler_model.set_auxiliary_loss(self.sampler_model.default_loss)
+        usage_tracker = self.usage_tracker
+        if usage_tracker is not None:
+            usage_tracker.reset_last()
