@@ -32,7 +32,11 @@ class LayerStack(LayerModuleBase):
         config = getattr(cfg, "layer_stack_config", cfg)
         self.cfg: LayerStackConfig = self._override_config(config, overrides)
         self.VALIDATOR.validate(self)
+        self.__initialize_from_config()
+        self.__initialize_delegates()
+        self.layers = self.__build_layer_stack()
 
+    def __initialize_from_config(self) -> None:
         self.input_dim: int = self.cfg.input_dim
         self.hidden_dim: int = self.cfg.hidden_dim
         self.output_dim: int = self.cfg.output_dim
@@ -43,13 +47,14 @@ class LayerStack(LayerModuleBase):
         self.last_layer_bias_option: LastLayerBiasOptions = (
             self.cfg.last_layer_bias_option
         )
+
+    def __initialize_delegates(self) -> None:
         self.layer_dimension_resolver = LayerStackTopology(self.cfg)
+        self.shared_controllers = LayerStackSharedControllers(self.cfg)
         self.stack_layer_builder = LayerStackBuilder(
             self.cfg,
             supports_rectangular_gate=self._supports_rectangular_gate,
         )
-        self.shared_controllers = LayerStackSharedControllers(self.cfg)
-        self.layers = self.__build_layer_stack()
 
     def __iter__(self):
         return iter(self.layers)
