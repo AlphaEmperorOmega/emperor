@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import TYPE_CHECKING, ClassVar
 
 import torch
 import torch.nn as nn
@@ -115,25 +115,34 @@ class AttentionResidual(ResidualConnectionAbstract):
         overrides: AttentionResidualConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.residual_dim = cast(int, self.residual_dim)
-        self.block_size = self.__resolve_block_size()
-        self.rms_norm_epsilon = self.__resolve_rms_norm_epsilon()
+        self.__initialize_from_config()
         self.query = nn.Parameter(torch.zeros(self.residual_dim))
         self.key_norm = self.__build_key_norm()
         self.__residual_state_lifecycle = self.__build_residual_state_lifecycle()
 
-    def __resolve_block_size(self) -> int:
-        return (
-            self.DEFAULT_BLOCK_SIZE
-            if self.cfg.block_size is None
-            else self.cfg.block_size
+    def __initialize_from_config(self) -> None:
+        self.block_size = self.__resolve_block_size(self.cfg.block_size)
+        self.rms_norm_epsilon = self.__resolve_rms_norm_epsilon(
+            self.cfg.rms_norm_epsilon
         )
 
-    def __resolve_rms_norm_epsilon(self) -> float:
+    @classmethod
+    def __resolve_block_size(cls, configured_block_size: int | None) -> int:
+        return (
+            cls.DEFAULT_BLOCK_SIZE
+            if configured_block_size is None
+            else configured_block_size
+        )
+
+    @classmethod
+    def __resolve_rms_norm_epsilon(
+        cls,
+        configured_rms_norm_epsilon: float | None,
+    ) -> float:
         configured_rms_norm_epsilon = (
-            self.DEFAULT_RMS_NORM_EPSILON
-            if self.cfg.rms_norm_epsilon is None
-            else self.cfg.rms_norm_epsilon
+            cls.DEFAULT_RMS_NORM_EPSILON
+            if configured_rms_norm_epsilon is None
+            else configured_rms_norm_epsilon
         )
         return float(configured_rms_norm_epsilon)
 

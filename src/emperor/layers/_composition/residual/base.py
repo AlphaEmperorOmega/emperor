@@ -71,6 +71,9 @@ class ResidualConnectionAbstract(Module, ABC):
         super().__init__()
         self.cfg: ResidualConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
+        self.__initialize_from_config()
+
+    def __initialize_from_config(self) -> None:
         self.residual_dim: int | None = self.cfg.residual_dim
 
     @property

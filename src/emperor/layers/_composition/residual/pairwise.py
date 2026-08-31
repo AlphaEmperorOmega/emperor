@@ -38,12 +38,15 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         overrides: WeightedResidualConfig | WeightedBlendResidualConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.model_config: LayerStackConfig | LinearLayerConfig | None = (
-            self.cfg.model_config
-        )
+        self.__initialize_from_config()
         self.raw_weight: nn.Parameter | None = None
         self.model: LayerStack | LinearAbstract | None = None
         self.__initialize_coefficient()
+
+    def __initialize_from_config(self) -> None:
+        self.model_config: LayerStackConfig | LinearLayerConfig | None = (
+            self.cfg.model_config
+        )
 
     def __initialize_coefficient(self) -> None:
         initial_raw_coefficient = self._initial_raw_mix_coefficient()
