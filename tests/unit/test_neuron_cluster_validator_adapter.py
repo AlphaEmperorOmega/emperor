@@ -8,10 +8,8 @@ from emperor.neuron import (
     NeuronClusterConfig,
     NeuronConfig,
 )
-from emperor.neuron._validation import (
-    NeuronClusterValidator,
-    NeuronValidator,
-)
+from emperor.neuron._cluster.validation import NeuronClusterValidator
+from emperor.neuron._neuron.validation import NeuronValidator
 
 
 class TestNeuronClusterValidatorAdapter(unittest.TestCase):

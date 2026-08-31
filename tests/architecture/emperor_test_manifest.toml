@@ -654,12 +654,18 @@ integration_tests = [
 ]
 mutation_scope = [
   "src/emperor/neuron/*.py",
+  "src/emperor/neuron/_axons/*.py",
   "src/emperor/neuron/_cluster/*.py",
   "src/emperor/neuron/_monitoring/*.py",
+  "src/emperor/neuron/_neuron/*.py",
+  "src/emperor/neuron/_nucleus/*.py",
+  "src/emperor/neuron/_terminal/*.py",
+  "src/emperor/neuron/_validation/*.py",
 ]
 mutation_exclusions = [
   "src/emperor/neuron/_cluster/__init__.py",
   "src/emperor/neuron/_monitoring/__init__.py",
+  "src/emperor/neuron/_validation/__init__.py",
 ]
 environment = [
   "cpu",
@@ -675,6 +681,9 @@ review_evidence = ""
 blocked_reason = ""
 modules = [
   "src/emperor/neuron/__init__.py",
+  "src/emperor/neuron/_axons/__init__.py",
+  "src/emperor/neuron/_axons/core.py",
+  "src/emperor/neuron/_axons/validation.py",
   "src/emperor/neuron/_cluster/__init__.py",
   "src/emperor/neuron/_cluster/beam_routes.py",
   "src/emperor/neuron/_cluster/checkpointing.py",
@@ -685,20 +694,30 @@ modules = [
   "src/emperor/neuron/_cluster/runtime_policy.py",
   "src/emperor/neuron/_cluster/state.py",
   "src/emperor/neuron/_cluster/topology.py",
+  "src/emperor/neuron/_cluster/validation.py",
   "src/emperor/neuron/_config.py",
   "src/emperor/neuron/_distributed_gradients.py",
   "src/emperor/neuron/_monitoring/__init__.py",
   "src/emperor/neuron/_monitoring/callback.py",
   "src/emperor/neuron/_monitoring/diagnostics.py",
+  "src/emperor/neuron/_neuron/__init__.py",
+  "src/emperor/neuron/_neuron/core.py",
+  "src/emperor/neuron/_neuron/validation.py",
+  "src/emperor/neuron/_nucleus/__init__.py",
+  "src/emperor/neuron/_nucleus/core.py",
+  "src/emperor/neuron/_nucleus/validation.py",
   "src/emperor/neuron/_optimizer_layout.py",
   "src/emperor/neuron/_optimizer_scheduler.py",
   "src/emperor/neuron/_optimizer_sync.py",
   "src/emperor/neuron/_optimizer_transaction.py",
   "src/emperor/neuron/_options.py",
-  "src/emperor/neuron/_parts.py",
-  "src/emperor/neuron/_terminal_topology.py",
+  "src/emperor/neuron/_terminal/__init__.py",
+  "src/emperor/neuron/_terminal/core.py",
+  "src/emperor/neuron/_terminal/topology.py",
+  "src/emperor/neuron/_terminal/validation.py",
   "src/emperor/neuron/_trace.py",
-  "src/emperor/neuron/_validation.py",
+  "src/emperor/neuron/_validation/__init__.py",
+  "src/emperor/neuron/_validation/common.py",
 ]
 
 [families.datasets]

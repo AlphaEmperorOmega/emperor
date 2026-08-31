@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from emperor.neuron._validation import NeuronValidationMixin
+from emperor.neuron._validation.common import NeuronValidationMixin
 
 
 class TestNeuronValidationMixin(unittest.TestCase):
