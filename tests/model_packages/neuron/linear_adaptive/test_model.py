@@ -13,7 +13,11 @@ from emperor.layers import (
     LayerNormPositionOptions,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
+from emperor.neuron import (
+    NeuronClusterConfig,
+    NeuronClusterOptimizerSyncCallback,
+    TerminalConnectionShapeOptions,
+)
 from models.catalog import model_package
 from models.cli_selection import resolve_cli_selection
 from models.experiment_cli_parser import get_experiment_parser
@@ -149,7 +153,8 @@ class TestNeuronLinearAdaptiveModel(unittest.TestCase):
             cluster_halting_stack_bias_flag=False,
         )
         cluster_config = cfg.experiment_config.neuron_cluster_config
-        terminal_sampler = cluster_config.neuron_config.terminal_config.sampler_config
+        terminal_config = cluster_config.neuron_config.terminal_config
+        terminal_sampler = terminal_config.sampler_config
         router_config = terminal_sampler.router_config
         halting_stack = cluster_config.halting_config.halting_gate_config
 
@@ -161,6 +166,10 @@ class TestNeuronLinearAdaptiveModel(unittest.TestCase):
         self.assertEqual(cluster_config.initial_z_axis_total_neurons, 1)
         self.assertEqual(cluster_config.max_steps, 3)
         self.assertEqual(cluster_config.growth_threshold, 99)
+        self.assertIs(
+            terminal_config.connection_shape,
+            TerminalConnectionShapeOptions.BOX,
+        )
         self.assertEqual(terminal_sampler.top_k, 2)
         self.assertEqual(terminal_sampler.num_experts, 18)
         self.assertEqual(router_config.input_dim, cfg.hidden_dim)
