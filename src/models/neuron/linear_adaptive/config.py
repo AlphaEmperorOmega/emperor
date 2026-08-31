@@ -473,6 +473,7 @@ OUTPUT_LAYER_MASK_DIMENSION_OPTION: MaskDimensionOptions = MASK_DIMENSION_OPTION
 from emperor.neuron import (
     NeuronClusterOptimizerSyncCallback,
     TerminalRangeOptions,
+    TerminalRoutingTreeDepthOptions,
     TerminalZAxisOffsetOptions,
 )
 
@@ -503,6 +504,11 @@ CLUSTER_TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = (
     TerminalZAxisOffsetOptions.ZERO
 )
 CLUSTER_TERMINAL_TOP_K: int = 1
+CLUSTER_TERMINAL_ROUTING_TREE_DEPTH: TerminalRoutingTreeDepthOptions | None = None
+CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_BRANCH_COUNT: int | None = None
+CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_TOP_K: int | None = None
+CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_BRANCH_COUNT: int | None = None
+CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K: int | None = None
 
 ### Cluster Terminal Router Options
 CLUSTER_TERMINAL_ROUTER_NUM_LAYERS: int = 1
