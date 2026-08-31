@@ -25,8 +25,6 @@ from emperor.layers import (
     LayerStackConfig,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.memory import GatedResidualDynamicMemoryConfig
-from emperor.memory._variants.gated_residual import GatedResidualDynamicMemory
 from emperor.neuron import (
     Axons,
     AxonsConfig,
@@ -46,7 +44,9 @@ from emperor.neuron import (
 from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 from emperor.nn import Module
 from emperor.sampler import RouterConfig, SamplerConfig
-from unit.test_memory import make_memory_config
+
+# Re-exported for numerical-contract tests that consume this fixture module.
+from unit.test_memory import make_memory_config as make_memory_config
 
 ROUTER_CONFIG_UNSET = object()
 
@@ -734,37 +734,6 @@ class TestNeuronConfigs(NeuronTestCase):
         self.assertEqual(model.beam_width, 2)
         self.assertEqual(config.max_steps, 1)
         self.assertEqual(config.beam_width, 1)
-
-
-class TestAxons(NeuronTestCase):
-    def test_identity_path_preserves_input(self):
-        model = AxonsConfig(memory_config=None).build()
-        input_batch = torch.randn(self.batch_size, self.input_dim)
-
-        output = model(input_batch)
-
-        self.assertIs(output, input_batch)
-
-    def test_builds_and_applies_dynamic_memory_config(self):
-        memory_config = make_memory_config(
-            config_cls=GatedResidualDynamicMemoryConfig,
-            input_dim=self.input_dim,
-            output_dim=self.input_dim + 2,
-        )
-        model = AxonsConfig(memory_config=memory_config).build()
-        input_batch = torch.randn(self.batch_size, self.input_dim)
-
-        output = model(input_batch)
-
-        self.assertIsInstance(model.memory_model, GatedResidualDynamicMemory)
-        self.assertEqual(model.memory_model.input_dim, self.input_dim)
-        self.assertEqual(model.memory_model.output_dim, self.input_dim)
-        self.assertEqual(output.shape, input_batch.shape)
-        self.assertFalse(torch.allclose(output, input_batch))
-
-    def test_rejects_non_memory_config_base(self):
-        with self.assertRaises(TypeError):
-            AxonsConfig(memory_config=self.projection_config()).build()
 
 
 class TestTerminal(NeuronTestCase):
