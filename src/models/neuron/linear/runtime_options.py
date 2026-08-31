@@ -12,7 +12,11 @@ from emperor.layers import (
     LayerNormPositionOptions,
     ResidualConfig,
 )
-from emperor.neuron import TerminalRangeOptions, TerminalZAxisOffsetOptions
+from emperor.neuron import (
+    TerminalRangeOptions,
+    TerminalRoutingTreeDepthOptions,
+    TerminalZAxisOffsetOptions,
+)
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 from models.neuron.linear._hidden.runtime_options import (
     RuntimeOptions as HiddenRuntimeOptions,
@@ -40,11 +44,19 @@ class NeuronClusterCapacityOptions:
 
 
 @dataclass(frozen=True)
+class NeuronTerminalRoutingTreeOptions:
+    depth: TerminalRoutingTreeDepthOptions
+    direction_branch_counts: tuple[int, ...]
+    direction_top_k: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class NeuronTerminalOptions:
     xy_axis_range: TerminalRangeOptions
     z_axis_range: TerminalRangeOptions
     z_axis_offset: TerminalZAxisOffsetOptions
     top_k: int
+    routing_tree: NeuronTerminalRoutingTreeOptions | None = None
 
 
 @dataclass(frozen=True)
