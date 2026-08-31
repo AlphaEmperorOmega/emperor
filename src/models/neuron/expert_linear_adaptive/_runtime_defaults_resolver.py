@@ -16,6 +16,7 @@ from models.neuron.expert_linear_adaptive.runtime_options import (
     NeuronClusterCapacityOptions,
     NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
+    NeuronTerminalRoutingTreeOptions,
     NeuronTerminalSamplerOptions,
 )
 
@@ -115,6 +116,21 @@ _CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT_DEFAULT = (
     config.CLUSTER_TERMINAL_SAMPLER_ZERO_CENTRED_LOSS_WEIGHT
 )
 _CLUSTER_TERMINAL_TOP_K_DEFAULT = config.CLUSTER_TERMINAL_TOP_K
+_CLUSTER_TERMINAL_ROUTING_TREE_DEPTH_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTING_TREE_DEPTH
+)
+_CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_BRANCH_COUNT_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_BRANCH_COUNT
+)
+_CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_TOP_K_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_TOP_K
+)
+_CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_BRANCH_COUNT_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_BRANCH_COUNT
+)
+_CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K
+)
 _CLUSTER_TERMINAL_XY_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_XY_AXIS_RANGE
 _CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_OFFSET
 _CLUSTER_TERMINAL_Z_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_RANGE
@@ -239,13 +255,93 @@ def _terminal_options(values: dict[str, object]) -> NeuronTerminalOptions:
         _CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT,
     )
     top_k = _pop(values, "cluster_terminal_top_k", _CLUSTER_TERMINAL_TOP_K_DEFAULT)
+    routing_tree_depth = _pop(
+        values,
+        "cluster_terminal_routing_tree_depth",
+        _CLUSTER_TERMINAL_ROUTING_TREE_DEPTH_DEFAULT,
+    )
+    level_1_branch_count = _pop(
+        values,
+        "cluster_terminal_routing_tree_level_1_branch_count",
+        _CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_BRANCH_COUNT_DEFAULT,
+    )
+    level_1_top_k = _pop(
+        values,
+        "cluster_terminal_routing_tree_level_1_top_k",
+        _CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_TOP_K_DEFAULT,
+    )
+    level_2_branch_count = _pop(
+        values,
+        "cluster_terminal_routing_tree_level_2_branch_count",
+        _CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_BRANCH_COUNT_DEFAULT,
+    )
+    level_2_top_k = _pop(
+        values,
+        "cluster_terminal_routing_tree_level_2_top_k",
+        _CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K_DEFAULT,
+    )
     if provided:
         return provided
+    routing_tree = _terminal_routing_tree_options(
+        routing_tree_depth,
+        level_1_branch_count,
+        level_1_top_k,
+        level_2_branch_count,
+        level_2_top_k,
+    )
     return NeuronTerminalOptions(
         xy_axis_range=xy_axis_range,
         z_axis_range=z_axis_range,
         z_axis_offset=z_axis_offset,
         top_k=top_k,
+        routing_tree=routing_tree,
+    )
+
+
+def _terminal_routing_tree_options(
+    depth,
+    level_1_branch_count,
+    level_1_top_k,
+    level_2_branch_count,
+    level_2_top_k,
+) -> NeuronTerminalRoutingTreeOptions | None:
+    configured_levels = (
+        level_1_branch_count,
+        level_1_top_k,
+        level_2_branch_count,
+        level_2_top_k,
+    )
+    if depth is None:
+        if any(value is not None for value in configured_levels):
+            raise ValueError(
+                "cluster_terminal_routing_tree_depth must be set when routing "
+                "tree level options are provided."
+            )
+        return None
+    required_level_count = depth.value - 1
+    required_values = configured_levels[: required_level_count * 2]
+    if any(value is None for value in required_values):
+        raise ValueError(
+            f"Terminal routing tree depth {depth.value} requires branch_count and "
+            f"top_k for {required_level_count} direction level(s)."
+        )
+    unused_values = configured_levels[required_level_count * 2 :]
+    if any(value is not None for value in unused_values):
+        raise ValueError(
+            f"Terminal routing tree depth {depth.value} does not accept level "
+            f"{required_level_count + 1} options."
+        )
+    if any(
+        not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        for value in required_values
+    ):
+        raise ValueError(
+            "Terminal routing tree branch counts and top-k values must be positive integers."
+        )
+    return NeuronTerminalRoutingTreeOptions(
+        depth=depth,
+        direction_branch_counts=tuple(required_values[0::2]),
+        direction_top_k=tuple(required_values[1::2]),
     )
 
 

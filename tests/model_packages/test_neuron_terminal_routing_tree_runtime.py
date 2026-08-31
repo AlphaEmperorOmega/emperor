@@ -5,6 +5,7 @@ from emperor.neuron import TerminalRoutingTreeDepthOptions
 
 PACKAGE_BUILDERS = (
     ("expert_linear", "NeuronExpertLinearConfigBuilder"),
+    ("expert_linear_adaptive", "NeuronExpertLinearAdaptiveConfigBuilder"),
 )
 
 
