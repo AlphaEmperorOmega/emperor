@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 from emperor.neuron._options import TerminalConnectionShapeOptions
+from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
 from emperor.neuron._terminal.topology import initialize_terminal_connections
 from emperor.neuron._terminal.validation import TerminalValidator
 from emperor.nn import Module
@@ -40,11 +41,17 @@ class Terminal(Module):
             self.cfg.connection_shape
         )
         self.sampler_config = self.cfg.sampler_config
+        self.routing_tree_config = self.cfg.routing_tree_config
         neuron_connections = initialize_terminal_connections(self.cfg)
         self.total_neuron_connections = int(neuron_connections.shape[0])
         self.register_buffer("neuron_connections", neuron_connections, persistent=False)
 
     def __build_sampler(self):
+        if self.routing_tree_config is not None:
+            return TerminalRoutingTreeDelegate(
+                cfg=self.cfg,
+                neuron_connections=self.neuron_connections,
+            )
         if self.sampler_config.router_config is None:
             return self.sampler_config.build()
         return self.sampler_config.build_with_router_input_dim(self.input_dim)

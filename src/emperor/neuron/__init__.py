@@ -8,6 +8,7 @@ from emperor.neuron._config import (
     NeuronConfig,
     NucleusConfig,
     TerminalConfig,
+    TerminalRoutingTreeConfig,
 )
 from emperor.neuron._monitoring.callback import NeuronClusterMonitorCallback
 from emperor.neuron._neuron import Neuron
@@ -16,6 +17,7 @@ from emperor.neuron._optimizer_sync import NeuronClusterOptimizerSyncCallback
 from emperor.neuron._options import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
+    TerminalRoutingTreeDepthOptions,
     TerminalZAxisOffsetOptions,
 )
 from emperor.neuron._terminal import Terminal
@@ -38,5 +40,7 @@ __all__ = (
     "TerminalConfig",
     "TerminalConnectionShapeOptions",
     "TerminalRangeOptions",
+    "TerminalRoutingTreeConfig",
+    "TerminalRoutingTreeDepthOptions",
     "TerminalZAxisOffsetOptions",
 )
