@@ -25,6 +25,8 @@ from emperor.neuron import (
     TerminalConfig,
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
+    TerminalRoutingTreeConfig,
+    TerminalRoutingTreeDepthOptions,
     TerminalZAxisOffsetOptions,
 )
 from unit.test_neuron import (
@@ -52,6 +54,8 @@ EXPECTED_EXPORTS = (
     "TerminalConfig",
     "TerminalConnectionShapeOptions",
     "TerminalRangeOptions",
+    "TerminalRoutingTreeConfig",
+    "TerminalRoutingTreeDepthOptions",
     "TerminalZAxisOffsetOptions",
 )
 
@@ -72,6 +76,8 @@ EXPECTED_OWNERS = {
     "TerminalConfig": "emperor.neuron._config",
     "TerminalConnectionShapeOptions": "emperor.neuron._options",
     "TerminalRangeOptions": "emperor.neuron._options",
+    "TerminalRoutingTreeConfig": "emperor.neuron._config",
+    "TerminalRoutingTreeDepthOptions": "emperor.neuron._options",
     "TerminalZAxisOffsetOptions": "emperor.neuron._options",
 }
 
@@ -89,6 +95,7 @@ PRIVATE_MODULES = (
     "emperor.neuron._neuron.validation",
     "emperor.neuron._terminal",
     "emperor.neuron._terminal.core",
+    "emperor.neuron._terminal.routing",
     "emperor.neuron._terminal.topology",
     "emperor.neuron._terminal.validation",
     "emperor.neuron._trace",
@@ -121,6 +128,13 @@ TERMINAL_CONFIG_FIELDS = (
     "z_axis_offset",
     "sampler_config",
     "connection_shape",
+    "routing_tree_config",
+)
+TERMINAL_ROUTING_TREE_CONFIG_FIELDS = (
+    "depth",
+    "direction_branch_counts",
+    "direction_top_k",
+    "direction_sampler_config",
 )
 NEURON_CONFIG_FIELDS = (
     "nucleus_config",
@@ -483,6 +497,7 @@ print(json.dumps({{
             (NucleusConfig, NUCLEUS_CONFIG_FIELDS),
             (AxonsConfig, AXONS_CONFIG_FIELDS),
             (TerminalConfig, TERMINAL_CONFIG_FIELDS),
+            (TerminalRoutingTreeConfig, TERMINAL_ROUTING_TREE_CONFIG_FIELDS),
             (NeuronConfig, NEURON_CONFIG_FIELDS),
             (NeuronClusterConfig, CLUSTER_CONFIG_FIELDS),
             (NeuronClusterTraceStep, TRACE_STEP_FIELDS),
@@ -499,6 +514,7 @@ print(json.dumps({{
             NucleusConfig,
             AxonsConfig,
             TerminalConfig,
+            TerminalRoutingTreeConfig,
             NeuronConfig,
             NeuronClusterConfig,
         ):
@@ -520,6 +536,13 @@ print(json.dumps({{
                 ("SEVEN", 7),
                 ("EIGHT", 8),
             ),
+        )
+        self.assertEqual(
+            tuple(
+                (option.name, option.value)
+                for option in TerminalRoutingTreeDepthOptions
+            ),
+            (("TWO", 2), ("THREE", 3)),
         )
         self.assertEqual(
             tuple((option.name, option.value) for option in TerminalZAxisOffsetOptions),

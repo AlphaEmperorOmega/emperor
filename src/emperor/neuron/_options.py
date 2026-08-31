@@ -29,3 +29,8 @@ class TerminalConnectionShapeOptions(Enum):
     LINE_LEFT_RIGHT = "line_left_right"
     LINE_UP_DOWN = "line_up_down"
     LINE_FRONT_BACK = "line_front_back"
+
+
+class TerminalRoutingTreeDepthOptions(Enum):
+    TWO = 2
+    THREE = 3
