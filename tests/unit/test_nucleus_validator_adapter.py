@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.neuron import Nucleus, NucleusConfig
-from emperor.neuron._validation import NucleusValidator
+from emperor.neuron._nucleus.validation import NucleusValidator
 
 
 class TestNucleusValidatorAdapter(unittest.TestCase):

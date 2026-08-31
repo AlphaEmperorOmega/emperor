@@ -61,6 +61,8 @@ retired_modules = [
   "emperor.neuron.cluster",
   "emperor.neuron.monitoring",
   "emperor.neuron.optimizer_sync",
+  "emperor.neuron._parts",
+  "emperor.neuron._terminal_topology",
   "emperor.parametric.state",
   "emperor.parametric.monitoring",
   "emperor.sampler.router",
@@ -105,6 +107,14 @@ retired_symbol_imports = [
   { module = "emperor.layers._validation", name = "RecurrentLayerValidator" },
   { module = "emperor.layers", name = "HRMRecurrentConfig" },
   { module = "emperor.layers", name = "TRMRecurrentConfig" },
+  { module = "emperor.neuron._axons", name = "AxonsValidator" },
+  { module = "emperor.neuron._nucleus", name = "NucleusValidator" },
+  { module = "emperor.neuron._validation", name = "AxonsValidator" },
+  { module = "emperor.neuron._validation", name = "NeuronClusterValidator" },
+  { module = "emperor.neuron._validation", name = "NeuronValidationMixin" },
+  { module = "emperor.neuron._validation", name = "NeuronValidator" },
+  { module = "emperor.neuron._validation", name = "NucleusValidator" },
+  { module = "emperor.neuron._validation", name = "TerminalValidator" },
 ]
 
 retired_members = []
@@ -250,7 +260,7 @@ owners = ["emperor.monitoring._metadata", "emperor.monitoring._metadata", "emper
 module = "emperor.neuron"
 kind = "runtime"
 exports = ["Axons", "AxonsConfig", "Neuron", "NeuronCluster", "NeuronClusterConfig", "NeuronClusterMonitorCallback", "NeuronClusterOptimizerSyncCallback", "NeuronClusterTrace", "NeuronClusterTraceStep", "NeuronConfig", "Nucleus", "NucleusConfig", "Terminal", "TerminalConfig", "TerminalConnectionShapeOptions", "TerminalRangeOptions", "TerminalZAxisOffsetOptions"]
-owners = ["emperor.neuron._parts", "emperor.neuron._config", "emperor.neuron._parts", "emperor.neuron._cluster.model", "emperor.neuron._config", "emperor.neuron._monitoring.callback", "emperor.neuron._optimizer_sync", "emperor.neuron._trace", "emperor.neuron._trace", "emperor.neuron._config", "emperor.neuron._parts", "emperor.neuron._config", "emperor.neuron._parts", "emperor.neuron._config", "emperor.neuron._options", "emperor.neuron._options", "emperor.neuron._options"]
+owners = ["emperor.neuron._axons.core", "emperor.neuron._config", "emperor.neuron._neuron.core", "emperor.neuron._cluster.model", "emperor.neuron._config", "emperor.neuron._monitoring.callback", "emperor.neuron._optimizer_sync", "emperor.neuron._trace", "emperor.neuron._trace", "emperor.neuron._config", "emperor.neuron._nucleus.core", "emperor.neuron._config", "emperor.neuron._terminal.core", "emperor.neuron._config", "emperor.neuron._options", "emperor.neuron._options", "emperor.neuron._options"]
 
 [[interfaces]]
 module = "emperor.nn"

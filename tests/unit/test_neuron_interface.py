@@ -56,9 +56,9 @@ EXPECTED_EXPORTS = (
 )
 
 EXPECTED_OWNERS = {
-    "Axons": "emperor.neuron._parts",
+    "Axons": "emperor.neuron._axons.core",
     "AxonsConfig": "emperor.neuron._config",
-    "Neuron": "emperor.neuron._parts",
+    "Neuron": "emperor.neuron._neuron.core",
     "NeuronCluster": "emperor.neuron._cluster.model",
     "NeuronClusterConfig": "emperor.neuron._config",
     "NeuronClusterMonitorCallback": "emperor.neuron._monitoring.callback",
@@ -66,9 +66,9 @@ EXPECTED_OWNERS = {
     "NeuronClusterTrace": "emperor.neuron._trace",
     "NeuronClusterTraceStep": "emperor.neuron._trace",
     "NeuronConfig": "emperor.neuron._config",
-    "Nucleus": "emperor.neuron._parts",
+    "Nucleus": "emperor.neuron._nucleus.core",
     "NucleusConfig": "emperor.neuron._config",
-    "Terminal": "emperor.neuron._parts",
+    "Terminal": "emperor.neuron._terminal.core",
     "TerminalConfig": "emperor.neuron._config",
     "TerminalConnectionShapeOptions": "emperor.neuron._options",
     "TerminalRangeOptions": "emperor.neuron._options",
@@ -78,15 +78,29 @@ EXPECTED_OWNERS = {
 PRIVATE_MODULES = (
     "emperor.neuron._config",
     "emperor.neuron._options",
-    "emperor.neuron._parts",
+    "emperor.neuron._axons",
+    "emperor.neuron._axons.core",
+    "emperor.neuron._axons.validation",
+    "emperor.neuron._nucleus",
+    "emperor.neuron._nucleus.core",
+    "emperor.neuron._nucleus.validation",
+    "emperor.neuron._neuron",
+    "emperor.neuron._neuron.core",
+    "emperor.neuron._neuron.validation",
+    "emperor.neuron._terminal",
+    "emperor.neuron._terminal.core",
+    "emperor.neuron._terminal.topology",
+    "emperor.neuron._terminal.validation",
     "emperor.neuron._trace",
     "emperor.neuron._validation",
+    "emperor.neuron._validation.common",
     "emperor.neuron._optimizer_sync",
     "emperor.neuron._monitoring",
     "emperor.neuron._monitoring.callback",
     "emperor.neuron._monitoring.diagnostics",
     "emperor.neuron._cluster",
     "emperor.neuron._cluster.model",
+    "emperor.neuron._cluster.validation",
     "emperor.neuron._cluster.topology",
     "emperor.neuron._cluster.state",
     "emperor.neuron._cluster.recurrent_routes",
@@ -377,7 +391,15 @@ runtime_before = {{
     "torch": "torch" in sys.modules,
 }}
 private_packages = {{}}
-for module_name in ("emperor.neuron._cluster", "emperor.neuron._monitoring"):
+for module_name in (
+    "emperor.neuron._axons",
+    "emperor.neuron._cluster",
+    "emperor.neuron._monitoring",
+    "emperor.neuron._neuron",
+    "emperor.neuron._nucleus",
+    "emperor.neuron._terminal",
+    "emperor.neuron._validation",
+):
     module = importlib.import_module(module_name)
     private_packages[module_name] = sorted(getattr(module, "__all__", ()))
 
@@ -429,8 +451,13 @@ print(json.dumps({{
         self.assertEqual(
             result["private_packages"],
             {
+                "emperor.neuron._axons": ["Axons"],
                 "emperor.neuron._cluster": [],
                 "emperor.neuron._monitoring": [],
+                "emperor.neuron._neuron": ["Neuron"],
+                "emperor.neuron._nucleus": ["Nucleus"],
+                "emperor.neuron._terminal": ["Terminal"],
+                "emperor.neuron._validation": [],
             },
         )
         self.assertEqual(

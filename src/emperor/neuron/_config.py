@@ -21,7 +21,7 @@ class NucleusConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.neuron._parts import Nucleus
+        from emperor.neuron._nucleus import Nucleus
 
         return Nucleus
 
@@ -33,7 +33,7 @@ class AxonsConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.neuron._parts import Axons
+        from emperor.neuron._axons import Axons
 
         return Axons
 
@@ -71,7 +71,7 @@ class TerminalConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.neuron._parts import Terminal
+        from emperor.neuron._terminal import Terminal
 
         return Terminal
 
@@ -93,7 +93,7 @@ class NeuronConfig(ConfigBase):
     )
 
     def _registry_owner(self) -> type:
-        from emperor.neuron._parts import Neuron
+        from emperor.neuron._neuron import Neuron
 
         return Neuron
 

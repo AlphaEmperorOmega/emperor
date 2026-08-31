@@ -8,7 +8,7 @@ from emperor.halting import (
     SoftHalting,
     SoftHaltingConfig,
 )
-from emperor.neuron._validation import NeuronClusterValidator
+from emperor.neuron._cluster.validation import NeuronClusterValidator
 
 
 class _DuckTypedHalting:

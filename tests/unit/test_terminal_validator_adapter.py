@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.neuron import Terminal, TerminalConfig
-from emperor.neuron._validation import TerminalValidator
+from emperor.neuron._terminal.validation import TerminalValidator
 
 
 class TestTerminalValidatorAdapter(unittest.TestCase):

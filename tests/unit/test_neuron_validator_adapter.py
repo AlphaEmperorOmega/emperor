@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.neuron import Neuron, NeuronConfig
-from emperor.neuron._validation import NeuronValidator
+from emperor.neuron._neuron.validation import NeuronValidator
 from unit.test_neuron import NeuronTestCase
 
 
