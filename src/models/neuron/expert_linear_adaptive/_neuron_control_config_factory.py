@@ -11,6 +11,7 @@ from emperor.neuron import (
     NeuronConfig,
     NucleusConfig,
     TerminalConfig,
+    TerminalConnectionShapeOptions,
 )
 from emperor.sampler import RouterConfig, SamplerConfig
 from models.neuron.expert_linear_adaptive._hidden_block import HiddenBlockConfig
@@ -77,6 +78,7 @@ class NeuronControlConfigFactory:
             axons_config=AxonsConfig(memory_config=None),
             terminal_config=TerminalConfig(
                 input_dim=hidden_dim,
+                connection_shape=TerminalConnectionShapeOptions.BOX,
                 xy_axis_range=terminal_options.xy_axis_range,
                 z_axis_range=terminal_options.z_axis_range,
                 z_axis_offset=terminal_options.z_axis_offset,
