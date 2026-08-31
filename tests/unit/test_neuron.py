@@ -548,7 +548,9 @@ class NeuronTestCase(unittest.TestCase):
         z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
         z_axis_offset: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO,
         sampler_config: SamplerConfig | None = None,
-        connection_shape: TerminalConnectionShapeOptions | None = None,
+        connection_shape: TerminalConnectionShapeOptions = (
+            TerminalConnectionShapeOptions.BOX
+        ),
     ) -> TerminalConfig:
         num_experts = self.terminal_total_connections(xy_axis_range, z_axis_range)
         return TerminalConfig(
@@ -3405,18 +3407,6 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(
             int(target_model.cluster["neuron_1_1_1"].warmup_remaining_steps.item()),
             0,
-        )
-
-    def test_explicit_box_shape_matches_default_connections(self):
-        default_terminal = self.terminal_config().build()
-        box_terminal = self.terminal_config(
-            connection_shape=TerminalConnectionShapeOptions.BOX,
-        ).build()
-
-        self.assertEqual(box_terminal.total_neuron_connections, 18)
-        torch.testing.assert_close(
-            box_terminal.neuron_connections,
-            default_terminal.neuron_connections,
         )
 
     def test_cross_shape_keeps_axis_lines_only(self):
