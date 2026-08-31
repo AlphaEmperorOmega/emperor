@@ -10,6 +10,7 @@ from emperor.neuron import (
     NucleusConfig,
     TerminalConfig,
     TerminalConnectionShapeOptions,
+    TerminalRoutingTreeConfig,
 )
 from emperor.sampler import RouterConfig, SamplerConfig
 from models.neuron.expert_linear._hidden_block import HiddenBlockConfig
@@ -21,6 +22,7 @@ from models.neuron.expert_linear.runtime_options import (
     NeuronClusterCapacityOptions,
     NeuronSubmoduleStackOptions,
     NeuronTerminalOptions,
+    NeuronTerminalRoutingTreeOptions,
     NeuronTerminalSamplerOptions,
 )
 
@@ -81,7 +83,23 @@ class NeuronControlConfigFactory:
                 z_axis_range=terminal_options.z_axis_range,
                 z_axis_offset=terminal_options.z_axis_offset,
                 sampler_config=terminal_sampler_config,
+                routing_tree_config=self.__build_terminal_routing_tree_config(),
             ),
+        )
+
+    def __build_terminal_routing_tree_config(
+        self,
+    ) -> TerminalRoutingTreeConfig | None:
+        routing_tree_options: NeuronTerminalRoutingTreeOptions | None = (
+            self.terminal_options.routing_tree
+        )
+        if routing_tree_options is None:
+            return None
+        return TerminalRoutingTreeConfig(
+            depth=routing_tree_options.depth,
+            direction_branch_counts=routing_tree_options.direction_branch_counts,
+            direction_top_k=routing_tree_options.direction_top_k,
+            direction_sampler_config=None,
         )
 
     def __build_neuron_cluster_config(
