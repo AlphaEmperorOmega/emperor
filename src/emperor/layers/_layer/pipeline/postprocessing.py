@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from torch import Tensor, nn
 
@@ -27,13 +27,15 @@ class LayerPostprocessingDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-
-        self.activation_function = cast(ActivationOptions, self.cfg.activation)
-        self.output_dim = cast(int, self.cfg.output_dim)
-        self.gate_config = self.cfg.gate_config
+        self.__initialize_from_config()
         self.gate = self.__build_gate()
-        self.dropout_probability = cast(float, self.cfg.dropout_probability)
         self.dropout = self.__build_dropout()
+
+    def __initialize_from_config(self) -> None:
+        self.activation_function: ActivationOptions = self.cfg.activation
+        self.output_dim: int = self.cfg.output_dim
+        self.gate_config = self.cfg.gate_config
+        self.dropout_probability: float = self.cfg.dropout_probability
 
     def __build_gate(self) -> LayerGate | None:
         gate = self._build_from_config(

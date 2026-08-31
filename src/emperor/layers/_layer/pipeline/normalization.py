@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from torch import nn
 
@@ -25,17 +25,19 @@ class LayerNormalizationDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
+        self.__initialize_from_config()
+        self.module = self.__build_layer_norm()
 
-        self.position = cast(LayerNormPositionOptions, self.cfg.layer_norm_position)
-        self.input_dim = cast(int, self.cfg.input_dim)
-        self.output_dim = cast(int, self.cfg.output_dim)
-        self.dimension = self.__resolve_dimension(
-            self.input_dim,
-            self.output_dim,
-        )
-        self.module: nn.LayerNorm | None = (
-            None if self.dimension is None else nn.LayerNorm(self.dimension)
-        )
+    def __initialize_from_config(self) -> None:
+        self.position: LayerNormPositionOptions = self.cfg.layer_norm_position
+        self.input_dim: int = self.cfg.input_dim
+        self.output_dim: int = self.cfg.output_dim
+        self.dimension = self.__resolve_dimension(self.input_dim, self.output_dim)
+
+    def __build_layer_norm(self) -> nn.LayerNorm | None:
+        if self.dimension is None:
+            return None
+        return nn.LayerNorm(self.dimension)
 
     def __resolve_dimension(self, input_dim: int, output_dim: int) -> int | None:
         if self.position == LayerNormPositionOptions.DISABLED:
