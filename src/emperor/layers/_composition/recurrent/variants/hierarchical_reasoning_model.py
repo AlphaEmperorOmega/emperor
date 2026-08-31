@@ -61,13 +61,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
     ) -> None:
         super().__init__(cfg, overrides)
         self.cfg: HierarchicalReasoningModelRecurrentConfig
-        self.high_block_config: ConfigBase = self.cfg.high_block_config
-        self.low_block_config: ConfigBase = self.cfg.low_block_config
-        self.high_cycles: int = self.cfg.high_cycles
-        self.low_cycles: int = self.cfg.low_cycles
-        self.initialization_standard_deviation: float = (
-            self.cfg.initialization_standard_deviation
-        )
+        self.__initialize_from_config()
         self.__register_initial_buffer("high_initial")
         self.__register_initial_buffer("low_initial")
         self.high_model: Module = self._build_transition_model(self.high_block_config)
@@ -75,6 +69,15 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         self.__recurrent_execution: RecurrentExecution[
             _HierarchicalReasoningModelState
         ] = RecurrentExecution()
+
+    def __initialize_from_config(self) -> None:
+        self.high_block_config: ConfigBase = self.cfg.high_block_config
+        self.low_block_config: ConfigBase = self.cfg.low_block_config
+        self.high_cycles: int = self.cfg.high_cycles
+        self.low_cycles: int = self.cfg.low_cycles
+        self.initialization_standard_deviation: float = (
+            self.cfg.initialization_standard_deviation
+        )
 
     def __register_initial_buffer(self, buffer_name: str) -> None:
         initial_buffer = self._new_recurrent_initial_buffer(

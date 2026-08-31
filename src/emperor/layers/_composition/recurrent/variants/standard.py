@@ -50,11 +50,7 @@ class RecurrentLayer(RecurrentCompositionAbstract):
     ) -> None:
         super().__init__(cfg, overrides)
         self.cfg: RecurrentLayerConfig
-        self.max_steps: int = self.cfg.max_steps
-        self.reinject_original_hidden_flag: bool = (
-            self.cfg.reinject_original_hidden_flag is True
-        )
-        self.block_config: ConfigBase = self.cfg.block_config
+        self.__initialize_from_config()
         self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
             self.max_steps
         )
@@ -62,6 +58,13 @@ class RecurrentLayer(RecurrentCompositionAbstract):
         self.__recurrent_execution: RecurrentExecution[_StandardRecurrentState] = (
             RecurrentExecution()
         )
+
+    def __initialize_from_config(self) -> None:
+        self.max_steps: int = self.cfg.max_steps
+        self.reinject_original_hidden_flag: bool = (
+            self.cfg.reinject_original_hidden_flag is True
+        )
+        self.block_config: ConfigBase = self.cfg.block_config
 
     def forward(self, state: LayerState) -> LayerState:
         self.VALIDATOR.validate_state(state, self.input_dim)

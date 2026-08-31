@@ -61,6 +61,15 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
     ) -> None:
         super().__init__(cfg, overrides)
         self.cfg: TinyRecursiveModelRecurrentConfig
+        self.__initialize_from_config()
+        self.__register_initial_buffer("answer_initial")
+        self.__register_initial_buffer("latent_initial")
+        self.block_model: Module = self._build_transition_model(self.block_config)
+        self.__recurrent_execution: RecurrentExecution[_TinyRecursiveModelState] = (
+            RecurrentExecution()
+        )
+
+    def __initialize_from_config(self) -> None:
         self.block_config: ConfigBase = self.cfg.block_config
         self.latent_updates_per_answer_update: int = (
             self.cfg.latent_updates_per_answer_update
@@ -68,12 +77,6 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
         self.answer_update_count: int = self.cfg.answer_update_count
         self.initialization_standard_deviation: float = (
             self.cfg.initialization_standard_deviation
-        )
-        self.__register_initial_buffer("answer_initial")
-        self.__register_initial_buffer("latent_initial")
-        self.block_model: Module = self._build_transition_model(self.block_config)
-        self.__recurrent_execution: RecurrentExecution[_TinyRecursiveModelState] = (
-            RecurrentExecution()
         )
 
     def __register_initial_buffer(self, buffer_name: str) -> None:

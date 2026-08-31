@@ -1,5 +1,7 @@
+import ast
 import importlib
 import inspect
+import textwrap
 import unittest
 from dataclasses import fields
 from pathlib import Path
@@ -185,12 +187,38 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             recurrent_base_module_name,
         )
 
-        base_initializer_source = inspect.getsource(
-            RecurrentCompositionAbstract.__init__
+        base_initializer_tree = ast.parse(
+            textwrap.dedent(inspect.getsource(RecurrentCompositionAbstract.__init__))
+        )
+        base_initializer_calls = [
+            node
+            for node in ast.walk(base_initializer_tree)
+            if isinstance(node, ast.Call)
+        ]
+        call_lines = {
+            ast.unparse(call.func): call.lineno for call in base_initializer_calls
+        }
+        self.assertLess(
+            call_lines["self.VALIDATOR.validate"],
+            call_lines["self.__initialize_from_config"],
         )
         self.assertLess(
-            base_initializer_source.index("self.VALIDATOR.validate(self)"),
-            base_initializer_source.index("RecurrentIterationSchedule(self.cfg)"),
+            call_lines["self.__initialize_from_config"],
+            call_lines["self.__initialize_delegates"],
+        )
+        delegate_initializer = vars(RecurrentCompositionAbstract)[
+            "_RecurrentCompositionAbstract__initialize_delegates"
+        ]
+        delegate_initializer_tree = ast.parse(
+            textwrap.dedent(inspect.getsource(delegate_initializer))
+        )
+        self.assertTrue(
+            any(
+                isinstance(call.func, ast.Name)
+                and call.func.id == "RecurrentIterationSchedule"
+                for call in ast.walk(delegate_initializer_tree)
+                if isinstance(call, ast.Call)
+            )
         )
 
     def test_variant_classes_are_adapters_for_shared_recurrent_execution(
