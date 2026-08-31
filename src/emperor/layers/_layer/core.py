@@ -36,10 +36,16 @@ class Layer(LayerModuleBase):
         super().__init__()
         self.cfg: LayerConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
+        self.__initialize_from_config()
+        self.__initialize_delegates()
+        self.model = self.__build_model()
 
+    def __initialize_from_config(self) -> None:
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
-        self.model = self.__build_model()
+        self.layer_model_config = self.cfg.layer_model_config
+
+    def __initialize_delegates(self) -> None:
         self.postprocessing = LayerPostprocessingDelegate(self.cfg)
         self.halting = LayerHaltingDelegate(self.cfg)
         self.memory = LayerMemoryDelegate(self.cfg)
@@ -48,7 +54,7 @@ class Layer(LayerModuleBase):
 
     def __build_model(self) -> Module:
         model = self._build_from_config(
-            self.cfg.layer_model_config,
+            self.layer_model_config,
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )

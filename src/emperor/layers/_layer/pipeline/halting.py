@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from emperor.layers._layer.validation import LayerHaltingDelegateValidator
 from emperor.layers._state import LayerState
@@ -26,11 +26,13 @@ class LayerHaltingDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-
-        self.config = self.cfg.halting_config
-        self.output_dim = cast(int, self.cfg.output_dim)
+        self.__initialize_from_config()
         self.model: HaltingInterface[HaltingStateBase] | None = self.__build_model()
         self.is_terminal = False
+
+    def __initialize_from_config(self) -> None:
+        self.config = self.cfg.halting_config
+        self.output_dim: int = self.cfg.output_dim
 
     def __build_model(self) -> HaltingInterface[HaltingStateBase] | None:
         model = self._build_from_config(
