@@ -37,9 +37,7 @@ class Terminal(Module):
         self.z_axis_range: int = self.cfg.z_axis_range.value
         self.z_axis_offset: int = self.cfg.z_axis_offset.value
         self.connection_shape: TerminalConnectionShapeOptions = (
-            TerminalConnectionShapeOptions.BOX
-            if self.cfg.connection_shape is None
-            else self.cfg.connection_shape
+            self.cfg.connection_shape
         )
         self.sampler_config = self.cfg.sampler_config
         neuron_connections = initialize_terminal_connections(self.cfg)

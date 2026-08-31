@@ -5,11 +5,7 @@ from emperor.neuron._options import TerminalConnectionShapeOptions
 
 
 def initialize_terminal_connections(cfg) -> Tensor:
-    connection_shape = (
-        TerminalConnectionShapeOptions.BOX
-        if cfg.connection_shape is None
-        else cfg.connection_shape
-    )
+    connection_shape = cfg.connection_shape
     if connection_shape is TerminalConnectionShapeOptions.BOX:
         return torch.cartesian_prod(
             _axis_range(cfg.x_axis_position, cfg.xy_axis_range.value),
