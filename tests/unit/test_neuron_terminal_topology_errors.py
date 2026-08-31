@@ -1,6 +1,6 @@
 import unittest
 
-from emperor.neuron._terminal_topology import _connection_offsets
+from emperor.neuron._terminal.topology import _connection_offsets
 
 
 class TestNeuronTerminalTopologyErrors(unittest.TestCase):

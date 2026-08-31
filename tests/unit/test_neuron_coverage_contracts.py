@@ -1,8 +1,8 @@
 import unittest
 
 from emperor.neuron import NeuronClusterConfig
-from emperor.neuron._terminal_topology import initialize_terminal_connections
-from emperor.neuron._validation import NeuronValidator
+from emperor.neuron._neuron.validation import NeuronValidator
+from emperor.neuron._terminal.topology import initialize_terminal_connections
 from unit.test_memory import make_memory_config
 from unit.test_neuron import NeuronTestCase
 

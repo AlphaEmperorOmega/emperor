@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.neuron import Axons, AxonsConfig
-from emperor.neuron._validation import AxonsValidator
+from emperor.neuron._axons.validation import AxonsValidator
 
 
 class TestAxonsValidatorAdapter(unittest.TestCase):

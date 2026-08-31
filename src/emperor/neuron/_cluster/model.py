@@ -19,9 +19,9 @@ from emperor.neuron._cluster.state import (
     _NeuronClusterStateMixin,
 )
 from emperor.neuron._cluster.topology import _NeuronClusterTopologyMixin
+from emperor.neuron._cluster.validation import NeuronClusterValidator
 from emperor.neuron._config import NeuronClusterConfig, TerminalConfig
 from emperor.neuron._trace import NeuronClusterTrace
-from emperor.neuron._validation import NeuronClusterValidator
 from emperor.nn import Module
 
 if TYPE_CHECKING:

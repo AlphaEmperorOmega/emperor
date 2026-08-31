@@ -108,6 +108,8 @@ class CanonicalCutoverScannerTests(unittest.TestCase):
             Path("src/models") / ("dataset" + "_naming.py"),
             Path("src/models") / ("experiment" + "_mode.py"),
             Path("src/models") / ("log" + "_migration.py"),
+            Path("src/emperor/neuron") / ("_axons" + ".py"),
+            Path("src/emperor/neuron") / ("_nucleus" + ".py"),
             Path("src/emperor/neuron") / ("_optimizer" + "_checkpoint.py"),
         )
 
@@ -171,6 +173,8 @@ class CanonicalCutoverScannerTests(unittest.TestCase):
             "models." + "log_migration",
             "models." + "model_metadata",
             "models." + "parser",
+            "emperor.neuron." + "_parts",
+            "emperor.neuron." + "_terminal_topology",
         }
         findings: list[str] = []
         for path in _owned_text_files():
