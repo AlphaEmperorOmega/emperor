@@ -59,7 +59,7 @@ class TerminalConfig(ConfigBase):
         "Sampler configuration used to choose terminal connections."
     )
     connection_shape: TerminalConnectionShapeOptions | None = optional_field(
-        "Geometry of the terminal's connection neighborhood. BOX (default) "
+        "Required geometry of the terminal's connection neighborhood. BOX "
         "is the full cartesian box of the configured ranges; CROSS keeps "
         "only the three axis lines through the neuron; SPHERE keeps box "
         "offsets inside the ellipsoid inscribed in the box; DIAGONAL_X "
@@ -67,7 +67,7 @@ class TerminalConfig(ConfigBase):
         "axis line (left-right = x, up-down = y, front-back = z with the "
         "usual offset window) so signals can jump far along one axis "
         "without the quadratic fan-out of a box. The sampler num_experts "
-        "must match the resulting connection count. Defaults to BOX."
+        "must match the resulting connection count."
     )
 
     def _registry_owner(self) -> type:

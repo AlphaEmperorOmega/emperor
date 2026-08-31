@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class TerminalValidator(ValidatorBase, NeuronValidationMixin):
-    OPTIONAL_FIELDS = {"connection_shape"}
+    OPTIONAL_FIELDS = set()
 
     @classmethod
     def validate_config_fields(cls, cfg) -> None:
@@ -23,12 +23,12 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
     def validate_connection_shape(cfg) -> None:
         from emperor.neuron._options import TerminalConnectionShapeOptions
 
-        if cfg.connection_shape is not None and not isinstance(
+        if not isinstance(
             cfg.connection_shape,
             TerminalConnectionShapeOptions,
         ):
             raise TypeError(
-                "connection_shape must be a TerminalConnectionShapeOptions or None "
+                "connection_shape must be a TerminalConnectionShapeOptions "
                 f"for TerminalConfig, got {type(cfg.connection_shape).__name__}."
             )
 

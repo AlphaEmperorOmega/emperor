@@ -23,6 +23,20 @@ class TestTerminal(NeuronTestCase):
             ),
         )
 
+    def test_connection_shape_is_required(self):
+        config = self.terminal_config()
+        config.connection_shape = None
+        torch.manual_seed(20260830)
+        rng_before = torch.random.get_rng_state().clone()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "connection_shape is required for TerminalConfig, received None",
+        ):
+            config.build()
+
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
     def test_forward_returns_selected_coordinates(self):
         model = self.terminal_config().build()
         input_batch = torch.randn(self.batch_size, self.input_dim)
