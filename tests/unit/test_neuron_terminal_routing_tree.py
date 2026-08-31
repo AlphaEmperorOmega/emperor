@@ -12,6 +12,7 @@ from emperor.neuron import (
 )
 from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
 from emperor.sampler import SamplerConfig, SamplerModel
+from emperor.sampler._usage import SamplerUsageTrackerManager
 from unit.test_neuron import NeuronTestCase
 
 
@@ -370,7 +371,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
             )
         )
 
-    def test_tree_checkpoint_round_trip(self) -> None:
+    def test_tree_checkpoint_round_trip_and_nested_usage_reset(self) -> None:
         terminal = self.tree_terminal(
             leaf_top_k=1,
             routing_tree_config=self.routing_tree_config(direction_top_k=(1,)),
@@ -393,6 +394,18 @@ class TestTerminalRoutingTree(NeuronTestCase):
         torch.testing.assert_close(actual[1], expected[1])
         torch.testing.assert_close(actual[2], expected[2])
 
+        tracker_manager = SamplerUsageTrackerManager()
+        samplers = [
+            module for module in terminal.modules() if isinstance(module, SamplerModel)
+        ]
+        for sampler in samplers:
+            tracker = tracker_manager.attach(sampler)
+            tracker.last_expert_usage_counts.fill_(7.0)
+            tracker.last_expert_usage_mass.fill_(7.0)
+        terminal(input_batch)
+        unvisited_tracker = root.branches[1].sampler.usage_tracker
+        self.assertEqual(unvisited_tracker.last_expert_usage_counts.sum().item(), 0.0)
+        self.assertEqual(unvisited_tracker.last_expert_usage_mass.sum().item(), 0.0)
 
     def test_invalid_tree_fails_before_trainable_construction(self) -> None:
         invalid_configs = (

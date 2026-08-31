@@ -76,10 +76,15 @@ class SamplerUsageTracker(Module):
         return expert_usage_counts, expert_probability_mass
 
     def reset(self) -> None:
-        self.last_expert_usage_counts.zero_()
-        self.last_expert_usage_mass.zero_()
+        self.reset_last()
         self.cumulative_expert_usage_counts.zero_()
         self.cumulative_expert_usage_mass.zero_()
+
+    def reset_last(self) -> None:
+        """Clear only the observation associated with the most recent forward."""
+
+        self.last_expert_usage_counts.zero_()
+        self.last_expert_usage_mass.zero_()
 
 
 class SamplerUsageTrackerManager:
