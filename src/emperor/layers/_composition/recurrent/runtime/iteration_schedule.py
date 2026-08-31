@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
-from typing import cast
 
 import torch
 from torch import Tensor, nn
@@ -112,8 +111,45 @@ class RecurrentIterationSchedule(nn.Module):
 
     def __init__(self, config: RecurrentCompositionConfig) -> None:
         super().__init__()
-        self.VALIDATOR.validate_config(config)
-        profile = self.__profile_from_config(config)
+        self.cfg = config
+        self.VALIDATOR.validate_config(self.cfg)
+        self.__initialize_from_config()
+
+        self.register_buffer(
+            "forward_call_progress",
+            torch.zeros((), dtype=torch.long),
+            persistent=True,
+        )
+        self.register_load_state_dict_pre_hook(self.__prepare_checkpoint)
+
+    def __initialize_from_config(self) -> None:
+        if isinstance(self.cfg, RecurrentLayerConfig):
+            profile = _RecurrentIterationProfile(
+                iteration_unit="transition",
+                maximum_iterations=self.cfg.max_steps,
+                transitions_per_iteration=1,
+                default_gradient_transition_count=None,
+            )
+        elif isinstance(self.cfg, TinyRecursiveModelRecurrentConfig):
+            transitions_per_iteration = self.cfg.latent_updates_per_answer_update + 1
+            profile = _RecurrentIterationProfile(
+                iteration_unit="answer_cycle",
+                maximum_iterations=self.cfg.answer_update_count,
+                transitions_per_iteration=transitions_per_iteration,
+                default_gradient_transition_count=transitions_per_iteration,
+            )
+        elif isinstance(self.cfg, HierarchicalReasoningModelRecurrentConfig):
+            profile = _RecurrentIterationProfile(
+                iteration_unit="high_cycle",
+                maximum_iterations=self.cfg.high_cycles,
+                transitions_per_iteration=self.cfg.low_cycles + 1,
+                default_gradient_transition_count=2,
+            )
+        else:
+            raise TypeError(
+                "recurrent iteration profiles require a concrete recurrent config, "
+                f"got {type(self.cfg).__name__}."
+            )
 
         self.iteration_unit = profile.iteration_unit
         self.maximum_iterations = profile.maximum_iterations
@@ -121,21 +157,20 @@ class RecurrentIterationSchedule(nn.Module):
         self.maximum_transition_count = (
             self.maximum_iterations * self.transitions_per_iteration
         )
-        self.initial_iterations = cast(int, config.initial_iterations)
-        self.gradient_transition_count = config.gradient_transition_count
-        self.iteration_increment = cast(int, config.iteration_increment)
-        self.forward_calls_before_iteration_increment = cast(
-            int,
-            config.forward_calls_before_iteration_increment,
+        self.initial_iterations: int = self.cfg.initial_iterations
+        self.gradient_transition_count = self.cfg.gradient_transition_count
+        self.iteration_increment: int = self.cfg.iteration_increment
+        self.forward_calls_before_iteration_increment: int = (
+            self.cfg.forward_calls_before_iteration_increment
         )
-        self.smooth_iteration_growth = config.smooth_iteration_growth_flag is True
+        self.smooth_iteration_growth = self.cfg.smooth_iteration_growth_flag is True
         self.transition_forward_count = (
             self.forward_calls_before_iteration_increment // 2
             if self.smooth_iteration_growth
             else 0
         )
         self.__configured_no_gradient_transition_count = (
-            config.no_gradient_transition_count
+            self.cfg.no_gradient_transition_count
         )
         self.__full_gradient_smooth_handoff = (
             self.smooth_iteration_growth
@@ -146,45 +181,6 @@ class RecurrentIterationSchedule(nn.Module):
             profile.default_gradient_transition_count
         )
         self.__saturation_progress = self.__compute_saturation_progress()
-
-        self.register_buffer(
-            "forward_call_progress",
-            torch.zeros((), dtype=torch.long),
-            persistent=True,
-        )
-        self.register_load_state_dict_pre_hook(self.__prepare_checkpoint)
-
-    @staticmethod
-    def __profile_from_config(
-        config: RecurrentCompositionConfig,
-    ) -> _RecurrentIterationProfile:
-        if isinstance(config, RecurrentLayerConfig):
-            return _RecurrentIterationProfile(
-                iteration_unit="transition",
-                maximum_iterations=cast(int, config.max_steps),
-                transitions_per_iteration=1,
-                default_gradient_transition_count=None,
-            )
-        if isinstance(config, TinyRecursiveModelRecurrentConfig):
-            transitions_per_iteration = (
-                cast(int, config.latent_updates_per_answer_update) + 1
-            )
-            return _RecurrentIterationProfile(
-                iteration_unit="answer_cycle",
-                maximum_iterations=cast(int, config.answer_update_count),
-                transitions_per_iteration=transitions_per_iteration,
-                default_gradient_transition_count=transitions_per_iteration,
-            )
-        hierarchical_config = cast(
-            HierarchicalReasoningModelRecurrentConfig,
-            config,
-        )
-        return _RecurrentIterationProfile(
-            iteration_unit="high_cycle",
-            maximum_iterations=cast(int, hierarchical_config.high_cycles),
-            transitions_per_iteration=cast(int, hierarchical_config.low_cycles) + 1,
-            default_gradient_transition_count=2,
-        )
 
     def __compute_saturation_progress(self) -> int:
         remaining_iterations = self.maximum_iterations - self.initial_iterations
