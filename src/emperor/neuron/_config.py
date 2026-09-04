@@ -7,7 +7,6 @@ from emperor.neuron._options import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
     TerminalRoutingTreeDepthOptions,
-    TerminalZAxisOffsetOptions,
 )
 from emperor.sampler import SamplerConfig
 
@@ -71,10 +70,7 @@ class TerminalConfig(ConfigBase):
         "Neighbor range on each side of the x and y axes."
     )
     z_axis_range: TerminalRangeOptions | None = optional_field(
-        "Forward z-axis neighbor range."
-    )
-    z_axis_offset: TerminalZAxisOffsetOptions | None = optional_field(
-        "Backward z-axis offset applied before the forward z range."
+        "Neighbor range on each side of the z axis."
     )
     sampler_config: SamplerConfig | None = optional_field(
         "Sampler configuration used to choose terminal connections."

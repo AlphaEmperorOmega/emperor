@@ -190,7 +190,6 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
         cls.validate_integer("x_axis_position", model.x_axis_position)
         cls.validate_integer("y_axis_position", model.y_axis_position)
         cls.validate_integer("z_axis_position", model.z_axis_position)
-        cls.validate_axis_ranges(model)
         cls.validate_sampler_config(model)
 
     @classmethod
@@ -210,7 +209,6 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
             z_axis_position=cfg.z_axis_position,
             xy_axis_range=cfg.xy_axis_range.value,
             z_axis_range=cfg.z_axis_range.value,
-            z_axis_offset=cfg.z_axis_offset.value,
             sampler_config=cfg.sampler_config,
             routing_tree_config=cfg.routing_tree_config,
             total_neuron_connections=int(neuron_connections.shape[0]),
@@ -220,15 +218,6 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
             TerminalRoutingTreeDelegate.preflight(cfg, neuron_connections)
             return
         cfg.sampler_config.validate_for_router_input_dim(cfg.input_dim)
-
-    @staticmethod
-    def validate_axis_ranges(model: "Terminal") -> None:
-        if model.z_axis_offset >= model.z_axis_range:
-            raise ValueError(
-                "z_axis_offset must be smaller than z_axis_range for Terminal, "
-                f"received z_axis_offset={model.z_axis_offset} and "
-                f"z_axis_range={model.z_axis_range}."
-            )
 
     @classmethod
     def validate_sampler_config(cls, model: "Terminal") -> None:

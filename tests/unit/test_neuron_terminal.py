@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 
+from emperor.neuron import TerminalRangeOptions
 from unit.test_neuron import FourFieldOnlySampler, NeuronTestCase
 
 
@@ -9,18 +10,40 @@ class TestTerminal(NeuronTestCase):
         model = self.terminal_config().build()
 
         self.assertEqual(model.input_dim, self.input_dim)
-        self.assertEqual(model.total_neuron_connections, 18)
-        self.assertEqual(model.neuron_connections.shape, (18, 3))
+        self.assertEqual(model.total_neuron_connections, 27)
+        self.assertEqual(model.neuron_connections.shape, (27, 3))
+        self.assertEqual(
+            model.neuron_connections[:, 2].unique(sorted=True).tolist(),
+            [0, 1, 2],
+        )
+        self.assertEqual(model.neuron_connections.tolist().count([1, 1, 1]), 1)
         torch.testing.assert_close(
             model.neuron_connections[:4],
             torch.tensor(
                 [
+                    [0, 0, 0],
                     [0, 0, 1],
                     [0, 0, 2],
-                    [0, 1, 1],
-                    [0, 1, 2],
+                    [0, 1, 0],
                 ]
             ),
+        )
+
+    def test_box_range_two_has_five_centered_z_planes(self):
+        model = self.terminal_config(
+            z_axis_range=TerminalRangeOptions.TWO,
+            sampler_config=self.sampler_config(num_experts=45),
+        ).build()
+
+        z_coordinates = model.neuron_connections[:, 2].unique(sorted=True).tolist()
+        self.assertEqual(model.total_neuron_connections, 45)
+        self.assertEqual(model.neuron_connections.shape, (45, 3))
+        self.assertEqual(z_coordinates, [-1, 0, 1, 2, 3])
+        self.assertEqual(z_coordinates[2], model.z_axis_position)
+        self.assertEqual(model.neuron_connections.tolist().count([1, 1, 1]), 1)
+        self.assertEqual(
+            int((model.neuron_connections[:, 2] == model.z_axis_position).sum()),
+            9,
         )
 
     def test_connection_shape_is_required(self):

@@ -252,8 +252,8 @@ def _axis_range(position: int, axis_range: int) -> Tensor:
 
 def _z_axis_range(cfg) -> Tensor:
     return torch.arange(
-        cfg.z_axis_position - cfg.z_axis_offset.value,
-        cfg.z_axis_position + cfg.z_axis_range.value - cfg.z_axis_offset.value + 1,
+        cfg.z_axis_position - cfg.z_axis_range.value,
+        cfg.z_axis_position + cfg.z_axis_range.value + 1,
     )
 
 
@@ -298,8 +298,8 @@ def _z_axis_line_offsets(cfg) -> list[tuple[int, int, int]]:
     return [
         (0, 0, delta)
         for delta in range(
-            -cfg.z_axis_offset.value,
-            cfg.z_axis_range.value - cfg.z_axis_offset.value + 1,
+            -cfg.z_axis_range.value,
+            cfg.z_axis_range.value + 1,
         )
     ]
 
@@ -315,17 +315,14 @@ def _xy_diagonal_offsets(cfg) -> list[tuple[int, int, int]]:
 def _ellipsoid_offsets(cfg) -> list[tuple[int, int, int]]:
     xy_axis_range = cfg.xy_axis_range.value
     z_axis_range = cfg.z_axis_range.value
-    z_axis_offset = cfg.z_axis_offset.value
-    z_window_center = (z_axis_range - 2 * z_axis_offset) / 2
-    z_half_extent = z_axis_range / 2
     ellipsoid_offsets = []
     for x_delta in range(-xy_axis_range, xy_axis_range + 1):
         for y_delta in range(-xy_axis_range, xy_axis_range + 1):
-            for z_delta in range(-z_axis_offset, z_axis_range - z_axis_offset + 1):
+            for z_delta in range(-z_axis_range, z_axis_range + 1):
                 normalized_squared_distance = (
                     (x_delta / xy_axis_range) ** 2
                     + (y_delta / xy_axis_range) ** 2
-                    + ((z_delta - z_window_center) / z_half_extent) ** 2
+                    + (z_delta / z_axis_range) ** 2
                 )
                 if normalized_squared_distance <= 1.0 + 1e-9:
                     ellipsoid_offsets.append((x_delta, y_delta, z_delta))
