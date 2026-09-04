@@ -228,6 +228,67 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self.assertEqual(plan.direction_top_k, (1,))
         self.assertEqual(plan.root.bounds, ((0, 1), (0, 1), (0, 1)))
 
+    def test_compiler_preserves_uneven_intervals_and_input_connection_order(
+        self,
+    ) -> None:
+        coordinates = torch.tensor(
+            [[0, 4, 0], [0, 0, 0], [0, 2, 0], [0, 1, 0], [0, 3, 0]]
+        )
+        routing_tree_config = self.routing_tree_config(
+            branch_counts=(3,), direction_top_k=(1,)
+        )
+
+        plan = RoutingTreeCompiler(coordinates, routing_tree_config, 1).compile()
+
+        self.assertEqual(plan.root.subdivision, (1, 3, 1))
+        self.assertEqual(
+            tuple(child.bounds for child in plan.root.children),
+            (
+                ((0, 0), (0, 1), (0, 0)),
+                ((0, 0), (2, 3), (0, 0)),
+                ((0, 0), (4, 4), (0, 0)),
+            ),
+        )
+        self.assertEqual(
+            tuple(child.connection_indices for child in plan.root.children),
+            ((1, 3), (2, 4), (0,)),
+        )
+        self.assertEqual(
+            tuple(child.path for child in plan.root.children), ((0,), (1,), (2,))
+        )
+
+    def test_compiler_numbers_nonempty_children_without_path_gaps(self) -> None:
+        coordinates = torch.tensor([[0, 0, 0], [2, 2, 0]])
+        routing_tree_config = self.routing_tree_config(
+            branch_counts=(4,), direction_top_k=(1,)
+        )
+
+        plan = RoutingTreeCompiler(coordinates, routing_tree_config, 1).compile()
+
+        self.assertEqual(plan.root.subdivision, (2, 2, 1))
+        self.assertEqual(tuple(node.path for node in plan.walk()), ((), (0,), (1,)))
+        self.assertEqual(
+            tuple(child.connection_indices for child in plan.root.children),
+            ((0,), (1,)),
+        )
+        self.assertEqual(
+            tuple(child.bounds for child in plan.root.children),
+            (((0, 1), (0, 1), (0, 0)), ((2, 2), (2, 2), (0, 0))),
+        )
+
+    def test_compiler_rejects_empty_connections_without_consuming_rng(self) -> None:
+        coordinates = torch.empty((0, 3), dtype=torch.long)
+        rng_before = torch.random.get_rng_state().clone()
+        compiler = RoutingTreeCompiler(coordinates, self.routing_tree_config(), 1)
+
+        with self.assertRaisesRegex(
+            ValueError, "Terminal routing tree requires at least one connection\\."
+        ):
+            compiler.compile()
+
+        self.assertEqual(compiler.coordinate_rows, ())
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
     def test_compiler_balances_three_dimensions_and_covers_connections_once(self):
         coordinates = torch.cartesian_prod(
             torch.arange(3),
