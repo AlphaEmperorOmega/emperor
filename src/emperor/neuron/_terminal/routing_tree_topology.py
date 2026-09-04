@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import partial
 from itertools import product
 from typing import TYPE_CHECKING
 
@@ -200,11 +202,30 @@ class RoutingTreeCompiler:
         bounds: AxisBounds,
         maximum_regions: int,
     ) -> AxisSubdivision:
+        axis_spans = cls.__axis_spans(bounds)
+        bounded_subdivision_candidates = cls.__bounded_subdivision_candidates(
+            axis_spans,
+            maximum_regions,
+        )
+        subdivision_score = partial(cls.__subdivision_score, axis_spans=axis_spans)
+        best_subdivision = min(bounded_subdivision_candidates, key=subdivision_score)
+        return best_subdivision
+
+    @staticmethod
+    def __axis_spans(bounds: AxisBounds) -> tuple[int, int, int]:
         x_axis_bounds, y_axis_bounds, z_axis_bounds = bounds
         x_axis_span = x_axis_bounds[1] - x_axis_bounds[0] + 1
         y_axis_span = y_axis_bounds[1] - y_axis_bounds[0] + 1
         z_axis_span = z_axis_bounds[1] - z_axis_bounds[0] + 1
         axis_spans = (x_axis_span, y_axis_span, z_axis_span)
+        return axis_spans
+
+    @classmethod
+    def __bounded_subdivision_candidates(
+        cls,
+        axis_spans: tuple[int, int, int],
+        maximum_regions: int,
+    ) -> Iterator[AxisSubdivision]:
         x_axis_split_count_after_last = axis_spans[0] + 1
         y_axis_split_count_after_last = axis_spans[1] + 1
         z_axis_split_count_after_last = axis_spans[2] + 1
@@ -221,41 +242,58 @@ class RoutingTreeCompiler:
             for subdivision in all_subdivision_candidates
             if cls.__subdivision_region_count(subdivision) <= maximum_regions
         )
-
-        def score(subdivision: AxisSubdivision):
-            region_count = cls.__subdivision_region_count(subdivision)
-            axis_spans_with_split_counts = zip(
-                axis_spans,
-                subdivision,
-                strict=True,
-            )
-            cell_edges = tuple(
-                Fraction(span, split) for span, split in axis_spans_with_split_counts
-            )
-            aspect_ratio = max(cell_edges) / min(cell_edges)
-            average_cell_edge = sum(cell_edges, Fraction()) / 3
-            edge_spread = sum((edge - average_cell_edge) ** 2 for edge in cell_edges)
-            region_count_sort_key = -region_count
-            x_axis_split_count, y_axis_split_count, z_axis_split_count = subdivision
-            x_axis_split_count_sort_key = -x_axis_split_count
-            y_axis_split_count_sort_key = -y_axis_split_count
-            z_axis_split_count_sort_key = -z_axis_split_count
-            return (
-                region_count_sort_key,
-                aspect_ratio,
-                edge_spread,
-                x_axis_split_count_sort_key,
-                y_axis_split_count_sort_key,
-                z_axis_split_count_sort_key,
-            )
-
-        best_subdivision = min(bounded_subdivision_candidates, key=score)
-        return best_subdivision
+        return bounded_subdivision_candidates
 
     @staticmethod
     def __subdivision_region_count(subdivision: AxisSubdivision) -> int:
         x_axis_split_count, y_axis_split_count, z_axis_split_count = subdivision
         return x_axis_split_count * y_axis_split_count * z_axis_split_count
+
+    @classmethod
+    def __subdivision_score(
+        cls,
+        subdivision: AxisSubdivision,
+        *,
+        axis_spans: tuple[int, int, int],
+    ) -> tuple[int, Fraction, Fraction, int, int, int]:
+        region_count = cls.__subdivision_region_count(subdivision)
+        cell_edges = cls.__subdivision_cell_edges(axis_spans, subdivision)
+        aspect_ratio = max(cell_edges) / min(cell_edges)
+        edge_spread = cls.__cell_edge_spread(cell_edges)
+        region_count_sort_key = -region_count
+        x_axis_split_count, y_axis_split_count, z_axis_split_count = subdivision
+        x_axis_split_count_sort_key = -x_axis_split_count
+        y_axis_split_count_sort_key = -y_axis_split_count
+        z_axis_split_count_sort_key = -z_axis_split_count
+        return (
+            region_count_sort_key,
+            aspect_ratio,
+            edge_spread,
+            x_axis_split_count_sort_key,
+            y_axis_split_count_sort_key,
+            z_axis_split_count_sort_key,
+        )
+
+    @staticmethod
+    def __subdivision_cell_edges(
+        axis_spans: tuple[int, int, int],
+        subdivision: AxisSubdivision,
+    ) -> tuple[Fraction, ...]:
+        axis_spans_with_split_counts = zip(
+            axis_spans,
+            subdivision,
+            strict=True,
+        )
+        cell_edges = tuple(
+            Fraction(span, split) for span, split in axis_spans_with_split_counts
+        )
+        return cell_edges
+
+    @staticmethod
+    def __cell_edge_spread(cell_edges: tuple[Fraction, ...]) -> Fraction:
+        average_cell_edge = sum(cell_edges, Fraction()) / 3
+        edge_spread = sum((edge - average_cell_edge) ** 2 for edge in cell_edges)
+        return edge_spread
 
     def __compile_child_nodes(
         self,
