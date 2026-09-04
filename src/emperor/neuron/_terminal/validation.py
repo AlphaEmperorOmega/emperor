@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from emperor.neuron._terminal.core import Terminal
     from emperor.neuron._terminal.routing import RoutingTreeDelegate
     from emperor.neuron._terminal.routing_tree_topology import RoutingTreePlan
+    from emperor.sampler import SamplerConfig
 
 
 class RoutingTreeDelegateValidator(ValidatorBase):
@@ -54,14 +55,30 @@ class RoutingTreeDelegateValidator(ValidatorBase):
         model: "RoutingTreeDelegate",
         routing_tree_plan: "RoutingTreePlan",
     ) -> None:
+        cls.validate_plan_sampler_configs(
+            input_dim=model.input_dim,
+            leaf_sampler_config=model.leaf_sampler_config,
+            direction_sampler_config=model.direction_sampler_config,
+            routing_tree_plan=routing_tree_plan,
+        )
+
+    @classmethod
+    def validate_plan_sampler_configs(
+        cls,
+        *,
+        input_dim: int,
+        leaf_sampler_config: "SamplerConfig",
+        direction_sampler_config: "SamplerConfig",
+        routing_tree_plan: "RoutingTreePlan",
+    ) -> None:
         from emperor.neuron._terminal.routing.node import RoutingTreeNode
         from emperor.sampler import RouterConfig
 
         for template_name, sampler_template in (
-            ("sampler_config", model.leaf_sampler_config),
+            ("sampler_config", leaf_sampler_config),
             (
                 "routing_tree_config.direction_sampler_config",
-                model.direction_sampler_config,
+                direction_sampler_config,
             ),
         ):
             if not isinstance(sampler_template.router_config, RouterConfig):
@@ -81,7 +98,7 @@ class RoutingTreeDelegateValidator(ValidatorBase):
                         "sampler_config.top_k="
                         f"{routing_tree_plan.leaf_top_k}."
                     )
-                template = model.leaf_sampler_config
+                template = leaf_sampler_config
                 num_experts = len(node.connection_indices)
                 top_k = routing_tree_plan.leaf_top_k
             else:
@@ -100,17 +117,17 @@ class RoutingTreeDelegateValidator(ValidatorBase):
                         f"{num_children} nonempty regions, fewer than "
                         f"direction_top_k[{node.level}]={level_top_k}."
                     )
-                template = model.direction_sampler_config
+                template = direction_sampler_config
                 num_experts = num_children
                 top_k = level_top_k
 
             derived_config = RoutingTreeNode.derive_sampler_config(
                 template,
-                input_dim=model.input_dim,
+                input_dim=input_dim,
                 num_experts=num_experts,
                 top_k=top_k,
             )
-            derived_config.validate_for_router_input_dim(model.input_dim)
+            derived_config.validate_for_router_input_dim(input_dim)
 
     @staticmethod
     def _format_tree_path(path: tuple[int, ...]) -> str:
@@ -268,14 +285,11 @@ class Validator(ValidatorBase, NeuronValidationMixin):
             routing_tree_config=routing_tree_config,
             leaf_top_k=leaf_sampler_config.top_k,
         ).compile()
-        routing_tree_validation_target = SimpleNamespace(
+        RoutingTreeDelegateValidator.validate_plan_sampler_configs(
             input_dim=cfg.input_dim,
             leaf_sampler_config=leaf_sampler_config,
             direction_sampler_config=direction_sampler_config,
-        )
-        RoutingTreeDelegateValidator.validate_routing_tree_plan(
-            routing_tree_validation_target,
-            routing_tree_plan,
+            routing_tree_plan=routing_tree_plan,
         )
 
     @classmethod
