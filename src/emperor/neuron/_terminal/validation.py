@@ -7,20 +7,52 @@ from emperor._validation import ValidatorBase
 from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
+    from emperor.neuron._config import TerminalRoutingTreeConfig
     from emperor.neuron._terminal.core import Terminal
+    from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
     from emperor.neuron._terminal.routing_tree_topology import RoutingTreePlan
-    from emperor.sampler import SamplerConfig
 
 
-class TerminalRoutingTreeDelegateValidator(ValidatorBase):
+class RoutingTreeDelegateValidator(ValidatorBase):
+    @staticmethod
+    def validate_routing_tree_config(
+        routing_tree_config: "TerminalRoutingTreeConfig | None",
+    ) -> None:
+        """Validate the configuration required to construct a routing tree."""
+        if routing_tree_config is None:
+            raise ValueError("RoutingTreeDelegate requires routing_tree_config.")
+
+    @staticmethod
+    def validate_forward_inputs(
+        model: "TerminalRoutingTreeDelegate",
+        input_matrix: object,
+        skip_mask: Tensor | None,
+    ) -> None:
+        """Validate one routing-tree sampling request."""
+        if not isinstance(input_matrix, Tensor):
+            raise TypeError(
+                "input_matrix must be a Tensor, "
+                f"received {type(input_matrix).__name__}."
+            )
+
+        if input_matrix.dim() != 2 or input_matrix.shape[-1] != model.input_dim:
+            raise ValueError(
+                "Terminal routing tree input must have shape "
+                f"(batch_size, {model.input_dim}), received "
+                f"{tuple(input_matrix.shape)}."
+            )
+
+        if skip_mask is not None:
+            raise ValueError(
+                "Terminal routing trees do not accept a shared skip_mask; each "
+                "conditionally executed node manages its own sampler state."
+            )
+
     @classmethod
-    def validate_preflight(
+    def validate_routing_tree_plan(
         cls,
-        *,
-        input_dim: int,
-        leaf_sampler_config: "SamplerConfig",
-        direction_sampler_config: "SamplerConfig",
-        plan: "RoutingTreePlan",
+        model: "TerminalRoutingTreeDelegate",
+        routing_tree_plan: "RoutingTreePlan",
     ) -> None:
         from emperor.neuron._terminal.routing import (
             derive_terminal_tree_sampler_config,
@@ -28,8 +60,11 @@ class TerminalRoutingTreeDelegateValidator(ValidatorBase):
         from emperor.sampler import RouterConfig
 
         for template_name, sampler_template in (
-            ("sampler_config", leaf_sampler_config),
-            ("routing_tree_config.direction_sampler_config", direction_sampler_config),
+            ("sampler_config", model.leaf_sampler_config),
+            (
+                "routing_tree_config.direction_sampler_config",
+                model.direction_sampler_config,
+            ),
         ):
             if not isinstance(sampler_template.router_config, RouterConfig):
                 raise ValueError(
@@ -38,21 +73,22 @@ class TerminalRoutingTreeDelegateValidator(ValidatorBase):
                     "available only in flat mode."
                 )
 
-        for node in plan.walk():
+        for node in routing_tree_plan.walk():
             if node.is_leaf:
-                if len(node.connection_indices) < plan.leaf_top_k:
+                if len(node.connection_indices) < routing_tree_plan.leaf_top_k:
                     raise ValueError(
                         "Terminal routing tree leaf "
                         f"{cls._format_tree_path(node.path)} contains "
                         f"{len(node.connection_indices)} connections, fewer than "
-                        f"sampler_config.top_k={plan.leaf_top_k}."
+                        "sampler_config.top_k="
+                        f"{routing_tree_plan.leaf_top_k}."
                     )
-                template = leaf_sampler_config
+                template = model.leaf_sampler_config
                 num_experts = len(node.connection_indices)
-                top_k = plan.leaf_top_k
+                top_k = routing_tree_plan.leaf_top_k
             else:
                 num_children = len(node.children)
-                level_top_k = plan.direction_top_k[node.level]
+                level_top_k = routing_tree_plan.direction_top_k[node.level]
                 if num_children < 2:
                     raise ValueError(
                         "Terminal routing tree internal node "
@@ -66,17 +102,17 @@ class TerminalRoutingTreeDelegateValidator(ValidatorBase):
                         f"{num_children} nonempty regions, fewer than "
                         f"direction_top_k[{node.level}]={level_top_k}."
                     )
-                template = direction_sampler_config
+                template = model.direction_sampler_config
                 num_experts = num_children
                 top_k = level_top_k
 
             derived_config = derive_terminal_tree_sampler_config(
                 template,
-                input_dim=input_dim,
+                input_dim=model.input_dim,
                 num_experts=num_experts,
                 top_k=top_k,
             )
-            derived_config.validate_for_router_input_dim(input_dim)
+            derived_config.validate_for_router_input_dim(model.input_dim)
 
     @staticmethod
     def _format_tree_path(path: tuple[int, ...]) -> str:
@@ -199,7 +235,6 @@ class Validator(ValidatorBase, NeuronValidationMixin):
         from emperor.neuron._terminal.connection_topology import (
             TargetCoordinateBuilder,
         )
-        from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
 
         cls.validate_config_fields(cfg)
         neuron_connections = TargetCoordinateBuilder(cfg).build()
@@ -217,9 +252,33 @@ class Validator(ValidatorBase, NeuronValidationMixin):
         )
         cls.validate(terminal_validation_target)
         if cfg.routing_tree_config is not None:
-            TerminalRoutingTreeDelegate.preflight(cfg, neuron_connections)
+            cls.validate_routing_tree_composition(cfg, neuron_connections)
             return
         cfg.sampler_config.validate_for_router_input_dim(cfg.input_dim)
+
+    @staticmethod
+    def validate_routing_tree_composition(cfg, neuron_connections: Tensor) -> None:
+        from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
+
+        routing_tree_config = cfg.routing_tree_config
+        leaf_sampler_config = cfg.sampler_config
+        direction_sampler_config = (
+            routing_tree_config.direction_sampler_config or leaf_sampler_config
+        )
+        routing_tree_plan = RoutingTreeCompiler(
+            neuron_connections=neuron_connections,
+            routing_tree_config=routing_tree_config,
+            leaf_top_k=leaf_sampler_config.top_k,
+        ).compile()
+        routing_tree_validation_target = SimpleNamespace(
+            input_dim=cfg.input_dim,
+            leaf_sampler_config=leaf_sampler_config,
+            direction_sampler_config=direction_sampler_config,
+        )
+        RoutingTreeDelegateValidator.validate_routing_tree_plan(
+            routing_tree_validation_target,
+            routing_tree_plan,
+        )
 
     @classmethod
     def validate_sampler_config(cls, model: "Terminal") -> None:
