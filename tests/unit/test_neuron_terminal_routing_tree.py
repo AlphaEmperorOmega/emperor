@@ -12,7 +12,9 @@ from emperor.neuron import (
     TerminalRoutingTreeConfig,
     TerminalRoutingTreeDepthOptions,
 )
+from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
 from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
+from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
 from emperor.sampler import SamplerConfig, SamplerModel
 from emperor.sampler._usage import SamplerUsageTrackerManager
 from unit.test_neuron import NeuronTestCase
@@ -107,6 +109,40 @@ class TestTerminalRoutingTree(NeuronTestCase):
             second_next_random_values,
         )
 
+    def test_compiler_snapshots_inputs_as_public_topology_values(self) -> None:
+        coordinates = torch.tensor(
+            [
+                [0, 0, 0],
+                [1, 1, 1],
+            ]
+        )
+        routing_tree_config = self.routing_tree_config(
+            branch_counts=(2,),
+            direction_top_k=(1,),
+        )
+        compiler = RoutingTreeCompiler(
+            neuron_connections=coordinates,
+            routing_tree_config=routing_tree_config,
+            leaf_top_k=1,
+        )
+
+        self.assertEqual(compiler.coordinate_rows, ((0, 0, 0), (1, 1, 1)))
+        self.assertEqual(compiler.depth, 2)
+        self.assertEqual(compiler.direction_branch_counts, (2,))
+        self.assertEqual(compiler.direction_top_k, (1,))
+        self.assertEqual(compiler.leaf_top_k, 1)
+
+        coordinates.add_(10)
+        routing_tree_config.depth = TerminalRoutingTreeDepthOptions.THREE
+        routing_tree_config.direction_branch_counts = (2, 2)
+        routing_tree_config.direction_top_k = (1, 1)
+
+        plan = compiler.compile()
+
+        self.assertEqual(plan.depth, 2)
+        self.assertEqual(plan.direction_top_k, (1,))
+        self.assertEqual(plan.root.bounds, ((0, 1), (0, 1), (0, 1)))
+
     def test_compiler_balances_three_dimensions_and_covers_connections_once(self):
         coordinates = torch.cartesian_prod(
             torch.arange(3),
@@ -118,10 +154,11 @@ class TestTerminalRoutingTree(NeuronTestCase):
             branch_counts=(12,),
             direction_top_k=(1,),
         )
-        plan = TerminalRoutingTreeDelegate.preflight(
-            config,
-            coordinates,
-        )
+        plan = RoutingTreeCompiler(
+            neuron_connections=coordinates,
+            routing_tree_config=config.routing_tree_config,
+            leaf_top_k=config.sampler_config.top_k,
+        ).compile()
 
         self.assertEqual(plan.root.subdivision, (3, 2, 2))
         assigned_indices = [
@@ -147,16 +184,16 @@ class TestTerminalRoutingTree(NeuronTestCase):
                     ),
                     connection_shape=connection_shape,
                 )
-                connections = terminal_config.build().neuron_connections
+                connections = TargetCoordinateBuilder(terminal_config).build()
                 routing_tree_config = self.routing_tree_config(
                     branch_counts=(8,),
                     direction_top_k=(1,),
                 )
-                terminal_config.routing_tree_config = routing_tree_config
-                plan = TerminalRoutingTreeDelegate.preflight(
-                    terminal_config,
-                    connections,
-                )
+                plan = RoutingTreeCompiler(
+                    neuron_connections=connections,
+                    routing_tree_config=routing_tree_config,
+                    leaf_top_k=terminal_config.sampler_config.top_k,
+                ).compile()
 
                 assigned_connection_indices = [
                     connection_index
@@ -202,15 +239,16 @@ class TestTerminalRoutingTree(NeuronTestCase):
             direction_top_k=(1,),
         )
         config = self.terminal_config(sampler_config=self.sampler_config(top_k=1))
-        config.routing_tree_config = tree_config
-        original_plan = TerminalRoutingTreeDelegate.preflight(
-            config,
-            sparse_coordinates,
-        )
-        translated_plan = TerminalRoutingTreeDelegate.preflight(
-            config,
-            sparse_coordinates + torch.tensor([11, -7, 5]),
-        )
+        original_plan = RoutingTreeCompiler(
+            neuron_connections=sparse_coordinates,
+            routing_tree_config=tree_config,
+            leaf_top_k=config.sampler_config.top_k,
+        ).compile()
+        translated_plan = RoutingTreeCompiler(
+            neuron_connections=sparse_coordinates + torch.tensor([11, -7, 5]),
+            routing_tree_config=tree_config,
+            leaf_top_k=config.sampler_config.top_k,
+        ).compile()
 
         original_assignments = tuple(
             child.connection_indices for child in original_plan.root.children

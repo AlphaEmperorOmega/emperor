@@ -8,7 +8,7 @@ from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
     from emperor.neuron._terminal.core import Terminal
-    from emperor.neuron._terminal.topology import TerminalRoutingTreePlan
+    from emperor.neuron._terminal.routing_tree_topology import RoutingTreePlan
     from emperor.sampler import SamplerConfig
 
 
@@ -20,7 +20,7 @@ class TerminalRoutingTreeDelegateValidator(ValidatorBase):
         input_dim: int,
         leaf_sampler_config: "SamplerConfig",
         direction_sampler_config: "SamplerConfig",
-        plan: "TerminalRoutingTreePlan",
+        plan: "RoutingTreePlan",
     ) -> None:
         from emperor.neuron._terminal.routing import (
             derive_terminal_tree_sampler_config,
