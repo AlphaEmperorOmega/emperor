@@ -5,7 +5,7 @@ from torch import Tensor
 
 from emperor.neuron._options import TerminalConnectionShapeOptions
 from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
-from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
+from emperor.neuron._terminal.routing import RoutingTreeDelegate
 from emperor.neuron._terminal.validation import Validator
 from emperor.nn import Module
 
@@ -50,7 +50,7 @@ class Terminal(Module):
 
     def __build_sampler(self):
         if self.routing_tree_config is not None:
-            return TerminalRoutingTreeDelegate(
+            return RoutingTreeDelegate(
                 cfg=self.cfg,
                 neuron_connections=self.neuron_connections,
             )

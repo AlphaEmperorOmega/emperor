@@ -9,7 +9,7 @@ from emperor.neuron._validation.common import NeuronValidationMixin
 if TYPE_CHECKING:
     from emperor.neuron._config import TerminalRoutingTreeConfig
     from emperor.neuron._terminal.core import Terminal
-    from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
+    from emperor.neuron._terminal.routing import RoutingTreeDelegate
     from emperor.neuron._terminal.routing_tree_topology import RoutingTreePlan
 
 
@@ -24,7 +24,7 @@ class RoutingTreeDelegateValidator(ValidatorBase):
 
     @staticmethod
     def validate_forward_inputs(
-        model: "TerminalRoutingTreeDelegate",
+        model: "RoutingTreeDelegate",
         input_matrix: object,
         skip_mask: Tensor | None,
     ) -> None:
@@ -51,10 +51,10 @@ class RoutingTreeDelegateValidator(ValidatorBase):
     @classmethod
     def validate_routing_tree_plan(
         cls,
-        model: "TerminalRoutingTreeDelegate",
+        model: "RoutingTreeDelegate",
         routing_tree_plan: "RoutingTreePlan",
     ) -> None:
-        from emperor.neuron._terminal.routing import (
+        from emperor.neuron._terminal.routing.sampler_config import (
             derive_terminal_tree_sampler_config,
         )
         from emperor.sampler import RouterConfig

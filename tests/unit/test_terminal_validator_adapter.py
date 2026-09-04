@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from emperor.neuron import Terminal, TerminalConfig
-from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
+from emperor.neuron._terminal.routing import RoutingTreeDelegate
 from emperor.neuron._terminal.validation import (
     RoutingTreeDelegateValidator,
     Validator,
@@ -50,10 +50,7 @@ class TestTerminalValidatorAdapter(unittest.TestCase):
 
 class TestRoutingTreeDelegateValidatorAdapter(unittest.TestCase):
     def test_module_declares_its_validator_adapter(self):
-        self.assertIs(
-            TerminalRoutingTreeDelegate.VALIDATOR,
-            RoutingTreeDelegateValidator,
-        )
+        self.assertIs(RoutingTreeDelegate.VALIDATOR, RoutingTreeDelegateValidator)
 
     def test_construction_config_validation_uses_adapter(self):
         class RejectingValidator(RoutingTreeDelegateValidator):
@@ -61,7 +58,7 @@ class TestRoutingTreeDelegateValidatorAdapter(unittest.TestCase):
             def validate_routing_tree_config(cls, routing_tree_config):
                 raise RuntimeError("substituted construction validator was called")
 
-        class RejectingDelegate(TerminalRoutingTreeDelegate):
+        class RejectingDelegate(RoutingTreeDelegate):
             VALIDATOR = RejectingValidator
 
         with self.assertRaisesRegex(
@@ -79,7 +76,7 @@ class TestRoutingTreeDelegateValidatorAdapter(unittest.TestCase):
             def validate_forward_inputs(cls, model, input_matrix, skip_mask):
                 raise RuntimeError("substituted runtime validator was called")
 
-        class RejectingDelegate(TerminalRoutingTreeDelegate):
+        class RejectingDelegate(RoutingTreeDelegate):
             VALIDATOR = RejectingValidator
 
         model = RejectingDelegate.__new__(RejectingDelegate)
