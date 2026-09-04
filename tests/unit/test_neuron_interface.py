@@ -543,20 +543,44 @@ print(json.dumps({{
             ),
             (("TWO", 2), ("THREE", 3)),
         )
+        expected_terminal_connection_shapes = (
+            ("BOX", "box"),
+            ("CROSS", "cross"),
+            ("SPHERE", "sphere"),
+            ("DIAGONAL", "diagonal"),
+            ("CROSS_DIAGONAL", "cross_diagonal"),
+        )
         self.assertEqual(
             tuple(
                 (option.name, option.value) for option in TerminalConnectionShapeOptions
             ),
-            (
-                ("BOX", "box"),
-                ("CROSS", "cross"),
-                ("SPHERE", "sphere"),
-                ("DIAGONAL_X", "diagonal_x"),
-                ("LINE_LEFT_RIGHT", "line_left_right"),
-                ("LINE_UP_DOWN", "line_up_down"),
-                ("LINE_FRONT_BACK", "line_front_back"),
-            ),
+            expected_terminal_connection_shapes,
         )
+        self.assertEqual(
+            tuple(TerminalConnectionShapeOptions.__members__),
+            tuple(name for name, _ in expected_terminal_connection_shapes),
+        )
+        retired_shape_names = (
+            "DIAGONAL_X",
+            "LINE_LEFT_RIGHT",
+            "LINE_UP_DOWN",
+            "LINE_FRONT_BACK",
+        )
+        for retired_shape_name in retired_shape_names:
+            with self.subTest(retired_shape_name=retired_shape_name):
+                self.assertFalse(
+                    hasattr(TerminalConnectionShapeOptions, retired_shape_name)
+                )
+        retired_shape_values = (
+            "diagonal_x",
+            "line_left_right",
+            "line_up_down",
+            "line_front_back",
+        )
+        for retired_shape_value in retired_shape_values:
+            with self.subTest(retired_shape_value=retired_shape_value):
+                with self.assertRaises(ValueError):
+                    TerminalConnectionShapeOptions(retired_shape_value)
 
         monitor_parameters = inspect.signature(NeuronClusterMonitorCallback).parameters
         self.assertEqual(

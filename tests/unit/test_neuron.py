@@ -3558,69 +3558,115 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertNotIn((3, 3, 1), connection_set)
         self.assertNotIn((2, 1, -1), connection_set)
 
-    def test_diagonal_x_shape_keeps_xy_diagonals(self):
+    def test_diagonal_shape_keeps_ordered_xy_and_yz_diagonals(self):
         terminal = self.shaped_terminal(
-            TerminalConnectionShapeOptions.DIAGONAL_X,
+            TerminalConnectionShapeOptions.DIAGONAL,
             num_experts=9,
-            xy_axis_range=TerminalRangeOptions.TWO,
         )
 
         self.assertEqual(terminal.total_neuron_connections, 9)
         self.assertEqual(
-            self.terminal_connection_set(terminal),
-            {
-                (-1, -1, 1),
-                (-1, 3, 1),
-                (0, 0, 1),
-                (0, 2, 1),
-                (1, 1, 1),
-                (2, 0, 1),
-                (2, 2, 1),
-                (3, -1, 1),
-                (3, 3, 1),
-            },
+            terminal.neuron_connections.tolist(),
+            [
+                [0, 0, 1],
+                [0, 2, 1],
+                [1, 1, 1],
+                [2, 2, 1],
+                [2, 0, 1],
+                [1, 0, 0],
+                [1, 0, 2],
+                [1, 2, 2],
+                [1, 2, 0],
+            ],
         )
+        self.assertNotIn((2, 1, 2), self.terminal_connection_set(terminal))
 
-    def test_line_front_back_shape_spans_z_window(self):
+    def test_diagonal_shape_spans_unequal_yz_extents_with_exact_lattice_steps(
+        self,
+    ) -> None:
         terminal = self.shaped_terminal(
-            TerminalConnectionShapeOptions.LINE_FRONT_BACK,
-            num_experts=5,
+            TerminalConnectionShapeOptions.DIAGONAL,
+            num_experts=25,
+            xy_axis_range=TerminalRangeOptions.FOUR,
             z_axis_range=TerminalRangeOptions.TWO,
         )
 
+        connections = self.terminal_connection_set(terminal)
+        yz_diagonal_connections = {
+            connection for connection in connections if connection[0] == 1
+        }
+        self.assertEqual(terminal.total_neuron_connections, 25)
         self.assertEqual(
-            self.terminal_connection_set(terminal),
+            yz_diagonal_connections,
             {
-                (1, 1, -1),
-                (1, 1, 0),
+                (1, -3, -1),
+                (1, -3, 3),
+                (1, -1, 0),
+                (1, -1, 2),
                 (1, 1, 1),
-                (1, 1, 2),
-                (1, 1, 3),
+                (1, 3, 0),
+                (1, 3, 2),
+                (1, 5, -1),
+                (1, 5, 3),
             },
         )
+        self.assertNotIn((1, 0, 0), connections)
 
-    def test_line_left_right_shape_spans_x_axis(self):
-        terminal = self.shaped_terminal(
-            TerminalConnectionShapeOptions.LINE_LEFT_RIGHT,
-            num_experts=5,
-            xy_axis_range=TerminalRangeOptions.TWO,
+    def test_cross_diagonal_shape_is_ordered_deduplicated_union(self) -> None:
+        cross_terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.CROSS,
+            num_experts=7,
+        )
+        diagonal_terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.DIAGONAL,
+            num_experts=9,
+        )
+        cross_diagonal_terminal = self.shaped_terminal(
+            TerminalConnectionShapeOptions.CROSS_DIAGONAL,
+            num_experts=15,
         )
 
+        cross_connections = cross_terminal.neuron_connections.tolist()
+        cross_connection_set = self.terminal_connection_set(cross_terminal)
+        diagonal_connection_rows = diagonal_terminal.neuron_connections.tolist()
+        diagonal_connections = self.terminal_connection_set(diagonal_terminal)
+        cross_diagonal_connections = cross_diagonal_terminal.neuron_connections.tolist()
+        cross_diagonal_connection_set = self.terminal_connection_set(
+            cross_diagonal_terminal
+        )
+        appended_diagonal_connections = [
+            connection
+            for connection in diagonal_connection_rows
+            if tuple(connection) not in cross_connection_set
+        ]
+        self.assertEqual(cross_diagonal_terminal.total_neuron_connections, 15)
         self.assertEqual(
-            self.terminal_connection_set(terminal),
-            {(-1, 1, 1), (0, 1, 1), (1, 1, 1), (2, 1, 1), (3, 1, 1)},
+            cross_diagonal_connections[: len(cross_connections)],
+            cross_connections,
         )
-
-    def test_line_up_down_shape_spans_y_axis(self):
-        terminal = self.shaped_terminal(
-            TerminalConnectionShapeOptions.LINE_UP_DOWN,
-            num_experts=3,
-        )
-
         self.assertEqual(
-            self.terminal_connection_set(terminal),
-            {(1, 0, 1), (1, 1, 1), (1, 2, 1)},
+            cross_diagonal_connections[len(cross_connections) :],
+            appended_diagonal_connections,
         )
+        self.assertEqual(
+            cross_diagonal_connection_set,
+            cross_connection_set | diagonal_connections,
+        )
+        self.assertEqual(
+            len(cross_diagonal_connections),
+            len(cross_diagonal_connection_set),
+        )
+        self.assertEqual(cross_diagonal_connections.count([1, 1, 1]), 1)
+
+    def test_diagonal_shape_rejects_obsolete_sampler_width(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "num_experts=5 and total_neuron_connections=9",
+        ):
+            self.terminal_config(
+                sampler_config=self.sampler_config(num_experts=5),
+                connection_shape=TerminalConnectionShapeOptions.DIAGONAL,
+            ).build()
 
     def test_connection_shape_rejects_non_enum_value(self):
         with self.assertRaises(TypeError):

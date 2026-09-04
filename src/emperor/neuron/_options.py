@@ -16,10 +16,8 @@ class TerminalConnectionShapeOptions(Enum):
     BOX = "box"
     CROSS = "cross"
     SPHERE = "sphere"
-    DIAGONAL_X = "diagonal_x"
-    LINE_LEFT_RIGHT = "line_left_right"
-    LINE_UP_DOWN = "line_up_down"
-    LINE_FRONT_BACK = "line_front_back"
+    DIAGONAL = "diagonal"
+    CROSS_DIAGONAL = "cross_diagonal"
 
 
 class TerminalRoutingTreeDepthOptions(Enum):
