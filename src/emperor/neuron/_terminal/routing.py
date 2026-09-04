@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 
 from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
-from emperor.neuron._terminal.validation import TerminalRoutingTreeDelegateValidator
+from emperor.neuron._terminal.validation import RoutingTreeDelegateValidator
 from emperor.nn import Module
 from emperor.sampler import SamplerConfig, SamplerModel
 
@@ -51,7 +51,7 @@ def derive_terminal_tree_sampler_config(
 class TerminalRoutingTreeDelegate(Module):
     """Own and execute an independently parameterized spatial routing tree."""
 
-    VALIDATOR = TerminalRoutingTreeDelegateValidator
+    VALIDATOR = RoutingTreeDelegateValidator
 
     def __init__(
         self,
@@ -60,10 +60,38 @@ class TerminalRoutingTreeDelegate(Module):
     ) -> None:
         super().__init__()
         self.cfg = cfg
-        self.__initialize_from_config()
-        self.plan = self.preflight(self.cfg, neuron_connections)
+        self.input_dim: int = self.cfg.input_dim
+        self.leaf_sampler_config: SamplerConfig = self.cfg.sampler_config
+        self.routing_tree_config: TerminalRoutingTreeConfig = (
+            self.cfg.routing_tree_config
+        )
+        self.VALIDATOR.validate_routing_tree_config(self.routing_tree_config)
+        self.direction_sampler_config: SamplerConfig = (
+            self.__resolve_direction_sampler_config()
+        )
+        self.neuron_connections = neuron_connections
+        self.plan = self.compile_routing_tree_plan()
         self.output_width = self.plan.output_width
-        self.root = _TerminalRoutingTreeNode(
+        self.root = self.__build_routing_tree_root_node()
+
+    def __resolve_direction_sampler_config(self) -> SamplerConfig:
+        return (
+            self.routing_tree_config.direction_sampler_config
+            or self.leaf_sampler_config
+        )
+
+    def compile_routing_tree_plan(self) -> RoutingTreePlan:
+        routing_tree_compiler = RoutingTreeCompiler(
+            neuron_connections=self.neuron_connections,
+            routing_tree_config=self.routing_tree_config,
+            leaf_top_k=self.leaf_sampler_config.top_k,
+        )
+        routing_tree_plan = routing_tree_compiler.compile()
+        self.VALIDATOR.validate_routing_tree_plan(self, routing_tree_plan)
+        return routing_tree_plan
+
+    def __build_routing_tree_root_node(self) -> _TerminalRoutingTreeNode:
+        return _TerminalRoutingTreeNode(
             input_dim=self.input_dim,
             plan=self.plan,
             node_plan=self.plan.root,
@@ -71,66 +99,12 @@ class TerminalRoutingTreeDelegate(Module):
             direction_sampler_config=self.direction_sampler_config,
         )
 
-    def __initialize_from_config(self) -> None:
-        self.input_dim: int = self.cfg.input_dim
-        self.leaf_sampler_config: SamplerConfig = self.cfg.sampler_config
-        self.routing_tree_config: TerminalRoutingTreeConfig = (
-            self.cfg.routing_tree_config
-        )
-        self.direction_sampler_config: SamplerConfig = (
-            self.routing_tree_config.direction_sampler_config
-            or self.leaf_sampler_config
-        )
-
-    @classmethod
-    def preflight(
-        cls,
-        cfg: TerminalConfig,
-        neuron_connections: Tensor,
-    ) -> RoutingTreePlan:
-        routing_tree_config = cfg.routing_tree_config
-        if routing_tree_config is None:
-            raise ValueError(
-                "TerminalRoutingTreeDelegate requires routing_tree_config."
-            )
-        leaf_sampler_config = cfg.sampler_config
-        direction_sampler_config = (
-            routing_tree_config.direction_sampler_config or leaf_sampler_config
-        )
-        plan = RoutingTreeCompiler(
-            neuron_connections=neuron_connections,
-            routing_tree_config=routing_tree_config,
-            leaf_top_k=leaf_sampler_config.top_k,
-        ).compile()
-        cls.VALIDATOR.validate_preflight(
-            input_dim=cfg.input_dim,
-            leaf_sampler_config=leaf_sampler_config,
-            direction_sampler_config=direction_sampler_config,
-            plan=plan,
-        )
-        return plan
-
     def sample_probabilities_and_indices(
         self,
         input_matrix: Tensor,
         skip_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor, None, Tensor]:
-        if not isinstance(input_matrix, Tensor):
-            raise TypeError(
-                "input_matrix must be a Tensor, "
-                f"received {type(input_matrix).__name__}."
-            )
-        if input_matrix.dim() != 2 or input_matrix.shape[-1] != self.input_dim:
-            raise ValueError(
-                "Terminal routing tree input must have shape "
-                f"(batch_size, {self.input_dim}), received "
-                f"{tuple(input_matrix.shape)}."
-            )
-        if skip_mask is not None:
-            raise ValueError(
-                "Terminal routing trees do not accept a shared skip_mask; each "
-                "conditionally executed node manages its own sampler state."
-            )
+        self.VALIDATOR.validate_forward_inputs(self, input_matrix, skip_mask)
 
         self.__reset_runtime_observations()
         probabilities, connection_indices, auxiliary_loss = self.root.route(
