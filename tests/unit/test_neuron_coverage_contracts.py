@@ -2,7 +2,9 @@ import unittest
 
 from emperor.neuron import NeuronClusterConfig
 from emperor.neuron._neuron.validation import NeuronValidator
-from emperor.neuron._terminal.topology import initialize_terminal_connections
+from emperor.neuron._terminal.connection_topology import (
+    TargetCoordinateBuilder,
+)
 from unit.test_memory import make_memory_config
 from unit.test_neuron import NeuronTestCase
 
@@ -13,7 +15,7 @@ class TestNeuronCoverageContracts(NeuronTestCase):
         terminal_config.connection_shape = object()
 
         with self.assertRaisesRegex(ValueError, "Unsupported terminal connection"):
-            initialize_terminal_connections(terminal_config)
+            TargetCoordinateBuilder(terminal_config).build()
 
     def test_matching_axons_memory_dimension_is_accepted(self):
         neuron_config = self.neuron_config()
