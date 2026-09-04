@@ -61,28 +61,14 @@ class Terminal(Module):
 
     def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         self.VALIDATOR.validate_forward_input(self, input)
-        probabilities, selected_connection_indices, _, auxiliary_loss = (
+        probabilities, connection_indices, _, auxiliary_loss = (
             self.sampler.sample_probabilities_and_indices(input)
         )
-        probabilities = self.__ensure_probability_matrix(probabilities)
-        selected_connection_indices = self.__resolve_selected_indices(
-            input, selected_connection_indices
-        )
-        selected_connection_indices = self.__ensure_index_matrix(
-            selected_connection_indices
-        )
-        device_aligned_neuron_connections = self.neuron_connections.to(
-            selected_connection_indices.device
-        )
-        selected_neurons = device_aligned_neuron_connections[
-            selected_connection_indices
-        ]
+        connection_indices = self.__resolve_selected_indices(input, connection_indices)
+        probabilities = self.__ensure_matrix(probabilities)
+        connection_indices = self.__ensure_matrix(connection_indices)
+        selected_neurons = self.__select_neurons(connection_indices)
         return (input, probabilities, selected_neurons, auxiliary_loss)
-
-    def __ensure_probability_matrix(self, probabilities: Tensor) -> Tensor:
-        if probabilities.dim() == 1:
-            return probabilities.unsqueeze(-1)
-        return probabilities
 
     def __resolve_selected_indices(
         self, input: Tensor, indices: Tensor | None
@@ -98,7 +84,13 @@ class Terminal(Module):
         batched_connection_indices = all_connection_indices.expand(batch_size, -1)
         return batched_connection_indices
 
-    def __ensure_index_matrix(self, indices: Tensor) -> Tensor:
-        if indices.dim() == 1:
-            return indices.unsqueeze(-1)
-        return indices
+    def __ensure_matrix(self, values: Tensor) -> Tensor:
+        if values.dim() == 1:
+            return values.unsqueeze(-1)
+        return values
+
+    def __select_neurons(self, connection_indices: Tensor) -> Tensor:
+        device_aligned_neuron_connections = self.neuron_connections.to(
+            connection_indices.device
+        )
+        return device_aligned_neuron_connections[connection_indices]
