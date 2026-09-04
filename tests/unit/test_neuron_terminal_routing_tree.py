@@ -252,6 +252,60 @@ class TestTerminalRoutingTree(NeuronTestCase):
             second_next_random_values,
         )
 
+    def test_tree_config_validation_preserves_first_error_order(self) -> None:
+        invalid_fields = (
+            (
+                "depth",
+                2,
+                TypeError,
+                "routing_tree_config.depth must be a TerminalRoutingTreeDepthOptions, got int.",
+            ),
+            (
+                "direction_branch_counts",
+                [4],
+                TypeError,
+                "routing_tree_config.direction_branch_counts must be a tuple, got list.",
+            ),
+            (
+                "direction_top_k",
+                (0,),
+                ValueError,
+                "routing_tree_config.direction_top_k[0] must be a positive integer, received 0.",
+            ),
+            (
+                "direction_sampler_config",
+                "invalid",
+                TypeError,
+                "routing_tree_config.direction_sampler_config must be a SamplerConfig or None, got str.",
+            ),
+            (
+                None,
+                None,
+                ValueError,
+                "sampler_config.top_k must be a positive integer for a Terminal routing tree, received 0.",
+            ),
+        )
+        for first_invalid_index, (field_name, _, error_type, message) in enumerate(
+            invalid_fields
+        ):
+            with self.subTest(first_invalid_field=field_name):
+                config = self.terminal_config(
+                    sampler_config=self.sampler_config(top_k=0)
+                )
+                config.routing_tree_config = self.routing_tree_config()
+                for invalid_field, value, _, _ in invalid_fields[first_invalid_index:]:
+                    if invalid_field is not None:
+                        setattr(config.routing_tree_config, invalid_field, value)
+                config_before = copy.deepcopy(config)
+                rng_before = torch.random.get_rng_state().clone()
+
+                with self.assertRaises(error_type) as raised:
+                    Validator.validate_routing_tree_config_fields(config)
+
+                self.assertEqual(str(raised.exception), message)
+                self.assertEqual(config, config_before)
+                torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
     def test_plan_validation_checks_both_templates_before_node_constraints(
         self,
     ) -> None:
