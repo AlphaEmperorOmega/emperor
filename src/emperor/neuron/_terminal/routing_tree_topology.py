@@ -64,15 +64,8 @@ class RoutingTreeCompiler:
         routing_tree_config: TerminalRoutingTreeConfig,
         leaf_top_k: int,
     ) -> None:
-        detached_neuron_connections = neuron_connections.detach()
-        cpu_neuron_connections = detached_neuron_connections.cpu()
-        connection_coordinate_rows = cpu_neuron_connections.tolist()
-        integer_coordinate_rows = (
-            tuple(int(component) for component in row)
-            for row in connection_coordinate_rows
-        )
-        self.coordinate_rows: tuple[tuple[int, int, int], ...] = tuple(
-            integer_coordinate_rows
+        self.coordinate_rows: tuple[tuple[int, int, int], ...] = (
+            self.__snapshot_coordinate_rows(neuron_connections)
         )
         self.depth: int = int(routing_tree_config.depth.value)
         self.direction_branch_counts: tuple[int, ...] = tuple(
@@ -83,10 +76,33 @@ class RoutingTreeCompiler:
         )
         self.leaf_top_k: int = leaf_top_k
 
+    @staticmethod
+    def __snapshot_coordinate_rows(
+        neuron_connections: Tensor,
+    ) -> tuple[tuple[int, int, int], ...]:
+        detached_neuron_connections = neuron_connections.detach()
+        cpu_neuron_connections = detached_neuron_connections.cpu()
+        connection_coordinate_rows = cpu_neuron_connections.tolist()
+        integer_coordinate_rows = (
+            tuple(int(component) for component in row)
+            for row in connection_coordinate_rows
+        )
+        return tuple(integer_coordinate_rows)
+
     def compile(self) -> RoutingTreePlan:
         if not self.coordinate_rows:
             raise ValueError("Terminal routing tree requires at least one connection.")
 
+        root_node_plan = self.__compile_root_node()
+        routing_tree_plan = RoutingTreePlan(
+            depth=self.depth,
+            direction_top_k=self.direction_top_k,
+            leaf_top_k=self.leaf_top_k,
+            root=root_node_plan,
+        )
+        return routing_tree_plan
+
+    def __compile_root_node(self) -> RoutingTreeNodePlan:
         root_bounds = self.__root_bounds()
         total_connections = len(self.coordinate_rows)
         connection_index_range = range(total_connections)
@@ -97,13 +113,7 @@ class RoutingTreeCompiler:
             path=(),
             level=0,
         )
-        routing_tree_plan = RoutingTreePlan(
-            depth=self.depth,
-            direction_top_k=self.direction_top_k,
-            leaf_top_k=self.leaf_top_k,
-            root=root_node_plan,
-        )
-        return routing_tree_plan
+        return root_node_plan
 
     def __root_bounds(self) -> AxisBounds:
         x_axis_bounds = self.__axis_bounds(0)
@@ -126,46 +136,61 @@ class RoutingTreeCompiler:
     ) -> RoutingTreeNodePlan:
         leaf_level = self.depth - 1
         if level == leaf_level:
-            leaf_node_plan = RoutingTreeNodePlan(
+            return self.__compile_leaf_node(
+                connection_indices=connection_indices,
+                bounds=bounds,
                 path=path,
                 level=level,
-                bounds=bounds,
-                connection_indices=connection_indices,
-                subdivision=(1, 1, 1),
             )
-            return leaf_node_plan
 
+        return self.__compile_direction_node(
+            connection_indices=connection_indices,
+            bounds=bounds,
+            path=path,
+            level=level,
+        )
+
+    @staticmethod
+    def __compile_leaf_node(
+        *,
+        connection_indices: tuple[int, ...],
+        bounds: AxisBounds,
+        path: tuple[int, ...],
+        level: int,
+    ) -> RoutingTreeNodePlan:
+        leaf_node_plan = RoutingTreeNodePlan(
+            path=path,
+            level=level,
+            bounds=bounds,
+            connection_indices=connection_indices,
+            subdivision=(1, 1, 1),
+        )
+        return leaf_node_plan
+
+    def __compile_direction_node(
+        self,
+        *,
+        connection_indices: tuple[int, ...],
+        bounds: AxisBounds,
+        path: tuple[int, ...],
+        level: int,
+    ) -> RoutingTreeNodePlan:
         maximum_regions = self.direction_branch_counts[level]
         axis_subdivision = self.__balanced_axis_subdivision(bounds, maximum_regions)
-        candidate_child_bounds = self.__subdivide_bounds(bounds, axis_subdivision)
-        child_node_plans = []
-        for candidate_bounds in candidate_child_bounds:
-            child_connection_indices = self.__connection_indices_within_bounds(
-                connection_indices,
-                candidate_bounds,
-            )
-            if not child_connection_indices:
-                continue
-
-            child_index = len(child_node_plans)
-            child_path = (*path, child_index)
-            child_level = level + 1
-            child_node_plan = self.__compile_node(
-                connection_indices=child_connection_indices,
-                bounds=candidate_bounds,
-                path=child_path,
-                level=child_level,
-            )
-            child_node_plans.append(child_node_plan)
-
-        compiled_child_node_plans = tuple(child_node_plans)
+        child_node_plans = self.__compile_child_nodes(
+            connection_indices=connection_indices,
+            bounds=bounds,
+            subdivision=axis_subdivision,
+            path=path,
+            level=level,
+        )
         routing_tree_node_plan = RoutingTreeNodePlan(
             path=path,
             level=level,
             bounds=bounds,
             connection_indices=connection_indices,
             subdivision=axis_subdivision,
-            children=compiled_child_node_plans,
+            children=child_node_plans,
         )
         return routing_tree_node_plan
 
@@ -231,6 +256,39 @@ class RoutingTreeCompiler:
     def __subdivision_region_count(subdivision: AxisSubdivision) -> int:
         x_axis_split_count, y_axis_split_count, z_axis_split_count = subdivision
         return x_axis_split_count * y_axis_split_count * z_axis_split_count
+
+    def __compile_child_nodes(
+        self,
+        *,
+        connection_indices: tuple[int, ...],
+        bounds: AxisBounds,
+        subdivision: AxisSubdivision,
+        path: tuple[int, ...],
+        level: int,
+    ) -> tuple[RoutingTreeNodePlan, ...]:
+        candidate_child_bounds = self.__subdivide_bounds(bounds, subdivision)
+        child_node_plans = []
+        for candidate_bounds in candidate_child_bounds:
+            child_connection_indices = self.__connection_indices_within_bounds(
+                connection_indices,
+                candidate_bounds,
+            )
+            if not child_connection_indices:
+                continue
+
+            child_index = len(child_node_plans)
+            child_path = (*path, child_index)
+            child_level = level + 1
+            child_node_plan = self.__compile_node(
+                connection_indices=child_connection_indices,
+                bounds=candidate_bounds,
+                path=child_path,
+                level=child_level,
+            )
+            child_node_plans.append(child_node_plan)
+
+        compiled_child_node_plans = tuple(child_node_plans)
+        return compiled_child_node_plans
 
     @classmethod
     def __subdivide_bounds(
