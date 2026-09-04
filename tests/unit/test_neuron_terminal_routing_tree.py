@@ -15,6 +15,7 @@ from emperor.neuron import (
 from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
 from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
 from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
+from emperor.neuron._terminal.validation import RoutingTreeDelegateValidator
 from emperor.sampler import SamplerConfig, SamplerModel
 from emperor.sampler._usage import SamplerUsageTrackerManager
 from unit.test_neuron import NeuronTestCase
@@ -239,6 +240,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
             direction_top_k=(1,),
         )
         config = self.terminal_config(sampler_config=self.sampler_config(top_k=1))
+        config.routing_tree_config = tree_config
         original_plan = RoutingTreeCompiler(
             neuron_connections=sparse_coordinates,
             routing_tree_config=tree_config,
@@ -386,15 +388,96 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self.assertEqual(selected_coordinates.shape, (self.batch_size, 2, 3))
         self.assertEqual(terminal.sampler.plan.output_width, 2)
 
-    def test_delegate_owns_plan_without_retaining_terminal_connections(self) -> None:
+    def test_delegate_retains_connections_without_registering_a_second_buffer(
+        self,
+    ) -> None:
         terminal = self.tree_terminal()
 
         self.assertIsInstance(terminal.sampler, TerminalRoutingTreeDelegate)
         self.assertFalse(hasattr(terminal, "routing_tree_plan"))
-        self.assertNotIn("neuron_connections", terminal.sampler.__dict__)
+        self.assertIs(
+            terminal.sampler.neuron_connections,
+            terminal.neuron_connections,
+        )
         self.assertNotIn(
             "neuron_connections",
             dict(terminal.sampler.named_buffers()),
+        )
+
+    def test_delegate_requires_routing_tree_config_before_initialization(self) -> None:
+        config = self.terminal_config()
+        candidate_coordinates = TargetCoordinateBuilder(config).build()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "RoutingTreeDelegate requires routing_tree_config",
+        ):
+            TerminalRoutingTreeDelegate(config, candidate_coordinates)
+
+    def test_plan_compilation_uses_initialized_fields_instead_of_live_config(
+        self,
+    ) -> None:
+        terminal = self.tree_terminal()
+        delegate = terminal.sampler
+        expected_plan = delegate.plan
+        delegate.cfg.input_dim = None
+        delegate.cfg.sampler_config = None
+        delegate.cfg.routing_tree_config = None
+
+        actual_plan = delegate.compile_routing_tree_plan()
+
+        self.assertEqual(actual_plan, expected_plan)
+
+    def test_plan_compilation_passes_delegate_and_plan_to_validator(self) -> None:
+        terminal = self.tree_terminal()
+        delegate = terminal.sampler
+        validator_arguments = {}
+
+        class TrackingValidator(RoutingTreeDelegateValidator):
+            @classmethod
+            def validate_routing_tree_plan(cls, model, routing_tree_plan):
+                validator_arguments["model"] = model
+                validator_arguments["routing_tree_plan"] = routing_tree_plan
+
+        with patch.object(
+            TerminalRoutingTreeDelegate,
+            "VALIDATOR",
+            TrackingValidator,
+        ):
+            routing_tree_plan = delegate.compile_routing_tree_plan()
+
+        self.assertIs(validator_arguments["model"], delegate)
+        self.assertIs(
+            validator_arguments["routing_tree_plan"],
+            routing_tree_plan,
+        )
+
+    def test_delegate_validates_sampling_inputs(self) -> None:
+        delegate = self.tree_terminal().sampler
+
+        with self.assertRaisesRegex(TypeError, "input_matrix must be a Tensor"):
+            delegate.sample_probabilities_and_indices([[1.0]])
+
+        invalid_input = torch.zeros(self.batch_size, self.input_dim + 1)
+        with self.assertRaisesRegex(
+            ValueError,
+            "Terminal routing tree input must have shape",
+        ):
+            delegate.sample_probabilities_and_indices(invalid_input)
+
+        valid_input = torch.zeros(self.batch_size, self.input_dim)
+        with self.assertRaisesRegex(ValueError, "shared skip_mask"):
+            delegate.sample_probabilities_and_indices(
+                valid_input,
+                skip_mask=torch.ones(self.batch_size, dtype=torch.bool),
+            )
+
+    def test_missing_direction_sampler_config_uses_leaf_sampler_config(self) -> None:
+        delegate = self.tree_terminal().sampler
+
+        self.assertIs(
+            delegate.direction_sampler_config,
+            delegate.leaf_sampler_config,
         )
 
     def test_distinct_direction_template_is_derived_without_mutation(self) -> None:
@@ -406,6 +489,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
                 direction_sampler_config=direction_template,
             )
         )
+        self.assertIs(terminal.sampler.direction_sampler_config, direction_template)
         root = terminal.sampler.root
 
         self.assertTrue(root.sampler.sampler_config.normalize_probabilities_flag)
