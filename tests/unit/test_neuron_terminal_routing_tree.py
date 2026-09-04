@@ -252,6 +252,59 @@ class TestTerminalRoutingTree(NeuronTestCase):
             second_next_random_values,
         )
 
+    def test_plan_validation_checks_both_templates_before_node_constraints(
+        self,
+    ) -> None:
+        config = self.terminal_config()
+        routing_tree_config = self.routing_tree_config(direction_top_k=(5,))
+        plan = RoutingTreeCompiler(
+            TargetCoordinateBuilder(config).build(), routing_tree_config, 1
+        ).compile()
+        invalid_cases = (
+            (
+                True,
+                True,
+                "sampler_config.router_config must be a RouterConfig for Terminal routing trees; routerless direct-logit sampling is available only in flat mode.",
+            ),
+            (
+                False,
+                True,
+                "routing_tree_config.direction_sampler_config.router_config must be a RouterConfig for Terminal routing trees; routerless direct-logit sampling is available only in flat mode.",
+            ),
+            (
+                False,
+                False,
+                "Terminal routing tree internal node <root> contains 4 nonempty regions, fewer than direction_top_k[0]=5.",
+            ),
+        )
+        for routerless_leaf, routerless_direction, message in invalid_cases:
+            with self.subTest(
+                routerless_leaf=routerless_leaf,
+                routerless_direction=routerless_direction,
+            ):
+                leaf_config = self.sampler_config()
+                direction_config = self.sampler_config()
+                if routerless_leaf:
+                    leaf_config.router_config = None
+                if routerless_direction:
+                    direction_config.router_config = None
+                templates_before = copy.deepcopy((leaf_config, direction_config))
+                rng_before = torch.random.get_rng_state().clone()
+
+                with patch.object(SamplerConfig, "build") as sampler_build:
+                    with self.assertRaises(ValueError) as raised:
+                        RoutingTreeDelegateValidator.validate_plan_sampler_configs(
+                            input_dim=config.input_dim,
+                            leaf_sampler_config=leaf_config,
+                            direction_sampler_config=direction_config,
+                            routing_tree_plan=plan,
+                        )
+                    sampler_build.assert_not_called()
+
+                self.assertEqual(str(raised.exception), message)
+                self.assertEqual((leaf_config, direction_config), templates_before)
+                torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
     def test_compiler_snapshots_inputs_as_public_topology_values(self) -> None:
         coordinates = torch.tensor(
             [
