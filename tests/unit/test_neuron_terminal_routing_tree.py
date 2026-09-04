@@ -14,6 +14,7 @@ from emperor.neuron import (
 )
 from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
 from emperor.neuron._terminal.routing import RoutingTreeDelegate
+from emperor.neuron._terminal.routing.node import RoutingTreeNode
 from emperor.neuron._terminal.routing_tree_topology import (
     RoutingTreeCompiler,
 )
@@ -88,6 +89,87 @@ class TestTerminalRoutingTree(NeuronTestCase):
         )
         config.routing_tree_config = routing_tree_config or self.routing_tree_config()
         return config.build()
+
+    def test_node_derives_independent_sampler_configs_without_construction(
+        self,
+    ) -> None:
+        for num_topk_samples, expected_samples in (
+            (None, None),
+            (0, 0),
+            (1, 1),
+            (2, 2),
+            (3, 2),
+        ):
+            for noisy_topk_flag in (False, True):
+                with self.subTest(
+                    num_topk_samples=num_topk_samples,
+                    noisy_topk_flag=noisy_topk_flag,
+                ):
+                    template = self.sampler_config(input_dim=8, num_experts=9, top_k=3)
+                    template.num_topk_samples = num_topk_samples
+                    template.noisy_topk_flag = noisy_topk_flag
+                    template.router_config.noisy_topk_flag = not noisy_topk_flag
+                    original_template = copy.deepcopy(template)
+                    expected_config = copy.deepcopy(template)
+                    expected_config.num_experts = 4
+                    expected_config.top_k = 2
+                    expected_config.num_topk_samples = expected_samples
+                    expected_config.router_config.input_dim = 6
+                    expected_config.router_config.num_experts = 4
+                    expected_config.router_config.noisy_topk_flag = noisy_topk_flag
+                    rng_before = torch.random.get_rng_state().clone()
+
+                    with patch.object(SamplerConfig, "build") as sampler_build:
+                        derived_configs = [
+                            RoutingTreeNode.derive_sampler_config(
+                                template,
+                                input_dim=6,
+                                num_experts=4,
+                                top_k=2,
+                            )
+                            for _ in range(2)
+                        ]
+                        sampler_build.assert_not_called()
+
+                    for derived_config in derived_configs:
+                        self.assertEqual(derived_config, expected_config)
+                        self.assertIsNot(derived_config, template)
+                        self.assertIsNot(
+                            derived_config.router_config, template.router_config
+                        )
+                        self.assertIsNot(
+                            derived_config.router_config.model_config,
+                            template.router_config.model_config,
+                        )
+                    self.assertIsNot(derived_configs[0], derived_configs[1])
+                    self.assertIsNot(
+                        derived_configs[0].router_config.model_config,
+                        derived_configs[1].router_config.model_config,
+                    )
+                    self.assertEqual(template, original_template)
+                    torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
+    def test_node_sampler_config_derivation_requires_a_router(self) -> None:
+        template = self.sampler_config(router_config=None)
+        original_template = copy.deepcopy(template)
+        rng_before = torch.random.get_rng_state().clone()
+
+        with patch.object(SamplerConfig, "build") as sampler_build:
+            with self.assertRaisesRegex(
+                ValueError,
+                "Terminal routing trees require learned router_config values for "
+                "both direction and connection sampler templates\\.",
+            ):
+                RoutingTreeNode.derive_sampler_config(
+                    template,
+                    input_dim=6,
+                    num_experts=4,
+                    top_k=2,
+                )
+            sampler_build.assert_not_called()
+
+        self.assertEqual(template, original_template)
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
 
     def test_disabled_tree_preserves_flat_sampler_and_rng_contract(self) -> None:
         first_config = self.terminal_config()

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, nn
 
-from emperor.neuron._terminal.routing.sampler_config import (
-    derive_terminal_tree_sampler_config,
-)
 from emperor.nn import Module
 from emperor.sampler import SamplerConfig
 
@@ -33,7 +31,7 @@ class RoutingTreeNode(Module):
         self.is_leaf = node_plan.is_leaf
 
         if self.is_leaf:
-            node_sampler_config = derive_terminal_tree_sampler_config(
+            node_sampler_config = RoutingTreeNode.derive_sampler_config(
                 leaf_sampler_config,
                 input_dim=input_dim,
                 num_experts=len(node_plan.connection_indices),
@@ -48,7 +46,7 @@ class RoutingTreeNode(Module):
             self.branches = nn.ModuleList()
         else:
             direction_top_k = plan.direction_top_k[node_plan.level]
-            node_sampler_config = derive_terminal_tree_sampler_config(
+            node_sampler_config = RoutingTreeNode.derive_sampler_config(
                 direction_sampler_config,
                 input_dim=input_dim,
                 num_experts=len(node_plan.children),
@@ -68,6 +66,35 @@ class RoutingTreeNode(Module):
             self.output_width = direction_top_k * child_output_width
 
         self.sampler = node_sampler_config.build()
+
+    @staticmethod
+    def derive_sampler_config(
+        template: SamplerConfig,
+        *,
+        input_dim: int,
+        num_experts: int,
+        top_k: int,
+    ) -> SamplerConfig:
+        """Derive an independent node config without constructing a sampler."""
+
+        derived_config = copy.deepcopy(template)
+        derived_config.num_experts = num_experts
+        derived_config.top_k = top_k
+        if derived_config.num_topk_samples is not None:
+            derived_config.num_topk_samples = min(
+                derived_config.num_topk_samples,
+                top_k,
+            )
+
+        if derived_config.router_config is None:
+            raise ValueError(
+                "Terminal routing trees require learned router_config values for "
+                "both direction and connection sampler templates."
+            )
+        derived_config.router_config.input_dim = input_dim
+        derived_config.router_config.num_experts = num_experts
+        derived_config.router_config.noisy_topk_flag = derived_config.noisy_topk_flag
+        return derived_config
 
     def route(self, input_matrix: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         probabilities, selected_indices, _, auxiliary_loss = (
