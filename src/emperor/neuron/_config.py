@@ -79,12 +79,10 @@ class TerminalConfig(ConfigBase):
         "Required geometry of the terminal's connection neighborhood. BOX "
         "is the full cartesian box of the configured ranges; CROSS keeps "
         "only the three axis lines through the neuron; SPHERE keeps box "
-        "offsets inside the ellipsoid inscribed in the box; DIAGONAL_X "
-        "keeps the two xy-plane diagonals; the LINE shapes keep a single "
-        "axis line (left-right = x, up-down = y, front-back = z with the "
-        "usual offset window) so signals can jump far along one axis "
-        "without the quadratic fan-out of a box. The sampler num_experts "
-        "must match the resulting connection count."
+        "offsets inside the ellipsoid inscribed in the box; DIAGONAL keeps "
+        "one x-shaped pair of lines in each of the xy and yz planes; "
+        "CROSS_DIAGONAL combines the CROSS and DIAGONAL neighborhoods. The "
+        "sampler num_experts must match the resulting connection count."
     )
     routing_tree_config: TerminalRoutingTreeConfig | None = optional_field(
         "Optional hierarchical spatial router. When omitted, Terminal retains "

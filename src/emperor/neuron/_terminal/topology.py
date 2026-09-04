@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from fractions import Fraction
 from itertools import product
+from math import gcd
 
 import torch
 from torch import Tensor
@@ -262,22 +263,22 @@ def _connection_offsets(
     connection_shape: TerminalConnectionShapeOptions,
 ) -> list[tuple[int, int, int]]:
     if connection_shape is TerminalConnectionShapeOptions.CROSS:
-        return (
-            _x_axis_line_offsets(cfg)
-            + _y_axis_line_offsets(cfg)
-            + _z_axis_line_offsets(cfg)
-        )
+        return _cross_offsets(cfg)
     if connection_shape is TerminalConnectionShapeOptions.SPHERE:
         return _ellipsoid_offsets(cfg)
-    if connection_shape is TerminalConnectionShapeOptions.DIAGONAL_X:
-        return _xy_diagonal_offsets(cfg)
-    if connection_shape is TerminalConnectionShapeOptions.LINE_LEFT_RIGHT:
-        return _x_axis_line_offsets(cfg)
-    if connection_shape is TerminalConnectionShapeOptions.LINE_UP_DOWN:
-        return _y_axis_line_offsets(cfg)
-    if connection_shape is TerminalConnectionShapeOptions.LINE_FRONT_BACK:
-        return _z_axis_line_offsets(cfg)
+    if connection_shape is TerminalConnectionShapeOptions.DIAGONAL:
+        return _diagonal_offsets(cfg)
+    if connection_shape is TerminalConnectionShapeOptions.CROSS_DIAGONAL:
+        return _cross_diagonal_offsets(cfg)
     raise ValueError(f"Unsupported terminal connection shape: {connection_shape!r}")
+
+
+def _cross_offsets(cfg) -> list[tuple[int, int, int]]:
+    return (
+        _x_axis_line_offsets(cfg)
+        + _y_axis_line_offsets(cfg)
+        + _z_axis_line_offsets(cfg)
+    )
 
 
 def _x_axis_line_offsets(cfg) -> list[tuple[int, int, int]]:
@@ -310,6 +311,35 @@ def _xy_diagonal_offsets(cfg) -> list[tuple[int, int, int]]:
         diagonal_offsets.append((delta, delta, 0))
         diagonal_offsets.append((delta, -delta, 0))
     return diagonal_offsets
+
+
+def _yz_diagonal_offsets(cfg) -> list[tuple[int, int, int]]:
+    steps_from_center_to_yz_extent = gcd(
+        cfg.xy_axis_range.value,
+        cfg.z_axis_range.value,
+    )
+    y_axis_delta_per_step = (
+        cfg.xy_axis_range.value // steps_from_center_to_yz_extent
+    )
+    z_axis_delta_per_step = cfg.z_axis_range.value // steps_from_center_to_yz_extent
+    diagonal_offsets = []
+    for step_multiplier in range(
+        -steps_from_center_to_yz_extent,
+        steps_from_center_to_yz_extent + 1,
+    ):
+        y_delta = step_multiplier * y_axis_delta_per_step
+        z_delta = step_multiplier * z_axis_delta_per_step
+        diagonal_offsets.append((0, y_delta, z_delta))
+        diagonal_offsets.append((0, y_delta, -z_delta))
+    return diagonal_offsets
+
+
+def _diagonal_offsets(cfg) -> list[tuple[int, int, int]]:
+    return _xy_diagonal_offsets(cfg) + _yz_diagonal_offsets(cfg)
+
+
+def _cross_diagonal_offsets(cfg) -> list[tuple[int, int, int]]:
+    return _cross_offsets(cfg) + _diagonal_offsets(cfg)
 
 
 def _ellipsoid_offsets(cfg) -> list[tuple[int, int, int]]:
