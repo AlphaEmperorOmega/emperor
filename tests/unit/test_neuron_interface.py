@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import inspect
 import json
 import os
@@ -94,6 +95,9 @@ PRIVATE_MODULES = (
     "emperor.neuron._terminal.connection_topology",
     "emperor.neuron._terminal.core",
     "emperor.neuron._terminal.routing",
+    "emperor.neuron._terminal.routing.delegate",
+    "emperor.neuron._terminal.routing.node",
+    "emperor.neuron._terminal.routing.sampler_config",
     "emperor.neuron._terminal.routing_tree_topology",
     "emperor.neuron._terminal.validation",
     "emperor.neuron._trace",
@@ -409,6 +413,7 @@ for module_name in (
     "emperor.neuron._neuron",
     "emperor.neuron._nucleus",
     "emperor.neuron._terminal",
+    "emperor.neuron._terminal.routing",
     "emperor.neuron._validation",
 ):
     module = importlib.import_module(module_name)
@@ -468,6 +473,7 @@ print(json.dumps({{
                 "emperor.neuron._neuron": ["Neuron"],
                 "emperor.neuron._nucleus": ["Nucleus"],
                 "emperor.neuron._terminal": ["Terminal"],
+                "emperor.neuron._terminal.routing": ["RoutingTreeDelegate"],
                 "emperor.neuron._validation": [],
             },
         )
@@ -480,6 +486,28 @@ print(json.dumps({{
             result["runtime_before"],
             {"emperor.experts": False, "lightning": True, "torch": True},
         )
+
+    def test_routing_package_exposes_only_the_delegate(self) -> None:
+        routing_package = importlib.import_module("emperor.neuron._terminal.routing")
+        delegate_module = importlib.import_module(
+            "emperor.neuron._terminal.routing.delegate"
+        )
+        node_module = importlib.import_module("emperor.neuron._terminal.routing.node")
+
+        self.assertTupleEqual(routing_package.__all__, ("RoutingTreeDelegate",))
+        self.assertIs(
+            routing_package.RoutingTreeDelegate,
+            delegate_module.RoutingTreeDelegate,
+        )
+        self.assertEqual(
+            delegate_module.RoutingTreeDelegate.__module__,
+            "emperor.neuron._terminal.routing.delegate",
+        )
+        self.assertEqual(
+            node_module.RoutingTreeNode.__module__,
+            "emperor.neuron._terminal.routing.node",
+        )
+        self.assertFalse(hasattr(routing_package, "RoutingTreeNode"))
 
     def test_runtime_exports_are_available_at_the_root(self) -> None:
         import emperor.neuron as neuron_package

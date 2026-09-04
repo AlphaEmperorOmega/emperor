@@ -13,8 +13,10 @@ from emperor.neuron import (
     TerminalRoutingTreeDepthOptions,
 )
 from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
-from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
-from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
+from emperor.neuron._terminal.routing import RoutingTreeDelegate
+from emperor.neuron._terminal.routing_tree_topology import (
+    RoutingTreeCompiler,
+)
 from emperor.neuron._terminal.validation import RoutingTreeDelegateValidator
 from emperor.sampler import SamplerConfig, SamplerModel
 from emperor.sampler._usage import SamplerUsageTrackerManager
@@ -269,7 +271,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self,
     ) -> None:
         terminal = self.tree_terminal()
-        self.assertIsInstance(terminal.sampler, TerminalRoutingTreeDelegate)
+        self.assertIsInstance(terminal.sampler, RoutingTreeDelegate)
         root = terminal.sampler.root
         root.sampler = _ScriptedTreeSampler(
             num_experts=4,
@@ -393,7 +395,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
     ) -> None:
         terminal = self.tree_terminal()
 
-        self.assertIsInstance(terminal.sampler, TerminalRoutingTreeDelegate)
+        self.assertIsInstance(terminal.sampler, RoutingTreeDelegate)
         self.assertFalse(hasattr(terminal, "routing_tree_plan"))
         self.assertIs(
             terminal.sampler.neuron_connections,
@@ -412,7 +414,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
             ValueError,
             "RoutingTreeDelegate requires routing_tree_config",
         ):
-            TerminalRoutingTreeDelegate(config, candidate_coordinates)
+            RoutingTreeDelegate(config, candidate_coordinates)
 
     def test_plan_compilation_uses_initialized_fields_instead_of_live_config(
         self,
@@ -439,11 +441,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
                 validator_arguments["model"] = model
                 validator_arguments["routing_tree_plan"] = routing_tree_plan
 
-        with patch.object(
-            TerminalRoutingTreeDelegate,
-            "VALIDATOR",
-            TrackingValidator,
-        ):
+        with patch.object(RoutingTreeDelegate, "VALIDATOR", TrackingValidator):
             routing_tree_plan = delegate.compile_routing_tree_plan()
 
         self.assertIs(validator_arguments["model"], delegate)
@@ -586,7 +584,7 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self.assertEqual(len(cluster.cluster), 2)
         self.assertTrue(
             all(
-                isinstance(neuron.terminal.sampler, TerminalRoutingTreeDelegate)
+                isinstance(neuron.terminal.sampler, RoutingTreeDelegate)
                 for neuron in cluster.cluster.values()
             )
         )
