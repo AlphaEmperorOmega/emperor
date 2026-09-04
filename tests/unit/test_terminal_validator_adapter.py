@@ -3,15 +3,15 @@ import unittest
 import torch
 
 from emperor.neuron import Terminal, TerminalConfig
-from emperor.neuron._terminal.validation import TerminalValidator
+from emperor.neuron._terminal.validation import Validator
 
 
 class TestTerminalValidatorAdapter(unittest.TestCase):
     def test_module_declares_its_validator_adapter(self):
-        self.assertIs(Terminal.VALIDATOR, TerminalValidator)
+        self.assertIs(Terminal.VALIDATOR, Validator)
 
     def test_pre_initialization_config_validation_uses_adapter(self):
-        class TrackingValidator(TerminalValidator):
+        class TrackingValidator(Validator):
             @classmethod
             def validate_required_fields(cls, cfg):
                 raise RuntimeError("substituted construction validator was called")
@@ -26,7 +26,7 @@ class TestTerminalValidatorAdapter(unittest.TestCase):
             TrackingTerminal(TerminalConfig())
 
     def test_runtime_dispatches_through_substituted_validator(self):
-        class RejectingValidator(TerminalValidator):
+        class RejectingValidator(Validator):
             @classmethod
             def validate_forward_input(cls, model, input):
                 raise RuntimeError("substituted runtime validator was called")
