@@ -10,7 +10,10 @@ if TYPE_CHECKING:
     from emperor.neuron._config import TerminalRoutingTreeConfig
     from emperor.neuron._terminal.core import Terminal
     from emperor.neuron._terminal.routing import RoutingTreeDelegate
-    from emperor.neuron._terminal.routing_tree_topology import RoutingTreePlan
+    from emperor.neuron._terminal.routing_tree_topology import (
+        RoutingTreeNodePlan,
+        RoutingTreePlan,
+    )
     from emperor.sampler import SamplerConfig
 
 
@@ -22,6 +25,133 @@ class RoutingTreeDelegateValidator(ValidatorBase):
         """Validate the configuration required to construct a routing tree."""
         if routing_tree_config is None:
             raise ValueError("RoutingTreeDelegate requires routing_tree_config.")
+
+    @classmethod
+    def validate_routing_tree_plan(
+        cls,
+        model: "RoutingTreeDelegate",
+        routing_tree_plan: "RoutingTreePlan",
+    ) -> None:
+        cls.validate_plan_sampler_configs(
+            input_dim=model.input_dim,
+            leaf_sampler_config=model.leaf_sampler_config,
+            direction_sampler_config=model.direction_sampler_config,
+            routing_tree_plan=routing_tree_plan,
+        )
+
+    @classmethod
+    def validate_plan_sampler_configs(
+        cls,
+        *,
+        input_dim: int,
+        leaf_sampler_config: "SamplerConfig",
+        direction_sampler_config: "SamplerConfig",
+        routing_tree_plan: "RoutingTreePlan",
+    ) -> None:
+        cls.__validate_sampler_templates(leaf_sampler_config, direction_sampler_config)
+        for node in routing_tree_plan.walk():
+            cls.__validate_node_sampler_config(
+                node,
+                routing_tree_plan,
+                input_dim,
+                leaf_sampler_config,
+                direction_sampler_config,
+            )
+
+    @staticmethod
+    def __validate_sampler_templates(
+        leaf_sampler_config: "SamplerConfig",
+        direction_sampler_config: "SamplerConfig",
+    ) -> None:
+        from emperor.sampler import RouterConfig
+
+        for template_name, sampler_template in (
+            ("sampler_config", leaf_sampler_config),
+            (
+                "routing_tree_config.direction_sampler_config",
+                direction_sampler_config,
+            ),
+        ):
+            if not isinstance(sampler_template.router_config, RouterConfig):
+                raise ValueError(
+                    f"{template_name}.router_config must be a RouterConfig for "
+                    "Terminal routing trees; routerless direct-logit sampling is "
+                    "available only in flat mode."
+                )
+
+    @classmethod
+    def __validate_node_sampler_config(
+        cls,
+        node: "RoutingTreeNodePlan",
+        routing_tree_plan: "RoutingTreePlan",
+        input_dim: int,
+        leaf_sampler_config: "SamplerConfig",
+        direction_sampler_config: "SamplerConfig",
+    ) -> None:
+        from emperor.neuron._terminal.routing.node import RoutingTreeNode
+
+        if node.is_leaf:
+            cls.__validate_leaf_node(node, routing_tree_plan)
+            template = leaf_sampler_config
+            num_experts = len(node.connection_indices)
+            top_k = routing_tree_plan.leaf_top_k
+        else:
+            num_children = len(node.children)
+            level_top_k = routing_tree_plan.direction_top_k[node.level]
+            cls.__validate_direction_node(node, num_children, level_top_k)
+            template = direction_sampler_config
+            num_experts = num_children
+            top_k = level_top_k
+
+        derived_config = RoutingTreeNode.derive_sampler_config(
+            template,
+            input_dim=input_dim,
+            num_experts=num_experts,
+            top_k=top_k,
+        )
+        derived_config.validate_for_router_input_dim(input_dim)
+
+    @classmethod
+    def __validate_leaf_node(
+        cls,
+        node: "RoutingTreeNodePlan",
+        routing_tree_plan: "RoutingTreePlan",
+    ) -> None:
+        if len(node.connection_indices) < routing_tree_plan.leaf_top_k:
+            raise ValueError(
+                "Terminal routing tree leaf "
+                f"{cls._format_tree_path(node.path)} contains "
+                f"{len(node.connection_indices)} connections, fewer than "
+                "sampler_config.top_k="
+                f"{routing_tree_plan.leaf_top_k}."
+            )
+
+    @staticmethod
+    def _format_tree_path(path: tuple[int, ...]) -> str:
+        if not path:
+            return "<root>"
+        return ".".join(str(branch) for branch in path)
+
+    @classmethod
+    def __validate_direction_node(
+        cls,
+        node: "RoutingTreeNodePlan",
+        num_children: int,
+        level_top_k: int,
+    ) -> None:
+        if num_children < 2:
+            raise ValueError(
+                "Terminal routing tree internal node "
+                f"{cls._format_tree_path(node.path)} must contain at least "
+                f"two nonempty spatial regions, received {num_children}."
+            )
+        if num_children < level_top_k:
+            raise ValueError(
+                "Terminal routing tree internal node "
+                f"{cls._format_tree_path(node.path)} contains "
+                f"{num_children} nonempty regions, fewer than "
+                f"direction_top_k[{node.level}]={level_top_k}."
+            )
 
     @staticmethod
     def validate_forward_inputs(
@@ -48,92 +178,6 @@ class RoutingTreeDelegateValidator(ValidatorBase):
                 "Terminal routing trees do not accept a shared skip_mask; each "
                 "conditionally executed node manages its own sampler state."
             )
-
-    @classmethod
-    def validate_routing_tree_plan(
-        cls,
-        model: "RoutingTreeDelegate",
-        routing_tree_plan: "RoutingTreePlan",
-    ) -> None:
-        cls.validate_plan_sampler_configs(
-            input_dim=model.input_dim,
-            leaf_sampler_config=model.leaf_sampler_config,
-            direction_sampler_config=model.direction_sampler_config,
-            routing_tree_plan=routing_tree_plan,
-        )
-
-    @classmethod
-    def validate_plan_sampler_configs(
-        cls,
-        *,
-        input_dim: int,
-        leaf_sampler_config: "SamplerConfig",
-        direction_sampler_config: "SamplerConfig",
-        routing_tree_plan: "RoutingTreePlan",
-    ) -> None:
-        from emperor.neuron._terminal.routing.node import RoutingTreeNode
-        from emperor.sampler import RouterConfig
-
-        for template_name, sampler_template in (
-            ("sampler_config", leaf_sampler_config),
-            (
-                "routing_tree_config.direction_sampler_config",
-                direction_sampler_config,
-            ),
-        ):
-            if not isinstance(sampler_template.router_config, RouterConfig):
-                raise ValueError(
-                    f"{template_name}.router_config must be a RouterConfig for "
-                    "Terminal routing trees; routerless direct-logit sampling is "
-                    "available only in flat mode."
-                )
-
-        for node in routing_tree_plan.walk():
-            if node.is_leaf:
-                if len(node.connection_indices) < routing_tree_plan.leaf_top_k:
-                    raise ValueError(
-                        "Terminal routing tree leaf "
-                        f"{cls._format_tree_path(node.path)} contains "
-                        f"{len(node.connection_indices)} connections, fewer than "
-                        "sampler_config.top_k="
-                        f"{routing_tree_plan.leaf_top_k}."
-                    )
-                template = leaf_sampler_config
-                num_experts = len(node.connection_indices)
-                top_k = routing_tree_plan.leaf_top_k
-            else:
-                num_children = len(node.children)
-                level_top_k = routing_tree_plan.direction_top_k[node.level]
-                if num_children < 2:
-                    raise ValueError(
-                        "Terminal routing tree internal node "
-                        f"{cls._format_tree_path(node.path)} must contain at least "
-                        f"two nonempty spatial regions, received {num_children}."
-                    )
-                if num_children < level_top_k:
-                    raise ValueError(
-                        "Terminal routing tree internal node "
-                        f"{cls._format_tree_path(node.path)} contains "
-                        f"{num_children} nonempty regions, fewer than "
-                        f"direction_top_k[{node.level}]={level_top_k}."
-                    )
-                template = direction_sampler_config
-                num_experts = num_children
-                top_k = level_top_k
-
-            derived_config = RoutingTreeNode.derive_sampler_config(
-                template,
-                input_dim=input_dim,
-                num_experts=num_experts,
-                top_k=top_k,
-            )
-            derived_config.validate_for_router_input_dim(input_dim)
-
-    @staticmethod
-    def _format_tree_path(path: tuple[int, ...]) -> str:
-        if not path:
-            return "<root>"
-        return ".".join(str(branch) for branch in path)
 
 
 class Validator(ValidatorBase, NeuronValidationMixin):
