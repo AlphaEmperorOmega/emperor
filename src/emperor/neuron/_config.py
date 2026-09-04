@@ -86,7 +86,7 @@ class TerminalConfig(ConfigBase):
     )
     routing_tree_config: TerminalRoutingTreeConfig | None = optional_field(
         "Optional hierarchical spatial router. When omitted, Terminal retains "
-        "the single flat sampler path and checkpoint layout."
+        "the single flat sampler path and checkpoint key layout."
     )
 
     def _registry_owner(self) -> type:
