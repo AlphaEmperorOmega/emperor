@@ -7,6 +7,8 @@ import torch.nn as nn
 
 from emperor.neuron import (
     NeuronClusterConfig,
+    TerminalConnectionShapeOptions,
+    TerminalRangeOptions,
     TerminalRoutingTreeConfig,
     TerminalRoutingTreeDepthOptions,
 )
@@ -128,6 +130,58 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self.assertEqual(sorted(assigned_indices), list(range(len(coordinates))))
         self.assertEqual(len(assigned_indices), len(set(assigned_indices)))
         self.assertEqual(len(plan.root.children), 12)
+
+    def test_compiler_covers_new_sparse_terminal_shapes_once(self):
+        shape_connection_counts = (
+            (TerminalConnectionShapeOptions.DIAGONAL, 25),
+            (TerminalConnectionShapeOptions.CROSS_DIAGONAL, 45),
+        )
+        for connection_shape, expected_connection_count in shape_connection_counts:
+            with self.subTest(connection_shape=connection_shape):
+                terminal_config = self.terminal_config(
+                    xy_axis_range=TerminalRangeOptions.FOUR,
+                    z_axis_range=TerminalRangeOptions.TWO,
+                    sampler_config=self.sampler_config(
+                        num_experts=expected_connection_count,
+                        top_k=1,
+                    ),
+                    connection_shape=connection_shape,
+                )
+                connections = terminal_config.build().neuron_connections
+                routing_tree_config = self.routing_tree_config(
+                    branch_counts=(8,),
+                    direction_top_k=(1,),
+                )
+                terminal_config.routing_tree_config = routing_tree_config
+                plan = TerminalRoutingTreeDelegate.preflight(
+                    terminal_config,
+                    connections,
+                )
+
+                assigned_connection_indices = [
+                    connection_index
+                    for child in plan.root.children
+                    for connection_index in child.connection_indices
+                ]
+                assigned_coordinates = {
+                    tuple(connections[connection_index].tolist())
+                    for connection_index in assigned_connection_indices
+                }
+                expected_coordinates = {
+                    tuple(connection.tolist()) for connection in connections
+                }
+                self.assertEqual(len(connections), expected_connection_count)
+                self.assertEqual(
+                    sorted(assigned_connection_indices),
+                    list(range(expected_connection_count)),
+                )
+                self.assertEqual(
+                    len(assigned_connection_indices),
+                    len(set(assigned_connection_indices)),
+                )
+                self.assertEqual(assigned_coordinates, expected_coordinates)
+                self.assertIn((1, -3, -1), assigned_coordinates)
+                self.assertIn((1, 5, 3), assigned_coordinates)
 
     def test_compiler_is_translation_invariant_and_prunes_empty_regions(self):
         sparse_coordinates = torch.tensor(

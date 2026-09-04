@@ -1,4 +1,5 @@
 import unittest
+from math import gcd
 
 from emperor.neuron import (
     TerminalConnectionShapeOptions,
@@ -8,6 +9,54 @@ from unit.test_neuron import NeuronTestCase
 
 
 class TestNeuronTerminalTopology(NeuronTestCase):
+    def test_diagonal_shape_counts_match_every_supported_range_pair(self) -> None:
+        for xy_axis_range in TerminalRangeOptions:
+            for z_axis_range in TerminalRangeOptions:
+                shared_axis_range_divisor = gcd(
+                    xy_axis_range.value,
+                    z_axis_range.value,
+                )
+                shape_connection_counts = (
+                    (
+                        TerminalConnectionShapeOptions.DIAGONAL,
+                        4 * xy_axis_range.value + 4 * shared_axis_range_divisor + 1,
+                    ),
+                    (
+                        TerminalConnectionShapeOptions.CROSS_DIAGONAL,
+                        8 * xy_axis_range.value
+                        + 2 * z_axis_range.value
+                        + 4 * shared_axis_range_divisor
+                        + 1,
+                    ),
+                )
+                for connection_shape, expected_connection_count in (
+                    shape_connection_counts
+                ):
+                    with self.subTest(
+                        connection_shape=connection_shape,
+                        xy_axis_range=xy_axis_range,
+                        z_axis_range=z_axis_range,
+                    ):
+                        terminal = self.shaped_terminal(
+                            connection_shape,
+                            num_experts=expected_connection_count,
+                            xy_axis_range=xy_axis_range,
+                            z_axis_range=z_axis_range,
+                        )
+                        unique_connections = {
+                            tuple(connection)
+                            for connection in terminal.neuron_connections.tolist()
+                        }
+
+                        self.assertEqual(
+                            terminal.total_neuron_connections,
+                            expected_connection_count,
+                        )
+                        self.assertEqual(
+                            terminal.total_neuron_connections,
+                            len(unique_connections),
+                        )
+
     def test_centered_ellipsoid_matches_exact_integer_cross_sections(self) -> None:
         terminal = self.shaped_terminal(
             TerminalConnectionShapeOptions.SPHERE,

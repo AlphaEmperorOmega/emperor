@@ -1239,9 +1239,10 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
         self,
     ) -> None:
         auxiliary_weight = 0.7
+        terminal_num_experts = 7
         terminal_sampler_config = self.sampler_config(
             input_dim=self.input_dim,
-            num_experts=3,
+            num_experts=terminal_num_experts,
             top_k=2,
         )
         terminal_sampler_config.zero_centred_loss_weight = auxiliary_weight
@@ -1257,7 +1258,7 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
             terminal_config=self.terminal_config(
                 input_dim=self.input_dim,
                 sampler_config=terminal_sampler_config,
-                connection_shape=TerminalConnectionShapeOptions.LINE_LEFT_RIGHT,
+                connection_shape=TerminalConnectionShapeOptions.CROSS,
             ),
         )
         entry_sampler_config = self.sampler_config(
@@ -1285,7 +1286,12 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
         cluster.entry_sampler = ScriptedSampler(indices=[1], probabilities=[1.0])
         routed_neuron = cluster.cluster["neuron_2_1_1"]
         router_layer = routed_neuron.terminal.sampler.router.model.layers[0].model
-        router_bias = torch.tensor([2.0, 0.0, -2.0], dtype=torch.float64)
+        router_bias = torch.linspace(
+            2.0,
+            -2.0,
+            steps=terminal_num_experts,
+            dtype=torch.float64,
+        )
         with torch.no_grad():
             routed_neuron.nucleus.model.weight.copy_(
                 torch.eye(self.input_dim, dtype=torch.float64)
@@ -1338,17 +1344,16 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
             atol=2e-13,
         )
 
-        weight_direction = torch.tensor(
-            [
-                [0.3, -0.2, 0.7],
-                [-0.5, 0.4, 0.1],
-                [0.6, -0.8, 0.2],
-                [0.9, 0.25, -0.35],
-            ],
+        weight_direction = torch.linspace(
+            -0.9,
+            0.9,
+            steps=self.input_dim * terminal_num_experts,
             dtype=torch.float64,
-        )
-        bias_direction = torch.tensor(
-            [0.45, -0.65, 0.15],
+        ).reshape(self.input_dim, terminal_num_experts)
+        bias_direction = torch.linspace(
+            0.45,
+            -0.65,
+            steps=terminal_num_experts,
             dtype=torch.float64,
         )
         direction_norm = torch.sqrt(
