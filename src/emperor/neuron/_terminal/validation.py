@@ -54,9 +54,7 @@ class RoutingTreeDelegateValidator(ValidatorBase):
         model: "RoutingTreeDelegate",
         routing_tree_plan: "RoutingTreePlan",
     ) -> None:
-        from emperor.neuron._terminal.routing.sampler_config import (
-            derive_terminal_tree_sampler_config,
-        )
+        from emperor.neuron._terminal.routing.node import RoutingTreeNode
         from emperor.sampler import RouterConfig
 
         for template_name, sampler_template in (
@@ -106,7 +104,7 @@ class RoutingTreeDelegateValidator(ValidatorBase):
                 num_experts = num_children
                 top_k = level_top_k
 
-            derived_config = derive_terminal_tree_sampler_config(
+            derived_config = RoutingTreeNode.derive_sampler_config(
                 template,
                 input_dim=model.input_dim,
                 num_experts=num_experts,
