@@ -14,7 +14,7 @@ if TYPE_CHECKING:
         RoutingTreeNodePlan,
         RoutingTreePlan,
     )
-    from emperor.sampler import SamplerConfig
+    from emperor.sampler import RouterConfig, SamplerConfig
 
 
 class RoutingTreeDelegateValidator(ValidatorBase):
@@ -313,6 +313,73 @@ class Validator(ValidatorBase, NeuronValidationMixin):
         cls.validate_sampler_config(model)
 
     @classmethod
+    def validate_sampler_config(cls, model: "Terminal") -> None:
+        sampler_config = model.sampler_config
+        if model.routing_tree_config is not None:
+            return
+
+        cls.__validate_sampler_connection_count(model, sampler_config)
+        router_config = sampler_config.router_config
+        if router_config is None:
+            cls.validate_logits_only_input_dim(model)
+            return
+        cls.__validate_router_connection_count(model, router_config)
+
+    @classmethod
+    def __validate_sampler_connection_count(
+        cls,
+        model: "Terminal",
+        sampler_config: "SamplerConfig",
+    ) -> None:
+        cls.validate_positive_integer(
+            "sampler_config.num_experts",
+            sampler_config.num_experts,
+        )
+        if sampler_config.num_experts != model.total_neuron_connections:
+            raise ValueError(
+                "sampler_config.num_experts must equal Terminal "
+                "total_neuron_connections, received "
+                f"num_experts={sampler_config.num_experts} and "
+                f"total_neuron_connections={model.total_neuron_connections}."
+            )
+
+    @staticmethod
+    def validate_logits_only_input_dim(model: "Terminal") -> None:
+        if model.input_dim == model.total_neuron_connections:
+            return
+        raise ValueError(
+            "sampler_config.router_config is required when Terminal input_dim "
+            "does not equal total_neuron_connections, received "
+            f"input_dim={model.input_dim} and "
+            f"total_neuron_connections={model.total_neuron_connections}."
+        )
+
+    @classmethod
+    def __validate_router_connection_count(
+        cls,
+        model: "Terminal",
+        router_config: "RouterConfig",
+    ) -> None:
+        from emperor.sampler import RouterConfig
+
+        if not isinstance(router_config, RouterConfig):
+            raise TypeError(
+                "sampler_config.router_config must be a RouterConfig for Terminal, "
+                f"got {type(router_config).__name__}."
+            )
+        cls.validate_positive_integer(
+            "sampler_config.router_config.num_experts",
+            router_config.num_experts,
+        )
+        if router_config.num_experts != model.total_neuron_connections:
+            raise ValueError(
+                "sampler_config.router_config.num_experts must equal Terminal "
+                "total_neuron_connections, received "
+                f"num_experts={router_config.num_experts} and "
+                f"total_neuron_connections={model.total_neuron_connections}."
+            )
+
+    @classmethod
     def validate_config_composition(cls, cfg) -> None:
         """Validate Terminal composition without constructing trainable modules."""
 
@@ -359,58 +426,6 @@ class Validator(ValidatorBase, NeuronValidationMixin):
             leaf_sampler_config=leaf_sampler_config,
             direction_sampler_config=direction_sampler_config,
             routing_tree_plan=routing_tree_plan,
-        )
-
-    @classmethod
-    def validate_sampler_config(cls, model: "Terminal") -> None:
-        from emperor.sampler import RouterConfig
-
-        sampler_config = model.sampler_config
-        if model.routing_tree_config is not None:
-            return
-
-        cls.validate_positive_integer(
-            "sampler_config.num_experts",
-            sampler_config.num_experts,
-        )
-        if sampler_config.num_experts != model.total_neuron_connections:
-            raise ValueError(
-                "sampler_config.num_experts must equal Terminal "
-                "total_neuron_connections, received "
-                f"num_experts={sampler_config.num_experts} and "
-                f"total_neuron_connections={model.total_neuron_connections}."
-            )
-
-        router_config = sampler_config.router_config
-        if router_config is None:
-            cls.validate_logits_only_input_dim(model)
-            return
-        if not isinstance(router_config, RouterConfig):
-            raise TypeError(
-                "sampler_config.router_config must be a RouterConfig for Terminal, "
-                f"got {type(router_config).__name__}."
-            )
-        cls.validate_positive_integer(
-            "sampler_config.router_config.num_experts",
-            router_config.num_experts,
-        )
-        if router_config.num_experts != model.total_neuron_connections:
-            raise ValueError(
-                "sampler_config.router_config.num_experts must equal Terminal "
-                "total_neuron_connections, received "
-                f"num_experts={router_config.num_experts} and "
-                f"total_neuron_connections={model.total_neuron_connections}."
-            )
-
-    @staticmethod
-    def validate_logits_only_input_dim(model: "Terminal") -> None:
-        if model.input_dim == model.total_neuron_connections:
-            return
-        raise ValueError(
-            "sampler_config.router_config is required when Terminal input_dim "
-            "does not equal total_neuron_connections, received "
-            f"input_dim={model.input_dim} and "
-            f"total_neuron_connections={model.total_neuron_connections}."
         )
 
     @classmethod
