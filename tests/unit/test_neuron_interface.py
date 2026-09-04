@@ -94,7 +94,7 @@ PRIVATE_MODULES = (
     "emperor.neuron._terminal.connection_topology",
     "emperor.neuron._terminal.core",
     "emperor.neuron._terminal.routing",
-    "emperor.neuron._terminal.topology",
+    "emperor.neuron._terminal.routing_tree_topology",
     "emperor.neuron._terminal.validation",
     "emperor.neuron._trace",
     "emperor.neuron._validation",

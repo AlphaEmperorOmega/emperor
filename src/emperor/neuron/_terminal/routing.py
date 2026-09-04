@@ -6,16 +6,16 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor, nn
 
-from emperor.neuron._terminal.topology import _compile_terminal_routing_tree
+from emperor.neuron._terminal.routing_tree_topology import RoutingTreeCompiler
 from emperor.neuron._terminal.validation import TerminalRoutingTreeDelegateValidator
 from emperor.nn import Module
 from emperor.sampler import SamplerConfig, SamplerModel
 
 if TYPE_CHECKING:
     from emperor.neuron._config import TerminalConfig, TerminalRoutingTreeConfig
-    from emperor.neuron._terminal.topology import (
-        TerminalRoutingTreeNodePlan,
-        TerminalRoutingTreePlan,
+    from emperor.neuron._terminal.routing_tree_topology import (
+        RoutingTreeNodePlan,
+        RoutingTreePlan,
     )
 
 
@@ -87,7 +87,7 @@ class TerminalRoutingTreeDelegate(Module):
         cls,
         cfg: TerminalConfig,
         neuron_connections: Tensor,
-    ) -> TerminalRoutingTreePlan:
+    ) -> RoutingTreePlan:
         routing_tree_config = cfg.routing_tree_config
         if routing_tree_config is None:
             raise ValueError(
@@ -97,11 +97,11 @@ class TerminalRoutingTreeDelegate(Module):
         direction_sampler_config = (
             routing_tree_config.direction_sampler_config or leaf_sampler_config
         )
-        plan = _compile_terminal_routing_tree(
-            neuron_connections,
-            routing_tree_config,
-            leaf_sampler_config.top_k,
-        )
+        plan = RoutingTreeCompiler(
+            neuron_connections=neuron_connections,
+            routing_tree_config=routing_tree_config,
+            leaf_top_k=leaf_sampler_config.top_k,
+        ).compile()
         cls.VALIDATOR.validate_preflight(
             input_dim=cfg.input_dim,
             leaf_sampler_config=leaf_sampler_config,
@@ -158,8 +158,8 @@ class _TerminalRoutingTreeNode(Module):
         self,
         *,
         input_dim: int,
-        plan: TerminalRoutingTreePlan,
-        node_plan: TerminalRoutingTreeNodePlan,
+        plan: RoutingTreePlan,
+        node_plan: RoutingTreeNodePlan,
         leaf_sampler_config: SamplerConfig,
         direction_sampler_config: SamplerConfig,
     ) -> None:
