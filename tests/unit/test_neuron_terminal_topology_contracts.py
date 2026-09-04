@@ -1,14 +1,42 @@
 import unittest
 from math import gcd
 
+import torch
+
 from emperor.neuron import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
+)
+from emperor.neuron._terminal.connection_topology import (
+    TargetCoordinateBuilder,
 )
 from unit.test_neuron import NeuronTestCase
 
 
 class TestNeuronTerminalTopology(NeuronTestCase):
+    def test_builder_snapshots_topology_values_from_config(self) -> None:
+        terminal_config = self.terminal_config()
+        builder = TargetCoordinateBuilder(terminal_config)
+        total_neuron_connections = builder.get_total_neuron_connections()
+        expected_connections = builder.build()
+
+        self.assertIs(builder.connection_shape, terminal_config.connection_shape)
+        self.assertEqual(builder.x_axis_position, terminal_config.x_axis_position)
+        self.assertEqual(builder.y_axis_position, terminal_config.y_axis_position)
+        self.assertEqual(builder.z_axis_position, terminal_config.z_axis_position)
+        self.assertEqual(builder.xy_axis_range, terminal_config.xy_axis_range.value)
+        self.assertEqual(builder.z_axis_range, terminal_config.z_axis_range.value)
+        self.assertEqual(total_neuron_connections, 27)
+
+        terminal_config.connection_shape = TerminalConnectionShapeOptions.CROSS
+        terminal_config.x_axis_position = 10
+        terminal_config.y_axis_position = 20
+        terminal_config.z_axis_position = 30
+        terminal_config.xy_axis_range = TerminalRangeOptions.TWO
+        terminal_config.z_axis_range = TerminalRangeOptions.FOUR
+
+        torch.testing.assert_close(builder.build(), expected_connections)
+
     def test_diagonal_shape_counts_match_every_supported_range_pair(self) -> None:
         for xy_axis_range in TerminalRangeOptions:
             for z_axis_range in TerminalRangeOptions:
@@ -29,41 +57,62 @@ class TestNeuronTerminalTopology(NeuronTestCase):
                         + 1,
                     ),
                 )
-                for connection_shape, expected_connection_count in (
-                    shape_connection_counts
-                ):
+                for (
+                    connection_shape,
+                    expected_connection_count,
+                ) in shape_connection_counts:
                     with self.subTest(
                         connection_shape=connection_shape,
                         xy_axis_range=xy_axis_range,
                         z_axis_range=z_axis_range,
                     ):
-                        terminal = self.shaped_terminal(
-                            connection_shape,
-                            num_experts=expected_connection_count,
+                        terminal_config = self.terminal_config(
+                            connection_shape=connection_shape,
                             xy_axis_range=xy_axis_range,
                             z_axis_range=z_axis_range,
                         )
+                        connections = TargetCoordinateBuilder(terminal_config).build()
                         unique_connections = {
-                            tuple(connection)
-                            for connection in terminal.neuron_connections.tolist()
+                            tuple(connection) for connection in connections.tolist()
                         }
 
                         self.assertEqual(
-                            terminal.total_neuron_connections,
+                            len(connections),
                             expected_connection_count,
                         )
-                        self.assertEqual(
-                            terminal.total_neuron_connections,
-                            len(unique_connections),
-                        )
+                        self.assertEqual(len(connections), len(unique_connections))
+
+    def test_connection_count_is_computed_without_building_coordinates(self) -> None:
+        shape_connection_counts = (
+            (TerminalConnectionShapeOptions.BOX, 27),
+            (TerminalConnectionShapeOptions.CROSS, 7),
+            (TerminalConnectionShapeOptions.SPHERE, 7),
+            (TerminalConnectionShapeOptions.DIAGONAL, 9),
+            (TerminalConnectionShapeOptions.CROSS_DIAGONAL, 15),
+        )
+
+        for connection_shape, expected_connection_count in shape_connection_counts:
+            with self.subTest(connection_shape=connection_shape):
+                terminal_config = self.terminal_config(
+                    connection_shape=connection_shape,
+                )
+                builder = TargetCoordinateBuilder(terminal_config)
+
+                self.assertEqual(
+                    builder.get_total_neuron_connections(),
+                    expected_connection_count,
+                )
+                self.assertEqual(len(builder.build()), expected_connection_count)
 
     def test_centered_ellipsoid_matches_exact_integer_cross_sections(self) -> None:
-        terminal = self.shaped_terminal(
-            TerminalConnectionShapeOptions.SPHERE,
-            num_experts=33,
+        terminal_config = self.terminal_config(
+            connection_shape=TerminalConnectionShapeOptions.SPHERE,
+            sampler_config=self.sampler_config(num_experts=33),
             xy_axis_range=TerminalRangeOptions.TWO,
             z_axis_range=TerminalRangeOptions.TWO,
         )
+        builder = TargetCoordinateBuilder(terminal_config)
+        connections = builder.build()
         three_by_three_plane = {
             (x_coordinate, y_coordinate)
             for x_coordinate in range(3)
@@ -97,13 +146,12 @@ class TestNeuronTerminalTopology(NeuronTestCase):
             for x_coordinate, y_coordinate in cross_section
         }
 
-        actual_connections = {
-            tuple(connection) for connection in terminal.neuron_connections.tolist()
-        }
+        actual_connections = {tuple(connection) for connection in connections.tolist()}
 
-        self.assertEqual(terminal.total_neuron_connections, 33)
+        self.assertEqual(builder.get_total_neuron_connections(), 33)
+        self.assertEqual(connections.shape, (33, 3))
         self.assertEqual(actual_connections, expected_connections)
-        self.assertEqual(terminal.neuron_connections.tolist().count([1, 1, 1]), 1)
+        self.assertEqual(connections.tolist().count([1, 1, 1]), 1)
         for x_coordinate, y_coordinate, z_coordinate in actual_connections:
             mirrored_z_coordinate = 2 - z_coordinate
             self.assertIn(

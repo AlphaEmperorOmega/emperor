@@ -196,11 +196,13 @@ class TerminalValidator(ValidatorBase, NeuronValidationMixin):
     def validate_config_composition(cls, cfg) -> None:
         """Validate Terminal composition without constructing trainable modules."""
 
+        from emperor.neuron._terminal.connection_topology import (
+            TargetCoordinateBuilder,
+        )
         from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
-        from emperor.neuron._terminal.topology import initialize_terminal_connections
 
         cls.validate_config_fields(cfg)
-        neuron_connections = initialize_terminal_connections(cfg)
+        neuron_connections = TargetCoordinateBuilder(cfg).build()
         terminal_validation_target = SimpleNamespace(
             cfg=cfg,
             input_dim=cfg.input_dim,
