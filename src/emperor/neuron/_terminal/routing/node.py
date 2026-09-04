@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 
 class RoutingTreeNode(Module):
+    """Own one direction or leaf sampler and route its selected input rows."""
+
     def __init__(
         self,
         *,
@@ -27,45 +29,32 @@ class RoutingTreeNode(Module):
         direction_sampler_config: SamplerConfig,
     ) -> None:
         super().__init__()
-        self.input_dim = input_dim
-        self.is_leaf = node_plan.is_leaf
+        self.input_dim: int = input_dim
+        self.plan: RoutingTreePlan = plan
+        self.node_plan: RoutingTreeNodePlan = node_plan
+        self.leaf_sampler_config: SamplerConfig = leaf_sampler_config
+        self.direction_sampler_config: SamplerConfig = direction_sampler_config
+        self.is_leaf: bool = self.node_plan.is_leaf
+        self.sampler = self.__build_sampler()
 
+    def __build_sampler(self):
         if self.is_leaf:
-            node_sampler_config = RoutingTreeNode.derive_sampler_config(
-                leaf_sampler_config,
-                input_dim=input_dim,
-                num_experts=len(node_plan.connection_indices),
-                top_k=plan.leaf_top_k,
-            )
-            self.output_width = plan.leaf_top_k
-            self.register_buffer(
-                "global_connection_indices",
-                torch.tensor(node_plan.connection_indices, dtype=torch.long),
-                persistent=False,
-            )
-            self.branches = nn.ModuleList()
+            node_sampler_config = self.__initialize_leaf_node()
         else:
-            direction_top_k = plan.direction_top_k[node_plan.level]
-            node_sampler_config = RoutingTreeNode.derive_sampler_config(
-                direction_sampler_config,
-                input_dim=input_dim,
-                num_experts=len(node_plan.children),
-                top_k=direction_top_k,
-            )
-            self.branches = nn.ModuleList(
-                RoutingTreeNode(
-                    input_dim=input_dim,
-                    plan=plan,
-                    node_plan=child_plan,
-                    leaf_sampler_config=leaf_sampler_config,
-                    direction_sampler_config=direction_sampler_config,
-                )
-                for child_plan in node_plan.children
-            )
-            child_output_width = self.branches[0].output_width
-            self.output_width = direction_top_k * child_output_width
+            node_sampler_config = self.__initialize_direction_node()
+        return node_sampler_config.build()
 
-        self.sampler = node_sampler_config.build()
+    def __initialize_leaf_node(self) -> SamplerConfig:
+        node_sampler_config = RoutingTreeNode.derive_sampler_config(
+            self.leaf_sampler_config,
+            input_dim=self.input_dim,
+            num_experts=len(self.node_plan.connection_indices),
+            top_k=self.plan.leaf_top_k,
+        )
+        self.output_width = self.plan.leaf_top_k
+        self.__initialize_global_connection_indices()
+        self.branches = nn.ModuleList()
+        return node_sampler_config
 
     @staticmethod
     def derive_sampler_config(
@@ -95,6 +84,42 @@ class RoutingTreeNode(Module):
         derived_config.router_config.num_experts = num_experts
         derived_config.router_config.noisy_topk_flag = derived_config.noisy_topk_flag
         return derived_config
+
+    def __initialize_global_connection_indices(self) -> None:
+        global_connection_indices = torch.tensor(
+            self.node_plan.connection_indices,
+            dtype=torch.long,
+        )
+        self.register_buffer(
+            "global_connection_indices",
+            global_connection_indices,
+            persistent=False,
+        )
+
+    def __initialize_direction_node(self) -> SamplerConfig:
+        direction_top_k = self.plan.direction_top_k[self.node_plan.level]
+        node_sampler_config = RoutingTreeNode.derive_sampler_config(
+            self.direction_sampler_config,
+            input_dim=self.input_dim,
+            num_experts=len(self.node_plan.children),
+            top_k=direction_top_k,
+        )
+        self.branches = self.__build_branches()
+        child_output_width = self.branches[0].output_width
+        self.output_width = direction_top_k * child_output_width
+        return node_sampler_config
+
+    def __build_branches(self) -> nn.ModuleList:
+        return nn.ModuleList(
+            RoutingTreeNode(
+                input_dim=self.input_dim,
+                plan=self.plan,
+                node_plan=child_plan,
+                leaf_sampler_config=self.leaf_sampler_config,
+                direction_sampler_config=self.direction_sampler_config,
+            )
+            for child_plan in self.node_plan.children
+        )
 
     def route(self, input_matrix: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         probabilities, selected_indices, _, auxiliary_loss = (
