@@ -18,7 +18,6 @@ from emperor.neuron._options import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
     TerminalRoutingTreeDepthOptions,
-    TerminalZAxisOffsetOptions,
 )
 from emperor.neuron._terminal import Terminal
 from emperor.neuron._trace import NeuronClusterTrace, NeuronClusterTraceStep
@@ -42,5 +41,4 @@ __all__ = (
     "TerminalRangeOptions",
     "TerminalRoutingTreeConfig",
     "TerminalRoutingTreeDepthOptions",
-    "TerminalZAxisOffsetOptions",
 )

@@ -39,7 +39,6 @@ from emperor.neuron import (
     TerminalConfig,
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
-    TerminalZAxisOffsetOptions,
 )
 from emperor.neuron._cluster.state import _NeuronClusterForwardContext
 from emperor.nn import Module
@@ -453,7 +452,7 @@ class NeuronTestCase(unittest.TestCase):
         xy_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
         z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
     ) -> int:
-        return (xy_axis_range.value * 2 + 1) ** 2 * (z_axis_range.value + 1)
+        return (xy_axis_range.value * 2 + 1) ** 2 * (z_axis_range.value * 2 + 1)
 
     def router_config(
         self,
@@ -546,7 +545,6 @@ class NeuronTestCase(unittest.TestCase):
         input_dim: int = 4,
         xy_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
         z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
-        z_axis_offset: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO,
         sampler_config: SamplerConfig | None = None,
         connection_shape: TerminalConnectionShapeOptions = (
             TerminalConnectionShapeOptions.BOX
@@ -560,7 +558,6 @@ class NeuronTestCase(unittest.TestCase):
             z_axis_position=1,
             xy_axis_range=xy_axis_range,
             z_axis_range=z_axis_range,
-            z_axis_offset=z_axis_offset,
             sampler_config=sampler_config
             or self.sampler_config(input_dim=input_dim, num_experts=num_experts),
             connection_shape=connection_shape,
@@ -572,12 +569,10 @@ class NeuronTestCase(unittest.TestCase):
         num_experts: int,
         xy_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
         z_axis_range: TerminalRangeOptions = TerminalRangeOptions.ONE,
-        z_axis_offset: TerminalZAxisOffsetOptions = TerminalZAxisOffsetOptions.ZERO,
     ):
         return self.terminal_config(
             xy_axis_range=xy_axis_range,
             z_axis_range=z_axis_range,
-            z_axis_offset=z_axis_offset,
             sampler_config=self.sampler_config(num_experts=num_experts),
             connection_shape=connection_shape,
         ).build()
@@ -587,6 +582,13 @@ class NeuronTestCase(unittest.TestCase):
             tuple(connection_row)
             for connection_row in terminal.neuron_connections.tolist()
         }
+
+    def terminal_connection_index(
+        self,
+        terminal,
+        coordinate: tuple[int, int, int],
+    ) -> int:
+        return terminal.neuron_connections.tolist().index(list(coordinate))
 
     def neuron_config(
         self,
@@ -1509,6 +1511,113 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(output.shape, (self.batch_size, self.input_dim))
         self.assertEqual(int(model.cluster["neuron_1_1_1"].batch_counter.item()), 2)
         self.assertEqual(int(model.cluster["neuron_1_1_2"].batch_counter.item()), 1)
+
+    def test_symmetric_z_candidates_route_to_instantiated_lower_and_upper_neurons(
+        self,
+    ) -> None:
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=1,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=3,
+            max_steps=1,
+            growth_threshold=None,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.entry_coordinates = torch.tensor([[1, 1, 2]], dtype=torch.long)
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        terminal = model.cluster["neuron_1_1_2"].terminal
+        terminal.sampler = ScriptedSampler(
+            indices=[
+                self.terminal_connection_index(terminal, (1, 1, 1)),
+                self.terminal_connection_index(terminal, (1, 1, 3)),
+            ],
+            probabilities=[0.5, 0.5],
+        )
+
+        _, _, trace = model(
+            torch.zeros(self.batch_size, self.input_dim),
+            return_trace=True,
+        )
+
+        expected_coordinates = torch.tensor(
+            [[[1, 1, 1], [1, 1, 3]]],
+            dtype=torch.long,
+        ).expand(self.batch_size, -1, -1)
+        torch.testing.assert_close(
+            trace.steps[0].selected_coordinates,
+            expected_coordinates,
+        )
+        self.assertTrue(trace.steps[0].valid_mask.all())
+        self.assertFalse(trace.steps[0].escape_mask.any())
+
+    def test_out_of_capacity_z_candidates_escape_without_clamping(self) -> None:
+        model = NeuronClusterConfig(
+            x_axis_total_neurons=1,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=None,
+            neuron_config=self.full_sampler_neuron_config(),
+        ).build()
+        model.entry_sampler = ScriptedSampler(indices=[0], probabilities=[1.0])
+        terminal = model.cluster["neuron_1_1_1"].terminal
+        terminal.sampler = ScriptedSampler(
+            indices=[
+                self.terminal_connection_index(terminal, (1, 1, 0)),
+                self.terminal_connection_index(terminal, (1, 1, 2)),
+            ],
+            probabilities=[0.6, 0.4],
+        )
+
+        _, _, trace = model(
+            torch.zeros(self.batch_size, self.input_dim),
+            return_trace=True,
+        )
+
+        expected_coordinates = torch.tensor(
+            [[[1, 1, 0], [1, 1, 2]]],
+            dtype=torch.long,
+        ).expand(self.batch_size, -1, -1)
+        torch.testing.assert_close(
+            trace.steps[0].selected_coordinates,
+            expected_coordinates,
+        )
+        self.assertFalse(trace.steps[0].valid_mask.any())
+        self.assertTrue(trace.steps[0].escape_mask.all())
+
+    def test_symmetric_z_candidates_can_drive_growth_in_both_directions(self):
+        for target_z in (1, 3):
+            with self.subTest(target_z=target_z):
+                model = NeuronClusterConfig(
+                    x_axis_total_neurons=1,
+                    y_axis_total_neurons=1,
+                    z_axis_total_neurons=3,
+                    initial_x_axis_total_neurons=1,
+                    initial_y_axis_total_neurons=1,
+                    initial_z_axis_total_neurons=1,
+                    max_steps=1,
+                    growth_threshold=1,
+                    escape_driven_growth_flag=True,
+                    neuron_config=self.full_sampler_neuron_config(),
+                ).build()
+                model.entry_sampler = ScriptedSampler(
+                    indices=[0],
+                    probabilities=[1.0],
+                )
+                terminal = model.cluster["neuron_1_1_2"].terminal
+                terminal.sampler = ScriptedSampler(
+                    indices=[
+                        self.terminal_connection_index(
+                            terminal,
+                            (1, 1, target_z),
+                        )
+                    ],
+                    probabilities=[1.0],
+                )
+
+                model(torch.zeros(self.batch_size, self.input_dim))
+
+                self.assertIn(f"neuron_1_1_{target_z}", model.cluster)
 
     def test_growth_prefers_neuron_with_highest_counter(self):
         model = NeuronClusterConfig(
@@ -3412,33 +3521,42 @@ class TestNeuronCluster(NeuronTestCase):
     def test_cross_shape_keeps_axis_lines_only(self):
         terminal = self.shaped_terminal(
             TerminalConnectionShapeOptions.CROSS,
-            num_experts=6,
+            num_experts=7,
         )
 
-        self.assertEqual(terminal.total_neuron_connections, 6)
+        self.assertEqual(terminal.total_neuron_connections, 7)
         self.assertEqual(
             self.terminal_connection_set(terminal),
-            {(0, 1, 1), (1, 1, 1), (2, 1, 1), (1, 0, 1), (1, 2, 1), (1, 1, 2)},
+            {
+                (0, 1, 1),
+                (1, 1, 1),
+                (2, 1, 1),
+                (1, 0, 1),
+                (1, 2, 1),
+                (1, 1, 0),
+                (1, 1, 2),
+            },
         )
 
     def test_sphere_shape_keeps_ellipsoid_offsets(self):
         terminal = self.shaped_terminal(
             TerminalConnectionShapeOptions.SPHERE,
-            num_experts=15,
+            num_experts=33,
             xy_axis_range=TerminalRangeOptions.TWO,
             z_axis_range=TerminalRangeOptions.TWO,
         )
 
         connection_set = self.terminal_connection_set(terminal)
-        self.assertEqual(terminal.total_neuron_connections, 15)
-        # Window poles survive only on the axis; the mid-z plane holds the
-        # full disc; box corners fall outside the ellipsoid.
+        self.assertEqual(terminal.total_neuron_connections, 33)
+        # Both poles survive only on the z axis; the center plane holds the
+        # full integer disc; box corners fall outside the ellipsoid.
+        self.assertIn((1, 1, -1), connection_set)
         self.assertIn((1, 1, 1), connection_set)
         self.assertIn((1, 1, 3), connection_set)
-        self.assertIn((3, 1, 2), connection_set)
-        self.assertIn((2, 2, 2), connection_set)
-        self.assertNotIn((3, 3, 2), connection_set)
-        self.assertNotIn((2, 1, 1), connection_set)
+        self.assertIn((3, 1, 1), connection_set)
+        self.assertIn((2, 2, 1), connection_set)
+        self.assertNotIn((3, 3, 1), connection_set)
+        self.assertNotIn((2, 1, -1), connection_set)
 
     def test_diagonal_x_shape_keeps_xy_diagonals(self):
         terminal = self.shaped_terminal(
@@ -3466,14 +3584,19 @@ class TestNeuronCluster(NeuronTestCase):
     def test_line_front_back_shape_spans_z_window(self):
         terminal = self.shaped_terminal(
             TerminalConnectionShapeOptions.LINE_FRONT_BACK,
-            num_experts=3,
+            num_experts=5,
             z_axis_range=TerminalRangeOptions.TWO,
-            z_axis_offset=TerminalZAxisOffsetOptions.ONE,
         )
 
         self.assertEqual(
             self.terminal_connection_set(terminal),
-            {(1, 1, 0), (1, 1, 1), (1, 1, 2)},
+            {
+                (1, 1, -1),
+                (1, 1, 0),
+                (1, 1, 1),
+                (1, 1, 2),
+                (1, 1, 3),
+            },
         )
 
     def test_line_left_right_shape_spans_x_axis(self):
@@ -3990,12 +4113,9 @@ class TestNeuronValidation(NeuronTestCase):
                 terminal_config=self.terminal_config(),
             ).build()
 
-    def test_invalid_axis_offset_raises(self):
-        with self.assertRaises(ValueError):
-            self.terminal_config(
-                z_axis_range=TerminalRangeOptions.ONE,
-                z_axis_offset=TerminalZAxisOffsetOptions.ONE,
-            ).build()
+    def test_removed_axis_offset_is_rejected(self):
+        with self.assertRaises(TypeError):
+            TerminalConfig(z_axis_offset=0)
 
     def test_non_positive_cluster_dimensions_raise(self):
         with self.assertRaises(ValueError):

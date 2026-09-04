@@ -3,19 +3,17 @@ import unittest
 from emperor.neuron import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
-    TerminalZAxisOffsetOptions,
 )
 from unit.test_neuron import NeuronTestCase
 
 
 class TestNeuronTerminalTopology(NeuronTestCase):
-    def test_shifted_ellipsoid_matches_exact_integer_cross_sections(self) -> None:
+    def test_centered_ellipsoid_matches_exact_integer_cross_sections(self) -> None:
         terminal = self.shaped_terminal(
             TerminalConnectionShapeOptions.SPHERE,
             num_experts=33,
             xy_axis_range=TerminalRangeOptions.TWO,
-            z_axis_range=TerminalRangeOptions.FOUR,
-            z_axis_offset=TerminalZAxisOffsetOptions.ONE,
+            z_axis_range=TerminalRangeOptions.TWO,
         )
         three_by_three_plane = {
             (x_coordinate, y_coordinate)
@@ -38,11 +36,11 @@ class TestNeuronTerminalTopology(NeuronTestCase):
             (2, 2),
         }
         expected_cross_sections = {
-            0: {(1, 1)},
-            1: three_by_three_plane,
-            2: radius_two_integer_disc,
-            3: three_by_three_plane,
-            4: {(1, 1)},
+            -1: {(1, 1)},
+            0: three_by_three_plane,
+            1: radius_two_integer_disc,
+            2: three_by_three_plane,
+            3: {(1, 1)},
         }
         expected_connections = {
             (x_coordinate, y_coordinate, z_coordinate)
@@ -56,6 +54,13 @@ class TestNeuronTerminalTopology(NeuronTestCase):
 
         self.assertEqual(terminal.total_neuron_connections, 33)
         self.assertEqual(actual_connections, expected_connections)
+        self.assertEqual(terminal.neuron_connections.tolist().count([1, 1, 1]), 1)
+        for x_coordinate, y_coordinate, z_coordinate in actual_connections:
+            mirrored_z_coordinate = 2 - z_coordinate
+            self.assertIn(
+                (x_coordinate, y_coordinate, mirrored_z_coordinate),
+                actual_connections,
+            )
 
 
 if __name__ == "__main__":

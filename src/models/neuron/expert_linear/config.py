@@ -456,7 +456,6 @@ from emperor.neuron import (
     NeuronClusterOptimizerSyncCallback,
     TerminalRangeOptions,
     TerminalRoutingTreeDepthOptions,
-    TerminalZAxisOffsetOptions,
 )
 
 CALLBACK_NEURON_CLUSTER_OPTIMIZER_SYNC = NeuronClusterOptimizerSyncCallback()
@@ -482,9 +481,6 @@ CLUSTER_MITOSIS_INITIALIZATION_FLAG: bool = False
 ## Cluster Terminal Options
 CLUSTER_TERMINAL_XY_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
 CLUSTER_TERMINAL_Z_AXIS_RANGE: TerminalRangeOptions = TerminalRangeOptions.ONE
-CLUSTER_TERMINAL_Z_AXIS_OFFSET: TerminalZAxisOffsetOptions = (
-    TerminalZAxisOffsetOptions.ZERO
-)
 CLUSTER_TERMINAL_TOP_K: int = 1
 CLUSTER_TERMINAL_ROUTING_TREE_DEPTH: TerminalRoutingTreeDepthOptions | None = None
 CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_1_BRANCH_COUNT: int | None = None

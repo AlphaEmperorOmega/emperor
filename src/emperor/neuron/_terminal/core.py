@@ -36,7 +36,6 @@ class Terminal(Module):
         self.z_axis_position: int = self.cfg.z_axis_position
         self.xy_axis_range: int = self.cfg.xy_axis_range.value
         self.z_axis_range: int = self.cfg.z_axis_range.value
-        self.z_axis_offset: int = self.cfg.z_axis_offset.value
         self.connection_shape: TerminalConnectionShapeOptions = (
             self.cfg.connection_shape
         )

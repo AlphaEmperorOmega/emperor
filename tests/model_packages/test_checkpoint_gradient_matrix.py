@@ -66,14 +66,14 @@ EXPECTED_STATE_TOPOLOGY_DIGESTS = {
         "56e3ef8de17c47284dec93bac4817e28c55a185f1887c969abd7af558eee0bf4"
     ),
     "neuron/expert_linear": (
-        "1f2ffe2f7f3d551009917c36c3c218b25728a09058fe4ac6148a6b88f2c124e5"
+        "b75dc96394cc416fff56c28ef825f783072cb1f84e9a05d25685d560ffc1bf19"
     ),
     "neuron/expert_linear_adaptive": (
-        "08cdd31dd48a29cfcd799efa802ee04e4d9d6ba747f5a8d85f92a0ba28788b26"
+        "25a2e8452dd305940d2af31e6be93a77b748a6fd52b8dad0cadd3cad63495985"
     ),
-    "neuron/linear": "0d19dac15b982b01a20bda8b3b73f6e7e7b9291257e723a42fafb5aece2c2cfe",
+    "neuron/linear": "b7d35e5a5f9eb456b1916fbc3c2df2fb297aa30991188bbf40b3803b0ad34670",
     "neuron/linear_adaptive": (
-        "0d19dac15b982b01a20bda8b3b73f6e7e7b9291257e723a42fafb5aece2c2cfe"
+        "b7d35e5a5f9eb456b1916fbc3c2df2fb297aa30991188bbf40b3803b0ad34670"
     ),
     "parametric/parametric_generator": (
         "86ee37a7fe511e6bcdb99a6d95604c6a27c590f040bf7a6dd6765e8be0f930ca"

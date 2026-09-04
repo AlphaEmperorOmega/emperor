@@ -132,7 +132,6 @@ _CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K_DEFAULT = (
     config.CLUSTER_TERMINAL_ROUTING_TREE_LEVEL_2_TOP_K
 )
 _CLUSTER_TERMINAL_XY_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_XY_AXIS_RANGE
-_CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_OFFSET
 _CLUSTER_TERMINAL_Z_AXIS_RANGE_DEFAULT = config.CLUSTER_TERMINAL_Z_AXIS_RANGE
 _CLUSTER_X_AXIS_TOTAL_NEURONS_DEFAULT = config.CLUSTER_X_AXIS_TOTAL_NEURONS
 _CLUSTER_Y_AXIS_TOTAL_NEURONS_DEFAULT = config.CLUSTER_Y_AXIS_TOTAL_NEURONS
@@ -249,11 +248,6 @@ def _terminal_options(values: dict[str, object]) -> NeuronTerminalOptions:
     z_axis_range = _pop(
         values, "cluster_terminal_z_axis_range", _CLUSTER_TERMINAL_Z_AXIS_RANGE_DEFAULT
     )
-    z_axis_offset = _pop(
-        values,
-        "cluster_terminal_z_axis_offset",
-        _CLUSTER_TERMINAL_Z_AXIS_OFFSET_DEFAULT,
-    )
     top_k = _pop(values, "cluster_terminal_top_k", _CLUSTER_TERMINAL_TOP_K_DEFAULT)
     routing_tree_depth = _pop(
         values,
@@ -292,7 +286,6 @@ def _terminal_options(values: dict[str, object]) -> NeuronTerminalOptions:
     return NeuronTerminalOptions(
         xy_axis_range=xy_axis_range,
         z_axis_range=z_axis_range,
-        z_axis_offset=z_axis_offset,
         top_k=top_k,
         routing_tree=routing_tree,
     )

@@ -268,19 +268,19 @@ class TestNeuronCompositionValidation(NeuronTestCase):
 
     def test_terminal_sampler_and_runtime_dimension_errors_are_precise(self) -> None:
         outer_count_mismatch = self.terminal_config()
-        outer_count_mismatch.sampler_config.num_experts = 17
+        outer_count_mismatch.sampler_config.num_experts = 26
         invalid_router_type = self.terminal_config()
         invalid_router_type.sampler_config.router_config = object()
         router_count_mismatch = self.terminal_config()
-        router_count_mismatch.sampler_config.router_config.num_experts = 17
+        router_count_mismatch.sampler_config.router_config.num_experts = 26
 
         invalid_builds = (
             (
                 outer_count_mismatch,
                 ValueError,
                 "sampler_config.num_experts must equal Terminal "
-                "total_neuron_connections, received num_experts=17 and "
-                "total_neuron_connections=18.",
+                "total_neuron_connections, received num_experts=26 and "
+                "total_neuron_connections=27.",
             ),
             (
                 invalid_router_type,
@@ -292,8 +292,8 @@ class TestNeuronCompositionValidation(NeuronTestCase):
                 router_count_mismatch,
                 ValueError,
                 "sampler_config.router_config.num_experts must equal Terminal "
-                "total_neuron_connections, received num_experts=17 and "
-                "total_neuron_connections=18.",
+                "total_neuron_connections, received num_experts=26 and "
+                "total_neuron_connections=27.",
             ),
         )
         for config, error_type, message in invalid_builds:
@@ -363,7 +363,7 @@ class TestNeuronCompositionValidation(NeuronTestCase):
         expected_message = (
             "sampler_config.router_config is required when Terminal input_dim "
             "does not equal total_neuron_connections, received input_dim=4 and "
-            "total_neuron_connections=18."
+            "total_neuron_connections=27."
         )
         torch.manual_seed(20260719)
         rng_before = torch.random.get_rng_state().clone()
