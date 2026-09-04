@@ -23,13 +23,7 @@ class Terminal(Module):
     ):
         super().__init__()
         self.cfg: TerminalConfig = self._override_config(cfg, overrides)
-        self.__initialize_from_config()
-        self.VALIDATOR.validate(self)
-        self.sampler = self.__build_sampler()
-
-    def __initialize_from_config(self) -> None:
         self.VALIDATOR.validate_config_fields(self.cfg)
-
         self.input_dim: int = self.cfg.input_dim
         self.x_axis_position: int = self.cfg.x_axis_position
         self.y_axis_position: int = self.cfg.y_axis_position
@@ -41,12 +35,19 @@ class Terminal(Module):
         )
         self.sampler_config = self.cfg.sampler_config
         self.routing_tree_config = self.cfg.routing_tree_config
-        coordinate_builder = TargetCoordinateBuilder(self.cfg)
-        neuron_connections = coordinate_builder.build()
-        self.total_neuron_connections = (
-            coordinate_builder.get_total_neuron_connections()
+        self.__initialize_neuron_connections()
+        self.VALIDATOR.validate(self)
+        self.sampler = self.__build_sampler()
+
+    def __initialize_neuron_connections(self) -> None:
+        builder = TargetCoordinateBuilder(self.cfg)
+        self.total_neuron_connections = builder.get_total_neuron_connections()
+        candidate_coordinates = builder.build()
+        self.register_buffer(
+            "neuron_connections",
+            candidate_coordinates,
+            persistent=False,
         )
-        self.register_buffer("neuron_connections", neuron_connections, persistent=False)
 
     def __build_sampler(self):
         if self.routing_tree_config is not None:
