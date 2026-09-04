@@ -715,7 +715,7 @@ modules = [
   "src/emperor/neuron/_terminal/connection_topology.py",
   "src/emperor/neuron/_terminal/core.py",
   "src/emperor/neuron/_terminal/routing.py",
-  "src/emperor/neuron/_terminal/topology.py",
+  "src/emperor/neuron/_terminal/routing_tree_topology.py",
   "src/emperor/neuron/_terminal/validation.py",
   "src/emperor/neuron/_trace.py",
   "src/emperor/neuron/_validation/__init__.py",
