@@ -18,7 +18,7 @@ from emperor.neuron._terminal.routing.node import RoutingTreeNode
 from emperor.neuron._terminal.routing_tree_topology import (
     RoutingTreeCompiler,
 )
-from emperor.neuron._terminal.validation import RoutingTreeDelegateValidator
+from emperor.neuron._terminal.validation import RoutingTreeDelegateValidator, Validator
 from emperor.sampler import SamplerConfig, SamplerModel
 from emperor.sampler._usage import SamplerUsageTrackerManager
 from unit.test_neuron import NeuronTestCase
@@ -170,6 +170,64 @@ class TestTerminalRoutingTree(NeuronTestCase):
 
         self.assertEqual(template, original_template)
         torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+
+    def test_composition_and_runtime_validate_same_plan_and_sampler_templates(
+        self,
+    ) -> None:
+        validation_requests = []
+        validate_plan = RoutingTreeDelegateValidator.validate_plan_sampler_configs
+
+        def record_plan_validation(**request):
+            validate_plan(**request)
+            validation_requests.append(request)
+
+        for direction_sampler_config in (None, self.sampler_config(top_k=1)):
+            with self.subTest(direction_sampler_config=direction_sampler_config):
+                validation_requests.clear()
+                config = self.terminal_config()
+                config.routing_tree_config = self.routing_tree_config(
+                    direction_sampler_config=direction_sampler_config,
+                )
+                rng_before = torch.random.get_rng_state().clone()
+                with patch.object(
+                    RoutingTreeDelegateValidator,
+                    "validate_plan_sampler_configs",
+                    side_effect=record_plan_validation,
+                ):
+                    Validator.validate_config_composition(config)
+                    torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+                    terminal = config.build()
+
+                composition_request, runtime_request = validation_requests
+                self.assertEqual(
+                    composition_request["routing_tree_plan"],
+                    runtime_request["routing_tree_plan"],
+                )
+                self.assertIs(
+                    runtime_request["routing_tree_plan"],
+                    terminal.sampler.plan,
+                )
+                self.assertEqual(composition_request["input_dim"], terminal.input_dim)
+                self.assertIs(
+                    composition_request["leaf_sampler_config"],
+                    config.sampler_config,
+                )
+                self.assertIs(
+                    composition_request["leaf_sampler_config"],
+                    runtime_request["leaf_sampler_config"],
+                )
+                self.assertIs(
+                    composition_request["direction_sampler_config"],
+                    direction_sampler_config or config.sampler_config,
+                )
+                self.assertIs(
+                    composition_request["direction_sampler_config"],
+                    runtime_request["direction_sampler_config"],
+                )
+                self.assertIs(
+                    runtime_request["direction_sampler_config"],
+                    terminal.sampler.direction_sampler_config,
+                )
 
     def test_disabled_tree_preserves_flat_sampler_and_rng_contract(self) -> None:
         first_config = self.terminal_config()
@@ -588,13 +646,21 @@ class TestTerminalRoutingTree(NeuronTestCase):
         terminal = self.tree_terminal()
         delegate = terminal.sampler
         expected_plan = delegate.plan
+        expected_direction_sampler_config = delegate.direction_sampler_config
         delegate.cfg.input_dim = None
         delegate.cfg.sampler_config = None
         delegate.cfg.routing_tree_config = None
+        delegate.routing_tree_config.direction_sampler_config = self.sampler_config(
+            router_config=None,
+        )
 
         actual_plan = delegate.compile_routing_tree_plan()
 
         self.assertEqual(actual_plan, expected_plan)
+        self.assertIs(
+            delegate.direction_sampler_config,
+            expected_direction_sampler_config,
+        )
 
     def test_plan_compilation_passes_delegate_and_plan_to_validator(self) -> None:
         terminal = self.tree_terminal()
@@ -805,13 +871,17 @@ class TestTerminalRoutingTree(NeuronTestCase):
             with self.subTest(config=routing_tree_config):
                 config = self.terminal_config()
                 config.routing_tree_config = routing_tree_config
-                torch.manual_seed(991)
-                rng_before = torch.random.get_rng_state().clone()
-                with patch.object(SamplerConfig, "build") as sampler_build:
-                    with self.assertRaises((TypeError, ValueError)):
-                        config.build()
-                    sampler_build.assert_not_called()
-                torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
+                for operation in (
+                    lambda config=config: Validator.validate_config_composition(config),
+                    config.build,
+                ):
+                    torch.manual_seed(991)
+                    rng_before = torch.random.get_rng_state().clone()
+                    with patch.object(SamplerConfig, "build") as sampler_build:
+                        with self.assertRaises((TypeError, ValueError)):
+                            operation()
+                        sampler_build.assert_not_called()
+                    torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
 
     def test_routerless_sampling_is_rejected_only_for_tree_mode(self) -> None:
         total_connections = self.terminal_total_connections()
