@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 import torch
@@ -125,17 +126,15 @@ class RoutingTreeNode(Module):
         probabilities, selected_indices, _, auxiliary_loss = (
             self.sampler.sample_probabilities_and_indices(input_matrix)
         )
-        probability_matrix = _ensure_matrix(probabilities)
-        index_matrix = _resolve_index_matrix(
+        probability_matrix = self.__ensure_matrix(probabilities)
+        index_matrix = self.__resolve_index_matrix(
             selected_indices,
             batch_size=input_matrix.shape[0],
             num_experts=self.sampler.num_experts,
             device=input_matrix.device,
         )
         if self.is_leaf:
-            global_indices = self.global_connection_indices.to(index_matrix.device)[
-                index_matrix
-            ]
+            global_indices = self.__select_global_connection_indices(index_matrix)
             return probability_matrix, global_indices, auxiliary_loss
 
         return self.__route_selected_children(
@@ -144,6 +143,35 @@ class RoutingTreeNode(Module):
             index_matrix,
             auxiliary_loss,
         )
+
+    def __ensure_matrix(self, values: Tensor) -> Tensor:
+        if values.dim() == 1:
+            return values.unsqueeze(-1)
+        return values
+
+    def __resolve_index_matrix(
+        self,
+        indices: Tensor | None,
+        *,
+        batch_size: int,
+        num_experts: int,
+        device: torch.device,
+    ) -> Tensor:
+        if indices is not None:
+            return self.__ensure_matrix(indices)
+        all_connection_indices = torch.arange(
+            num_experts,
+            device=device,
+            dtype=torch.long,
+        )
+        batched_connection_indices = all_connection_indices.expand(batch_size, -1)
+        return batched_connection_indices
+
+    def __select_global_connection_indices(self, index_matrix: Tensor) -> Tensor:
+        device_aligned_global_indices = self.global_connection_indices.to(
+            index_matrix.device
+        )
+        return device_aligned_global_indices[index_matrix]
 
     def __route_selected_children(
         self,
@@ -155,80 +183,156 @@ class RoutingTreeNode(Module):
         batch_size, selected_direction_count = selected_child_indices.shape
         flattened_child_indices = selected_child_indices.reshape(-1)
         flattened_direction_probabilities = direction_probabilities.reshape(-1)
-        flattened_original_inputs = (
-            input_matrix.unsqueeze(1)
-            .expand(-1, selected_direction_count, -1)
-            .reshape(-1, self.input_dim)
+        flattened_original_inputs = self.__expand_inputs_for_selected_directions(
+            input_matrix,
+            selected_direction_count,
         )
-        child_output_width = self.branches[0].output_width
-        flattened_probability_paths = direction_probabilities.new_zeros(
-            flattened_child_indices.shape[0],
-            child_output_width,
+        probability_paths, connection_paths, accumulated_auxiliary_loss = (
+            self.__route_flattened_children(
+                flattened_original_inputs,
+                flattened_direction_probabilities,
+                flattened_child_indices,
+                auxiliary_loss,
+            )
         )
-        flattened_connection_paths = selected_child_indices.new_zeros(
-            flattened_child_indices.shape[0],
-            child_output_width,
+        probability_paths, connection_paths = self.__restore_batch_path_layout(
+            probability_paths,
+            connection_paths,
+            batch_size,
         )
+        return probability_paths, connection_paths, accumulated_auxiliary_loss
 
+    def __expand_inputs_for_selected_directions(
+        self,
+        input_matrix: Tensor,
+        selected_direction_count: int,
+    ) -> Tensor:
+        input_direction_axis = input_matrix.unsqueeze(1)
+        inputs_per_selected_direction = input_direction_axis.expand(
+            -1,
+            selected_direction_count,
+            -1,
+        )
+        flattened_original_inputs = inputs_per_selected_direction.reshape(
+            -1,
+            self.input_dim,
+        )
+        return flattened_original_inputs
+
+    def __route_flattened_children(
+        self,
+        input_matrix: Tensor,
+        direction_probabilities: Tensor,
+        selected_child_indices: Tensor,
+        auxiliary_loss: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        probability_paths, connection_paths = self.__initialize_route_paths(
+            direction_probabilities,
+            selected_child_indices,
+        )
         accumulated_auxiliary_loss = auxiliary_loss
-        for child_index, child in enumerate(self.branches):
-            selected_positions = torch.nonzero(
-                flattened_child_indices == child_index,
-                as_tuple=False,
-            ).flatten()
-            if selected_positions.numel() == 0:
-                continue
-
-            child_inputs = flattened_original_inputs.index_select(
-                0,
-                selected_positions,
-            )
-            child_probabilities, child_connections, child_auxiliary_loss = child.route(
-                child_inputs
-            )
-            selected_direction_probabilities = (
-                flattened_direction_probabilities.index_select(
-                    0,
+        for child, selected_positions in self.__iter_selected_children(
+            selected_child_indices
+        ):
+            joint_probabilities, child_connections, child_auxiliary_loss = (
+                self.__route_selected_child(
+                    child,
+                    input_matrix,
+                    direction_probabilities,
                     selected_positions,
-                ).unsqueeze(1)
+                )
             )
-            joint_probabilities = selected_direction_probabilities * child_probabilities
-            flattened_probability_paths = flattened_probability_paths.index_copy(
-                0,
+            probability_paths, connection_paths = self.__merge_child_paths(
+                probability_paths,
+                connection_paths,
                 selected_positions,
                 joint_probabilities,
-            )
-            flattened_connection_paths = flattened_connection_paths.index_copy(
-                0,
-                selected_positions,
                 child_connections,
             )
             accumulated_auxiliary_loss = (
                 accumulated_auxiliary_loss + child_auxiliary_loss
             )
+        return probability_paths, connection_paths, accumulated_auxiliary_loss
 
-        return (
-            flattened_probability_paths.reshape(batch_size, self.output_width),
-            flattened_connection_paths.reshape(batch_size, self.output_width),
-            accumulated_auxiliary_loss,
+    def __initialize_route_paths(
+        self,
+        direction_probabilities: Tensor,
+        selected_child_indices: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        selected_path_count = selected_child_indices.shape[0]
+        child_output_width = self.branches[0].output_width
+        probability_paths = direction_probabilities.new_zeros(
+            selected_path_count,
+            child_output_width,
         )
+        connection_paths = selected_child_indices.new_zeros(
+            selected_path_count,
+            child_output_width,
+        )
+        return probability_paths, connection_paths
 
+    def __iter_selected_children(
+        self,
+        selected_child_indices: Tensor,
+    ) -> Iterator[tuple[RoutingTreeNode, Tensor]]:
+        for child_index, child in enumerate(self.branches):
+            selected_positions = torch.nonzero(
+                selected_child_indices == child_index,
+                as_tuple=False,
+            ).flatten()
+            if selected_positions.numel() > 0:
+                yield child, selected_positions
 
-def _ensure_matrix(values: Tensor) -> Tensor:
-    return values.unsqueeze(-1) if values.dim() == 1 else values
+    def __route_selected_child(
+        self,
+        child: RoutingTreeNode,
+        input_matrix: Tensor,
+        direction_probabilities: Tensor,
+        selected_positions: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        child_inputs = input_matrix.index_select(0, selected_positions)
+        child_probabilities, child_connections, auxiliary_loss = child.route(
+            child_inputs
+        )
+        selected_direction_probabilities = direction_probabilities.index_select(
+            0,
+            selected_positions,
+        ).unsqueeze(1)
+        joint_probabilities = selected_direction_probabilities * child_probabilities
+        return joint_probabilities, child_connections, auxiliary_loss
 
+    def __merge_child_paths(
+        self,
+        probability_paths: Tensor,
+        connection_paths: Tensor,
+        selected_positions: Tensor,
+        joint_probabilities: Tensor,
+        child_connections: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        probability_paths = probability_paths.index_copy(
+            0,
+            selected_positions,
+            joint_probabilities,
+        )
+        connection_paths = connection_paths.index_copy(
+            0,
+            selected_positions,
+            child_connections,
+        )
+        return probability_paths, connection_paths
 
-def _resolve_index_matrix(
-    indices: Tensor | None,
-    *,
-    batch_size: int,
-    num_experts: int,
-    device: torch.device,
-) -> Tensor:
-    if indices is None:
-        return torch.arange(
-            num_experts,
-            device=device,
-            dtype=torch.long,
-        ).expand(batch_size, -1)
-    return _ensure_matrix(indices)
+    def __restore_batch_path_layout(
+        self,
+        probability_paths: Tensor,
+        connection_paths: Tensor,
+        batch_size: int,
+    ) -> tuple[Tensor, Tensor]:
+        probability_paths = probability_paths.reshape(
+            batch_size,
+            self.output_width,
+        )
+        connection_paths = connection_paths.reshape(
+            batch_size,
+            self.output_width,
+        )
+        return probability_paths, connection_paths
