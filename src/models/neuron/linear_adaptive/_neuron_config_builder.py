@@ -58,7 +58,6 @@ class NeuronConfigBuilder:
         self.terminal_options = terminal_options
         self.cluster_terminal_xy_axis_range = terminal_options.xy_axis_range
         self.cluster_terminal_z_axis_range = terminal_options.z_axis_range
-        self.cluster_terminal_z_axis_offset = terminal_options.z_axis_offset
         self.cluster_terminal_top_k = terminal_options.top_k
         self.terminal_router_options = terminal_router_options
         self.cluster_terminal_router_num_layers = terminal_router_options.num_layers

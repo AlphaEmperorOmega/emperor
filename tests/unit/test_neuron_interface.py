@@ -27,7 +27,6 @@ from emperor.neuron import (
     TerminalRangeOptions,
     TerminalRoutingTreeConfig,
     TerminalRoutingTreeDepthOptions,
-    TerminalZAxisOffsetOptions,
 )
 from unit.test_neuron import (
     NeuronTestCase,
@@ -56,7 +55,6 @@ EXPECTED_EXPORTS = (
     "TerminalRangeOptions",
     "TerminalRoutingTreeConfig",
     "TerminalRoutingTreeDepthOptions",
-    "TerminalZAxisOffsetOptions",
 )
 
 EXPECTED_OWNERS = {
@@ -78,7 +76,6 @@ EXPECTED_OWNERS = {
     "TerminalRangeOptions": "emperor.neuron._options",
     "TerminalRoutingTreeConfig": "emperor.neuron._config",
     "TerminalRoutingTreeDepthOptions": "emperor.neuron._options",
-    "TerminalZAxisOffsetOptions": "emperor.neuron._options",
 }
 
 PRIVATE_MODULES = (
@@ -125,7 +122,6 @@ TERMINAL_CONFIG_FIELDS = (
     "z_axis_position",
     "xy_axis_range",
     "z_axis_range",
-    "z_axis_offset",
     "sampler_config",
     "connection_shape",
     "routing_tree_config",
@@ -196,12 +192,12 @@ NEURON_TOPOLOGY = (
     ),
     (
         "terminal.sampler.router.model.layers.0.model.weight_params",
-        (4, 18),
+        (4, 27),
         torch.float32,
     ),
     (
         "terminal.sampler.router.model.layers.0.model.bias_params",
-        (18,),
+        (27,),
         torch.float32,
     ),
 )
@@ -224,12 +220,12 @@ CLUSTER_TOPOLOGY = (
     (
         "cluster.neuron_1_1_1.terminal.sampler.router.model.layers.0."
         "model.weight_params",
-        (4, 18),
+        (4, 27),
         torch.float32,
     ),
     (
         "cluster.neuron_1_1_1.terminal.sampler.router.model.layers.0.model.bias_params",
-        (18,),
+        (27,),
         torch.float32,
     ),
     ("entry_sampler.sampler_model.default_loss", (), torch.float32),
@@ -250,18 +246,18 @@ CLUSTER_TOPOLOGY = (
     ),
 )
 
-NEURON_RNG_DIGEST = "e06a4f0a50552801f019d081e8abb2a5b62506eddf44e06799d462d088eed7ab"
+NEURON_RNG_DIGEST = "9b559ed49466ee0de129c34a72cceeafdce0a833d8526069f15dd7f0e821f788"
 NEURON_OUTPUT_DIGEST = (
-    "f2d1b2318747f51fc7e713d018a66fce77d02074078de65929189a2865375046"
+    "90d2b0953f4db5a3b5d3fa078be3f6dff8caaafd8059dc32e8ac4251ffa64df7"
 )
-CLUSTER_RNG_DIGEST = "0c8a84abf80270c9c19d9564fa63bb9e0314b5a8d843c7c0d50b5a4d12c9485b"
+CLUSTER_RNG_DIGEST = "e678ee396443ca0caff5227a422a56a828d1852360ceb0ef8407074120603afe"
 CLUSTER_TRACE_DIGEST = (
-    "20dbd2eff718e4d736b297f18f115741867121437e12c8ac58c5011f30f65069"
+    "7772f7f9b06035006d3878617e99a6b5b4e5a9f481254d20208381a2c3defda4"
 )
 GROWTH_OUTPUT_DIGEST = (
-    "f8c3c147d86bc6b33cd045ef6a9225274753c2a333a85c685168dde23c8788a5"
+    "98695906599d78f95d518e686fdcbd9cdfe53bd1159aa27900058f1bf35ff951"
 )
-GROWTH_STATE_DIGEST = "fb1a0212086e8ad262b06ab6f1bad203d94afa732e6d7c521a6196fe89542e92"
+GROWTH_STATE_DIGEST = "2b5155a0f301f84c407cc904bb803e4b3b7f16ee883f4b62e0678dea5a49a8cd"
 
 
 def _input(*, requires_grad: bool = False) -> torch.Tensor:
@@ -492,6 +488,9 @@ print(json.dumps({{
                 self.assertIn(export_name, neuron_package.__all__)
                 self.assertIsNotNone(getattr(neuron_package, export_name))
 
+        self.assertNotIn("TerminalZAxisOffsetOptions", neuron_package.__all__)
+        self.assertFalse(hasattr(neuron_package, "TerminalZAxisOffsetOptions"))
+
     def test_config_enum_trace_and_callback_contracts_are_preserved(self):
         schemas = (
             (NucleusConfig, NUCLEUS_CONFIG_FIELDS),
@@ -543,17 +542,6 @@ print(json.dumps({{
                 for option in TerminalRoutingTreeDepthOptions
             ),
             (("TWO", 2), ("THREE", 3)),
-        )
-        self.assertEqual(
-            tuple((option.name, option.value) for option in TerminalZAxisOffsetOptions),
-            (
-                ("ZERO", 0),
-                ("ONE", 1),
-                ("TWO", 2),
-                ("THREE", 3),
-                ("FOUR", 4),
-                ("FIVE", 5),
-            ),
         )
         self.assertEqual(
             tuple(

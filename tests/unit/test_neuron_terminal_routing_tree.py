@@ -232,6 +232,50 @@ class TestTerminalRoutingTree(NeuronTestCase):
             input_batch,
         )
 
+    def test_tree_maps_symmetric_z_candidates_back_to_absolute_coordinates(
+        self,
+    ) -> None:
+        terminal = self.tree_terminal(
+            leaf_top_k=2,
+            routing_tree_config=self.routing_tree_config(direction_top_k=(1,)),
+        )
+        root = terminal.sampler.root
+        selected_branch = root.branches[0]
+        lower_global_index = self.terminal_connection_index(terminal, (1, 1, 0))
+        upper_global_index = self.terminal_connection_index(terminal, (1, 1, 2))
+        branch_global_indices = selected_branch.global_connection_indices.tolist()
+        lower_local_index = branch_global_indices.index(lower_global_index)
+        upper_local_index = branch_global_indices.index(upper_global_index)
+        root.sampler = _ScriptedTreeSampler(
+            num_experts=len(root.branches),
+            probabilities=(1.0,),
+            indices=(0,),
+            auxiliary_loss=0.0,
+        )
+        selected_branch.sampler = _ScriptedTreeSampler(
+            num_experts=len(branch_global_indices),
+            probabilities=(0.6, 0.4),
+            indices=(lower_local_index, upper_local_index),
+            auxiliary_loss=0.0,
+        )
+
+        _, probabilities, selected_coordinates, _ = terminal(
+            torch.zeros(self.batch_size, self.input_dim)
+        )
+
+        torch.testing.assert_close(
+            probabilities,
+            torch.tensor([[0.6, 0.4]]).expand(self.batch_size, -1),
+        )
+        torch.testing.assert_close(
+            selected_coordinates,
+            torch.tensor([[[1, 1, 0], [1, 1, 2]]]).expand(
+                self.batch_size,
+                -1,
+                -1,
+            ),
+        )
+
     def test_depth_three_has_fixed_branch_preserving_width(self) -> None:
         terminal = self.tree_terminal(
             leaf_top_k=1,

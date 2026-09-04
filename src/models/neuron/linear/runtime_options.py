@@ -15,7 +15,6 @@ from emperor.layers import (
 from emperor.neuron import (
     TerminalRangeOptions,
     TerminalRoutingTreeDepthOptions,
-    TerminalZAxisOffsetOptions,
 )
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 from models.neuron.linear._hidden.runtime_options import (
@@ -54,7 +53,6 @@ class NeuronTerminalRoutingTreeOptions:
 class NeuronTerminalOptions:
     xy_axis_range: TerminalRangeOptions
     z_axis_range: TerminalRangeOptions
-    z_axis_offset: TerminalZAxisOffsetOptions
     top_k: int
     routing_tree: NeuronTerminalRoutingTreeOptions | None = None
 

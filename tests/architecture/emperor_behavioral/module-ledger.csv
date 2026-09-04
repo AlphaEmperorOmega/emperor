@@ -324,7 +324,7 @@ src/emperor/neuron/_optimizer_transaction.py,neuron,NeuronOptimizerLoadTransacti
 src/emperor/neuron/_optimizer_layout.py,neuron,NeuronOptimizerNamedLayout,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/neuron/_optimizer_scheduler.py,neuron,SchedulerGroupLoadBinding;NeuronSchedulerCheckpointReconciler,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/neuron/_optimizer_sync.py,neuron,NeuronClusterOptimizerSyncCallback,pending,manifest,pending,pending,pending,pending,pending,pending,
-src/emperor/neuron/_options.py,neuron,TerminalRangeOptions;TerminalZAxisOffsetOptions;TerminalConnectionShapeOptions;TerminalRoutingTreeDepthOptions,pending,manifest,pending,pending,pending,pending,pending,pending,
+src/emperor/neuron/_options.py,neuron,TerminalRangeOptions;TerminalConnectionShapeOptions;TerminalRoutingTreeDepthOptions,pending,manifest,pending,pending,pending,pending,pending,pending,
 src/emperor/neuron/_axons/__init__.py,neuron,Axons,private owner Interface and canonical runtime export,tests/unit/test_neuron_interface.py;tests/architecture/test_emperor_interfaces.py,pending,pending,pending,pending,pending,pending,
 src/emperor/neuron/_axons/core.py,neuron,Axons,identity path; configured memory construction and gradient-preserving forwarding,tests/unit/test_neuron_axons.py;tests/unit/test_axons_validator_adapter.py;tests/unit/test_neuron_interface.py,pending,pending,pending,pending,pending,pending,
 src/emperor/neuron/_axons/validation.py,neuron,AxonsValidator,optional memory validation; config fields; rank-two forward input,tests/unit/test_axons_validator_adapter.py;tests/unit/test_neuron_validation_contracts.py,pending,pending,pending,pending,pending,pending,

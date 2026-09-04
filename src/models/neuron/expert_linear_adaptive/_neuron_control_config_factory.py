@@ -83,7 +83,6 @@ class NeuronControlConfigFactory:
                 connection_shape=TerminalConnectionShapeOptions.BOX,
                 xy_axis_range=terminal_options.xy_axis_range,
                 z_axis_range=terminal_options.z_axis_range,
-                z_axis_offset=terminal_options.z_axis_offset,
                 sampler_config=terminal_sampler_config,
                 routing_tree_config=self.__build_terminal_routing_tree_config(),
             ),
@@ -214,7 +213,7 @@ class NeuronControlConfigFactory:
         terminal_options = self.terminal_options
         xy_range = self.__enum_or_int_value(terminal_options.xy_axis_range)
         z_range = self.__enum_or_int_value(terminal_options.z_axis_range)
-        return (xy_range * 2 + 1) ** 2 * (z_range + 1)
+        return (xy_range * 2 + 1) ** 2 * (z_range * 2 + 1)
 
     @staticmethod
     def __enum_or_int_value(value) -> int:

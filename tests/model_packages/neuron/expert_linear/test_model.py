@@ -45,6 +45,12 @@ def _build_config(**runtime_defaults):
 class TestNeuronExpertLinearModel(unittest.TestCase):
     package_module = "models.neuron.expert_linear"
 
+    def test_removed_terminal_z_axis_offset_override_is_rejected(self):
+        with self.assertRaisesRegex(TypeError, "cluster_terminal_z_axis_offset"):
+            model_package("neuron/expert_linear").bind_runtime_defaults(
+                {"cluster_terminal_z_axis_offset": 0}
+            )
+
     def test_public_imports_and_cli_resolution(self):
         package = importlib.import_module(self.package_module)
         registration = model_package("neuron/expert_linear")
@@ -169,9 +175,9 @@ class TestNeuronExpertLinearModel(unittest.TestCase):
             TerminalConnectionShapeOptions.BOX,
         )
         self.assertEqual(terminal_sampler.top_k, 2)
-        self.assertEqual(terminal_sampler.num_experts, 18)
+        self.assertEqual(terminal_sampler.num_experts, 27)
         self.assertEqual(router_config.input_dim, cfg.hidden_dim)
-        self.assertEqual(router_config.num_experts, 18)
+        self.assertEqual(router_config.num_experts, 27)
         self.assertEqual(halting_stack.hidden_dim, 33)
         self.assertEqual(
             halting_stack.layer_config.layer_norm_position,
@@ -209,9 +215,9 @@ class TestNeuronExpertLinearModel(unittest.TestCase):
         )
         maximum_sampler = self._terminal_sampler(maximum)
 
-        self.assertEqual(maximum_sampler.num_experts, 18)
-        self.assertEqual(maximum_sampler.top_k, 18)
-        self.assertEqual(maximum_sampler.num_topk_samples, 18)
+        self.assertEqual(maximum_sampler.num_experts, 27)
+        self.assertEqual(maximum_sampler.top_k, 27)
+        self.assertEqual(maximum_sampler.num_topk_samples, 27)
 
         minimum = _build_config(
             cluster_terminal_top_k=0,
