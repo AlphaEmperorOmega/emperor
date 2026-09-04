@@ -190,20 +190,45 @@ class Validator(ValidatorBase, NeuronValidationMixin):
         cls.validate_connection_shape(cfg)
         cls.validate_routing_tree_config_fields(cfg)
 
+    @staticmethod
+    def validate_connection_shape(cfg) -> None:
+        from emperor.neuron._options import TerminalConnectionShapeOptions
+
+        if not isinstance(cfg.connection_shape, TerminalConnectionShapeOptions):
+            raise TypeError(
+                "connection_shape must be a TerminalConnectionShapeOptions "
+                f"for TerminalConfig, got {type(cfg.connection_shape).__name__}."
+            )
+
     @classmethod
     def validate_routing_tree_config_fields(cls, cfg) -> None:
-        from emperor.neuron._config import TerminalRoutingTreeConfig
-        from emperor.neuron._options import TerminalRoutingTreeDepthOptions
-        from emperor.sampler import SamplerConfig
-
         routing_tree_config = cfg.routing_tree_config
         if routing_tree_config is None:
             return
+        cls.__validate_routing_tree_config_type(routing_tree_config)
+        cls.__validate_routing_tree_depth(routing_tree_config)
+        cls.__validate_direction_levels(routing_tree_config)
+        cls.__validate_direction_sampler_config(
+            routing_tree_config.direction_sampler_config
+        )
+        cls.__validate_leaf_top_k(cfg.sampler_config.top_k)
+
+    @staticmethod
+    def __validate_routing_tree_config_type(routing_tree_config: object) -> None:
+        from emperor.neuron._config import TerminalRoutingTreeConfig
+
         if not isinstance(routing_tree_config, TerminalRoutingTreeConfig):
             raise TypeError(
                 "routing_tree_config must be a TerminalRoutingTreeConfig for "
                 f"TerminalConfig, got {type(routing_tree_config).__name__}."
             )
+
+    @staticmethod
+    def __validate_routing_tree_depth(
+        routing_tree_config: "TerminalRoutingTreeConfig",
+    ) -> None:
+        from emperor.neuron._options import TerminalRoutingTreeDepthOptions
+
         if not isinstance(
             routing_tree_config.depth,
             TerminalRoutingTreeDepthOptions,
@@ -214,6 +239,11 @@ class Validator(ValidatorBase, NeuronValidationMixin):
                 f"{type(routing_tree_config.depth).__name__}."
             )
 
+    @classmethod
+    def __validate_direction_levels(
+        cls,
+        routing_tree_config: "TerminalRoutingTreeConfig",
+    ) -> None:
         expected_direction_levels = routing_tree_config.depth.value - 1
         cls._validate_direction_tuple(
             "routing_tree_config.direction_branch_counts",
@@ -225,26 +255,6 @@ class Validator(ValidatorBase, NeuronValidationMixin):
             routing_tree_config.direction_top_k,
             expected_direction_levels,
         )
-        direction_sampler_config = routing_tree_config.direction_sampler_config
-        if direction_sampler_config is not None and not isinstance(
-            direction_sampler_config,
-            SamplerConfig,
-        ):
-            raise TypeError(
-                "routing_tree_config.direction_sampler_config must be a "
-                f"SamplerConfig or None, got {type(direction_sampler_config).__name__}."
-            )
-
-        leaf_top_k = cfg.sampler_config.top_k
-        if (
-            not isinstance(leaf_top_k, int)
-            or isinstance(leaf_top_k, bool)
-            or leaf_top_k <= 0
-        ):
-            raise ValueError(
-                "sampler_config.top_k must be a positive integer for a Terminal "
-                f"routing tree, received {leaf_top_k!r}."
-            )
 
     @staticmethod
     def _validate_direction_tuple(
@@ -269,13 +279,28 @@ class Validator(ValidatorBase, NeuronValidationMixin):
                 )
 
     @staticmethod
-    def validate_connection_shape(cfg) -> None:
-        from emperor.neuron._options import TerminalConnectionShapeOptions
+    def __validate_direction_sampler_config(direction_sampler_config: object) -> None:
+        from emperor.sampler import SamplerConfig
 
-        if not isinstance(cfg.connection_shape, TerminalConnectionShapeOptions):
+        if direction_sampler_config is not None and not isinstance(
+            direction_sampler_config,
+            SamplerConfig,
+        ):
             raise TypeError(
-                "connection_shape must be a TerminalConnectionShapeOptions "
-                f"for TerminalConfig, got {type(cfg.connection_shape).__name__}."
+                "routing_tree_config.direction_sampler_config must be a "
+                f"SamplerConfig or None, got {type(direction_sampler_config).__name__}."
+            )
+
+    @staticmethod
+    def __validate_leaf_top_k(leaf_top_k: object) -> None:
+        if (
+            not isinstance(leaf_top_k, int)
+            or isinstance(leaf_top_k, bool)
+            or leaf_top_k <= 0
+        ):
+            raise ValueError(
+                "sampler_config.top_k must be a positive integer for a Terminal "
+                f"routing tree, received {leaf_top_k!r}."
             )
 
     @classmethod
