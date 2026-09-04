@@ -94,7 +94,12 @@ class TestTerminal(NeuronTestCase):
             probabilities,
             torch.tensor([[0.25, 0.75]]).expand(self.batch_size, -1),
         )
-        self.assertEqual(selected_neurons.shape, (self.batch_size, 2, 3))
+        expected_selected_neurons = model.neuron_connections[:2].expand(
+            self.batch_size,
+            -1,
+            -1,
+        )
+        torch.testing.assert_close(selected_neurons, expected_selected_neurons)
         self.assertEqual(auxiliary_loss.shape, ())
 
     def test_routerless_full_selection_follows_input_device(self) -> None:
