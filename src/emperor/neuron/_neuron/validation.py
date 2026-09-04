@@ -4,7 +4,7 @@ from torch import Tensor
 
 from emperor._validation import ValidatorBase
 from emperor.neuron._axons.validation import AxonsValidator
-from emperor.neuron._terminal.validation import TerminalValidator
+from emperor.neuron._terminal.validation import Validator
 from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 class NeuronValidator(ValidatorBase, NeuronValidationMixin):
     AXONS_VALIDATOR = AxonsValidator
-    TERMINAL_VALIDATOR = TerminalValidator
+    TERMINAL_VALIDATOR = Validator
 
     OPTIONAL_FIELDS = {"coordinate_embedding_flag"}
 

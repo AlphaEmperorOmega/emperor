@@ -6,7 +6,7 @@ from torch import Tensor
 from emperor.neuron._options import TerminalConnectionShapeOptions
 from emperor.neuron._terminal.connection_topology import TargetCoordinateBuilder
 from emperor.neuron._terminal.routing import TerminalRoutingTreeDelegate
-from emperor.neuron._terminal.validation import TerminalValidator
+from emperor.neuron._terminal.validation import Validator
 from emperor.nn import Module
 
 if TYPE_CHECKING:
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class Terminal(Module):
-    VALIDATOR = TerminalValidator
+    VALIDATOR = Validator
 
     def __init__(
         self,

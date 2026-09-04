@@ -85,7 +85,7 @@ class TerminalRoutingTreeDelegateValidator(ValidatorBase):
         return ".".join(str(branch) for branch in path)
 
 
-class TerminalValidator(ValidatorBase, NeuronValidationMixin):
+class Validator(ValidatorBase, NeuronValidationMixin):
     OPTIONAL_FIELDS = {"routing_tree_config"}
 
     @classmethod
