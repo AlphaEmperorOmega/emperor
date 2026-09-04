@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from math import gcd
 from typing import TYPE_CHECKING
 
@@ -151,24 +152,12 @@ class TargetCoordinateBuilder:
         ]
 
     def __ellipsoid_offsets(self) -> list[tuple[int, int, int]]:
-        ellipsoid_offsets = []
-        for x_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
-            for y_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
-                for z_delta in range(
-                    -self.z_axis_range,
-                    self.z_axis_range + 1,
-                ):
-                    normalized_squared_distance = self.__normalized_squared_distance(
-                        x_delta=x_delta,
-                        y_delta=y_delta,
-                        z_delta=z_delta,
-                    )
-                    if normalized_squared_distance <= 1.0 + 1e-9:
-                        ellipsoid_offsets.append((x_delta, y_delta, z_delta))
-        return ellipsoid_offsets
+        return list(self.__iter_ellipsoid_offsets())
 
     def __ellipsoid_connection_count(self) -> int:
-        total_neuron_connections = 0
+        return sum(1 for _ in self.__iter_ellipsoid_offsets())
+
+    def __iter_ellipsoid_offsets(self) -> Iterator[tuple[int, int, int]]:
         for x_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
             for y_delta in range(-self.xy_axis_range, self.xy_axis_range + 1):
                 for z_delta in range(
@@ -181,8 +170,7 @@ class TargetCoordinateBuilder:
                         z_delta=z_delta,
                     )
                     if normalized_squared_distance <= 1.0 + 1e-9:
-                        total_neuron_connections += 1
-        return total_neuron_connections
+                        yield x_delta, y_delta, z_delta
 
     def __normalized_squared_distance(
         self,
