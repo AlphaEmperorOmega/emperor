@@ -228,6 +228,29 @@ class TestTerminalRoutingTree(NeuronTestCase):
         self.assertEqual(plan.direction_top_k, (1,))
         self.assertEqual(plan.root.bounds, ((0, 1), (0, 1), (0, 1)))
 
+    def test_compiler_preserves_subdivision_scoring_and_axis_tie_breaks(self) -> None:
+        subdivision_cases = (
+            ((2, 2, 2), 2, (2, 1, 1)),
+            ((2, 2, 2), 4, (2, 2, 1)),
+            ((5, 3, 2), 8, (4, 2, 1)),
+            ((1, 5, 1), 3, (1, 3, 1)),
+            ((3, 3, 2), 12, (3, 2, 2)),
+        )
+        for axis_spans, branch_count, expected_subdivision in subdivision_cases:
+            with self.subTest(axis_spans=axis_spans, branch_count=branch_count):
+                coordinates = torch.cartesian_prod(
+                    *(torch.arange(span) for span in axis_spans)
+                )
+                routing_tree_config = self.routing_tree_config(
+                    branch_counts=(branch_count,),
+                    direction_top_k=(1,),
+                )
+                plan = RoutingTreeCompiler(
+                    coordinates, routing_tree_config, 1
+                ).compile()
+
+                self.assertEqual(plan.root.subdivision, expected_subdivision)
+
     def test_compiler_preserves_uneven_intervals_and_input_connection_order(
         self,
     ) -> None:
