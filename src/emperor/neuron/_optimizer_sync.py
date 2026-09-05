@@ -349,17 +349,25 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
 
-    def on_before_optimizer_step(
+    def on_after_backward(
         self,
         trainer: Trainer,
         pl_module: LightningModule,
-        optimizer: Optimizer,
     ) -> None:
-        average_post_wrap_gradients(
-            pl_module,
-            optimizer,
-            self._post_wrap_param_ids,
-        )
+        # Lightning unscales after backward and before on_before_optimizer_step.
+        # Reduce each microbatch while scaled so overflow decisions agree on all ranks.
+        reduced_parameter_ids: set[int] = set()
+        for optimizer in list(getattr(trainer, "optimizers", []) or []):
+            average_post_wrap_gradients(
+                pl_module,
+                optimizer,
+                self._post_wrap_param_ids - reduced_parameter_ids,
+            )
+            reduced_parameter_ids.update(
+                id(parameter)
+                for group in optimizer.param_groups
+                for parameter in group["params"]
+            )
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__clear_fit_state()

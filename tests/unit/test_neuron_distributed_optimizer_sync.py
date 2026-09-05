@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from contextlib import nullcontext
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -432,7 +434,7 @@ def _distributed_grown_gradient_worker(
         torch.distributed.all_gather(gathered_local_gradients, local_gradient)
         expected_average = torch.stack(gathered_local_gradients).mean(dim=0)
 
-        callback.on_before_optimizer_step(trainer, module, optimizer)
+        callback.on_after_backward(trainer, module)
 
         torch.testing.assert_close(parameter.grad, expected_average)
         if parameter.grad.dtype != parameter.dtype:
@@ -445,6 +447,163 @@ def _distributed_grown_gradient_worker(
         gathered_parameters = [torch.zeros_like(parameter) for _ in range(2)]
         torch.distributed.all_gather(gathered_parameters, parameter.detach())
         torch.testing.assert_close(gathered_parameters[0], gathered_parameters[1])
+    finally:
+        torch.distributed.destroy_process_group()
+
+
+def _distributed_mid_accumulation_growth_worker(rank, world_size, init_file, config):
+    torch.set_num_threads(1)
+    torch.distributed.init_process_group(
+        "gloo",
+        init_method=f"file://{init_file}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=45),
+    )
+    try:
+        torch.manual_seed(17)
+        module = _DistributedGrowingModule(config)
+        distributed = DistributedDataParallel(module, find_unused_parameters=True)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01, momentum=0.9)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = NeuronClusterOptimizerSyncCallback()
+        callback.on_fit_start(trainer, module)
+        scaler = torch.amp.GradScaler("cpu", init_scale=8)
+        source = torch.arange(12, dtype=torch.float32).reshape(3, 4) / 10
+        for microbatch in range(2):
+            with distributed.no_sync() if microbatch == 0 else nullcontext():
+                loss = distributed(source) * 0
+                child = module.cluster.cluster["neuron_2_1_1"].nucleus.model.weight
+                if microbatch == 0:
+                    before = child.detach().clone()
+                    callback.on_before_zero_grad(trainer, module, optimizer)
+                    optimizer.zero_grad(set_to_none=True)
+                else:
+                    loss = loss + child.sum() * (rank + 1) / 2
+                callback.on_before_backward(trainer, module, loss)
+                scaler.scale(loss).backward()
+                callback.on_after_backward(trainer, module)
+                if microbatch == 0:
+                    assert child.grad is None
+        torch.testing.assert_close(
+            child.grad, torch.full_like(child, 0.75 * scaler.get_scale())
+        )
+        scaler.unscale_(optimizer)
+        scaler.step(optimizer)
+        scaler.update()
+        torch.testing.assert_close(child, before - 0.01 * 0.75)
+        torch.testing.assert_close(
+            optimizer.state[child]["momentum_buffer"], torch.full_like(child, 0.75)
+        )
+    finally:
+        torch.distributed.destroy_process_group()
+
+
+def _distributed_amp_accumulation_worker(rank, world_size, init_file, config):
+    torch.set_num_threads(1)
+    torch.distributed.init_process_group(
+        "gloo",
+        init_method=f"file://{init_file}",
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(seconds=45),
+    )
+    try:
+        torch.manual_seed(17)
+        module = _DistributedGrowingModule(config)
+        distributed = DistributedDataParallel(module, find_unused_parameters=True)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01, momentum=0.9)
+        scaler = torch.amp.GradScaler("cpu", init_scale=8, growth_interval=100)
+        trainer = SimpleNamespace(optimizers=[optimizer])
+        callback = NeuronClusterOptimizerSyncCallback()
+        callback.on_fit_start(trainer, module)
+        source = torch.arange(12, dtype=torch.float32).reshape(3, 4) / 10
+
+        # One update grows a real Neuron outside DDP's registration snapshot.
+        loss = distributed(source)
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        optimizer.zero_grad(set_to_none=True)
+        callback.on_before_backward(trainer, module, loss)
+        scaler.scale(loss).backward()
+        callback.on_after_backward(trainer, module)
+        scaler.unscale_(optimizer)
+        callback.on_before_optimizer_step(trainer, module, optimizer)
+        scaler.step(optimizer)
+        scaler.update()
+        parameter = module.cluster.cluster["neuron_2_1_1"].nucleus.model.weight
+
+        # Two microbatches with native DDP accumulation and asymmetric local
+        # contributions. The post-wrap gradient must accumulate the same mean.
+        before = parameter.detach().clone()
+        for microbatch in range(2):
+            context = distributed.no_sync() if microbatch == 0 else nullcontext()
+            with context:
+                loss = distributed(source) * 0 + parameter.sum() * (rank + 1) / 2
+                if microbatch == 0:
+                    callback.on_before_zero_grad(trainer, module, optimizer)
+                    optimizer.zero_grad(set_to_none=True)
+                callback.on_before_backward(trainer, module, loss)
+                scaler.scale(loss).backward()
+                callback.on_after_backward(trainer, module)
+        expected_gradient = torch.full_like(parameter, 1.5)
+        torch.testing.assert_close(
+            parameter.grad, expected_gradient * scaler.get_scale()
+        )
+        scaler.unscale_(optimizer)
+        callback.on_before_optimizer_step(trainer, module, optimizer)
+        torch.nn.utils.clip_grad_norm_(module.parameters(), 1.0)
+        clipped = expected_gradient / (expected_gradient.norm() + 1e-6).clamp_min(1)
+        torch.testing.assert_close(parameter.grad, clipped)
+        scaler.step(optimizer)
+        scaler.update()
+        torch.testing.assert_close(parameter, before - 0.01 * clipped)
+
+        before = parameter.detach().clone()
+        momentum = optimizer.state[parameter]["momentum_buffer"].clone()
+        previous_scale = scaler.get_scale()
+        loss = distributed(source) * 0 + parameter.sum() * (rank + 1)
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        optimizer.zero_grad(set_to_none=True)
+        callback.on_before_backward(trainer, module, loss)
+        overflow_hook = parameter.register_hook(
+            lambda gradient: gradient * float("inf") if rank == 0 else gradient
+        )
+        try:
+            scaler.scale(loss).backward()
+        finally:
+            overflow_hook.remove()
+        callback.on_after_backward(trainer, module)
+        assert torch.isinf(parameter.grad).all()
+        scaler.unscale_(optimizer)
+        callback.on_before_optimizer_step(trainer, module, optimizer)
+        scaler.step(optimizer)
+        scaler.update()
+        torch.testing.assert_close(parameter, before)
+        torch.testing.assert_close(
+            optimizer.state[parameter]["momentum_buffer"], momentum
+        )
+        assert scaler.get_scale() == previous_scale / 2
+
+        # Fourth and final update attempt: finite recovery without stale Inf.
+        loss = distributed(source) * 0 + parameter.sum() * (rank + 1)
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        optimizer.zero_grad(set_to_none=True)
+        callback.on_before_backward(trainer, module, loss)
+        scaler.scale(loss).backward()
+        callback.on_after_backward(trainer, module)
+        scaler.unscale_(optimizer)
+        callback.on_before_optimizer_step(trainer, module, optimizer)
+        scaler.step(optimizer)
+        scaler.update()
+        torch.testing.assert_close(
+            parameter, before - 0.01 * (0.9 * momentum + expected_gradient)
+        )
+        values = [torch.zeros_like(parameter) for _ in range(world_size)]
+        torch.distributed.all_gather(values, parameter.detach())
+        torch.testing.assert_close(values[0], values[1])
+        scales = [None] * world_size
+        torch.distributed.all_gather_object(scales, scaler.state_dict())
+        assert scales[0] == scales[1]
     finally:
         torch.distributed.destroy_process_group()
 
@@ -710,6 +869,46 @@ def _distributed_ddp_growth_history_worker(
     "gloo process group support is required",
 )
 class TestNeuronDistributedOptimizerSync(NeuronTestCase):
+    @pytest.mark.training
+    def test_growth_midway_through_scaled_accumulation(self) -> None:
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            max_total_growths=1,
+            neuron_config=self.full_sampler_neuron_config(),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            torch.multiprocessing.spawn(
+                _distributed_mid_accumulation_growth_worker,
+                args=(2, os.path.join(directory, "mid_accumulation_group"), config),
+                nprocs=2,
+                join=True,
+            )
+
+    @pytest.mark.training
+    def test_scaled_post_wrap_accumulation_overflow_and_recovery(self) -> None:
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            max_total_growths=1,
+            neuron_config=self.full_sampler_neuron_config(),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            torch.multiprocessing.spawn(
+                _distributed_amp_accumulation_worker,
+                args=(2, os.path.join(directory, "amp_group"), config),
+                nprocs=2,
+                join=True,
+            )
+
     @pytest.mark.training
     def test_lightning_ddp_configuration_supports_repeated_conditional_routes(
         self,

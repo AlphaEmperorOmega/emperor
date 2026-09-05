@@ -81,7 +81,7 @@ def _real_post_wrap_sync_worker(
                 local_grown_gradient,
             )
 
-            callback.on_before_optimizer_step(trainer, host, optimizer)
+            callback.on_after_backward(trainer, host)
 
             torch.testing.assert_close(
                 old_parameter.grad,
