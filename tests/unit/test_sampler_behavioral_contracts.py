@@ -1012,6 +1012,49 @@ class SamplerSelectionMathTests(unittest.TestCase):
 
 
 class SamplerAuxiliaryLossContractTests(ExactExceptionMixin, unittest.TestCase):
+    def test_zero_centred_empty_and_mixed_accumulation_matches_nonempty_reference(self):
+        for include_nonempty in (False, True):
+            with self.subTest(include_nonempty=include_nonempty):
+                loss = ZeroCentredLoss(0.5)
+                empty = torch.empty(0, 4, dtype=torch.float64, requires_grad=True)
+                loss.update_accumulation(empty)
+                loss.update_accumulation(empty)
+                values = (
+                    torch.arange(8, dtype=torch.float64).reshape(2, 4).requires_grad_()
+                )
+                if include_nonempty:
+                    loss.update_accumulation(values)
+                    loss.update_accumulation(empty)
+                actual = loss.get_weighted_loss(torch.zeros((), dtype=torch.float64))
+                expected = (
+                    0.5 * values.logsumexp(1).square().mean()
+                    if include_nonempty
+                    else empty.sum()
+                )
+                torch.testing.assert_close(actual, expected)
+                self.assertTrue(torch.isfinite(actual))
+                actual.backward()
+                torch.testing.assert_close(empty.grad, torch.zeros_like(empty))
+                if include_nonempty:
+                    (expected_gradient,) = torch.autograd.grad(expected, values)
+                    torch.testing.assert_close(values.grad, expected_gradient)
+                else:
+                    self.assertIsNone(values.grad)
+
+    def test_empty_sampler_zero_centred_loss_has_zero_input_gradients(self):
+        for top_k in (1, 2):
+            for dtype in (torch.float32, torch.float64, torch.bfloat16):
+                with self.subTest(top_k=top_k, dtype=dtype):
+                    sampler = SamplerModel(
+                        sampler_config(top_k=top_k, zero_centred_loss_weight=0.5)
+                    ).to(dtype=dtype)
+                    source = torch.empty(0, 4, dtype=dtype, requires_grad=True)
+                    _, _, _, loss = sampler.sample_probabilities_and_indices(source)
+                    self.assertTrue(torch.isfinite(loss))
+                    torch.testing.assert_close(loss, torch.zeros_like(loss))
+                    loss.backward()
+                    torch.testing.assert_close(source.grad, torch.zeros_like(source))
+
     def test_all_loss_defaults_are_disabled(self) -> None:
         losses = (
             AuxiliaryLossBase(),
