@@ -74,6 +74,10 @@ class SamplerConfig(ConfigBase):
         sampler_owner = self._registry_owner()
         sampler_owner.VALIDATOR.validate_config(self, router_input_dim=input_dim)
 
+    def required_logit_width(self) -> int:
+        """Return the expert-logit width, including configured noise scales."""
+        return self.num_experts * (2 if self.noisy_topk_flag else 1)
+
     def __override_router_config(
         self,
         router_config_overrides: "RouterConfig",
