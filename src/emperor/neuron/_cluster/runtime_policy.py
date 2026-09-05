@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from heapq import heappop, heappush
 
 import torch
 from torch import Tensor
@@ -97,7 +98,33 @@ def _module_policies(
             training=template_child.training,
             role=role,
         )
-    return policies
+    return _parent_first_module_policies(module, policies)
+
+
+def _parent_first_module_policies(
+    module: Module,
+    policies: dict[int, _ModulePolicy],
+) -> dict[int, _ModulePolicy]:
+    modules = list(module.modules())
+    positions = {id(child): index for index, child in enumerate(modules)}
+    children = [list(child.children()) for child in modules]
+    parent_counts = [0] * len(modules)
+    for descendants in children:
+        for descendant in descendants:
+            parent_counts[positions[id(descendant)]] += 1
+    ready = [index for index, count in enumerate(parent_counts) if count == 0]
+    ordered_policies = {}
+    while ready:
+        position = heappop(ready)
+        policy = policies.get(id(modules[position]))
+        if policy is not None:
+            ordered_policies[id(policy.module)] = policy
+        for descendant in children[position]:
+            descendant_position = positions[id(descendant)]
+            parent_counts[descendant_position] -= 1
+            if parent_counts[descendant_position] == 0:
+                heappush(ready, descendant_position)
+    return ordered_policies
 
 
 def _parameter_policies(
