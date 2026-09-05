@@ -50,7 +50,7 @@ class _DistributedAtrophyHistoryProbe(nn.Module):
         forward_context = _NeuronClusterForwardContext(
             called_neuron_names=({self.grown_name} if used_on_this_rank else set())
         )
-        self.cluster._check_neuron_atrophy(forward_context)
+        self.cluster._NeuronCluster__plasticity.check_neuron_atrophy(forward_context)
         self.forward_index += 1
         parameter_anchor = next(self.cluster.parameters()).reshape(-1)[0]
         return input_tensor + parameter_anchor * 0.0
@@ -65,7 +65,9 @@ class _DistributedGrowthHistoryProbe(nn.Module):
         self.forward_index = 0
 
     def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
-        baseline = self.cluster._capture_growth_counter_baseline()
+        baseline = (
+            self.cluster._NeuronCluster__plasticity.capture_growth_counter_baseline()
+        )
         contributes_this_forward = (
             self.forward_index > 0 or torch.distributed.get_rank() == 1
         )
@@ -74,7 +76,9 @@ class _DistributedGrowthHistoryProbe(nn.Module):
         forward_context = _NeuronClusterForwardContext(
             called_neuron_names={self.parent_name}
         )
-        self.cluster._check_neuron_growth(baseline, forward_context)
+        self.cluster._NeuronCluster__plasticity.check_neuron_growth(
+            baseline, forward_context
+        )
         self.forward_index += 1
         parameter_anchor = next(self.cluster.parameters()).reshape(-1)[0]
         return input_tensor + parameter_anchor * 0.0
