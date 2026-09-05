@@ -38,8 +38,12 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._clusters: list[nn.Module] = []
         self._synced_neuron_names: dict[int, set[str]] = {}
         self._synced_param_ids: dict[int, set[int]] = {}
+        self._synced_cluster_signatures: dict[
+            int, tuple[tuple[str, int, bool], ...]
+        ] = {}
         self._synced_parameter_names_by_id: dict[int, str] = {}
         self._post_wrap_param_ids: set[int] = set()
+        self._ddp_registered_param_ids: set[int] = set()
         self._fit_started = False
         self._optimizer_load_transaction = NeuronOptimizerLoadTransaction()
         self._named_layout = NeuronOptimizerNamedLayout()
@@ -247,10 +251,17 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self.__commit_optimizer_checkpoint_load()
         self._synced_neuron_names.clear()
         self._synced_param_ids.clear()
+        self._synced_cluster_signatures.clear()
         self._synced_parameter_names_by_id.clear()
         self._post_wrap_param_ids.clear()
         self._fit_started = False
         self._clusters = self.__find_neuron_clusters(pl_module)
+        self._ddp_registered_param_ids = {
+            id(parameter)
+            for cluster in self._clusters
+            for parameter in cluster.parameters()
+            if parameter.requires_grad
+        }
         self.sync_optimizers(trainer, pl_module)
         optimizers = list(getattr(trainer, "optimizers", []) or [])
         if self._pending_saved_optimizer_states is not None:
@@ -311,8 +322,20 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         clusters = self._clusters or self.__find_neuron_clusters(pl_module)
         return any(
             self._synced_neuron_names.get(id(cluster)) != set(cluster.cluster.keys())
+            or self._synced_cluster_signatures.get(id(cluster))
+            != self.__cluster_parameter_signature(cluster)
             for cluster in clusters
         )
+
+    @staticmethod
+    def __cluster_parameter_signature(
+        cluster: nn.Module,
+    ) -> tuple[tuple[str, int, bool], ...]:
+        return tuple(
+            (name, id(parameter), parameter.requires_grad)
+            for name, parameter in cluster.named_parameters(remove_duplicate=False)
+        )
+
 
     def on_train_batch_end(
         self,
@@ -343,8 +366,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._clusters.clear()
         self._synced_neuron_names.clear()
         self._synced_param_ids.clear()
+        self._synced_cluster_signatures.clear()
         self._synced_parameter_names_by_id.clear()
         self._post_wrap_param_ids.clear()
+        self._ddp_registered_param_ids.clear()
         self._fit_started = False
         self._pending_saved_optimizer_states = None
         self._pending_saved_scheduler_states = None
@@ -411,13 +436,8 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             cluster_id: {id(parameter) for parameter in parameters}
             for cluster_id, parameters in cluster_parameters.items()
         }
-        new_post_wrap_param_ids = (
-            set().union(*(
-                parameter_ids - self._synced_param_ids.get(cluster_id, parameter_ids)
-                for cluster_id, parameter_ids in current_parameter_ids.items()
-            ))
-            if self._fit_started
-            else set()
+        new_post_wrap_param_ids = self.__new_post_wrap_parameter_ids(
+            current_parameter_ids
         )
 
         for optimizer in optimizers:
@@ -440,6 +460,18 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self.__record_synchronized_parameters(
             clusters, parameter_names_by_id, new_post_wrap_param_ids, current_parameter_ids
         )
+
+    def __new_post_wrap_parameter_ids(
+        self,
+        current_parameter_ids: dict[int, set[int]],
+    ) -> set[int]:
+        if not self._fit_started:
+            return set()
+        new_parameter_ids: set[int] = set()
+        for parameter_ids in current_parameter_ids.values():
+            new_parameter_ids.update(parameter_ids - self._ddp_registered_param_ids)
+        return new_parameter_ids
+
 
     def __remove_pruned_neuron_parameters(
         self,
@@ -792,6 +824,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             id(cluster): set(cluster.cluster.keys()) for cluster in clusters
         }
         self._synced_param_ids = current_parameter_ids
+        self._synced_cluster_signatures = {
+            id(cluster): self.__cluster_parameter_signature(cluster)
+            for cluster in clusters
+        }
         self._synced_parameter_names_by_id = dict(parameter_names_by_id)
         current_cluster_param_ids = {
             parameter_id

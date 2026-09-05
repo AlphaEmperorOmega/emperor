@@ -58,6 +58,26 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    def test_ddp_registration_is_independent_of_live_optimizer_membership(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        neuron = cluster.cluster["neuron_0_0_0"]
+        neuron.terminal.weight.requires_grad_(False)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        self.assertIn(id(neuron.nucleus.weight), callback._ddp_registered_param_ids)
+        self.assertNotIn(id(neuron.terminal.weight), callback._ddp_registered_param_ids)
+        neuron.terminal.weight.requires_grad_(True)
+        callback.on_before_backward(trainer, module, None)
+        self.assertIn(id(neuron.terminal.weight), callback._post_wrap_param_ids)
+        del cluster.cluster["neuron_0_0_0"]
+        callback.sync_optimizers(trainer, module)
+        cluster.cluster["neuron_0_0_0"] = neuron
+        callback.sync_optimizers(trainer, module)
+        self.assertNotIn(id(neuron.nucleus.weight), callback._post_wrap_param_ids)
+
     @pytest.mark.training
     def test_second_forward_grown_parameter_participates_in_current_update(
         self,
