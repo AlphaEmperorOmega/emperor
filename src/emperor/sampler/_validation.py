@@ -134,6 +134,22 @@ class RouterModelValidator(ValidatorBase):
                 num_experts=router_config.num_experts,
             )
         )
+        cls._validate_builtin_model_config(router_config)
+
+    @staticmethod
+    def _validate_builtin_model_config(router_config) -> None:
+        from emperor.layers import LayerStackConfig, MirroredLayerStackConfig
+
+        model_config = router_config.model_config
+        # Custom builders may have different override semantics; never run them
+        # speculatively or claim recursive preflight for those configurations.
+        if type(model_config) not in (LayerStackConfig, MirroredLayerStackConfig):
+            return
+        resolved_config = copy.deepcopy(model_config)
+        dimension_overrides = router_config.model_dimension_overrides()
+        resolved_config.input_dim = dimension_overrides.input_dim
+        resolved_config.output_dim = dimension_overrides.output_dim
+        resolved_config._registry_owner().VALIDATOR.validate_config(resolved_config)
 
     @staticmethod
     def _validate_input_dimension(value: object) -> None:

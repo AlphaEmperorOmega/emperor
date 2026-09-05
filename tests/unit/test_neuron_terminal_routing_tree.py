@@ -64,6 +64,85 @@ class _ScriptedTreeSampler(nn.Module):
 
 
 class TestTerminalRoutingTree(NeuronTestCase):
+    def test_invalid_nested_direction_stack_rejects_before_any_sampler(self):
+        direction = self.sampler_config()
+        direction.router_config.model_config.num_layers = 0
+        config = self.terminal_config()
+        config.routing_tree_config = self.routing_tree_config(
+            direction_sampler_config=direction
+        )
+        original = copy.deepcopy(config)
+        random_state = torch.get_rng_state().clone()
+        with patch(
+            "emperor.sampler._sampler.SamplerModel.__init__",
+            side_effect=AssertionError("sampler constructed"),
+        ):
+            with self.assertRaisesRegex(ValueError, "num_layers"):
+                config.build()
+        self.assertEqual(config, original)
+        torch.testing.assert_close(torch.get_rng_state(), random_state)
+
+    def test_invalid_nested_leaf_stack_rejects_without_rng_or_modules(self):
+        config = self.terminal_config()
+        config.sampler_config.router_config.model_config.num_layers = 0
+        config.routing_tree_config = self.routing_tree_config(
+            direction_sampler_config=self.sampler_config()
+        )
+        original = copy.deepcopy(config)
+        random_state = torch.get_rng_state().clone()
+        with patch(
+            "emperor.sampler._sampler.SamplerModel.__init__",
+            side_effect=AssertionError("sampler constructed"),
+        ):
+            with self.assertRaisesRegex(ValueError, "num_layers"):
+                config.build()
+        self.assertEqual(config, original)
+        torch.testing.assert_close(torch.get_rng_state(), random_state)
+
+    def test_builtin_router_preflight_preserves_initialization_and_effective_dimensions(
+        self,
+    ):
+        from emperor.sampler._validation import RouterModelValidator
+
+        for tree in (False, True):
+            for noisy in (False, True):
+                with self.subTest(tree=tree, noisy=noisy):
+                    config = self.terminal_config()
+                    config.sampler_config.noisy_topk_flag = noisy
+                    router = config.sampler_config.router_config
+                    router.noisy_topk_flag = noisy
+                    router.model_config.input_dim = 0
+                    router.model_config.output_dim = 0
+                    if tree:
+                        config.routing_tree_config = self.routing_tree_config()
+                    original = copy.deepcopy(config)
+                    torch.manual_seed(17)
+                    with patch.object(
+                        RouterModelValidator, "_validate_builtin_model_config"
+                    ):
+                        reference = config.build()
+                    reference_rng = torch.get_rng_state().clone()
+                    torch.manual_seed(17)
+                    current = config.build()
+                    torch.testing.assert_close(torch.get_rng_state(), reference_rng)
+                    self.assertEqual(config, original)
+                    self.assertEqual(
+                        tuple(current.state_dict()), tuple(reference.state_dict())
+                    )
+                    for name, value in current.state_dict().items():
+                        torch.testing.assert_close(
+                            value, reference.state_dict()[name], rtol=0, atol=0
+                        )
+                    for module in current.modules():
+                        if isinstance(module, SamplerModel):
+                            self.assertEqual(
+                                module.router.model.input_dim, config.input_dim
+                            )
+                            self.assertEqual(
+                                module.router.model.output_dim,
+                                module.sampler_config.required_logit_width(),
+                            )
+
     def test_empty_tree_probabilities_keep_visited_sampler_gradients(self):
         terminal = self.tree_terminal(leaf_top_k=1)
         source = torch.empty(0, self.input_dim, requires_grad=True)
