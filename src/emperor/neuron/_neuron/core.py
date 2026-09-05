@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 
 class Neuron(Module):
+    """Compose signal processing, memory, and spatial routing for one neuron."""
+
     COORDINATE_EMBEDDING_FREQUENCY_BASE = 10000.0
     VALIDATOR = NeuronValidator
 
@@ -24,9 +26,16 @@ class Neuron(Module):
         self.cfg: NeuronConfig = self._override_config(neuron_config, overrides)
         self.VALIDATOR.validate(self.cfg)
         self.coordinate_embedding_flag: bool = bool(self.cfg.coordinate_embedding_flag)
+        self.__initialize_components()
+        self.__initialize_counters()
+        self.__register_coordinate_embedding()
+
+    def __initialize_components(self) -> None:
         self.nucleus = self.cfg.nucleus_config.build()
         self.axons = self.cfg.axons_config.build()
         self.terminal = self.cfg.terminal_config.build()
+
+    def __initialize_counters(self) -> None:
         self.register_buffer(
             "batch_counter",
             torch.tensor(0, dtype=torch.int64),
@@ -37,6 +46,8 @@ class Neuron(Module):
             torch.tensor(0, dtype=torch.int64),
             persistent=True,
         )
+
+    def __register_coordinate_embedding(self) -> None:
         if self.coordinate_embedding_flag:
             self.register_buffer(
                 "coordinate_embedding",
@@ -90,13 +101,12 @@ class Neuron(Module):
             torch.cos(sinusoidal_angles),
         )
 
-    def __inject_coordinate_embedding(self, input: Tensor) -> Tensor:
-        if self.coordinate_embedding is None:
-            return input
-        return input + self.coordinate_embedding.to(
-            device=input.device,
-            dtype=input.dtype,
+    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        processed_signal = self.process_signal(input)
+        probabilities, selected_neurons, auxiliary_loss = self.route_signal(
+            processed_signal
         )
+        return processed_signal, probabilities, selected_neurons, auxiliary_loss
 
     def process_signal(self, input: Tensor) -> Tensor:
         self.VALIDATOR.validate_forward_input(input)
@@ -106,6 +116,14 @@ class Neuron(Module):
         processed_signal = self.nucleus(self.__inject_coordinate_embedding(input))
         return self.axons(processed_signal)
 
+    def __inject_coordinate_embedding(self, input: Tensor) -> Tensor:
+        if self.coordinate_embedding is None:
+            return input
+        return input + self.coordinate_embedding.to(
+            device=input.device,
+            dtype=input.dtype,
+        )
+
     def route_signal(self, processed_signal: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         self.VALIDATOR.validate_forward_input(processed_signal)
         self.VALIDATOR.validate_feature_dimension(self, processed_signal)
@@ -113,10 +131,3 @@ class Neuron(Module):
             self.__inject_coordinate_embedding(processed_signal)
         )
         return probabilities, selected_neurons, auxiliary_loss
-
-    def forward(self, input: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        processed_signal = self.process_signal(input)
-        probabilities, selected_neurons, auxiliary_loss = self.route_signal(
-            processed_signal
-        )
-        return processed_signal, probabilities, selected_neurons, auxiliary_loss
