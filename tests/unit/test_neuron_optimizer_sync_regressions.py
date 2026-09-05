@@ -2,11 +2,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 import torch
 from torch import nn
 
 from emperor.neuron import _optimizer_sync as optimizer_sync
-from emperor.neuron import NeuronClusterOptimizerSyncCallback
+from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
+from unit.test_neuron import NeuronTestCase
 
 
 class _RoleNeuron(nn.Module):
@@ -56,6 +58,47 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    @pytest.mark.training
+    def test_second_forward_grown_parameter_participates_in_current_update(
+        self,
+    ) -> None:
+        torch.manual_seed(17)
+        cluster = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            max_total_growths=1,
+            neuron_config=NeuronTestCase().full_sampler_neuron_config(),
+        ).build()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = NeuronClusterOptimizerSyncCallback()
+        callback.on_fit_start(trainer, module)
+        source = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        first_output, first_loss = cluster(source)
+        second_output, second_loss = cluster(source / 10)
+        loss = (
+            first_output.square().mean()
+            + second_output.square().mean()
+            + first_loss
+            + second_loss
+        )
+        child_parameter = cluster.cluster["neuron_2_1_1"].nucleus.model.weight
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        optimizer.zero_grad(set_to_none=True)
+        callback.on_before_backward(trainer, module, loss)
+        loss.backward()
+        self.assertGreater(float(child_parameter.grad.norm()), 0.0)
+        self.assertIn(id(child_parameter), _optimizer_parameter_ids(optimizer))
+        self.assertIn(id(child_parameter), callback._post_wrap_param_ids)
+        expected = child_parameter.detach() - 0.01 * child_parameter.grad
+        optimizer.step()
+        torch.testing.assert_close(child_parameter, expected)
+
     def __assert_scheduler_preflight_order(self, fail_second_preflight: bool) -> None:
         cluster = _DynamicCluster(neuron_count=2)
         module = _HostModule(cluster)

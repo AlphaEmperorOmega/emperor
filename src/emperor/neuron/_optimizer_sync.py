@@ -278,6 +278,23 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
 
+    def on_before_zero_grad(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        optimizer: Optimizer,
+    ) -> None:
+        self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
+
+    def on_before_backward(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        loss,
+    ) -> None:
+        self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
+
+
     def __sync_optimizers_if_clusters_grew(
         self,
         trainer: Trainer,
