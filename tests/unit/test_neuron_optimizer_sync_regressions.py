@@ -1,5 +1,6 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 from torch import nn
@@ -54,6 +55,35 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    def test_synchronization_parameter_traversal_is_linear(self) -> None:
+        for neuron_count in (10, 100):
+            with self.subTest(neuron_count=neuron_count):
+                cluster = _DynamicCluster(neuron_count)
+                module = _HostModule(cluster)
+                optimizer = torch.optim.Adam(module.parameters(), lr=0.01)
+                trainer = SimpleNamespace(
+                    optimizers=[optimizer], lr_scheduler_configs=[]
+                )
+                callback = _callback_for(cluster)
+                callback.on_fit_start(trainer, module)
+                parameters = tuple(cluster.parameters())
+                parameter_visits = 0
+
+                def counted_parameters(*args, snapshot=parameters, **kwargs):
+                    nonlocal parameter_visits
+                    for parameter in snapshot:
+                        parameter_visits += 1
+                        yield parameter
+
+                with patch.object(cluster, "parameters", counted_parameters):
+                    callback.sync_optimizers(trainer, module)
+
+                self.assertLessEqual(parameter_visits, 4 * len(parameters))
+                self.assertEqual(
+                    _optimizer_parameter_ids(optimizer), {id(p) for p in parameters}
+                )
+                self.assertFalse(callback._post_wrap_param_ids)
+
     def test_growth_inherits_the_existing_group_for_each_parameter_role(self) -> None:
         cluster = _DynamicCluster()
         module = _HostModule(cluster)
