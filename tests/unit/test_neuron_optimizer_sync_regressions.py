@@ -125,6 +125,26 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
         )
         self.assertEqual(optimizer.param_groups[0]["lr"], 0.03)
 
+    def test_ddp_registration_is_independent_of_live_optimizer_membership(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        neuron = cluster.cluster["neuron_0_0_0"]
+        neuron.terminal.weight.requires_grad_(False)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        self.assertIn(id(neuron.nucleus.weight), callback._ddp_registered_param_ids)
+        self.assertNotIn(id(neuron.terminal.weight), callback._ddp_registered_param_ids)
+        neuron.terminal.weight.requires_grad_(True)
+        callback.on_before_backward(trainer, module, None)
+        self.assertIn(id(neuron.terminal.weight), callback._post_wrap_param_ids)
+        del cluster.cluster["neuron_0_0_0"]
+        callback.sync_optimizers(trainer, module)
+        cluster.cluster["neuron_0_0_0"] = neuron
+        callback.sync_optimizers(trainer, module)
+        self.assertNotIn(id(neuron.nucleus.weight), callback._post_wrap_param_ids)
+
     def test_replacement_preserves_subset_ownership_through_aliases(self) -> None:
         cluster = _DynamicCluster()
         module = _HostModule(cluster)
@@ -256,6 +276,47 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
         )
         self.assertEqual(scheduler.base_lrs, [0.01, 0.02])
 
+    @pytest.mark.training
+    def test_second_forward_grown_parameter_participates_in_current_update(
+        self,
+    ) -> None:
+        torch.manual_seed(17)
+        cluster = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            initial_x_axis_total_neurons=1,
+            max_steps=1,
+            growth_threshold=1,
+            max_total_growths=1,
+            neuron_config=NeuronTestCase().full_sampler_neuron_config(),
+        ).build()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = NeuronClusterOptimizerSyncCallback()
+        callback.on_fit_start(trainer, module)
+        source = torch.arange(12, dtype=torch.float32).reshape(3, 4)
+        first_output, first_loss = cluster(source)
+        second_output, second_loss = cluster(source / 10)
+        loss = (
+            first_output.square().mean()
+            + second_output.square().mean()
+            + first_loss
+            + second_loss
+        )
+        child_parameter = cluster.cluster["neuron_2_1_1"].nucleus.model.weight
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        optimizer.zero_grad(set_to_none=True)
+        callback.on_before_backward(trainer, module, loss)
+        loss.backward()
+        self.assertGreater(float(child_parameter.grad.norm()), 0.0)
+        self.assertIn(id(child_parameter), _optimizer_parameter_ids(optimizer))
+        self.assertIn(id(child_parameter), callback._post_wrap_param_ids)
+        expected = child_parameter.detach() - 0.01 * child_parameter.grad
+        optimizer.step()
+        torch.testing.assert_close(child_parameter, expected)
+
     def test_replacement_and_pruning_roll_back_together_before_retry(self) -> None:
         cluster = _DynamicCluster(neuron_count=2)
         module = _HostModule(cluster)
@@ -316,66 +377,39 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
             optimizer.param_groups[0]["params"][0], replacement.nucleus.weight
         )
 
-    def test_ddp_registration_is_independent_of_live_optimizer_membership(self) -> None:
-        cluster = _DynamicCluster()
-        module = _HostModule(cluster)
-        neuron = cluster.cluster["neuron_0_0_0"]
-        neuron.terminal.weight.requires_grad_(False)
-        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
-        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
-        callback = _callback_for(cluster)
-        callback.on_fit_start(trainer, module)
-        self.assertIn(id(neuron.nucleus.weight), callback._ddp_registered_param_ids)
-        self.assertNotIn(id(neuron.terminal.weight), callback._ddp_registered_param_ids)
-        neuron.terminal.weight.requires_grad_(True)
-        callback.on_before_backward(trainer, module, None)
-        self.assertIn(id(neuron.terminal.weight), callback._post_wrap_param_ids)
-        del cluster.cluster["neuron_0_0_0"]
-        callback.sync_optimizers(trainer, module)
-        cluster.cluster["neuron_0_0_0"] = neuron
-        callback.sync_optimizers(trainer, module)
-        self.assertNotIn(id(neuron.nucleus.weight), callback._post_wrap_param_ids)
+    def test_synchronization_parameter_traversal_is_linear(self) -> None:
+        for neuron_count in (10, 100):
+            with self.subTest(neuron_count=neuron_count):
+                cluster = _DynamicCluster(neuron_count)
+                module = _HostModule(cluster)
+                optimizer = torch.optim.Adam(module.parameters(), lr=0.01)
+                trainer = SimpleNamespace(
+                    optimizers=[optimizer], lr_scheduler_configs=[]
+                )
+                callback = _callback_for(cluster)
+                callback.on_fit_start(trainer, module)
+                parameters = tuple(cluster.parameters())
+                parameter_visits = 0
 
-    @pytest.mark.training
-    def test_second_forward_grown_parameter_participates_in_current_update(
-        self,
-    ) -> None:
-        torch.manual_seed(17)
-        cluster = NeuronClusterConfig(
-            x_axis_total_neurons=2,
-            y_axis_total_neurons=1,
-            z_axis_total_neurons=1,
-            initial_x_axis_total_neurons=1,
-            max_steps=1,
-            growth_threshold=1,
-            max_total_growths=1,
-            neuron_config=NeuronTestCase().full_sampler_neuron_config(),
-        ).build()
-        module = _HostModule(cluster)
-        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
-        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
-        callback = NeuronClusterOptimizerSyncCallback()
-        callback.on_fit_start(trainer, module)
-        source = torch.arange(12, dtype=torch.float32).reshape(3, 4)
-        first_output, first_loss = cluster(source)
-        second_output, second_loss = cluster(source / 10)
-        loss = (
-            first_output.square().mean()
-            + second_output.square().mean()
-            + first_loss
-            + second_loss
-        )
-        child_parameter = cluster.cluster["neuron_2_1_1"].nucleus.model.weight
-        callback.on_before_zero_grad(trainer, module, optimizer)
-        optimizer.zero_grad(set_to_none=True)
-        callback.on_before_backward(trainer, module, loss)
-        loss.backward()
-        self.assertGreater(float(child_parameter.grad.norm()), 0.0)
-        self.assertIn(id(child_parameter), _optimizer_parameter_ids(optimizer))
-        self.assertIn(id(child_parameter), callback._post_wrap_param_ids)
-        expected = child_parameter.detach() - 0.01 * child_parameter.grad
-        optimizer.step()
-        torch.testing.assert_close(child_parameter, expected)
+                def counted_parameters(*args, snapshot=parameters, **kwargs):
+                    nonlocal parameter_visits
+                    for parameter in snapshot:
+                        parameter_visits += 1
+                        yield parameter
+
+                with patch.object(cluster, "parameters", counted_parameters):
+                    callback.sync_optimizers(trainer, module)
+
+                self.assertLessEqual(parameter_visits, 4 * len(parameters))
+                self.assertEqual(
+                    _optimizer_parameter_ids(optimizer), {id(p) for p in parameters}
+                )
+                self.assertFalse(callback._post_wrap_param_ids)
+
+    def test_scheduler_preflights_precede_all_pruning_mutations(self) -> None:
+        for fail_second_preflight in (False, True):
+            with self.subTest(fail_second_preflight=fail_second_preflight):
+                self.__assert_scheduler_preflight_order(fail_second_preflight)
 
     def __assert_scheduler_preflight_order(self, fail_second_preflight: bool) -> None:
         cluster = _DynamicCluster(neuron_count=2)
@@ -453,40 +487,6 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
         else:
             expected_events.extend([("remove", 0), ("remove", 1)])
         self.assertEqual(events, expected_events)
-
-    def test_scheduler_preflights_precede_all_pruning_mutations(self) -> None:
-        for fail_second_preflight in (False, True):
-            with self.subTest(fail_second_preflight=fail_second_preflight):
-                self.__assert_scheduler_preflight_order(fail_second_preflight)
-
-    def test_synchronization_parameter_traversal_is_linear(self) -> None:
-        for neuron_count in (10, 100):
-            with self.subTest(neuron_count=neuron_count):
-                cluster = _DynamicCluster(neuron_count)
-                module = _HostModule(cluster)
-                optimizer = torch.optim.Adam(module.parameters(), lr=0.01)
-                trainer = SimpleNamespace(
-                    optimizers=[optimizer], lr_scheduler_configs=[]
-                )
-                callback = _callback_for(cluster)
-                callback.on_fit_start(trainer, module)
-                parameters = tuple(cluster.parameters())
-                parameter_visits = 0
-
-                def counted_parameters(*args, snapshot=parameters, **kwargs):
-                    nonlocal parameter_visits
-                    for parameter in snapshot:
-                        parameter_visits += 1
-                        yield parameter
-
-                with patch.object(cluster, "parameters", counted_parameters):
-                    callback.sync_optimizers(trainer, module)
-
-                self.assertLessEqual(parameter_visits, 4 * len(parameters))
-                self.assertEqual(
-                    _optimizer_parameter_ids(optimizer), {id(p) for p in parameters}
-                )
-                self.assertFalse(callback._post_wrap_param_ids)
 
     def test_growth_inherits_the_existing_group_for_each_parameter_role(self) -> None:
         cluster = _DynamicCluster()
