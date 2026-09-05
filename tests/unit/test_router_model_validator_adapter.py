@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -19,6 +20,19 @@ def make_config(**overrides) -> RouterConfig:
 
 
 class TestRouterModelValidatorAdapter(unittest.TestCase):
+    def test_custom_builder_is_not_executed_speculatively(self):
+        config = make_config()
+        with patch.object(
+            ConfigBase,
+            "build",
+            side_effect=RuntimeError("custom construction validation"),
+        ) as build:
+            RouterModelValidator.validate_config(config)
+            build.assert_not_called()
+            with self.assertRaisesRegex(RuntimeError, "custom construction validation"):
+                RouterModel(config)
+            build.assert_called_once()
+
     def test_module_exposes_validator_adapter(self):
         self.assertIs(RouterModel.VALIDATOR, RouterModelValidator)
 
