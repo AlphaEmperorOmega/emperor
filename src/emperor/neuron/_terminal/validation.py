@@ -345,13 +345,14 @@ class Validator(ValidatorBase, NeuronValidationMixin):
 
     @staticmethod
     def validate_logits_only_input_dim(model: "Terminal") -> None:
-        if model.input_dim == model.total_neuron_connections:
+        required_width = model.sampler_config.required_logit_width()
+        if model.input_dim == required_width:
             return
         raise ValueError(
             "sampler_config.router_config is required when Terminal input_dim "
-            "does not equal total_neuron_connections, received "
+            "does not equal the required logit width, received "
             f"input_dim={model.input_dim} and "
-            f"total_neuron_connections={model.total_neuron_connections}."
+            f"required_logit_width={required_width}."
         )
 
     @classmethod
