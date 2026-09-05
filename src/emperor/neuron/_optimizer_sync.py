@@ -42,6 +42,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             int, tuple[tuple[str, int, bool], ...]
         ] = {}
         self._synced_parameter_names_by_id: dict[int, str] = {}
+        self._synced_parameter_ids_by_name: dict[str, int] = {}
         self._post_wrap_param_ids: set[int] = set()
         self._ddp_registered_param_ids: set[int] = set()
         self._fit_started = False
@@ -253,6 +254,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._synced_param_ids.clear()
         self._synced_cluster_signatures.clear()
         self._synced_parameter_names_by_id.clear()
+        self._synced_parameter_ids_by_name.clear()
         self._post_wrap_param_ids.clear()
         self._fit_started = False
         self._clusters = self.__find_neuron_clusters(pl_module)
@@ -368,6 +370,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._synced_param_ids.clear()
         self._synced_cluster_signatures.clear()
         self._synced_parameter_names_by_id.clear()
+        self._synced_parameter_ids_by_name.clear()
         self._post_wrap_param_ids.clear()
         self._ddp_registered_param_ids.clear()
         self._fit_started = False
@@ -425,9 +428,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         clusters = self._clusters or self.__find_neuron_clusters(pl_module)
         if not clusters:
             return
-        parameter_names_by_id = {
-            id(parameter): name for name, parameter in pl_module.named_parameters()
-        }
+        parameters_by_name = dict(pl_module.named_parameters(remove_duplicate=False))
+        parameter_names_by_id: dict[int, str] = {}
+        for name, parameter in parameters_by_name.items():
+            parameter_names_by_id.setdefault(id(parameter), name)
         live_module_parameter_ids = set(parameter_names_by_id)
         cluster_parameters = {
             id(cluster): tuple(cluster.parameters()) for cluster in clusters
@@ -439,6 +443,9 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         new_post_wrap_param_ids = self.__new_post_wrap_parameter_ids(
             current_parameter_ids
         )
+        replacements = self.__same_name_replacements(
+            optimizers, parameters_by_name, current_parameter_ids
+        )
 
         for optimizer in optimizers:
             self.__remove_pruned_neuron_parameters(
@@ -448,6 +455,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 live_module_parameter_ids,
                 parameter_names_by_id,
                 current_parameter_ids,
+                replacements,
             )
         parameter_locations = self.__optimizer_parameter_locations(optimizers)
         for cluster in clusters:
@@ -458,7 +466,11 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
         self.__warn_about_unoptimized_cluster_parameters(optimizers, cluster_parameters)
         self.__record_synchronized_parameters(
-            clusters, parameter_names_by_id, new_post_wrap_param_ids, current_parameter_ids
+            clusters,
+            parameter_names_by_id,
+            new_post_wrap_param_ids,
+            current_parameter_ids,
+            parameters_by_name,
         )
 
     def __new_post_wrap_parameter_ids(
@@ -481,6 +493,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         live_module_parameter_ids: set[int],
         parameter_names_by_id: dict[int, str],
         current_parameter_ids: dict[int, set[int]],
+        replacements: dict[int, list[nn.Parameter]],
     ) -> None:
         pruned_cluster_param_ids = self.__pruned_cluster_parameter_ids(
             clusters, current_parameter_ids
@@ -493,13 +506,20 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
             for cluster in clusters
         )
-        if not pruned_cluster_param_ids and not topology_was_pruned:
+        if (
+            not pruned_cluster_param_ids
+            and not topology_was_pruned
+            and not replacements
+        ):
             return
 
         previous_group_count = len(optimizer.param_groups)
         projected_parameters, projected_parameter_names = (
             self.__project_retained_optimizer_parameters(
-                optimizer, stale_param_ids, parameter_names_by_id
+                optimizer,
+                stale_param_ids,
+                parameter_names_by_id,
+                replacements,
             )
         )
         removed_group_indices = tuple(
@@ -532,6 +552,68 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 previous_group_count=previous_group_count,
             )
 
+    def __same_name_replacements(
+        self,
+        optimizers: list[Optimizer],
+        parameters_by_name: dict[str, nn.Parameter],
+        current_parameter_ids: dict[int, set[int]],
+    ) -> dict[int, list[nn.Parameter]]:
+        live_parameters = {
+            id(parameter): parameter for parameter in parameters_by_name.values()
+        }
+        previous_cluster_ids = set().union(*self._synced_param_ids.values())
+        live_cluster_ids = set().union(*current_parameter_ids.values())
+        locations = self.__optimizer_parameter_locations(optimizers)
+        parameter_order = {
+            parameter_id: index for index, parameter_id in enumerate(locations)
+        }
+        candidates: dict[int, set[int]] = {}
+        for name, parameter in parameters_by_name.items():
+            old_id = self._synced_parameter_ids_by_name.get(name)
+            if (
+                old_id not in previous_cluster_ids
+                or id(parameter) not in live_cluster_ids
+            ):
+                continue
+            if id(parameter) in locations:
+                continue
+            candidates.setdefault(id(parameter), set()).add(old_id)
+
+        replacements: dict[int, list[nn.Parameter]] = {}
+        for parameter_id, previous_ids in candidates.items():
+            owners = {
+                (id(optimizer), id(group))
+                for old_id in previous_ids
+                for optimizer, group in locations.get(old_id, [])
+            }
+            if len(owners) > 1:
+                raise RuntimeError(
+                    "Cannot synchronize a Neuron parameter replacement with ambiguous "
+                    "optimizer group ownership across its previous aliases."
+                )
+            if not owners:
+                continue
+            old_id = min(
+                (candidate for candidate in previous_ids if candidate in locations),
+                key=parameter_order.__getitem__,
+            )
+            # A split may produce several parameters from one owned alias set.
+            # Keep the old parameter too when another live role still uses it.
+            if old_id not in replacements:
+                replacements[old_id] = (
+                    [live_parameters[old_id]] if old_id in live_parameters else []
+                )
+            replacements[old_id].append(live_parameters[parameter_id])
+        live_parameter_order = {
+            parameter_id: index for index, parameter_id in enumerate(live_parameters)
+        }
+        for replacement_parameters in replacements.values():
+            replacement_parameters.sort(
+                key=lambda parameter: live_parameter_order[id(parameter)]
+            )
+        return replacements
+
+
     def __pruned_cluster_parameter_ids(
         self,
         clusters: list[nn.Module],
@@ -551,12 +633,16 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         optimizer: Optimizer,
         stale_param_ids: set[int],
         parameter_names_by_id: dict[int, str],
+        replacements: dict[int, list[nn.Parameter]],
     ) -> tuple[list[list[nn.Parameter]], list[list[str] | None]]:
         projected_parameters = [
             [
-                parameter
+                retained_parameter
                 for parameter in group["params"]
-                if id(parameter) not in stale_param_ids
+                for retained_parameter in replacements.get(
+                    id(parameter),
+                    [] if id(parameter) in stale_param_ids else [parameter],
+                )
             ]
             for group in optimizer.param_groups
         ]
@@ -564,7 +650,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         for group in optimizer.param_groups:
             projected_parameter_names.append(
                 self.__project_retained_group_names(
-                    group, stale_param_ids, parameter_names_by_id
+                    group,
+                    stale_param_ids,
+                    parameter_names_by_id,
+                    replacements,
                 )
             )
         return projected_parameters, projected_parameter_names
@@ -574,6 +663,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         group: dict,
         stale_param_ids: set[int],
         parameter_names_by_id: dict[int, str],
+        replacements: dict[int, list[nn.Parameter]],
     ) -> list[str] | None:
         parameter_names = group.get("param_names")
         if parameter_names is None:
@@ -597,19 +687,23 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 strict=True,
             )
         )
-        return [
-                (
-                    parameter_names_by_id.get(id(parameter), name)
-                    if group_uses_official_parameter_names
-                    else name
+        projected_names = []
+        for name, parameter in zip(parameter_names, group["params"], strict=True):
+            retained_parameters = replacements.get(
+                id(parameter), [] if id(parameter) in stale_param_ids else [parameter]
+            )
+            if len(retained_parameters) > 1 and not group_uses_official_parameter_names:
+                raise RuntimeError(
+                    "Cannot derive names for split Neuron optimizer parameters "
+                    "because the owning group does not use fully-qualified module names."
                 )
-                for name, parameter in zip(
-                    parameter_names,
-                    group["params"],
-                    strict=True,
-                )
-                if id(parameter) not in stale_param_ids
-            ]
+            projected_names.extend(
+                parameter_names_by_id.get(id(retained), name)
+                if group_uses_official_parameter_names
+                else name
+                for retained in retained_parameters
+            )
+        return projected_names
 
     @staticmethod
     def __optimizer_schedulers(
@@ -819,6 +913,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         parameter_names_by_id: dict[int, str],
         new_post_wrap_param_ids: set[int],
         current_parameter_ids: dict[int, set[int]],
+        parameters_by_name: dict[str, nn.Parameter],
     ) -> None:
         self._synced_neuron_names = {
             id(cluster): set(cluster.cluster.keys()) for cluster in clusters
@@ -829,6 +924,9 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             for cluster in clusters
         }
         self._synced_parameter_names_by_id = dict(parameter_names_by_id)
+        self._synced_parameter_ids_by_name = {
+            name: id(parameter) for name, parameter in parameters_by_name.items()
+        }
         current_cluster_param_ids = {
             parameter_id
             for parameter_ids in self._synced_param_ids.values()
