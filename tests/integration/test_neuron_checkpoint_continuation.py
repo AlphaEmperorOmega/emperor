@@ -12,6 +12,8 @@ import pytest
 import torch
 from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.strategies import SingleDeviceStrategy
+from lightning.pytorch.trainer.states import TrainerFn
 from torch.utils.data import DataLoader, TensorDataset
 
 from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
@@ -53,6 +55,17 @@ class _GrowingNeuronModule(LightningModule):
 class _ReversedGrowingNeuronModule(_GrowingNeuronModule):
     def configure_optimizers(self):
         return torch.optim.Adam(reversed(list(self.parameters())), lr=0.01)
+
+
+class _DelayedCheckpointStrategy(SingleDeviceStrategy):
+    @property
+    def restore_checkpoint_after_setup(self) -> bool:
+        return True
+
+
+class _StopAfterTwoUpdates(Callback):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
+        trainer.should_stop = trainer.global_step >= 2
 
 
 class _GrownParameterContinuationProbe(Callback):
@@ -124,6 +137,143 @@ class _OptimizerStateIdentityProbe(Callback):
 
 
 class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
+    @pytest.mark.training
+    def test_reused_trainer_continues_adam_with_early_and_delayed_restore(self) -> None:
+        for delayed in (False, True):
+            with (
+                self.subTest(delayed=delayed),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                torch.manual_seed(17)
+                module = _GrowingNeuronModule(self.build_config())
+                trainer = Trainer(
+                    accelerator="cpu",
+                    strategy=_DelayedCheckpointStrategy(device="cpu")
+                    if delayed
+                    else "auto",
+                    default_root_dir=directory,
+                    max_epochs=3,
+                    max_steps=3,
+                    limit_train_batches=2,
+                    logger=False,
+                    enable_checkpointing=False,
+                    enable_progress_bar=False,
+                    enable_model_summary=False,
+                    num_sanity_val_steps=0,
+                    callbacks=[_StopAfterTwoUpdates()],
+                )
+                loader = self.build_loader()
+                trainer.fit(module, train_dataloaders=loader)
+                self.assertEqual(trainer.global_step, 2)
+                previous_optimizer = trainer.optimizers[0]
+                source_child = module.cluster.cluster[
+                    "neuron_2_1_1"
+                ].nucleus.model.weight
+                expected_parameter = source_child.detach().clone()
+                expected_state = self.clone_optimizer_state(
+                    previous_optimizer.state[source_child]
+                )
+                checkpoint_path = Path(directory) / "resume.ckpt"
+                trainer.save_checkpoint(checkpoint_path)
+                resumed_module = _GrowingNeuronModule(self.build_config())
+                probe = _GrownParameterContinuationProbe()
+                trainer.callbacks.append(probe)
+                trainer.fit(
+                    resumed_module, train_dataloaders=loader, ckpt_path=checkpoint_path
+                )
+                self.assertIsNot(trainer.optimizers[0], previous_optimizer)
+                self.assertEqual(trainer.global_step, 3)
+                torch.testing.assert_close(probe.restored_parameter, expected_parameter)
+                for name, value in expected_state.items():
+                    torch.testing.assert_close(probe.restored_state[name], value)
+                self.assertFalse(
+                    torch.equal(probe.updated_parameter, expected_parameter)
+                )
+                self.assertEqual(
+                    probe.updated_state["step"], expected_state["step"] + 1
+                )
+                self.assertTrue(torch.isfinite(probe.updated_state["exp_avg"]).all())
+
+    def test_late_restoration_preserves_original_ddp_registration_snapshot(
+        self,
+    ) -> None:
+        source = _GrowingNeuronModule(self.build_config())
+        with torch.no_grad():
+            source.cluster(torch.ones(3, self.input_dim))
+        source_optimizer = torch.optim.Adam(source.parameters(), lr=0.01)
+        saved_states = [source_optimizer.state_dict()]
+        checkpoint = {
+            "optimizer_states": saved_states,
+            "lr_schedulers": [],
+        }
+        NeuronClusterOptimizerSyncCallback().on_save_checkpoint(
+            type("SourceTrainer", (), {"optimizers": [source_optimizer]})(),
+            source,
+            checkpoint,
+        )
+        module = _GrowingNeuronModule(self.build_config())
+        optimizer = torch.optim.Adam(module.parameters(), lr=0.02)
+        trainer = type(
+            "TrainerStub", (), {"optimizers": [optimizer], "lr_scheduler_configs": []}
+        )()
+        callback = NeuronClusterOptimizerSyncCallback()
+        callback.on_fit_start(trainer, module)
+        original_registered_ids = set(callback._ddp_registered_param_ids)
+        module.load_state_dict(source.state_dict())
+        callback.on_load_checkpoint(trainer, module, checkpoint)
+        child_ids = {
+            id(parameter)
+            for parameter in module.cluster.cluster["neuron_2_1_1"].parameters()
+        }
+        self.assertEqual(callback._ddp_registered_param_ids, original_registered_ids)
+        self.assertTrue(child_ids.issubset(callback._post_wrap_param_ids))
+        with self.assertRaisesRegex(RuntimeError, "partial Neuron optimizer"):
+            callback.on_train_start(trainer, module)
+        optimizer.load_state_dict(saved_states[0])
+        callback.on_train_start(trainer, module)
+        self.assertTrue(child_ids.issubset(callback._post_wrap_param_ids))
+
+    def test_reused_trainer_binds_checkpoint_to_current_optimizer_generation(
+        self,
+    ) -> None:
+        module = _GrowingNeuronModule(self.build_config())
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = Trainer(
+                accelerator="cpu",
+                logger=False,
+                enable_checkpointing=False,
+                enable_progress_bar=False,
+                enable_model_summary=False,
+                default_root_dir=directory,
+            )
+            module.trainer = trainer
+            trainer.state.fn = TrainerFn.FITTING
+            trainer.strategy.connect(module)
+            trainer.strategy.setup_optimizers(trainer)
+            previous_optimizer = trainer.optimizers[0]
+            callback = NeuronClusterOptimizerSyncCallback()
+            callback.setup(trainer, module, "fit")
+            callback.on_fit_start(trainer, module)
+            checkpoint = {
+                "optimizer_states": [previous_optimizer.state_dict()],
+                "lr_schedulers": [],
+            }
+            callback.on_save_checkpoint(trainer, module, checkpoint)
+            callback.on_fit_end(trainer, module)
+
+            callback.setup(trainer, module, "fit")
+            callback.on_load_checkpoint(trainer, module, checkpoint)
+            self.assertFalse(previous_optimizer._optimizer_load_state_dict_post_hooks)
+            trainer.strategy.setup_optimizers(trainer)
+            current_optimizer = trainer.optimizers[0]
+            self.assertIsNot(current_optimizer, previous_optimizer)
+            callback.on_fit_start(trainer, module)
+            current_optimizer.load_state_dict(checkpoint["optimizer_states"][0])
+            callback.on_train_start(trainer, module)
+            self.assertFalse(current_optimizer._optimizer_load_state_dict_post_hooks)
+            self.assertFalse(previous_optimizer._optimizer_load_state_dict_post_hooks)
+            callback.on_fit_end(trainer, module)
+
     def build_config(self) -> NeuronClusterConfig:
         return NeuronClusterConfig(
             x_axis_total_neurons=2,

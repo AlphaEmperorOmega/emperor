@@ -191,6 +191,17 @@ class NeuronOptimizerNamedLayout:
             self.clear()
             raise
 
+    @classmethod
+    def validate_checkpoint(
+        cls, saved_optimizer_states: list[dict[str, Any]], layout: Any
+    ) -> None:
+        """Validate version and serialized optimizer count without live optimizers."""
+        optimizer_layouts = cls.__validated_optimizer_layouts(layout)
+        if len(saved_optimizer_states) != len(optimizer_layouts):
+            raise RuntimeError(
+                "Cannot load named Neuron optimizer state: optimizer counts differ."
+            )
+
     @staticmethod
     def __validated_optimizer_layouts(layout: Any) -> list[dict[str, Any]]:
         if not isinstance(layout, dict):

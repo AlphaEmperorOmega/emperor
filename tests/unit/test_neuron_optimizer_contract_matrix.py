@@ -427,7 +427,9 @@ class TestOptimizerCheckpointHookLifecycle(unittest.TestCase):
             module,
             {"optimizer_states": []},
         )
-        self.assertEqual(len(callback._optimizer_load_hook_handles), 1)
+        self.assertEqual(len(callback._optimizer_load_hook_handles), 0)
+        callback.on_fit_start(fitting_trainer, module)
+        callback.on_train_start(fitting_trainer, module)
         callback.on_fit_end(fitting_trainer, module)
         self.assertEqual(callback._optimizer_load_hook_handles, {})
 
@@ -444,6 +446,7 @@ class TestOptimizerCheckpointHookLifecycle(unittest.TestCase):
         checkpoint = self.checkpoint(module, optimizer)
         callback = NeuronClusterOptimizerSyncCallback()
 
+        callback.on_fit_start(trainer, module)
         callback.on_load_checkpoint(trainer, module, checkpoint)
         first_handle = callback._optimizer_load_hook_handles[id(optimizer)]
         callback.on_load_checkpoint(trainer, module, checkpoint)

@@ -557,6 +557,7 @@ class TestNeuronOptimizerSyncCheckpointEdges(unittest.TestCase):
         checkpoint = self.checkpoint(module, optimizer)
         checkpoint["lr_schedulers"] = []
 
+        callback.on_fit_start(trainer, module)
         with self.assertRaisesRegex(RuntimeError, "scheduler counts differ"):
             callback.on_load_checkpoint(trainer, module, checkpoint)
 
@@ -576,6 +577,7 @@ class TestNeuronOptimizerSyncCheckpointEdges(unittest.TestCase):
         checkpoint["lr_schedulers"] = [foreign_scheduler.state_dict()]
 
         callback.on_load_checkpoint(trainer, module, checkpoint)
+        callback.on_fit_start(trainer, module)
         optimizer.load_state_dict(checkpoint["optimizer_states"][0])
         callback.on_train_start(trainer, module)
 

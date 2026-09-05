@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import warnings
 from typing import TYPE_CHECKING
 
@@ -46,9 +47,14 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._post_wrap_param_ids: set[int] = set()
         self._ddp_registered_param_ids: set[int] = set()
         self._fit_started = False
+        self._fit_optimizers: list[Optimizer] | None = None
         self._optimizer_load_transaction = NeuronOptimizerLoadTransaction()
         self._named_layout = NeuronOptimizerNamedLayout()
         self._scheduler_reconciler = NeuronSchedulerCheckpointReconciler()
+        self._checkpoint_scheduler_transaction = NeuronSchedulerMutationTransaction()
+        self._checkpoint_sync_snapshot: dict | None = None
+        self._checkpoint_removed_ids: list[tuple[nn.Module, set[int]]] = []
+        self._checkpoint_load_prepared = False
         self._pending_saved_optimizer_states: list[dict] | None = None
         self._pending_saved_scheduler_states: list[dict] | None = None
         self._pending_named_optimizer_layout: dict | None = None
@@ -62,6 +68,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         if stage != "fit":
             return
+        self.__clear_fit_state()
         _ConditionalDDPStrategyAdapter.configure(trainer.strategy)
 
     def on_load_checkpoint(
@@ -75,23 +82,40 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         saved_optimizer_states = checkpoint.get("optimizer_states")
         if not isinstance(saved_optimizer_states, list):
             return
-        self._pending_saved_optimizer_states = saved_optimizer_states
         saved_scheduler_states = checkpoint.get("lr_schedulers")
-        self._pending_saved_scheduler_states = (
-            saved_scheduler_states if isinstance(saved_scheduler_states, list) else None
-        )
         named_layout = checkpoint.get(OPTIMIZER_LAYOUT_CHECKPOINT_KEY)
         if saved_optimizer_states and not isinstance(named_layout, dict):
             raise RuntimeError(
                 "Neuron optimizer checkpoints require canonical named-layout "
                 "metadata; this checkpoint uses a retired optimizer layout."
             )
-        self._pending_named_optimizer_layout = named_layout
-        optimizers = list(getattr(trainer, "optimizers", []) or [])
-        if not optimizers:
+        if named_layout is not None:
+            NeuronOptimizerNamedLayout.validate_checkpoint(
+                saved_optimizer_states, named_layout
+            )
+        if (
+            self._checkpoint_load_prepared
+            and self._pending_saved_optimizer_states is saved_optimizer_states
+        ):
             return
+        self.__remove_optimizer_load_hooks()
+        self._scheduler_reconciler.clear()
+        self._named_layout.clear()
+        self.__rollback_optimizer_checkpoint_load()
+        self._pending_saved_optimizer_states = saved_optimizer_states
+        self._pending_saved_scheduler_states = (
+            saved_scheduler_states if isinstance(saved_scheduler_states, list) else None
+        )
+        self._pending_named_optimizer_layout = named_layout
+        optimizers = self._fit_optimizers
+        if optimizers is None:
+            return
+        if optimizers != list(getattr(trainer, "optimizers", []) or []):
+            raise RuntimeError(
+                "Trainer optimizers changed after Neuron fit binding; "
+                "begin a new fit before restoring a checkpoint."
+            )
         self._clusters = self.__find_neuron_clusters(pl_module)
-        self.sync_optimizers(trainer, pl_module)
         self.__prepare_optimizer_checkpoint_load(
             trainer,
             pl_module,
@@ -126,15 +150,21 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         saved_optimizer_states: list[dict],
     ) -> None:
         named_layout = self._pending_named_optimizer_layout
-        self._pending_saved_optimizer_states = None
-        self._pending_named_optimizer_layout = None
         if named_layout is None and saved_optimizer_states:
             raise RuntimeError(
                 "Neuron optimizer checkpoints require canonical named-layout "
                 "metadata; this checkpoint uses a retired optimizer layout."
             )
         self._optimizer_load_transaction.prepare_for_load(optimizers)
+        self._checkpoint_scheduler_transaction.prepare(
+            [
+                config.scheduler
+                for config in list(getattr(trainer, "lr_scheduler_configs", []) or [])
+            ]
+        )
+        self.__capture_checkpoint_synchronization()
         try:
+            self.sync_optimizers(trainer, pl_module)
             if saved_optimizer_states:
                 assert named_layout is not None
                 self._named_layout.prepare_for_load(
@@ -144,13 +174,39 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                     named_layout,
                 )
             self.__reconcile_pending_schedulers(trainer, optimizers)
-            self.__register_optimizer_load_hooks(optimizers)
+            if saved_optimizer_states:
+                self.__register_optimizer_load_hooks(optimizers)
+            else:
+                # No serialized optimizer load is expected, but sync mutations
+                # still need rollback protection until the fit can start.
+                for optimizer in optimizers:
+                    self._optimizer_load_transaction.mark_optimizer_loaded(optimizer)
+                    self._scheduler_reconciler.mark_optimizer_loaded(optimizer)
+            self._checkpoint_load_prepared = True
         except BaseException:
             self.__remove_optimizer_load_hooks()
             self._scheduler_reconciler.clear()
             self._named_layout.clear()
             self.__rollback_optimizer_checkpoint_load()
             raise
+
+    def __capture_checkpoint_synchronization(self) -> None:
+        self._checkpoint_sync_snapshot = {
+            name: copy.deepcopy(getattr(self, name))
+            for name in (
+                "_synced_neuron_names",
+                "_synced_param_ids",
+                "_synced_cluster_signatures",
+                "_synced_parameter_names_by_id",
+                "_synced_parameter_ids_by_name",
+                "_post_wrap_param_ids",
+            )
+        }
+        self._checkpoint_removed_ids = [
+            (cluster, set(cluster._checkpoint_removed_parameter_ids))
+            for cluster in self._clusters
+        ]
+
 
     def __reconcile_pending_schedulers(
         self,
@@ -159,7 +215,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         scheduler_configs = list(getattr(trainer, "lr_scheduler_configs", []) or [])
         saved_scheduler_states = self._pending_saved_scheduler_states
-        self._pending_saved_scheduler_states = None
         if not scheduler_configs:
             self._scheduler_reconciler.prepare_for_load([])
             return
@@ -229,6 +284,15 @@ class NeuronClusterOptimizerSyncCallback(Callback):
 
     def __rollback_optimizer_checkpoint_load(self) -> None:
         self._optimizer_load_transaction.clear()
+        self._checkpoint_scheduler_transaction.clear()
+        if self._checkpoint_sync_snapshot is not None:
+            for name, value in self._checkpoint_sync_snapshot.items():
+                setattr(self, name, value)
+        for cluster, removed_ids in self._checkpoint_removed_ids:
+            cluster._checkpoint_removed_parameter_ids.update(removed_ids)
+        self._checkpoint_sync_snapshot = None
+        self._checkpoint_removed_ids.clear()
+        self._checkpoint_load_prepared = False
 
     def on_save_checkpoint(
         self,
@@ -249,7 +313,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         )
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self.__commit_optimizer_checkpoint_load()
+        optimizers = list(getattr(trainer, "optimizers", []) or [])
         self._synced_neuron_names.clear()
         self._synced_param_ids.clear()
         self._synced_cluster_signatures.clear()
@@ -264,8 +328,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             for parameter in cluster.parameters()
             if parameter.requires_grad
         }
-        self.sync_optimizers(trainer, pl_module)
-        optimizers = list(getattr(trainer, "optimizers", []) or [])
+        self._fit_optimizers = optimizers
         if self._pending_saved_optimizer_states is not None:
             self.__prepare_optimizer_checkpoint_load(
                 trainer,
@@ -273,11 +336,27 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 optimizers,
                 self._pending_saved_optimizer_states,
             )
+        else:
+            self.sync_optimizers(trainer, pl_module)
         self._fit_started = True
 
     def __commit_optimizer_checkpoint_load(self) -> None:
+        if (
+            self._pending_saved_optimizer_states is not None
+            and not self._checkpoint_load_prepared
+        ):
+            raise RuntimeError(
+                "Cannot commit a Neuron checkpoint before fit optimizers are ready."
+            )
         self._optimizer_load_transaction.commit_loaded()
         self._scheduler_reconciler.commit_loaded()
+        self._checkpoint_scheduler_transaction.commit()
+        self._checkpoint_sync_snapshot = None
+        self._checkpoint_removed_ids.clear()
+        self._checkpoint_load_prepared = False
+        self._pending_saved_optimizer_states = None
+        self._pending_saved_scheduler_states = None
+        self._pending_named_optimizer_layout = None
 
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__commit_optimizer_checkpoint_load()
@@ -373,6 +452,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self.__clear_fit_state()
 
     def __clear_fit_state(self) -> None:
+        self.__remove_optimizer_load_hooks()
+        self._scheduler_reconciler.clear()
+        self._named_layout.clear()
+        self.__rollback_optimizer_checkpoint_load()
         self._clusters.clear()
         self._synced_neuron_names.clear()
         self._synced_param_ids.clear()
@@ -382,13 +465,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._post_wrap_param_ids.clear()
         self._ddp_registered_param_ids.clear()
         self._fit_started = False
+        self._fit_optimizers = None
         self._pending_saved_optimizer_states = None
         self._pending_saved_scheduler_states = None
         self._pending_named_optimizer_layout = None
-        self.__remove_optimizer_load_hooks()
-        self._scheduler_reconciler.clear()
-        self._named_layout.clear()
-        self.__rollback_optimizer_checkpoint_load()
 
     def on_exception(
         self,
