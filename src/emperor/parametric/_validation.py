@@ -19,6 +19,7 @@ from emperor.parametric._mixtures.config import (
 )
 
 if TYPE_CHECKING:
+    from emperor.nn import Module
     from emperor.parametric._handlers import (
         ParameterHandlerBase,
         ParametricLayerHandler,
@@ -322,6 +323,10 @@ class ParametricLayerHandlerValidator(ValidatorBase):
     def validate(cls, model: "ParametricLayerHandler") -> None:
         Layer.VALIDATOR.validate(model)
         cls._validate_layer_handler(model)
+
+    @staticmethod
+    def validate_layer_model(model: "Module | None") -> "Module":
+        return Layer.VALIDATOR.validate_layer_model(model)
 
     @staticmethod
     def validate_state(state: LayerState) -> None:
