@@ -125,6 +125,8 @@ class ClassifierMetricsLogger(nn.Module):
     def log_training_step(
         self, log_fn: Callable, output: ClassifierStepOutput
     ) -> None:
+        if output.labels.numel() == 0:
+            return
         accuracy = self.train_accuracy(output.logits, output.labels)
         f1score = self.train_f1_score(output.logits, output.labels)
         self.update_train_epoch(output.total_loss, output.logits, output.labels)
@@ -143,6 +145,8 @@ class ClassifierMetricsLogger(nn.Module):
         output: ClassifierStepOutput,
         examples: Tensor | None = None,
     ) -> None:
+        if output.labels.numel() == 0:
+            return
         accuracy = self.validation_accuracy(output.logits, output.labels)
         f1score = self.validation_f1_score(output.logits, output.labels)
         self.update_validation_epoch(
@@ -163,6 +167,8 @@ class ClassifierMetricsLogger(nn.Module):
     def log_test_step(
         self, log_fn: Callable, output: ClassifierStepOutput
     ) -> None:
+        if output.labels.numel() == 0:
+            return
         accuracy = self.test_accuracy(output.logits, output.labels)
         f1score = self.test_f1_score(output.logits, output.labels)
         log_fn(

@@ -103,6 +103,29 @@ class TextOnlyExperiment:
 
 
 class TestClassifierMetricsLogger(unittest.TestCase):
+    def test_empty_steps_do_not_pollute_metrics_or_log_fabricated_observations(self):
+        model = LifecycleProbeClassifier()
+        empty_batch = (torch.empty(0, 4), torch.empty(0, dtype=torch.long))
+        model.trainer = SimpleNamespace(sanity_checking=True)
+        for stage in ("training_step", "validation_step", "test_step"):
+            with self.subTest(stage=stage):
+                before = {
+                    name: value.clone() for name, value in model.metrics.named_buffers()
+                }
+                loss = getattr(model, stage)(empty_batch, 0)
+                self.assertTrue(torch.isfinite(loss))
+                self.assertEqual(loss.item(), 0)
+                loss.backward()
+                torch.testing.assert_close(model.scale.grad, torch.tensor(0.0))
+                model.zero_grad(set_to_none=True)
+                self.assertEqual(model.log_calls, [])
+                torch.testing.assert_close(dict(model.metrics.named_buffers()), before)
+        # Subsequent real observations retain the ordinary cross-entropy mean.
+        inputs, labels = torch.ones(2, 4), torch.tensor([0, 1])
+        expected = nn.functional.cross_entropy(model(inputs), labels)
+        torch.testing.assert_close(model.training_step((inputs, labels), 1), expected)
+        self.assertEqual(model.metrics._train_count.item(), 2)
+
     @staticmethod
     def _step_output(
         total_loss: torch.Tensor,
