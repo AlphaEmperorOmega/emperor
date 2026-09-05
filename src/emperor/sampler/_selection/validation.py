@@ -109,9 +109,7 @@ class SamplerBaseValidator(ValidatorBase):
                 f"{router_logit_scores.dim()}D tensor with shape "
                 f"{tuple(router_logit_scores.shape)}."
             )
-        expected_dim = (
-            model.num_experts * 2 if model.noisy_topk_flag else model.num_experts
-        )
+        expected_dim = model.cfg.required_logit_width()
         if router_logit_scores.shape[1] != expected_dim:
             raise ValueError(
                 "router_logit_scores feature dimension is invalid, "
