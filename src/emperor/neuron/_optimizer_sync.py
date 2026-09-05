@@ -49,7 +49,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._pending_named_optimizer_layout: dict | None = None
         self._optimizer_load_hook_handles: dict[int, RemovableHandle] = {}
 
-
     def setup(
         self,
         trainer: Trainer,
@@ -59,7 +58,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         if stage != "fit":
             return
         _ConditionalDDPStrategyAdapter.configure(trainer.strategy)
-
 
     def on_load_checkpoint(
         self,
@@ -96,12 +94,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             saved_optimizer_states,
         )
 
-
     @staticmethod
     def __is_fitting(trainer: Trainer) -> bool:
         trainer_function = getattr(getattr(trainer, "state", None), "fn", None)
         return trainer_function is None or trainer_function == TrainerFn.FITTING
-
 
     def __find_neuron_clusters(self, module: nn.Module):
         from emperor.neuron._cluster.model import NeuronCluster
@@ -116,7 +112,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             clusters.append(candidate_module)
             seen_cluster_ids.add(id(candidate_module))
         return clusters
-
 
     def __prepare_optimizer_checkpoint_load(
         self,
@@ -151,7 +146,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             self._named_layout.clear()
             self.__rollback_optimizer_checkpoint_load()
             raise
-
 
     def __reconcile_pending_schedulers(
         self,
@@ -196,7 +190,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
         self._scheduler_reconciler.prepare_for_load(scheduler_load_bindings)
 
-
     def __register_optimizer_load_hooks(
         self,
         optimizers: list[Optimizer],
@@ -217,7 +210,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 )
             )
 
-
     def __complete_loaded_optimizer(self, optimizer: Optimizer) -> None:
         self._named_layout.complete_optimizer_load(optimizer)
         self._scheduler_reconciler.mark_optimizer_loaded(optimizer)
@@ -225,16 +217,13 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         handle = self._optimizer_load_hook_handles.pop(id(optimizer))
         handle.remove()
 
-
     def __remove_optimizer_load_hooks(self) -> None:
         for handle in self._optimizer_load_hook_handles.values():
             handle.remove()
         self._optimizer_load_hook_handles.clear()
 
-
     def __rollback_optimizer_checkpoint_load(self) -> None:
         self._optimizer_load_transaction.clear()
-
 
     def on_save_checkpoint(
         self,
@@ -253,7 +242,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 saved_optimizer_states,
             )
         )
-
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__commit_optimizer_checkpoint_load()
@@ -274,15 +262,12 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
         self._fit_started = True
 
-
     def __commit_optimizer_checkpoint_load(self) -> None:
         self._optimizer_load_transaction.commit_loaded()
         self._scheduler_reconciler.commit_loaded()
 
-
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__commit_optimizer_checkpoint_load()
-
 
     def on_train_batch_start(
         self,
@@ -293,7 +278,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
 
-
     def __sync_optimizers_if_clusters_grew(
         self,
         trainer: Trainer,
@@ -302,7 +286,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         if not self.__clusters_changed_since_last_sync(pl_module):
             return
         self.sync_optimizers(trainer, pl_module)
-
 
     def __clusters_changed_since_last_sync(
         self,
@@ -314,7 +297,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             for cluster in clusters
         )
 
-
     def on_train_batch_end(
         self,
         trainer: Trainer,
@@ -324,7 +306,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         batch_idx: int,
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
-
 
     def on_before_optimizer_step(
         self,
@@ -338,10 +319,8 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             self._post_wrap_param_ids,
         )
 
-
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__clear_fit_state()
-
 
     def __clear_fit_state(self) -> None:
         self._clusters.clear()
@@ -358,7 +337,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._named_layout.clear()
         self.__rollback_optimizer_checkpoint_load()
 
-
     def on_exception(
         self,
         trainer: Trainer,
@@ -366,7 +344,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         exception: BaseException,
     ) -> None:
         self.__clear_fit_state()
-
 
     def sync_optimizers(
         self,
@@ -393,7 +370,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             raise
         scheduler_transaction.commit()
         optimizer_transaction.commit()
-
 
     def __sync_optimizers(
         self,
@@ -444,21 +420,9 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 parameter_names_by_id,
             )
         self.__warn_about_unoptimized_cluster_parameters(optimizers, cluster_parameters)
-        self._synced_neuron_names = {
-            id(cluster): set(cluster.cluster.keys()) for cluster in clusters
-        }
-        self._synced_param_ids = current_parameter_ids
-        self._synced_parameter_names_by_id = dict(parameter_names_by_id)
-        current_cluster_param_ids = {
-            parameter_id
-            for parameter_ids in self._synced_param_ids.values()
-            for parameter_id in parameter_ids
-        }
-        self._post_wrap_param_ids.intersection_update(current_cluster_param_ids)
-        self._post_wrap_param_ids.update(new_post_wrap_param_ids)
-        for cluster in clusters:
-            cluster._checkpoint_removed_parameter_ids.clear()
-
+        self.__record_synchronized_parameters(
+            clusters, parameter_names_by_id, new_post_wrap_param_ids, current_parameter_ids
+        )
 
     def __remove_pruned_neuron_parameters(
         self,
@@ -469,13 +433,9 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         parameter_names_by_id: dict[int, str],
         current_parameter_ids: dict[int, set[int]],
     ) -> None:
-        pruned_cluster_param_ids: set[int] = set()
-        for cluster in clusters:
-            pruned_cluster_param_ids.update(
-                self._synced_param_ids.get(id(cluster), set())
-                - current_parameter_ids[id(cluster)]
-            )
-            pruned_cluster_param_ids.update(cluster._checkpoint_removed_parameter_ids)
+        pruned_cluster_param_ids = self.__pruned_cluster_parameter_ids(
+            clusters, current_parameter_ids
+        )
         stale_param_ids = pruned_cluster_param_ids - live_module_parameter_ids
         topology_was_pruned = any(
             bool(
@@ -488,54 +448,11 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             return
 
         previous_group_count = len(optimizer.param_groups)
-        projected_parameters = [
-            [
-                parameter
-                for parameter in group["params"]
-                if id(parameter) not in stale_param_ids
-            ]
-            for group in optimizer.param_groups
-        ]
-        projected_parameter_names: list[list[str] | None] = []
-        for group in optimizer.param_groups:
-            parameter_names = group.get("param_names")
-            if parameter_names is None:
-                projected_parameter_names.append(None)
-                continue
-            if not isinstance(parameter_names, list) or len(parameter_names) != len(
-                group["params"]
-            ):
-                raise RuntimeError(
-                    "Cannot safely prune Neuron optimizer parameters because "
-                    "param_names are not aligned with params."
-                )
-            group_uses_official_parameter_names = all(
-                self._synced_parameter_names_by_id.get(
-                    id(parameter),
-                    parameter_names_by_id.get(id(parameter)),
-                )
-                == name
-                for name, parameter in zip(
-                    parameter_names,
-                    group["params"],
-                    strict=True,
-                )
+        projected_parameters, projected_parameter_names = (
+            self.__project_retained_optimizer_parameters(
+                optimizer, stale_param_ids, parameter_names_by_id
             )
-            projected_parameter_names.append(
-                [
-                    (
-                        parameter_names_by_id.get(id(parameter), name)
-                        if group_uses_official_parameter_names
-                        else name
-                    )
-                    for name, parameter in zip(
-                        parameter_names,
-                        group["params"],
-                        strict=True,
-                    )
-                    if id(parameter) not in stale_param_ids
-                ]
-            )
+        )
         removed_group_indices = tuple(
             index
             for index, (group, parameters) in enumerate(
@@ -552,6 +469,120 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                     previous_group_count=previous_group_count,
                 )
 
+        self.__apply_pruned_optimizer_parameters(
+            optimizer,
+            projected_parameters,
+            projected_parameter_names,
+            stale_param_ids,
+            removed_group_indices,
+        )
+        for scheduler in schedulers:
+            remove_scheduler_groups(
+                scheduler,
+                removed_group_indices,
+                previous_group_count=previous_group_count,
+            )
+
+    def __pruned_cluster_parameter_ids(
+        self,
+        clusters: list[nn.Module],
+        current_parameter_ids: dict[int, set[int]],
+    ) -> set[int]:
+        pruned_cluster_param_ids: set[int] = set()
+        for cluster in clusters:
+            pruned_cluster_param_ids.update(
+                self._synced_param_ids.get(id(cluster), set())
+                - current_parameter_ids[id(cluster)]
+            )
+            pruned_cluster_param_ids.update(cluster._checkpoint_removed_parameter_ids)
+        return pruned_cluster_param_ids
+
+    def __project_retained_optimizer_parameters(
+        self,
+        optimizer: Optimizer,
+        stale_param_ids: set[int],
+        parameter_names_by_id: dict[int, str],
+    ) -> tuple[list[list[nn.Parameter]], list[list[str] | None]]:
+        projected_parameters = [
+            [
+                parameter
+                for parameter in group["params"]
+                if id(parameter) not in stale_param_ids
+            ]
+            for group in optimizer.param_groups
+        ]
+        projected_parameter_names: list[list[str] | None] = []
+        for group in optimizer.param_groups:
+            projected_parameter_names.append(
+                self.__project_retained_group_names(
+                    group, stale_param_ids, parameter_names_by_id
+                )
+            )
+        return projected_parameters, projected_parameter_names
+
+    def __project_retained_group_names(
+        self,
+        group: dict,
+        stale_param_ids: set[int],
+        parameter_names_by_id: dict[int, str],
+    ) -> list[str] | None:
+        parameter_names = group.get("param_names")
+        if parameter_names is None:
+            return None
+        if not isinstance(parameter_names, list) or len(parameter_names) != len(
+            group["params"]
+        ):
+            raise RuntimeError(
+                "Cannot safely prune Neuron optimizer parameters because "
+                "param_names are not aligned with params."
+            )
+        group_uses_official_parameter_names = all(
+            self._synced_parameter_names_by_id.get(
+                id(parameter),
+                parameter_names_by_id.get(id(parameter)),
+            )
+            == name
+            for name, parameter in zip(
+                parameter_names,
+                group["params"],
+                strict=True,
+            )
+        )
+        return [
+                (
+                    parameter_names_by_id.get(id(parameter), name)
+                    if group_uses_official_parameter_names
+                    else name
+                )
+                for name, parameter in zip(
+                    parameter_names,
+                    group["params"],
+                    strict=True,
+                )
+                if id(parameter) not in stale_param_ids
+            ]
+
+    @staticmethod
+    def __optimizer_schedulers(
+        trainer: Trainer,
+        optimizer: Optimizer,
+    ) -> list[object]:
+        return [
+            scheduler_config.scheduler
+            for scheduler_config in list(
+                getattr(trainer, "lr_scheduler_configs", []) or []
+            )
+            if getattr(scheduler_config.scheduler, "optimizer", None) is optimizer
+        ]
+
+    @staticmethod
+    def __apply_pruned_optimizer_parameters(
+        optimizer: Optimizer,
+        projected_parameters: list[list[nn.Parameter]],
+        projected_parameter_names: list[list[str] | None],
+        stale_param_ids: set[int],
+        removed_group_indices: tuple[int, ...],
+    ) -> None:
         for group, parameters, parameter_names in zip(
             optimizer.param_groups,
             projected_parameters,
@@ -570,27 +601,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             for index, group in enumerate(optimizer.param_groups)
             if index not in removed_group_index_set
         ]
-        for scheduler in schedulers:
-            remove_scheduler_groups(
-                scheduler,
-                removed_group_indices,
-                previous_group_count=previous_group_count,
-            )
-
-
-    @staticmethod
-    def __optimizer_schedulers(
-        trainer: Trainer,
-        optimizer: Optimizer,
-    ) -> list[object]:
-        return [
-            scheduler_config.scheduler
-            for scheduler_config in list(
-                getattr(trainer, "lr_scheduler_configs", []) or []
-            )
-            if getattr(scheduler_config.scheduler, "optimizer", None) is optimizer
-        ]
-
 
     def __optimizer_parameter_locations(
         self,
@@ -604,7 +614,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                         (optimizer, group)
                     )
         return parameter_locations
-
 
     def __sync_cluster_parameters(
         self,
@@ -646,7 +655,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
             parameter_locations[id(parameter)] = [(owning_optimizer, owning_group)]
 
-
     def __dynamic_neuron_parameter_role(self, name: str) -> str | None:
         parameter_name_parts = name.split(".", 2)
         if (
@@ -656,7 +664,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         ):
             return None
         return parameter_name_parts[2]
-
 
     def __insert_in_cluster_parameter_order(
         self,
@@ -697,7 +704,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             group["param_names"].insert(insertion_index, parameter_name)
         group["params"].insert(insertion_index, parameter)
 
-
     @staticmethod
     def __validate_official_param_names(
         group: dict,
@@ -725,7 +731,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 "the owning group does not use fully-qualified module names."
             )
 
-
     def __warn_about_unoptimized_cluster_parameters(
         self,
         optimizers: list[Optimizer],
@@ -752,10 +757,31 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 stacklevel=1,
             )
 
-
     def __optimizer_param_ids(self, optimizer: Optimizer) -> set[int]:
         return {
             id(parameter)
             for group in optimizer.param_groups
             for parameter in group["params"]
         }
+
+    def __record_synchronized_parameters(
+        self,
+        clusters: list[nn.Module],
+        parameter_names_by_id: dict[int, str],
+        new_post_wrap_param_ids: set[int],
+        current_parameter_ids: dict[int, set[int]],
+    ) -> None:
+        self._synced_neuron_names = {
+            id(cluster): set(cluster.cluster.keys()) for cluster in clusters
+        }
+        self._synced_param_ids = current_parameter_ids
+        self._synced_parameter_names_by_id = dict(parameter_names_by_id)
+        current_cluster_param_ids = {
+            parameter_id
+            for parameter_ids in self._synced_param_ids.values()
+            for parameter_id in parameter_ids
+        }
+        self._post_wrap_param_ids.intersection_update(current_cluster_param_ids)
+        self._post_wrap_param_ids.update(new_post_wrap_param_ids)
+        for cluster in clusters:
+            cluster._checkpoint_removed_parameter_ids.clear()

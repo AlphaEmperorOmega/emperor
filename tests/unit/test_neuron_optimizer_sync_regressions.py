@@ -5,6 +5,7 @@ from unittest.mock import patch
 import torch
 from torch import nn
 
+from emperor.neuron import _optimizer_sync as optimizer_sync
 from emperor.neuron import NeuronClusterOptimizerSyncCallback
 
 
@@ -55,6 +56,88 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    def __assert_scheduler_preflight_order(self, fail_second_preflight: bool) -> None:
+        cluster = _DynamicCluster(neuron_count=2)
+        module = _HostModule(cluster)
+        retained_neuron, removed_neuron = cluster.cluster.values()
+        optimizer = torch.optim.Adam(
+            [
+                {"params": list(retained_neuron.parameters())},
+                {"params": list(removed_neuron.parameters())},
+            ],
+            lr=0.01,
+        )
+        schedulers = [
+            torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size)
+            for step_size in (2, 3)
+        ]
+        trainer = SimpleNamespace(
+            optimizers=[optimizer],
+            lr_scheduler_configs=[
+                SimpleNamespace(scheduler=scheduler) for scheduler in schedulers
+            ],
+        )
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        removed_parameter = removed_neuron.nucleus.weight
+        optimizer.state[removed_parameter] = {"sentinel": 1}
+        original_groups = tuple(optimizer.param_groups)
+        original_parameter_lists = [group["params"] for group in original_groups]
+        original_state = optimizer.state
+        del cluster.cluster["neuron_1_0_0"]
+        events = []
+        preflight = optimizer_sync.preflight_scheduler_group_removal
+        remove_groups = optimizer_sync.remove_scheduler_groups
+
+        def record_preflight(scheduler, indices, *, previous_group_count):
+            events.append(("preflight", schedulers.index(scheduler)))
+            self.assertEqual(indices, (1,))
+            self.assertEqual(previous_group_count, 2)
+            self.assertEqual(tuple(optimizer.param_groups), original_groups)
+            for index, group in enumerate(optimizer.param_groups):
+                self.assertIs(group["params"], original_parameter_lists[index])
+            self.assertIn(removed_parameter, optimizer.state)
+            if fail_second_preflight and scheduler is schedulers[1]:
+                raise RuntimeError("second scheduler rejected pruning")
+            preflight(scheduler, indices, previous_group_count=previous_group_count)
+
+        def record_removal(scheduler, indices, *, previous_group_count):
+            events.append(("remove", schedulers.index(scheduler)))
+            self.assertEqual(len(optimizer.param_groups), 1)
+            self.assertIs(optimizer.param_groups[0], original_groups[0])
+            self.assertNotIn(removed_parameter, optimizer.state)
+            remove_groups(scheduler, indices, previous_group_count=previous_group_count)
+
+        with (
+            patch.object(
+                optimizer_sync,
+                "preflight_scheduler_group_removal",
+                record_preflight,
+            ),
+            patch.object(optimizer_sync, "remove_scheduler_groups", record_removal),
+        ):
+            if fail_second_preflight:
+                with self.assertRaisesRegex(RuntimeError, "second scheduler"):
+                    callback.sync_optimizers(trainer, module)
+            else:
+                callback.sync_optimizers(trainer, module)
+
+        expected_events = [("preflight", 0), ("preflight", 1)]
+        if fail_second_preflight:
+            for index, group in enumerate(optimizer.param_groups):
+                self.assertIs(group, original_groups[index])
+                self.assertIs(group["params"], original_parameter_lists[index])
+            self.assertIs(optimizer.state, original_state)
+            self.assertIn(removed_parameter, optimizer.state)
+        else:
+            expected_events.extend([("remove", 0), ("remove", 1)])
+        self.assertEqual(events, expected_events)
+
+    def test_scheduler_preflights_precede_all_pruning_mutations(self) -> None:
+        for fail_second_preflight in (False, True):
+            with self.subTest(fail_second_preflight=fail_second_preflight):
+                self.__assert_scheduler_preflight_order(fail_second_preflight)
+
     def test_synchronization_parameter_traversal_is_linear(self) -> None:
         for neuron_count in (10, 100):
             with self.subTest(neuron_count=neuron_count):
