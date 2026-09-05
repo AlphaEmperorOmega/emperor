@@ -9,6 +9,7 @@ from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
     from emperor.neuron._config import NeuronConfig
+    from emperor.neuron._neuron.core import Neuron
 
 
 class NeuronValidator(ValidatorBase, NeuronValidationMixin):
@@ -93,3 +94,12 @@ class NeuronValidator(ValidatorBase, NeuronValidationMixin):
     @classmethod
     def validate_forward_input(cls, input: Tensor) -> None:
         cls.validate_tensor_rank("Neuron input", input, 2)
+
+    @staticmethod
+    def validate_feature_dimension(model: "Neuron", input: Tensor) -> None:
+        input_dim = model.cfg.terminal_config.input_dim
+        if input.shape[-1] != input_dim:
+            raise ValueError(
+                "Neuron input feature dimension must match terminal_config.input_dim, "
+                f"received input_dim={input_dim} and input shape {tuple(input.shape)}."
+            )
