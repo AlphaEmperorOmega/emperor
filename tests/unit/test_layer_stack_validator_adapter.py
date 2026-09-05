@@ -1,5 +1,9 @@
+import copy
 import unittest
 from dataclasses import dataclass
+from unittest.mock import patch
+
+import torch
 
 from emperor.layers import (
     ActivationOptions,
@@ -51,6 +55,18 @@ def attention_residual_layer_config() -> LayerConfig:
 
 
 class TestLayerStackValidatorAdapter(unittest.TestCase):
+    def test_pure_config_validation_does_not_construct_or_mutate(self):
+        config = make_config(num_layers=0)
+        original = copy.deepcopy(config)
+        random_state = torch.get_rng_state().clone()
+        with patch.object(
+            LayerStack, "__init__", side_effect=AssertionError("stack constructed")
+        ):
+            with self.assertRaisesRegex(ValueError, "num_layers"):
+                LayerStackValidator.validate_config(config)
+        self.assertEqual(config, original)
+        torch.testing.assert_close(torch.get_rng_state(), random_state)
+
     def test_attention_residual_requires_the_final_output_postprocessing(self):
         with self.assertRaisesRegex(
             ValueError,
