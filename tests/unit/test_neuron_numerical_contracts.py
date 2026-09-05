@@ -59,7 +59,79 @@ class _DifferentiableSelfRouteNeuron(nn.Module):
 
 
 class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
+    def test_shared_collection_preserves_loss_addition_order_and_row_groups(self):
+        observed = []
 
+        def neuron(name, loss, dtype):
+            def route(hidden):
+                observed.append((name, hidden.detach().tolist()))
+                return (
+                    hidden.to(dtype),
+                    torch.ones(hidden.shape[0], 1, 3, dtype=torch.long),
+                    hidden.new_tensor(loss),
+                )
+
+            return SimpleNamespace(route_signal=route)
+
+        owner = SimpleNamespace(
+            cluster={
+                "neuron_1_1_1": neuron("first", -1e20, torch.float32),
+                "neuron_2_1_1": neuron("second", 1.0, torch.float64),
+            }
+        )
+        routing = self.routing_delegate(owner)
+        hidden = torch.tensor([[1.0], [2.0], [3.0], [4.0]], requires_grad=True)
+        state = NeuronClusterRouteState(
+            hidden=hidden,
+            positions=torch.tensor([[1, 1, 1], [2, 1, 1], [1, 1, 1], [9, 1, 1]]),
+            active_mask=torch.ones(4, dtype=torch.bool),
+            escaped_mask=torch.zeros(4, dtype=torch.bool),
+            final_mask=torch.zeros(4, dtype=torch.bool),
+            halting_state=None,
+            loss=torch.tensor(1e20),
+        )
+        result = routing.collect_routes(state, state.active_mask)
+        self.assertEqual(observed, [("first", [[1.0], [3.0]]), ("second", [[2.0]])])
+        torch.testing.assert_close(result.loss, torch.tensor(1.0))
+        torch.testing.assert_close(
+            result.probabilities,
+            torch.tensor([[1.0], [2.0], [3.0], [0.0]], dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            result.called_mask, torch.tensor([True, True, True, False])
+        )
+        torch.testing.assert_close(
+            result.missing_mask, torch.tensor([False, False, False, True])
+        )
+        result.probabilities.sum().backward()
+        torch.testing.assert_close(
+            hidden.grad, torch.tensor([[1.0], [1.0], [1.0], [0.0]])
+        )
+
+    def test_route_buffers_follow_probability_dtype_and_promote_later_rows(self):
+        owner = SimpleNamespace()
+        state = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
+        hidden = torch.zeros(2, 4, dtype=torch.bfloat16)
+        first = torch.tensor([[0.25, 0.75]], dtype=torch.float32, requires_grad=True)
+        second = torch.tensor([[0.6, 0.4]], dtype=torch.float64, requires_grad=True)
+        coordinates = torch.zeros(1, 2, 3, dtype=torch.long)
+        probabilities, collected_coordinates = state.ensure_route_buffers(
+            None, None, first, coordinates, hidden
+        )
+        self.assertEqual(probabilities.dtype, first.dtype)
+        probabilities[0] = first[0]
+        probabilities, collected_coordinates = state.ensure_route_buffers(
+            probabilities, collected_coordinates, second, coordinates, hidden
+        )
+        probabilities, incoming = state.promote_floating_values(probabilities, second)
+        probabilities[1] = incoming[0]
+        self.assertEqual(probabilities.dtype, torch.float64)
+        self.assertEqual(collected_coordinates.dtype, torch.long)
+        self.assertEqual(collected_coordinates.device, hidden.device)
+        torch.testing.assert_close(probabilities, torch.cat((first.double(), second)))
+        probabilities.sum().backward()
+        torch.testing.assert_close(first.grad, torch.ones_like(first))
+        torch.testing.assert_close(second.grad, torch.ones_like(second))
 
     def test_beam_slot_padding_is_inactive_and_has_zero_probability(self) -> None:
         routing = self.routing_delegate(SimpleNamespace(beam_width=3))
