@@ -8,6 +8,7 @@ from emperor.neuron._neuron.validation import NeuronValidator
 from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
+    from emperor.sampler import SamplerConfig
     from emperor.neuron._config import NeuronClusterConfig, NeuronConfig
 
 
@@ -176,6 +177,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         router_config = sampler_config.router_config
         if router_config is None:
             sampler_config.validate_for_router_input_dim()
+            cls.__validate_entry_logit_width(
+                sampler_config, cfg.neuron_config.terminal_config.input_dim
+            )
             return
         if not isinstance(router_config, RouterConfig):
             raise TypeError(
@@ -199,7 +203,18 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         )
 
     @staticmethod
-    def validate_derived_entry_sampler_config(cfg: "NeuronClusterConfig") -> None:
+    def __validate_entry_logit_width(
+        sampler_config: "SamplerConfig", input_dim: int
+    ) -> None:
+        required_width = sampler_config.required_logit_width()
+        if input_dim != required_width:
+            raise ValueError(
+                "Routerless entry sampler requires input_dim to equal its logit width, "
+                f"received input_dim={input_dim} and required_logit_width={required_width}."
+            )
+
+    @classmethod
+    def validate_derived_entry_sampler_config(cls, cfg: "NeuronClusterConfig") -> None:
         if cfg.entry_sampler_config is not None:
             return
 
@@ -210,15 +225,9 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         initialized_entry_count = (
             cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons
         ) * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
-        if terminal_config.input_dim == initialized_entry_count:
-            return
-        raise ValueError(
-            "entry_sampler_config is required when the terminal sampler has no "
-            "router_config and input_dim does not equal the initialized entry "
-            "coordinate count, received "
-            f"input_dim={terminal_config.input_dim} and "
-            f"entry_coordinate_count={initialized_entry_count}."
-        )
+        derived_config = copy.deepcopy(terminal_config.sampler_config)
+        derived_config.num_experts = initialized_entry_count
+        cls.__validate_entry_logit_width(derived_config, terminal_config.input_dim)
 
     @classmethod
     def validate_beam_width(cls, beam_width: int | None) -> None:

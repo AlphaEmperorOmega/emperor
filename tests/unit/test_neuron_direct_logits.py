@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import torch
 
+from emperor.neuron import NeuronClusterConfig
 from unit.test_neuron import NeuronTestCase
 
 
@@ -88,3 +89,101 @@ class TestNeuronDirectLogits(NeuronTestCase):
                 sampler.sample_probabilities_and_indices(
                     torch.zeros(2, config.required_logit_width() - 1)
                 )
+
+    def test_explicit_entry_width_rejects_before_initialization(self):
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=2,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            neuron_config=self.neuron_config(),
+            entry_sampler_config=self.sampler_config(num_experts=2, router_config=None),
+        )
+        original = copy.deepcopy(config)
+        random_state = torch.get_rng_state().clone()
+        with self.assertRaisesRegex(ValueError, "entry.*logit width"):
+            config.build()
+        self.assertEqual(config, original)
+        torch.testing.assert_close(torch.get_rng_state(), random_state)
+
+    def test_explicit_entry_width_supports_ordinary_and_noisy_inputs(self):
+        for noisy, count in ((False, 4), (True, 2)):
+            with self.subTest(noisy=noisy):
+                sampler = self.sampler_config(
+                    num_experts=count, top_k=1, router_config=None
+                )
+                sampler.noisy_topk_flag = noisy
+                config = NeuronClusterConfig(
+                    x_axis_total_neurons=count,
+                    y_axis_total_neurons=1,
+                    z_axis_total_neurons=1,
+                    max_steps=1,
+                    neuron_config=self.neuron_config(),
+                    entry_sampler_config=sampler,
+                )
+                original = copy.deepcopy(config)
+                cluster = config.build().eval()
+                source = torch.randn(2, 4, requires_grad=True)
+                output, loss = cluster(source)
+                (output.sum() + loss).backward()
+                self.assertTrue(torch.isfinite(source.grad).all())
+                self.assertEqual(config, original)
+
+    def test_derived_entry_width_supports_ordinary_and_noisy_inputs(self):
+        for noisy in (False, True):
+            with self.subTest(noisy=noisy):
+                terminal = self.direct_terminal_config(noisy=noisy)
+                neuron = self.neuron_config()
+                neuron.terminal_config = terminal
+                neuron.nucleus_config.model_config = self.projection_config(
+                    input_dim=terminal.input_dim,
+                    output_dim=terminal.input_dim,
+                    scale=0.25,
+                )
+                config = NeuronClusterConfig(
+                    x_axis_total_neurons=27,
+                    y_axis_total_neurons=1,
+                    z_axis_total_neurons=1,
+                    max_steps=1,
+                    neuron_config=neuron,
+                )
+                original = copy.deepcopy(config)
+                cluster = config.build().eval()
+                source = torch.randn(2, terminal.input_dim, requires_grad=True)
+                output, loss = cluster(source)
+                (output.sum() + loss).backward()
+                self.assertTrue(torch.isfinite(source.grad).all())
+                self.assertEqual(config, original)
+                config.x_axis_total_neurons = 26
+                rejected_original = copy.deepcopy(config)
+                random_state = torch.get_rng_state().clone()
+                with patch(
+                    "emperor.neuron._neuron.core.Neuron.__init__",
+                    side_effect=AssertionError("neuron constructed"),
+                ):
+                    with self.assertRaisesRegex(ValueError, "entry.*logit width"):
+                        config.build()
+                self.assertEqual(config, rejected_original)
+                torch.testing.assert_close(torch.get_rng_state(), random_state)
+
+    def test_explicit_noisy_entry_mismatch_is_rng_neutral(self):
+        sampler = self.sampler_config(num_experts=3, router_config=None)
+        sampler.noisy_topk_flag = True
+        config = NeuronClusterConfig(
+            x_axis_total_neurons=3,
+            y_axis_total_neurons=1,
+            z_axis_total_neurons=1,
+            max_steps=1,
+            neuron_config=self.neuron_config(),
+            entry_sampler_config=sampler,
+        )
+        original = copy.deepcopy(config)
+        random_state = torch.get_rng_state().clone()
+        with patch(
+            "emperor.neuron._neuron.core.Neuron.__init__",
+            side_effect=AssertionError("neuron constructed"),
+        ):
+            with self.assertRaisesRegex(ValueError, "entry.*logit width"):
+                config.build()
+        self.assertEqual(config, original)
+        torch.testing.assert_close(torch.get_rng_state(), random_state)
