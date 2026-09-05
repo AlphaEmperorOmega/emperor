@@ -104,6 +104,14 @@ class _NeuronHaltingLifecycle:
         return updated_state
 
     @staticmethod
+    def __is_row_aligned_tensor(value: Any, update_mask: Tensor) -> bool:
+        return (
+            isinstance(value, Tensor)
+            and value.dim() >= 1
+            and value.shape[0] == update_mask.shape[0]
+        )
+
+    @staticmethod
     def __is_optional_tensor_field(state: Any, attribute_name: str) -> bool:
         for state_type in type(state).__mro__:
             annotation = getattr(state_type, "__annotations__", {}).get(attribute_name)
@@ -112,17 +120,23 @@ class _NeuronHaltingLifecycle:
                 return True
         return False
 
-    @staticmethod
-    def __is_row_aligned_tensor(value: Any, update_mask: Tensor) -> bool:
-        return (
-            isinstance(value, Tensor)
-            and value.dim() >= 1
-            and value.shape[0] == update_mask.shape[0]
-        )
-
     @classmethod
     def __record_route_metadata(
         cls,
+        halting_state: "HaltingStateBase",
+        previous_state: "HaltingStateBase | None",
+        halting_input: Tensor,
+        update_mask: Tensor,
+    ) -> None:
+        cls.__record_advanced_rows(
+            halting_state, previous_state, halting_input, update_mask
+        )
+        cls.__record_continuation_probability(halting_state, halting_input, update_mask)
+        cls.__record_step_indices(halting_state, previous_state, update_mask)
+        cls.__expand_scalar_ponder_cost(halting_state, update_mask)
+
+    @staticmethod
+    def __record_advanced_rows(
         halting_state: "HaltingStateBase",
         previous_state: "HaltingStateBase | None",
         halting_input: Tensor,
@@ -148,6 +162,12 @@ class _NeuronHaltingLifecycle:
             previous_raw_hidden,
         )
 
+    @staticmethod
+    def __record_continuation_probability(
+        halting_state: "HaltingStateBase",
+        halting_input: Tensor,
+        update_mask: Tensor,
+    ) -> None:
         if hasattr(halting_state, "log_continuation"):
             halting_state.continuation_probability = (
                 halting_state.log_continuation.exp()
@@ -155,6 +175,12 @@ class _NeuronHaltingLifecycle:
         elif not hasattr(halting_state, "continuation_probability"):
             halting_state.continuation_probability = update_mask.to(halting_input.dtype)
 
+    @staticmethod
+    def __record_step_indices(
+        halting_state: "HaltingStateBase",
+        previous_state: "HaltingStateBase | None",
+        update_mask: Tensor,
+    ) -> None:
         if hasattr(halting_state, "step_count"):
             step_count = halting_state.step_count
             if not isinstance(step_count, Tensor) or step_count.dim() == 0:
@@ -179,6 +205,11 @@ class _NeuronHaltingLifecycle:
                 else previous_step_indices + update_mask.to(torch.long)
             )
 
+    @staticmethod
+    def __expand_scalar_ponder_cost(
+        halting_state: "HaltingStateBase",
+        update_mask: Tensor,
+    ) -> None:
         accumulated_ponder_cost = getattr(
             halting_state,
             "accumulated_ponder_cost",
