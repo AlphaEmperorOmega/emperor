@@ -97,7 +97,9 @@ class ClassifierExperiment(LightningModule):
             )
         inputs, labels = batch
         if not isinstance(inputs, Tensor) or inputs.ndim < 1:
-            raise ValueError("Classifier input must be a tensor with a batch dimension.")
+            raise ValueError(
+                "Classifier input must be a tensor with a batch dimension."
+            )
         if not isinstance(labels, Tensor) or labels.ndim != 1:
             raise ValueError("Classifier labels must be a rank-1 tensor.")
         if inputs.size(0) != labels.size(0):
@@ -123,8 +125,7 @@ class ClassifierExperiment(LightningModule):
             auxiliary_loss = None
         if not isinstance(logits, Tensor) or logits.ndim != 2:
             raise ValueError(
-                "Classifier logits must be a rank-2 tensor with shape "
-                "[batch, classes]."
+                "Classifier logits must be a rank-2 tensor with shape [batch, classes]."
             )
         if logits.size(0) != labels.size(0):
             raise ValueError(
