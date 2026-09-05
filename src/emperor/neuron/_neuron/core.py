@@ -100,6 +100,7 @@ class Neuron(Module):
 
     def process_signal(self, input: Tensor) -> Tensor:
         self.VALIDATOR.validate_forward_input(input)
+        self.VALIDATOR.validate_feature_dimension(self, input)
         if self.training:
             self.batch_counter += 1
         processed_signal = self.nucleus(self.__inject_coordinate_embedding(input))
@@ -107,6 +108,7 @@ class Neuron(Module):
 
     def route_signal(self, processed_signal: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         self.VALIDATOR.validate_forward_input(processed_signal)
+        self.VALIDATOR.validate_feature_dimension(self, processed_signal)
         _, probabilities, selected_neurons, auxiliary_loss = self.terminal(
             self.__inject_coordinate_embedding(processed_signal)
         )
