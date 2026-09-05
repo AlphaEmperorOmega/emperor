@@ -311,6 +311,11 @@ class RoutingTreeNode(Module):
         joint_probabilities: Tensor,
         child_connections: Tensor,
     ) -> tuple[Tensor, Tensor]:
+        common_dtype = torch.promote_types(
+            probability_paths.dtype, joint_probabilities.dtype
+        )
+        probability_paths = probability_paths.to(dtype=common_dtype)
+        joint_probabilities = joint_probabilities.to(dtype=common_dtype)
         probability_paths = probability_paths.index_copy(
             0,
             selected_positions,
