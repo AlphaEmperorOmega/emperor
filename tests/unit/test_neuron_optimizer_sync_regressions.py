@@ -6,8 +6,8 @@ import pytest
 import torch
 from torch import nn
 
-from emperor.neuron import _optimizer_sync as optimizer_sync
 from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
+from emperor.neuron import _optimizer_sync as optimizer_sync
 from emperor.neuron._optimizer_layout import (
     OPTIMIZER_LAYOUT_CHECKPOINT_KEY,
     NeuronOptimizerNamedLayout,
@@ -26,10 +26,7 @@ class _DynamicCluster(nn.Module):
     def __init__(self, neuron_count: int = 1) -> None:
         super().__init__()
         self.cluster = nn.ModuleDict(
-            {
-                f"neuron_{index}_0_0": _RoleNeuron()
-                for index in range(neuron_count)
-            }
+            {f"neuron_{index}_0_0": _RoleNeuron() for index in range(neuron_count)}
         )
         self._checkpoint_removed_parameter_ids: set[int] = set()
 
@@ -520,10 +517,7 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
         self.assertIn(terminal_parameter, optimizer.param_groups[1]["params"])
         self.assertNotIn(terminal_parameter, optimizer.param_groups[0]["params"])
         self.assertEqual(
-            [
-                (group["lr"], group["weight_decay"])
-                for group in optimizer.param_groups
-            ],
+            [(group["lr"], group["weight_decay"]) for group in optimizer.param_groups],
             [(0.001, 0.01), (0.002, 0.02)],
         )
 
@@ -593,14 +587,10 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
         missing_terminal_name = malformed_names.pop()
         original_param_lists = [group["params"] for group in optimizer.param_groups]
         original_param_contents = [tuple(params) for params in original_param_lists]
-        original_name_lists = [
-            group["param_names"] for group in optimizer.param_groups
-        ]
+        original_name_lists = [group["param_names"] for group in optimizer.param_groups]
         original_name_contents = [tuple(names) for names in original_name_lists]
         grown_neuron = cluster.grow()
-        grown_parameter_ids = {
-            id(parameter) for parameter in grown_neuron.parameters()
-        }
+        grown_parameter_ids = {id(parameter) for parameter in grown_neuron.parameters()}
 
         with self.assertRaisesRegex(RuntimeError, "param_names"):
             callback.sync_optimizers(trainer, module)
@@ -609,9 +599,7 @@ class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
             self.assertIs(group["params"], original_param_lists[index])
             self.assertEqual(tuple(group["params"]), original_param_contents[index])
             self.assertIs(group["param_names"], original_name_lists[index])
-            self.assertEqual(
-                tuple(group["param_names"]), original_name_contents[index]
-            )
+            self.assertEqual(tuple(group["param_names"]), original_name_contents[index])
         self.assertTrue(
             grown_parameter_ids.isdisjoint(_optimizer_parameter_ids(optimizer))
         )

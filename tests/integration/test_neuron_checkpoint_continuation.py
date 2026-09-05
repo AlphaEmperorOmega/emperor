@@ -338,9 +338,7 @@ class NeuronCheckpointContinuationIntegrationTests(NeuronTestCase):
                 CheckpointContinuation(checkpoint),
                 _SingleRunPlan(),
             ) as lifecycle:
-                execution_options = lifecycle.bind_training_runs(
-                    [_TargetTrainingRun()]
-                )
+                execution_options = lifecycle.bind_training_runs([_TargetTrainingRun()])
                 model_validator = execution_options.strict_model_preloader
                 assert model_validator is not None
                 model_validator(resumed_model)
