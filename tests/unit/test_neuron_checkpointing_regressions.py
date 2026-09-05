@@ -1,10 +1,11 @@
 import re
 import unittest
+from types import SimpleNamespace
 
 import torch
 from torch import nn
 
-from emperor.neuron._cluster.checkpointing import _NeuronClusterCheckpointingMixin
+from emperor.neuron._cluster.checkpointing import ClusterCheckpointDelegate
 
 
 class _CheckpointNeuron(nn.Module):
@@ -15,7 +16,7 @@ class _CheckpointNeuron(nn.Module):
         self.register_buffer("atrophy_counter", torch.zeros((), dtype=torch.int64))
 
 
-class _CheckpointCluster(_NeuronClusterCheckpointingMixin, nn.Module):
+class _CheckpointCluster(nn.Module):
     def __init__(
         self,
         neuron_names: tuple[str, ...] = ("neuron_1_1_1",),
@@ -35,7 +36,17 @@ class _CheckpointCluster(_NeuronClusterCheckpointingMixin, nn.Module):
         self.forwards_since_last_growth = None
         self.total_growth_count = None
         self._checkpoint_removed_parameter_ids: set[int] = set()
-        self.register_load_state_dict_pre_hook(self._reconcile_cluster_with_state_dict)
+        topology = SimpleNamespace(
+            is_neuron_name=self._is_neuron_name,
+            parse_neuron_name=self._parse_neuron_name,
+            neuron_name=self._neuron_name,
+            is_within_grid_capacity=self._is_within_grid_capacity,
+            coordinate_from_row=self._coordinate_from_row,
+        )
+        self.checkpointing = ClusterCheckpointDelegate(self, topology)
+        self.register_load_state_dict_pre_hook(
+            self.checkpointing.reconcile_cluster_with_state_dict
+        )
 
     @staticmethod
     def _is_neuron_name(neuron_name: str) -> bool:

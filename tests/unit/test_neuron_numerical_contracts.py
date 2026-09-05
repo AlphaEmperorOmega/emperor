@@ -15,15 +15,16 @@ from emperor.neuron import (
     NucleusConfig,
     TerminalConnectionShapeOptions,
 )
-from emperor.neuron._cluster.beam_routes import _NeuronClusterBeamRoutesMixin
+from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
 from emperor.neuron._cluster.recurrent_routes import (
-    _NeuronClusterRecurrentRoutesMixin,
+    ClusterRoutingDelegate,
 )
 from emperor.neuron._cluster.state import (
     NeuronClusterRouteState,
+    RouteStateDelegate,
     _NeuronClusterForwardContext,
-    _NeuronClusterStateMixin,
 )
+from emperor.neuron._cluster.topology import ClusterTopologyDelegate
 from emperor.neuron._monitoring.diagnostics import _NeuronDiagnostics
 from unit import test_neuron as neuron_test_fixtures
 from unit.test_neuron import (
@@ -58,12 +59,14 @@ class _DifferentiableSelfRouteNeuron(nn.Module):
 
 
 class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
+
+
     def test_beam_slot_padding_is_inactive_and_has_zero_probability(self) -> None:
-        beam_routes = _NeuronClusterBeamRoutesMixin()
-        beam_routes.beam_width = 3
+        routing = self.routing_delegate(SimpleNamespace(beam_width=3))
+        beam_routes = routing._ClusterRoutingDelegate__beam_routes
 
         path_probabilities, branch_indices = (
-            beam_routes._NeuronClusterBeamRoutesMixin__top_beam_slots(
+            beam_routes._BeamRoutingDelegate__top_beam_slots(
                 torch.tensor([[0.2, -0.4]], dtype=torch.float64)
             )
         )
@@ -77,19 +80,13 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             torch.tensor([[0, 1, 0]], dtype=torch.long),
         )
 
+    @staticmethod
+    def routing_delegate(owner) -> ClusterRoutingDelegate:
+        topology = ClusterTopologyDelegate(owner)
+        plasticity = ClusterPlasticityDelegate(owner, topology)
+        return ClusterRoutingDelegate(owner, topology, plasticity)
+
     def test_beam_missing_current_route_finalizes_only_the_missing_slot(self) -> None:
-        class BeamHarness(
-            _NeuronClusterBeamRoutesMixin,
-            _NeuronClusterStateMixin,
-        ):
-            @staticmethod
-            def _coordinate_from_row(row):
-                return tuple(int(value) for value in row)
-
-            @staticmethod
-            def _neuron_name(x, y, z):
-                return f"neuron_{x}_{y}_{z}"
-
         hidden = torch.tensor(
             [[1.0], [2.0]],
             dtype=torch.float64,
@@ -105,11 +102,10 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             loss=torch.tensor(0.25, dtype=torch.float64),
             beam_path_probabilities=torch.tensor([0.75, 0.25], dtype=torch.float64),
         )
-        harness = BeamHarness()
-        harness.beam_width = 2
-        harness.cluster = {}
+        routing = self.routing_delegate(SimpleNamespace(beam_width=2, cluster={}))
+        harness = routing._ClusterRoutingDelegate__beam_routes
 
-        finalized = harness._NeuronClusterBeamRoutesMixin__run_beam_route_step(
+        finalized = harness._BeamRoutingDelegate__run_beam_route_step(
             route_state,
             torch.tensor([True, False]),
             _NeuronClusterForwardContext(),
@@ -134,18 +130,6 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
     def test_recurrent_missing_current_route_finalizes_without_graph_break(
         self,
     ) -> None:
-        class RecurrentHarness(
-            _NeuronClusterRecurrentRoutesMixin,
-            _NeuronClusterStateMixin,
-        ):
-            @staticmethod
-            def _coordinate_from_row(row):
-                return tuple(int(value) for value in row)
-
-            @staticmethod
-            def _neuron_name(x, y, z):
-                return f"neuron_{x}_{y}_{z}"
-
         hidden = torch.tensor(
             [[1.0], [2.0]],
             dtype=torch.float64,
@@ -161,15 +145,12 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             loss=torch.tensor(0.25, dtype=torch.float64),
             trace=SimpleNamespace(marker="trace"),
         )
-        harness = RecurrentHarness()
-        harness.cluster = {}
+        harness = self.routing_delegate(SimpleNamespace(cluster={}))
 
-        finalized = (
-            harness._NeuronClusterRecurrentRoutesMixin__run_recurrent_route_step(
-                route_state,
-                torch.tensor([True, False]),
-                _NeuronClusterForwardContext(),
-            )
+        finalized = harness._ClusterRoutingDelegate__run_recurrent_route_step(
+            route_state,
+            torch.tensor([True, False]),
+            _NeuronClusterForwardContext(),
         )
 
         torch.testing.assert_close(finalized.hidden, hidden)
@@ -185,7 +166,8 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
         torch.testing.assert_close(hidden.grad, torch.ones_like(hidden))
 
     def test_halting_masks_and_state_rows_preserve_batch_ownership(self) -> None:
-        state = _NeuronClusterStateMixin()
+        owner = SimpleNamespace()
+        state = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
         halting_state = SimpleNamespace(
             halt_mask=torch.tensor([[True, True], [True, False]]),
             scores=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
@@ -194,13 +176,13 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             label="state",
         )
 
-        reduced_mask = state._get_halt_mask(halting_state)
-        mask_tensor = state._halt_mask_tensor(
+        reduced_mask = state.get_halt_mask(halting_state)
+        mask_tensor = state.halt_mask_tensor(
             halting_state,
             batch_size=2,
             device=torch.device("cpu"),
         )
-        gathered = state._gather_halting_state_rows(
+        gathered = state.gather_halting_state_rows(
             halting_state,
             torch.tensor([1, 0]),
         )
@@ -221,9 +203,10 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
         self.assertEqual(gathered.label, "state")
 
     def test_state_wrapper_places_absent_halt_mask_on_requested_device(self) -> None:
-        state = _NeuronClusterStateMixin()
+        owner = SimpleNamespace()
+        state = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
 
-        halt_mask = state._halt_mask_tensor(
+        halt_mask = state.halt_mask_tensor(
             None,
             batch_size=3,
             device=torch.device("meta"),
@@ -238,13 +221,8 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             def finalize_weighted_accumulation(self, state, current_hidden):
                 return current_hidden, current_hidden.new_tensor([0.75, 0.0])
 
-        class StateHarness(_NeuronClusterStateMixin):
-            @staticmethod
-            def _accumulate_auxiliary_loss(loss, auxiliary_loss):
-                return loss + auxiliary_loss
-
-        state_mixin = StateHarness()
-        state_mixin.halting_model = FixedHaltingModel()
+        owner = SimpleNamespace(halting_model=FixedHaltingModel())
+        state_delegate = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
         halting_state = SimpleNamespace(
             valid_mask=torch.tensor([True, False]),
             advanced_mask=torch.tensor([True, False]),
@@ -260,7 +238,7 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
             beam_path_probabilities=torch.tensor([1.0, 0.0]),
         )
 
-        finalized = state_mixin._maybe_finalize_cluster_halting(route_state)
+        finalized = state_delegate.maybe_finalize_cluster_halting(route_state)
 
         torch.testing.assert_close(finalized.loss, torch.tensor(0.75))
 
@@ -270,11 +248,6 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
         class FixedHaltingModel:
             def finalize_weighted_accumulation(self, state, current_hidden):
                 return current_hidden, ponder_loss
-
-        class StateHarness(_NeuronClusterStateMixin):
-            @staticmethod
-            def _accumulate_auxiliary_loss(loss, auxiliary_loss):
-                return loss + auxiliary_loss
 
         halting_state = SimpleNamespace(
             valid_mask=torch.tensor([True, False]),
@@ -293,10 +266,10 @@ class TestNeuronRoutingLifecycleContracts(unittest.TestCase):
                 dtype=torch.float64,
             ),
         )
-        state = StateHarness()
-        state.halting_model = FixedHaltingModel()
+        owner = SimpleNamespace(halting_model=FixedHaltingModel())
+        state = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
 
-        finalized = state._maybe_finalize_cluster_halting(route_state)
+        finalized = state.maybe_finalize_cluster_halting(route_state)
         finalized.loss.backward()
 
         torch.testing.assert_close(
@@ -460,11 +433,6 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
         self._assert_cluster_stick_breaking_gradcheck(cluster.double().eval())
 
     def test_sparse_halting_monitor_records_only_advanced_rows(self) -> None:
-        class StateHarness(_NeuronClusterStateMixin):
-            @staticmethod
-            def _accumulate_auxiliary_loss(loss, auxiliary_loss):
-                return loss + auxiliary_loss
-
         halting_model = (
             self.halting_config(input_dim=1, threshold=0.7).build().double().eval()
         )
@@ -474,12 +442,12 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
             )
         tracker_manager = HaltingUsageTrackerManager()
         tracker = tracker_manager.attach(halting_model)
-        state_harness = StateHarness()
-        state_harness.halting_model = halting_model
+        owner = SimpleNamespace(halting_model=halting_model)
+        state_harness = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
         hidden = torch.tensor([[0.0], [2.0]], dtype=torch.float64)
 
         try:
-            halting_state = state_harness._maybe_update_halting_state(
+            halting_state, _ = state_harness.maybe_update_halting_state(
                 None,
                 hidden,
                 hidden,
@@ -495,7 +463,7 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
                 loss=torch.zeros((), dtype=torch.float64),
             )
 
-            finalized_state = state_harness._maybe_finalize_cluster_halting(route_state)
+            finalized_state = state_harness.maybe_finalize_cluster_halting(route_state)
 
             torch.testing.assert_close(
                 tracker.last_survival,
@@ -774,22 +742,17 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
     def test_sparse_halting_update_freezes_inactive_stick_breaking_row(
         self,
     ) -> None:
-        class StateHarness(_NeuronClusterStateMixin):
-            @staticmethod
-            def _accumulate_auxiliary_loss(loss, auxiliary_loss):
-                return loss + auxiliary_loss
-
         halting_model = (
             self.halting_config(input_dim=2, threshold=0.999).build().double().eval()
         )
-        state_harness = StateHarness()
-        state_harness.halting_model = halting_model
+        owner = SimpleNamespace(halting_model=halting_model)
+        state_harness = RouteStateDelegate(owner, ClusterTopologyDelegate(owner))
         initial_hidden = torch.tensor(
             [[0.2, -0.4], [0.5, 0.3]],
             dtype=torch.float64,
             requires_grad=True,
         )
-        initial_state = state_harness._maybe_update_halting_state(
+        initial_state, _ = state_harness.maybe_update_halting_state(
             None,
             initial_hidden,
             initial_hidden,
@@ -806,7 +769,7 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
             requires_grad=True,
         )
 
-        updated_state = state_harness._maybe_update_halting_state(
+        updated_state, _ = state_harness.maybe_update_halting_state(
             initial_state,
             current_hidden,
             weighted_candidate,
@@ -1048,7 +1011,7 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
         neuron = WarmNeuron()
         input_tensor = torch.zeros(2, self.input_dim)
 
-        output = cluster._process_neuron(neuron, input_tensor)
+        output = cluster._NeuronCluster__routing.process_neuron(neuron, input_tensor)
 
         torch.testing.assert_close(output, torch.full_like(output, 2.0))
         self.assertEqual(int(neuron.warmup_remaining_steps), 0)
@@ -1191,8 +1154,8 @@ class TestNeuronRecurrentGradientContract(NeuronTestCase):
             requires_grad=True,
         )
 
-        entry_probabilities, entry_coordinates, _ = cluster._route_entry_input(
-            input_tensor.detach()
+        entry_probabilities, entry_coordinates, _ = (
+            cluster._NeuronCluster__routing.route_entry_input(input_tensor.detach())
         )
         chosen_coordinate = entry_coordinates[0, entry_probabilities.argmax(dim=1)[0]]
         torch.testing.assert_close(
