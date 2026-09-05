@@ -129,3 +129,30 @@ class TestNeuronOptimizerNamedLayout(unittest.TestCase):
                 [saved_state],
                 layout,
             )
+
+    def test_saved_metadata_is_validated_before_live_membership(self) -> None:
+        module = self._module()
+        source_optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        saved_state = source_optimizer.state_dict()
+        layout = NeuronOptimizerNamedLayout.capture(
+            module, [source_optimizer], [saved_state]
+        )
+        target_optimizer = torch.optim.SGD([module["b"], module["a"]], lr=0.1)
+        original_group = target_optimizer.param_groups[0]
+        original_parameter_list = original_group["params"]
+        saved_parameter_ids = saved_state["param_groups"][0]["params"]
+        saved_state["param_groups"][0]["param_names"] = ["a"]
+        manager = NeuronOptimizerNamedLayout()
+
+        with self.assertRaisesRegex(RuntimeError, "param_names metadata"):
+            manager.prepare_for_load(module, [target_optimizer], [saved_state], layout)
+
+        del saved_state["param_groups"][0]["param_names"]
+        with self.assertRaisesRegex(RuntimeError, "parameter membership differs"):
+            manager.prepare_for_load(module, [target_optimizer], [saved_state], layout)
+
+        self.assertIs(target_optimizer.param_groups[0], original_group)
+        self.assertIs(original_group["params"], original_parameter_list)
+        self.assertIs(saved_state["param_groups"][0]["params"], saved_parameter_ids)
+        self.assertEqual(saved_parameter_ids, [0, 1, 2])
+        self.assertFalse(manager.optimizer_requires_completion(target_optimizer))
