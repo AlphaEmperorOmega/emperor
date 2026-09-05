@@ -8,8 +8,9 @@ from emperor.neuron._neuron.validation import NeuronValidator
 from emperor.neuron._validation.common import NeuronValidationMixin
 
 if TYPE_CHECKING:
-    from emperor.sampler import SamplerConfig
+    from emperor.halting import HaltingBase, HaltingConfig
     from emperor.neuron._config import NeuronClusterConfig, NeuronConfig
+    from emperor.sampler import RouterConfig, SamplerConfig
 
 
 class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
@@ -134,6 +135,12 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 )
 
     @classmethod
+    def validate_beam_width(cls, beam_width: int | None) -> None:
+        if beam_width is None:
+            return
+        cls.validate_positive_integer("beam_width", beam_width)
+
+    @classmethod
     def validate_entry_sampler_config(cls, cfg: "NeuronClusterConfig") -> None:
         sampler_config = cfg.entry_sampler_config
         if sampler_config is None:
@@ -151,6 +158,32 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         initialized_entry_count = (
             cfg.initial_x_axis_total_neurons or cfg.x_axis_total_neurons
         ) * (cfg.initial_y_axis_total_neurons or cfg.y_axis_total_neurons)
+        cls.__validate_entry_sampler_dimensions(sampler_config, initialized_entry_count)
+
+        router_config = sampler_config.router_config
+        if router_config is None:
+            sampler_config.validate_for_router_input_dim()
+            cls.__validate_entry_logit_width(
+                sampler_config, cfg.neuron_config.terminal_config.input_dim
+            )
+            return
+        if not isinstance(router_config, RouterConfig):
+            raise TypeError(
+                "entry_sampler_config.router_config must be a RouterConfig for "
+                "NeuronClusterConfig, got "
+                f"{type(router_config).__name__}."
+            )
+        cls.__validate_entry_router_dimensions(router_config, initialized_entry_count)
+        sampler_config.validate_for_router_input_dim(
+            cfg.neuron_config.terminal_config.input_dim
+        )
+
+    @classmethod
+    def __validate_entry_sampler_dimensions(
+        cls,
+        sampler_config: "SamplerConfig",
+        initialized_entry_count: int,
+    ) -> None:
         cls.validate_positive_integer(
             "entry_sampler_config.num_experts",
             sampler_config.num_experts,
@@ -174,19 +207,12 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"entry_coordinate_count={initialized_entry_count}."
             )
 
-        router_config = sampler_config.router_config
-        if router_config is None:
-            sampler_config.validate_for_router_input_dim()
-            cls.__validate_entry_logit_width(
-                sampler_config, cfg.neuron_config.terminal_config.input_dim
-            )
-            return
-        if not isinstance(router_config, RouterConfig):
-            raise TypeError(
-                "entry_sampler_config.router_config must be a RouterConfig for "
-                "NeuronClusterConfig, got "
-                f"{type(router_config).__name__}."
-            )
+    @classmethod
+    def __validate_entry_router_dimensions(
+        cls,
+        router_config: "RouterConfig",
+        initialized_entry_count: int,
+    ) -> None:
         cls.validate_positive_integer(
             "entry_sampler_config.router_config.num_experts",
             router_config.num_experts,
@@ -198,9 +224,6 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"num_experts={router_config.num_experts} and "
                 f"entry_coordinate_count={initialized_entry_count}."
             )
-        sampler_config.validate_for_router_input_dim(
-            cfg.neuron_config.terminal_config.input_dim
-        )
 
     @staticmethod
     def __validate_entry_logit_width(
@@ -228,12 +251,6 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         derived_config = copy.deepcopy(terminal_config.sampler_config)
         derived_config.num_experts = initialized_entry_count
         cls.__validate_entry_logit_width(derived_config, terminal_config.input_dim)
-
-    @classmethod
-    def validate_beam_width(cls, beam_width: int | None) -> None:
-        if beam_width is None:
-            return
-        cls.validate_positive_integer("beam_width", beam_width)
 
     @classmethod
     def validate_growth_threshold(cls, growth_threshold: int | None) -> None:
@@ -303,6 +320,19 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
         if halting_config is None:
             return
 
+        halting_model_type = NeuronClusterValidator.__resolve_halting_model_type(
+            halting_config
+        )
+        NeuronClusterValidator.__validate_halting_lifecycle(
+            halting_config, halting_model_type
+        )
+        NeuronClusterValidator.__validate_halting_owner_steps(
+            halting_config, halting_model_type
+        )
+        NeuronClusterValidator.__validate_halting_input_dimension(cfg, halting_config)
+
+    @staticmethod
+    def __resolve_halting_model_type(halting_config: "HaltingConfig") -> type:
         from emperor.halting import HaltingConfig
 
         if not isinstance(halting_config, HaltingConfig):
@@ -311,13 +341,18 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 f"NeuronClusterConfig, got {type(halting_config).__name__}"
             )
         try:
-            halting_model_type = halting_config._registry_owner()
+            return halting_config._registry_owner()
         except NotImplementedError as registry_error:
             raise ValueError(
                 "halting_config must be a concrete halting config for "
                 "NeuronClusterConfig"
             ) from registry_error
 
+    @staticmethod
+    def __validate_halting_lifecycle(
+        halting_config: "HaltingConfig",
+        halting_model_type: type,
+    ) -> None:
         from emperor.halting import HaltingBase
 
         implements_halting_interface = (
@@ -337,6 +372,11 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 "lifecycle required by NeuronCluster"
             )
 
+    @staticmethod
+    def __validate_halting_owner_steps(
+        halting_config: "HaltingConfig",
+        halting_model_type: type["HaltingBase"],
+    ) -> None:
         validator = getattr(halting_model_type, "VALIDATOR", None)
         validate_owner_step_contract = getattr(
             validator,
@@ -350,6 +390,11 @@ class NeuronClusterValidator(ValidatorBase, NeuronValidationMixin):
                 owner_name="NeuronClusterConfig",
             )
 
+    @staticmethod
+    def __validate_halting_input_dimension(
+        cfg: "NeuronClusterConfig",
+        halting_config: "HaltingConfig",
+    ) -> None:
         terminal_input_dim = cfg.neuron_config.terminal_config.input_dim
         if (
             halting_config.input_dim is not None
