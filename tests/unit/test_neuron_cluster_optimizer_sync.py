@@ -651,8 +651,9 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
             target_module,
             checkpoint,
         )
-        target_optimizer.load_state_dict(checkpoint["optimizer_states"][0])
         target_callback.on_fit_start(target_trainer, target_module)
+        target_optimizer.load_state_dict(checkpoint["optimizer_states"][0])
+        target_callback.on_train_start(target_trainer, target_module)
 
         live_parameter_ids = {id(parameter) for parameter in target_module.parameters()}
         self.assertTrue(
@@ -713,6 +714,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
         optimizer_snapshot = self.optimizer_identity_snapshot(optimizer)
         scheduler_snapshot = self.scheduler_identity_snapshot(scheduler)
 
+        callback.on_fit_start(trainer, module)
         callback.on_load_checkpoint(trainer, module, checkpoint)
         optimizer.load_state_dict(optimizer_state)
         with self.assertRaises(TypeError) as raised:
@@ -731,6 +733,7 @@ class TestNeuronClusterOptimizerSyncCallback(NeuronTestCase):
         self.assertNotIn("unexpected_partial_load_value", scheduler.__dict__)
 
         checkpoint["lr_schedulers"] = [valid_scheduler_state]
+        callback.on_fit_start(trainer, module)
         callback.on_load_checkpoint(trainer, module, checkpoint)
         optimizer.load_state_dict(optimizer_state)
         scheduler.load_state_dict(valid_scheduler_state)
