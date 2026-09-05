@@ -64,12 +64,15 @@ class RouteStateDelegate:
         hidden: Tensor,
     ) -> tuple[Tensor, Tensor]:
         if probabilities is not None and selected_coords is not None:
-            return probabilities, selected_coords
+            common_dtype = torch.promote_types(
+                probabilities.dtype, route_probabilities.dtype
+            )
+            return probabilities.to(dtype=common_dtype), selected_coords
 
         batch_size = hidden.shape[0]
         top_k = route_probabilities.shape[1]
         return (
-            hidden.new_zeros((batch_size, top_k)),
+            route_probabilities.new_zeros((batch_size, top_k)),
             torch.zeros(
                 batch_size,
                 top_k,
@@ -79,6 +82,12 @@ class RouteStateDelegate:
             ),
         )
 
+    @staticmethod
+    def promote_floating_values(
+        destination: Tensor, values: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        common_dtype = torch.promote_types(destination.dtype, values.dtype)
+        return destination.to(dtype=common_dtype), values.to(dtype=common_dtype)
 
     def ensure_probability_matrix(self, probabilities: Tensor) -> Tensor:
         if probabilities.dim() == 1:

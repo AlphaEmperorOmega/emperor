@@ -183,6 +183,11 @@ class ClusterRoutingDelegate:
                 self.__owner.cluster[neuron_name],
                 source_hidden.index_select(0, batch_index_tensor),
             )
+            branch_outputs, processed_branch_output = (
+                self.__state.promote_floating_values(
+                    branch_outputs, processed_branch_output
+                )
+            )
             branch_outputs[batch_index_tensor, topk_index_tensor] = (
                 processed_branch_output
             )
@@ -393,6 +398,9 @@ class ClusterRoutingDelegate:
                 route_coords,
                 route_state.hidden,
             )
+            probabilities, route_probabilities = self.__state.promote_floating_values(
+                probabilities, route_probabilities
+            )
             probabilities[batch_index_tensor] = route_probabilities
             selected_coords[batch_index_tensor] = route_coords.to(
                 device=route_state.hidden.device,
@@ -503,6 +511,9 @@ class ClusterRoutingDelegate:
         valid_target_mask: Tensor,
         chosen_branch_indices: Tensor,
     ) -> None:
+        next_state.hidden, weighted_candidate = self.__state.promote_floating_values(
+            next_state.hidden, weighted_candidate
+        )
         chosen_valid_mask = self.__state.gather_branch_mask(
             valid_target_mask, chosen_branch_indices
         )
