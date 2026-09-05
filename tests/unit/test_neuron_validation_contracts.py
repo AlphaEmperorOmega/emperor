@@ -362,8 +362,8 @@ class TestNeuronCompositionValidation(NeuronTestCase):
         config.sampler_config.router_config = None
         expected_message = (
             "sampler_config.router_config is required when Terminal input_dim "
-            "does not equal total_neuron_connections, received input_dim=4 and "
-            "total_neuron_connections=27."
+            "does not equal the required logit width, received input_dim=4 and "
+            "required_logit_width=27."
         )
         torch.manual_seed(20260719)
         rng_before = torch.random.get_rng_state().clone()
