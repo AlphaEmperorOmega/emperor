@@ -839,8 +839,19 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
         expected_mean_entry_entropy = (
             entropy_for_first_distribution + entropy_for_second_distribution
         ) / 2.0
-        expected_marginal_entry_entropy = -(
-            0.375 * math.log(0.375) + 0.5 * math.log(0.5) + 0.125 * math.log(0.125)
+        # The six global entry identities receive mass [1.5, .5, 1, .25, 0, 1].
+        # Repeated destinations combine; out-of-capacity selections are not entries.
+        entry_marginal = [6 / 17, 2 / 17, 4 / 17, 1 / 17, 0.0, 4 / 17]
+        expected_marginal_entry_entropy = -sum(
+            probability * math.log(probability)
+            for probability in entry_marginal
+            if probability
+        )
+        expected_entry_cv = (
+            math.sqrt(
+                sum((probability - 1 / 6) ** 2 for probability in entry_marginal) / 6
+            )
+            * 6
         )
         expected_scalars = {
             "route/depth_mean": 7.0 / 6.0,
@@ -852,7 +863,7 @@ class TestNeuronClusterMonitorCallback(NeuronTestCase):
             "route/active_neuron_count": 5.0,
             "entry/routing_entropy": expected_mean_entry_entropy,
             "entry/routing_entropy_marginal": expected_marginal_entry_entropy,
-            "entry/routing_coefficient_of_variation": math.sqrt(7.0 / 32.0),
+            "entry/routing_coefficient_of_variation": expected_entry_cv,
             "loss/auxiliary_loss": 0.625,
         }
         scalar_values = dict(module.logged_scalars)
