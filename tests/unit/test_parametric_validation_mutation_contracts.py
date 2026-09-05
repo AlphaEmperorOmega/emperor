@@ -74,6 +74,31 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
         ):
             _handler_config(nested_config).build()
 
+    def test_handler_checkpoint_round_trip_preserves_outputs_and_gradients(self):
+        config = _handler_config(_parametric_config())
+        original = config.build().double().eval()
+        restored = config.build().double().eval()
+        restored.load_state_dict(original.state_dict(), strict=True)
+        source = torch.ones(2, 2, dtype=torch.float64, requires_grad=True)
+        restored_source = source.detach().clone().requires_grad_()
+        output = original(LayerState(hidden=source)).hidden
+        restored_output = restored(LayerState(hidden=restored_source)).hidden
+        torch.testing.assert_close(output, restored_output)
+        output.square().sum().backward()
+        restored_output.square().sum().backward()
+        torch.testing.assert_close(source.grad, restored_source.grad)
+        restored_parameters = dict(restored.named_parameters())
+        gradients = []
+        for name, parameter in original.named_parameters():
+            other = restored_parameters[name]
+            if parameter.grad is None:
+                self.assertIsNone(other.grad)
+            else:
+                gradients.append(parameter.grad)
+                torch.testing.assert_close(parameter.grad, other.grad)
+        self.assertTrue(gradients)
+        self.assertTrue(all(torch.isfinite(gradient).all() for gradient in gradients))
+
     def assert_exact_error(
         self,
         exception_type: type[Exception],
