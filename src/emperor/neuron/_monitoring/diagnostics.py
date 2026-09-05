@@ -81,7 +81,9 @@ class _NeuronDiagnostics:
             normalized_entry_probabilities,
             dimension=-1,
         )
-        marginal_entry_probabilities = normalized_entry_probabilities.mean(dim=0)
+        marginal_entry_probabilities = cls._entry_destination_mass(
+            trace, normalized_entry_probabilities
+        )
         marginal_entry_probabilities = (
             marginal_entry_probabilities
             / marginal_entry_probabilities.sum().clamp_min(1e-9)
@@ -97,6 +99,24 @@ class _NeuronDiagnostics:
                 / marginal_entry_probabilities.mean().clamp_min(1e-6)
             ),
         )
+
+    @staticmethod
+    def _entry_destination_mass(
+        trace: "NeuronClusterTrace", normalized_probabilities: Tensor
+    ) -> Tensor:
+        entry_count = trace.entry_coordinates.shape[0]
+        coordinates = torch.cat(
+            (trace.entry_coordinates, trace.entry_selected_coordinates.reshape(-1, 3))
+        )
+        unique_coordinates, coordinate_indices = torch.unique(
+            coordinates, dim=0, return_inverse=True
+        )
+        destination_mass = normalized_probabilities.new_zeros(
+            unique_coordinates.shape[0]
+        ).scatter_add(
+            0, coordinate_indices[entry_count:], normalized_probabilities.flatten()
+        )
+        return destination_mass[coordinate_indices[:entry_count]]
 
     @staticmethod
     def valid_coordinates(
