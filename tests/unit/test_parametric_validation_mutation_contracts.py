@@ -20,6 +20,7 @@ from emperor.parametric import (
     GeneratorWeightsMixtureConfig,
     MatrixBiasMixtureConfig,
     ParametricLayer,
+    ParametricLayerConfig,
     ParametricLayerHandler,
     ParametricLayerHandlerConfig,
     VectorWeightsMixtureConfig,
@@ -59,6 +60,20 @@ def _handler_config(
 
 
 class ParametricValidationMutationContractTests(unittest.TestCase):
+    def test_handler_delegates_built_model_rejection_to_layer_validator(self):
+        class EmptyBuilderConfig(ParametricLayerConfig):
+            def build(self, *args, **kwargs):
+                return None
+
+        template = _parametric_config()
+        nested_config = EmptyBuilderConfig(
+            **{name: getattr(template, name) for name in template.__dataclass_fields__}
+        )
+        with self.assertRaisesRegex(
+            RuntimeError, "layer_model_config must build a model"
+        ):
+            _handler_config(nested_config).build()
+
     def assert_exact_error(
         self,
         exception_type: type[Exception],
