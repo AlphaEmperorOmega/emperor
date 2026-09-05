@@ -116,8 +116,8 @@ def _average_gradient(parameter: nn.Parameter, world_size: int) -> None:
     averaged_gradient = (
         torch.zeros_like(parameter) if gradient is None else gradient.detach().clone()
     )
-    torch.distributed.all_reduce(averaged_gradient)
     averaged_gradient.div_(world_size)
+    torch.distributed.all_reduce(averaged_gradient)
     if gradient is None:
         parameter.grad = averaged_gradient
     else:
