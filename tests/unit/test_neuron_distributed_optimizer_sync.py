@@ -207,6 +207,36 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
             parameter.grad, torch.tensor([2e38], dtype=torch.float32)
         )
 
+    def test_rejects_rank_manifest_mismatches_before_parameter_collectives(
+        self,
+    ) -> None:
+        module = nn.Linear(2, 1, bias=False)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.1)
+        for remote_manifest in (
+            [],
+            [("other.weight", (1, 2), "torch.float32", "cpu", True)],
+            [("weight", (2, 1), "torch.float32", "cpu", True)],
+            [("weight", (1, 2), "torch.float64", "cpu", True)],
+        ):
+            with self.subTest(remote_manifest=remote_manifest):
+
+                def gather_manifests(collected, manifest, remote=remote_manifest):
+                    collected[:] = [manifest, remote]
+
+                with (
+                    patch("torch.distributed.is_available", return_value=True),
+                    patch("torch.distributed.is_initialized", return_value=True),
+                    patch("torch.distributed.get_world_size", return_value=2),
+                    patch(
+                        "torch.distributed.all_gather_object",
+                        side_effect=gather_manifests,
+                    ),
+                    patch("torch.distributed.all_reduce") as all_reduce,
+                    self.assertRaisesRegex(RuntimeError, "manifests differ"),
+                ):
+                    average_post_wrap_gradients(module, optimizer, {id(module.weight)})
+                all_reduce.assert_not_called()
+
     def test_noops_without_an_active_multi_rank_process_group(self) -> None:
         parameter = nn.Parameter(torch.tensor([2.0]))
         parameter.grad = torch.tensor([3.0])
@@ -266,6 +296,12 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
             patch("torch.distributed.is_available", return_value=True),
             patch("torch.distributed.is_initialized", return_value=True),
             patch("torch.distributed.get_world_size", return_value=2),
+            patch(
+                "torch.distributed.all_gather_object",
+                side_effect=lambda collected, manifest: collected.__setitem__(
+                    slice(None), [manifest, manifest]
+                ),
+            ),
             patch("torch.distributed.all_reduce") as all_reduce,
         ):
             average_post_wrap_gradients(
