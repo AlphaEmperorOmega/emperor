@@ -122,6 +122,58 @@ class TestTerminalRoutingTree(NeuronTestCase):
                         )
                     )
 
+    def test_tree_promotes_direction_and_leaf_probabilities_without_detaching(self):
+        def double_hidden(module, inputs, output):
+            output.hidden = output.hidden.double()
+            return output
+
+        for depth, counts in (
+            (TerminalRoutingTreeDepthOptions.TWO, (2,)),
+            (TerminalRoutingTreeDepthOptions.THREE, (2, 2)),
+        ):
+            with self.subTest(depth=depth):
+                torch.manual_seed(17)
+                terminal = self.tree_terminal(
+                    leaf_top_k=1,
+                    routing_tree_config=self.routing_tree_config(
+                        depth=depth,
+                        branch_counts=counts,
+                        direction_top_k=(1,) * len(counts),
+                    ),
+                ).eval()
+                for node in terminal.sampler.root.modules():
+                    if isinstance(node, RoutingTreeNode) and not node.branches:
+                        node.sampler.router.model.register_forward_hook(double_hidden)
+                reference = copy.deepcopy(terminal).double()
+                source = torch.ones(2, self.input_dim, requires_grad=True)
+                with torch.autocast("cpu", dtype=torch.bfloat16):
+                    _, probabilities, coordinates, loss = terminal(source)
+                self.assertEqual(probabilities.dtype, torch.float64)
+                self.assertEqual(coordinates.dtype, torch.long)
+                (probabilities.sum() + loss).backward()
+                self.assertTrue(torch.isfinite(source.grad).all())
+                visited_gradients = [
+                    p.grad for p in terminal.parameters() if p.grad is not None
+                ]
+                self.assertTrue(visited_gradients)
+                self.assertTrue(
+                    all(
+                        torch.isfinite(gradient).all() for gradient in visited_gradients
+                    )
+                )
+                reference_source = source.detach().double().requires_grad_()
+                _, reference_probabilities, reference_coordinates, reference_loss = (
+                    reference(reference_source)
+                )
+                (reference_probabilities.sum() + reference_loss).backward()
+                torch.testing.assert_close(
+                    probabilities, reference_probabilities, rtol=0.03, atol=1e-5
+                )
+                torch.testing.assert_close(coordinates, reference_coordinates)
+                torch.testing.assert_close(
+                    source.grad.double(), reference_source.grad, rtol=0.05, atol=1e-5
+                )
+
     def routing_tree_config(
         self,
         *,
