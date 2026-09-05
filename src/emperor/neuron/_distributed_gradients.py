@@ -84,12 +84,31 @@ def average_post_wrap_gradients(
         for group in optimizer.param_groups
         for parameter in group["params"]
     }
-    for _, parameter in module.named_parameters():
-        if (
-            id(parameter) not in parameter_ids
-            or id(parameter) not in optimizer_parameter_ids
-        ):
-            continue
+    named_parameters = [
+        (name, parameter)
+        for name, parameter in module.named_parameters()
+        if id(parameter) in parameter_ids and id(parameter) in optimizer_parameter_ids
+    ]
+    manifest = [
+        (
+            name,
+            tuple(parameter.shape),
+            str(parameter.dtype),
+            parameter.device.type,
+            parameter.requires_grad,
+        )
+        for name, parameter in named_parameters
+    ]
+    rank_manifests = [None] * world_size
+    # Every rank participates even if its selected set is empty. Detect divergent
+    # roles/layouts before differently shaped parameter collectives can hang.
+    torch.distributed.all_gather_object(rank_manifests, manifest)
+    if any(rank_manifest != manifest for rank_manifest in rank_manifests):
+        raise RuntimeError(
+            "Distributed Neuron post-wrap parameter manifests differ across ranks; "
+            "ordered roles, shapes, dtypes and trainability must agree."
+        )
+    for _, parameter in named_parameters:
         _average_gradient(parameter, world_size)
 
 
