@@ -159,6 +159,10 @@ class LifecycleProjectionModel(TestProjectionModel):
                 shared_mode = nn.Dropout(p=0.1)
                 self.mode_role_a = shared_mode
                 self.mode_role_b = shared_mode
+            case "shared_descendant_modes":
+                shared_mode = nn.Dropout(p=1)
+                self.mode_parent_a = nn.Sequential(shared_mode)
+                self.mode_parent_b = nn.Sequential(nn.Sequential(shared_mode))
             case "tied_policy_parameters":
                 shared_parameter = nn.Parameter(torch.zeros_like(reference))
                 self.policy_role_a = shared_parameter
@@ -179,6 +183,12 @@ class LifecycleProjectionModel(TestProjectionModel):
                 pass
             case fixture:
                 raise ValueError(f"Unknown lifecycle projection fixture: {fixture}")
+
+    def forward(self, input: Tensor) -> Tensor:
+        output = super().forward(input)
+        if self.cfg.fixture == "shared_descendant_modes":
+            return self.mode_parent_a(output) + self.mode_parent_b(output)
+        return output
 
 
 @dataclass
@@ -1329,6 +1339,55 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(grown_observer.weight.dtype, torch.float64)
         self.assertEqual(grown_observer.observed_dtype, torch.float64)
 
+    def test_shared_descendant_modes_survive_growth_and_checkpoint_reconstruction(self):
+        neuron_config = self.full_sampler_neuron_config(
+            model_config=self.lifecycle_projection_config("shared_descendant_modes")
+        )
+        config = self.growth_cluster_config(
+            growth_threshold=1, neuron_config=neuron_config
+        )
+        model = config.build().double()
+
+        def configure_parent(cluster):
+            parent = cluster.cluster["neuron_1_1_1"].nucleus.model
+            parent.mode_parent_a.eval()
+            parent.mode_parent_b.train()
+            parent.mode_parent_a[0].eval()
+            parent.weight.requires_grad_(False)
+            return parent
+
+        parent = configure_parent(model)
+        source = torch.ones(self.batch_size, self.input_dim, dtype=torch.float64)
+        expected_output = parent(source)
+        self.assertTrue(torch.count_nonzero(expected_output))
+        model(source)
+        grown = model.cluster["neuron_2_1_1"].nucleus.model
+        self.assertIs(grown.mode_parent_a[0], grown.mode_parent_b[0][0])
+        self.assertFalse(grown.mode_parent_a[0].training)
+        self.assertFalse(grown.mode_parent_a.training)
+        self.assertTrue(grown.mode_parent_b.training)
+        self.assertFalse(grown.weight.requires_grad)
+        torch.testing.assert_close(grown(source), expected_output)
+
+        restored = config.build().double()
+        configure_parent(restored)
+        restored.load_state_dict(model.state_dict())
+        restored_child = restored.cluster["neuron_2_1_1"].nucleus.model
+        self.assertIs(
+            restored_child.mode_parent_a[0], restored_child.mode_parent_b[0][0]
+        )
+        self.assertEqual(
+            {
+                name: child.training
+                for name, child in restored_child.named_modules(remove_duplicate=False)
+            },
+            {
+                name: child.training
+                for name, child in parent.named_modules(remove_duplicate=False)
+            },
+        )
+        self.assertFalse(restored_child.weight.requires_grad)
+        torch.testing.assert_close(restored_child(source), expected_output)
 
     def test_empty_cluster_initialization_inherits_owner_device_and_dtype(self):
         model = self.growth_cluster_config(growth_threshold=1).build().double()
