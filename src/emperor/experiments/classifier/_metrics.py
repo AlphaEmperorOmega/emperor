@@ -42,9 +42,7 @@ class ClassifierMetricsLogger(nn.Module):
         self._diagnostics_owner = _ClassifierDiagnostics(
             num_classes=self.num_classes,
             confidence_bin_count=self.confidence_bin_count,
-            full_confusion_matrix_class_limit=(
-                self.full_confusion_matrix_class_limit
-            ),
+            full_confusion_matrix_class_limit=(self.full_confusion_matrix_class_limit),
             top_confused_pair_limit=self.top_confused_pair_limit,
         )
         self._validation_examples_owner = _ClassifierValidationExamples(
@@ -122,9 +120,7 @@ class ClassifierMetricsLogger(nn.Module):
             "_best_validation_loss_epoch", torch.tensor(-1.0), persistent=False
         )
 
-    def log_training_step(
-        self, log_fn: Callable, output: ClassifierStepOutput
-    ) -> None:
+    def log_training_step(self, log_fn: Callable, output: ClassifierStepOutput) -> None:
         if output.labels.numel() == 0:
             return
         accuracy = self.train_accuracy(output.logits, output.labels)
@@ -164,9 +160,7 @@ class ClassifierMetricsLogger(nn.Module):
             prog_bar=True,
         )
 
-    def log_test_step(
-        self, log_fn: Callable, output: ClassifierStepOutput
-    ) -> None:
+    def log_test_step(self, log_fn: Callable, output: ClassifierStepOutput) -> None:
         if output.labels.numel() == 0:
             return
         accuracy = self.test_accuracy(output.logits, output.labels)
