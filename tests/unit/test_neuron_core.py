@@ -1,8 +1,10 @@
+from contextlib import ExitStack
 from unittest.mock import patch
 
 import torch
 from torch import Tensor
 
+from emperor.neuron import Neuron
 from unit.test_neuron import FourFieldOnlySampler, NeuronTestCase
 
 
@@ -56,6 +58,85 @@ class TestNeuron(NeuronTestCase):
                     self.assertEqual(
                         neuron.batch_counter.item(), int(interface != "route_signal")
                     )
+
+    def test_initialization_preserves_validation_component_and_buffer_order(self):
+        initialization_events = []
+
+        class RecordingValidator(Neuron.VALIDATOR):
+            @classmethod
+            def validate(cls, cfg):
+                initialization_events.append(("validate",))
+                super().validate(cfg)
+
+        class RecordingNeuron(Neuron):
+            VALIDATOR = RecordingValidator
+
+            def register_buffer(self, name, tensor, persistent=True):
+                initialization_events.append(("buffer", name, persistent))
+                return super().register_buffer(name, tensor, persistent=persistent)
+
+        for coordinate_embedding_flag in (None, False, True):
+            with self.subTest(coordinate_embedding_flag=coordinate_embedding_flag):
+                initialization_events.clear()
+                config = self.neuron_config(coordinate_embedding_flag)
+                with ExitStack() as patches:
+                    for component_name in ("nucleus", "axons", "terminal"):
+                        component_config = getattr(config, f"{component_name}_config")
+
+                        def record_build(
+                            build=component_config.build,
+                            name=component_name,
+                        ):
+                            initialization_events.append(("build", name))
+                            return build()
+
+                        patches.enter_context(
+                            patch.object(component_config, "build", record_build)
+                        )
+                    model = RecordingNeuron(config)
+
+                expected_events = [
+                    ("validate",),
+                    ("build", "nucleus"),
+                    ("build", "axons"),
+                    ("build", "terminal"),
+                    ("buffer", "batch_counter", True),
+                    ("buffer", "atrophy_counter", True),
+                ]
+                if coordinate_embedding_flag:
+                    expected_events.append(("buffer", "coordinate_embedding", False))
+                self.assertEqual(initialization_events, expected_events)
+                self.assertIs(model.cfg, config)
+                self.assertEqual(
+                    tuple(model._modules), ("nucleus", "axons", "terminal")
+                )
+                for counter in (model.batch_counter, model.atrophy_counter):
+                    self.assertEqual(counter.shape, ())
+                    self.assertEqual(counter.dtype, torch.int64)
+                    self.assertEqual(counter.item(), 0)
+                self.assertIsNot(model.batch_counter, model.atrophy_counter)
+
+    def test_rejected_config_stops_before_component_or_buffer_initialization(self):
+        config = self.neuron_config(coordinate_embedding_flag=1)
+        rng_before = torch.random.get_rng_state().clone()
+
+        with (
+            patch.object(config.nucleus_config, "build") as build_nucleus,
+            patch.object(config.axons_config, "build") as build_axons,
+            patch.object(config.terminal_config, "build") as build_terminal,
+            patch.object(Neuron, "register_buffer") as register_buffer,
+        ):
+            with self.assertRaisesRegex(
+                TypeError, "coordinate_embedding_flag must be a bool"
+            ):
+                Neuron(config)
+
+            build_nucleus.assert_not_called()
+            build_axons.assert_not_called()
+            build_terminal.assert_not_called()
+            register_buffer.assert_not_called()
+
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_before)
 
     def test_composes_nucleus_axons_and_terminal(self):
         model = self.neuron_config().build()
