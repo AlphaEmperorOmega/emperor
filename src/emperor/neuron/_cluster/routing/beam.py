@@ -105,7 +105,7 @@ class BeamRoutingDelegate:
         )
 
         flattened_hidden = slot_hidden.reshape(
-            batch_size * beam_width, -1
+            batch_size * beam_width, slot_hidden.shape[-1]
         )
         flattened_positions = slot_positions.reshape(batch_size * beam_width, 3)
         active_mask = selected_valid_mask.reshape(-1)
@@ -462,7 +462,7 @@ class BeamRoutingDelegate:
         batch_size: int,
     ) -> Tensor:
         beam_hidden = route_state.hidden.reshape(
-            batch_size, self.__owner.beam_width, -1
+            batch_size, self.__owner.beam_width, route_state.hidden.shape[-1]
         )
         beam_path_probabilities = route_state.beam_path_probabilities.reshape(
             batch_size,
