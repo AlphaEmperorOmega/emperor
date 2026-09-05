@@ -194,6 +194,17 @@ class TestConditionalDDPConfiguration(NeuronTestCase):
 
 
 class TestPostWrapGradientAveraging(unittest.TestCase):
+    def test_finite_scaled_mean_does_not_overflow_during_reduction(self) -> None:
+        parameter = nn.Parameter(torch.tensor([0.0], dtype=torch.float32))
+        parameter.grad = torch.tensor([2e38], dtype=torch.float32)
+        with patch(
+            "torch.distributed.all_reduce", side_effect=lambda value: value.mul_(2)
+        ):
+            _average_gradient(parameter, world_size=2)
+        torch.testing.assert_close(
+            parameter.grad, torch.tensor([2e38], dtype=torch.float32)
+        )
+
     def test_noops_without_an_active_multi_rank_process_group(self) -> None:
         parameter = nn.Parameter(torch.tensor([2.0]))
         parameter.grad = torch.tensor([3.0])
@@ -338,7 +349,7 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
             if tensor.dtype == torch.int64:
                 tensor.fill_(0 if collective_count == 1 else 1)
             else:
-                tensor.copy_(torch.tensor([6.0, -4.0], dtype=tensor.dtype))
+                tensor.copy_(torch.tensor([6.0, -4.0], dtype=tensor.dtype) / 2)
 
         with patch(
             "torch.distributed.all_reduce",
@@ -367,7 +378,8 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
             if tensor.dtype == torch.int64:
                 tensor.fill_(0 if collective_count == 1 else 2)
             else:
-                tensor.add_(4.0)
+                # The peer also divides its local gradient (4) before summing.
+                tensor.add_(4.0 / 2)
 
         with patch("torch.distributed.all_reduce", side_effect=collective):
             _average_gradient(parameter, world_size=2)
