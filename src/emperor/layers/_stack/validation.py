@@ -49,7 +49,11 @@ class LayerStackValidator(ValidatorBase):
 
     @classmethod
     def validate(cls, model: LayerStack) -> None:
-        cfg = model.cfg
+        cls.validate_config(model.cfg)
+
+    @classmethod
+    def validate_config(cls, cfg: LayerStackConfig) -> None:
+        """Validate built-in stack configuration without constructing modules."""
         cls.validate_required_fields(cfg)
         cls.validate_field_types(cfg)
         cls.validate_dimensions(
