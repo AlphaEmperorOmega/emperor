@@ -63,14 +63,14 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
         ).double()
         model.eval()
 
-        first_state = _NeuronHaltingLifecycle.update(
+        first_state, _ = _NeuronHaltingLifecycle.update(
             model,
             None,
             torch.tensor([[0.0], [10.0]], dtype=torch.float64),
             torch.tensor([[1.0], [20.0]], dtype=torch.float64),
             torch.tensor([True, False]),
         )
-        second_state = _NeuronHaltingLifecycle.update(
+        second_state, _ = _NeuronHaltingLifecycle.update(
             model,
             first_state,
             first_state.output_hidden,
@@ -99,7 +99,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             torch.zeros(2, 2, dtype=torch.float64),
         )
 
-        third_state = _NeuronHaltingLifecycle.update(
+        third_state, _ = _NeuronHaltingLifecycle.update(
             model,
             second_state,
             second_state.output_hidden,
@@ -140,7 +140,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             )
         )
 
-        state = _NeuronHaltingLifecycle.update(
+        state, _ = _NeuronHaltingLifecycle.update(
             model,
             SimpleNamespace(halt_mask=torch.tensor([False, False])),
             current_hidden,
@@ -190,7 +190,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             )
         )
 
-        state = _NeuronHaltingLifecycle.update(
+        state, _ = _NeuronHaltingLifecycle.update(
             model,
             _previous_state(metric=previous_metric),
             torch.tensor([[1.0], [2.0]], dtype=torch.float64),
@@ -238,7 +238,7 @@ class TestNeuronHaltingLifecycle(unittest.TestCase):
             strategy_token="preserved",
         )
 
-        state = _NeuronHaltingLifecycle.update(
+        state, _ = _NeuronHaltingLifecycle.update(
             model,
             previous_state,
             torch.ones(2, 1, dtype=torch.float64),

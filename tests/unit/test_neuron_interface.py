@@ -110,9 +110,11 @@ PRIVATE_MODULES = (
     "emperor.neuron._cluster.model",
     "emperor.neuron._cluster.validation",
     "emperor.neuron._cluster.topology",
-    "emperor.neuron._cluster.state",
-    "emperor.neuron._cluster.recurrent_routes",
-    "emperor.neuron._cluster.beam_routes",
+    "emperor.neuron._cluster.routing",
+    "emperor.neuron._cluster.routing.delegate",
+    "emperor.neuron._cluster.routing.beam",
+    "emperor.neuron._cluster.routing.state",
+    "emperor.neuron._cluster.routing.halting",
     "emperor.neuron._cluster.plasticity",
     "emperor.neuron._cluster.checkpointing",
 )
@@ -408,6 +410,7 @@ private_packages = {{}}
 for module_name in (
     "emperor.neuron._axons",
     "emperor.neuron._cluster",
+    "emperor.neuron._cluster.routing",
     "emperor.neuron._monitoring",
     "emperor.neuron._neuron",
     "emperor.neuron._nucleus",
@@ -468,6 +471,7 @@ print(json.dumps({{
             {
                 "emperor.neuron._axons": ["Axons"],
                 "emperor.neuron._cluster": [],
+                "emperor.neuron._cluster.routing": ["ClusterRoutingDelegate"],
                 "emperor.neuron._monitoring": [],
                 "emperor.neuron._neuron": ["Neuron"],
                 "emperor.neuron._nucleus": ["Nucleus"],

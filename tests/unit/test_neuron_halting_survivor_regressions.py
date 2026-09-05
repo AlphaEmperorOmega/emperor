@@ -38,7 +38,7 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
         )
         first_candidate = first_hidden + 0.5
 
-        first_state = _NeuronHaltingLifecycle.update(
+        first_state, _ = _NeuronHaltingLifecycle.update(
             halting_model,
             None,
             first_hidden,
@@ -50,7 +50,7 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
         self.assertFalse(first_state.halt_mask.any().item())
 
         second_candidate = first_candidate + 0.75
-        second_state = _NeuronHaltingLifecycle.update(
+        second_state, _ = _NeuronHaltingLifecycle.update(
             halting_model,
             first_state,
             first_candidate,
@@ -74,7 +74,7 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
             [[1.0, 2.0], [3.0, 4.0]],
             dtype=torch.float64,
         )
-        first_state = _NeuronHaltingLifecycle.update(
+        first_state, _ = _NeuronHaltingLifecycle.update(
             halting_model,
             None,
             torch.zeros_like(first_candidate),
@@ -92,7 +92,7 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
             dtype=torch.float64,
             requires_grad=True,
         )
-        second_state = _NeuronHaltingLifecycle.update(
+        second_state, _ = _NeuronHaltingLifecycle.update(
             halting_model,
             first_state,
             first_candidate,
@@ -114,7 +114,7 @@ class TestNeuronHaltingSurvivorRegressions(NeuronTestCase):
             dtype=torch.float64,
             requires_grad=True,
         )
-        third_state = _NeuronHaltingLifecycle.update(
+        third_state, _ = _NeuronHaltingLifecycle.update(
             halting_model,
             second_state,
             third_current,
