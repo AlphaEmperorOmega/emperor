@@ -49,6 +49,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._pending_named_optimizer_layout: dict | None = None
         self._optimizer_load_hook_handles: dict[int, RemovableHandle] = {}
 
+
     def setup(
         self,
         trainer: Trainer,
@@ -58,6 +59,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         if stage != "fit":
             return
         _ConditionalDDPStrategyAdapter.configure(trainer.strategy)
+
 
     def on_load_checkpoint(
         self,
@@ -94,45 +96,27 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             saved_optimizer_states,
         )
 
-    def on_save_checkpoint(
-        self,
-        trainer: Trainer,
-        pl_module: LightningModule,
-        checkpoint: dict,
-    ) -> None:
-        saved_optimizer_states = checkpoint.get("optimizer_states")
-        optimizers = list(getattr(trainer, "optimizers", []) or [])
-        if not isinstance(saved_optimizer_states, list) or not optimizers:
-            return
-        checkpoint[OPTIMIZER_LAYOUT_CHECKPOINT_KEY] = (
-            NeuronOptimizerNamedLayout.capture(
-                pl_module,
-                optimizers,
-                saved_optimizer_states,
-            )
-        )
 
-    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self.__commit_optimizer_checkpoint_load()
-        self._synced_neuron_names.clear()
-        self._synced_param_ids.clear()
-        self._synced_parameter_names_by_id.clear()
-        self._post_wrap_param_ids.clear()
-        self._fit_started = False
-        self._clusters = self.__find_neuron_clusters(pl_module)
-        self.sync_optimizers(trainer, pl_module)
-        optimizers = list(getattr(trainer, "optimizers", []) or [])
-        if self._pending_saved_optimizer_states is not None:
-            self.__prepare_optimizer_checkpoint_load(
-                trainer,
-                pl_module,
-                optimizers,
-                self._pending_saved_optimizer_states,
-            )
-        self._fit_started = True
+    @staticmethod
+    def __is_fitting(trainer: Trainer) -> bool:
+        trainer_function = getattr(getattr(trainer, "state", None), "fn", None)
+        return trainer_function is None or trainer_function == TrainerFn.FITTING
 
-    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self.__commit_optimizer_checkpoint_load()
+
+    def __find_neuron_clusters(self, module: nn.Module):
+        from emperor.neuron._cluster.model import NeuronCluster
+
+        clusters: list[nn.Module] = []
+        seen_cluster_ids: set[int] = set()
+        for _, candidate_module in module.named_modules(remove_duplicate=False):
+            if not isinstance(candidate_module, NeuronCluster):
+                continue
+            if id(candidate_module) in seen_cluster_ids:
+                continue
+            clusters.append(candidate_module)
+            seen_cluster_ids.add(id(candidate_module))
+        return clusters
+
 
     def __prepare_optimizer_checkpoint_load(
         self,
@@ -167,6 +151,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             self._named_layout.clear()
             self.__rollback_optimizer_checkpoint_load()
             raise
+
 
     def __reconcile_pending_schedulers(
         self,
@@ -211,10 +196,93 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
         self._scheduler_reconciler.prepare_for_load(scheduler_load_bindings)
 
-    @staticmethod
-    def __is_fitting(trainer: Trainer) -> bool:
-        trainer_function = getattr(getattr(trainer, "state", None), "fn", None)
-        return trainer_function is None or trainer_function == TrainerFn.FITTING
+
+    def __register_optimizer_load_hooks(
+        self,
+        optimizers: list[Optimizer],
+    ) -> None:
+        for optimizer in optimizers:
+            optimizer_id = id(optimizer)
+            if optimizer_id in self._optimizer_load_hook_handles or not (
+                self._named_layout.optimizer_requires_completion(optimizer)
+                or self._scheduler_reconciler.optimizer_requires_completion(optimizer)
+                or self._optimizer_load_transaction.optimizer_requires_completion(
+                    optimizer
+                )
+            ):
+                continue
+            self._optimizer_load_hook_handles[optimizer_id] = (
+                optimizer.register_load_state_dict_post_hook(
+                    self.__complete_loaded_optimizer
+                )
+            )
+
+
+    def __complete_loaded_optimizer(self, optimizer: Optimizer) -> None:
+        self._named_layout.complete_optimizer_load(optimizer)
+        self._scheduler_reconciler.mark_optimizer_loaded(optimizer)
+        self._optimizer_load_transaction.mark_optimizer_loaded(optimizer)
+        handle = self._optimizer_load_hook_handles.pop(id(optimizer))
+        handle.remove()
+
+
+    def __remove_optimizer_load_hooks(self) -> None:
+        for handle in self._optimizer_load_hook_handles.values():
+            handle.remove()
+        self._optimizer_load_hook_handles.clear()
+
+
+    def __rollback_optimizer_checkpoint_load(self) -> None:
+        self._optimizer_load_transaction.clear()
+
+
+    def on_save_checkpoint(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        checkpoint: dict,
+    ) -> None:
+        saved_optimizer_states = checkpoint.get("optimizer_states")
+        optimizers = list(getattr(trainer, "optimizers", []) or [])
+        if not isinstance(saved_optimizer_states, list) or not optimizers:
+            return
+        checkpoint[OPTIMIZER_LAYOUT_CHECKPOINT_KEY] = (
+            NeuronOptimizerNamedLayout.capture(
+                pl_module,
+                optimizers,
+                saved_optimizer_states,
+            )
+        )
+
+
+    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__commit_optimizer_checkpoint_load()
+        self._synced_neuron_names.clear()
+        self._synced_param_ids.clear()
+        self._synced_parameter_names_by_id.clear()
+        self._post_wrap_param_ids.clear()
+        self._fit_started = False
+        self._clusters = self.__find_neuron_clusters(pl_module)
+        self.sync_optimizers(trainer, pl_module)
+        optimizers = list(getattr(trainer, "optimizers", []) or [])
+        if self._pending_saved_optimizer_states is not None:
+            self.__prepare_optimizer_checkpoint_load(
+                trainer,
+                pl_module,
+                optimizers,
+                self._pending_saved_optimizer_states,
+            )
+        self._fit_started = True
+
+
+    def __commit_optimizer_checkpoint_load(self) -> None:
+        self._optimizer_load_transaction.commit_loaded()
+        self._scheduler_reconciler.commit_loaded()
+
+
+    def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        self.__commit_optimizer_checkpoint_load()
+
 
     def on_train_batch_start(
         self,
@@ -225,6 +293,28 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
 
+
+    def __sync_optimizers_if_clusters_grew(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+    ) -> None:
+        if not self.__clusters_changed_since_last_sync(pl_module):
+            return
+        self.sync_optimizers(trainer, pl_module)
+
+
+    def __clusters_changed_since_last_sync(
+        self,
+        pl_module: LightningModule,
+    ) -> bool:
+        clusters = self._clusters or self.__find_neuron_clusters(pl_module)
+        return any(
+            self._synced_neuron_names.get(id(cluster)) != set(cluster.cluster.keys())
+            for cluster in clusters
+        )
+
+
     def on_train_batch_end(
         self,
         trainer: Trainer,
@@ -234,6 +324,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         batch_idx: int,
     ) -> None:
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
+
 
     def on_before_optimizer_step(
         self,
@@ -247,8 +338,26 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             self._post_wrap_param_ids,
         )
 
+
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.__clear_fit_state()
+
+
+    def __clear_fit_state(self) -> None:
+        self._clusters.clear()
+        self._synced_neuron_names.clear()
+        self._synced_param_ids.clear()
+        self._synced_parameter_names_by_id.clear()
+        self._post_wrap_param_ids.clear()
+        self._fit_started = False
+        self._pending_saved_optimizer_states = None
+        self._pending_saved_scheduler_states = None
+        self._pending_named_optimizer_layout = None
+        self.__remove_optimizer_load_hooks()
+        self._scheduler_reconciler.clear()
+        self._named_layout.clear()
+        self.__rollback_optimizer_checkpoint_load()
+
 
     def on_exception(
         self,
@@ -258,24 +367,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     ) -> None:
         self.__clear_fit_state()
 
-    def __sync_optimizers_if_clusters_grew(
-        self,
-        trainer: Trainer,
-        pl_module: LightningModule,
-    ) -> None:
-        if not self.__clusters_changed_since_last_sync(pl_module):
-            return
-        self.sync_optimizers(trainer, pl_module)
-
-    def __clusters_changed_since_last_sync(
-        self,
-        pl_module: LightningModule,
-    ) -> bool:
-        clusters = self._clusters or self.__find_neuron_clusters(pl_module)
-        return any(
-            self._synced_neuron_names.get(id(cluster)) != set(cluster.cluster.keys())
-            for cluster in clusters
-        )
 
     def sync_optimizers(
         self,
@@ -302,6 +393,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             raise
         scheduler_transaction.commit()
         optimizer_transaction.commit()
+
 
     def __sync_optimizers(
         self,
@@ -373,108 +465,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         for cluster in clusters:
             cluster._checkpoint_removed_parameter_ids.clear()
 
-    def __find_neuron_clusters(self, module: nn.Module):
-        from emperor.neuron._cluster.model import NeuronCluster
-
-        clusters: list[nn.Module] = []
-        seen_cluster_ids: set[int] = set()
-        for _, candidate_module in module.named_modules(remove_duplicate=False):
-            if not isinstance(candidate_module, NeuronCluster):
-                continue
-            if id(candidate_module) in seen_cluster_ids:
-                continue
-            clusters.append(candidate_module)
-            seen_cluster_ids.add(id(candidate_module))
-        return clusters
-
-    def __sync_cluster_parameters(
-        self,
-        cluster: nn.Module,
-        parameter_locations: dict[int, list[tuple[Optimizer, dict]]],
-        parameter_names_by_id: dict[int, str],
-    ) -> None:
-        named_parameters = list(cluster.named_parameters(remove_duplicate=False))
-        cluster_parameter_order: dict[int, int] = {}
-        for index, (_, parameter) in enumerate(named_parameters):
-            cluster_parameter_order.setdefault(id(parameter), index)
-        parameters_by_role: dict[str, list[nn.Parameter]] = {}
-        for name, parameter in named_parameters:
-            role = self.__dynamic_neuron_parameter_role(name)
-            if role is not None:
-                parameters_by_role.setdefault(role, []).append(parameter)
-
-        for name, parameter in named_parameters:
-            if id(parameter) in parameter_locations:
-                continue
-            role = self.__dynamic_neuron_parameter_role(name)
-            if role is None:
-                continue
-            role_parameter_locations = {
-                (id(optimizer), id(group)): (optimizer, group)
-                for role_parameter in parameters_by_role[role]
-                for optimizer, group in parameter_locations.get(id(role_parameter), [])
-            }
-            if len(role_parameter_locations) != 1:
-                continue
-            owning_optimizer, owning_group = next(
-                iter(role_parameter_locations.values())
-            )
-            self.__insert_in_cluster_parameter_order(
-                owning_group,
-                parameter,
-                cluster_parameter_order,
-                parameter_names_by_id,
-            )
-            parameter_locations[id(parameter)] = [(owning_optimizer, owning_group)]
-
-    def __insert_in_cluster_parameter_order(
-        self,
-        group: dict,
-        parameter: nn.Parameter,
-        cluster_parameter_order: dict[int, int],
-        parameter_names_by_id: dict[int, str],
-    ) -> None:
-        desired_parameter_order = cluster_parameter_order[id(parameter)]
-        last_cluster_group_index: int | None = None
-        insertion_index = len(group["params"])
-        for index, existing_group_parameter in enumerate(group["params"]):
-            existing_parameter_order = cluster_parameter_order.get(
-                id(existing_group_parameter)
-            )
-            if existing_parameter_order is None:
-                continue
-            if existing_parameter_order > desired_parameter_order:
-                insertion_index = index
-                break
-            last_cluster_group_index = index
-        else:
-            insertion_index = (
-                len(group["params"])
-                if last_cluster_group_index is None
-                else last_cluster_group_index + 1
-            )
-        if "param_names" in group:
-            self.__validate_official_param_names(group, parameter_names_by_id)
-            try:
-                parameter_name = parameter_names_by_id[id(parameter)]
-            except KeyError as error:
-                raise RuntimeError(
-                    "Cannot safely synchronize optimizer param_names for a "
-                    "dynamic Neuron parameter that is not registered on the "
-                    "Lightning module."
-                ) from error
-            group["param_names"].insert(insertion_index, parameter_name)
-        group["params"].insert(insertion_index, parameter)
-
-    def __dynamic_neuron_parameter_role(self, name: str) -> str | None:
-        parameter_name_parts = name.split(".", 2)
-        if (
-            len(parameter_name_parts) != 3
-            or parameter_name_parts[0] != "cluster"
-            or not parameter_name_parts[1].startswith("neuron_")
-        ):
-            return None
-        return parameter_name_parts[2]
 
     def __remove_pruned_neuron_parameters(
         self,
@@ -592,6 +582,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 previous_group_count=previous_group_count,
             )
 
+
     @staticmethod
     def __optimizer_schedulers(
         trainer: Trainer,
@@ -604,6 +595,113 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             )
             if getattr(scheduler_config.scheduler, "optimizer", None) is optimizer
         ]
+
+
+    def __optimizer_parameter_locations(
+        self,
+        optimizers: list[Optimizer],
+    ) -> dict[int, list[tuple[Optimizer, dict]]]:
+        parameter_locations: dict[int, list[tuple[Optimizer, dict]]] = {}
+        for optimizer in optimizers:
+            for group in optimizer.param_groups:
+                for parameter in group["params"]:
+                    parameter_locations.setdefault(id(parameter), []).append(
+                        (optimizer, group)
+                    )
+        return parameter_locations
+
+
+    def __sync_cluster_parameters(
+        self,
+        cluster: nn.Module,
+        parameter_locations: dict[int, list[tuple[Optimizer, dict]]],
+        parameter_names_by_id: dict[int, str],
+    ) -> None:
+        named_parameters = list(cluster.named_parameters(remove_duplicate=False))
+        cluster_parameter_order: dict[int, int] = {}
+        for index, (_, parameter) in enumerate(named_parameters):
+            cluster_parameter_order.setdefault(id(parameter), index)
+        parameters_by_role: dict[str, list[nn.Parameter]] = {}
+        for name, parameter in named_parameters:
+            role = self.__dynamic_neuron_parameter_role(name)
+            if role is not None:
+                parameters_by_role.setdefault(role, []).append(parameter)
+
+        for name, parameter in named_parameters:
+            if id(parameter) in parameter_locations:
+                continue
+            role = self.__dynamic_neuron_parameter_role(name)
+            if role is None:
+                continue
+            role_parameter_locations = {
+                (id(optimizer), id(group)): (optimizer, group)
+                for role_parameter in parameters_by_role[role]
+                for optimizer, group in parameter_locations.get(id(role_parameter), [])
+            }
+            if len(role_parameter_locations) != 1:
+                continue
+            owning_optimizer, owning_group = next(
+                iter(role_parameter_locations.values())
+            )
+            self.__insert_in_cluster_parameter_order(
+                owning_group,
+                parameter,
+                cluster_parameter_order,
+                parameter_names_by_id,
+            )
+            parameter_locations[id(parameter)] = [(owning_optimizer, owning_group)]
+
+
+    def __dynamic_neuron_parameter_role(self, name: str) -> str | None:
+        parameter_name_parts = name.split(".", 2)
+        if (
+            len(parameter_name_parts) != 3
+            or parameter_name_parts[0] != "cluster"
+            or not parameter_name_parts[1].startswith("neuron_")
+        ):
+            return None
+        return parameter_name_parts[2]
+
+
+    def __insert_in_cluster_parameter_order(
+        self,
+        group: dict,
+        parameter: nn.Parameter,
+        cluster_parameter_order: dict[int, int],
+        parameter_names_by_id: dict[int, str],
+    ) -> None:
+        desired_parameter_order = cluster_parameter_order[id(parameter)]
+        last_cluster_group_index: int | None = None
+        insertion_index = len(group["params"])
+        for index, existing_group_parameter in enumerate(group["params"]):
+            existing_parameter_order = cluster_parameter_order.get(
+                id(existing_group_parameter)
+            )
+            if existing_parameter_order is None:
+                continue
+            if existing_parameter_order > desired_parameter_order:
+                insertion_index = index
+                break
+            last_cluster_group_index = index
+        else:
+            insertion_index = (
+                len(group["params"])
+                if last_cluster_group_index is None
+                else last_cluster_group_index + 1
+            )
+        if "param_names" in group:
+            self.__validate_official_param_names(group, parameter_names_by_id)
+            try:
+                parameter_name = parameter_names_by_id[id(parameter)]
+            except KeyError as error:
+                raise RuntimeError(
+                    "Cannot safely synchronize optimizer param_names for a "
+                    "dynamic Neuron parameter that is not registered on the "
+                    "Lightning module."
+                ) from error
+            group["param_names"].insert(insertion_index, parameter_name)
+        group["params"].insert(insertion_index, parameter)
+
 
     @staticmethod
     def __validate_official_param_names(
@@ -632,6 +730,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 "the owning group does not use fully-qualified module names."
             )
 
+
     def __warn_about_unoptimized_cluster_parameters(
         self,
         optimizers: list[Optimizer],
@@ -658,76 +757,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 stacklevel=1,
             )
 
+
     def __optimizer_param_ids(self, optimizer: Optimizer) -> set[int]:
         return {
             id(parameter)
             for group in optimizer.param_groups
             for parameter in group["params"]
         }
-
-    def __optimizer_parameter_locations(
-        self,
-        optimizers: list[Optimizer],
-    ) -> dict[int, list[tuple[Optimizer, dict]]]:
-        parameter_locations: dict[int, list[tuple[Optimizer, dict]]] = {}
-        for optimizer in optimizers:
-            for group in optimizer.param_groups:
-                for parameter in group["params"]:
-                    parameter_locations.setdefault(id(parameter), []).append(
-                        (optimizer, group)
-                    )
-        return parameter_locations
-
-    def __register_optimizer_load_hooks(
-        self,
-        optimizers: list[Optimizer],
-    ) -> None:
-        for optimizer in optimizers:
-            optimizer_id = id(optimizer)
-            if optimizer_id in self._optimizer_load_hook_handles or not (
-                self._named_layout.optimizer_requires_completion(optimizer)
-                or self._scheduler_reconciler.optimizer_requires_completion(optimizer)
-                or self._optimizer_load_transaction.optimizer_requires_completion(
-                    optimizer
-                )
-            ):
-                continue
-            self._optimizer_load_hook_handles[optimizer_id] = (
-                optimizer.register_load_state_dict_post_hook(
-                    self.__complete_loaded_optimizer
-                )
-            )
-
-    def __complete_loaded_optimizer(self, optimizer: Optimizer) -> None:
-        self._named_layout.complete_optimizer_load(optimizer)
-        self._scheduler_reconciler.mark_optimizer_loaded(optimizer)
-        self._optimizer_load_transaction.mark_optimizer_loaded(optimizer)
-        handle = self._optimizer_load_hook_handles.pop(id(optimizer))
-        handle.remove()
-
-    def __remove_optimizer_load_hooks(self) -> None:
-        for handle in self._optimizer_load_hook_handles.values():
-            handle.remove()
-        self._optimizer_load_hook_handles.clear()
-
-    def __clear_fit_state(self) -> None:
-        self._clusters.clear()
-        self._synced_neuron_names.clear()
-        self._synced_param_ids.clear()
-        self._synced_parameter_names_by_id.clear()
-        self._post_wrap_param_ids.clear()
-        self._fit_started = False
-        self._pending_saved_optimizer_states = None
-        self._pending_saved_scheduler_states = None
-        self._pending_named_optimizer_layout = None
-        self.__remove_optimizer_load_hooks()
-        self._scheduler_reconciler.clear()
-        self._named_layout.clear()
-        self.__rollback_optimizer_checkpoint_load()
-
-    def __rollback_optimizer_checkpoint_load(self) -> None:
-        self._optimizer_load_transaction.clear()
-
-    def __commit_optimizer_checkpoint_load(self) -> None:
-        self._optimizer_load_transaction.commit_loaded()
-        self._scheduler_reconciler.commit_loaded()
