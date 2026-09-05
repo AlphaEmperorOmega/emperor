@@ -47,71 +47,99 @@ class NeuronOptimizerNamedLayout:
             saved_optimizer_states,
             strict=True,
         ):
-            saved_groups = saved_state.get("param_groups")
-            if not isinstance(saved_groups, list) or len(saved_groups) != len(
-                optimizer.param_groups
-            ):
-                raise RuntimeError(
-                    "Cannot save Neuron optimizer layout metadata: the live and "
-                    "serialized parameter-group counts differ."
-                )
-            parameter_names_by_group = []
-            optimizer_parameter_names = []
-            for live_group, saved_group in zip(
-                optimizer.param_groups,
-                saved_groups,
-                strict=True,
-            ):
-                live_parameters = live_group["params"]
-                saved_parameter_ids = saved_group.get("params")
-                if not isinstance(saved_parameter_ids, list) or len(
-                    live_parameters
-                ) != len(saved_parameter_ids):
-                    raise RuntimeError(
-                        "Cannot save Neuron optimizer layout metadata: a live and "
-                        "serialized parameter-group size differs."
-                    )
-                for parameter_group, layout_source in (
-                    (live_group, "live"),
-                    (saved_group, "serialized"),
-                ):
-                    group_parameter_names = parameter_group.get("param_names")
-                    if group_parameter_names is not None and (
-                        not isinstance(group_parameter_names, list)
-                        or len(group_parameter_names) != len(live_parameters)
-                    ):
-                        raise RuntimeError(
-                            "Cannot save Neuron optimizer layout metadata: "
-                            f"{layout_source} param_names are not aligned with params."
-                        )
-                try:
-                    live_parameter_names = [
-                        parameter_names_by_id[id(parameter)]
-                        for parameter in live_parameters
-                    ]
-                except KeyError as error:
-                    raise RuntimeError(
-                        "Cannot save Neuron optimizer layout metadata: every "
-                        "optimizer parameter must be registered on the Lightning "
-                        "module."
-                    ) from error
-                parameter_names_by_group.append(live_parameter_names)
-                optimizer_parameter_names.extend(live_parameter_names)
-            if len(optimizer_parameter_names) != len(set(optimizer_parameter_names)):
-                raise RuntimeError(
-                    "Cannot save Neuron optimizer layout metadata: a parameter "
-                    "appears more than once in an optimizer."
-                )
             optimizer_layouts.append(
-                {
-                    "parameter_names": parameter_names_by_group,
-                    "sync_policy": _ROLE_SYNC_POLICY,
-                }
+                cls.__capture_optimizer_layout(
+                    optimizer,
+                    saved_state,
+                    parameter_names_by_id,
+                )
             )
         return {
             "version": _OPTIMIZER_LAYOUT_VERSION,
             "optimizers": optimizer_layouts,
         }
+
+    @staticmethod
+    def __parameter_names_by_identity(module: nn.Module) -> dict[int, str]:
+        return {id(parameter): name for name, parameter in module.named_parameters()}
+
+    @classmethod
+    def __capture_optimizer_layout(
+        cls,
+        optimizer: Optimizer,
+        saved_state: dict[str, Any],
+        parameter_names_by_id: dict[int, str],
+    ) -> dict[str, Any]:
+        saved_groups = saved_state.get("param_groups")
+        if not isinstance(saved_groups, list) or len(saved_groups) != len(
+            optimizer.param_groups
+        ):
+            raise RuntimeError(
+                "Cannot save Neuron optimizer layout metadata: the live and "
+                "serialized parameter-group counts differ."
+            )
+        parameter_names_by_group = []
+        optimizer_parameter_names = []
+        for live_group, saved_group in zip(
+            optimizer.param_groups,
+            saved_groups,
+            strict=True,
+        ):
+            live_parameter_names = cls.__capture_group_parameter_names(
+                live_group,
+                saved_group,
+                parameter_names_by_id,
+            )
+            parameter_names_by_group.append(live_parameter_names)
+            optimizer_parameter_names.extend(live_parameter_names)
+        if len(optimizer_parameter_names) != len(set(optimizer_parameter_names)):
+            raise RuntimeError(
+                "Cannot save Neuron optimizer layout metadata: a parameter "
+                "appears more than once in an optimizer."
+            )
+        return {
+            "parameter_names": parameter_names_by_group,
+            "sync_policy": _ROLE_SYNC_POLICY,
+        }
+
+    @staticmethod
+    def __capture_group_parameter_names(
+        live_group: dict,
+        saved_group: dict,
+        parameter_names_by_id: dict[int, str],
+    ) -> list[str]:
+        live_parameters = live_group["params"]
+        saved_parameter_ids = saved_group.get("params")
+        if not isinstance(saved_parameter_ids, list) or len(live_parameters) != len(
+            saved_parameter_ids
+        ):
+            raise RuntimeError(
+                "Cannot save Neuron optimizer layout metadata: a live and "
+                "serialized parameter-group size differs."
+            )
+        for parameter_group, layout_source in (
+            (live_group, "live"),
+            (saved_group, "serialized"),
+        ):
+            group_parameter_names = parameter_group.get("param_names")
+            if group_parameter_names is not None and (
+                not isinstance(group_parameter_names, list)
+                or len(group_parameter_names) != len(live_parameters)
+            ):
+                raise RuntimeError(
+                    "Cannot save Neuron optimizer layout metadata: "
+                    f"{layout_source} param_names are not aligned with params."
+                )
+        try:
+            return [
+                parameter_names_by_id[id(parameter)] for parameter in live_parameters
+            ]
+        except KeyError as error:
+            raise RuntimeError(
+                "Cannot save Neuron optimizer layout metadata: every "
+                "optimizer parameter must be registered on the Lightning "
+                "module."
+            ) from error
 
     def prepare_for_load(
         self,
@@ -163,28 +191,6 @@ class NeuronOptimizerNamedLayout:
             self.clear()
             raise
 
-    def optimizer_requires_completion(self, optimizer: Optimizer) -> bool:
-        return any(migration.optimizer is optimizer for migration in self._migrations)
-
-    def complete_optimizer_load(self, optimizer: Optimizer) -> None:
-        remaining_migrations = []
-        for migration in self._migrations:
-            if migration.optimizer is optimizer:
-                self.__restore_saved_parameter_ids(migration)
-            else:
-                remaining_migrations.append(migration)
-        self._migrations = remaining_migrations
-
-    def clear(self) -> None:
-        for migration in self._migrations:
-            migration.optimizer.param_groups[:] = list(migration.original_groups)
-            self.__restore_saved_parameter_ids(migration)
-        self._migrations.clear()
-
-    @staticmethod
-    def __parameter_names_by_identity(module: nn.Module) -> dict[int, str]:
-        return {id(parameter): name for name, parameter in module.named_parameters()}
-
     @staticmethod
     def __validated_optimizer_layouts(layout: Any) -> list[dict[str, Any]]:
         if not isinstance(layout, dict):
@@ -212,6 +218,45 @@ class NeuronOptimizerNamedLayout:
         parameters_by_name: dict[str, nn.Parameter],
         names_by_parameter_id: dict[int, str],
     ) -> _NamedOptimizerMigration:
+        saved_groups, saved_group_names, validated_saved_parameter_names = (
+            cls.__validated_saved_layout_groups(
+                saved_state,
+                optimizer_layout,
+                parameters_by_name,
+            )
+        )
+        cls.__validate_live_parameter_membership(
+            optimizer,
+            names_by_parameter_id,
+            validated_saved_parameter_names,
+        )
+        cls.__validate_live_group_membership(
+            optimizer,
+            saved_group_names,
+            names_by_parameter_id,
+        )
+        return _NamedOptimizerMigration(
+            optimizer=optimizer,
+            original_groups=tuple(optimizer.param_groups),
+            saved_state=saved_state,
+            original_saved_parameter_ids=tuple(
+                tuple(group["params"]) for group in saved_groups
+            ),
+            original_saved_parameter_names=tuple(
+                tuple(group["param_names"])
+                if isinstance(group.get("param_names"), list)
+                else None
+                for group in saved_groups
+            ),
+        )
+
+    @classmethod
+    def __validated_saved_layout_groups(
+        cls,
+        saved_state: dict[str, Any],
+        optimizer_layout: dict[str, Any],
+        parameters_by_name: dict[str, nn.Parameter],
+    ) -> tuple[list[dict[str, Any]], list[list[str]], list[str]]:
         saved_groups = saved_state.get("param_groups")
         saved_group_names = optimizer_layout.get("parameter_names")
         if set(optimizer_layout) != {"parameter_names", "sync_policy"}:
@@ -242,77 +287,7 @@ class NeuronOptimizerNamedLayout:
                 raise RuntimeError(
                     "Invalid named Neuron optimizer param_names metadata."
                 )
-        try:
-            live_optimizer_parameter_names = [
-                names_by_parameter_id[id(parameter)]
-                for group in optimizer.param_groups
-                for parameter in group["params"]
-            ]
-        except KeyError as error:
-            raise RuntimeError(
-                "Cannot load named Neuron optimizer state: every live optimizer "
-                "parameter must be registered on the Lightning module."
-            ) from error
-        if len(live_optimizer_parameter_names) != len(
-            set(live_optimizer_parameter_names)
-        ) or set(live_optimizer_parameter_names) != set(
-            validated_saved_parameter_names
-        ):
-            raise RuntimeError(
-                "Cannot load named Neuron optimizer state: configured parameter "
-                "membership differs from the checkpoint."
-            )
-        if len(optimizer.param_groups) != len(saved_group_names):
-            raise RuntimeError(
-                "Cannot load named Neuron optimizer state: configured "
-                "parameter-group counts differ from the checkpoint."
-            )
-        for live_group, group_parameter_names in zip(
-            optimizer.param_groups,
-            saved_group_names,
-            strict=True,
-        ):
-            live_group_parameter_names = {
-                names_by_parameter_id[id(parameter)]
-                for parameter in live_group["params"]
-            }
-            if live_group_parameter_names != set(group_parameter_names):
-                raise RuntimeError(
-                    "Cannot load named Neuron optimizer state: configured "
-                    "parameter-group membership differs from the checkpoint."
-                )
-        return _NamedOptimizerMigration(
-            optimizer=optimizer,
-            original_groups=tuple(optimizer.param_groups),
-            saved_state=saved_state,
-            original_saved_parameter_ids=tuple(
-                tuple(group["params"]) for group in saved_groups
-            ),
-            original_saved_parameter_names=tuple(
-                tuple(group["param_names"])
-                if isinstance(group.get("param_names"), list)
-                else None
-                for group in saved_groups
-            ),
-        )
-
-    @staticmethod
-    def __restore_saved_parameter_ids(
-        migration: _NamedOptimizerMigration,
-    ) -> None:
-        for group, parameter_ids in zip(
-            migration.saved_state["param_groups"],
-            migration.original_saved_parameter_ids,
-            strict=True,
-        ):
-            group["params"] = list(parameter_ids)
-        for group, parameter_names in zip(
-            migration.saved_state["param_groups"],
-            migration.original_saved_parameter_names,
-            strict=True,
-        ):
-            if parameter_names is not None:
-                group["param_names"] = list(parameter_names)
+        return saved_groups, saved_group_names, validated_saved_parameter_names
 
     @staticmethod
     def __validate_saved_group_names(
@@ -353,6 +328,59 @@ class NeuronOptimizerNamedLayout:
         return validated_parameter_names
 
     @staticmethod
+    def __validate_live_parameter_membership(
+        optimizer: Optimizer,
+        names_by_parameter_id: dict[int, str],
+        validated_saved_parameter_names: list[str],
+    ) -> None:
+        try:
+            live_optimizer_parameter_names = [
+                names_by_parameter_id[id(parameter)]
+                for group in optimizer.param_groups
+                for parameter in group["params"]
+            ]
+        except KeyError as error:
+            raise RuntimeError(
+                "Cannot load named Neuron optimizer state: every live optimizer "
+                "parameter must be registered on the Lightning module."
+            ) from error
+        if len(live_optimizer_parameter_names) != len(
+            set(live_optimizer_parameter_names)
+        ) or set(live_optimizer_parameter_names) != set(
+            validated_saved_parameter_names
+        ):
+            raise RuntimeError(
+                "Cannot load named Neuron optimizer state: configured parameter "
+                "membership differs from the checkpoint."
+            )
+
+    @staticmethod
+    def __validate_live_group_membership(
+        optimizer: Optimizer,
+        saved_group_names: list[list[str]],
+        names_by_parameter_id: dict[int, str],
+    ) -> None:
+        if len(optimizer.param_groups) != len(saved_group_names):
+            raise RuntimeError(
+                "Cannot load named Neuron optimizer state: configured "
+                "parameter-group counts differ from the checkpoint."
+            )
+        for live_group, group_parameter_names in zip(
+            optimizer.param_groups,
+            saved_group_names,
+            strict=True,
+        ):
+            live_group_parameter_names = {
+                names_by_parameter_id[id(parameter)]
+                for parameter in live_group["params"]
+            }
+            if live_group_parameter_names != set(group_parameter_names):
+                raise RuntimeError(
+                    "Cannot load named Neuron optimizer state: configured "
+                    "parameter-group membership differs from the checkpoint."
+                )
+
+    @staticmethod
     def __reorder_saved_parameter_ids(
         optimizer: Optimizer,
         saved_state: dict[str, Any],
@@ -388,3 +416,39 @@ class NeuronOptimizerNamedLayout:
                     serialized_parameter_names_by_layout_name[name]
                     for name in live_parameter_names
                 ]
+
+    def optimizer_requires_completion(self, optimizer: Optimizer) -> bool:
+        return any(migration.optimizer is optimizer for migration in self._migrations)
+
+    def complete_optimizer_load(self, optimizer: Optimizer) -> None:
+        remaining_migrations = []
+        for migration in self._migrations:
+            if migration.optimizer is optimizer:
+                self.__restore_saved_parameter_ids(migration)
+            else:
+                remaining_migrations.append(migration)
+        self._migrations = remaining_migrations
+
+    @staticmethod
+    def __restore_saved_parameter_ids(
+        migration: _NamedOptimizerMigration,
+    ) -> None:
+        for group, parameter_ids in zip(
+            migration.saved_state["param_groups"],
+            migration.original_saved_parameter_ids,
+            strict=True,
+        ):
+            group["params"] = list(parameter_ids)
+        for group, parameter_names in zip(
+            migration.saved_state["param_groups"],
+            migration.original_saved_parameter_names,
+            strict=True,
+        ):
+            if parameter_names is not None:
+                group["param_names"] = list(parameter_names)
+
+    def clear(self) -> None:
+        for migration in self._migrations:
+            migration.optimizer.param_groups[:] = list(migration.original_groups)
+            self.__restore_saved_parameter_ids(migration)
+        self._migrations.clear()
