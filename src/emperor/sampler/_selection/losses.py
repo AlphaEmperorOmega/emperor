@@ -167,7 +167,9 @@ class ZeroCentredLoss(AuxiliaryLossBase):
         return self.__compute_zero_centred_loss()
 
     def __compute_zero_centred_loss(self):
-        return self.squared_log_sum_exp_accumulation / self.count_accumulation
+        return (
+            self.squared_log_sum_exp_accumulation / self.count_accumulation.clamp_min(1)
+        )
 
 
 class MutualInformationLoss(AuxiliaryLossBase):
