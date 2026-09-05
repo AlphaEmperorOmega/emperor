@@ -183,6 +183,12 @@ class TestPostWrapGradientAveraging(unittest.TestCase):
             patch("torch.distributed.is_available", return_value=True),
             patch("torch.distributed.is_initialized", return_value=True),
             patch("torch.distributed.get_world_size", return_value=2),
+            patch(
+                "torch.distributed.all_gather_object",
+                side_effect=lambda collected, manifest: collected.__setitem__(
+                    slice(None), [manifest, manifest]
+                ),
+            ),
             patch("torch.distributed.all_reduce") as all_reduce,
         ):
             average_post_wrap_gradients(
