@@ -81,7 +81,9 @@ class ClassifierExperiment(LightningModule):
         logits, resolved_auxiliary_loss = self._validate_model_output(
             self(inputs), labels
         )
-        task_loss = self.loss_fn(logits, labels)
+        # CrossEntropyLoss's mean is undefined without observations. Retain the
+        # visited model graph so empty DDP peers can still participate in backward.
+        task_loss = self.loss_fn(logits, labels) if labels.numel() else logits.sum()
         loss = task_loss
         if resolved_auxiliary_loss is not None:
             loss = task_loss + resolved_auxiliary_loss
