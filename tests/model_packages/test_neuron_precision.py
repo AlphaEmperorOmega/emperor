@@ -5,7 +5,12 @@ import importlib
 import pytest
 import torch
 
-from emperor.neuron import TerminalRoutingTreeDepthOptions
+from emperor.halting import (
+    HaltingHiddenStateModeOptions,
+    SoftHaltingConfig,
+    StickBreakingConfig,
+)
+from emperor.neuron import NeuronCluster, TerminalRoutingTreeDepthOptions
 from emperor.sampler import SamplerModel
 from model_packages.test_neuron_terminal_routing_tree_runtime import PACKAGE_BUILDERS
 
@@ -77,6 +82,43 @@ def test_empty_package_training_step_has_finite_graph_connected_loss(
     assert gradients and all(
         torch.equal(value, torch.zeros_like(value)) for value in gradients
     )
+
+
+@pytest.mark.parametrize("package,builder_name", PACKAGE_BUILDERS)
+@pytest.mark.parametrize("beam_width", [1, 2])
+@pytest.mark.parametrize("halting_option", [StickBreakingConfig, SoftHaltingConfig])
+def test_packages_expose_accumulated_cluster_halting(
+    package, builder_name, beam_width, halting_option
+):
+    model = _build_model(
+        package,
+        builder_name,
+        beam_width,
+        None,
+        cluster_halting_flag=True,
+        cluster_halting_option=halting_option,
+        cluster_halting_hidden_state_mode=HaltingHiddenStateModeOptions.ACCUMULATED,
+    )
+    clusters = [
+        module for module in model.modules() if isinstance(module, NeuronCluster)
+    ]
+    assert clusters
+    for cluster in clusters:
+        assert (
+            cluster.halting_model.hidden_state_mode
+            == HaltingHiddenStateModeOptions.ACCUMULATED
+        )
+        assert isinstance(cluster.halting_model.cfg, halting_option)
+    source = torch.ones(2, 4, requires_grad=True)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        output, loss = model(source)
+    (output.square().sum() + loss).backward()
+    assert torch.isfinite(output).all() and torch.isfinite(loss)
+    assert source.grad is not None and torch.isfinite(source.grad).all()
+    visited = [
+        parameter.grad for parameter in model.parameters() if parameter.grad is not None
+    ]
+    assert visited and all(torch.isfinite(gradient).all() for gradient in visited)
 
 
 @pytest.mark.parametrize("package,builder_name", PACKAGE_BUILDERS)

@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, get_args
 import torch
 from torch import Tensor
 
+from emperor.halting import HaltingHiddenStateModeOptions
+
 if TYPE_CHECKING:
     from emperor.halting import HaltingBase, HaltingStateBase
 
@@ -31,15 +33,20 @@ class _NeuronHaltingLifecycle:
             current_hidden,
         )
         prepared_previous_state = cls.__copy_previous_state(previous_state)
-        halting_state, _ = halting_model.update_halting_state(
+        halting_state, continuation_hidden = halting_model.update_halting_state(
             prepared_previous_state,
             halting_input,
         )
+        has_native_continuation = hasattr(halting_state, "continuation_probability")
         if prepared_previous_state is not None:
             halting_state = cls.__merge_state_row_updates(
                 prepared_previous_state,
                 halting_state,
                 update_mask,
+            )
+        if not has_native_continuation:
+            cls.__record_continuation_probability(
+                halting_state, halting_input, update_mask
             )
         cls.__record_route_metadata(
             halting_state,
@@ -47,7 +54,15 @@ class _NeuronHaltingLifecycle:
             halting_input,
             update_mask,
         )
-        return halting_state, weighted_candidate
+        if (
+            getattr(halting_model, "hidden_state_mode", None)
+            == HaltingHiddenStateModeOptions.RAW
+        ):
+            continuation_hidden = weighted_candidate
+        continuation_hidden = torch.where(
+            update_mask.unsqueeze(-1), continuation_hidden, weighted_candidate
+        )
+        return halting_state, continuation_hidden
 
     @staticmethod
     def __copy_previous_state(
@@ -131,7 +146,6 @@ class _NeuronHaltingLifecycle:
         cls.__record_advanced_rows(
             halting_state, previous_state, halting_input, update_mask
         )
-        cls.__record_continuation_probability(halting_state, halting_input, update_mask)
         cls.__record_step_indices(halting_state, previous_state, update_mask)
         cls.__expand_scalar_ponder_cost(halting_state, update_mask)
 
@@ -233,7 +247,7 @@ class _NeuronHaltingLifecycle:
     ) -> tuple[Tensor, Tensor]:
         finalized_hidden, ponder_loss = halting_model.finalize_weighted_accumulation(
             halting_state,
-            current_hidden,
+            getattr(halting_state, "raw_hidden", current_hidden),
         )
         reduced_ponder_loss = cls.__reduce_ponder_loss(
             ponder_loss,
@@ -315,4 +329,12 @@ class _NeuronHaltingLifecycle:
                     attribute_name,
                     attribute_value.index_select(0, row_indices),
                 )
+        if usable_mask is not None:
+            for attribute_name in ("valid_mask", "advanced_mask"):
+                if hasattr(gathered_state, attribute_name):
+                    setattr(
+                        gathered_state,
+                        attribute_name,
+                        getattr(gathered_state, attribute_name) & usable_mask,
+                    )
         return gathered_state
