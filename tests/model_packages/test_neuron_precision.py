@@ -61,6 +61,25 @@ def _build_model(package, builder_name, beam_width, tree_depth, **overrides):
 
 
 @pytest.mark.parametrize("package,builder_name", PACKAGE_BUILDERS)
+def test_empty_package_training_step_has_finite_graph_connected_loss(
+    package, builder_name
+):
+    model = _build_model(package, builder_name, 2, 2).train()
+    source = torch.empty(0, 4)
+    labels = torch.empty(0, dtype=torch.long)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        loss = model.training_step((source, labels), 0)
+    assert torch.isfinite(loss) and loss.item() == 0
+    loss.backward()
+    gradients = [
+        parameter.grad for parameter in model.parameters() if parameter.grad is not None
+    ]
+    assert gradients and all(
+        torch.equal(value, torch.zeros_like(value)) for value in gradients
+    )
+
+
+@pytest.mark.parametrize("package,builder_name", PACKAGE_BUILDERS)
 @pytest.mark.parametrize("beam_width", [1, 2])
 @pytest.mark.parametrize("tree_depth", [None, 2, 3])
 @pytest.mark.parametrize("precision", [torch.bfloat16, torch.float64])
