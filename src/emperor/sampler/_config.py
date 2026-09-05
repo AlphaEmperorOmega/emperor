@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from emperor.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
+    from emperor.layers import LayerStackConfig
     from emperor.sampler._sampler import SamplerModel
 
 
@@ -23,6 +24,17 @@ class RouterConfig(ConfigBase):
         from emperor.sampler._router import RouterModel
 
         return RouterModel
+
+    def model_dimension_overrides(
+        self, input_dim: int | None = None
+    ) -> "LayerStackConfig":
+        """Resolve the same effective network dimensions for preflight and build."""
+        from emperor.layers import LayerStackConfig
+
+        return LayerStackConfig(
+            input_dim=self.input_dim if input_dim is None else input_dim,
+            output_dim=self.num_experts * (2 if self.noisy_topk_flag else 1),
+        )
 
 
 @dataclass
