@@ -410,23 +410,19 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         parameter_names_by_id = {
             id(parameter): name for name, parameter in pl_module.named_parameters()
         }
-        live_module_parameter_ids = {
-            id(parameter) for parameter in pl_module.parameters()
+        live_module_parameter_ids = set(parameter_names_by_id)
+        cluster_parameters = {
+            id(cluster): tuple(cluster.parameters()) for cluster in clusters
+        }
+        current_parameter_ids = {
+            cluster_id: {id(parameter) for parameter in parameters}
+            for cluster_id, parameters in cluster_parameters.items()
         }
         new_post_wrap_param_ids = (
-            {
-                id(parameter)
-                for cluster in clusters
-                for parameter in cluster.parameters()
-                if id(parameter)
-                not in self._synced_param_ids.get(
-                    id(cluster),
-                    {
-                        id(current_parameter)
-                        for current_parameter in cluster.parameters()
-                    },
-                )
-            }
+            set().union(*(
+                parameter_ids - self._synced_param_ids.get(cluster_id, parameter_ids)
+                for cluster_id, parameter_ids in current_parameter_ids.items()
+            ))
             if self._fit_started
             else set()
         )
@@ -438,6 +434,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 clusters,
                 live_module_parameter_ids,
                 parameter_names_by_id,
+                current_parameter_ids,
             )
         parameter_locations = self.__optimizer_parameter_locations(optimizers)
         for cluster in clusters:
@@ -446,14 +443,11 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 parameter_locations,
                 parameter_names_by_id,
             )
-        self.__warn_about_unoptimized_cluster_parameters(optimizers, clusters)
+        self.__warn_about_unoptimized_cluster_parameters(optimizers, cluster_parameters)
         self._synced_neuron_names = {
             id(cluster): set(cluster.cluster.keys()) for cluster in clusters
         }
-        self._synced_param_ids = {
-            id(cluster): {id(parameter) for parameter in cluster.parameters()}
-            for cluster in clusters
-        }
+        self._synced_param_ids = current_parameter_ids
         self._synced_parameter_names_by_id = dict(parameter_names_by_id)
         current_cluster_param_ids = {
             parameter_id
@@ -473,12 +467,13 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         clusters: list[nn.Module],
         live_module_parameter_ids: set[int],
         parameter_names_by_id: dict[int, str],
+        current_parameter_ids: dict[int, set[int]],
     ) -> None:
         pruned_cluster_param_ids: set[int] = set()
         for cluster in clusters:
             pruned_cluster_param_ids.update(
                 self._synced_param_ids.get(id(cluster), set())
-                - {id(parameter) for parameter in cluster.parameters()}
+                - current_parameter_ids[id(cluster)]
             )
             pruned_cluster_param_ids.update(cluster._checkpoint_removed_parameter_ids)
         stale_param_ids = pruned_cluster_param_ids - live_module_parameter_ids
@@ -734,16 +729,16 @@ class NeuronClusterOptimizerSyncCallback(Callback):
     def __warn_about_unoptimized_cluster_parameters(
         self,
         optimizers: list[Optimizer],
-        clusters: list[nn.Module],
+        cluster_parameters: dict[int, tuple[nn.Parameter, ...]],
     ) -> None:
         all_optimizer_param_ids: set[int] = set()
         for optimizer in optimizers:
             all_optimizer_param_ids |= self.__optimizer_param_ids(optimizer)
 
-        for cluster in clusters:
+        for parameters in cluster_parameters.values():
             unoptimized_count = sum(
                 1
-                for parameter in cluster.parameters()
+                for parameter in parameters
                 if parameter.requires_grad
                 and id(parameter) not in all_optimizer_param_ids
             )
