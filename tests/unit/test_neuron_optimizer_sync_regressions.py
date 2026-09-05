@@ -58,6 +58,197 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    def test_replacement_preserves_subset_ownership_through_aliases(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        old_parameter = cluster.cluster["neuron_0_0_0"].terminal.weight
+        optimizer = torch.optim.Adam([old_parameter], lr=0.02)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        with self.assertWarns(UserWarning):
+            callback.on_fit_start(trainer, module)
+        replacement = _RoleNeuron()
+        replacement.terminal.weight = replacement.nucleus.weight
+        cluster.cluster["neuron_0_0_0"] = replacement
+        callback.on_before_backward(trainer, module, None)
+        self.assertEqual(len(optimizer.param_groups), 1)
+        self.assertIs(
+            optimizer.param_groups[0]["params"][0], replacement.nucleus.weight
+        )
+        self.assertEqual(optimizer.param_groups[0]["lr"], 0.02)
+
+    def test_replacement_split_inherits_shared_parameter_group(self) -> None:
+        cluster = _DynamicCluster()
+        old_neuron = cluster.cluster["neuron_0_0_0"]
+        old_neuron.terminal.weight = old_neuron.nucleus.weight
+        module = _HostModule(cluster)
+        optimizer = torch.optim.Adam(module.parameters(), lr=0.02)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        cluster.cluster["neuron_0_0_0"] = _RoleNeuron()
+        callback.on_before_backward(trainer, module, None)
+        self.assertEqual(
+            _optimizer_parameter_ids(optimizer), {id(p) for p in cluster.parameters()}
+        )
+        self.assertEqual(len(optimizer.param_groups[0]["params"]), 2)
+
+    def test_replacement_merge_rejects_conflicting_groups_before_mutation(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.Adam(
+            [
+                {"params": [parameter], "lr": learning_rate}
+                for parameter, learning_rate in zip(
+                    cluster.parameters(), (0.01, 0.02), strict=True
+                )
+            ]
+        )
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        old_groups = tuple(optimizer.param_groups)
+        old_lists = tuple(group["params"] for group in old_groups)
+        old_ids = _optimizer_parameter_ids(optimizer)
+        replacement = _RoleNeuron()
+        replacement.terminal.weight = replacement.nucleus.weight
+        cluster.cluster["neuron_0_0_0"] = replacement
+        with self.assertRaisesRegex(RuntimeError, "ambiguous"):
+            callback.on_before_backward(trainer, module, None)
+        self.assertEqual(_optimizer_parameter_ids(optimizer), old_ids)
+        for index, group in enumerate(optimizer.param_groups):
+            self.assertIs(group, old_groups[index])
+            self.assertIs(group["params"], old_lists[index])
+
+    def test_live_alias_split_keeps_both_roles_in_registered_order(self) -> None:
+        cluster = _DynamicCluster()
+        neuron = cluster.cluster["neuron_0_0_0"]
+        neuron.terminal.weight = neuron.nucleus.weight
+        module = _HostModule(cluster)
+        optimizer = torch.optim.Adam(
+            [
+                {
+                    "params": list(module.parameters()),
+                    "param_names": [name for name, _ in module.named_parameters()],
+                }
+            ],
+            lr=0.01,
+        )
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        neuron.nucleus.weight = nn.Parameter(torch.ones_like(neuron.nucleus.weight))
+        callback.on_before_backward(trainer, module, None)
+        self.assertEqual(
+            list(map(id, optimizer.param_groups[0]["params"])),
+            list(map(id, module.parameters())),
+        )
+        self.assertEqual(
+            optimizer.param_groups[0]["param_names"],
+            [name for name, _ in module.named_parameters()],
+        )
+
+    def test_same_name_replacement_preserves_sole_exemplar_groups(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        named_parameters = list(module.named_parameters())
+        optimizer = torch.optim.Adam(
+            [
+                {"params": [parameter], "param_names": [name], "lr": learning_rate}
+                for (name, parameter), learning_rate in zip(
+                    named_parameters, (0.01, 0.02), strict=True
+                )
+            ]
+        )
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2)
+        trainer = SimpleNamespace(
+            optimizers=[optimizer],
+            lr_scheduler_configs=[SimpleNamespace(scheduler=scheduler)],
+        )
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        original_groups = tuple(optimizer.param_groups)
+        old_parameters = tuple(cluster.parameters())
+        for parameter in old_parameters:
+            optimizer.state[parameter] = {"sentinel": torch.ones_like(parameter)}
+        cluster.cluster["neuron_0_0_0"] = _RoleNeuron()
+
+        callback.on_before_backward(trainer, module, None)
+
+        for index, (name, parameter) in enumerate(module.named_parameters()):
+            self.assertIs(optimizer.param_groups[index], original_groups[index])
+            self.assertIs(optimizer.param_groups[index]["params"][0], parameter)
+            self.assertEqual(optimizer.param_groups[index]["param_names"], [name])
+            self.assertNotIn(parameter, optimizer.state)
+            self.assertIn(id(parameter), callback._post_wrap_param_ids)
+        self.assertTrue(
+            all(parameter not in optimizer.state for parameter in old_parameters)
+        )
+        self.assertEqual(
+            [group["lr"] for group in optimizer.param_groups], [0.01, 0.02]
+        )
+        self.assertEqual(scheduler.base_lrs, [0.01, 0.02])
+
+    def test_replacement_and_pruning_roll_back_together_before_retry(self) -> None:
+        cluster = _DynamicCluster(neuron_count=2)
+        module = _HostModule(cluster)
+        optimizer = torch.optim.Adam(
+            [
+                {"params": list(neuron.parameters()), "lr": learning_rate}
+                for neuron, learning_rate in zip(
+                    cluster.cluster.values(), (0.01, 0.02), strict=True
+                )
+            ]
+        )
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2)
+        trainer = SimpleNamespace(
+            optimizers=[optimizer],
+            lr_scheduler_configs=[SimpleNamespace(scheduler=scheduler)],
+        )
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        original_groups = tuple(optimizer.param_groups)
+        original_lists = tuple(group["params"] for group in original_groups)
+        original_parameters = tuple(tuple(parameters) for parameters in original_lists)
+        cluster.cluster["neuron_0_0_0"] = _RoleNeuron()
+        del cluster.cluster["neuron_1_0_0"]
+        with patch.object(
+            optimizer_sync,
+            "preflight_scheduler_group_removal",
+            side_effect=RuntimeError("reject pruning"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "reject pruning"):
+                callback.on_before_backward(trainer, module, None)
+        for index, group in enumerate(optimizer.param_groups):
+            self.assertIs(group, original_groups[index])
+            self.assertIs(group["params"], original_lists[index])
+            self.assertEqual(
+                tuple(map(id, group["params"])),
+                tuple(map(id, original_parameters[index])),
+            )
+        self.assertEqual(scheduler.base_lrs, [0.01, 0.02])
+        callback.on_before_backward(trainer, module, None)
+        self.assertEqual(
+            _optimizer_parameter_ids(optimizer), {id(p) for p in cluster.parameters()}
+        )
+        self.assertEqual(scheduler.base_lrs, [0.01])
+
+    def test_replacement_ties_keep_one_slot_without_retired_state(self) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.Adam(module.parameters(), lr=0.01)
+        trainer = SimpleNamespace(optimizers=[optimizer], lr_scheduler_configs=[])
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        replacement = _RoleNeuron()
+        replacement.terminal.weight = replacement.nucleus.weight
+        cluster.cluster["neuron_0_0_0"] = replacement
+        callback.on_before_zero_grad(trainer, module, optimizer)
+        self.assertEqual(len(optimizer.param_groups[0]["params"]), 1)
+        self.assertIs(
+            optimizer.param_groups[0]["params"][0], replacement.nucleus.weight
+        )
+
     def test_ddp_registration_is_independent_of_live_optimizer_membership(self) -> None:
         cluster = _DynamicCluster()
         module = _HostModule(cluster)
