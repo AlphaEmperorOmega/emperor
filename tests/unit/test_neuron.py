@@ -1329,6 +1329,7 @@ class TestNeuronCluster(NeuronTestCase):
         self.assertEqual(grown_observer.weight.dtype, torch.float64)
         self.assertEqual(grown_observer.observed_dtype, torch.float64)
 
+
     def test_empty_cluster_initialization_inherits_owner_device_and_dtype(self):
         model = self.growth_cluster_config(growth_threshold=1).build().double()
         owner_parameter = next(model.entry_sampler.parameters())
@@ -2274,7 +2275,9 @@ class TestNeuronCluster(NeuronTestCase):
                 "Distributed Neuron growth topology changed during a forward pass",
             ),
         ):
-            model._check_neuron_growth(None, _NeuronClusterForwardContext())
+            model._NeuronCluster__plasticity.check_neuron_growth(
+                None, _NeuronClusterForwardContext()
+            )
 
     def test_public_forward_passes_captured_growth_baseline_to_growth_check(self):
         model = self.growth_cluster_config(growth_threshold=1).build()
@@ -2283,11 +2286,13 @@ class TestNeuronCluster(NeuronTestCase):
 
         with (
             patch.object(
-                model,
-                "_capture_growth_counter_baseline",
+                model._NeuronCluster__plasticity,
+                "capture_growth_counter_baseline",
                 return_value=captured_baseline,
             ) as capture_baseline,
-            patch.object(model, "_check_neuron_growth") as check_growth,
+            patch.object(
+                model._NeuronCluster__plasticity, "check_neuron_growth"
+            ) as check_growth,
         ):
             model(input_batch)
 
@@ -2303,7 +2308,7 @@ class TestNeuronCluster(NeuronTestCase):
             x_axis_total_neurons=3,
         ).build()
         model._growth_counters_are_global = True
-        baseline = model._capture_growth_counter_baseline()
+        baseline = model._NeuronCluster__plasticity.capture_growth_counter_baseline()
         model.cluster["neuron_1_1_1"] = model._initialize_neuron(1, 1, 1)
 
         with (
@@ -2313,7 +2318,7 @@ class TestNeuronCluster(NeuronTestCase):
                 "Distributed Neuron growth topology changed during a forward pass",
             ),
         ):
-            model._check_neuron_growth(
+            model._NeuronCluster__plasticity.check_neuron_growth(
                 baseline,
                 _NeuronClusterForwardContext(),
             )
@@ -2321,16 +2326,17 @@ class TestNeuronCluster(NeuronTestCase):
     def test_distributed_growth_rejects_missing_escape_count_baseline(self):
         model = self.escape_growth_cluster()
         model._growth_counters_are_global = True
-        captured_baseline = model._capture_growth_counter_baseline()
+        captured_baseline = (
+            model._NeuronCluster__plasticity.capture_growth_counter_baseline()
+        )
         self.assertIsNotNone(captured_baseline)
         baseline_without_escape_counts = type(captured_baseline)(
             neuron_names=captured_baseline.neuron_names,
             batch_counters=captured_baseline.batch_counters,
             escape_counts=None,
         )
-        synchronize_escape_counts = (
-            model._NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks
-        )
+        plasticity = model._NeuronCluster__plasticity
+        synchronize_escape_counts = plasticity._ClusterPlasticityDelegate__synchronize_escape_counts_across_ranks
 
         with (
             patch("torch.distributed.is_initialized", return_value=True),
@@ -2344,7 +2350,7 @@ class TestNeuronCluster(NeuronTestCase):
     def test_distributed_escape_counts_advance_from_captured_global_baseline(self):
         model = self.escape_growth_cluster()
         model._growth_counters_are_global = True
-        baseline = model._capture_growth_counter_baseline()
+        baseline = model._NeuronCluster__plasticity.capture_growth_counter_baseline()
         self.assertIsNotNone(baseline)
         self.assertIsNotNone(baseline.escape_counts)
         model.escape_counts.add_(torch.ones_like(model.escape_counts))
@@ -2352,9 +2358,8 @@ class TestNeuronCluster(NeuronTestCase):
         expected_escape_counts = (
             model.escape_counts.clone() + remote_escape_count_contribution
         )
-        synchronize_escape_counts = (
-            model._NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks
-        )
+        plasticity = model._NeuronCluster__plasticity
+        synchronize_escape_counts = plasticity._ClusterPlasticityDelegate__synchronize_escape_counts_across_ranks
 
         def add_remote_escape_count_contribution(
             tensor: Tensor,
@@ -3303,13 +3308,15 @@ class TestNeuronCluster(NeuronTestCase):
         ).eval()
         input_tensor = torch.zeros(1, 1)
 
-        entry_state = model._NeuronClusterBeamRoutesMixin__run_entry_routes_with_beams(
+        routing = model._NeuronCluster__routing
+        beam_routes = routing._ClusterRoutingDelegate__beam_routes
+        entry_state = beam_routes._BeamRoutingDelegate__run_entry_routes_with_beams(
             input_tensor,
             _NeuronClusterForwardContext(),
         )
-        route_state = model._NeuronClusterBeamRoutesMixin__run_beam_route_step(
+        route_state = beam_routes._BeamRoutingDelegate__run_beam_route_step(
             entry_state,
-            model._current_route_mask(entry_state),
+            routing.current_route_mask(entry_state),
             _NeuronClusterForwardContext(),
         )
 
@@ -3932,11 +3939,13 @@ def _distributed_growth_worker_assert_post_load_counter_deltas(
         contribution_sum = world_size * (world_size + 1) // 2
         observed_intervals = []
         for interval in (1, 2):
-            baseline = target._capture_growth_counter_baseline()
+            baseline = (
+                target._NeuronCluster__plasticity.capture_growth_counter_baseline()
+            )
             target.cluster["neuron_1_1_1"].batch_counter.add_(rank + 1)
             target.escape_counts[1, 0, 0].add_(2 * (rank + 1))
 
-            target._check_neuron_growth(
+            target._NeuronCluster__plasticity.check_neuron_growth(
                 baseline,
                 _NeuronClusterForwardContext(),
             )

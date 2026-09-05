@@ -1,22 +1,25 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
 from torch import nn
 
 from emperor.neuron import NeuronCluster
-from emperor.neuron._cluster.plasticity import _NeuronClusterPlasticityMixin
+from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
+from emperor.neuron._cluster.recurrent_routes import ClusterRoutingDelegate
 from emperor.neuron._cluster.state import _NeuronClusterForwardContext
+from emperor.neuron._cluster.topology import ClusterTopologyDelegate
 
 _SYNC_BATCH_COUNTERS = (
-    "_NeuronClusterPlasticityMixin__synchronize_batch_counters_across_ranks"
+    "_ClusterPlasticityDelegate__synchronize_batch_counters_across_ranks"
 )
 _SYNC_ESCAPE_COUNTS = (
-    "_NeuronClusterPlasticityMixin__synchronize_escape_counts_across_ranks"
+    "_ClusterPlasticityDelegate__synchronize_escape_counts_across_ranks"
 )
-_FIND_GROWTH_POSITION = "_NeuronClusterPlasticityMixin__find_closest_empty_connection"
+_FIND_GROWTH_POSITION = "_ClusterPlasticityDelegate__find_closest_empty_connection"
 _INITIALIZE_GROWN_NEURON = (
-    "_NeuronClusterPlasticityMixin__initialize_grown_neuron_with_synchronized_rng"
+    "_ClusterPlasticityDelegate__initialize_grown_neuron_with_synchronized_rng"
 )
 
 
@@ -29,14 +32,15 @@ class _CounterNeuron(nn.Module):
 
 class TestDistributedNeuronAtrophyCounters(unittest.TestCase):
     def test_reduced_atrophy_counters_are_persisted_on_every_rank(self) -> None:
-        plasticity = _NeuronClusterPlasticityMixin()
-        plasticity.cluster = nn.ModuleDict(
+        owner = SimpleNamespace()
+        plasticity = ClusterPlasticityDelegate(owner, ClusterTopologyDelegate(owner))
+        owner.cluster = nn.ModuleDict(
             {
                 "neuron_1_1_1": _CounterNeuron(atrophy_counter=8),
                 "neuron_2_1_1": _CounterNeuron(atrophy_counter=5),
             }
         )
-        synchronize = plasticity._NeuronClusterPlasticityMixin__synchronize_atrophy_counters_across_ranks
+        synchronize = plasticity._ClusterPlasticityDelegate__synchronize_atrophy_counters_across_ranks
 
         def reduce_to_global_minimum(
             counters: torch.Tensor,
@@ -57,29 +61,32 @@ class TestDistributedNeuronAtrophyCounters(unittest.TestCase):
             {"neuron_1_1_1": 3, "neuron_2_1_1": 4},
         )
         self.assertEqual(
-            [int(neuron.atrophy_counter) for neuron in plasticity.cluster.values()],
+            [int(neuron.atrophy_counter) for neuron in owner.cluster.values()],
             [3, 4],
         )
 
 
 class TestDistributedNeuronGrowthCounters(unittest.TestCase):
     def setUp(self) -> None:
-        self.plasticity = _NeuronClusterPlasticityMixin()
-        self.plasticity.growth_threshold = 10_000
-        self.plasticity.cluster = nn.ModuleDict(
+        self.owner = SimpleNamespace()
+        self.plasticity = ClusterPlasticityDelegate(
+            self.owner, ClusterTopologyDelegate(self.owner)
+        )
+        self.owner.growth_threshold = 10_000
+        self.owner.cluster = nn.ModuleDict(
             {
                 "neuron_1_1_1": _CounterNeuron(batch_counter=5),
                 "neuron_2_1_1": _CounterNeuron(batch_counter=7),
             }
         )
-        self.plasticity.escape_counts = torch.tensor([7])
-        self.plasticity._growth_counters_are_global = True
+        self.owner.escape_counts = torch.tensor([7])
+        self.owner._growth_counters_are_global = True
 
     def test_global_history_adds_each_rank_delta_once(self) -> None:
-        baseline = self.plasticity._capture_growth_counter_baseline()
-        self.plasticity.cluster["neuron_1_1_1"].batch_counter.add_(1)
-        self.plasticity.cluster["neuron_2_1_1"].batch_counter.add_(2)
-        self.plasticity.escape_counts.add_(1)
+        baseline = self.plasticity.capture_growth_counter_baseline()
+        self.owner.cluster["neuron_1_1_1"].batch_counter.add_(1)
+        self.owner.cluster["neuron_2_1_1"].batch_counter.add_(2)
+        self.owner.escape_counts.add_(1)
         synchronize_batch = getattr(self.plasticity, _SYNC_BATCH_COUNTERS)
         synchronize_escape = getattr(self.plasticity, _SYNC_ESCAPE_COUNTS)
 
@@ -107,18 +114,18 @@ class TestDistributedNeuronGrowthCounters(unittest.TestCase):
             {"neuron_1_1_1": 9, "neuron_2_1_1": 13},
         )
         self.assertEqual(
-            [int(neuron.batch_counter) for neuron in self.plasticity.cluster.values()],
+            [int(neuron.batch_counter) for neuron in self.owner.cluster.values()],
             [9, 13],
         )
         torch.testing.assert_close(synchronized_escape, torch.tensor([10]))
-        torch.testing.assert_close(self.plasticity.escape_counts, torch.tensor([10]))
+        torch.testing.assert_close(self.owner.escape_counts, torch.tensor([10]))
 
     def test_loaded_growth_counters_are_marked_global(self) -> None:
-        self.plasticity._growth_counters_are_global = False
+        self.owner._growth_counters_are_global = False
 
-        self.plasticity._mark_growth_counters_global_after_load(None, None)
+        self.plasticity.mark_growth_counters_global_after_load(None, None)
 
-        self.assertTrue(self.plasticity._growth_counters_are_global)
+        self.assertTrue(self.owner._growth_counters_are_global)
 
     def test_forward_passes_the_captured_baseline_to_growth(self) -> None:
         model = NeuronCluster.__new__(NeuronCluster)
@@ -126,23 +133,28 @@ class TestDistributedNeuronGrowthCounters(unittest.TestCase):
         model.beam_width = 1
         model.input_dim = 2
         model.train()
+        topology = ClusterTopologyDelegate(model)
+        plasticity = ClusterPlasticityDelegate(model, topology)
+        routing = ClusterRoutingDelegate(model, topology, plasticity)
+        model._NeuronCluster__plasticity = plasticity
+        model._NeuronCluster__routing = routing
         baseline = object()
         input_batch = torch.ones(2, 2)
 
         with (
             patch.object(
-                model,
-                "_propagate_signal_through_recurrent_routes",
+                routing,
+                "propagate",
                 return_value=(input_batch.clone(), torch.zeros(()), None),
             ),
             patch.object(
-                model,
-                "_capture_growth_counter_baseline",
+                plasticity,
+                "capture_growth_counter_baseline",
                 return_value=baseline,
             ),
-            patch.object(model, "_advance_grown_neuron_warmup"),
-            patch.object(model, "_check_neuron_growth") as check_growth,
-            patch.object(model, "_check_neuron_atrophy") as check_atrophy,
+            patch.object(plasticity, "advance_grown_neuron_warmup"),
+            patch.object(plasticity, "check_neuron_growth") as check_growth,
+            patch.object(plasticity, "check_neuron_atrophy") as check_atrophy,
         ):
             model(input_batch)
 
@@ -157,16 +169,16 @@ class TestDistributedNeuronGrowthCounters(unittest.TestCase):
 
 class TestNeuronGrowthCounterTransactions(unittest.TestCase):
     def test_failed_growth_preserves_the_saturated_counter(self) -> None:
-        plasticity = _NeuronClusterPlasticityMixin()
+        owner = SimpleNamespace()
+        plasticity = ClusterPlasticityDelegate(owner, ClusterTopologyDelegate(owner))
         saturated_neuron = _CounterNeuron(batch_counter=5)
-        plasticity.growth_threshold = 1
-        plasticity.cluster = nn.ModuleDict({"neuron_1_1_1": saturated_neuron})
-        plasticity.escape_counts = None
-        plasticity.total_growth_count = None
-        plasticity.forwards_since_last_growth = None
-        plasticity._growth_counters_are_global = False
-        plasticity._neuron_name = lambda x, y, z: f"neuron_{x}_{y}_{z}"
-        plasticity._add_neuron = lambda _cluster, _name, _neuron: None
+        owner.growth_threshold = 1
+        owner.cluster = nn.ModuleDict({"neuron_1_1_1": saturated_neuron})
+        owner.escape_counts = None
+        owner.total_growth_count = None
+        owner.forwards_since_last_growth = None
+        owner._growth_counters_are_global = False
+        owner._add_neuron = lambda _cluster, _name, _neuron: None
 
         with (
             patch.object(
@@ -181,7 +193,7 @@ class TestNeuronGrowthCounterTransactions(unittest.TestCase):
             ),
             self.assertRaisesRegex(RuntimeError, "initializer failed"),
         ):
-            plasticity._check_neuron_growth(
+            plasticity.check_neuron_growth(
                 None,
                 _NeuronClusterForwardContext(),
             )

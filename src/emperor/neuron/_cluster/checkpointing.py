@@ -1,31 +1,26 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import torch
-from torch import Tensor
-from torch.nn import ModuleDict
 
-from emperor.nn import Module
+if TYPE_CHECKING:
+    from emperor.neuron._cluster.model import NeuronCluster
+    from emperor.neuron._cluster.topology import ClusterTopologyDelegate
 
 
-class _NeuronClusterCheckpointingMixin:
-    """Own checkpoint topology over explicitly declared sibling capabilities."""
+class ClusterCheckpointDelegate:
+    """Reconcile the owner's live grid with an incoming checkpoint."""
 
-    cluster: ModuleDict
-    entry_coordinates: Tensor
-    forwards_since_last_growth: Tensor | None
-    total_growth_count: Tensor | None
-    _checkpoint_removed_parameter_ids: set[int]
-    _add_neuron: Callable[..., None]
-    _coordinate_from_row: Callable[..., tuple[int, int, int]]
-    _initialize_neuron: Callable[..., Module]
-    _is_neuron_name: Callable[..., bool]
-    _is_within_grid_capacity: Callable[..., bool]
-    _neuron_name: Callable[..., str]
-    _parse_neuron_name: Callable[..., tuple[int, int, int]]
+    def __init__(
+        self,
+        owner: NeuronCluster,
+        topology: ClusterTopologyDelegate,
+    ) -> None:
+        self.__owner = owner
+        self.__topology = topology
 
-    def _reconcile_cluster_with_state_dict(
+    def reconcile_cluster_with_state_dict(
         self,
         module,
         state_dict,
@@ -64,7 +59,7 @@ class _NeuronClusterCheckpointingMixin:
             if not state_key.startswith(cluster_prefix):
                 continue
             neuron_name = state_key[len(cluster_prefix) :].split(".", 1)[0]
-            if self._is_neuron_name(neuron_name):
+            if self.__topology.is_neuron_name(neuron_name):
                 incoming_neuron_names.setdefault(neuron_name, None)
         return tuple(incoming_neuron_names)
 
@@ -76,7 +71,10 @@ class _NeuronClusterCheckpointingMixin:
         noncanonical_names = sorted(
             neuron_name
             for neuron_name in incoming_neuron_names
-            if neuron_name != self._neuron_name(*self._parse_neuron_name(neuron_name))
+            if neuron_name
+            != self.__topology.neuron_name(
+                *self.__topology.parse_neuron_name(neuron_name)
+            )
         )
         if noncanonical_names:
             error_msgs.append(
@@ -88,7 +86,9 @@ class _NeuronClusterCheckpointingMixin:
         invalid_names = sorted(
             neuron_name
             for neuron_name in incoming_neuron_names
-            if not self._is_within_grid_capacity(self._parse_neuron_name(neuron_name))
+            if not self.__topology.is_within_grid_capacity(
+                self.__topology.parse_neuron_name(neuron_name)
+            )
         )
         if invalid_names:
             error_msgs.append(
@@ -98,8 +98,10 @@ class _NeuronClusterCheckpointingMixin:
             return False
 
         entry_neuron_names = {
-            self._neuron_name(*self._coordinate_from_row(coordinate_row))
-            for coordinate_row in self.entry_coordinates.detach().cpu().tolist()
+            self.__topology.neuron_name(
+                *self.__topology.coordinate_from_row(coordinate_row)
+            )
+            for coordinate_row in self.__owner.entry_coordinates.detach().cpu().tolist()
         }
         missing_entry_neuron_names = sorted(
             entry_neuron_names - set(incoming_neuron_names)
@@ -114,16 +116,16 @@ class _NeuronClusterCheckpointingMixin:
 
     def __reconcile_neurons(self, incoming_neuron_names: tuple[str, ...]) -> None:
         incoming_neuron_name_set = set(incoming_neuron_names)
-        self._checkpoint_removed_parameter_ids.update(
+        self.__owner._checkpoint_removed_parameter_ids.update(
             id(parameter)
-            for neuron_name, neuron in self.cluster.items()
+            for neuron_name, neuron in self.__owner.cluster.items()
             if neuron_name not in incoming_neuron_name_set
             for parameter in neuron.parameters()
         )
         missing_neuron_names = tuple(
             neuron_name
             for neuron_name in incoming_neuron_names
-            if neuron_name not in self.cluster
+            if neuron_name not in self.__owner.cluster
         )
         reconstructed_neurons = {}
         if missing_neuron_names:
@@ -138,23 +140,23 @@ class _NeuronClusterCheckpointingMixin:
             # continuation RNG streams.
             with torch.random.fork_rng(devices=rng_fork_devices):
                 reconstructed_neurons = {
-                    neuron_name: self._initialize_neuron(
-                        *self._parse_neuron_name(neuron_name)
+                    neuron_name: self.__owner._initialize_neuron(
+                        *self.__topology.parse_neuron_name(neuron_name)
                     )
                     for neuron_name in missing_neuron_names
                 }
         checkpoint_ordered_neurons = [
             (
                 neuron_name,
-                self.cluster[neuron_name]
-                if neuron_name in self.cluster
+                self.__owner.cluster[neuron_name]
+                if neuron_name in self.__owner.cluster
                 else reconstructed_neurons[neuron_name],
             )
             for neuron_name in incoming_neuron_names
         ]
-        self.cluster.clear()
+        self.__owner.cluster.clear()
         for neuron_name, neuron in checkpoint_ordered_neurons:
-            self._add_neuron(self.cluster, neuron_name, neuron)
+            self.__owner._add_neuron(self.__owner.cluster, neuron_name, neuron)
 
     def __seed_missing_atrophy_counters(
         self,
@@ -162,7 +164,7 @@ class _NeuronClusterCheckpointingMixin:
         cluster_prefix: str,
     ) -> None:
         """Zero-fill missing atrophy counters from legacy checkpoints."""
-        for neuron_name in self.cluster.keys():
+        for neuron_name in self.__owner.cluster.keys():
             counter_key = f"{cluster_prefix}{neuron_name}.atrophy_counter"
             if counter_key not in state_dict:
                 state_dict[counter_key] = torch.zeros((), dtype=torch.int64)
@@ -173,7 +175,7 @@ class _NeuronClusterCheckpointingMixin:
         prefix: str,
     ) -> None:
         for buffer_name in ("forwards_since_last_growth", "total_growth_count"):
-            if getattr(self, buffer_name) is None:
+            if getattr(self.__owner, buffer_name) is None:
                 continue
             buffer_key = f"{prefix}{buffer_name}"
             if buffer_key not in state_dict:
@@ -191,9 +193,9 @@ class _NeuronClusterCheckpointingMixin:
             ):
                 continue
             neuron_name = state_key[len(cluster_prefix) :].split(".", 1)[0]
-            if neuron_name not in self.cluster:
+            if neuron_name not in self.__owner.cluster:
                 continue
-            neuron = self.cluster[neuron_name]
+            neuron = self.__owner.cluster[neuron_name]
             if getattr(neuron, "warmup_remaining_steps", None) is None:
                 neuron.register_buffer(
                     "warmup_remaining_steps",
@@ -210,7 +212,7 @@ class _NeuronClusterCheckpointingMixin:
         state_dict,
         cluster_prefix: str,
     ) -> None:
-        for neuron_name, neuron in self.cluster.items():
+        for neuron_name, neuron in self.__owner.cluster.items():
             if getattr(neuron, "warmup_remaining_steps", None) is None:
                 continue
             buffer_key = f"{cluster_prefix}{neuron_name}.warmup_remaining_steps"
