@@ -28,6 +28,54 @@ class _TrainingPolicyObserver(nn.Module):
 
 
 class TestNeuronRuntimePolicy(unittest.TestCase):
+    def test_shared_descendant_is_applied_after_every_parent_at_any_alias_depth(
+        self,
+    ) -> None:
+        def graph():
+            root = nn.Module()
+            shared = _TrainingPolicyObserver()
+            root.short_alias = shared
+            root.left = nn.Sequential(shared)
+            root.right = nn.Sequential(nn.Sequential(shared))
+            return root
+
+        for shared_training in (False, True):
+            with self.subTest(shared_training=shared_training):
+                template = graph().double()
+                template.left.eval()
+                template.right.train()
+                template.short_alias.train(shared_training)
+                template.short_alias.weight.requires_grad_(False)
+                module = graph()
+                inherit_runtime_policy(
+                    module,
+                    template,
+                    fallback_device=torch.device("cpu"),
+                    fallback_dtype=torch.float32,
+                )
+                self.assertEqual(
+                    {
+                        name: child.training
+                        for name, child in module.named_modules(remove_duplicate=False)
+                    },
+                    {
+                        name: child.training
+                        for name, child in template.named_modules(
+                            remove_duplicate=False
+                        )
+                    },
+                )
+                self.assertTrue(module.short_alias.training_observations)
+                self.assertTrue(
+                    all(
+                        observation[1:] == (torch.float64, False, torch.float64)
+                        for observation in module.short_alias.training_observations
+                    )
+                )
+                self.assertEqual(
+                    module.short_alias.training_observations[-1][0], shared_training
+                )
+
     def test_unmatched_tensor_roles_inherit_cluster_fallback_context(self) -> None:
         module = nn.Module()
         module.extra_parameter = nn.Parameter(torch.ones((), dtype=torch.float32))
