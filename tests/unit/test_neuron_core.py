@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import torch
 from torch import Tensor
 
@@ -5,6 +7,56 @@ from unit.test_neuron import FourFieldOnlySampler, NeuronTestCase
 
 
 class TestNeuron(NeuronTestCase):
+    def test_width_one_is_rejected_before_coordinate_embedding_and_counters(self):
+        neuron = self.neuron_config(coordinate_embedding_flag=True).build()
+        with self.assertRaisesRegex(ValueError, "feature dimension"):
+            neuron(torch.ones(2, 1))
+        self.assertEqual(neuron.batch_counter.item(), 0)
+
+    def test_all_signal_interfaces_reject_wrong_width_before_processing(self):
+        for embeddings in (False, True):
+            neuron = self.neuron_config(coordinate_embedding_flag=embeddings).build()
+            for interface in ("forward", "process_signal", "route_signal"):
+                for width in (0, 1, 3, 5):
+                    with self.subTest(
+                        embeddings=embeddings, interface=interface, width=width
+                    ):
+                        with (
+                            patch.object(
+                                neuron.nucleus,
+                                "forward",
+                                side_effect=AssertionError("nucleus called"),
+                            ),
+                            patch.object(
+                                neuron.terminal,
+                                "forward",
+                                side_effect=AssertionError("terminal called"),
+                            ),
+                        ):
+                            with self.assertRaisesRegex(
+                                ValueError, "feature dimension"
+                            ):
+                                getattr(neuron, interface)(torch.ones(2, width))
+                        self.assertEqual(neuron.batch_counter.item(), 0)
+                        self.assertEqual(neuron.atrophy_counter.item(), 0)
+
+    def test_signal_interfaces_accept_valid_empty_inputs(self):
+        for embeddings in (False, True):
+            for interface in ("forward", "process_signal", "route_signal"):
+                with self.subTest(embeddings=embeddings, interface=interface):
+                    neuron = self.neuron_config(
+                        coordinate_embedding_flag=embeddings
+                    ).build()
+                    source = torch.empty(0, self.input_dim, requires_grad=True)
+                    result = getattr(neuron, interface)(source)
+                    output = result[0] if isinstance(result, tuple) else result
+                    self.assertEqual(output.shape[0], 0)
+                    output.sum().backward()
+                    torch.testing.assert_close(source.grad, torch.zeros_like(source))
+                    self.assertEqual(
+                        neuron.batch_counter.item(), int(interface != "route_signal")
+                    )
+
     def test_composes_nucleus_axons_and_terminal(self):
         model = self.neuron_config().build()
         input_batch = torch.randn(self.batch_size, self.input_dim)
