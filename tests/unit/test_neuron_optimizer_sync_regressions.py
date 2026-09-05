@@ -8,6 +8,10 @@ from torch import nn
 
 from emperor.neuron import _optimizer_sync as optimizer_sync
 from emperor.neuron import NeuronClusterConfig, NeuronClusterOptimizerSyncCallback
+from emperor.neuron._optimizer_layout import (
+    OPTIMIZER_LAYOUT_CHECKPOINT_KEY,
+    NeuronOptimizerNamedLayout,
+)
 from unit.test_neuron import NeuronTestCase
 
 
@@ -58,6 +62,69 @@ def _optimizer_parameter_ids(optimizer: torch.optim.Optimizer) -> set[int]:
 
 
 class TestNeuronOptimizerSyncRegressions(unittest.TestCase):
+    def test_empty_checkpoint_failure_restores_pre_sync_optimizer_membership(
+        self,
+    ) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2)
+        trainer = SimpleNamespace(
+            optimizers=[optimizer],
+            lr_scheduler_configs=[SimpleNamespace(scheduler=scheduler)],
+        )
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        before_ids = _optimizer_parameter_ids(optimizer)
+        cluster.grow()
+        with self.assertRaisesRegex(RuntimeError, "scheduler counts differ"):
+            callback.on_load_checkpoint(
+                trainer, module, {"optimizer_states": [], "lr_schedulers": []}
+            )
+        self.assertEqual(_optimizer_parameter_ids(optimizer), before_ids)
+
+    def test_checkpoint_preparation_failure_restores_pre_sync_membership_and_retries(
+        self,
+    ) -> None:
+        cluster = _DynamicCluster()
+        module = _HostModule(cluster)
+        optimizer = torch.optim.SGD(module.parameters(), lr=0.01)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2)
+        trainer = SimpleNamespace(
+            optimizers=[optimizer],
+            lr_scheduler_configs=[SimpleNamespace(scheduler=scheduler)],
+        )
+        callback = _callback_for(cluster)
+        callback.on_fit_start(trainer, module)
+        before_ids = _optimizer_parameter_ids(optimizer)
+        before_synced = {
+            key: set(value) for key, value in callback._synced_param_ids.items()
+        }
+        cluster.grow()
+        source_optimizer = torch.optim.SGD(module.parameters(), lr=0.03)
+        saved_states = [source_optimizer.state_dict()]
+        checkpoint = {
+            "optimizer_states": saved_states,
+            "lr_schedulers": [],
+            OPTIMIZER_LAYOUT_CHECKPOINT_KEY: NeuronOptimizerNamedLayout.capture(
+                module, [source_optimizer], saved_states
+            ),
+        }
+        with self.assertRaisesRegex(RuntimeError, "scheduler counts differ"):
+            callback.on_load_checkpoint(trainer, module, checkpoint)
+        self.assertEqual(_optimizer_parameter_ids(optimizer), before_ids)
+        self.assertEqual(callback._synced_param_ids, before_synced)
+        self.assertFalse(callback._optimizer_load_hook_handles)
+        checkpoint["lr_schedulers"] = [scheduler.state_dict()]
+        callback.on_load_checkpoint(trainer, module, checkpoint)
+        optimizer.load_state_dict(saved_states[0])
+        scheduler.load_state_dict(checkpoint["lr_schedulers"][0])
+        callback.on_train_start(trainer, module)
+        self.assertEqual(
+            _optimizer_parameter_ids(optimizer), {id(p) for p in module.parameters()}
+        )
+        self.assertEqual(optimizer.param_groups[0]["lr"], 0.03)
+
     def test_replacement_preserves_subset_ownership_through_aliases(self) -> None:
         cluster = _DynamicCluster()
         module = _HostModule(cluster)
