@@ -1,5 +1,6 @@
 import copy
 import unittest
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import torch
@@ -63,6 +64,64 @@ class _ScriptedTreeSampler(nn.Module):
 
 
 class TestTerminalRoutingTree(NeuronTestCase):
+    def test_empty_tree_probabilities_keep_visited_sampler_gradients(self):
+        terminal = self.tree_terminal(leaf_top_k=1)
+        source = torch.empty(0, self.input_dim, requires_grad=True)
+        _, probabilities, coordinates, _ = terminal(source)
+        self.assertEqual(probabilities.shape, (0, terminal.sampler.root.output_width))
+        self.assertEqual(coordinates.shape, (0, terminal.sampler.root.output_width, 3))
+        probabilities.sum().backward()
+        torch.testing.assert_close(source.grad, torch.zeros_like(source))
+
+    def test_empty_tree_only_visits_root_at_both_depths_and_under_autocast(self):
+        for depth, counts in (
+            (TerminalRoutingTreeDepthOptions.TWO, (2,)),
+            (TerminalRoutingTreeDepthOptions.THREE, (2, 2)),
+        ):
+            for autocast in (False, True):
+                with self.subTest(depth=depth, autocast=autocast):
+                    terminal = self.tree_terminal(
+                        leaf_top_k=2,
+                        routing_tree_config=self.routing_tree_config(
+                            depth=depth,
+                            branch_counts=counts,
+                            direction_top_k=(1,) * len(counts),
+                        ),
+                    ).eval()
+                    source = torch.empty(0, self.input_dim, requires_grad=True)
+                    root = terminal.sampler.root
+                    random_state = torch.get_rng_state().clone()
+                    with patch.object(
+                        root.branches[0],
+                        "route",
+                        side_effect=AssertionError("empty child visited"),
+                    ):
+                        with (
+                            torch.autocast("cpu", dtype=torch.bfloat16)
+                            if autocast
+                            else nullcontext()
+                        ):
+                            _, probabilities, coordinates, loss = terminal(source)
+                    torch.testing.assert_close(torch.get_rng_state(), random_state)
+                    self.assertEqual(probabilities.shape, (0, root.output_width))
+                    self.assertEqual(coordinates.shape, (0, root.output_width, 3))
+                    self.assertEqual(coordinates.dtype, torch.long)
+                    self.assertEqual(coordinates.device, source.device)
+                    self.assertTrue(torch.isfinite(loss))
+                    probabilities.sum().backward()
+                    torch.testing.assert_close(source.grad, torch.zeros_like(source))
+                    for parameter in root.sampler.parameters():
+                        self.assertIsNotNone(parameter.grad)
+                        torch.testing.assert_close(
+                            parameter.grad, torch.zeros_like(parameter)
+                        )
+                    self.assertTrue(
+                        all(
+                            parameter.grad is None
+                            for parameter in root.branches.parameters()
+                        )
+                    )
+
     def routing_tree_config(
         self,
         *,

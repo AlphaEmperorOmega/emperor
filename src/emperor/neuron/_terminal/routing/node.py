@@ -265,6 +265,8 @@ class RoutingTreeNode(Module):
             selected_path_count,
             child_output_width,
         )
+        if selected_path_count == 0:
+            probability_paths = probability_paths + direction_probabilities.sum() * 0
         connection_paths = selected_child_indices.new_zeros(
             selected_path_count,
             child_output_width,
