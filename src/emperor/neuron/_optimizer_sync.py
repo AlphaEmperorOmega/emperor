@@ -5,9 +5,11 @@ import warnings
 from typing import TYPE_CHECKING
 
 from lightning.pytorch.callbacks import Callback
+from lightning.pytorch.strategies import DDPStrategy, SingleDeviceStrategy
 from lightning.pytorch.trainer.states import TrainerFn
 from torch import nn
-from torch.optim import Optimizer
+from torch.nn.parallel import DistributedDataParallel
+from torch.optim import SGD, Adam, AdamW, Optimizer
 from torch.utils.hooks import RemovableHandle
 
 from emperor.neuron._distributed_gradients import (
@@ -69,7 +71,72 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         if stage != "fit":
             return
         self.__clear_fit_state()
+        self.__validate_dynamic_fit(trainer, pl_module)
         _ConditionalDDPStrategyAdapter.configure(trainer.strategy)
+
+    def __validate_dynamic_fit(
+        self,
+        trainer: Trainer,
+        pl_module: LightningModule,
+        optimizers: list[Optimizer] | None = None,
+    ) -> None:
+        # Direct synchronization/layout clients can use ordinary nn.Module hosts.
+        # This qualification boundary applies to Lightning-managed training only.
+        if not hasattr(pl_module, "automatic_optimization"):
+            return
+        clusters = self.__find_neuron_clusters(pl_module)
+        if not any(
+            getattr(cluster, "growth_threshold", None) is not None
+            or getattr(cluster, "pruning_threshold", None) is not None
+            for cluster in clusters
+        ):
+            return
+        if not getattr(pl_module, "automatic_optimization", True):
+            raise RuntimeError(
+                "Dynamic Neuron training requires Lightning automatic optimization."
+            )
+        strategy = getattr(trainer, "strategy", None)
+        if strategy is not None and not isinstance(
+            strategy, (SingleDeviceStrategy, DDPStrategy)
+        ):
+            raise RuntimeError(
+                "Dynamic Neuron training supports only single-device and standard DDP."
+            )
+        self.__validate_ddp_communication(strategy)
+        if optimizers is None:
+            return
+        if len(optimizers) != 1 or type(optimizers[0]) not in (SGD, Adam, AdamW):
+            raise RuntimeError(
+                "Dynamic Neuron training requires one ordinary SGD, Adam, or AdamW "
+                "optimizer; custom, multiple, and closure-replaying optimizers "
+                "require separate qualification."
+            )
+        optimizer = optimizers[0]
+        for options in (optimizer.defaults, *optimizer.param_groups):
+            for option in ("fused", "capturable", "differentiable"):
+                if options.get(option, False):
+                    raise RuntimeError(
+                        f"Dynamic Neuron training does not support {option} optimizers."
+                    )
+
+    @staticmethod
+    def __validate_ddp_communication(strategy) -> None:
+        if isinstance(strategy, DDPStrategy) and any(
+            getattr(strategy, field, None) is not None
+            for field in ("_ddp_comm_hook", "_ddp_comm_state", "_ddp_comm_wrapper")
+        ):
+            raise RuntimeError(
+                "Dynamic Neuron training does not support custom DDP communication."
+            )
+        distributed_model = getattr(strategy, "model", None)
+        if (
+            isinstance(distributed_model, DistributedDataParallel)
+            and getattr(distributed_model, "_comm_hooks", None) != []
+        ):
+            raise RuntimeError(
+                "Dynamic Neuron training requires a DDP wrapper with no custom "
+                "communication hooks and an inspectable hook registry."
+            )
 
     def on_load_checkpoint(
         self,
@@ -207,7 +274,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             for cluster in self._clusters
         ]
 
-
     def __reconcile_pending_schedulers(
         self,
         trainer: Trainer,
@@ -314,6 +380,7 @@ class NeuronClusterOptimizerSyncCallback(Callback):
 
     def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
         optimizers = list(getattr(trainer, "optimizers", []) or [])
+        self.__validate_dynamic_fit(trainer, pl_module, optimizers)
         self._synced_neuron_names.clear()
         self._synced_param_ids.clear()
         self._synced_cluster_signatures.clear()
@@ -359,6 +426,10 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         self._pending_named_optimizer_layout = None
 
     def on_train_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        # Checkpoint loading can replace the constructor's optimizer group options.
+        self.__validate_dynamic_fit(
+            trainer, pl_module, list(getattr(trainer, "optimizers", []) or [])
+        )
         self.__commit_optimizer_checkpoint_load()
 
     def on_train_batch_start(
@@ -384,8 +455,14 @@ class NeuronClusterOptimizerSyncCallback(Callback):
         pl_module: LightningModule,
         loss,
     ) -> None:
+        if hasattr(pl_module, "automatic_optimization") and any(
+            cluster.growth_threshold is not None
+            or cluster.pruning_threshold is not None
+            for cluster in self._clusters
+        ):
+            # A later train-start hook can install communication on the live wrapper.
+            self.__validate_ddp_communication(getattr(trainer, "strategy", None))
         self.__sync_optimizers_if_clusters_grew(trainer, pl_module)
-
 
     def __sync_optimizers_if_clusters_grew(
         self,
@@ -416,7 +493,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             (name, id(parameter), parameter.requires_grad)
             for name, parameter in cluster.named_parameters(remove_duplicate=False)
         )
-
 
     def on_train_batch_end(
         self,
@@ -572,7 +648,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
             new_parameter_ids.update(parameter_ids - self._ddp_registered_param_ids)
         return new_parameter_ids
 
-
     def __remove_pruned_neuron_parameters(
         self,
         trainer: Trainer,
@@ -700,7 +775,6 @@ class NeuronClusterOptimizerSyncCallback(Callback):
                 key=lambda parameter: live_parameter_order[id(parameter)]
             )
         return replacements
-
 
     def __pruned_cluster_parameter_ids(
         self,
