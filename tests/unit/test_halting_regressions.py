@@ -66,6 +66,28 @@ def strategies(input_dim: int = 2):
 
 
 class HaltingRegressionTests(unittest.TestCase):
+    def test_stick_breaking_minimum_step_delay_handles_different_row_steps(self):
+        model = strategies()[0].double()
+        model.min_steps = 3
+        hidden = torch.ones(2, 2, dtype=torch.float64, requires_grad=True)
+        state, _ = model.update_halting_state(None, hidden)
+        state.step_count = torch.tensor([0, 1])
+        updated, output = model.update_halting_state(state, hidden * 2)
+        torch.testing.assert_close(updated.step_count, torch.tensor([1, 2]))
+        torch.testing.assert_close(
+            updated.accumulated_halt_probabilities,
+            torch.tensor([0.0, 0.5], dtype=torch.float64),
+        )
+        torch.testing.assert_close(
+            updated.accumulated_hidden,
+            torch.tensor([[0.0, 0.0], [1.0, 1.0]], dtype=torch.float64),
+        )
+        torch.testing.assert_close(output, hidden * 2)
+        updated.accumulated_hidden.sum().backward()
+        torch.testing.assert_close(
+            hidden.grad, torch.tensor([[0.0, 0.0], [1.0, 1.0]], dtype=torch.float64)
+        )
+
     def test_non_contiguous_hidden_matches_contiguous_hidden(self) -> None:
         non_contiguous = torch.arange(24, dtype=torch.float64).reshape(2, 2, 6)[
             ..., ::3

@@ -58,7 +58,7 @@ class StickBreakingState(HaltingStateBase):
             )
         },
     )
-    step_count: int = field(
+    step_count: int | Tensor = field(
         metadata={
             "help": (
                 "Current step index, used to compute the expected number of "
@@ -155,6 +155,10 @@ class StickBreaking(HaltingBase[StickBreakingState]):
 
         updated_step_count = previous_state.step_count + 1
         accumulation_start_index = self.min_steps - 1
+        if isinstance(updated_step_count, Tensor):
+            return self.__advance_row_steps(
+                previous_state, model_hidden_state, updated_step_count
+            )
         if updated_step_count < accumulation_start_index:
             return self.__dormant_state(
                 model_hidden_state,
@@ -174,11 +178,41 @@ class StickBreaking(HaltingBase[StickBreakingState]):
             model_hidden_state,
         )
 
+    def __advance_row_steps(
+        self,
+        previous_state: StickBreakingState,
+        model_hidden_state: Tensor,
+        updated_step_count: Tensor,
+    ) -> StickBreakingState:
+        eligible_mask = updated_step_count >= self.min_steps - 1
+        dormant_state = self.__dormant_state(
+            model_hidden_state, step_count=updated_step_count
+        )
+        if not bool(eligible_mask.any().item()):
+            return dormant_state
+        # A dormant row has zero spent mass and accumulated state, so its first
+        # eligible update is the same equation as initial stick construction.
+        updated_state = self.__update_state(
+            previous_state,
+            self.__compute_gate_logits(model_hidden_state),
+            model_hidden_state,
+        )
+        for name, updated_value in vars(updated_state).items():
+            row_mask = eligible_mask
+            while row_mask.dim() < updated_value.dim():
+                row_mask = row_mask.unsqueeze(-1)
+            setattr(
+                updated_state,
+                name,
+                torch.where(row_mask, updated_value, getattr(dormant_state, name)),
+            )
+        return updated_state
+
     @staticmethod
     def __dormant_state(
         model_hidden_state: Tensor,
         *,
-        step_count: int,
+        step_count: int | Tensor,
     ) -> StickBreakingState:
         leading_zeros = model_hidden_state.new_zeros(model_hidden_state.shape[:-1])
         return StickBreakingState(
