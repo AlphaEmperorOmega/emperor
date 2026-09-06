@@ -306,11 +306,11 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
         self,
     ) -> None:
         model = SingleModelDynamicWeight(single_config()).double()
-        self.assertEqual(model.scale.item(), 1.0)
-        self.assertEqual(model.clamp_limit.item(), 1.0)
+        self.assertEqual(model._normalization_policy.scale.item(), 1.0)
+        self.assertEqual(model._normalization_policy.clamp_limit.item(), 1.0)
         with torch.no_grad():
-            model.scale.fill_(1.5)
-            model.clamp_limit.fill_(2.0)
+            model._normalization_policy.scale.fill_(1.5)
+            model._normalization_policy.clamp_limit.fill_(2.0)
         vectors = torch.tensor(
             [
                 [[1.0e-8, 2.0e-8, -3.0e-8], [3.0, -4.0, 1.0]],
@@ -349,7 +349,7 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
 
         for option, expected in cases:
             with self.subTest(option=option):
-                model.normalization_option = option
+                model._normalization_policy.normalization_option = option
                 actual = model._apply_normalization_transform(vectors)
                 self.assertTrue(
                     torch.allclose(actual, expected, atol=1e-15, rtol=1e-12)
@@ -359,7 +359,7 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
         model = SingleModelDynamicWeight(single_config())
         vectors = torch.ones(1, 1, 2)
 
-        model.normalization_position_option = "invalid"
+        model._normalization_policy.normalization_position_option = "invalid"
         with self.assertRaises(ValueError) as position_error:
             model._compute_outer_product(vectors, vectors)
         self.assertEqual(
@@ -367,7 +367,7 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
             "Unsupported normalization_position_option value: 'invalid'.",
         )
 
-        model.normalization_option = "invalid"
+        model._normalization_policy.normalization_option = "invalid"
         with self.assertRaises(ValueError) as normalization_error:
             model._apply_normalization_transform(vectors)
         self.assertEqual(
@@ -375,10 +375,12 @@ class AdaptiveParameterWeightMutationContractTests(unittest.TestCase):
             "Unsupported normalization_option value: 'invalid'.",
         )
 
-        model.normalization_position_option = (
+        model._normalization_policy.normalization_position_option = (
             WeightNormalizationPositionOptions.DISABLED
         )
-        model.normalization_option = WeightNormalizationOptions.DISABLED
+        model._normalization_policy.normalization_option = (
+            WeightNormalizationOptions.DISABLED
+        )
         model._decay_policy.decay_schedule_option = "invalid"
         with self.assertRaises(ValueError) as decay_error:
             model(torch.ones(2, 2), torch.ones(1, 2))
