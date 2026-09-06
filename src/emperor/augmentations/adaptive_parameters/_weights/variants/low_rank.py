@@ -20,7 +20,6 @@ class LowRankDynamicWeight(DynamicWeightAbstract):
         overrides: LowRankDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.normalization_option = self.cfg.normalization_option
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 

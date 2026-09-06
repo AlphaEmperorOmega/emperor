@@ -47,6 +47,9 @@ from emperor.augmentations.adaptive_parameters._weights.config import (
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 )
+from emperor.augmentations.adaptive_parameters._weights.normalization import (
+    WeightNormalizationPolicy,
+)
 from emperor.augmentations.adaptive_parameters.monitoring import (
     AdaptiveParameterMonitorCallback,
     WeightBankUtilizationMonitorCallback,
@@ -54,6 +57,7 @@ from emperor.augmentations.adaptive_parameters.monitoring import (
 
 __all__ = (
     "DecayPolicy",
+    "WeightNormalizationPolicy",
     "AdaptiveParameterAugmentationConfig",
     "AdaptiveLinearLayerConfig",
     "DynamicWeightConfig",

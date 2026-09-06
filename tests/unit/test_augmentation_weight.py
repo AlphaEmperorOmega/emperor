@@ -329,7 +329,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             normalization_position_option=WeightNormalizationPositionOptions.DISABLED,
         )
         model = DualModelDynamicWeight(cfg)
-        model.normalization_position_option = "invalid_position"
+        model._normalization_policy.normalization_position_option = "invalid_position"
         input_vectors = torch.randn(batch_size, generator_depth, input_dim)
         output_vectors = torch.randn(batch_size, generator_depth, output_dim)
         with self.assertRaises(ValueError):
@@ -560,7 +560,11 @@ class TestWeightHandlerForward(unittest.TestCase):
                 active_model_gradients = [
                     parameter.grad
                     for name, parameter in model.named_parameters()
-                    if name not in {"scale", "clamp_limit"}
+                    if name
+                    not in {
+                        "_normalization_policy.scale",
+                        "_normalization_policy.clamp_limit",
+                    }
                     and parameter.grad is not None
                 ]
                 self.assertTrue(active_model_gradients)
@@ -584,14 +588,20 @@ class TestWeightHandlerForward(unittest.TestCase):
             dtype=torch.float64,
         )
         cases = (
-            (WeightNormalizationOptions.SIGMOID_SCALE, model.scale),
-            (WeightNormalizationOptions.SOFT_CLAMP, model.clamp_limit),
+            (
+                WeightNormalizationOptions.SIGMOID_SCALE,
+                model._normalization_policy.scale,
+            ),
+            (
+                WeightNormalizationOptions.SOFT_CLAMP,
+                model._normalization_policy.clamp_limit,
+            ),
         )
 
         for option, active_parameter in cases:
             with self.subTest(option=option):
                 model.zero_grad(set_to_none=True)
-                model.normalization_option = option
+                model._normalization_policy.normalization_option = option
                 differentiable_vectors = vectors.clone().requires_grad_()
 
                 transformed = model._apply_normalization_transform(
@@ -1260,7 +1270,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                         normalization_option=WeightNormalizationOptions.SOFT_CLAMP,
                     )
                     model = DualModelDynamicWeight(cfg).to(dtype=dtype)
-                    model.clamp_limit.data.fill_(clamp_limit)
+                    model._normalization_policy.clamp_limit.data.fill_(clamp_limit)
                     vectors = torch.tensor(
                         [[[0.0, 1.0, -1.0]]],
                         dtype=dtype,
@@ -1270,7 +1280,7 @@ class TestWeightHandlerForward(unittest.TestCase):
                     result = model._apply_normalization_transform(vectors)
                     vector_gradient, limit_gradient = torch.autograd.grad(
                         result.sum(),
-                        (vectors, model.clamp_limit),
+                        (vectors, model._normalization_policy.clamp_limit),
                     )
 
                     self.assertTrue(torch.isfinite(result).all().item())
@@ -1283,7 +1293,7 @@ class TestWeightHandlerForward(unittest.TestCase):
             normalization_option=WeightNormalizationOptions.CLAMP,
         )
         model = DualModelDynamicWeight(cfg)
-        model.clamp_limit.data.fill_(-1.0)
+        model._normalization_policy.clamp_limit.data.fill_(-1.0)
         vectors = torch.tensor([[[-3.0, 0.0, 3.0]]])
 
         result = model._apply_normalization_transform(vectors)
@@ -1297,8 +1307,8 @@ class TestWeightHandlerForward(unittest.TestCase):
         )
         model = DualModelDynamicWeight(cfg)
         vectors = torch.tensor([[[-2.0, -0.5, 0.5, 2.0]]])
-        model.scale.data.fill_(2.0)
-        model.clamp_limit.data.fill_(1.0)
+        model._normalization_policy.scale.data.fill_(2.0)
+        model._normalization_policy.clamp_limit.data.fill_(1.0)
 
         expected_by_option = {
             WeightNormalizationOptions.CLAMP: torch.clamp(vectors, -1.0, 1.0),
@@ -1316,7 +1326,7 @@ class TestWeightHandlerForward(unittest.TestCase):
 
         for option, expected in expected_by_option.items():
             with self.subTest(option=option):
-                model.normalization_option = option
+                model._normalization_policy.normalization_option = option
                 result = model._apply_normalization_transform(vectors)
                 torch.testing.assert_close(result, expected)
 
@@ -1327,7 +1337,7 @@ class TestWeightHandlerForward(unittest.TestCase):
         output_dim = 24
         cfg = self.preset(input_dim=input_dim, output_dim=output_dim)
         model = DualModelDynamicWeight(cfg)
-        model.normalization_option = "invalid_normalization"
+        model._normalization_policy.normalization_option = "invalid_normalization"
         vectors = torch.randn(batch_size, generator_depth, input_dim)
         with self.assertRaises(ValueError):
             model._apply_normalization_transform(vectors)

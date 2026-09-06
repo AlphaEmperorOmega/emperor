@@ -19,8 +19,6 @@ class DualModelDynamicWeight(DynamicWeightAbstract):
         overrides: DualModelDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.normalization_option = self.cfg.normalization_option
-        self.normalization_position_option = self.cfg.normalization_position_option
         self.input_model = self.__init_input_model()
         self.output_model = self.__init_output_model()
 

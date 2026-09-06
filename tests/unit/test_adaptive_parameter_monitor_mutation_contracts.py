@@ -185,8 +185,8 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
             option.weight_bank.copy_(bank_values)
             option._decay_policy.decay_step.fill_(2.0)
             option._decay_policy.warmup_step.fill_(3.0)
-            option.scale.fill_(4.0)
-            option.clamp_limit.fill_(5.0)
+            option._normalization_policy.scale.fill_(4.0)
+            option._normalization_policy.clamp_limit.fill_(5.0)
         base = torch.tensor([[0.1, 0.2], [0.3, 0.4]])
         requested_delta = torch.tensor(
             [
