@@ -26,6 +26,7 @@ from model_runtime.packages import (
     RuntimeDefaultsError,
     abstract_config_class_error,
     config_key_to_flag,
+    serialize_config_value,
 )
 
 DEFAULT_SECTION = "General"
@@ -131,7 +132,11 @@ def _enum_choices(value: Any, annotation: Any) -> list[str]:
             if issubclass(cls, Enum):
                 enum_type = cls
                 break
-    return [member.name for member in enum_type] if enum_type is not None else []
+    return (
+        [str(serialize_config_value(member)) for member in enum_type]
+        if enum_type is not None
+        else []
+    )
 
 
 def _class_choice_name(value: Any) -> str | None:

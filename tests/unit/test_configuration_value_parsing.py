@@ -16,6 +16,12 @@ class _Color(Enum):
     BLUE = "blue"
 
 
+class _NullLikeOption(Enum):
+    NONE = 0
+    NULL = 1
+    ACTIVE = 2
+
+
 class _RenamedOption(Enum):
     CURRENT = "current"
     HISTORICAL = "current"
@@ -42,6 +48,7 @@ def _configuration_module() -> ModuleType:
     module.CURRENT_STRING = "old"
     module.CURRENT_ENUM = _Color.RED
     module.RENAMED_ENUM = _RenamedOption.CURRENT
+    module.NULL_LIKE_ENUM = None
     module.CURRENT_CLASS = _FirstChoice
     module.RENAMED_CLASS = _FirstChoice
     module.CURRENT_LIST = [None, 1, 2]
@@ -51,6 +58,7 @@ def _configuration_module() -> ModuleType:
     module.FALLBACK = object()
     module.ANNOTATED_NONE = None
     module.__annotations__ = {
+        "NULL_LIKE_ENUM": _NullLikeOption | None,
         "CURRENT_BOOL": int,
         "CURRENT_INT": bool,
         "CURRENT_FLOAT": str,
@@ -152,6 +160,23 @@ class ConfigurationValueParsingTests(unittest.TestCase):
             parse_config_value(module, "CURRENT_CLASS", "package.MissingChoice")
         with self.assertRaisesRegex(ValueError, "invalid literal for int"):
             parse_config_value(module, "CURRENT_INT", "not-an-integer")
+
+    def test_null_like_enum_members_round_trip_without_changing_clear_semantics(
+        self,
+    ) -> None:
+        module = _configuration_module()
+        for member in _NullLikeOption:
+            encoded = serialize_config_value(member)
+            expected = (
+                f"_NullLikeOption.{member.name}"
+                if member.name in {"NONE", "NULL"}
+                else "ACTIVE"
+            )
+            self.assertEqual(encoded, expected)
+            self.assertIs(parse_config_value(module, "NULL_LIKE_ENUM", encoded), member)
+        self.assertIsNone(serialize_config_value(None))
+        for spelling in ("None", "none", "NULL", "null"):
+            self.assertIsNone(parse_config_value(module, "NULL_LIKE_ENUM", spelling))
 
     def test_package_local_symbol_aliases_parse_but_serialize_canonically(self) -> None:
         module = _configuration_module()
