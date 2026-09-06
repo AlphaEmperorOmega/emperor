@@ -10,11 +10,10 @@ from emperor.augmentations.adaptive_parameters._config import (
 from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveLinearValidator,
 )
-from emperor.layers import RowLayout, RowLayoutAwareModule
 from emperor.linears import LinearAbstract
 
 
-class AdaptiveLinearLayer(LinearAbstract, RowLayoutAwareModule):
+class AdaptiveLinearLayer(LinearAbstract):
     VALIDATOR = AdaptiveLinearValidator
 
     def __init__(
@@ -23,19 +22,22 @@ class AdaptiveLinearLayer(LinearAbstract, RowLayoutAwareModule):
         overrides: AdaptiveLinearLayerConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.adaptive_augmentation_config = self.cfg.adaptive_augmentation_config
+        self.adaptive_cfg = self.cfg.adaptive_augmentation_config
+        self.diagonal_config = self.adaptive_cfg.diagonal_config
+        self.weight_config = self.adaptive_cfg.weight_config
+        self.bias_config = self.adaptive_cfg.bias_config
+        self.mask_config = self.adaptive_cfg.mask_config
         self.has_adaptive_augmentation: bool = self.__has_adaptive_augmentation()
         self.adaptive_behaviour = self.__init_behaviour()
 
     def __has_adaptive_augmentation(self) -> bool:
-        cfg = self.adaptive_augmentation_config
         return any(
             config is not None
             for config in (
-                cfg.diagonal_config,
-                cfg.weight_config,
-                cfg.bias_config,
-                cfg.mask_config,
+                self.diagonal_config,
+                self.weight_config,
+                self.bias_config,
+                self.mask_config,
             )
         )
 
@@ -47,13 +49,11 @@ class AdaptiveLinearLayer(LinearAbstract, RowLayoutAwareModule):
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
-        return self.adaptive_augmentation_config.build(overrides)
+        return self.adaptive_cfg.build(overrides)
 
     def forward(
         self,
         X: Tensor,
-        *,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
         self.VALIDATOR.validate_input_is_2d(X)
         if not self.has_adaptive_augmentation:
@@ -65,7 +65,6 @@ class AdaptiveLinearLayer(LinearAbstract, RowLayoutAwareModule):
             self.weight_params,
             self.bias_params,
             X,
-            row_layout=row_layout,
         )
 
     def _compute_affine_transformation_callback(

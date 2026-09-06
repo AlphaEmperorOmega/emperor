@@ -1,9 +1,13 @@
 import math
+from dataclasses import fields
 from typing import TYPE_CHECKING
 
 from torch.types import Tensor
 
 from emperor._validation import ValidatorBase
+from emperor.augmentations.adaptive_parameters._grouping.validation import (
+    GroupingValidator,
+)
 
 if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters._augmentation import (
@@ -15,7 +19,6 @@ if TYPE_CHECKING:
     from emperor.augmentations.adaptive_parameters._linear_adapter import (
         AdaptiveLinearLayer,
     )
-    from emperor.layers import RowLayout
 
 
 class AdaptiveLinearValidator(ValidatorBase):
@@ -50,6 +53,8 @@ class AdaptiveLinearValidator(ValidatorBase):
 
     @staticmethod
     def validate_input_is_2d(X: Tensor) -> None:
+        if not isinstance(X, Tensor):
+            raise TypeError(f"input must be a Tensor, received {type(X).__name__}.")
         if X.dim() != 2:
             raise ValueError(
                 f"Input must be a 2D matrix (batch, input_dim), "
@@ -255,7 +260,7 @@ class AdaptiveGeneratorValidatorBase:
 
 
 class AdaptiveParameterAugmentationValidator(
-    AdaptiveGeneratorValidatorBase, ValidatorBase
+    AdaptiveGeneratorValidatorBase, GroupingValidator, ValidatorBase
 ):
     OPTIONAL_FIELDS = {
         "diagonal_config",
@@ -263,7 +268,7 @@ class AdaptiveParameterAugmentationValidator(
         "bias_config",
         "mask_config",
         "model_config",
-        "group_count",
+        "grouping_config",
     }
 
     @classmethod
@@ -336,14 +341,16 @@ class AdaptiveParameterAugmentationValidator(
         cls,
         config: "AdaptiveParameterAugmentationConfig",
     ) -> None:
-        grouping_scope = config.grouping_scope
-        group_count = config.group_count
-        cls._validate_grouping_scope(grouping_scope)
-        if not cls.grouping_is_enabled(config):
-            if group_count is not None:
-                cls._validate_group_count(group_count)
+        declared_fields = {field.name for field in fields(config)}
+        if vars(config).keys() - declared_fields - {"_passed_args"}:
+            raise ValueError(
+                "AdaptiveParameterAugmentationConfig contains unsupported fields; "
+                "rebuild it using the current configuration schema."
+            )
+        grouping = config.grouping_config
+        if grouping is None:
             return
-        cls._validate_group_count(group_count)
+        cls.validate_grouping_value(grouping)
         active_components = (
             config.diagonal_config,
             config.weight_config,
@@ -356,49 +363,53 @@ class AdaptiveParameterAugmentationValidator(
             )
 
     @classmethod
-    def grouping_is_enabled(
-        cls,
-        config: "AdaptiveParameterAugmentationConfig",
-    ) -> bool:
+    def grouping_is_enabled(cls, config: "AdaptiveParameterAugmentationConfig") -> bool:
+        # Discovery validates only this local contract, before owner restrictions can
+        # obscure malformed grouping diagnostics. Dimension overrides are unresolved.
+        cls.validate_grouping_configuration(config)
+        return config.grouping_config is not None
+
+    @classmethod
+    def validate_grouping_expert_input(cls, config, *, path: str) -> None:
         from emperor.augmentations.adaptive_parameters._options import (
             AdaptiveParameterGroupingScopeOptions,
         )
 
-        grouping_scope = config.grouping_scope
-        return (
-            grouping_scope is AdaptiveParameterGroupingScopeOptions.ROWS
-            or grouping_scope is AdaptiveParameterGroupingScopeOptions.SEQUENCE
-        )
-
-    @staticmethod
-    def _validate_grouping_scope(grouping_scope: object) -> None:
-        from emperor.augmentations.adaptive_parameters._options import (
-            AdaptiveParameterGroupingScopeOptions,
-        )
-
-        if grouping_scope is None:
-            raise ValueError(
-                "grouping_scope is required for a resolved "
-                "AdaptiveParameterAugmentationConfig; use DISABLED, ROWS, or "
-                "SEQUENCE."
-            )
-        if not isinstance(grouping_scope, AdaptiveParameterGroupingScopeOptions):
-            raise TypeError(
-                "grouping_scope must be an "
-                "AdaptiveParameterGroupingScopeOptions value, received "
-                f"{grouping_scope!r}."
-            )
-
-    @staticmethod
-    def _validate_group_count(group_count: int | None) -> None:
-        if (
-            isinstance(group_count, bool)
-            or not isinstance(group_count, int)
-            or group_count <= 0
+        cls.validate_grouping_configuration(config)
+        grouping = config.grouping_config
+        if grouping is not None and (
+            grouping.scope is not AdaptiveParameterGroupingScopeOptions.ROWS
+            or grouping.chunk_size is None
         ):
             raise ValueError(
-                "group_count must be a positive integer when provided, "
-                f"received {group_count!r}."
+                "Routed expert adaptive grouping requires ROWS with chunk_size; "
+                f"fixed-count and SEQUENCE grouping are unsupported. Found grouping at {path}."
+            )
+
+    @classmethod
+    def validate_grouping_sequence_input(
+        cls,
+        config: "AdaptiveParameterAugmentationConfig",
+        *,
+        sequence_length: int,
+        input_order: str,
+        path: str,
+    ) -> None:
+        cls.validate_grouping_configuration(config)
+        grouping = config.grouping_config
+        if grouping is None:
+            return
+        if grouping.scope.name != "SEQUENCE":
+            raise ValueError(
+                f"{path} requires SEQUENCE grouping for token inputs; ROWS mixes samples."
+            )
+        if grouping.sequence_length != sequence_length:
+            raise ValueError(
+                f"{path} sequence_length={grouping.sequence_length} does not match actual sequence length {sequence_length}."
+            )
+        if grouping.input_order.name != input_order:
+            raise ValueError(
+                f"{path} input_order must be {input_order} for this input, received {grouping.input_order.name}."
             )
 
     @staticmethod
@@ -428,15 +439,23 @@ class AdaptiveParameterAugmentationValidator(
                 f"received {type(affine_transform_callback).__name__}."
             )
         cls.validate_input_batch(model, input_batch)
+        if (
+            model.grouping_config is not None
+            and model.grouping_config.chunk_size is not None
+            and not input_batch.is_floating_point()
+        ):
+            raise TypeError(
+                "Adaptive parameter grouping requires floating-point input."
+            )
         cls.validate_batched_weight_params(model, weight_params, input_batch)
         cls.validate_bias_params(model, bias_params, input_batch)
 
     @staticmethod
     def validate_grouped_base_parameters(
-        weight_params: Tensor,
+        weight_params: Tensor | None,
         bias_params: Tensor | None,
     ) -> None:
-        if weight_params.dim() != 2:
+        if weight_params is not None and weight_params.dim() != 2:
             raise ValueError(
                 "Adaptive parameter grouping requires shared two-dimensional base "
                 "weights; row-specific base weights are not supported."
@@ -452,12 +471,7 @@ class AdaptiveParameterAugmentationValidator(
         cls,
         weight_params: Tensor,
         bias_params: Tensor | None,
-        row_layout: "RowLayout | None",
     ) -> None:
-        if row_layout is None:
-            raise ValueError(
-                "Enabled adaptive parameter grouping requires an explicit RowLayout."
-            )
         cls.validate_grouped_base_parameters(weight_params, bias_params)
 
     @classmethod

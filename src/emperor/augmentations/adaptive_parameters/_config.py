@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from emperor.augmentations.adaptive_parameters._options import (
-    AdaptiveParameterGroupingScopeOptions,
+from emperor.augmentations.adaptive_parameters._grouping.config import (
+    GroupingConfig,
 )
 from emperor.config import ConfigBase, optional_field
 from emperor.linears import LinearLayerConfig
@@ -42,13 +42,9 @@ class AdaptiveParameterAugmentationConfig(ConfigBase):
     model_config: "LayerStackConfig | None" = optional_field(
         "Internal generator network config."
     )
-    grouping_scope: AdaptiveParameterGroupingScopeOptions | None = optional_field(
-        "ROWS groups one declared row axis; SEQUENCE groups positions separately "
-        "inside each batch member; DISABLED preserves per-row generation. None is "
-        "reserved for unresolved partial overrides and means inherit."
-    )
-    group_count: int | None = optional_field(
-        "Number of generated adaptive parameter sets per row set or sequence sample."
+    grouping_config: GroupingConfig | None = optional_field(
+        "Optional all-valid grouping and fixed sequence-layout contract. None "
+        "preserves per-row generation; in a partial override it means inherit."
     )
 
     def _registry_owner(self) -> type:
