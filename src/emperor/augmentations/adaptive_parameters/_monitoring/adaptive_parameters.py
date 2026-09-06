@@ -189,11 +189,12 @@ class _AdaptiveParameterDiagnostics:
             return ()
         metrics: list[_AdaptiveParameterMetric] = []
         decay_policy = getattr(option, "_decay_policy", None)
+        normalization_policy = getattr(option, "_normalization_policy", None)
         for metric_owner, attribute_name in (
             (decay_policy, "decay_step"),
             (decay_policy, "warmup_step"),
-            (option, "scale"),
-            (option, "clamp_limit"),
+            (normalization_policy, "scale"),
+            (normalization_policy, "clamp_limit"),
         ):
             value = getattr(metric_owner, attribute_name, None)
             if torch.is_tensor(value):

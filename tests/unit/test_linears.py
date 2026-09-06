@@ -1022,10 +1022,10 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
             (
                 "weight_params",
                 "bias_params",
-                "adaptive_behaviour.weight_model.scale",
-                "adaptive_behaviour.weight_model.clamp_limit",
                 "adaptive_behaviour.weight_model._decay_policy.decay_step",
                 "adaptive_behaviour.weight_model._decay_policy.warmup_step",
+                "adaptive_behaviour.weight_model._normalization_policy.scale",
+                "adaptive_behaviour.weight_model._normalization_policy.clamp_limit",
                 "adaptive_behaviour.weight_model.input_model.model.layers.0.model.weight_params",
                 "adaptive_behaviour.weight_model.input_model.model.layers.0.model.bias_params",
                 "adaptive_behaviour.weight_model.input_model.model.layers.1.model.weight_params",

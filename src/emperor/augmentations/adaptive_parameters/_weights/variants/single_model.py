@@ -19,8 +19,6 @@ class SingleModelDynamicWeight(DynamicWeightAbstract):
         overrides: SingleModelDynamicWeightConfig | None = None,
     ):
         super().__init__(cfg, overrides)
-        self.normalization_option = self.cfg.normalization_option
-        self.normalization_position_option = self.cfg.normalization_position_option
         self.model = self._init_model()
 
     def _init_model(self) -> DepthMappingLayerStack:

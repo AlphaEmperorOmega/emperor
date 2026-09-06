@@ -1,18 +1,16 @@
 import torch
-import torch.nn as nn
 from torch import Tensor
 
 from emperor.augmentations.adaptive_parameters._decay import DecayPolicy
-from emperor.augmentations.adaptive_parameters._options import (
-    WeightNormalizationOptions,
-    WeightNormalizationPositionOptions,
-)
 from emperor.augmentations.adaptive_parameters._weights.config import (
     DynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
     DepthMappingHandlerConfig,
     DepthMappingLayerStack,
+)
+from emperor.augmentations.adaptive_parameters._weights.normalization import (
+    WeightNormalizationPolicy,
 )
 from emperor.augmentations.adaptive_parameters._weights.validation import (
     DynamicWeightValidator,
@@ -34,9 +32,8 @@ class DynamicWeightAbstract(Module):
         self.input_dim = self.cfg.input_dim
         self.output_dim = self.cfg.output_dim
         self.generator_depth = self.cfg.generator_depth
-        self.scale = nn.Parameter(torch.tensor(1.0))
-        self.clamp_limit = nn.Parameter(torch.tensor(1.0))
         self._decay_policy = DecayPolicy(self.cfg)
+        self._normalization_policy = WeightNormalizationPolicy(self.cfg)
 
     def _init_model(
         self, overrides: "DepthMappingHandlerConfig"
@@ -58,39 +55,14 @@ class DynamicWeightAbstract(Module):
         input_vectors: Tensor,
         output_vectors: Tensor,
     ) -> Tensor:
-        match self.normalization_position_option:
-            case WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT:
-                return self._compute_prenormalized_outer_product(
-                    input_vectors, output_vectors
-                )
-            case WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT:
-                return self._compute_postnormalized_outer_product(
-                    input_vectors, output_vectors
-                )
-            case WeightNormalizationPositionOptions.DISABLED:
-                return self._compute_raw_outer_product(input_vectors, output_vectors)
-            case _:
-                raise ValueError(
-                    "Unsupported normalization_position_option value: "
-                    f"{self.normalization_position_option!r}."
-                )
-
-    def _compute_prenormalized_outer_product(
-        self,
-        input_vectors: Tensor,
-        output_vectors: Tensor,
-    ) -> Tensor:
-        input_vectors = self._apply_normalization_transform(input_vectors)
-        output_vectors = self._apply_normalization_transform(output_vectors)
-        return self._compute_raw_outer_product(input_vectors, output_vectors)
-
-    def _compute_postnormalized_outer_product(
-        self,
-        input_vectors: Tensor,
-        output_vectors: Tensor,
-    ) -> Tensor:
+        input_vectors = self._normalization_policy.normalize_before_outer_product(
+            input_vectors
+        )
+        output_vectors = self._normalization_policy.normalize_before_outer_product(
+            output_vectors
+        )
         outer_product = self._compute_raw_outer_product(input_vectors, output_vectors)
-        return self._apply_normalization_transform(outer_product)
+        return self._normalization_policy.normalize_after_outer_product(outer_product)
 
     def _compute_raw_outer_product(
         self,
@@ -103,127 +75,7 @@ class DynamicWeightAbstract(Module):
         self,
         vectors: Tensor,
     ) -> Tensor:
-        match self.normalization_option:
-            case WeightNormalizationOptions.CLAMP:
-                return self.__apply_symmetric_clamp(vectors)
-            case WeightNormalizationOptions.L2_SCALE:
-                return self.__apply_stable_l2_normalization(vectors) * self.scale
-            case WeightNormalizationOptions.SOFT_CLAMP:
-                return self.__apply_stable_soft_clamp(vectors)
-            case WeightNormalizationOptions.RMS:
-                return self.__apply_stable_rms_normalization(vectors) * self.scale
-            case WeightNormalizationOptions.SIGMOID_SCALE:
-                return (torch.sigmoid(vectors) * 2 - 1) * self.scale
-            case WeightNormalizationOptions.DISABLED:
-                return vectors
-            case _:
-                raise ValueError(
-                    "Unsupported normalization_option value: "
-                    f"{self.normalization_option!r}."
-                )
-
-    def __apply_symmetric_clamp(self, vectors: Tensor) -> Tensor:
-        clamp_limit_magnitude = self.clamp_limit.abs()
-        return torch.clamp(
-            vectors,
-            -clamp_limit_magnitude,
-            clamp_limit_magnitude,
-        )
-
-    def __apply_stable_l2_normalization(self, vectors: Tensor) -> Tensor:
-        (
-            accumulator_vectors,
-            maximum_magnitude,
-            magnitude_scaled_vectors,
-            contains_nonzero_value,
-        ) = self.__scale_vectors_by_maximum_magnitude(vectors)
-        squared_magnitude_scaled_vectors = magnitude_scaled_vectors.square()
-        scaled_squared_l2_norm = squared_magnitude_scaled_vectors.sum(
-            dim=-1,
-            keepdim=True,
-        )
-        stable_scaled_squared_l2_norm = torch.where(
-            contains_nonzero_value,
-            scaled_squared_l2_norm,
-            torch.ones_like(scaled_squared_l2_norm),
-        )
-        scaled_l2_norm = stable_scaled_squared_l2_norm.sqrt()
-        l2_norm = maximum_magnitude * scaled_l2_norm
-
-        finite_l2_norm = torch.isfinite(l2_norm)
-        safe_l2_norm = torch.where(
-            finite_l2_norm,
-            l2_norm,
-            torch.ones_like(l2_norm),
-        )
-        minimum_l2_norm = max(1e-12, torch.finfo(vectors.dtype).tiny)
-        normalized_by_l2_norm = accumulator_vectors / safe_l2_norm.clamp_min(
-            minimum_l2_norm
-        )
-        normalized_by_scaled_l2_norm = magnitude_scaled_vectors / scaled_l2_norm
-        normalized_vectors = torch.where(
-            finite_l2_norm, normalized_by_l2_norm, normalized_by_scaled_l2_norm
-        )
-        return normalized_vectors.to(dtype=vectors.dtype)
-
-    def __apply_stable_soft_clamp(self, vectors: Tensor) -> Tensor:
-        clamp_limit_magnitude = self.clamp_limit.abs()
-        minimum_safe_denominator = torch.finfo(vectors.dtype).eps
-        safe_clamp_denominator = clamp_limit_magnitude.clamp_min(
-            minimum_safe_denominator
-        )
-        scaled_vectors = vectors / safe_clamp_denominator
-        return clamp_limit_magnitude * torch.tanh(scaled_vectors)
-
-    def __apply_stable_rms_normalization(self, vectors: Tensor) -> Tensor:
-        (
-            accumulator_vectors,
-            maximum_magnitude,
-            magnitude_scaled_vectors,
-            contains_nonzero_value,
-        ) = self.__scale_vectors_by_maximum_magnitude(vectors)
-        scaled_squared_mean = magnitude_scaled_vectors.square().mean(
-            dim=-1,
-            keepdim=True,
-        )
-        stable_scaled_squared_mean = torch.where(
-            contains_nonzero_value,
-            scaled_squared_mean,
-            torch.ones_like(scaled_squared_mean),
-        )
-        scaled_root_mean_square = stable_scaled_squared_mean.sqrt()
-        root_mean_square = maximum_magnitude * scaled_root_mean_square
-        minimum_root_mean_square = max(1e-8, torch.finfo(vectors.dtype).tiny)
-        normalized_vectors = accumulator_vectors / (
-            root_mean_square + minimum_root_mean_square
-        )
-        return normalized_vectors.to(dtype=vectors.dtype)
-
-    @staticmethod
-    def __scale_vectors_by_maximum_magnitude(
-        vectors: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        if vectors.dtype in (torch.float16, torch.bfloat16):
-            accumulator_vectors = vectors.float()
-        else:
-            accumulator_vectors = vectors
-        maximum_magnitude = accumulator_vectors.abs().amax(
-            dim=-1,
-            keepdim=True,
-        )
-        contains_nonzero_value = maximum_magnitude > 0
-        safe_maximum_magnitude = torch.where(
-            contains_nonzero_value,
-            maximum_magnitude,
-            torch.ones_like(maximum_magnitude),
-        )
-        magnitude_scaled_vectors = accumulator_vectors / safe_maximum_magnitude
-        return (
-            accumulator_vectors,
-            maximum_magnitude,
-            magnitude_scaled_vectors,
-            contains_nonzero_value,
-        )
+        return self._normalization_policy(vectors)
 
     def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:
         return self._decay_policy(weight_params)

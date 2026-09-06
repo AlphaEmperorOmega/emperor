@@ -21,6 +21,31 @@ if TYPE_CHECKING:
 class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
     OPTIONAL_FIELDS = {"bank_expansion_factor"}
 
+    @staticmethod
+    def validate_normalization_option(normalization_option) -> None:
+        from emperor.augmentations.adaptive_parameters._options import (
+            WeightNormalizationOptions,
+        )
+
+        if not isinstance(normalization_option, WeightNormalizationOptions):
+            raise ValueError(
+                f"Unsupported normalization_option value: {normalization_option!r}."
+            )
+
+    @staticmethod
+    def validate_normalization_position_option(normalization_position_option) -> None:
+        from emperor.augmentations.adaptive_parameters._options import (
+            WeightNormalizationPositionOptions,
+        )
+
+        if not isinstance(
+            normalization_position_option, WeightNormalizationPositionOptions
+        ):
+            raise ValueError(
+                "Unsupported normalization_position_option value: "
+                f"{normalization_position_option!r}."
+            )
+
     @classmethod
     def validate(cls, model: "DynamicWeightAbstract") -> None:
         cls.validate_initialization_fields(model)
