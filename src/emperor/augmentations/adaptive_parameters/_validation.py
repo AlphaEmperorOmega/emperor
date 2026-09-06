@@ -20,6 +20,10 @@ if TYPE_CHECKING:
         AdaptiveLinearLayer,
     )
 
+from emperor.augmentations.adaptive_parameters._weights.config import (
+    MatrixWeightsMixtureConfig,
+)
+
 
 class AdaptiveLinearValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"override_config"}
@@ -39,6 +43,9 @@ class AdaptiveLinearValidator(ValidatorBase):
             model.cfg.adaptive_augmentation_config
         )
         cls._validate_adaptive_bias_consistency(model)
+        augmentation_validator.validate_matrix_mixture_configs(
+            model.cfg.adaptive_augmentation_config, model.input_dim, model.output_dim
+        )
 
     @staticmethod
     def _validate_adaptive_bias_consistency(model: "AdaptiveLinearLayer") -> None:
@@ -299,8 +306,22 @@ class AdaptiveParameterAugmentationValidator(
                 f"output_dim must be a positive integer, received {model.output_dim!r}."
             )
 
+    @staticmethod
+    def validate_matrix_mixture_configs(config, input_dim, output_dim):
+        variant = config.weight_config
+        if isinstance(variant, MatrixWeightsMixtureConfig):
+            variant.registry_owner().validate_owner_config(
+                variant,
+                input_dim=input_dim,
+                output_dim=output_dim,
+                model_config=config.model_config,
+            )
+
     @classmethod
     def _validate_sub_configs(cls, model: "AdaptiveParameterAugmentation") -> None:
+        cls.validate_matrix_mixture_configs(
+            model.cfg, model.input_dim, model.output_dim
+        )
         from emperor.augmentations.adaptive_parameters._biases.config import (
             DynamicBiasConfig,
         )
@@ -328,6 +349,8 @@ class AdaptiveParameterAugmentationValidator(
                     f"{name} must be a {expected_type.__name__} instance, "
                     f"got {type(config).__name__}."
                 )
+            if isinstance(config, MatrixWeightsMixtureConfig):
+                continue
             cls._validate_model_config(f"{name}.model_config", config.model_config)
             if config.model_config is None and model.model_config is None:
                 raise ValueError(
