@@ -123,7 +123,14 @@ def _parse_from_annotation(
     classes = _annotation_classes(annotation)
     enum_classes = [cls for cls in classes if issubclass(cls, Enum)]
     if enum_classes:
-        parsed: Any = _enum_lookup(enum_classes[0], raw_value)
+        try:
+            parsed: Any = _enum_lookup(enum_classes[0], raw_value)
+        except ConfigValueError as exc:
+            if NoneType in get_args(annotation):
+                raise ConfigValueError(
+                    f"{exc}. Use None to leave this optional setting unset."
+                ) from exc
+            raise
     elif bool in classes:
         parsed = _bool_value(raw_value)
     elif int in classes:
@@ -214,6 +221,8 @@ def abstract_config_class_error(candidate: type) -> str | None:
 
 
 def serialize_config_value(value: Any) -> bool | int | float | str | None:
+    if isinstance(value, Enum) and value.name.lower() in {"none", "null"}:
+        return f"{type(value).__name__}.{value.name}"
     if hasattr(value, "name"):
         return value.name
     if isinstance(value, type):
