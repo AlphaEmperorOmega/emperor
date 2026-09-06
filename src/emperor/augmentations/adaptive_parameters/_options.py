@@ -2,9 +2,13 @@ from enum import Enum
 
 
 class AdaptiveParameterGroupingScopeOptions(Enum):
-    DISABLED = 0
     ROWS = 1
     SEQUENCE = 2
+
+
+class AdaptiveParameterInputOrderOptions(Enum):
+    BATCH_FIRST = 0
+    SEQUENCE_FIRST = 1
 
 
 class WeightNormalizationOptions(Enum):
