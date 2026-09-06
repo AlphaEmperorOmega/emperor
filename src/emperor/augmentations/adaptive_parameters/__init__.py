@@ -56,11 +56,15 @@ from emperor.augmentations.adaptive_parameters._weights.config import (
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MatrixWeightsMixtureConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
 )
 from emperor.augmentations.adaptive_parameters._weights.normalization import (
     WeightNormalizationPolicy,
+)
+from emperor.augmentations.adaptive_parameters._weights.variants.matrix_mixture import (
+    MatrixWeightsMixture,
 )
 from emperor.augmentations.adaptive_parameters.monitoring import (
     AdaptiveParameterMonitorCallback,
@@ -70,6 +74,8 @@ from emperor.augmentations.adaptive_parameters.monitoring import (
 __all__ = (
     "DecayPolicy",
     "WeightNormalizationPolicy",
+    "MatrixWeightsMixtureConfig",
+    "MatrixWeightsMixture",
     "AttentionGroupingConfig",
     "GroupingConfig",
     "MeanGroupingConfig",
